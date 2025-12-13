@@ -1,0 +1,114 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+	<title>Features - ParseTrail</title>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+	<link rel="stylesheet" href="assets/css/main.css" />
+	<noscript>
+		<link rel="stylesheet" href="assets/css/noscript.css" />
+	</noscript>
+	<script src="env.js"></script>
+	<style>
+		.wrapper { padding: 4em 2em; }
+		section.feature { display: flex; align-items: center; margin-bottom: 4em; }
+		section.feature:nth-child(odd) { flex-direction: row-reverse; }
+		.feature .content { flex: 1; padding: 2em; }
+		.feature .image { flex: 1; padding: 2em; text-align: center; }
+		.feature .image img { max-width: 100%; height: auto; border-radius: 8px; }
+		@media screen and (max-width: 768px) {
+			section.feature { flex-direction: column; }
+			.feature .content, .feature .image { padding: 1em; text-align: center; }
+		}
+	</style>
+</head>
+
+<body class="is-preload">
+
+	<header id="header">
+		<a href="index.html" class="title">ParseTrail</a>
+		<nav>
+			<ul>
+				<li><a href="index.html">Home</a></li>
+				<li><a href="features.html" class="active">Features</a></li>
+				<li><a href="plugins.html">Plugins</a></li>
+				<li><a href="download.html">Get the App</a></li>
+				<li><a class="nav-login" href="#">Open Dashboard</a></li>
+				<li><a class="nav-github" href="#">View on GitHub</a></li>
+			</ul>
+		</nav>
+	</header>
+
+	<div id="wrapper">
+		<section id="main" class="wrapper">
+			<div class="inner">
+				<h1 class="major">Features</h1>
+				<p>ParseTrail is a free, privacy-first personal finance app. Statement imports are painless, spending is auto-categorized locally, and your data stays on your own machine. Create a free account only to fetch new plugins from the ParseTrail server; no financial data is collected, just basic contact info for updates. Open source and community driven.</p>
+
+				<section class="feature">
+					<div class="content">
+						<h2>Know Your Net Worth</h2>
+						<p>Bring in bank, card, loan, and investment statements in minutes. ParseTrail visualizes assets, debts, and net worth so you can see progress without spreadsheets.</p>
+						<p><strong>Local-only by design:</strong> your balances, categories, and models stay on disk. The free account is only for plugin updates; your finances never leave your device.</p>
+					</div>
+					<div class="image">
+						<img src="images/net_worth.png" alt="Net Worth Screenshot">
+					</div>
+				</section>
+
+				<section class="feature">
+					<div class="content">
+						<h2>Track Spending Without Effort</h2>
+						<p>Smart categorization learns your habits and keeps improving. Spot the categories that matter—groceries, dining, travel, subscriptions—and adjust in seconds.</p>
+						<p><strong>Free forever and open source:</strong> no subscriptions or upsells. Inspect, fork, or improve the code.</p>
+					</div>
+					<div class="image">
+						<img src="images/donut.png" alt="Accounts Screenshot">
+					</div>
+				</section>
+
+				<section class="feature">
+					<div class="content">
+						<h2>Stay In Control</h2>
+						<p>Recurring-charge detection and anomaly spotting help you catch surprises early. Export reports for budgeting, taxes, or to share with a partner.</p>
+						<p><strong>Built for usability:</strong> clean views, fast navigation, and reports you can act on. Need a new parser? Submit a statement securely for plugin development, or build your own and open a PR on GitHub.</p>
+					</div>
+					<div class="image">
+						<img src="images/category_spend.png" alt="Category Spending Screenshot">
+					</div>
+				</section>
+			</div>
+		</section>
+	</div>
+
+	<footer id="footer" class="wrapper alt">
+		<div class="inner">
+			<ul class="menu">
+				<li>&copy; ParseTrail. All rights reserved.</li>
+				<li>Design: <a href="https://html5up.net">HTML5 UP</a></li>
+			</ul>
+		</div>
+	</footer>
+
+	<script src="assets/js/jquery.min.js"></script>
+	<script src="assets/js/jquery.scrollex.min.js"></script>
+	<script src="assets/js/jquery.scrolly.min.js"></script>
+	<script src="assets/js/browser.min.js"></script>
+	<script src="assets/js/breakpoints.min.js"></script>
+	<script src="assets/js/util.js"></script>
+	<script src="assets/js/main.js"></script>
+	<script>
+		(function () {
+			var gh = window.__GITHUB_URL__ || "https://github.com/tbrownhe/parsetrail";
+			var frontend = window.__FRONTEND_HOST__ || "https://dashboard.parsetrail.com";
+			var ghLink = document.querySelector(".nav-github");
+			if (ghLink && gh) ghLink.href = gh;
+			var loginLink = document.querySelector(".nav-login");
+			if (loginLink && frontend) loginLink.href = frontend;
+		})();
+	</script>
+
+</body>
+
+</html>

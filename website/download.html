@@ -1,0 +1,154 @@
+<!DOCTYPE HTML>
+<!--
+	Hyperspace by HTML5 UP
+	html5up.net | @ajlkn
+	Customized for ParseTrail Download Page
+	Free for personal and commercial use under the CCA 3.0 license (html5up.net/license)
+-->
+<html>
+
+<head>
+	<title>Downloads - ParseTrail</title>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+	<link rel="stylesheet" href="assets/css/main.css" />
+	<noscript>
+		<link rel="stylesheet" href="assets/css/noscript.css" />
+	</noscript>
+	<script>
+		fetch('version.json')
+			.then(response => response.json())
+			.then(data => {
+				const version = data.version;
+				const script = document.createElement("script");
+				script.src = `assets/js/main.js?v=${version}`;
+				document.head.appendChild(script);
+			})
+			.catch(error => console.error("Failed to fetch version:", error));
+	</script>
+	<script src="env.js"></script>
+	<script>
+		document.addEventListener("DOMContentLoaded", async () => {
+			const fallbackApiBase = "http://localhost:8000/api/v1";
+			const apiBaseUrl = (window.__BACKEND_HOST__ || fallbackApiBase).replace(/\/$/, "");
+			const platformMapBackend = {
+				Win32: "win64",
+				MacIntel: "macos",
+				"Mac ARM": "macos"
+			};
+			const platformMapWebsite = {
+				Win32: "Windows",
+				MacIntel: "MacOS",
+				"Mac ARM": "MacOS"
+			};
+
+			// Detect platform
+			const apiPlatform = platformMapBackend[navigator.platform] || null;
+			const webPlatform = platformMapWebsite[navigator.platform] || null;
+
+			try {
+				// Fetch available installers
+				const response = await fetch(`${apiBaseUrl}/clients/`);
+				if (!response.ok) {
+					throw new Error(`HTTP error! status: ${response.status}`);
+				}
+				const installers = await response.json();
+
+				// Find the appropriate installer
+				const installer = apiPlatform
+					? installers.find(i => i.platform === apiPlatform)
+					: null;
+
+				// Create a download button
+				const downloadSection = document.getElementById("download-button");
+				if (installer) {
+					const button = document.createElement("a");
+					button.href = `${apiBaseUrl}/clients/${installer.platform}/latest`;
+					button.textContent = `Download for ${webPlatform}`;
+					button.className = "button primary";
+					downloadSection.appendChild(button);
+				} else {
+					downloadSection.innerHTML = "<p>Sorry, we couldn't detect your platform. Please select an installer below:</p>";
+					installers.forEach(inst => {
+						const link = document.createElement("a");
+						link.href = `${apiBaseUrl}/clients/${inst.platform}/latest`;
+						link.textContent = `Download for ${inst.platform}`;
+						link.className = "button secondary";
+						downloadSection.appendChild(link);
+						downloadSection.appendChild(document.createElement("br"));
+					});
+				}
+			} catch (error) {
+				console.error("Error fetching installers:", error);
+				document.getElementById("download-button").innerHTML = "<p>Failed to load download options. Please try again later.</p>";
+			}
+		});
+	</script>
+</head>
+
+<body class="is-preload">
+
+	<!-- Header -->
+	<header id="header">
+		<a href="index.html" class="title">ParseTrail</a>
+		<nav>
+			<ul>
+				<li><a href="index.html">Home</a></li>
+				<li><a href="features.html">Features</a></li>
+				<li><a href="plugins.html">Plugins</a></li>
+				<li><a href="download.html" class="active">Get the App</a></li>
+				<li><a class="nav-login" href="#">Open Dashboard</a></li>
+				<li><a class="nav-github" href="#">View on GitHub</a></li>
+			</ul>
+		</nav>
+	</header>
+
+	<!-- Wrapper -->
+	<div id="wrapper">
+
+		<!-- Main -->
+		<section id="main" class="wrapper">
+			<div class="inner">
+				<h1 class="major">Download ParseTrail</h1>
+				<p>Download the latest version of ParseTrail for your platform. Start managing your finances with
+					privacy and control.</p>
+				<div id="download-button">
+					<!-- Dynamic content will be inserted here -->
+				</div>
+			</div>
+		</section>
+
+	</div>
+
+	<!-- Footer -->
+	<footer id="footer" class="wrapper alt">
+		<div class="inner">
+			<ul class="menu">
+				<li>&copy; ParseTrail. All rights reserved.</li>
+				<li>Design: <a href="https://html5up.net">HTML5 UP</a></li>
+			</ul>
+		</div>
+	</footer>
+
+	<!-- Scripts -->
+	<script src="assets/js/jquery.min.js"></script>
+	<script src="assets/js/jquery.scrollex.min.js"></script>
+	<script src="assets/js/jquery.scrolly.min.js"></script>
+	<script src="assets/js/browser.min.js"></script>
+	<script src="assets/js/breakpoints.min.js"></script>
+	<script src="assets/js/util.js"></script>
+	<script src="assets/js/main.js"></script>
+	<script>
+		(function () {
+			var gh = window.__GITHUB_URL__ || "https://github.com/tbrownhe/parsetrail";
+			var frontend = window.__FRONTEND_HOST__ || "https://dashboard.parsetrail.com";
+			var ghLink = document.querySelector(".nav-github");
+			if (ghLink && gh) ghLink.href = gh;
+			var loginLink = document.querySelector(".nav-login");
+			if (loginLink && frontend) loginLink.href = frontend;
+		})();
+	</script>
+
+</body>
+
+</html>

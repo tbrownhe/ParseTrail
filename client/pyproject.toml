@@ -1,0 +1,53 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "parsetrail"
+description = "ParseTrail Desktop Client"
+readme = "README.md"
+authors = [{ name = "Tobias Brown-Heft" }]
+
+requires-python = ">=3.10,<3.11"
+dependencies = [
+  "PyQt5<6.0,>=5.0",
+  "pyinstaller<7.0,>=6.17",
+  "loguru<1.0,>=0.7",
+  "openpyxl<4.0,>=3.1",
+  "pandas<3.0,>=2.3",
+  "matplotlib<4.0,>=3.10",
+  "scikit-learn==1.7.2",
+  "seaborn<1.0.0,>=0.13.0",
+  "SQLAlchemy<3.0.0,>=2.0.0",
+  "alembic<2.0.0,>=1.12.1",
+  "nltk<4.0,>=3.9",
+  "pdfplumber==0.11.4",
+  "requests<3,>=2.32",
+  "pydantic<3,>=2.10",
+  "pydantic-settings<3,>=2.7",
+  "cryptography<45.0.0,>=44.0.0",
+  "psycopg[binary]<4.0.0,>=3.1.13",
+  "mkl; sys_platform == 'win32'",
+]
+dynamic = ["version"]
+
+[tool.hatch.version]
+path = "src/parsetrail/version.py"
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "ruff",
+  "black",
+  "mypy",
+  "pre-commit",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/parsetrail"]
+include = ["src/parsetrail/assets/**"]
+
+[tool.ruff]
+line-length = 120
+lint.extend-select = ["E"]
+lint.ignore = ["E203"]

@@ -1,0 +1,253 @@
+services:
+
+  db:
+    image: postgres:12
+    restart: always
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 10s
+    volumes:
+      - app-db-data:/var/lib/postgresql/data/pgdata
+    env_file:
+      - .env
+    environment:
+      - PGDATA=/var/lib/postgresql/data/pgdata
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD?Variable not set}
+      - POSTGRES_USER=${POSTGRES_USER?Variable not set}
+      - POSTGRES_DB=${POSTGRES_DB?Variable not set}
+
+
+  prestart:
+    image: '${DOCKER_IMAGE_BACKEND?Variable not set}:${TAG-latest}'
+    build:
+      context: ./backend
+    networks:
+      - traefik-public
+      - default
+    depends_on:
+      db:
+        condition: service_healthy
+        restart: true
+    command: bash scripts/prestart.sh
+    env_file:
+      - .env
+    environment:
+      - DOMAIN=${DOMAIN}
+      - FRONTEND_HOST=${FRONTEND_HOST?Variable not set}
+      - ENVIRONMENT=${ENVIRONMENT}
+      - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS}
+      - SECRET_KEY=${SECRET_KEY?Variable not set}
+      - FIRST_SUPERUSER=${FIRST_SUPERUSER?Variable not set}
+      - FIRST_SUPERUSER_PASSWORD=${FIRST_SUPERUSER_PASSWORD?Variable not set}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - EMAILS_FROM_EMAIL=${EMAILS_FROM_EMAIL}
+      - POSTGRES_SERVER=db
+      - POSTGRES_PORT=${POSTGRES_PORT}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER?Variable not set}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD?Variable not set}
+      - SENTRY_DSN=${SENTRY_DSN}
+
+
+  backend:
+    image: '${DOCKER_IMAGE_BACKEND?Variable not set}:${TAG-latest}'
+    restart: always
+    build:
+      context: ./backend
+    networks:
+      - traefik-public
+      - default
+    depends_on:
+      db:
+        condition: service_healthy
+        restart: true
+      prestart:
+        condition: service_completed_successfully
+    env_file:
+      - .env
+    volumes:
+      # Docker-managed keys (chmod 600) visible to backend only
+      - app-keys-data:/app/keys
+      # Bind mounts treated separately for custom persmissions. Statements should be chmod 600.
+      # Bind mounts to be replaced by docker volumes someday if this scales.
+      - ${CLIENTS_DIR?Variable not set}:/app/data/clients
+      - ${PLUGINS_DIR?Variable not set}:/app/data/plugins
+      - ${MODELS_DIR?Variable not set}:/app/data/models
+      - ${STATEMENTS_DIR?Variable not set}:/app/secure/statements
+    environment:
+      - MASTER_KEY=${MASTER_KEY}
+      - DOMAIN=${DOMAIN}
+      - FRONTEND_HOST=${FRONTEND_HOST?Variable not set}
+      - ENVIRONMENT=${ENVIRONMENT}
+      - BACKEND_CORS_ORIGINS=${BACKEND_CORS_ORIGINS}
+      - SECRET_KEY=${SECRET_KEY?Variable not set}
+      - FIRST_SUPERUSER=${FIRST_SUPERUSER?Variable not set}
+      - FIRST_SUPERUSER_PASSWORD=${FIRST_SUPERUSER_PASSWORD?Variable not set}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - EMAILS_FROM_EMAIL=${EMAILS_FROM_EMAIL}
+      - POSTGRES_SERVER=db
+      - POSTGRES_PORT=${POSTGRES_PORT}
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER?Variable not set}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD?Variable not set}
+      - SENTRY_DSN=${SENTRY_DSN}
+      - STATEMENTS_FILE_OWNER=${STATEMENTS_FILE_OWNER}
+      - STATEMENTS_FILE_GROUP=${STATEMENTS_FILE_GROUP}
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/utils/health-check/" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    labels:
+      # Enforce use of Traefik routing
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      - traefik.constraint-label=traefik-public
+
+      # Serve traefik proxy on port 8000 of this container
+      - traefik.http.services.${STACK_NAME?Variable not set}-backend.loadbalancer.server.port=8000
+
+      # Prevent abuse
+      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.middlewares=rate-limit
+
+      # HTTP redirect + HTTPS Certificates
+      # Backend endpoints are at `api.DOMAIN/api/v1/etc`
+      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-http.rule=Host(`api.${DOMAIN}`) && PathPrefix(`/api`)
+      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-http.entrypoints=http
+      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-http.middlewares=https-redirect
+      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.rule=Host(`api.${DOMAIN}`) && PathPrefix(`/api`)
+      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.entrypoints=https
+      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.tls=true
+      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.tls.certresolver=le
+
+      # Secure Swagger UI (`/docs`) with BasicAuth Middleware
+      - traefik.http.routers.${STACK_NAME?Variable not set}-swagger-http.rule=Host(`api.${DOMAIN}`) && PathPrefix(`/docs`)
+      - traefik.http.routers.${STACK_NAME?Variable not set}-swagger-http.entrypoints=http
+      - traefik.http.routers.${STACK_NAME?Variable not set}-swagger-http.middlewares=https-redirect
+      - traefik.http.routers.${STACK_NAME?Variable not set}-swagger-https.rule=Host(`api.${DOMAIN}`) && PathPrefix(`/docs`)
+      - traefik.http.routers.${STACK_NAME?Variable not set}-swagger-https.entrypoints=https
+      - traefik.http.routers.${STACK_NAME?Variable not set}-swagger-https.tls=true
+      - traefik.http.routers.${STACK_NAME?Variable not set}-swagger-https.tls.certresolver=le
+
+      # Secure `/openapi.json` (Swagger API Definition)
+      - traefik.http.routers.${STACK_NAME?Variable not set}-openapi-http.rule=Host(`api.${DOMAIN}`) && PathPrefix(`/api/v1/openapi.json`)
+      - traefik.http.routers.${STACK_NAME?Variable not set}-openapi-http.entrypoints=http
+      - traefik.http.routers.${STACK_NAME?Variable not set}-openapi-http.middlewares=https-redirect
+      - traefik.http.routers.${STACK_NAME?Variable not set}-openapi-https.rule=Host(`api.${DOMAIN}`) && PathPrefix(`/api/v1/openapi.json`)
+      - traefik.http.routers.${STACK_NAME?Variable not set}-openapi-https.entrypoints=https
+      - traefik.http.routers.${STACK_NAME?Variable not set}-openapi-https.tls=true
+      - traefik.http.routers.${STACK_NAME?Variable not set}-openapi-https.tls.certresolver=le
+      - traefik.http.routers.${STACK_NAME?Variable not set}-openapi-https.priority=110
+
+      #- traefik.http.routers.swagger-uim.service=backend
+      - traefik.http.routers.${STACK_NAME?Variable not set}-swagger-https.middlewares=swagger-auth
+      - traefik.http.routers.${STACK_NAME?Variable not set}-openapi-https.middlewares=swagger-auth
+      - traefik.http.middlewares.${STACK_NAME?Variable not set}-swagger-auth.basicauth.users=${SWAGGER_HASH}
+
+
+  frontend:
+    image: '${DOCKER_IMAGE_FRONTEND?Variable not set}:${TAG-latest}'
+    restart: always
+    networks:
+      - traefik-public
+      - default
+    build:
+      context: ./frontend
+      args:
+        # Points the frontend to the backend running at api.${DOMAIN}
+        - VITE_API_URL=https://api.${DOMAIN}
+        - NODE_ENV=production
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      - traefik.constraint-label=traefik-public
+
+      # Serve traefik proxy on port 80 of this container
+      - traefik.http.services.${STACK_NAME?Variable not set}-frontend.loadbalancer.server.port=80
+
+      # Route http/s requests for dashboard.$DOMAN to FastAPI frontend
+      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.rule=Host(`dashboard.${DOMAIN}`)
+      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.entrypoints=http
+      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-http.middlewares=https-redirect
+      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.rule=Host(`dashboard.${DOMAIN}`)
+      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.entrypoints=https
+      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.tls=true
+      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.tls.certresolver=le
+
+
+  website:
+    # Static site for Marketing, FAQ and latest client downloads
+    image: nginx:latest
+    restart: always
+    volumes:
+      # In production, freeze static website via Dockerfile.web and remove the bind mount
+      - ./website:/usr/share/nginx/html
+    environment:
+      # Base URLs used by website JS; written into env.js at container start.
+      - BACKEND_HOST=${BACKEND_HOST?Variable not set}
+      - FRONTEND_HOST=${FRONTEND_HOST?Variable not set}
+      - GITHUB_URL=${GITHUB_URL?Variable not set}
+    command: >
+      /bin/sh -c "
+      {
+        echo \"window.__BACKEND_HOST__='${BACKEND_HOST}'\";
+        echo \"window.__FRONTEND_HOST__='${FRONTEND_HOST}'\";
+        echo \"window.__GITHUB_URL__='${GITHUB_URL}'\";
+      } >/usr/share/nginx/html/env.js
+      && exec nginx -g 'daemon off;'"
+    networks:
+      - traefik-public
+      - default
+    labels:
+      # Enforce use of Traefik routing
+      - traefik.enable=true
+      - traefik.docker.network=traefik-public
+      - traefik.constraint-label=traefik-public
+
+      # Serve traefik proxy on port 80 of this container
+      - traefik.http.services.${STACK_NAME?Variable not set}-web.loadbalancer.server.port=80
+
+      # HTTP redirect + HTTPS Certificates
+      # www.domain
+      - traefik.http.routers.${STACK_NAME?Variable not set}-web-www-http.rule=Host(`www.${DOMAIN}`)
+      - traefik.http.routers.${STACK_NAME?Variable not set}-web-www-http.entrypoints=http
+      - traefik.http.routers.${STACK_NAME?Variable not set}-web-www-http.middlewares=https-redirect
+      - traefik.http.routers.${STACK_NAME?Variable not set}-web-www-https.rule=Host(`www.${DOMAIN}`)
+      - traefik.http.routers.${STACK_NAME?Variable not set}-web-www-https.entrypoints=https
+      - traefik.http.routers.${STACK_NAME?Variable not set}-web-www-https.tls=true
+      - traefik.http.routers.${STACK_NAME?Variable not set}-web-www-https.tls.certresolver=le
+      # domain
+      - traefik.http.routers.${STACK_NAME?Variable not set}-web-http.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.${STACK_NAME?Variable not set}-web-http.entrypoints=http
+      - traefik.http.routers.${STACK_NAME?Variable not set}-web-http.middlewares=https-redirect
+      - traefik.http.routers.${STACK_NAME?Variable not set}-web-https.rule=Host(`${DOMAIN}`)
+      - traefik.http.routers.${STACK_NAME?Variable not set}-web-https.entrypoints=https
+      - traefik.http.routers.${STACK_NAME?Variable not set}-web-https.tls=true
+      - traefik.http.routers.${STACK_NAME?Variable not set}-web-https.tls.certresolver=le
+
+      # Prevent abuse
+      - traefik.http.routers.${STACK_NAME?Variable not set}-web-https.middlewares=rate-limit
+
+
+volumes:
+  app-db-data:
+    external: true
+    name: parsetrail_app-db-data
+  app-keys-data:
+    external: true
+    name: parsetrail_app-keys-data
+
+networks:
+  traefik-public:
+    name: traefik-public
+    external: true
+  default:
+    driver: bridge

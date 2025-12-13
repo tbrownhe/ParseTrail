@@ -1,0 +1,61 @@
+# FOR LOCAL DEVELOPMENT ONLY
+
+# Running `docker-compose up --build -d` reads docker-compose.yml and
+# docker-compose.override.yml, with override values taking precedence.
+
+# In production, skip override by running:
+# `docker-compose -f docker-compose.yml up --build -d`
+
+services:
+
+  db:
+    ports:
+      - 5432:5432
+
+  adminer:
+    image: adminer
+    restart: always
+    networks:
+      - default
+    ports:
+      - "8090:8080"   # http://localhost:8090
+    depends_on:
+      - db
+    environment:
+      - ADMINER_DESIGN=pepa-linha-dark
+
+  prestart:
+    networks:
+      - default
+
+  backend:
+    ports:
+      - "8000:8000"   # http://localhost:8000
+    networks:
+      - default
+    labels: []
+
+  frontend:
+    ports:
+      - "8080:80"     # http://localhost:8080
+    labels: []
+    networks:
+      - default
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: "http://localhost:8000"
+        NODE_ENV: "development"
+
+  website:
+    ports:
+      - "80:80"   # http://localhost:80
+    networks:
+      - default
+    labels: []
+
+
+networks:
+  default:
+    name: parsetrail_local_default
+    driver: bridge
