@@ -47,7 +47,7 @@ jobs:
       run: npx playwright test --fail-on-flaky-tests --trace=retain-on-failure
       working-directory: frontend
     - run: docker compose down -v --remove-orphans
-    - uses: actions/upload-artifact@v5
+    - uses: actions/upload-artifact@v6
       if: always()
       with:
         name: playwright-report
