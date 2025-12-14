@@ -139,11 +139,12 @@ try {
     }
 
     $remoteBase = $remoteDir.TrimEnd('/')
+    $distRoot   = (Resolve-Path $distDir).Path.TrimEnd('\', '/')
 
-    Get-ChildItem -Path $clientDir -File | ForEach-Object {
-        $localPath  = $_.FullName
-        $fileName   = $_.Name
-        $remotePath = "$remoteBase/$fileName"
+    Get-ChildItem -Path $clientDir -File -Recurse | ForEach-Object {
+        $localPath     = $_.FullName
+        $relativePath  = $localPath.Replace($distRoot, '').TrimStart('\', '/')
+        $remotePath    = "$remoteBase/$relativePath" -replace '\\','/'
 
         Write-Host "Syncing: $localPath -> $remotePath"
         $remoteSpec = "${remoteUser}@${remoteHost}:$remotePath"
