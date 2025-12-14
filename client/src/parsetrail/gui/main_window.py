@@ -28,13 +28,13 @@ from parsetrail.gui.accounts import (
     BalanceCheckDialog,
     EditAccountsDialog,
 )
+from parsetrail.gui.budget_view import BudgetTab
 from parsetrail.gui.category import CategoryManagerDialog
 from parsetrail.gui.plugins import (
     ParseTestDialog,
     PluginManagerDialog,
     PluginSyncDialog,
 )
-from parsetrail.gui.budget_view import BudgetTab
 from parsetrail.gui.preferences import PreferencesDialog
 from parsetrail.gui.send import StatementSubmissionDialog
 from parsetrail.gui.statements import CompletenessDialog
@@ -43,7 +43,13 @@ from parsetrail.gui.transactions import (
     RecurringTransactionsDialog,
 )
 from parsetrail.gui.verification import TransactionReviewWindow
-from parsetrail.version import __developer__, __version__, __year__
+from parsetrail.version import (
+    __developer__,
+    __repo__,
+    __version__,
+    __website__,
+    __year__,
+)
 from PyQt5.QtCore import QAbstractTableModel, Qt
 from PyQt5.QtGui import QColor, QFontMetrics
 from PyQt5.QtWidgets import (
@@ -683,7 +689,17 @@ class ParseTrail(QMainWindow):
     def about(self):
         msg_box = QMessageBox()
         msg_box.setIcon(QMessageBox.Information)
-        msg_box.setText(f"ParseTrail v{__version__}\n© {__year__} {__developer__}")
+        msg_box.setTextFormat(Qt.RichText)
+        msg_box.setTextInteractionFlags(Qt.TextBrowserInteraction)
+        msg_box.setText(
+            (
+                f"<b>ParseTrail v{__version__}</b><br>"
+                f"(c) {__year__} ParseTrail contributors<br>"
+                f"Original author: {__developer__}<br>"
+                f'<a href="{__website__}">Website</a> | '
+                f'<a href="{__repo__}">GitHub</a>'
+            )
+        )
         msg_box.setWindowTitle("About")
         msg_box.setStandardButtons(QMessageBox.Ok)
         msg_box.exec_()
