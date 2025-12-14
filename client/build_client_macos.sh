@@ -126,7 +126,7 @@ create-dmg \
 read -r -p "Do you want to deploy the .dmg to server? (y/n): " confirm
 if [[ "$confirm" =~ ^[Yy]$ ]]; then
     echo "Deploying macOS client installer..."
-    rsync -avz --progress "$DMG_PATH" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_CLIENTS_DIR/"
+    rsync -avz --progress "$DIST_DIR" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_CLIENTS_DIR/"
     echo "Sync complete!"
 else
     echo "Deployment cancelled."
