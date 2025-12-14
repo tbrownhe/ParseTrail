@@ -17,8 +17,6 @@ os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"  # Enable HiDPI scaling
 system_name = system()
 if system_name == "Windows":
     os.environ["QT_QPA_PLATFORM"] = "windows"
-elif system_name == "Darwin":
-    os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
 
 
 def handle_signal(signal, frame):
