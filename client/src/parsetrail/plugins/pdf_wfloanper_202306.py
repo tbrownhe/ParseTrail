@@ -288,8 +288,8 @@ class Parser(IParser):
 
         transactions.append(
             Transaction(
-                transaction_date=principal.transaction_date,
-                posting_date=principal.posting_date,
+                transaction_date=interest.transaction_date,
+                posting_date=interest.posting_date,
                 amount=round(amount, 2),
                 desc="PAYMENT",
             )
