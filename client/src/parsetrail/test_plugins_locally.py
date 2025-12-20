@@ -8,6 +8,7 @@ from parsetrail.core.plugins import PluginManager
 from parsetrail.core.settings import settings
 from parsetrail.gui.plugins import ParseTestDialog
 from PyQt5.QtWidgets import QApplication
+from parsetrail.build_plugins import PLUGINS_DIR
 
 # Compile plugins into dist/plugins
 compile_plugins()
