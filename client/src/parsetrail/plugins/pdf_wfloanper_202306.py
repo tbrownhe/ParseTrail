@@ -11,7 +11,7 @@ from parsetrail.core.validation import Account, Statement, Transaction
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_wfloanper_202306"
-    VERSION = "0.1.0"
+    VERSION = "0.1.1"
     SUFFIX = ".pdf"
     COMPANY = "Wells Fargo"
     STATEMENT_TYPE = "Personal Loan Monthly Statement"
@@ -203,6 +203,21 @@ class Parser(IParser):
         """
         transactions = []
 
+        # Deal with loan origination
+        if len(transaction_lines) == 0:
+            transactions.append(
+                Transaction(
+                    transaction_date=self.end_date,
+                    posting_date=self.end_date,
+                    amount=0.0,
+                    desc="LOAN ORIGINATION",
+                )
+            )
+            return transactions
+
+        interest = None
+        principal = []
+
         for line in transaction_lines:
             # Split the line into words
             words = line.split()
@@ -224,36 +239,60 @@ class Parser(IParser):
             if not desc:
                 raise ValueError(f"Missing description in transaction line: {line}")
 
+            # Deal with bizarre accounting
             if "INTEREST PAYMENT" in desc:
-                # Hidden interest charge to match the interest payment
+                if interest is not None:
+                    raise ValueError("Found more than one Interest charge")
+                interest = Transaction(
+                    transaction_date=posting_date,
+                    posting_date=posting_date,
+                    amount=-amount,
+                    desc="INTEREST PAYMENT",
+                )
+            elif "PRINCIPAL PAYMENT" in desc:
+                # Overpayments show up as multiple principal payments
+                principal.append(
+                    Transaction(
+                        transaction_date=posting_date,
+                        posting_date=posting_date,
+                        amount=amount,
+                        desc=desc,
+                    )
+                )
+            else:
+                # Catch any other transactions, this would be weird
                 transactions.append(
                     Transaction(
                         transaction_date=posting_date,
                         posting_date=posting_date,
-                        amount=-amount,
-                        desc="INTEREST FEE",
+                        amount=amount,
+                        desc=desc,
                     )
                 )
 
-            # Create the Transaction object
-            transactions.append(
-                Transaction(
-                    transaction_date=posting_date,
-                    posting_date=posting_date,
-                    amount=amount,
-                    desc=desc,
-                )
-            )
+        # Deal with bizarre accounting
+        if interest is None or principal == []:
+            raise ValueError("Interest and Principal must both be present")
 
-        # Add loan origination transactions
-        if len(transactions) == 0:
-            transactions.append(
-                Transaction(
-                    transaction_date=self.end_date,
-                    posting_date=self.end_date,
-                    amount=0.0,
-                    desc="LOAN ORIGINATION",
-                )
+        # Include the fee in transactions
+        transactions.append(interest)
+
+        # Bundle all interest + principal amounts from the same date into a single transfer from bank
+        amount = -interest.amount
+        for payment in principal:
+            if payment.transaction_date == interest.transaction_date:
+                amount += payment.amount
+            else:
+                # Extra principal payments not on the payment date
+                transactions.append(payment)
+
+        transactions.append(
+            Transaction(
+                transaction_date=interest.transaction_date,
+                posting_date=interest.posting_date,
+                amount=round(amount, 2),
+                desc="PAYMENT",
             )
+        )
 
         return transactions
