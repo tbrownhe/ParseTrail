@@ -216,7 +216,7 @@ class Parser(IParser):
             return transactions
 
         interest = None
-        principal = None
+        principal = []
 
         for line in transaction_lines:
             # Split the line into words
@@ -250,13 +250,14 @@ class Parser(IParser):
                     desc="INTEREST PAYMENT",
                 )
             elif "PRINCIPAL PAYMENT" in desc:
-                if principal is not None:
-                    raise ValueError("Found more than one Principal charge")
-                principal = Transaction(
-                    transaction_date=posting_date,
-                    posting_date=posting_date,
-                    amount=amount,
-                    desc=desc,
+                # Overpayments show up as multiple principal payments
+                principal.append(
+                    Transaction(
+                        transaction_date=posting_date,
+                        posting_date=posting_date,
+                        amount=amount,
+                        desc=desc,
+                    )
                 )
             else:
                 # Catch any other transactions, this would be weird
@@ -270,18 +271,26 @@ class Parser(IParser):
                 )
 
         # Deal with bizarre accounting
-        if interest is None or principal is None:
+        if interest is None or principal == []:
             raise ValueError("Interest and Principal must both be present")
 
         # Include the fee in transactions
         transactions.append(interest)
 
-        # Bundle interest + principal amounts into a single transfer from bank
+        # Bundle all interest + principal amounts from the same date into a single transfer from bank
+        amount = -interest.amount
+        for payment in principal:
+            if payment.transaction_date == interest.transaction_date:
+                amount += payment.amount
+            else:
+                # Extra principal payments not on the payment date
+                transactions.append(payment)
+
         transactions.append(
             Transaction(
                 transaction_date=principal.transaction_date,
                 posting_date=principal.posting_date,
-                amount=round(principal.amount - interest.amount, 2),
+                amount=round(amount, 2),
                 desc="PAYMENT",
             )
         )
