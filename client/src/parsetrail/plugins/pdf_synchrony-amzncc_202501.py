@@ -40,6 +40,8 @@ class Parser(IParser):
         "Description",
         "Amount",
     ]
+    HEADER_WORD_Y_TOLERANCE = 10
+    MULTILINE_DESC_LIMIT = 3
 
     def parse(self, reader: PDFReader) -> Statement:
         """Entry point
@@ -89,10 +91,10 @@ class Parser(IParser):
             ValueError: If dates cannot be parsed or are invalid.
         """
         logger.trace("Attempting to parse dates from text.")
-        patterns = [
+        patterns = (
             re.compile(r"previous balance as of (\d{2}/\d{2}/\d{4})"),
             re.compile(r"new balance as of (\d{2}/\d{2}/\d{4})"),
-        ]
+        )
         dates = []
         try:
             for pattern in patterns:
@@ -214,41 +216,13 @@ class Parser(IParser):
         # Get the metadata and text of every word in the header.
         page_words_all = page.extract_words()
 
-        # Dynamically correct partial matches for columns
-        word_list = [word.get("text") for word in page_words_all]
-        word_set = set(word_list)
-        header_cols = []
-        for col in self.HEADER_COLS:
-            if col in word_set:
-                # Use the col word as is
-                header_cols.append(col)
-            else:
-                # Attempt to find the largest partial match
-                matches = [word for word in word_set if col.endswith(word) and len(word) >= 3]
-                if matches:
-                    best_match = sorted(
-                        matches,
-                        key=lambda x: len(x),
-                        reverse=True,
-                    )[0]
-                    logger.debug(f"Matching fragment '{best_match}' to missing header '{col}'")
-                    header_cols.append(best_match)
-                else:
-                    # Use the original word
-                    header_cols.append(col)
-
-        # Return empty if not all header names were found, even after partial match detection
-        missing_words = [word for word in header_cols if word not in word_set]
-        if missing_words:
-            logger.debug(f"Skipping page {page.page_number} because a table header was not found.")
+        header_cols, page_words = self._match_header_words(page_words_all, page.page_number)
+        if not header_cols:
             return []
-
-        # Get all the word objects that match the corrected header_cols
-        page_words = [word for word in page_words_all if word.get("text") in header_cols]
 
         # Filter out spurious words by removing anything > 10 points from the mode
         y_mode = median(word.get("bottom") for word in page_words)
-        page_words = [word for word in page_words if abs(word.get("bottom") - y_mode) < 10]
+        page_words = [word for word in page_words if abs(word.get("bottom") - y_mode) < self.HEADER_WORD_Y_TOLERANCE]
 
         # Make sure there are the right number of matches, or return empty
         if len(page_words) != len(self.HEADER_COLS):
@@ -257,14 +231,15 @@ class Parser(IParser):
             return []
 
         # Remap words list[dict] so it's addressable by column name
-        header = {}
-        for word in page_words:
-            header[word.get("text")] = {
+        header = {
+            word.get("text"): {
                 "x0": word.get("x0"),
                 "x1": word.get("x1"),
                 "top": word.get("top"),
                 "bottom": word.get("bottom"),
             }
+            for word in page_words
+        }
 
         def calculate_vertical_lines(header):
             """
@@ -294,13 +269,13 @@ class Parser(IParser):
 
         # Array validation
         array = []
-        for row in raw_array:
+        for row in raw_array or []:
             # Make sure each row has the right number of columns
             if len(row) != len(vertical_lines) - 1:
                 raise ValueError(f"Incorrect number of columns for row: {row}")
 
             # Skip empty rows
-            if all([item == "" for item in row]):
+            if all(item == "" for item in row):
                 continue
 
             # Include only rows that have a date or empty in date col.
@@ -311,6 +286,36 @@ class Parser(IParser):
                 array.append(row)
 
         return array
+
+    def _match_header_words(
+        self,
+        page_words_all: list[dict],
+        page_number: int,
+    ) -> tuple[list[str], list[dict]]:
+        # Dynamically correct partial matches for columns
+        word_list = [word.get("text") for word in page_words_all]
+        word_set = set(word_list)
+        header_cols = []
+        for col in self.HEADER_COLS:
+            if col in word_set:
+                header_cols.append(col)
+                continue
+
+            matches = [word for word in word_set if col.endswith(word) and len(word) >= 3]
+            if matches:
+                best_match = max(matches, key=len)
+                logger.debug(f"Matching fragment '{best_match}' to missing header '{col}'")
+                header_cols.append(best_match)
+            else:
+                header_cols.append(col)
+
+        missing_words = [word for word in header_cols if word not in word_set]
+        if missing_words:
+            logger.debug(f"Skipping page {page_number} because a table header was not found.")
+            return [], []
+
+        page_words = [word for word in page_words_all if word.get("text") in header_cols]
+        return header_cols, page_words
 
     def parse_transaction_array(self, array: list[list[str]]) -> list[Transaction]:
         """Convert transaction table into structured data.
@@ -336,7 +341,7 @@ class Parser(IParser):
                 amount_str = array[i_row + multilines][amount_col]
                 if self.AMOUNT.match(amount_str):
                     return multilines, " ".join(desc), amount_str
-                if multilines > 3:
+                if multilines > self.MULTILINE_DESC_LIMIT:
                     break
                 multilines += 1
             return multilines, None, None
