@@ -17,7 +17,7 @@ from parsetrail.core.validation import Account, Statement, Transaction
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_citicc_202506"
-    VERSION = "0.1.0"
+    VERSION = "0.1.1"
     SUFFIX = ".pdf"
     COMPANY = "Citibank"
     STATEMENT_TYPE = "Credit Account Monthly Statement"
@@ -88,7 +88,7 @@ class Parser(IParser):
             ValueError: If dates cannot be parsed or are invalid.
         """
         logger.trace("Attempting to parse dates from text.")
-        pattern = re.compile(r"Billing Period: (\d{2}/\d{2}/\d{2})-(\d{2}/\d{2}/\d{2})")
+        pattern = re.compile(r"Billing Period:\s{0,4}(\d{2}/\d{2}/\d{2})-(\d{2}/\d{2}/\d{2})")
         try:
             match = re.search(pattern, self.chars)
             self.start_date = datetime.strptime(match.group(1), self.HEADER_DATE)
