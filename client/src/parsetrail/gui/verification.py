@@ -5,8 +5,9 @@ from typing import List, Optional
 
 import pandas as pd
 from loguru import logger
-from parsetrail.core.categorize import transactions as categorize_transactions
+from parsetrail.core.categorize import add_missing_categories, transactions as categorize_transactions
 from parsetrail.core.cluster import recurring_transactions
+from parsetrail.core import learn
 from parsetrail.core.orm import Categories, Transactions
 from parsetrail.core.query import update_db_where
 from PyQt5 import QtCore, QtWidgets, QtGui
@@ -768,12 +769,23 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
             session = self.Session()
             try:
                 # Update db with predicted categories
-                categorize_transactions(
-                    session=session,
-                    model_path=settings.model_path,
-                    unverified=True,
-                    uncategorized=False,
-                )
+                try:
+                    categorize_transactions(
+                        session=session,
+                        model_path=settings.model_path,
+                        unverified=True,
+                        uncategorized=False,
+                    )
+                except learn.CategoryCompatibilityError as exc:
+                    if not self._prompt_add_missing_categories(session, exc.missing_categories):
+                        self.status_label.setText("Auto-categorization skipped (missing categories).")
+                        return
+                    categorize_transactions(
+                        session=session,
+                        model_path=settings.model_path,
+                        unverified=True,
+                        uncategorized=False,
+                    )
             finally:
                 session.close()
 
@@ -785,6 +797,32 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.critical(self, "Error", f"Auto-categorization failed:\n{exc}")
         finally:
             progress.close()
+
+    def _prompt_add_missing_categories(self, session, missing: list[str]) -> bool:
+        missing_text = ", ".join(missing)
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            "Add Missing Categories?",
+            (
+                "The trained model expects categories that are missing from this database:\n\n"
+                f"{missing_text}\n\n"
+                "Would you like to add these categories now and continue auto-categorizing?"
+            ),
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            QtWidgets.QMessageBox.Yes,
+        )
+        if reply != QtWidgets.QMessageBox.Yes:
+            return False
+        add_missing_categories(session, missing)
+        QtWidgets.QMessageBox.information(
+            self,
+            "Categories Added",
+            (
+                "Missing categories were added with Type set to 'Expense'.\n\n"
+                "Please update the type as needed in the Category Manager."
+            ),
+        )
+        return True
 
     def _build_clustering_kwargs(self):
         """

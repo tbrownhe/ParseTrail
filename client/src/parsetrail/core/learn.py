@@ -23,6 +23,17 @@ MODEL_VERSION = "1.0-category-bundle"
 ModelBundle = Dict[str, Any]
 
 
+class CategoryCompatibilityError(RuntimeError):
+    def __init__(self, missing_categories: Iterable[str]) -> None:
+        self.missing_categories = sorted(set(missing_categories))
+        message = (
+            "The trained model uses categories that no longer exist in the current category set: "
+            + ", ".join(self.missing_categories)
+            + ". Please either restore these categories or retrain the model."
+        )
+        super().__init__(message)
+
+
 def save_model(model_path: Path, bundle: ModelBundle) -> None:
     """
     Persist a complete model bundle (pipeline + metadata) to disk.
@@ -317,11 +328,7 @@ def _check_category_compatibility(
     missing_in_current = sorted(model_set - current_set)
     if missing_in_current:
         # Model can predict labels that the current system does not support
-        raise RuntimeError(
-            "The trained model uses categories that no longer exist in the current category set: "
-            + ", ".join(missing_in_current)
-            + ". Please either restore these categories or retrain the model."
-        )
+        raise CategoryCompatibilityError(missing_in_current)
 
     extra_in_current = sorted(current_set - model_set)
     if extra_in_current:

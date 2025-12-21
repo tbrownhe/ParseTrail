@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Iterable, List
 
 import pandas as pd
 from loguru import logger
@@ -66,6 +67,30 @@ def update_db_categories(session: Session, df: pd.DataFrame) -> None:
 
     session.commit()
     logger.success("Updated categories and confidence scores for {} transactions", len(df))
+
+
+def add_missing_categories(session: Session, category_names: Iterable[str], default_type: str = "Expense") -> List[str]:
+    """
+    Add missing category names to the Categories table (Active=1).
+
+    Returns:
+        List of category names that were inserted.
+    """
+    normalized = sorted({str(name).strip() for name in category_names if name is not None and str(name).strip()})
+    if not normalized:
+        return []
+
+    existing = session.query(Categories.Name).filter(Categories.Name.in_(normalized)).all()
+    existing_names = {name for (name,) in existing}
+    missing = [name for name in normalized if name not in existing_names]
+
+    if not missing:
+        return []
+
+    session.add_all([Categories(Name=name, Type=default_type, Active=1) for name in missing])
+    session.commit()
+    logger.success("Added {} missing categories: {}", len(missing), missing)
+    return missing
 
 
 def transactions(

@@ -12,7 +12,7 @@ from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as Navigatio
 from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter, MaxNLocator
 from parsetrail.core import config, learn, plot, query, reports
-from parsetrail.core.categorize import transactions as categorize_transactions
+from parsetrail.core.categorize import add_missing_categories, transactions as categorize_transactions
 from parsetrail.core.client import (
     ClientUpdateThread,
     check_for_client_updates,
@@ -776,7 +776,11 @@ class ParseTrail(QMainWindow):
         finally:
             # Categorize new transactions and update all GUI elements
             with self.Session() as session:
-                categorize_transactions(session, settings.model_path, uncategorized=True)
+                self._categorize_with_missing_category_prompt(
+                    session,
+                    model_path=settings.model_path,
+                    uncategorized=True,
+                )
                 self.update_main_gui(session)
 
     def import_one_statement(self):
@@ -811,8 +815,67 @@ class ParseTrail(QMainWindow):
 
         # Categorize new transactions and update all GUI elements
         with self.Session() as session:
-            categorize_transactions(session, settings.model_path, uncategorized=True)
+            self._categorize_with_missing_category_prompt(
+                session,
+                model_path=settings.model_path,
+                uncategorized=True,
+            )
             self.update_main_gui(session)
+
+    def _categorize_with_missing_category_prompt(
+        self,
+        session: Session,
+        model_path: Path,
+        unverified: bool = True,
+        uncategorized: bool = False,
+    ) -> None:
+        try:
+            categorize_transactions(
+                session=session,
+                model_path=model_path,
+                unverified=unverified,
+                uncategorized=uncategorized,
+            )
+        except learn.CategoryCompatibilityError as exc:
+            if not self._prompt_add_missing_categories(session, exc.missing_categories):
+                QMessageBox.information(
+                    self,
+                    "Auto-categorization Skipped",
+                    "Missing model categories were not added.",
+                )
+                return
+            categorize_transactions(
+                session=session,
+                model_path=model_path,
+                unverified=unverified,
+                uncategorized=uncategorized,
+            )
+
+    def _prompt_add_missing_categories(self, session: Session, missing: list[str]) -> bool:
+        missing_text = ", ".join(missing)
+        reply = QMessageBox.question(
+            self,
+            "Add Missing Categories?",
+            (
+                "The trained model expects categories that are missing from this database:\n\n"
+                f"{missing_text}\n\n"
+                "Would you like to add these categories now and continue auto-categorizing?"
+            ),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
+        )
+        if reply != QMessageBox.Yes:
+            return False
+        add_missing_categories(session, missing)
+        QMessageBox.information(
+            self,
+            "Categories Added",
+            (
+                "Missing categories were added with Type set to 'Expense'.\n\n"
+                "Please update the type as needed in the Category Manager."
+            ),
+        )
+        return True
 
     def statement_matrix(self):
         dialog = CompletenessDialog(self.Session)
