@@ -9,6 +9,7 @@ from parsetrail.core.utils import (
     PDFReader,
     convert_amount_to_float,
     find_param_in_line,
+    find_regex_in_line,
     get_absolute_date,
 )
 from parsetrail.core.validation import Account, Statement, Transaction
@@ -19,7 +20,7 @@ class Parser(IParser):
     PLUGIN_NAME = "pdf_synchrony-amzncc_202501.py"
     VERSION = "0.1.0"
     SUFFIX = ".pdf"
-    COMPANY = "Amazon"
+    COMPANY = "Synchrony"
     STATEMENT_TYPE = "Amazon Store Card by Synchrony Bank"
     SEARCH_STRING = "amazon.syf.com"
     INSTRUCTIONS = (
@@ -34,8 +35,8 @@ class Parser(IParser):
     TRANSACTION_DATE = re.compile(r"\d{2}/\d{2}")
     AMOUNT = re.compile(r"-?\$\d{1,3}(?:,\d{3})*(?:\.\d{2})?")
     HEADER_COLS = [
-        "Trans.",
-        "Post",
+        "Date",
+        "Reference",
         "Description",
         "Amount",
     ]
@@ -51,8 +52,9 @@ class Parser(IParser):
         """
         logger.trace(f"Parsing {self.STATEMENT_TYPE} statement")
         try:
-            lines = reader.extract_lines_clean()
-            if not lines:
+            self.lines = reader.extract_lines_clean()
+            self.lower = [line.lower() for line in self.lines]
+            if not self.lines:
                 raise ValueError("No lines extracted from the PDF.")
             self.reader = reader
             # Extract raw chars from first page
@@ -87,11 +89,16 @@ class Parser(IParser):
             ValueError: If dates cannot be parsed or are invalid.
         """
         logger.trace("Attempting to parse dates from text.")
-        pattern = re.compile(r"Billing Period: (\d{2}/\d{2}/\d{2})-(\d{2}/\d{2}/\d{2})")
+        patterns = [
+            re.compile(r"previous balance as of (\d{2}/\d{2}/\d{4})"),
+            re.compile(r"new balance as of (\d{2}/\d{2}/\d{4})"),
+        ]
+        dates = []
         try:
-            match = re.search(pattern, self.chars)
-            self.start_date = datetime.strptime(match.group(1), self.HEADER_DATE)
-            self.end_date = datetime.strptime(match.group(2), self.HEADER_DATE)
+            for pattern in patterns:
+                _, _, match = find_regex_in_line(self.lower, pattern)
+                dates.append(datetime.strptime(match.group(1), self.HEADER_DATE))
+            self.start_date, self.end_date = dates
         except Exception as e:
             logger.trace(f"Failed to parse dates from text: {e}")
             raise ValueError(f"Failed to parse statement dates: {e}")
@@ -125,25 +132,19 @@ class Parser(IParser):
         try:
             self.get_statement_balances()
         except Exception as e:
-            raise ValueError(
-                f"Failed to extract balances for account {account_num}: {e}"
-            )
+            raise ValueError(f"Failed to extract balances for account {account_num}: {e}")
 
         # Extract transaction lines
         try:
             transaction_array = self.get_transaction_array()
         except Exception as e:
-            raise ValueError(
-                f"Failed to extract transactions for account {account_num}: {e}"
-            )
+            raise ValueError(f"Failed to extract transactions for account {account_num}: {e}")
 
         # Parse transactions
         try:
             transactions = self.parse_transaction_array(transaction_array)
         except Exception as e:
-            raise ValueError(
-                f"Failed to parse transactions for account {account_num}: {e}"
-            )
+            raise ValueError(f"Failed to parse transactions for account {account_num}: {e}")
 
         return Account(
             account_num=account_num,
@@ -158,8 +159,8 @@ class Parser(IParser):
         Returns:
             str: Account number
         """
-        pattern = re.compile(r"Account number ending in: (\d{4})")
-        match = re.search(pattern, self.chars)
+        pattern = re.compile(r"account number ending in (\d{4})")
+        _, _, match = find_regex_in_line(self.lower, pattern)
         account_num = match.group(1)
         return account_num
 
@@ -169,19 +170,18 @@ class Parser(IParser):
         Raises:
             ValueError: Unable to extract balances
         """
-        patterns = ["Previous balance ", "New balance "]
+        patterns = ["previous balance as of ", "new balance as of "]
         balances = []
 
         for pattern in patterns:
             try:
-                _, balance_line = find_param_in_line(self.reader.lines_clean, pattern)
-                balance_str = balance_line.split()[-1]
-                balance = -convert_amount_to_float(balance_str)
+                _, balance_line = find_param_in_line(self.lower, pattern)
+                balance_line_right = balance_line.split(pattern)[-1]
+                amount_str = balance_line_right.split()[1]
+                balance = -convert_amount_to_float(amount_str)
                 balances.append(balance)
             except ValueError as e:
-                raise ValueError(
-                    f"Failed to extract balance for pattern '{pattern}': {e}"
-                )
+                raise ValueError(f"Failed to extract balance for pattern '{pattern}': {e}")
 
         if len(balances) != 2:
             raise ValueError("Could not extract both starting and ending balances.")
@@ -224,18 +224,14 @@ class Parser(IParser):
                 header_cols.append(col)
             else:
                 # Attempt to find the largest partial match
-                matches = [
-                    word for word in word_set if col.endswith(word) and len(word) >= 3
-                ]
+                matches = [word for word in word_set if col.endswith(word) and len(word) >= 3]
                 if matches:
                     best_match = sorted(
                         matches,
                         key=lambda x: len(x),
                         reverse=True,
                     )[0]
-                    logger.debug(
-                        f"Matching fragment '{best_match}' to missing header '{col}'"
-                    )
+                    logger.debug(f"Matching fragment '{best_match}' to missing header '{col}'")
                     header_cols.append(best_match)
                 else:
                     # Use the original word
@@ -244,28 +240,20 @@ class Parser(IParser):
         # Return empty if not all header names were found, even after partial match detection
         missing_words = [word for word in header_cols if word not in word_set]
         if missing_words:
-            logger.debug(
-                f"Skipping page {page.page_number} because a table header was not found."
-            )
+            logger.debug(f"Skipping page {page.page_number} because a table header was not found.")
             return []
 
         # Get all the word objects that match the corrected header_cols
-        page_words = [
-            word for word in page_words_all if word.get("text") in header_cols
-        ]
+        page_words = [word for word in page_words_all if word.get("text") in header_cols]
 
         # Filter out spurious words by removing anything > 10 points from the mode
         y_mode = median(word.get("bottom") for word in page_words)
-        page_words = [
-            word for word in page_words if abs(word.get("bottom") - y_mode) < 10
-        ]
+        page_words = [word for word in page_words if abs(word.get("bottom") - y_mode) < 10]
 
         # Make sure there are the right number of matches, or return empty
         if len(page_words) != len(self.HEADER_COLS):
             word_list = [word.get("text") for word in page_words]
-            logger.debug(
-                f"Header keywords could not be matched. Expected: {self.HEADER_COLS}\nGot: {word_list}"
-            )
+            logger.debug(f"Header keywords could not be matched. Expected: {self.HEADER_COLS}\nGot: {word_list}")
             return []
 
         # Remap words list[dict] so it's addressable by column name
@@ -278,40 +266,31 @@ class Parser(IParser):
                 "bottom": word.get("bottom"),
             }
 
-        # Crop the page to the table size: [x0, top, x1, bottom]
-        crop_page = page.crop(
-            [
-                header[header_cols[0]]["x0"] - 3,  # Date col
-                header[header_cols[-1]]["bottom"] + 0.1,  # Amount col
-                header[header_cols[-1]]["x1"] + 2,  # Amount col
-                page.height,
-            ]
-        )
-
         def calculate_vertical_lines(header):
             """
             Create a list of vertical table separators based on the header coordinates
-            0: Trans. Date:     L justified
-            1: Post Date:       L Justified
+            0: Date:            L justified
+            1: Reference:       L Justified
             2: Description:     L Justified
-            4: Amount:          R Justified
+            3: Amount:          R Justified
             """
             return [
-                header[header_cols[0]]["x0"] - 3,  # Trans. Date left
-                header[header_cols[1]]["x0"] - 2,  # Post Date left
-                header[header_cols[2]]["x0"] - 2,  # Description left
+                header[header_cols[0]]["x0"] - 3,  # Date left
+                header[header_cols[1]]["x0"] - 8,  # Reference left
+                header[header_cols[2]]["x0"] - 8,  # Description left
                 header[header_cols[3]]["x0"] - 20,  # Amount left
-                header[header_cols[3]]["x1"] + 2,  # Amount right
+                header[header_cols[3]]["x1"] + 3,  # Amount right
             ]
 
         # Extract the table from the cropped page using dynamic vertical separators
         vertical_lines = calculate_vertical_lines(header)
         table_settings = {
             "vertical_strategy": "explicit",
-            "horizontal_strategy": "lines",
+            "horizontal_strategy": "text",
             "explicit_vertical_lines": vertical_lines,
         }
-        raw_array = crop_page.extract_table(table_settings=table_settings)
+
+        raw_array = page.extract_table(table_settings=table_settings)
 
         # Array validation
         array = []
@@ -325,9 +304,9 @@ class Parser(IParser):
                 continue
 
             # Include only rows that have a date or empty in date col.
-            # Break early if two rows are missing a date.
+            # And have either an amount or nothing in in amount col
             valid0 = bool(self.TRANSACTION_DATE.match(row[0])) or not row[0]
-            valid1 = bool(self.TRANSACTION_DATE.match(row[1])) or not row[0]
+            valid1 = bool(self.AMOUNT.match(row[3])) or not row[3]
             if valid0 and valid1:
                 array.append(row)
 
@@ -344,14 +323,14 @@ class Parser(IParser):
         """
 
         # Define column indices
-        tdate_col, pdate_col, desc_col, amount_col = 0, 1, 2, 3
+        date_col, desc_col, amount_col = 0, 2, 3
 
         def get_full_description(i_row):
             """Lookahead for multi-line transactions"""
             desc = []
             multilines = 0
             while i_row + multilines < len(array):
-                if multilines > 0 and array[i_row + multilines][pdate_col]:
+                if multilines > 0 and array[i_row + multilines][date_col]:
                     break
                 desc.append(array[i_row + multilines][desc_col])
                 amount_str = array[i_row + multilines][amount_col]
@@ -368,25 +347,22 @@ class Parser(IParser):
             row = array[i_row]
 
             # Return early if this is not a transaction start line
-            valid = bool(self.TRANSACTION_DATE.search(row[tdate_col])) or bool(
-                self.TRANSACTION_DATE.search(row[pdate_col])
-            )
-            if not valid:
+            if not bool(self.TRANSACTION_DATE.search(row[date_col])):
                 i_row += 1
                 continue
 
             # Extract main part of the transaction
-            if row[tdate_col] and not row[pdate_col]:
-                row[pdate_col] = row[tdate_col]
-            if row[pdate_col] and not row[tdate_col]:
-                row[tdate_col] = row[pdate_col]
-            transaction_date = get_absolute_date(
-                row[tdate_col], self.start_date, self.end_date
-            )
-            posting_date = get_absolute_date(
-                row[pdate_col], self.start_date, self.end_date
-            )
+            date = get_absolute_date(row[date_col], self.start_date, self.end_date)
 
+            # Deal with posting/transaction date ambiguity
+            if date < self.start_date:
+                posting_date = self.start_date
+            elif date > self.end_date:
+                posting_date = self.end_date
+            else:
+                posting_date = date
+
+            # Lookahead to get full description
             multilines, desc, amount_str = get_full_description(i_row)
             i_row += multilines
             if amount_str is None:
@@ -396,7 +372,7 @@ class Parser(IParser):
             # Append transaction
             transactions.append(
                 Transaction(
-                    transaction_date=transaction_date,
+                    transaction_date=date,
                     posting_date=posting_date,
                     amount=amount,
                     desc=desc,
