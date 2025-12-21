@@ -1,9 +1,8 @@
 """`cd client` before running as __main__"""
 
 import sys
-from pathlib import Path
 
-from parsetrail.build_plugins import compile_plugins
+from parsetrail.build_plugins import PLUGINS_DIR, compile_plugins
 from parsetrail.core.initialize import initialize_db
 from parsetrail.core.plugins import PluginManager
 from parsetrail.core.settings import settings
@@ -14,7 +13,7 @@ from PyQt5.QtWidgets import QApplication
 compile_plugins()
 
 # Manually set the plugin dir to the local plugin dist dir
-settings.plugin_dir = Path("dist/plugins")
+settings.plugin_dir = PLUGINS_DIR
 
 # Initialze db and plugin manager
 Session = initialize_db()
