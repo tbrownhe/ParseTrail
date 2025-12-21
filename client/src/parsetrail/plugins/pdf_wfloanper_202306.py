@@ -11,7 +11,7 @@ from parsetrail.core.validation import Account, Statement, Transaction
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_wfloanper_202306"
-    VERSION = "0.1.1"
+    VERSION = "0.1.2"
     SUFFIX = ".pdf"
     COMPANY = "Wells Fargo"
     STATEMENT_TYPE = "Personal Loan Monthly Statement"
@@ -205,14 +205,16 @@ class Parser(IParser):
 
         # Deal with loan origination
         if len(transaction_lines) == 0:
+            # Correct 'starting principal' to amount
             transactions.append(
                 Transaction(
                     transaction_date=self.end_date,
                     posting_date=self.end_date,
-                    amount=0.0,
+                    amount=self.start_balance,
                     desc="LOAN ORIGINATION",
                 )
             )
+            self.start_balance = 0.0
             return transactions
 
         interest = None
