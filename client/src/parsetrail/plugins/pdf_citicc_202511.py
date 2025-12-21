@@ -42,6 +42,7 @@ class Parser(IParser):
         "Amount",
     ]
     INTEREST_LINE = r"^\d{2}/\d{2} INTEREST CHARGED TO STANDARD PURCH"
+    MAX_DESC_LINES = 4
 
     def __init__(self):
         self.vertical_lines = None
@@ -98,6 +99,8 @@ class Parser(IParser):
         pattern = re.compile(r"Billing Period:\s{0,4}(\d{2}/\d{2}/\d{2})-(\d{2}/\d{2}/\d{2})")
         try:
             match = re.search(pattern, self.chars)
+            if not match:
+                raise ValueError("Statement date range not found.")
             self.start_date = datetime.strptime(match.group(1), self.HEADER_DATE)
             self.end_date = datetime.strptime(match.group(2), self.HEADER_DATE)
         except Exception as e:
@@ -127,25 +130,25 @@ class Parser(IParser):
         try:
             account_num = self.get_account_number()
         except Exception as e:
-            raise ValueError(f"Failed to extract account number: {e}")
+            raise ValueError(f"Failed to extract account number: {e}") from e
 
         # Extract statement balances
         try:
             self.get_statement_balances()
         except Exception as e:
-            raise ValueError(f"Failed to extract balances for account {account_num}: {e}")
+            raise ValueError(f"Failed to extract balances for account {account_num}: {e}") from e
 
         # Extract transaction lines
         try:
             transaction_array = self.get_transaction_array()
         except Exception as e:
-            raise ValueError(f"Failed to extract transactions for account {account_num}: {e}")
+            raise ValueError(f"Failed to extract transactions for account {account_num}: {e}") from e
 
         # Parse transactions
         try:
             transactions = self.parse_transaction_array(transaction_array)
         except Exception as e:
-            raise ValueError(f"Failed to parse transactions for account {account_num}: {e}")
+            raise ValueError(f"Failed to parse transactions for account {account_num}: {e}") from e
 
         return Account(
             account_num=account_num,
@@ -162,6 +165,8 @@ class Parser(IParser):
         """
         pattern = re.compile(r"Account number ending in: (\d{4})")
         match = re.search(pattern, self.chars)
+        if not match:
+            raise ValueError("Account number not found.")
         account_num = match.group(1)
         return account_num
 
@@ -199,13 +204,14 @@ class Parser(IParser):
             if self.stop:
                 logger.debug(f"Found end of transactions on page {i+1}")
                 return transaction_array
-            if self.vertical_lines is None:
+            if not self.vertical_lines:
                 self.get_vertical_lines(page)
-            if self.vertical_lines:
-                try:
-                    transaction_array.extend(self.get_transactions_from_page(page))
-                except Exception as e:
-                    raise ValueError(f"Failed to extract transactions from page {i}: {e}")
+            if not self.vertical_lines:
+                continue
+            try:
+                transaction_array.extend(self.get_transactions_from_page(page))
+            except Exception as e:
+                raise ValueError(f"Failed to extract transactions from page {i}: {e}")
         return transaction_array
 
     def get_vertical_lines(self, page: Page):
@@ -245,13 +251,13 @@ class Parser(IParser):
         page_words = [word for word in page_words_all if word.get("text") in header_cols]
 
         # Filter out spurious words by removing anything > 10 points from the mode
-        y_mode = median(word.get("bottom") for word in page_words)
-        page_words = [word for word in page_words if abs(word.get("bottom") - y_mode) < 10]
+        y_median = median(word.get("bottom") for word in page_words)
+        page_words = [word for word in page_words if abs(word.get("bottom") - y_median) < 10]
 
         # Make sure there are the right number of matches, or return empty
         if len(page_words) != len(self.HEADER_COLS):
             word_list = [word.get("text") for word in page_words]
-            logger.debug(f"Header keywords could not be matched. Expected: {self.HEADER_COLS}\nGot: {word_list}")
+            logger.debug("Header keywords could not be matched." f" Expected: {self.HEADER_COLS}\nGot: {word_list}")
             return
 
         # Remap words list[dict] so it's addressable by column name
@@ -308,7 +314,7 @@ class Parser(IParser):
         }
         raw_array = crop_page.extract_table(table_settings=table_settings)
         if raw_array is None:
-            return []
+            raw_array = []
 
         # Array validation
         array = []
@@ -369,7 +375,7 @@ class Parser(IParser):
                 amount_str = array[i_row + multilines][amount_col]
                 if self.AMOUNT.match(amount_str):
                     return multilines, " ".join(desc), amount_str
-                if multilines > 3:
+                if multilines > self.MAX_DESC_LINES - 1:
                     break
                 multilines += 1
             return multilines, None, None
@@ -388,12 +394,9 @@ class Parser(IParser):
                 continue
 
             # Extract main part of the transaction
-            if row[tdate_col] and not row[pdate_col]:
-                row[pdate_col] = row[tdate_col]
-            if row[pdate_col] and not row[tdate_col]:
-                row[tdate_col] = row[pdate_col]
-            transaction_date = get_absolute_date(row[tdate_col], self.start_date, self.end_date)
-            posting_date = get_absolute_date(row[pdate_col], self.start_date, self.end_date)
+            tdate, pdate = self._normalize_dates(row[tdate_col], row[pdate_col])
+            transaction_date = get_absolute_date(tdate, self.start_date, self.end_date)
+            posting_date = get_absolute_date(pdate, self.start_date, self.end_date)
 
             multilines, desc, amount_str = get_full_description(i_row)
             i_row += multilines
@@ -415,3 +418,10 @@ class Parser(IParser):
             i_row += 1
 
         return transactions
+
+    def _normalize_dates(self, tdate: str, pdate: str) -> tuple[str, str]:
+        if tdate and not pdate:
+            pdate = tdate
+        if pdate and not tdate:
+            tdate = pdate
+        return tdate, pdate
