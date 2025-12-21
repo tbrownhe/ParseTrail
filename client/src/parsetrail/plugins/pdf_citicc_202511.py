@@ -9,6 +9,7 @@ from parsetrail.core.utils import (
     PDFReader,
     convert_amount_to_float,
     find_param_in_line,
+    find_regex_in_line,
     get_absolute_date,
 )
 from parsetrail.core.validation import Account, Statement, Transaction
@@ -16,8 +17,8 @@ from parsetrail.core.validation import Account, Statement, Transaction
 
 class Parser(IParser):
     # Plugin metadata required by IParser
-    PLUGIN_NAME = "pdf_citicc_202506"
-    VERSION = "0.1.1"
+    PLUGIN_NAME = "pdf_citicc_202511"
+    VERSION = "0.1.0"
     SUFFIX = ".pdf"
     COMPANY = "Citibank"
     STATEMENT_TYPE = "Credit Account Monthly Statement"
@@ -35,11 +36,18 @@ class Parser(IParser):
     TRANSACTION_DATE = re.compile(r"\d{2}/\d{2}")
     AMOUNT = re.compile(r"-?\$\d{1,3}(?:,\d{3})*(?:\.\d{2})?")
     HEADER_COLS = [
-        "Trans.",
+        "Sale",
         "Post",
         "Description",
         "Amount",
     ]
+    INTEREST_LINE = r"^\d{2}/\d{2} INTEREST CHARGED TO STANDARD PURCH"
+    MAX_DESC_LINES = 4
+
+    def __init__(self):
+        self.vertical_lines = None
+        self.crop_settings = None
+        self.stop = False
 
     def parse(self, reader: PDFReader) -> Statement:
         """Entry point
@@ -52,8 +60,8 @@ class Parser(IParser):
         """
         logger.trace(f"Parsing {self.STATEMENT_TYPE} statement")
         try:
-            lines = reader.extract_lines_clean()
-            if not lines:
+            self.lines = reader.extract_lines_clean()
+            if not self.lines:
                 raise ValueError("No lines extracted from the PDF.")
             self.reader = reader
             # Extract raw chars from first page
@@ -91,6 +99,8 @@ class Parser(IParser):
         pattern = re.compile(r"Billing Period:\s{0,4}(\d{2}/\d{2}/\d{2})-(\d{2}/\d{2}/\d{2})")
         try:
             match = re.search(pattern, self.chars)
+            if not match:
+                raise ValueError("Statement date range not found.")
             self.start_date = datetime.strptime(match.group(1), self.HEADER_DATE)
             self.end_date = datetime.strptime(match.group(2), self.HEADER_DATE)
         except Exception as e:
@@ -120,25 +130,25 @@ class Parser(IParser):
         try:
             account_num = self.get_account_number()
         except Exception as e:
-            raise ValueError(f"Failed to extract account number: {e}")
+            raise ValueError(f"Failed to extract account number: {e}") from e
 
         # Extract statement balances
         try:
             self.get_statement_balances()
         except Exception as e:
-            raise ValueError(f"Failed to extract balances for account {account_num}: {e}")
+            raise ValueError(f"Failed to extract balances for account {account_num}: {e}") from e
 
         # Extract transaction lines
         try:
             transaction_array = self.get_transaction_array()
         except Exception as e:
-            raise ValueError(f"Failed to extract transactions for account {account_num}: {e}")
+            raise ValueError(f"Failed to extract transactions for account {account_num}: {e}") from e
 
         # Parse transactions
         try:
             transactions = self.parse_transaction_array(transaction_array)
         except Exception as e:
-            raise ValueError(f"Failed to parse transactions for account {account_num}: {e}")
+            raise ValueError(f"Failed to parse transactions for account {account_num}: {e}") from e
 
         return Account(
             account_num=account_num,
@@ -155,6 +165,8 @@ class Parser(IParser):
         """
         pattern = re.compile(r"Account number ending in: (\d{4})")
         match = re.search(pattern, self.chars)
+        if not match:
+            raise ValueError("Account number not found.")
         account_num = match.group(1)
         return account_num
 
@@ -189,21 +201,20 @@ class Parser(IParser):
         """
         transaction_array = []
         for i, page in enumerate(self.reader.PDF.pages):
+            if self.stop:
+                logger.debug(f"Found end of transactions on page {i+1}")
+                return transaction_array
+            if not self.vertical_lines:
+                self.get_vertical_lines(page)
+            if not self.vertical_lines:
+                continue
             try:
                 transaction_array.extend(self.get_transactions_from_page(page))
             except Exception as e:
                 raise ValueError(f"Failed to extract transactions from page {i}: {e}")
         return transaction_array
 
-    def get_transactions_from_page(self, page: Page) -> list[list[str]]:
-        """Extracts transaction array from each page of the pdf.
-
-        Args:
-            page (Page): pdfplumber PDF.pages object
-
-        Returns:
-            list[list[str]]: Processed lines containing dates and amounts for this page
-        """
+    def get_vertical_lines(self, page: Page):
         # Get the metadata and text of every word in the header.
         page_words_all = page.extract_words()
 
@@ -234,20 +245,20 @@ class Parser(IParser):
         missing_words = [word for word in header_cols if word not in word_set]
         if missing_words:
             logger.debug(f"Skipping page {page.page_number} because a table header was not found.")
-            return []
+            return
 
         # Get all the word objects that match the corrected header_cols
         page_words = [word for word in page_words_all if word.get("text") in header_cols]
 
         # Filter out spurious words by removing anything > 10 points from the mode
-        y_mode = median(word.get("bottom") for word in page_words)
-        page_words = [word for word in page_words if abs(word.get("bottom") - y_mode) < 10]
+        y_median = median(word.get("bottom") for word in page_words)
+        page_words = [word for word in page_words if abs(word.get("bottom") - y_median) < 10]
 
         # Make sure there are the right number of matches, or return empty
         if len(page_words) != len(self.HEADER_COLS):
             word_list = [word.get("text") for word in page_words]
-            logger.debug(f"Header keywords could not be matched. Expected: {self.HEADER_COLS}\nGot: {word_list}")
-            return []
+            logger.debug("Header keywords could not be matched." f" Expected: {self.HEADER_COLS}\nGot: {word_list}")
+            return
 
         # Remap words list[dict] so it's addressable by column name
         header = {}
@@ -259,26 +270,24 @@ class Parser(IParser):
                 "bottom": word.get("bottom"),
             }
 
-        # Crop the page to the table size: [x0, top, x1, bottom]
-        crop_page = page.crop(
-            [
-                header[header_cols[0]]["x0"] - 3,  # Date col
-                header[header_cols[-1]]["bottom"] + 0.1,  # Amount col
-                header[header_cols[-1]]["x1"] + 2,  # Amount col
-                page.height,
-            ]
-        )
+        # Crop the page to the table size: [left, top, right, bottom]
+        self.crop_settings = [
+            header[header_cols[0]]["x0"] - 3,  # Date col
+            0,
+            header[header_cols[-1]]["x1"] + 2,  # Amount col
+            page.height,
+        ]
 
-        def calculate_vertical_lines(header):
+        def calculate_lines(header):
             """
             Create a list of vertical table separators based on the header coordinates
-            0: Trans. Date:     L justified
+            0: Sale Date:     L justified
             1: Post Date:       L Justified
             2: Description:     L Justified
             4: Amount:          R Justified
             """
             return [
-                header[header_cols[0]]["x0"] - 3,  # Trans. Date left
+                header[header_cols[0]]["x0"] - 3,  # Sale Date left
                 header[header_cols[1]]["x0"] - 2,  # Post Date left
                 header[header_cols[2]]["x0"] - 2,  # Description left
                 header[header_cols[3]]["x0"] - 20,  # Amount left
@@ -286,19 +295,32 @@ class Parser(IParser):
             ]
 
         # Extract the table from the cropped page using dynamic vertical separators
-        vertical_lines = calculate_vertical_lines(header)
+        self.vertical_lines = calculate_lines(header)
+
+    def get_transactions_from_page(self, page: Page) -> list[list[str]]:
+        """Extracts transaction array from each page of the pdf.
+
+        Args:
+            page (Page): pdfplumber PDF.pages object
+
+        Returns:
+            list[list[str]]: Processed lines containing dates and amounts for this page
+        """
+        crop_page = page.crop(self.crop_settings)
         table_settings = {
             "vertical_strategy": "explicit",
             "horizontal_strategy": "lines",
-            "explicit_vertical_lines": vertical_lines,
+            "explicit_vertical_lines": self.vertical_lines,
         }
         raw_array = crop_page.extract_table(table_settings=table_settings)
+        if raw_array is None:
+            raw_array = []
 
         # Array validation
         array = []
         for row in raw_array:
             # Make sure each row has the right number of columns
-            if len(row) != len(vertical_lines) - 1:
+            if len(row) != len(self.vertical_lines) - 1:
                 raise ValueError(f"Incorrect number of columns for row: {row}")
 
             # Skip empty rows
@@ -308,9 +330,21 @@ class Parser(IParser):
             # Include only rows that have a date or empty in date col.
             # Break early if two rows are missing a date.
             valid0 = bool(self.TRANSACTION_DATE.match(row[0])) or not row[0]
-            valid1 = bool(self.TRANSACTION_DATE.match(row[1])) or not row[0]
+            valid1 = bool(self.TRANSACTION_DATE.match(row[1])) or not row[1]
             if valid0 and valid1:
                 array.append(row)
+
+        # Stop parsing more pages
+        txt = page.extract_text_simple()
+        if "TOTAL INTEREST FOR THIS PERIOD" in txt:
+            # Stop parsing pages
+            self.stop = True
+
+            # Table extraction misses the interest fee. Find and append it manually.
+            _, line, _ = find_regex_in_line(txt.splitlines(), self.INTEREST_LINE)
+            parts = line.split()
+            row = ["", parts[0], " ".join(parts[1:-1]), parts[-1]]
+            array.append(row)
 
         return array
 
@@ -323,6 +357,9 @@ class Parser(IParser):
         Returns:
             list[tuple]: Unsorted transaction array
         """
+
+        # Strip all newlines
+        array = [[elem.replace("\n", " ") for elem in row] for row in array]
 
         # Define column indices
         tdate_col, pdate_col, desc_col, amount_col = 0, 1, 2, 3
@@ -338,7 +375,7 @@ class Parser(IParser):
                 amount_str = array[i_row + multilines][amount_col]
                 if self.AMOUNT.match(amount_str):
                     return multilines, " ".join(desc), amount_str
-                if multilines > 3:
+                if multilines > self.MAX_DESC_LINES - 1:
                     break
                 multilines += 1
             return multilines, None, None
@@ -357,12 +394,9 @@ class Parser(IParser):
                 continue
 
             # Extract main part of the transaction
-            if row[tdate_col] and not row[pdate_col]:
-                row[pdate_col] = row[tdate_col]
-            if row[pdate_col] and not row[tdate_col]:
-                row[tdate_col] = row[pdate_col]
-            transaction_date = get_absolute_date(row[tdate_col], self.start_date, self.end_date)
-            posting_date = get_absolute_date(row[pdate_col], self.start_date, self.end_date)
+            tdate, pdate = self._normalize_dates(row[tdate_col], row[pdate_col])
+            transaction_date = get_absolute_date(tdate, self.start_date, self.end_date)
+            posting_date = get_absolute_date(pdate, self.start_date, self.end_date)
 
             multilines, desc, amount_str = get_full_description(i_row)
             i_row += multilines
@@ -384,3 +418,10 @@ class Parser(IParser):
             i_row += 1
 
         return transactions
+
+    def _normalize_dates(self, tdate: str, pdate: str) -> tuple[str, str]:
+        if tdate and not pdate:
+            pdate = tdate
+        if pdate and not tdate:
+            tdate = pdate
+        return tdate, pdate
