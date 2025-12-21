@@ -230,13 +230,13 @@ def create_directory(folder: Path):
         raise
 
 
-def find_line_startswith(lines: list[str], search_str: str, start: int = 0) -> tuple[int, str]:
+def find_line_startswith(lines: list[str], pattern: str, start: int = 0) -> tuple[int, str]:
     """
     Finds the first line in the list that starts with the given search string.
 
     Args:
         lines (list[str]): List of lines to search through.
-        search_str (str): String to match at the start of the line.
+        pattern (str): String to match at the start of the line.
         start (int, optional): Index to start the search from. Defaults to 0.
 
     Returns:
@@ -247,25 +247,25 @@ def find_line_startswith(lines: list[str], search_str: str, start: int = 0) -> t
     """
     if not isinstance(lines, list) or not all(isinstance(line, str) for line in lines):
         raise TypeError("Input 'lines' must be a list of strings.")
-    if not isinstance(search_str, str):
-        raise TypeError("Input 'search_str' must be a string.")
+    if not isinstance(pattern, str):
+        raise TypeError("Input 'pattern' must be a string.")
     if not isinstance(start, int) or start < 0:
         raise ValueError("Input 'start' must be a non-negative integer.")
 
     for i, line in enumerate(lines[start:], start=start):
-        if line.startswith(search_str):
+        if line.startswith(pattern):
             return i, line
 
-    raise ValueError(f"Search string '{search_str}' not found in lines.")
+    raise ValueError(f"Search string '{pattern}' not found in lines.")
 
 
-def find_regex_in_line(lines: list[str], search_str: Union[str, re.Pattern]) -> tuple[int, str, str]:
+def find_regex_in_line(lines: list[str], pattern: str | re.Pattern) -> tuple[int, str, re.Match]:
     """
     Finds the first line in the list that matches the given regular expression.
 
     Args:
         lines (list[str]): List of lines to search through.
-        search_str (Union[str, re.Pattern]): Regex pattern (string or compiled) to search for.
+        pattern (Union[str, re.Pattern]): Regex pattern (string or compiled) to search for.
 
     Returns:
         Tuple[int, str, str]: A tuple containing the line index, the line content,
@@ -278,29 +278,26 @@ def find_regex_in_line(lines: list[str], search_str: Union[str, re.Pattern]) -> 
     # Input validation
     if not isinstance(lines, list) or not all(isinstance(line, str) for line in lines):
         raise TypeError("Input 'lines' must be a list of strings.")
-    if not isinstance(search_str, (str, re.Pattern)):
-        raise TypeError("Input 'search_str' must be a string or a compiled regex pattern.")
-
-    # Compile search_str if it's a string
-    regex = search_str if isinstance(search_str, re.Pattern) else re.compile(search_str)
+    if isinstance(pattern, str):
+        pattern = re.compile(pattern)
+    if not isinstance(pattern, re.Pattern):
+        raise TypeError("Input 'pattern' must be a string or a compiled regex pattern.")
 
     for i, line in enumerate(lines):
-        match = regex.search(line)
+        match = pattern.search(line)
         if match:
-            return i, line, match.group(0)
+            return i, line, match
 
-    raise ValueError(f"Regex pattern '{search_str}' not found in lines.")
+    raise ValueError(f"Regex pattern '{pattern}' not found in lines.")
 
 
-def find_param_in_line(
-    lines: list[str], search_str: str, start: int = 0, case_sensitive: bool = True
-) -> Tuple[int, str]:
+def find_param_in_line(lines: list[str], pattern: str, start: int = 0, case_sensitive: bool = True) -> Tuple[int, str]:
     """
     Finds the first line in the list that contains the search string.
 
     Args:
         lines (list[str]): List of lines to search through.
-        search_str (str): The string to search for.
+        pattern (str): The string to search for.
         start (int, optional): The starting index for the search. Defaults to 0.
         case_sensitive (bool, optional): Whether the search is case-sensitive. Defaults to True.
 
@@ -314,27 +311,27 @@ def find_param_in_line(
     # Input validation
     if not isinstance(lines, list) or not all(isinstance(line, str) for line in lines):
         raise TypeError("Input 'lines' must be a list of strings.")
-    if not isinstance(search_str, str):
-        raise TypeError("Input 'search_str' must be a string.")
+    if not isinstance(pattern, str):
+        raise TypeError("Input 'pattern' must be a string.")
     if not isinstance(start, int) or start < 0:
         raise TypeError("Input 'start' must be a non-negative integer.")
     if not isinstance(case_sensitive, bool):
         raise TypeError("Input 'case_sensitive' must be a boolean.")
 
     for i, line in enumerate(lines[start:], start=start):
-        if search_str in line if case_sensitive else search_str.lower() in line.lower():
+        if pattern in line if case_sensitive else pattern.lower() in line.lower():
             return i, line
 
-    raise ValueError(f"Parameter '{search_str}' not found in lines.")
+    raise ValueError(f"Parameter '{pattern}' not found in lines.")
 
 
-def find_line_re_search(lines: list[str], search_str: Union[str, re.Pattern]) -> tuple[int, str]:
+def find_line_re_search(lines: list[str], pattern: Union[str, re.Pattern]) -> tuple[int, str]:
     """
     Finds the first line matching the given regex pattern.
 
     Args:
         lines (list[str]): List of lines to search through.
-        search_str (Union[str, re.Pattern]): Regex pattern (string or compiled) to search for.
+        pattern (Union[str, re.Pattern]): Regex pattern (string or compiled) to search for.
 
     Returns:
         tuple[int, str]: A tuple containing the line index and the matching line.
@@ -346,17 +343,17 @@ def find_line_re_search(lines: list[str], search_str: Union[str, re.Pattern]) ->
     # Input validation
     if not isinstance(lines, list) or not all(isinstance(line, str) for line in lines):
         raise TypeError("Input 'lines' must be a list of strings.")
-    if not isinstance(search_str, (str, re.Pattern)):
-        raise TypeError("Input 'search_str' must be a string or a compiled regex pattern.")
+    if not isinstance(pattern, (str, re.Pattern)):
+        raise TypeError("Input 'pattern' must be a string or a compiled regex pattern.")
 
-    # Compile search_str if it's a string
-    regex = search_str if isinstance(search_str, re.Pattern) else re.compile(search_str)
+    # Compile pattern if it's a string
+    regex = pattern if isinstance(pattern, re.Pattern) else re.compile(pattern)
 
-    regex = re.compile(search_str)
+    regex = re.compile(pattern)
     for i, line in enumerate(lines):
         if regex.search(line):
             return i, line
-    raise ValueError(f"Regex '{search_str}' not found in lines.")
+    raise ValueError(f"Regex '{pattern}' not found in lines.")
 
 
 def get_absolute_date(mmdd: str, start_date: datetime, end_date: datetime) -> datetime:

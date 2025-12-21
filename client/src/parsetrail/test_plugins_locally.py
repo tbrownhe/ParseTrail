@@ -1,5 +1,3 @@
-"""`cd client` before running as __main__"""
-
 import sys
 
 from parsetrail.build_plugins import PLUGINS_DIR, compile_plugins

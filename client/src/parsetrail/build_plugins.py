@@ -1,5 +1,3 @@
-"""`cd client` before running as __main__"""
-
 import json
 import py_compile
 from pathlib import Path
