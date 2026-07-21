@@ -201,6 +201,13 @@ def is_newer_version(local_version, server_version) -> bool:
     return version.parse(server_version) > version.parse(local_version)
 
 
+def is_version_compatible(current_version: str, minimum_version: str) -> bool:
+    """
+    Check if the current version meets or exceeds a minimum version.
+    """
+    return version.parse(current_version) >= version.parse(minimum_version)
+
+
 def open_file_in_os(fpath: Path):
     try:
         if not fpath.exists():

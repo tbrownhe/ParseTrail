@@ -15,7 +15,8 @@ from parsetrail.core.validation import Account, Statement, Transaction
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_fidelity401k_201810"
-    VERSION = "0.1.1"
+    VERSION = "0.1.2"
+    MIN_CLIENT_VERSION = "1.1.1"
     SUFFIX = ".pdf"
     COMPANY = "Fidelity"
     STATEMENT_TYPE = "Retirement Savings Monthly Statement"

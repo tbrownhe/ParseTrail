@@ -10,7 +10,8 @@ from parsetrail.core.validation import Account, Statement, Transaction
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "csv_mohela_202411"
-    VERSION = "0.1.0"
+    VERSION = "0.1.1"
+    MIN_CLIENT_VERSION = "1.1.1"
     SUFFIX = ".csv"
     COMPANY = "MOHELA Student Loan Servicing"
     STATEMENT_TYPE = "Life of Loan Statement"

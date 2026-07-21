@@ -17,7 +17,8 @@ from parsetrail.core.validation import Account, Statement, Transaction
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_citicc_202506"
-    VERSION = "0.1.1"
+    VERSION = "0.1.2"
+    MIN_CLIENT_VERSION = "1.1.1"
     SUFFIX = ".pdf"
     COMPANY = "Citibank"
     STATEMENT_TYPE = "Credit Account Monthly Statement"

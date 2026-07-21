@@ -11,7 +11,8 @@ from parsetrail.core.validation import Account, Statement, Transaction
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_wfloanper_202306"
-    VERSION = "0.1.2"
+    VERSION = "0.1.3"
+    MIN_CLIENT_VERSION = "1.1.1"
     SUFFIX = ".pdf"
     COMPANY = "Wells Fargo"
     STATEMENT_TYPE = "Personal Loan Monthly Statement"

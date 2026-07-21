@@ -5,9 +5,20 @@ from loguru import logger
 from parsetrail.core.api import api_client
 from parsetrail.core.interfaces import IParser, class_variables, validate_parser
 from parsetrail.core.settings import settings
-from parsetrail.core.utils import is_newer_version
+from parsetrail.core.utils import is_newer_version, is_version_compatible
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtWidgets import QApplication, QProgressDialog
+from parsetrail.version import __version__ as current_version
+
+
+def _get_min_client_version(metadata: dict[str, str]) -> str:
+    min_version = metadata.get("MIN_CLIENT_VERSION")
+    return min_version.strip() if isinstance(min_version, str) and min_version.strip() else "0.0.0"
+
+
+def _is_plugin_compatible(metadata: dict[str, str]) -> bool:
+    min_version = _get_min_client_version(metadata)
+    return is_version_compatible(current_version, min_version)
 
 
 def load_plugin(plugin_file: Path) -> tuple[str, IParser, dict[str, str]]:
@@ -56,6 +67,14 @@ class PluginManager:
             # Retrieve the Parser(Iparser) class from the plugin and store it
             try:
                 plugin_id, ParserClass, metadata = load_plugin(plugin_file)
+                if not _is_plugin_compatible(metadata):
+                    logger.warning(
+                        "Skipping plugin {name}: requires client >= {min_version} (current {current}).",
+                        name=metadata.get("PLUGIN_NAME", plugin_id),
+                        min_version=_get_min_client_version(metadata),
+                        current=current_version,
+                    )
+                    continue
                 self.plugins[plugin_id] = ParserClass
                 self.metadata[plugin_id] = metadata
                 success += 1
@@ -111,6 +130,13 @@ def download_plugin(plugin_fname: str):
 def compare_plugins(local_plugins: list[dict], server_plugins: list[dict]) -> list[dict]:
     new_plugins = []
     for server_plugin in server_plugins:
+        if not _is_plugin_compatible(server_plugin):
+            logger.warning(
+                "Plugin {name} requires client >= {min_version}; skipping download.",
+                name=server_plugin.get("PLUGIN_NAME", "unknown"),
+                min_version=_get_min_client_version(server_plugin),
+            )
+            continue
         plugin_name = server_plugin["PLUGIN_NAME"]
         local_plugin = next(
             (lp for lp in local_plugins if lp["PLUGIN_NAME"] == plugin_name),

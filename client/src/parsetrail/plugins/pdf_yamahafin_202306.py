@@ -16,7 +16,8 @@ from parsetrail.core.validation import Account, Statement, Transaction
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_yamahafin_202306"
-    VERSION = "0.1.0"
+    VERSION = "0.1.1"
+    MIN_CLIENT_VERSION = "1.1.1"
     SUFFIX = ".pdf"
     COMPANY = "Yamaha Motor Finance"
     STATEMENT_TYPE = "Auto Loan Monthly Statement"

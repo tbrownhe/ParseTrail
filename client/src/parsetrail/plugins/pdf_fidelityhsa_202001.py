@@ -17,7 +17,8 @@ from parsetrail.core.validation import Account, Statement, Transaction
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_fidelityhsa_202001"
-    VERSION = "0.1.0"
+    VERSION = "0.1.1"
+    MIN_CLIENT_VERSION = "1.1.1"
     SUFFIX = ".pdf"
     COMPANY = "Fidelity"
     STATEMENT_TYPE = "Health Savings Account Monthly Statement"

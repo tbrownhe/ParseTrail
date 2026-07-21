@@ -18,7 +18,8 @@ from parsetrail.core.validation import Account, Statement, Transaction
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_synchrony-amzncc_202501.py"
-    VERSION = "0.1.0"
+    VERSION = "0.1.1"
+    MIN_CLIENT_VERSION = "1.1.2"
     SUFFIX = ".pdf"
     COMPANY = "Synchrony"
     STATEMENT_TYPE = "Amazon Store Card by Synchrony Bank"
@@ -134,19 +135,25 @@ class Parser(IParser):
         try:
             self.get_statement_balances()
         except Exception as e:
-            raise ValueError(f"Failed to extract balances for account {account_num}: {e}")
+            raise ValueError(
+                f"Failed to extract balances for account {account_num}: {e}"
+            )
 
         # Extract transaction lines
         try:
             transaction_array = self.get_transaction_array()
         except Exception as e:
-            raise ValueError(f"Failed to extract transactions for account {account_num}: {e}")
+            raise ValueError(
+                f"Failed to extract transactions for account {account_num}: {e}"
+            )
 
         # Parse transactions
         try:
             transactions = self.parse_transaction_array(transaction_array)
         except Exception as e:
-            raise ValueError(f"Failed to parse transactions for account {account_num}: {e}")
+            raise ValueError(
+                f"Failed to parse transactions for account {account_num}: {e}"
+            )
 
         return Account(
             account_num=account_num,
@@ -183,7 +190,9 @@ class Parser(IParser):
                 balance = -convert_amount_to_float(amount_str)
                 balances.append(balance)
             except ValueError as e:
-                raise ValueError(f"Failed to extract balance for pattern '{pattern}': {e}")
+                raise ValueError(
+                    f"Failed to extract balance for pattern '{pattern}': {e}"
+                )
 
         if len(balances) != 2:
             raise ValueError("Could not extract both starting and ending balances.")
@@ -216,18 +225,26 @@ class Parser(IParser):
         # Get the metadata and text of every word in the header.
         page_words_all = page.extract_words()
 
-        header_cols, page_words = self._match_header_words(page_words_all, page.page_number)
+        header_cols, page_words = self._match_header_words(
+            page_words_all, page.page_number
+        )
         if not header_cols:
             return []
 
         # Filter out spurious words by removing anything > 10 points from the mode
         y_mode = median(word.get("bottom") for word in page_words)
-        page_words = [word for word in page_words if abs(word.get("bottom") - y_mode) < self.HEADER_WORD_Y_TOLERANCE]
+        page_words = [
+            word
+            for word in page_words
+            if abs(word.get("bottom") - y_mode) < self.HEADER_WORD_Y_TOLERANCE
+        ]
 
         # Make sure there are the right number of matches, or return empty
         if len(page_words) != len(self.HEADER_COLS):
             word_list = [word.get("text") for word in page_words]
-            logger.debug(f"Header keywords could not be matched. Expected: {self.HEADER_COLS}\nGot: {word_list}")
+            logger.debug(
+                f"Header keywords could not be matched. Expected: {self.HEADER_COLS}\nGot: {word_list}"
+            )
             return []
 
         # Remap words list[dict] so it's addressable by column name
@@ -301,20 +318,28 @@ class Parser(IParser):
                 header_cols.append(col)
                 continue
 
-            matches = [word for word in word_set if col.endswith(word) and len(word) >= 3]
+            matches = [
+                word for word in word_set if col.endswith(word) and len(word) >= 3
+            ]
             if matches:
                 best_match = max(matches, key=len)
-                logger.debug(f"Matching fragment '{best_match}' to missing header '{col}'")
+                logger.debug(
+                    f"Matching fragment '{best_match}' to missing header '{col}'"
+                )
                 header_cols.append(best_match)
             else:
                 header_cols.append(col)
 
         missing_words = [word for word in header_cols if word not in word_set]
         if missing_words:
-            logger.debug(f"Skipping page {page_number} because a table header was not found.")
+            logger.debug(
+                f"Skipping page {page_number} because a table header was not found."
+            )
             return [], []
 
-        page_words = [word for word in page_words_all if word.get("text") in header_cols]
+        page_words = [
+            word for word in page_words_all if word.get("text") in header_cols
+        ]
         return header_cols, page_words
 
     def parse_transaction_array(self, array: list[list[str]]) -> list[Transaction]:
