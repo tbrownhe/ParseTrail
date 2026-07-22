@@ -11,7 +11,6 @@ on:
 
 jobs:
   lint-backend:
-    if: ${{ false }}  # Disabled for now; remove to enable
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -19,11 +18,13 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.10"
+          python-version: "3.13"
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
-          version: "0.4.15"
+          version: "0.9.5"
           enable-cache: true
-      - run: uv run bash scripts/lint.sh
+      - run: uv sync --extra dev --frozen
+        working-directory: backend
+      - run: uv run --frozen bash scripts/lint.sh
         working-directory: backend

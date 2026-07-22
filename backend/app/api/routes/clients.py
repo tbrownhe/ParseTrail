@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import text
 
+from app.api.request_utils import get_client_host, get_user_agent
 from app.core.db import engine
 
 router = APIRouter()
@@ -25,7 +26,7 @@ SUFFIX = {"win64": "exe", "macos": "dmg", "linux": ""}
 
 
 @router.get("/", summary="Get list of available client installers")
-async def get_plugins():
+async def get_plugins() -> JSONResponse:
     """
     Returns a list of available client installers and their metadata, grouped by file type.
     """
@@ -52,11 +53,15 @@ async def get_plugins():
 
 
 @router.get("/{platform}/{version}", summary="Download a client setup.exe")
-async def download_client(platform: str, version: str, request: Request):
+async def download_client(
+    platform: str, version: str, request: Request
+) -> FileResponse:
     """
     Serves the requested client install file.
     """
-    suffix = SUFFIX[platform]
+    suffix = SUFFIX.get(platform)
+    if suffix is None:
+        raise HTTPException(status_code=404, detail="Platform not found")
     if version == "latest":
         # Serve the latest version
         platform_dir = CLIENTS_DIR / platform
@@ -96,8 +101,8 @@ async def download_client(platform: str, version: str, request: Request):
         )
 
     # Log the download to file
-    client_ip = request.client.host
-    user_agent = request.headers.get("User-Agent", "Unknown")
+    client_ip = get_client_host(request)
+    user_agent = get_user_agent(request)
     logging.info(
         f"Download: {client_path.stem} (type: {platform}) | IP: {client_ip} | User-Agent: {user_agent}"
     )

@@ -91,30 +91,39 @@ Nevertheless, if it doesn't detect a change but a syntax error, it will just sto
 
 ## Backend tests
 
-To test the backend run:
+Backend tests are hard-wired to a dedicated local database name and port. They
+ignore the repository `.env` and refuse production-like database names or remote
+database hosts.
+
+Start the disposable Postgres service from the repository root:
 
 ```console
-$ bash ./scripts/test.sh
+$ docker compose -p parsetrail-tests -f docker-compose.test.yml up -d --wait
 ```
 
-The tests run with Pytest, modify and add tests to `./backend/app/tests/`.
+Then install the locked development environment and run the suite:
 
-If you use GitHub Actions the tests will run automatically.
-
-### Test running stack
-
-If your stack is already up and you just want to run the tests, you can use:
-
-```bash
-docker compose exec backend bash scripts/tests-start.sh
+```console
+$ cd backend
+$ uv sync --extra dev --frozen
+$ uv run --frozen bash scripts/tests-start.sh
 ```
 
-That `/app/scripts/tests-start.sh` script just calls `pytest` after making sure that the rest of the stack is running. If you need to pass extra arguments to `pytest`, you can pass them to that command and they will be forwarded.
+When finished, remove the test container and its non-external volume:
 
-For example, to stop on first error:
+```console
+$ docker compose -p parsetrail-tests -f docker-compose.test.yml down -v
+```
+
+The tests run with Pytest. Modify and add tests under `./backend/app/tests/`.
+
+Backend static checks run in GitHub Actions. The database-backed workflow remains
+disabled until the disposable test stack has completed its first local run.
+
+Arguments are forwarded to Pytest. For example, to stop on the first failure:
 
 ```bash
-docker compose exec backend bash scripts/tests-start.sh -x
+uv run --frozen bash scripts/tests-start.sh -x
 ```
 
 ### Test Coverage

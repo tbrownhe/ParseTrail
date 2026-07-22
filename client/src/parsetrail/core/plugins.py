@@ -3,6 +3,7 @@ from pathlib import Path
 
 from loguru import logger
 from parsetrail.core.api import api_client
+from parsetrail.core.artifacts import resolve_artifact_destination
 from parsetrail.core.interfaces import IParser, class_variables, validate_parser
 from parsetrail.core.settings import settings
 from parsetrail.core.utils import is_newer_version, is_version_compatible
@@ -116,13 +117,23 @@ def download_plugin(plugin_fname: str):
     Downloads a specific plugin from the server.
     """
     settings.plugin_dir.mkdir(parents=True, exist_ok=True)
-    dpath = settings.plugin_dir / plugin_fname
+    dpath = resolve_artifact_destination(
+        settings.plugin_dir, plugin_fname, allowed_suffixes={".pyc"}
+    )
+    partial_path = dpath.with_name(f"{dpath.name}.part")
     try:
-        with dpath.open("wb") as f:
+        with partial_path.open("wb") as f:
             for chunk, _, _ in api_client.stream_plugin(plugin_fname):
                 f.write(chunk)
+        partial_path.replace(dpath)
         logger.success(f"Downloaded plugin {plugin_fname}")
     except Exception as e:
+        try:
+            partial_path.unlink(missing_ok=True)
+        except OSError as cleanup_error:
+            logger.warning(
+                f"Could not remove incomplete plugin download {partial_path}: {cleanup_error}"
+            )
         logger.error(f"Error downloading plugin {plugin_fname}: {e}")
         raise
 
@@ -158,6 +169,7 @@ def sync_plugins(local_plugins: list[dict], server_plugins: list[dict], progress
     """
     new_plugins = compare_plugins(local_plugins, server_plugins)
 
+    dialog: QProgressDialog | None = None
     if progress:
         dialog = QProgressDialog(
             "Updating Plugins",
@@ -176,17 +188,18 @@ def sync_plugins(local_plugins: list[dict], server_plugins: list[dict], progress
 
     for plugin in new_plugins:
         plugin_name = plugin["PLUGIN_NAME"]
-        dialog.setLabelText(f"Downloading new {plugin_name}")
+        if dialog is not None:
+            dialog.setLabelText(f"Downloading new {plugin_name}")
         try:
             download_plugin(plugin["FILENAME"])
-            if progress:
+            if dialog is not None:
                 dialog.setValue(dialog.value() + 1)
                 QApplication.processEvents()
         except Exception as e:
             logger.error(f"Failed to download new plugin {plugin_name}: {e}")
             raise
 
-    if progress:
+    if dialog is not None:
         dialog.close()
 
 

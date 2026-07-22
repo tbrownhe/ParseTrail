@@ -1,6 +1,6 @@
 import hashlib
 import logging
-import subprocess
+import stat
 import time
 from pathlib import Path
 
@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from sqlalchemy import text
 
+from app.api.request_utils import get_client_host, get_user_agent
 from app.core.db import engine
 
 router = APIRouter()
@@ -25,29 +26,28 @@ PUBLIC_KEY_PATH = KEYS_DIR / "public_key.pem"
 KEYS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def ensure_permissions():
+def ensure_permissions() -> None:
     """
     Ensure the correct permissions are set for the keys directory and its contents.
     """
     try:
         if KEYS_DIR.exists():
-            subprocess.run(["chmod", "700", str(KEYS_DIR)], check=True)
+            KEYS_DIR.chmod(stat.S_IRWXU)
 
         for key_file in KEYS_DIR.glob("*"):
-            subprocess.run(["chmod", "600", str(key_file)], check=True)
-    except subprocess.CalledProcessError as e:
-        logging.error(f"Permission change failed: {e}")
-        raise RuntimeError("Failed to set key permissions")
+            key_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    except OSError as exc:
+        logging.error(f"Permission change failed: {exc}")
+        raise RuntimeError("Failed to set key permissions") from exc
 
 
-def generate_new_rsa_keys():
+def generate_new_rsa_keys() -> None:
     """Generate new RSA keys and save them to Docker volume"""
     try:
         private_key = rsa.generate_private_key(
             public_exponent=65537,
             key_size=2048,
         )
-        ...
     except Exception as e:
         logging.error(f"Failed to generate RSA keys: {e}")
         raise
@@ -78,7 +78,7 @@ def generate_new_rsa_keys():
     ensure_permissions()
 
 
-def is_key_expired(key_path: Path, max_age_days: int = 365):
+def is_key_expired(key_path: Path, max_age_days: int = 365) -> bool:
     if not key_path.exists():
         return True
     file_age = (time.time() - key_path.stat().st_mtime) / (24 * 3600)
@@ -104,7 +104,7 @@ logging.basicConfig(
 
 
 @router.get("/public-key", summary="Get the server's public RSA key")
-async def get_public_key(request: Request):
+async def get_public_key(request: Request) -> Response:
     """
     Returns the server's public RSA key.
     """
@@ -119,9 +119,8 @@ async def get_public_key(request: Request):
         raise HTTPException(status_code=500, detail="Error retrieving public key")
 
     try:
-        client_ip = request.client.host or "unknown"
-        user_agent = request.headers.get("User-Agent", "Unknown")
-        user_agent = user_agent[:255]
+        client_ip = get_client_host(request)
+        user_agent = get_user_agent(request)
         key_type = "public_key"
 
         logging.info(
@@ -152,7 +151,7 @@ async def get_public_key(request: Request):
 
 
 @router.get("/public-key-hash", summary="Get the hash of the server's public RSA key")
-async def get_public_key_hash():
+async def get_public_key_hash() -> dict[str, str | float]:
     """
     Returns the SHA-256 hash of the server's public RSA key.
     """

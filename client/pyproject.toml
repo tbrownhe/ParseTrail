@@ -21,11 +21,11 @@ dependencies = [
   "SQLAlchemy<3.0.0,>=2.0.0",
   "alembic<2.0.0,>=1.12.1",
   "nltk<4.0,>=3.9",
-  "pdfplumber==0.11.4",
+  "pdfplumber==0.11.10",
   "requests<3,>=2.32",
   "pydantic<3,>=2.10",
   "pydantic-settings<3,>=2.7",
-  "cryptography<45.0.0,>=44.0.0",
+  "cryptography<50.0.0,>=48.0.1",
   "psycopg[binary]<4.0.0,>=3.1.13",
   "mkl; sys_platform == 'win32'",
 ]
@@ -51,3 +51,13 @@ include = ["src/parsetrail/assets/**"]
 line-length = 120
 lint.extend-select = ["E"]
 lint.ignore = ["E203"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.uv]
+required-environments = [
+  "sys_platform == 'win32' and platform_machine == 'AMD64'",
+  "sys_platform == 'darwin' and platform_machine == 'arm64'",
+  "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+]

@@ -22,7 +22,7 @@ Windows builds are done with NSIS; macOS builds produce a disk image containing 
 cd client
 conda env create -f dev_env_win64.yml
 conda activate parsetrail-client
-uv pip install -e "./[dev]"
+uv sync --extra dev --frozen
 ```
 
 ### macOS
@@ -30,7 +30,7 @@ uv pip install -e "./[dev]"
 cd client
 conda env create -f dev_env_macos.yml
 conda activate parsetrail-client
-uv pip install -e "./[dev]"
+uv sync --extra dev --frozen
 ```
 
 ## Running the Client
@@ -38,7 +38,7 @@ uv pip install -e "./[dev]"
 To run the UI directly from source:
 
 ```bash
-python src/parsetrail/main.py
+uv run --frozen python src/parsetrail/main.py
 ```
 
 This launches the PyQt-based GUI in development mode.
@@ -49,14 +49,17 @@ The client supports dynamically loaded parsing plugins.
 You can exercise a plugin against local PDF/text statements:
 
 ```bash
-python src/parsetrail/test_plugins_locally.py
+uv run --frozen python src/parsetrail/run_plugins_locally.py
 ```
 
-This bypasses the GUI and is the fastest way to debug parsing logic.
+This opens the parser-development dialog and rebuilds local plugins before use.
 
 ## Build & Deploy Plugins
 
-Plugins are compiled into encrypted `.pyc` bundles and pushed to the backend server, where client applications can securely download them. Note this will be done on the ParseTrail server whenever a PR is merged and is not necessary for plugin development by the community unless running a local backend for testing purposes.
+Plugins are currently compiled into `.pyc` files and copied to the backend artifact
+directory. Python bytecode is not encryption, and downloaded plugins are not yet
+authenticated; see the repository `TODO.md` signed-artifact work before treating
+the distribution channel as a security boundary.
 
 ### Before building:
 

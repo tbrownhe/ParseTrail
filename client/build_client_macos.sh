@@ -65,6 +65,7 @@ DMG_PATH="${DIST_DIR}/parsetrail_${VERSION}_macos_setup.dmg"
 require_cmd conda
 require_cmd create-dmg
 require_cmd rsync
+require_cmd uv
 
 
 # ---------- Conda env & build ----------
@@ -76,8 +77,11 @@ CONDA_BASE=$(conda info --base 2>/dev/null) || error_exit "Unable to determine c
 source "$CONDA_BASE/etc/profile.d/conda.sh"
 conda activate "$CONDA_ENV" || error_exit "Failed to activate conda environment '$CONDA_ENV'."
 
+echo "Synchronizing the locked client environment..."
+uv sync --frozen || error_exit "Failed to synchronize the locked client environment."
+
 echo "Building the executable with PyInstaller..."
-pyinstaller \
+uv run --frozen pyinstaller \
     -n "$APP_NAME" \
     --clean \
     --noconfirm \

@@ -10,6 +10,7 @@ from loguru import logger
 from sqlalchemy.orm import sessionmaker
 
 from parsetrail.core.interfaces import IParser
+from parsetrail.core.parser_routing import first_successful_candidate
 from parsetrail.core.plugins import PluginManager
 from parsetrail.core.utils import PDFReader
 from parsetrail.core.validation import Statement, ValidationError, validate_statement
@@ -175,7 +176,7 @@ class BaseRouter(Generic[T]):
             ValueError: Statement is not recognized. A parser likely needs to be built.
 
         Returns:
-            str: Plugin name (e.g., 'pdf_citibank')
+            list[str]: Matching plugin names in metadata order.
         """
         plugins = []
         for plugin_name, metadata in self.plugin_manager.metadata.items():
@@ -214,6 +215,18 @@ class BaseRouter(Generic[T]):
 
             raise ValidationError(err)
         return statement
+
+    def extract_from_candidates(self, plugins: list[str], input_data: T) -> Statement:
+        """Try each metadata match consistently for every supported file format."""
+        try:
+            return first_successful_candidate(
+                plugins,
+                lambda plugin: self.extract_statement(plugin, input_data),
+                source=str(self.fpath),
+            )
+        except ValueError as exc:
+            logger.debug(str(exc))
+            raise
 
     def run_parser(self, parser: IParser, input_data: T) -> Statement:
         """
@@ -259,19 +272,7 @@ class PDFRouter(BaseRouter[PDFReader]):
         with PDFReader(self.parse_input.data, self.fpath) as reader:
             text = reader.extract_text_simple()
             plugins = self.select_parser(text, suffix=".pdf")
-
-            errs = []
-            for i, plugin in enumerate(plugins):
-                try:
-                    return self.extract_statement(plugin, reader)
-                except Exception as e:
-                    errs.append(f"{plugin}: {e}")
-                    if i < len(plugins) - 1:
-                        continue
-                    else:
-                        err = "; ".join(errs)
-                        logger.debug(f"Failed to parse {self.fpath}: {err}")
-                        raise ValueError(f"Failed to parse {self.fpath}: {err}")
+            return self.extract_from_candidates(plugins, reader)
 
 
 class CSVRouter(BaseRouter[list[list[str]]]):
@@ -299,9 +300,8 @@ class CSVRouter(BaseRouter[list[list[str]]]):
         array = self.read_csv_as_array()
 
         # Extract the statement data
-        plugin_name = self.select_parser(text, suffix=".csv")
-        statement = self.extract_statement(plugin_name, array)
-        return statement
+        plugins = self.select_parser(text, suffix=".csv")
+        return self.extract_from_candidates(plugins, array)
 
     def read_csv_as_text(self) -> str:
         """Reads the CSV file and returns its contents as plain text."""
@@ -333,9 +333,8 @@ class XLSXRouter(BaseRouter):
         """
         sheets = self.read_xlsx()
         text = self.plain_text(sheets)
-        plugin_name = self.select_parser(text, suffix=".xlsx")
-        statement = self.extract_statement(plugin_name, sheets)
-        return statement
+        plugins = self.select_parser(text, suffix=".xlsx")
+        return self.extract_from_candidates(plugins, sheets)
 
     def plain_text(self, sheets) -> str:
         """Convert all workbook data to plaintext"""

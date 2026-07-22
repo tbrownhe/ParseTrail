@@ -6,6 +6,8 @@ from fastapi.responses import FileResponse, JSONResponse
 from sqlalchemy import text
 
 from app.api.deps import get_current_user
+from app.api.request_utils import get_client_host, get_user_agent
+from app.core.artifacts import InvalidArtifactName, resolve_artifact_path
 from app.core.db import engine
 from app.models import User
 
@@ -24,7 +26,7 @@ logging.basicConfig(
 
 
 @router.get("/", summary="Get list of available models")
-async def get_models():
+async def get_models() -> JSONResponse:
     """
     Returns a list of available models.
     """
@@ -50,19 +52,24 @@ async def get_models():
 @router.get("/{model_file}", summary="Download a specific model")
 async def download_plugin(
     model_file: str, request: Request, current_user: User = Depends(get_current_user)
-):
+) -> FileResponse:
     """
     Serves the requested plugin file if the correct token was passed.
     model_file like 'default_0.1.0.mdl'
     """
 
-    model_path = MODELS_DIR / model_file
-    if not model_path.exists():
-        raise HTTPException(status_code=404, detail="Plugin not found")
+    try:
+        model_path = resolve_artifact_path(
+            MODELS_DIR, model_file, allowed_suffixes={".mdl"}
+        )
+    except InvalidArtifactName:
+        raise HTTPException(status_code=400, detail="Invalid model filename")
+    if not model_path.is_file():
+        raise HTTPException(status_code=404, detail="Model not found")
 
     # Log the download to file
-    client_ip = request.client.host
-    user_agent = request.headers.get("User-Agent", "Unknown")
+    client_ip = get_client_host(request)
+    user_agent = get_user_agent(request)
     logging.info(
         "Download: %s | IP: %s | User-Agent: %s | User: %s (%s)",
         model_path,

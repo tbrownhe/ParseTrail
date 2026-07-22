@@ -8,12 +8,13 @@ from pathlib import Path
 
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
 from sqlalchemy import text
 
 from app.api.deps import get_current_user
+from app.api.request_utils import get_client_host, get_user_agent
 from app.api.routes.keys import PRIVATE_KEY_PATH
 from app.core.config import settings
 from app.core.db import engine
@@ -41,25 +42,11 @@ def _resolve_owner_from_settings() -> tuple[int, int] | None:
     if not owner and not group:
         return None
 
-    def _uid(value: str | None) -> int:
-        if not value:
-            return -1  # -1 leaves uid unchanged
-        try:
-            return int(value)
-        except ValueError as exc:
-            raise RuntimeError(
-                "STATEMENTS_FILE_OWNER must be a numeric uid (or unset)."
-            ) from exc
+    def _uid(value: int | None) -> int:
+        return value if value is not None else -1
 
-    def _gid(value: str | None) -> int:
-        if not value:
-            return -1  # -1 leaves gid unchanged
-        try:
-            return int(value)
-        except ValueError as exc:
-            raise RuntimeError(
-                "STATEMENTS_FILE_GROUP must be a numeric gid (or unset)."
-            ) from exc
+    def _gid(value: int | None) -> int:
+        return value if value is not None else -1
 
     return _uid(owner), _gid(group)
 
@@ -77,7 +64,10 @@ def _apply_owner(path: Path, *, fatal: bool = False) -> None:
 
     uid, gid = STATEMENTS_OWNER_IDS
     try:
-        os.chown(path, uid, gid)
+        chown = getattr(os, "chown", None)
+        if chown is None:
+            raise OSError("File ownership changes are unavailable on this platform")
+        chown(path, uid, gid)
     except PermissionError as exc:
         message = (
             f"Failed to set ownership on {path} to STATEMENTS_FILE_OWNER/STATEMENTS_FILE_GROUP "
@@ -96,10 +86,15 @@ def _apply_owner(path: Path, *, fatal: bool = False) -> None:
 
 # Load server's private key.
 with PRIVATE_KEY_PATH.open("rb") as key_file:
-    PRIVATE_KEY = serialization.load_pem_private_key(key_file.read(), password=None)
+    loaded_private_key = serialization.load_pem_private_key(
+        key_file.read(), password=None
+    )
+if not isinstance(loaded_private_key, rsa.RSAPrivateKey):
+    raise RuntimeError("Submission private key is not an RSA private key")
+PRIVATE_KEY = loaded_private_key
 
 
-def load_master_key():
+def load_master_key() -> bytes:
     """Load MASTER_KEY from env vars and ensure it's 32 bytes for AES"""
     master_key_b64 = os.getenv("MASTER_KEY")
     if not master_key_b64:
@@ -110,7 +105,7 @@ def load_master_key():
     return master_key
 
 
-def load_master_key_from_docker_secrets():
+def load_master_key_from_docker_secrets() -> bytes:
     """
     Note: This is not currently used.
     For when I decide to use Docker Swarm with Docker Secrets.
@@ -125,7 +120,7 @@ def load_master_key_from_docker_secrets():
         raise HTTPException(status_code=500, detail="Master key not found in secrets")
 
 
-def decrypt_client_key(encrypted_key_b64: str) -> bytes:
+def decrypt_client_key(encrypted_key_b64: str | bytes) -> bytes:
     """Uses server's private key to decrypt the client's symmetric key
     that was encrypted using the server's public key.
     Encrypted key is encoded as Base64.
@@ -194,7 +189,7 @@ async def upload_statement(
     metadata: str = Form(...),
     encrypted_key: bytes = Form(...),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, str]:
     """
     Handles encrypted bank statement uploads.
     1. Decrypt the client's symmetric key.
@@ -214,26 +209,29 @@ async def upload_statement(
         symmetric_key = decrypt_client_key(encrypted_key)
     except Exception as e:
         logging.error(f"Failed to decrypt symmetric key: {e}")
-        raise HTTPException(
-            status_code=400, detail=f"Failed to decrypt symmetric key: {e}"
-        )
+        raise HTTPException(status_code=400, detail="Invalid encrypted key")
 
     # Step 2: Decrypt the file using the client's symmetric key
     try:
-        encrypted_data = await file.read()
+        max_encrypted_bytes = 36 * 1024 * 1024
+        encrypted_data = await file.read(max_encrypted_bytes + 1)
+        if len(encrypted_data) > max_encrypted_bytes:
+            raise HTTPException(
+                status_code=413, detail="Encrypted statement is too large"
+            )
         decrypted_data = decrypt_client_data(symmetric_key, encrypted_data)
+    except HTTPException:
+        raise
     except Exception as e:
         logging.error(f"Failed to decrypt file: {e}")
-        raise HTTPException(status_code=400, detail=f"Failed to decrypt file: {e}")
+        raise HTTPException(status_code=400, detail="Invalid encrypted statement")
 
     # Step 3: Encrypt the file using AES-GCM with the master key
     try:
         iv, reencrypted_data, auth_tag = aes_encrypt_data(decrypted_data)
     except Exception as e:
         logging.error(f"Failed to encrypt file for storage: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to encrypt file for storage, aborting: {e}"
-        )
+        raise HTTPException(status_code=500, detail="Statement storage failed")
 
     # Step 4: Save the AES-encrypted file to disk
     guid_filename = f"{uuid.uuid4()}.enc"
@@ -249,13 +247,15 @@ async def upload_statement(
         _apply_owner(file_path)
 
     except Exception as e:
+        temp_path.unlink(missing_ok=True)
+        file_path.unlink(missing_ok=True)
         logging.error(f"Failed to save file: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to save file: {e}")
+        raise HTTPException(status_code=500, detail="Statement storage failed")
 
     # Step 5: Log upload details to logfile and the database
     try:
-        client_ip = request.client.host
-        user_agent = request.headers.get("User-Agent", "Unknown")
+        client_ip = get_client_host(request)
+        user_agent = get_user_agent(request)
         sanitized_metadata = (
             metadata[:256].replace("\n", " ").replace("\r", " ").strip()
         )
@@ -288,8 +288,9 @@ async def upload_statement(
                 },
             )
     except Exception as e:
+        file_path.unlink(missing_ok=True)
         logging.error(f"Error logging upload to database: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to log upload: {e}")
+        raise HTTPException(status_code=500, detail="Statement registration failed")
 
     # Return a success message to client
     return {"message": "SUCCESS"}

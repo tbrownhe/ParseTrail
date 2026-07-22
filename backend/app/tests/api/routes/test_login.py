@@ -1,12 +1,12 @@
 from unittest.mock import patch
 
 from fastapi.testclient import TestClient
-from sqlmodel import Session, select
+from sqlmodel import Session
 
 from app import crud
 from app.core.config import settings
 from app.core.security import verify_password
-from app.models import User, UserCreate
+from app.models import UserCreate
 from app.tests.utils.utils import random_email, random_lower_string
 from app.utils import (
     generate_email_verification_token,
@@ -50,17 +50,15 @@ def test_use_access_token(
 def test_recovery_password(
     client: TestClient, normal_user_token_headers: dict[str, str]
 ) -> None:
-    with (
-        patch("app.core.config.settings.SMTP_HOST", "smtp.example.com"),
-        patch("app.core.config.settings.SMTP_USER", "admin@example.com"),
-    ):
-        email = "test@example.com"
+    with patch("app.api.routes.login.send_email") as send_email_mock:
+        email = settings.EMAIL_TEST_USER
         r = client.post(
             f"{settings.API_V1_STR}/password-recovery/{email}",
             headers=normal_user_token_headers,
         )
         assert r.status_code == 200
         assert r.json() == {"message": "Password recovery email sent"}
+        send_email_mock.assert_called_once()
 
 
 def test_recovery_password_user_not_exits(
@@ -74,22 +72,23 @@ def test_recovery_password_user_not_exits(
     assert r.status_code == 404
 
 
-def test_reset_password(
-    client: TestClient, superuser_token_headers: dict[str, str], db: Session
-) -> None:
-    token = generate_password_reset_token(email=settings.FIRST_SUPERUSER)
+def test_reset_password(client: TestClient, db: Session) -> None:
+    email = random_email()
+    password = random_lower_string()
+    user = crud.create_user(
+        session=db,
+        user_create=UserCreate(email=email, password=password),
+    )
+    token = generate_password_reset_token(email=email)
     data = {"new_password": "changethis", "token": token}
     r = client.post(
         f"{settings.API_V1_STR}/reset-password/",
-        headers=superuser_token_headers,
         json=data,
     )
     assert r.status_code == 200
     assert r.json() == {"message": "Password updated successfully"}
 
-    user_query = select(User).where(User.email == settings.FIRST_SUPERUSER)
-    user = db.exec(user_query).first()
-    assert user
+    db.refresh(user)
     assert verify_password(data["new_password"], user.hashed_password)
 
 

@@ -65,10 +65,16 @@ if (-not (Test-Path $nsisScript)) {
 }
 
 try {
+    Write-Host "Synchronizing the locked client environment..."
+    uv sync --frozen
+    if ($LASTEXITCODE -ne 0) {
+        throw "uv sync failed with exit code $LASTEXITCODE"
+    }
+
     # --- Build the executable -------------------------------------------------
     Write-Host "Running PyInstaller..."
 
-    pyinstaller `
+    uv run --frozen pyinstaller `
         --clean `
         --noconfirm `
         --noconsole `
@@ -85,6 +91,9 @@ try {
         --splash "assets\splash.png" `
         --icon "assets\parsetrail_128px.ico" `
         (Join-Path $srcDir "parsetrail\main.py")
+    if ($LASTEXITCODE -ne 0) {
+        throw "PyInstaller failed with exit code $LASTEXITCODE"
+    }
 
     # --- Create Install Package at dist\win64\parsetrail_version_win64_setup.exe
     Write-Host "Creating installer with NSIS..."
