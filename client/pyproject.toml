@@ -38,19 +38,12 @@ path = "src/parsetrail/version.py"
 dev = [
   "pytest",
   "ruff",
-  "black",
   "mypy",
-  "pre-commit",
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/parsetrail"]
 include = ["src/parsetrail/assets/**"]
-
-[tool.ruff]
-line-length = 120
-lint.extend-select = ["E"]
-lint.ignore = ["E203"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

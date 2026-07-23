@@ -6,6 +6,9 @@
   "files": {
     "ignore": [
       "node_modules",
+      "build",
+      "dist",
+      "src/client",
       "src/routeTree.gen.ts",
       "playwright.config.ts",
       "playwright-report"

@@ -10,3 +10,4 @@ resources/
 sync_resources.*
 certs/
 scratch/
+keys/

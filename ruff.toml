@@ -1,0 +1,32 @@
+target-version = "py310"
+line-length = 120
+force-exclude = true
+
+extend-exclude = [
+    "backend/app/alembic",
+    "backend/app/email-templates/build",
+    "client/build",
+    "client/dist",
+]
+
+[lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # import sorting
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "ARG001", # unused function arguments
+]
+ignore = [
+    "E501", # Line length is enforced by the formatter where practical.
+    "B008", # FastAPI dependencies are intentionally created in defaults.
+    "B904", # HTTPException re-raises do not always need an explicit cause.
+    "W191", # Tabs are handled by the formatter.
+]
+
+[lint.pyupgrade]
+# Preserve runtime-visible typing constructs where applications rely on them.
+keep-runtime-typing = true
