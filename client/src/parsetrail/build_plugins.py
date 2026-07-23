@@ -1,10 +1,10 @@
-import json
+import os
 import py_compile
 from pathlib import Path
 
 from loguru import logger
 
-from parsetrail.core.plugins import load_plugin
+from parsetrail.core.plugin_loader import load_plugin
 
 # Define source and destination directories
 SOURCE_DIR = Path(__file__).resolve().parent / "plugins"
@@ -29,67 +29,52 @@ def _load_project_env() -> dict[str, str]:
 
 
 PROJECT_ENV = _load_project_env()
-PLUGINS_DIR = Path(PROJECT_ENV.get("PLUGINS_DIR")).expanduser()
+PLUGINS_DIR = Path(os.environ.get("PLUGINS_DIR") or PROJECT_ENV.get("PLUGINS_DIR") or DEFAULT_PLUGINS_DIR).expanduser()
 
 
-def compile_plugins():
+def compile_plugins() -> None:
     PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
-    for plugin_file in SOURCE_DIR.glob("*.py"):
+    compiled_names: set[str] = set()
+    failures: list[str] = []
+    for plugin_file in sorted(SOURCE_DIR.glob("*.py")):
         if plugin_file.stem == "__init__":
             continue
+        partial_path: Path | None = None
         try:
-            # Load metadata from the plugin
             _, _, metadata = load_plugin(plugin_file)
-
-            # Plugin name based on internal metadata to ensure single source of truth
             plugin_name = metadata["PLUGIN_NAME"]
             compiled_name = f"{plugin_name}.pyc"
+            if compiled_name in compiled_names:
+                raise ValueError(f"Duplicate PLUGIN_NAME {plugin_name}")
+            compiled_names.add(compiled_name)
             compiled_path = PLUGINS_DIR / compiled_name
+            partial_path = compiled_path.with_name(f"{compiled_path.name}.part")
 
-            # Compile the plugin to a .pyc file
-            py_compile.compile(plugin_file, cfile=compiled_path)
-
-            # Copy to the server data/plugins directory for deployment
+            py_compile.compile(
+                plugin_file,
+                cfile=partial_path,
+                doraise=True,
+            )
+            partial_path.replace(compiled_path)
             logger.success(f"Compiled: {plugin_file} -> {compiled_path}")
         except Exception as e:
             logger.error(f"Failed to compile {plugin_file}: {e}")
+            failures.append(f"{plugin_file.name}: {e}")
+        finally:
+            if partial_path is not None:
+                partial_path.unlink(missing_ok=True)
+
+    if failures:
+        raise RuntimeError("Plugin compilation failed:\n" + "\n".join(failures))
+
+    for stale_plugin in PLUGINS_DIR.glob("*.pyc"):
+        if stale_plugin.name not in compiled_names:
+            stale_plugin.unlink()
+            logger.info(f"Removed stale compiled plugin: {stale_plugin}")
 
 
-def generate_metadata():
-    """
-    Generate metadata for all .pyc files in server data dir
-    Must be done here since .pyc files must be read by the same version of
-    Python they were compiled with.
-    """
-    metadata_file = PLUGINS_DIR / "plugin_metadata.json"
-    metadata_list = []
-    for plugin_file in PLUGINS_DIR.glob("*.pyc"):
-        try:
-            # Get the metadata
-            _, _, metadata = load_plugin(plugin_file)
-
-            # Remove any secret sauce
-            for del_key in ["SEARCH_STRING", "INSTRUCTIONS"]:
-                if del_key in metadata:
-                    del metadata[del_key]
-
-            # Add the filename
-            metadata["FILENAME"] = plugin_file.name
-
-            # Add to the list
-            metadata_list.append(metadata)
-        except Exception as e:
-            logger.exception(f"Failed to extract metadata for {plugin_file}: {e}")
-
-    with metadata_file.open("w") as f:
-        json.dump(metadata_list, f, indent=2)
-
-    logger.success(f"Created server metadata file {metadata_file}")
-
-
-def main():
+def main() -> None:
     compile_plugins()
-    generate_metadata()
 
 
 if __name__ == "__main__":

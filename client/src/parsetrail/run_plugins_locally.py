@@ -16,7 +16,10 @@ def main() -> None:
     settings.plugin_dir = PLUGINS_DIR
 
     session_maker = initialize_db()
-    plugin_manager = PluginManager()
+    plugin_manager = PluginManager(
+        plugin_dir=PLUGINS_DIR,
+        allow_unsigned=True,
+    )
     plugin_manager.load_plugins()
 
     app = QApplication(sys.argv)

@@ -674,10 +674,17 @@ class ParseTrail(QMainWindow):
         self.plugin_update_thread.update_complete.connect(self.handle_plugin_update_complete)
         self.plugin_update_thread.start()
 
-    def handle_plugin_update_available(self, local_plugins: list, server_plugins: list):
+    def handle_plugin_update_available(self, local_plugins: list, remote_release):
+        server_plugins = remote_release.legacy_metadata()
         dialog = PluginSyncDialog(local_plugins, server_plugins, parent=self)
         if dialog.exec_() == QDialog.Accepted:
-            sync_plugins(local_plugins, server_plugins, progress=True, parent=self)
+            sync_plugins(
+                local_plugins,
+                remote_release,
+                plugin_manager=self.plugin_manager,
+                progress=True,
+                parent=self,
+            )
             self.plugin_manager.load_plugins()
         else:
             logger.info("User declined to sync plugins")

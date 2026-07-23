@@ -71,6 +71,12 @@ try {
         throw "uv sync failed with exit code $LASTEXITCODE"
     }
 
+    Write-Host "Checking bundled plugin release trust keys..."
+    uv run --frozen python scripts/plugin_release.py check-trust-store
+    if ($LASTEXITCODE -ne 0) {
+        throw "Plugin trust-store check failed with exit code $LASTEXITCODE"
+    }
+
     # --- Build the executable -------------------------------------------------
     Write-Host "Running PyInstaller..."
 
@@ -83,6 +89,7 @@ try {
         --distpath "$buildDir" `
         --paths $srcDir `
         --add-data "assets;assets" `
+        --add-data "src\parsetrail\assets;parsetrail\assets" `
         --add-data "migrations;migrations" `
         --add-data "alembic.ini;." `
         --hidden-import="openpyxl.cell._writer" `

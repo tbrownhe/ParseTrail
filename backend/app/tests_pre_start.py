@@ -2,7 +2,13 @@ import logging
 
 from sqlalchemy import Engine
 from sqlmodel import Session, select
-from tenacity import after_log, before_log, retry, stop_after_attempt, wait_fixed
+from tenacity import (  # type: ignore[import-untyped]
+    after_log,
+    before_log,
+    retry,
+    stop_after_attempt,
+    wait_fixed,
+)
 
 from app.tests.safety import configure_test_environment
 
@@ -17,7 +23,7 @@ max_tries = 60 * 5  # 5 minutes
 wait_seconds = 1
 
 
-@retry(
+@retry(  # type: ignore[untyped-decorator]
     stop=stop_after_attempt(max_tries),
     wait=wait_fixed(wait_seconds),
     before=before_log(logger, logging.INFO),

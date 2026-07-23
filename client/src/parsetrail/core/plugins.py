@@ -1,13 +1,28 @@
-import importlib.util
+"""Authenticated plugin discovery, installation, and dynamic loading."""
+
+from __future__ import annotations
+
 from pathlib import Path
 
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from loguru import logger
 from PyQt5.QtCore import Qt, QThread, pyqtSignal
 from PyQt5.QtWidgets import QApplication, QProgressDialog
 
-from parsetrail.core.api import api_client
-from parsetrail.core.artifacts import resolve_artifact_destination
-from parsetrail.core.interfaces import IParser, class_variables, validate_parser
+from parsetrail.core.api import ApiClient, api_client
+from parsetrail.core.plugin_loader import load_plugin
+from parsetrail.core.plugin_manifest import (
+    PluginTrustError,
+    VerifiedPluginRelease,
+    load_trusted_plugin_keys,
+    require_no_rollback,
+    verify_manifest,
+)
+from parsetrail.core.plugin_store import (
+    InstalledPluginRelease,
+    install_plugin_release,
+    read_active_release,
+)
 from parsetrail.core.settings import settings
 from parsetrail.core.utils import is_newer_version, is_version_compatible
 from parsetrail.version import __version__ as current_version
@@ -19,160 +34,207 @@ def _get_min_client_version(metadata: dict[str, str]) -> str:
 
 
 def _is_plugin_compatible(metadata: dict[str, str]) -> bool:
-    min_version = _get_min_client_version(metadata)
-    return is_version_compatible(current_version, min_version)
+    return is_version_compatible(
+        current_version,
+        _get_min_client_version(metadata),
+    )
 
 
-def load_plugin(plugin_file: Path) -> tuple[str, IParser, dict[str, str]]:
-    """
-    Dynamically load the Parser class from a plugin module, validate it, and retrieve metadata.
-    plugin_file.name like 'pdf_citicc_v0.1.0.pyc'
-    """
-    # Load the module from file
-    plugin_name = plugin_file.stem
-    spec = importlib.util.spec_from_file_location(plugin_name, plugin_file)
-    if not spec or not spec.loader:
-        raise ImportError(f"Cannot load module from {plugin_file}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-
-    # Ensure this module contains a Parser(IParser)
-    ParserClass = getattr(module, "Parser", None)
-    if not ParserClass:
-        raise ValueError(f"No 'Parser' class found in {plugin_file}")
-    if not isinstance(ParserClass, IParser):
-        raise TypeError(f"Plugin {plugin_name} must implement IParser")
-
-    # Validate that the plugin overrides required class variables (metadata)
-    required_variables = class_variables(IParser)
-    validate_parser(ParserClass, required_variables)
-    metadata = {var: getattr(ParserClass, var) for var in required_variables}
-    metadata["FILENAME"] = plugin_file.name
-
-    return plugin_name, ParserClass, metadata
+def _validate_loaded_metadata(
+    loaded_metadata: dict[str, str],
+    signed_metadata: dict[str, str],
+) -> None:
+    authenticated_fields = {
+        "FILENAME",
+        "PLUGIN_NAME",
+        "VERSION",
+        "MIN_CLIENT_VERSION",
+        "COMPANY",
+        "SUFFIX",
+        "STATEMENT_TYPE",
+    }
+    mismatches = sorted(
+        field for field in authenticated_fields if loaded_metadata.get(field) != signed_metadata.get(field)
+    )
+    if mismatches:
+        raise ValueError("Plugin metadata does not match its signed manifest fields: " + ", ".join(mismatches))
 
 
 class PluginManager:
-    def __init__(self):
-        self.plugins = None
-        self.metadata = None
+    def __init__(
+        self,
+        *,
+        plugin_dir: Path | None = None,
+        allow_unsigned: bool = False,
+        trusted_keys: dict[str, Ed25519PublicKey] | None = None,
+    ):
+        self.plugin_dir = plugin_dir or settings.plugin_dir
+        self.allow_unsigned = allow_unsigned
+        self._trusted_keys = trusted_keys
+        self.plugins: dict[str, type] = {}
+        self.metadata: dict[str, dict[str, str]] = {}
+        self.suffixes: list[str] = []
+        self.active_release: InstalledPluginRelease | None = None
 
-    def load_plugins(self):
-        """
-        Load all plugins in the specified path.
-        """
+    def trusted_keys(self) -> dict[str, Ed25519PublicKey]:
+        if self._trusted_keys is None:
+            self._trusted_keys = load_trusted_plugin_keys()
+        return self._trusted_keys
+
+    def _load_one(
+        self,
+        plugin_file: Path,
+        *,
+        signed_metadata: dict[str, str] | None = None,
+    ) -> None:
+        plugin_id, parser_class, metadata = load_plugin(plugin_file)
+        if signed_metadata is not None:
+            _validate_loaded_metadata(metadata, signed_metadata)
+        if not _is_plugin_compatible(metadata):
+            logger.warning(
+                "Skipping plugin {name}: requires client >= {min_version} (current {current}).",
+                name=metadata.get("PLUGIN_NAME", plugin_id),
+                min_version=_get_min_client_version(metadata),
+                current=current_version,
+            )
+            return
+        self.plugins[plugin_id] = parser_class
+        self.metadata[plugin_id] = metadata
+
+    def load_plugins(self) -> None:
+        """Load local-development plugins or one fully authenticated release."""
         self.plugins = {}
         self.metadata = {}
+        self.active_release = None
 
-        success = 0
-        for plugin_file in settings.plugin_dir.glob("*.pyc"):
-            # Retrieve the Parser(Iparser) class from the plugin and store it
+        if self.allow_unsigned:
+            logger.warning("Unsigned plugin loading is enabled for the local development tool.")
+            for plugin_file in self.plugin_dir.glob("*.pyc"):
+                try:
+                    self._load_one(plugin_file)
+                except Exception as exc:
+                    logger.error(f"Failed to load {plugin_file}: {exc}")
+        else:
             try:
-                plugin_id, ParserClass, metadata = load_plugin(plugin_file)
-                if not _is_plugin_compatible(metadata):
-                    logger.warning(
-                        "Skipping plugin {name}: requires client >= {min_version} (current {current}).",
-                        name=metadata.get("PLUGIN_NAME", plugin_id),
-                        min_version=_get_min_client_version(metadata),
-                        current=current_version,
-                    )
-                    continue
-                self.plugins[plugin_id] = ParserClass
-                self.metadata[plugin_id] = metadata
-                success += 1
-            except Exception as e:
-                logger.error(f"Failed to load {plugin_file}: {e}")
+                self.active_release = read_active_release(
+                    self.plugin_dir,
+                    self.trusted_keys(),
+                )
+            except PluginTrustError as exc:
+                logger.error(f"Refusing untrusted plugin release: {exc}")
+            if self.active_release is None:
+                if any(self.plugin_dir.glob("*.pyc")):
+                    logger.warning("Ignoring unsigned legacy plugins. Install the signed plugin catalog to use them.")
+            else:
+                for artifact in self.active_release.manifest.artifacts:
+                    signed_metadata = artifact.as_legacy_metadata()
+                    if not _is_plugin_compatible(signed_metadata):
+                        logger.warning(
+                            "Skipping plugin {name}: requires client >= {min_version} (current {current}).",
+                            name=artifact.plugin_name,
+                            min_version=artifact.minimum_client_version,
+                            current=current_version,
+                        )
+                        continue
+                    plugin_file = self.active_release.release_dir / artifact.filename
+                    try:
+                        self._load_one(
+                            plugin_file,
+                            signed_metadata=signed_metadata,
+                        )
+                    except Exception as exc:
+                        logger.error(f"Failed to load {plugin_file}: {exc}")
 
-        if success > 0:
-            logger.success(f"Loaded {success} plugins")
-
-        # Build the set of supported file extensions
+        if self.plugins:
+            logger.success(f"Loaded {len(self.plugins)} plugins")
         self.suffixes = sorted({plugin["SUFFIX"] for plugin in self.metadata.values()})
 
     def get_parser(self, plugin_id: str):
-        """
-        Retrieve a specific parser class from the preloaded plugins.
-        """
-        ParserClass = self.plugins.get(plugin_id)
-        if not ParserClass:
+        parser_class = self.plugins.get(plugin_id)
+        if not parser_class:
             raise ImportError(f"Plugin '{plugin_id}' not loaded.")
-        return ParserClass
+        return parser_class
 
 
-def get_plugin_lists(plugin_manager: PluginManager) -> tuple[list, list]:
-    """Silently downloads any new updated plugins to local machine
+def fetch_verified_plugin_release(
+    plugin_manager: PluginManager,
+    *,
+    client: ApiClient = api_client,
+) -> VerifiedPluginRelease:
+    manifest_bytes, signature = client.fetch_plugin_release_bytes()
+    release = verify_manifest(
+        manifest_bytes,
+        signature,
+        plugin_manager.trusted_keys(),
+    )
+    require_no_rollback(
+        release,
+        (plugin_manager.active_release.verified if plugin_manager.active_release is not None else None),
+    )
+    return release
 
-    Args:
-        plugin_manager (PluginManager): PluginManager
 
-    Returns:
-        tuple[list, list]: local_plugins, server_plugins
-    """
+def get_plugin_lists(
+    plugin_manager: PluginManager,
+) -> tuple[list[dict[str, str]], VerifiedPluginRelease]:
     local_plugins = list(plugin_manager.metadata.values())
-    server_plugins = api_client.list_plugins()
-    return local_plugins, server_plugins
+    remote_release = fetch_verified_plugin_release(plugin_manager)
+    return local_plugins, remote_release
 
 
-def download_plugin(plugin_fname: str):
-    """
-    Downloads a specific plugin from the server.
-    """
-    settings.plugin_dir.mkdir(parents=True, exist_ok=True)
-    dpath = resolve_artifact_destination(settings.plugin_dir, plugin_fname, allowed_suffixes={".pyc"})
-    partial_path = dpath.with_name(f"{dpath.name}.part")
-    try:
-        with partial_path.open("wb") as f:
-            for chunk, _, _ in api_client.stream_plugin(plugin_fname):
-                f.write(chunk)
-        partial_path.replace(dpath)
-        logger.success(f"Downloaded plugin {plugin_fname}")
-    except Exception as e:
-        try:
-            partial_path.unlink(missing_ok=True)
-        except OSError as cleanup_error:
-            logger.warning(f"Could not remove incomplete plugin download {partial_path}: {cleanup_error}")
-        logger.error(f"Error downloading plugin {plugin_fname}: {e}")
-        raise
-
-
-def compare_plugins(local_plugins: list[dict], server_plugins: list[dict]) -> list[dict]:
+def compare_plugins(
+    local_plugins: list[dict[str, str]],
+    server_plugins: list[dict[str, str]],
+) -> list[dict[str, str]]:
     new_plugins = []
     for server_plugin in server_plugins:
         if not _is_plugin_compatible(server_plugin):
             logger.warning(
-                "Plugin {name} requires client >= {min_version}; skipping download.",
+                "Plugin {name} requires client >= {min_version}; skipping.",
                 name=server_plugin.get("PLUGIN_NAME", "unknown"),
                 min_version=_get_min_client_version(server_plugin),
             )
             continue
         plugin_name = server_plugin["PLUGIN_NAME"]
         local_plugin = next(
-            (lp for lp in local_plugins if lp["PLUGIN_NAME"] == plugin_name),
+            (plugin for plugin in local_plugins if plugin["PLUGIN_NAME"] == plugin_name),
             None,
         )
-        if local_plugin is None or is_newer_version(local_plugin["VERSION"], server_plugin["VERSION"]):
+        if local_plugin is None or is_newer_version(
+            local_plugin["VERSION"],
+            server_plugin["VERSION"],
+        ):
             new_plugins.append(server_plugin)
     return new_plugins
 
 
-def sync_plugins(local_plugins: list[dict], server_plugins: list[dict], progress=False, parent=None):
-    """For each plugin on the server, downloads plugin if missing from local,
-    and updates any obsolete plugins. Ignores plugins on user's machine that
-    are not on the server in case something weird happens.
+def release_update_available(
+    plugin_manager: PluginManager,
+    remote_release: VerifiedPluginRelease,
+) -> bool:
+    if plugin_manager.active_release is None:
+        return True
+    return remote_release.manifest.release_sequence > plugin_manager.active_release.manifest.release_sequence
 
-    Args:
-        local_plugins (list[dict]): Local plugin metadata
-        server_plugins (list[dict]): Remote plugin metadata
-    """
-    new_plugins = compare_plugins(local_plugins, server_plugins)
 
+def sync_plugins(
+    local_plugins: list[dict[str, str]],
+    remote_release: VerifiedPluginRelease,
+    *,
+    plugin_manager: PluginManager,
+    progress: bool = False,
+    parent=None,
+    client: ApiClient = api_client,
+) -> InstalledPluginRelease:
+    """Download and authenticate the complete catalog before activating it."""
+    del local_plugins  # Kept in the API because callers already display this state.
     dialog: QProgressDialog | None = None
     if progress:
         dialog = QProgressDialog(
             "Updating Plugins",
             "Cancel",
             0,
-            len(new_plugins),
+            len(remote_release.manifest.artifacts),
             parent,
         )
         dialog.setMinimumWidth(400)
@@ -183,59 +245,81 @@ def sync_plugins(local_plugins: list[dict], server_plugins: list[dict], progress
         dialog.show()
         QApplication.processEvents()
 
-    for plugin in new_plugins:
-        plugin_name = plugin["PLUGIN_NAME"]
+    def cancelled() -> bool:
+        QApplication.processEvents()
+        return dialog is not None and dialog.wasCanceled()
+
+    def stream_plugin_bytes(plugin_name: str):
         if dialog is not None:
-            dialog.setLabelText(f"Downloading new {plugin_name}")
-        try:
-            download_plugin(plugin["FILENAME"])
-            if dialog is not None:
-                dialog.setValue(dialog.value() + 1)
-                QApplication.processEvents()
-        except Exception as e:
-            logger.error(f"Failed to download new plugin {plugin_name}: {e}")
-            raise
+            dialog.setLabelText(f"Downloading and verifying {plugin_name}")
+        for chunk, _, _ in client.stream_plugin(plugin_name):
+            yield chunk
+        if dialog is not None:
+            dialog.setValue(dialog.value() + 1)
+            QApplication.processEvents()
 
-    if dialog is not None:
-        dialog.close()
+    try:
+        installed = install_plugin_release(
+            plugin_manager.plugin_dir,
+            remote_release,
+            stream_plugin_bytes,
+            current=plugin_manager.active_release,
+            cancelled=cancelled,
+        )
+        logger.success(
+            "Installed signed plugin release {sequence} with {count} plugins.",
+            sequence=remote_release.manifest.release_sequence,
+            count=len(remote_release.manifest.artifacts),
+        )
+        return installed
+    finally:
+        if dialog is not None:
+            dialog.close()
 
 
-def check_for_plugin_updates(plugin_manager: PluginManager, parent=None) -> bool:
-    """Silently downloads any new updated plugins to local machine
-
-    Args:
-        plugin_manager (PluginManager): PluginManager
-
-    Returns:
-        bool: Whether plugins were updated
-    """
-    local_plugins = list(plugin_manager.metadata.values())
-    server_plugins = api_client.list_plugins()
+def check_for_plugin_updates(
+    plugin_manager: PluginManager,
+    parent=None,
+) -> bool:
+    local_plugins, remote_release = get_plugin_lists(plugin_manager)
+    server_plugins = remote_release.legacy_metadata()
     new_plugins = compare_plugins(local_plugins, server_plugins)
-    if new_plugins:
-        sync_plugins(local_plugins, server_plugins, progress=True, parent=parent)
+    if new_plugins or release_update_available(plugin_manager, remote_release):
+        sync_plugins(
+            local_plugins,
+            remote_release,
+            plugin_manager=plugin_manager,
+            progress=True,
+            parent=parent,
+        )
         plugin_manager.load_plugins()
         return True
     return False
 
 
 class PluginUpdateThread(QThread):
-    """Checks for plugins in a separate thread"""
+    """Check for a newer authenticated plugin catalog without blocking the UI."""
 
-    update_available = pyqtSignal(list, list)
+    update_available = pyqtSignal(object, object)
     update_complete = pyqtSignal(bool, str)
 
     def __init__(self, plugin_manager: PluginManager):
         super().__init__()
         self.plugin_manager = plugin_manager
 
-    def run(self):
+    def run(self) -> None:
         try:
-            local_plugins, server_plugins = get_plugin_lists(self.plugin_manager)
-            new_plugins = compare_plugins(local_plugins, server_plugins)
-            if new_plugins:
-                self.update_available.emit(local_plugins, server_plugins)
+            local_plugins, remote_release = get_plugin_lists(self.plugin_manager)
+            new_plugins = compare_plugins(
+                local_plugins,
+                remote_release.legacy_metadata(),
+            )
+            if new_plugins or release_update_available(
+                self.plugin_manager,
+                remote_release,
+            ):
+                self.update_available.emit(local_plugins, remote_release)
             else:
                 self.update_complete.emit(True, "Plugins are up to date.")
-        except Exception as e:
-            self.update_complete.emit(False, f"Plugin update Failed: {e}")
+        except Exception as exc:
+            self.update_complete.emit(False, f"Plugin update failed: {exc}")

@@ -80,6 +80,10 @@ conda activate "$CONDA_ENV" || error_exit "Failed to activate conda environment 
 echo "Synchronizing the locked client environment..."
 uv sync --frozen || error_exit "Failed to synchronize the locked client environment."
 
+echo "Checking bundled plugin release trust keys..."
+uv run --frozen python scripts/plugin_release.py check-trust-store \
+    || error_exit "Plugin trust-store check failed."
+
 echo "Building the executable with PyInstaller..."
 uv run --frozen pyinstaller \
     -n "$APP_NAME" \
@@ -90,6 +94,7 @@ uv run --frozen pyinstaller \
     --distpath "$BUILD_DIR" \
     --paths "$SRC_DIR" \
     --hidden-import=openpyxl.cell._writer \
+    --add-data "src/parsetrail/assets:parsetrail/assets" \
     --add-data "migrations:migrations" \
     --add-data "alembic.ini:." \
     --add-data "assets:assets" \

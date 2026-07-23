@@ -24,6 +24,7 @@ from parsetrail.core.plugins import (
     PluginManager,
     compare_plugins,
     get_plugin_lists,
+    release_update_available,
     sync_plugins,
 )
 from parsetrail.core.settings import settings
@@ -156,12 +157,22 @@ class PluginManagerDialog(QDialog):
         """
         self.plugin_manager.load_plugins()
         try:
-            local_plugins, server_plugins = get_plugin_lists(self.plugin_manager)
+            local_plugins, remote_release = get_plugin_lists(self.plugin_manager)
+            server_plugins = remote_release.legacy_metadata()
             new_plugins = compare_plugins(local_plugins, server_plugins)
-            if new_plugins:
+            if new_plugins or release_update_available(
+                self.plugin_manager,
+                remote_release,
+            ):
                 dialog = PluginSyncDialog(local_plugins, server_plugins, parent=self)
                 if dialog.exec_() == QDialog.Accepted:
-                    sync_plugins(local_plugins, server_plugins, progress=True, parent=self)
+                    sync_plugins(
+                        local_plugins,
+                        remote_release,
+                        plugin_manager=self.plugin_manager,
+                        progress=True,
+                        parent=self,
+                    )
             else:
                 QMessageBox.information(self, "Plugins Up to Date", "Plugins are already up to date.")
         except Exception as e:
@@ -183,7 +194,7 @@ class PluginSyncDialog(QDialog):
         layout = QVBoxLayout(self)
 
         # Table for plugin status
-        layout.addWidget(QLabel("Some plugins are out of date:"))
+        layout.addWidget(QLabel("A signed plugin catalog update is available:"))
         self.table = self.create_table()
         layout.addWidget(self.table)
 

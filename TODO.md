@@ -90,26 +90,32 @@ equivalent plaintext write is introduced into either parse path.
 
 ### P0.3 Authenticate every executable artifact
 
-- [ ] Define a versioned release manifest for clients, plugins, and models with
-  artifact type, safe relative name, version, minimum client version, byte size,
-  SHA-256 digest, and Ed25519 signature.
-- [ ] Generate and document an offline signing-key procedure. Embed only the
-  verification public key in the desktop client; never place the private signing
-  key on the public server.
+- [x] Define a versioned plugin release manifest with artifact type, safe
+  filename, version, minimum client version, Python bytecode identity, byte size,
+  SHA-256 digest, monotonic release sequence, and one detached Ed25519 signature.
+- [ ] Extend the signed manifest vocabulary and release process to client
+  installers and models.
+- [~] Implement and document an encrypted offline signing-key procedure. The
+  client build embeds only a public-key trust store and refuses to build while it
+  is empty; initial key generation and backup location remain a `[USER]` step.
 - [x] Apply containment/suffix checks to desktop plugin destinations and preserve
   the previous plugin until a complete download is atomically renamed.
 - [ ] Apply the same checks to model and installer destinations, and reject
   unsupported installer platforms before constructing a path.
 - [x] Apply root containment, plain-filename, and suffix checks to backend plugin
   and model downloads, with cross-platform traversal regression tests.
-- [ ] Download to a sibling temporary name, enforce a byte limit and timeout,
-  authenticate the completed bytes, then atomically replace the destination.
-- [ ] Authenticate a plugin before dynamic import, a model before `joblib.load`,
-  and an installer before launch. Preserve the previously verified artifact on
-  cancellation or failure.
-- [ ] Add negative tests for altered bytes, altered manifest fields, wrong signing
-  keys, truncation, traversal names, rollback to an older disallowed version, and
-  cancellation midway through a download.
+- [x] Download the complete plugin catalog into an immutable staging release,
+  enforce bounded manifest/plugin reads and network timeouts, authenticate all
+  completed bytes, then atomically activate one release pointer.
+- [x] Authenticate every plugin on startup and immediately before dynamic import.
+  Unsigned legacy plugins are ignored by the normal application; cancellation or
+  any failed artifact preserves the previously verified release.
+- [ ] Apply the same authenticated staging behavior before `joblib.load` and
+  installer launch.
+- [x] Add plugin negative tests for altered bytes, altered manifest fields, wrong
+  and unknown signing keys, malformed/oversized manifests, truncation, traversal
+  names, rollback and sequence reuse, cancellation midway through a download,
+  unsigned legacy plugins, and post-install tampering.
 - [ ] `[USER]` Decide where the offline release key and recovery copy will live,
   then perform a signed Windows release rehearsal.
 - [ ] `[USER]` Add Windows Authenticode and macOS signing/notarization after the

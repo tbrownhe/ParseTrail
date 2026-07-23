@@ -117,14 +117,40 @@ $ docker compose -p parsetrail-tests -f docker-compose.test.yml down -v
 
 The tests run with Pytest. Modify and add tests under `./backend/app/tests/`.
 
-Backend static checks run in GitHub Actions. The database-backed workflow remains
-disabled until the disposable test stack has completed its first local run.
+Backend static checks run in GitHub Actions. The isolated PostgreSQL 17 suite has
+also been verified locally.
 
 Arguments are forwarded to Pytest. For example, to stop on the first failure:
 
 ```bash
 uv run --frozen bash scripts/tests-start.sh -x
 ```
+
+## Signed plugin artifacts
+
+The backend is an untrusted file host for plugin releases; it never has the
+Ed25519 private release key. A deployment is stored as:
+
+```text
+data/plugins/
+  current-release.json
+  releases/
+    <release-sequence>/
+      plugin-manifest.json
+      plugin-manifest.sig
+      *.pyc
+```
+
+Release files are uploaded completely before `current-release.json` is
+atomically replaced. `/api/v1/plugins/manifest` and
+`/api/v1/plugins/manifest-signature` serve the exact signed bytes. The public
+website's `/api/v1/plugins/` list is derived from the active manifest, while the
+desktop client authenticates the exact manifest itself and then verifies every
+downloaded plugin digest.
+
+A flat signed manifest is accepted temporarily for migration, but new
+deployments use immutable release directories. See `client/README.md` for
+offline key generation, signing, verification, deployment, and key rotation.
 
 ### Test Coverage
 

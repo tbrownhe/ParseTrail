@@ -1,23 +1,22 @@
 # ParseTrail Client
 
-The ParseTrail client is a standalone desktop application (Windows + macOS) that parses encrypted financial statements, manages a local SQLite database, and syncs with a FastAPI backend for plugin distribution, updates, and secure statement submission.
-
-This README covers only the client application. Project-level architecture and backend details are documented in the root README.
-
-## Requirements
-
-The client uses a hybrid Conda + uv workflow for reproducible builds and fast dependency management:
+ParseTrail is a Windows and macOS desktop application that parses financial
+statements, stores financial data in a local SQLite database, and talks to the
+FastAPI backend for authenticated plugin distribution, application updates, and
+optional encrypted statement submission.
 
 ## Requirements
-* [conda](https://www.anaconda.com/docs/getting-started/miniconda/main) - environment + Python version management
-* [uv](https://docs.astral.sh/uv/) - extremely fast package installer
-* [NSIS](https://nsis.sourceforge.io/Main_Page) - Windows only: builds the setup .exe installer
-* [create-dmg](https://github.com/create-dmg/create-dmg) - macOS only: builds the .dmg installer
 
-Windows builds are done with NSIS; macOS builds produce a disk image containing a drag-and-drop .app bundle.
+Conda provisions the supported Python 3.10 runtime; uv installs and runs the
+locked project environment.
 
-## Install Dependencies
-### Windows
+- [Miniconda](https://www.anaconda.com/docs/getting-started/miniconda/main)
+- [uv](https://docs.astral.sh/uv/)
+- [NSIS](https://nsis.sourceforge.io/Main_Page) for Windows installers
+- [create-dmg](https://github.com/create-dmg/create-dmg) for macOS installers
+
+### Windows development environment
+
 ```powershell
 cd client
 conda env create -f dev_env_win64.yml
@@ -25,7 +24,8 @@ conda activate parsetrail-client
 uv sync --extra dev --frozen
 ```
 
-### macOS
+### macOS development environment
+
 ```bash
 cd client
 conda env create -f dev_env_macos.yml
@@ -33,94 +33,153 @@ conda activate parsetrail-client
 uv sync --extra dev --frozen
 ```
 
-## Running the Client
+## Run and test
 
-To run the UI directly from source:
+Run the normal UI:
 
 ```bash
 uv run --frozen python src/parsetrail/main.py
 ```
 
-This launches the PyQt-based GUI in development mode.
+Run the automated suite:
 
-## Testing Plugins Locally
+```bash
+uv run --frozen pytest
+```
 
-The client supports dynamically loaded parsing plugins.
-You can exercise a plugin against local PDF/text statements:
+Exercise source plugins against local statement fixtures:
 
 ```bash
 uv run --frozen python src/parsetrail/run_plugins_locally.py
 ```
 
-This opens the parser-development dialog and rebuilds local plugins before use.
+The parser-development launcher explicitly enables unsigned local plugins and
+logs that mode. The normal application has no unsigned mode.
 
-## Build & Deploy Plugins
+## Signed plugin releases
 
-Plugins are currently compiled into `.pyc` files and copied to the backend artifact
-directory. Python bytecode is not encryption, and downloaded plugins are not yet
-authenticated; see the repository `TODO.md` signed-artifact work before treating
-the distribution channel as a security boundary.
+Plugins are compiled into `.pyc` files and authenticated as one catalog. The
+release manifest contains each plugin's safe filename, exact byte size, SHA-256
+digest, Python bytecode identity, plugin version, and minimum client version.
+The exact manifest bytes receive one detached Ed25519 signature.
 
-### Before building:
+The server stores immutable release directories, but it never receives the
+private signing key and cannot create a release an installed client will trust.
+Python bytecode is not encryption or obfuscation: signing detects unauthorized
+changes but does not prevent decompilation.
 
-1. Copy client `.env.example` → `.env`
-2. Set `REMOTE_HOST`, `REMOTE_USER`, `REMOTE_CLIENT_DIR`, etc.
-3. Ensure the backend container is running and accessible.
+### Provision the initial signing key
 
-### Windows
+Choose a private-key location outside this repository and outside any
+server-synchronized artifact directory. An encrypted removable drive is
+recommended.
+
+From `client/`, run:
+
+```powershell
+uv run --frozen python scripts/plugin_release.py generate-key `
+    --private-key "X:\ParseTrail\plugin-signing-key.pem"
+```
+
+The command:
+
+- prompts twice for a passphrase;
+- writes an encrypted Ed25519 private key only to the explicit external path;
+- adds only its public key to
+  `src/parsetrail/assets/plugin-release-keys.json`; and
+- refuses to put the private key anywhere inside the repository.
+
+Back up the encrypted private key separately and commit the public trust-store
+change. Never copy the private key to `parsetrail.com`, CI, this repository,
+`parsetrail-resources`, or a client package. Do not store its passphrase in
+`.env`, command arguments, or logs.
+
+Set these non-secret paths and deployment values in the repository `.env`:
+
+```dotenv
+PLUGIN_SIGNING_KEY=X:\ParseTrail\plugin-signing-key.pem
+PLUGINS_DIR=C:\path\to\parsetrail-resources\plugins
+REMOTE_HOST=example
+REMOTE_USER=example
+REMOTE_PLUGINS_DIR=/path/to/data/plugins
+```
+
+### Build, sign, verify, and deploy on Windows
+
 ```powershell
 .\build_plugins.ps1
 ```
 
-### macOS
+The script runs the client tests, compiles every source plugin, removes stale
+compiled output, prompts for the private-key passphrase, signs and independently
+verifies the complete catalog, and asks before deployment. It uploads the
+immutable release first and atomically changes `current-release.json` last.
 
-Plugin deployment scripts are not implemented yet. Plugins can still be compiled locally via
+### Compile and sign on macOS
+
+The automated deployment wrapper is currently Windows-only. Compilation,
+signing, and verification are platform-independent:
 
 ```bash
-python src/parsetrail/build_plugins.py
+uv run --frozen python src/parsetrail/build_plugins.py
+uv run --frozen python scripts/plugin_release.py sign \
+    --private-key /Volumes/ParseTrail/plugin-signing-key.pem \
+    --plugin-dir /path/to/plugins
+uv run --frozen python scripts/plugin_release.py verify \
+    --plugin-dir /path/to/plugins
 ```
 
-## Build & Deploy Client Installer
+For key rotation, first release a client that contains both old and new public
+keys. Only start signing catalogs with the new key after that client is
+available.
 
-This produces a downloadable client installer and uploads it to the server. Note that the deployment phase will be handled by the ParseTrail server after PR merge.
+### Client trust behavior
 
-### Before building:
+The normal application:
 
-- Ensure client .env is populated with deployment variables
-- Bump the version number in [src/parsetrail/version.py](src/parsetrail/version.py)
+- verifies the manifest signature before trusting catalog metadata;
+- downloads every listed plugin into a staging release;
+- enforces bounded reads, network timeouts, safe filenames, Python
+  compatibility, exact sizes, and SHA-256 digests;
+- changes the active release only after the complete catalog verifies;
+- re-verifies every plugin before each startup and dynamic import; and
+- rejects rollback, reused release sequence numbers, legacy unsigned plugins,
+  partial downloads, and tampered local files.
 
-### Windows
+Existing unsigned `.pyc` files are left in place but ignored. Cancellation or
+any failed artifact preserves the previously verified release.
+
+## Build the desktop installer
+
+Before building, update `src/parsetrail/version.py`. Both build scripts refuse to
+package a client while the plugin public-key trust store is empty.
+
+Windows:
 
 ```powershell
 .\build_client_win64.ps1
 ```
 
-This assembles a frozen application via PyInstaller, then packages it into an NSIS installer.
+This builds the PyInstaller application and packages it with NSIS.
 
-### macOS
+macOS:
+
 ```bash
 ./build_client_macos.sh
 ```
 
-This produces a .app bundle and a polished .dmg installer (with background, custom icon, and drag-and-drop target).
-Code signing / notarization steps are included but disabled by default.
+This builds the `.app` and a drag-and-drop `.dmg`. Apple signing and notarization
+are separate from ParseTrail's application-level artifact signatures and are
+not yet enabled by default.
 
-# Plugins & Plugin Manager
+## Plugin architecture
 
-Plugins are intentionally decoupled from the client application:
+Plugins remain decoupled from the client release so parsers can be updated
+without shipping a new application:
 
-- The client never imports plugins directly.
-
-- Plugins are loaded at runtime via `importlib`.
-
-- This allows new parsing modules to be deployed to users *without requiring a new client install*.
-
-- Plugins do rely on imports from the client’s codebase; therefore their source directory lives inside `src/parsetrail/plugins` so IDEs can resolve references without errors.
-
-## Why this structure?
-
-- Plugins are distributed as signed .pyc files, not source code.
-
-- Their directory does not have to follow standard Python package structure because importlib loads them from absolute paths.
-
-- This pattern keeps the client lightweight while making plugin updates extremely flexible.
+- Source lives under `src/parsetrail/plugins` for development and IDE support.
+- Release plugins are loaded at runtime with `importlib` only after
+  authentication.
+- Plugins may import stable interfaces from the client codebase.
+- The signed manifest carries compatibility metadata, so a plugin never needs
+  to execute merely to determine whether it can be loaded.

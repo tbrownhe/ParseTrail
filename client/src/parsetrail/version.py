@@ -1,5 +1,5 @@
-__version__ = "1.1.2"
-__year__ = "2024-2025"
+__version__ = "1.2.0"
+__year__ = "2024-2026"
 __developer__ = "Tobias Brown-Heft"
 __website__ = "https://parsetrail.com"
 __repo__ = "https://github.com/tbrownhe/ParseTrail"
