@@ -3,7 +3,6 @@
 from collections.abc import Callable, Sequence
 from typing import TypeVar
 
-
 ResultT = TypeVar("ResultT")
 
 

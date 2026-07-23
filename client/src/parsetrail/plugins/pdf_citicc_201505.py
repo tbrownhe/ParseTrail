@@ -202,7 +202,7 @@ class Parser(IParser):
         """
         # Get the raw lines and word array for this page
         lines_raw = [line for line in page.splitlines() if line.strip()]
-        word_array = [[word for word in line.split()] for line in lines_raw]
+        word_array = [line.split() for line in lines_raw]
         lines_clean = [" ".join(words) for words in word_array]
 
         # Find the line containing the transaction table header

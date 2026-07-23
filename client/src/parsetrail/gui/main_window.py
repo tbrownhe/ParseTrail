@@ -11,8 +11,36 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter, MaxNLocator
+from PyQt5.QtCore import QAbstractTableModel, Qt
+from PyQt5.QtGui import QColor, QFontMetrics
+from PyQt5.QtWidgets import (
+    QApplication,
+    QCheckBox,
+    QDialog,
+    QFileDialog,
+    QGridLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QMainWindow,
+    QMessageBox,
+    QPushButton,
+    QSizePolicy,
+    QSpacerItem,
+    QTableView,
+    QTabWidget,
+    QTextEdit,
+    QVBoxLayout,
+    QWidget,
+)
+from sqlalchemy.orm import Session
+
 from parsetrail.core import config, learn, plot, query, reports
-from parsetrail.core.categorize import add_missing_categories, transactions as categorize_transactions
+from parsetrail.core.categorize import add_missing_categories
+from parsetrail.core.categorize import transactions as categorize_transactions
 from parsetrail.core.client import (
     ClientUpdateThread,
     check_for_client_updates,
@@ -50,32 +78,6 @@ from parsetrail.version import (
     __website__,
     __year__,
 )
-from PyQt5.QtCore import QAbstractTableModel, Qt
-from PyQt5.QtGui import QColor, QFontMetrics
-from PyQt5.QtWidgets import (
-    QApplication,
-    QCheckBox,
-    QDialog,
-    QFileDialog,
-    QGridLayout,
-    QGroupBox,
-    QHBoxLayout,
-    QLabel,
-    QLineEdit,
-    QListWidget,
-    QListWidgetItem,
-    QMainWindow,
-    QMessageBox,
-    QPushButton,
-    QSizePolicy,
-    QSpacerItem,
-    QTableView,
-    QTabWidget,
-    QTextEdit,
-    QVBoxLayout,
-    QWidget,
-)
-from sqlalchemy.orm import Session
 
 
 class MatplotlibCanvas(FigureCanvas):
@@ -130,9 +132,10 @@ class MatplotlibCanvas(FigureCanvas):
         title="",
         xlabel="",
         ylabel="",
-        dashed=[],
+        dashed=None,
     ):
         self.axes.clear()
+        dashed = dashed or []
 
         # Handle empty data
         if df.empty or not selected_accounts:
@@ -692,13 +695,11 @@ class ParseTrail(QMainWindow):
         msg_box.setTextFormat(Qt.RichText)
         msg_box.setTextInteractionFlags(Qt.TextBrowserInteraction)
         msg_box.setText(
-            (
-                f"<b>ParseTrail v{__version__}</b><br>"
-                f"(c) {__year__} ParseTrail contributors<br>"
-                f"Original author: {__developer__}<br>"
-                f'<a href="{__website__}">Website</a> | '
-                f'<a href="{__repo__}">GitHub</a>'
-            )
+            f"<b>ParseTrail v{__version__}</b><br>"
+            f"(c) {__year__} ParseTrail contributors<br>"
+            f"Original author: {__developer__}<br>"
+            f'<a href="{__website__}">Website</a> | '
+            f'<a href="{__repo__}">GitHub</a>'
         )
         msg_box.setWindowTitle("About")
         msg_box.setStandardButtons(QMessageBox.Ok)

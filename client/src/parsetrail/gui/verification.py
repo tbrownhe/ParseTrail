@@ -1,17 +1,18 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 import pandas as pd
 from loguru import logger
-from parsetrail.core.categorize import add_missing_categories, transactions as categorize_transactions
-from parsetrail.core.cluster import recurring_transactions
+from PyQt5 import QtCore, QtGui, QtWidgets
+from sqlalchemy.orm import joinedload, sessionmaker
+
 from parsetrail.core import learn
+from parsetrail.core.categorize import add_missing_categories
+from parsetrail.core.categorize import transactions as categorize_transactions
+from parsetrail.core.cluster import recurring_transactions
 from parsetrail.core.orm import Categories, Transactions
 from parsetrail.core.query import update_db_where
-from PyQt5 import QtCore, QtWidgets, QtGui
-from sqlalchemy.orm import sessionmaker, joinedload
 from parsetrail.core.settings import settings
 
 
@@ -22,13 +23,13 @@ class TransactionRecord:
     account_name: str
     description: str
     amount: float
-    category_id: Optional[int]
+    category_id: int | None
     category_name: str
     verified: bool
     category_active: bool
-    confidence: Optional[float] = None
-    cluster: Optional[int] = None
-    orig_category_id: Optional[int] = field(init=False)
+    confidence: float | None = None
+    cluster: int | None = None
+    orig_category_id: int | None = field(init=False)
     orig_verified: bool = field(init=False)
 
     def __post_init__(self):
@@ -64,11 +65,11 @@ class TransactionTableModel(QtCore.QAbstractTableModel):
         "Cluster",
     ]
 
-    def __init__(self, records: List[TransactionRecord] | None = None, parent=None):
+    def __init__(self, records: list[TransactionRecord] | None = None, parent=None):
         super().__init__(parent)
-        self._records: List[TransactionRecord] = records or []
+        self._records: list[TransactionRecord] = records or []
 
-    def set_records(self, records: List[TransactionRecord]):
+    def set_records(self, records: list[TransactionRecord]):
         self.beginResetModel()
         self._records = records
         self.endResetModel()
@@ -448,7 +449,7 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
         try:
             session = self.Session()
             try:
-                rows: List[Categories] = (
+                rows: list[Categories] = (
                     session.query(Categories).filter(Categories.Active == 1).order_by(Categories.Name).all()
                 )
             finally:
@@ -508,11 +509,11 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
                 if only_archived:
                     query = query.join(Transactions.category).filter(Categories.Active == 0)
 
-                rows: List[Transactions] = query.all()
+                rows: list[Transactions] = query.all()
             finally:
                 session.close()
 
-            records: List[TransactionRecord] = []
+            records: list[TransactionRecord] = []
             for tx in rows:
                 if tx.category is not None and tx.CategoryID is not None:
                     category_id = tx.CategoryID
@@ -560,12 +561,12 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
             else:
                 header.setSectionResizeMode(col, QtWidgets.QHeaderView.ResizeToContents)
 
-    def _get_selected_records(self) -> List[TransactionRecord]:
+    def _get_selected_records(self) -> list[TransactionRecord]:
         selection_model = self.table_view.selectionModel()
         if not selection_model:
             return []
 
-        records: List[TransactionRecord] = []
+        records: list[TransactionRecord] = []
         for index in selection_model.selectedRows():
             source_index = self.proxy.mapToSource(index)
             records.append(self.model.record_at(source_index.row()))
@@ -588,7 +589,7 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
             idx = self.model.index(row, TransactionTableModel.COL_VERIFIED)
             self.model.dataChanged.emit(idx, idx, [QtCore.Qt.CheckStateRole])
 
-        msg = f"Marked {len(records)-skipped} transactions as verified (not yet saved)."
+        msg = f"Marked {len(records) - skipped} transactions as verified (not yet saved)."
         if skipped > 0:
             msg += f" Skipped {skipped} uncategorized lines."
         self.status_label.setText(msg)
@@ -664,7 +665,7 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
         progress.close()
 
         self.status_label.setText(
-            f"Applied category '{cat_name}' and marked {len(records)} transactions as verified " "(not yet saved)."
+            f"Applied category '{cat_name}' and marked {len(records)} transactions as verified (not yet saved)."
         )
 
     def save_changes(self):
@@ -687,7 +688,7 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.warning(
                 self,
                 "Missing Category",
-                "Some modified transactions have no category selected. " "Please apply a valid category before saving.",
+                "Some modified transactions have no category selected. Please apply a valid category before saving.",
             )
             return
 

@@ -123,9 +123,7 @@ async def get_public_key(request: Request) -> Response:
         user_agent = get_user_agent(request)
         key_type = "public_key"
 
-        logging.info(
-            f"Key request received from {client_ip} with user agent {user_agent}"
-        )
+        logging.info(f"Key request received from {client_ip} with user agent {user_agent}")
 
         query = text(
             """

@@ -35,9 +35,7 @@ def test_get_access_token_incorrect_password(client: TestClient) -> None:
     assert r.status_code == 400
 
 
-def test_use_access_token(
-    client: TestClient, superuser_token_headers: dict[str, str]
-) -> None:
+def test_use_access_token(client: TestClient, superuser_token_headers: dict[str, str]) -> None:
     r = client.post(
         f"{settings.API_V1_STR}/login/test-token",
         headers=superuser_token_headers,
@@ -47,9 +45,7 @@ def test_use_access_token(
     assert "email" in result
 
 
-def test_recovery_password(
-    client: TestClient, normal_user_token_headers: dict[str, str]
-) -> None:
+def test_recovery_password(client: TestClient, normal_user_token_headers: dict[str, str]) -> None:
     with patch("app.api.routes.login.send_email") as send_email_mock:
         email = settings.EMAIL_TEST_USER
         r = client.post(
@@ -61,9 +57,7 @@ def test_recovery_password(
         send_email_mock.assert_called_once()
 
 
-def test_recovery_password_user_not_exits(
-    client: TestClient, normal_user_token_headers: dict[str, str]
-) -> None:
+def test_recovery_password_user_not_exits(client: TestClient, normal_user_token_headers: dict[str, str]) -> None:
     email = "jVgQr@example.com"
     r = client.post(
         f"{settings.API_V1_STR}/password-recovery/{email}",
@@ -92,9 +86,7 @@ def test_reset_password(client: TestClient, db: Session) -> None:
     assert verify_password(data["new_password"], user.hashed_password)
 
 
-def test_reset_password_invalid_token(
-    client: TestClient, superuser_token_headers: dict[str, str]
-) -> None:
+def test_reset_password_invalid_token(client: TestClient, superuser_token_headers: dict[str, str]) -> None:
     data = {"new_password": "changethis", "token": "invalid"}
     r = client.post(
         f"{settings.API_V1_STR}/reset-password/",
@@ -142,7 +134,4 @@ def test_verify_email_user_not_found(client: TestClient) -> None:
         json={"token": token},
     )
     assert response.status_code == 404
-    assert (
-        response.json()["detail"]
-        == "The user with this email does not exist in the system."
-    )
+    assert response.json()["detail"] == "The user with this email does not exist in the system."

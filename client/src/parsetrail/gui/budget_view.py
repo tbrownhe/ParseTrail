@@ -1,15 +1,13 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
-from typing import Optional
 
 import pandas as pd
 from loguru import logger
-from matplotlib.ticker import FuncFormatter
-from PyQt5 import QtCore, QtGui
-
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
+from matplotlib.ticker import FuncFormatter
+from PyQt5 import QtCore, QtGui
 from PyQt5.QtCore import QDate
 from PyQt5.QtWidgets import (
     QCheckBox,
@@ -25,8 +23,8 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from sqlalchemy.orm import sessionmaker
 from sqlalchemy import func
+from sqlalchemy.orm import sessionmaker
 
 from parsetrail.core.orm import Categories, Transactions
 
@@ -37,7 +35,7 @@ class BudgetTab(QWidget):
     Data wiring lives here so ParseTrail stays lean.
     """
 
-    def __init__(self, session_factory: Optional[sessionmaker], parent: Optional[QWidget] = None) -> None:
+    def __init__(self, session_factory: sessionmaker | None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.Session = session_factory
         self._build_ui()
@@ -222,14 +220,14 @@ class BudgetTab(QWidget):
         rows = []
 
         # Helper to flip budgets for expenses so math aligns with negative actual outflows
-        def signed_budget(raw_budget: Optional[float], cat_type: Optional[str]) -> Optional[float]:
+        def signed_budget(raw_budget: float | None, cat_type: str | None) -> float | None:
             if raw_budget is None:
                 return None
             if (cat_type or "").lower() == "expense":
                 return -abs(raw_budget)
             return raw_budget
 
-        def prorated_budget(raw_budget: Optional[float], cat_type: Optional[str]) -> Optional[float]:
+        def prorated_budget(raw_budget: float | None, cat_type: str | None) -> float | None:
             if raw_budget is None:
                 return None
             if not prorate:
@@ -291,10 +289,10 @@ class BudgetTab(QWidget):
         model = QtGui.QStandardItemModel(df.shape[0], df.shape[1])
         model.setHorizontalHeaderLabels(["Label", "Budget", "Actual", "Variance", "% Used", "Transactions"])
 
-        def fmt_money(val: Optional[float]) -> str:
+        def fmt_money(val: float | None) -> str:
             return "" if val is None or pd.isna(val) else f"${val:,.2f}"
 
-        def fmt_pct(val: Optional[float]) -> str:
+        def fmt_pct(val: float | None) -> str:
             return "" if val is None or pd.isna(val) else f"{val:.0f}%"
 
         for row_idx, row in df.iterrows():
@@ -407,7 +405,7 @@ class BudgetTab(QWidget):
 
         slices = []
         other_total = 0.0
-        for label, value in zip(spend_df["label"], magnitudes):
+        for label, value in zip(spend_df["label"], magnitudes, strict=True):
             pct = value / total
             if pct < 0.03:
                 other_total += value
@@ -425,7 +423,7 @@ class BudgetTab(QWidget):
             values,
             labels=None,
             startangle=90,
-            wedgeprops=dict(width=0.4),
+            wedgeprops={"width": 0.4},
         )
         self.util_axes.legend(
             wedges,

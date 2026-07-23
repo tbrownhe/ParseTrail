@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
-from typing import Optional, List, Tuple
 
-from PyQt5 import QtCore, QtGui, QtWidgets
 from loguru import logger
+from PyQt5 import QtCore, QtGui, QtWidgets
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
-from sqlalchemy import func
+
 from parsetrail.core.orm import Categories, Transactions
 
 
@@ -47,7 +47,7 @@ class RenameCategoryDialog(QtWidgets.QDialog):
       - Set A.Active=0
     """
 
-    def __init__(self, parent: Optional[QtWidgets.QWidget], categories: List[Tuple[int, str]]):
+    def __init__(self, parent: QtWidgets.QWidget | None, categories: list[tuple[int, str]]):
         super().__init__(parent)
         self.setWindowTitle("Rename / Migrate Category")
         self.setModal(True)
@@ -80,7 +80,7 @@ class RenameCategoryDialog(QtWidgets.QDialog):
         layout.addWidget(btn_box)
         self.setLayout(layout)
 
-    def get_values(self) -> Tuple[int, str, bool]:
+    def get_values(self) -> tuple[int, str, bool]:
         cat_id = self.combo_source.currentData()
         new_name = self.edit_new_name.text().strip()
         unverify = self.chk_unverify.isChecked()
@@ -108,7 +108,7 @@ class MergeCategoryDialog(QtWidgets.QDialog):
       - Set D.Active=0
     """
 
-    def __init__(self, parent: Optional[QtWidgets.QWidget], categories: List[Tuple[int, str]]):
+    def __init__(self, parent: QtWidgets.QWidget | None, categories: list[tuple[int, str]]):
         super().__init__(parent)
         self.setWindowTitle("Merge Categories")
         self.setModal(True)
@@ -152,7 +152,7 @@ class MergeCategoryDialog(QtWidgets.QDialog):
             return
         super().accept()
 
-    def get_values(self) -> Tuple[int, int, bool]:
+    def get_values(self) -> tuple[int, int, bool]:
         src_id = self.combo_source.currentData()
         tgt_id = self.combo_target.currentData()
         unverify = self.chk_unverify.isChecked()
@@ -182,7 +182,7 @@ class CategoryManagerDialog(QtWidgets.QDialog):
     HEADERS = ["ID", "Name", "Type", "Budget/Mo", "Active", "Transactions"]
     TYPE_CHOICES = ["Expense", "Income", "Transfer"]
 
-    def __init__(self, Session: sessionmaker, parent: Optional[QtWidgets.QWidget] = None):
+    def __init__(self, Session: sessionmaker, parent: QtWidgets.QWidget | None = None):
         super().__init__(parent)
         self.setWindowTitle("Manage Categories")
         self.setModal(True)
@@ -459,7 +459,7 @@ class CategoryManagerDialog(QtWidgets.QDialog):
                     "Failed to add category. See log for details.",
                 )
 
-    def _get_all_categories(self, include_inactive: bool = True) -> List[Tuple[int, str]]:
+    def _get_all_categories(self, include_inactive: bool = True) -> list[tuple[int, str]]:
         """
         Helper to fetch all categories as (id, name) tuples.
         """
@@ -579,7 +579,7 @@ class CategoryManagerDialog(QtWidgets.QDialog):
 
                 session.commit()
                 self.status_label.setText(
-                    f"Renamed/migrated '{src_cat.Name}' to '{new_name}'. " f"Affected transactions: {count_total}."
+                    f"Renamed/migrated '{src_cat.Name}' to '{new_name}'. Affected transactions: {count_total}."
                 )
                 self.load_categories()
 
@@ -696,7 +696,7 @@ class CategoryManagerDialog(QtWidgets.QDialog):
 
                 session.commit()
                 self.status_label.setText(
-                    f"Merged '{src_cat.Name}' into '{tgt_cat.Name}'. " f"Affected transactions: {count_total}."
+                    f"Merged '{src_cat.Name}' into '{tgt_cat.Name}'. Affected transactions: {count_total}."
                 )
                 self.load_categories()
 

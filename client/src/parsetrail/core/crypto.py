@@ -2,14 +2,13 @@ import base64
 import hashlib
 from pathlib import Path
 
-
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from loguru import logger
 
-from parsetrail.core.settings import settings
 from parsetrail.core.api import api_client
+from parsetrail.core.settings import settings
 
 
 def cache_public_key(force: bool = False):

@@ -1,8 +1,13 @@
 import sqlite3
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from loguru import logger
+from sqlalchemy import Float, asc
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+from sqlalchemy.sql import cast, func, select, text
+
 from parsetrail.core.orm import (
     AccountNumbers,
     Accounts,
@@ -12,10 +17,6 @@ from parsetrail.core.orm import (
     Statements,
     Transactions,
 )
-from sqlalchemy import Float, asc
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session
-from sqlalchemy.sql import cast, func, select, text
 
 
 def optimize_db(session: Session) -> None:
@@ -52,7 +53,7 @@ def accounts_table(session: Session) -> list[dict]:
 
     # Fetch all data
     data = [
-        {column.get("name", "Unknown"): value for column, value in zip(query.column_descriptions, row)}
+        {column.get("name", "Unknown"): value for column, value in zip(query.column_descriptions, row, strict=True)}
         for row in query.all()
     ]
 
@@ -100,7 +101,7 @@ def account_numbers_table(session: Session) -> list[dict]:
 
     # Fetch all data
     data = [
-        {column.get("name", "Unknown"): value for column, value in zip(query.column_descriptions, row)}
+        {column.get("name", "Unknown"): value for column, value in zip(query.column_descriptions, row, strict=True)}
         for row in query.all()
     ]
 
@@ -315,7 +316,7 @@ def account_types_table(session: Session) -> list[dict]:
 
     # Fetch all data
     data = [
-        {column.get("name", "Unknown"): value for column, value in zip(query.column_descriptions, row)}
+        {column.get("name", "Unknown"): value for column, value in zip(query.column_descriptions, row, strict=True)}
         for row in query.all()
     ]
 
@@ -338,7 +339,7 @@ def asset_types(session: Session) -> dict[str, str]:
     )
 
     # Build the dictionary from query results
-    asset_dict = {account_name: asset_type for account_name, asset_type in query.all()}
+    asset_dict = dict(query.all())
     return asset_dict
 
 
@@ -501,7 +502,7 @@ def transactions(session: Session, months: int = None) -> tuple[list[tuple], lis
     return data, columns
 
 
-def latest_balance(session: Session, account_id: int) -> Optional[tuple[str, float]]:
+def latest_balance(session: Session, account_id: int) -> tuple[str, float] | None:
     """
     Retrieves the most recent balance and transaction date for a given account.
 
@@ -577,8 +578,8 @@ def latest_balances(session: Session) -> list[tuple[str, str, float]]:
 
 def transactions_in_range(
     session: Session,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
 ) -> tuple[list[tuple], list[str]]:
     """
     Retrieves transaction data within a date range.
@@ -788,10 +789,10 @@ def update_db_where(
     if len(update_list) != len(where_list):
         raise ValueError("Length of update_list and where_list must be equal.")
 
-    for update_vals, where_vals in zip(update_list, where_list):
+    for update_vals, where_vals in zip(update_list, where_list, strict=True):
         # Build the WHERE clause dynamically
-        conditions = [getattr(model, col) == val for col, val in zip(where_cols, where_vals)]
-        updates = {getattr(model, col): val for col, val in zip(update_cols, update_vals)}
+        conditions = [getattr(model, col) == val for col, val in zip(where_cols, where_vals, strict=True)]
+        updates = {getattr(model, col): val for col, val in zip(update_cols, update_vals, strict=True)}
 
         # Update the rows matching the conditions
         session.query(model).filter(*conditions).update(updates, synchronize_session="fetch")

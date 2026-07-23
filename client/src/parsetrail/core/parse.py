@@ -310,7 +310,7 @@ class CSVRouter(BaseRouter[list[list[str]]]):
     def read_csv_as_array(self) -> list[list[str]]:
         """Reads the CSV file and returns its contents as a list of rows."""
         reader = csv.reader(StringIO(self.read_csv_as_text()))
-        return [row for row in reader]
+        return list(reader)
 
 
 class XLSXRouter(BaseRouter):

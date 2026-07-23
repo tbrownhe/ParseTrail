@@ -53,9 +53,7 @@ async def get_plugins() -> JSONResponse:
 
 
 @router.get("/{platform}/{version}", summary="Download a client setup.exe")
-async def download_client(
-    platform: str, version: str, request: Request
-) -> FileResponse:
+async def download_client(platform: str, version: str, request: Request) -> FileResponse:
     """
     Serves the requested client install file.
     """
@@ -69,9 +67,7 @@ async def download_client(
             raise HTTPException(status_code=404, detail="Platform not found")
 
         # Find the latest version by sorting the filenames
-        client_files = list(
-            platform_dir.glob(f"parsetrail_*_{platform}_setup.{suffix}")
-        )
+        client_files = list(platform_dir.glob(f"parsetrail_*_{platform}_setup.{suffix}"))
         if not client_files:
             raise HTTPException(
                 status_code=404,
@@ -82,17 +78,13 @@ async def download_client(
         try:
             client_files.sort(key=lambda f: f.stem.split("_")[1], reverse=True)
         except IndexError:
-            raise HTTPException(
-                status_code=500, detail="Invalid file naming convention"
-            )
+            raise HTTPException(status_code=500, detail="Invalid file naming convention")
 
         client_path = client_files[0]
         version = client_path.stem.split("_")[1]  # Update version to the latest
     else:
         # Download specific version
-        client_path = (
-            CLIENTS_DIR / platform / f"parsetrail_{version}_{platform}_setup.{suffix}"
-        )
+        client_path = CLIENTS_DIR / platform / f"parsetrail_{version}_{platform}_setup.{suffix}"
 
     if not client_path.exists():
         raise HTTPException(
@@ -103,9 +95,7 @@ async def download_client(
     # Log the download to file
     client_ip = get_client_host(request)
     user_agent = get_user_agent(request)
-    logging.info(
-        f"Download: {client_path.stem} (type: {platform}) | IP: {client_ip} | User-Agent: {user_agent}"
-    )
+    logging.info(f"Download: {client_path.stem} (type: {platform}) | IP: {client_ip} | User-Agent: {user_agent}")
 
     # Log the download to the database
     query = text(

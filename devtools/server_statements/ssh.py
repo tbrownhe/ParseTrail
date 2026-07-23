@@ -17,9 +17,7 @@ def _ssh_cmd(base: list[str]) -> list[str]:
 
 def fetch_remote_env(var_name: str) -> str:
     if not settings.REMOTE_HOST or not settings.REMOTE_USER:
-        raise ValueError(
-            "REMOTE_HOST and REMOTE_USER are required to fetch MASTER_KEY remotely"
-        )
+        raise ValueError("REMOTE_HOST and REMOTE_USER are required to fetch MASTER_KEY remotely")
     remote_cmd = f"grep '^{var_name}=' {settings.REMOTE_ENV_PATH}"
     cmd = _ssh_cmd(
         [
@@ -65,8 +63,6 @@ def load_master_key() -> bytes:
     except Exception as e:
         raise ValueError("MASTER_KEY could not be base64-decoded") from e
     if len(key) != 32:
-        raise ValueError(
-            f"MASTER_KEY must be 32 bytes after base64 decode (got {len(key)})"
-        )
+        raise ValueError(f"MASTER_KEY must be 32 bytes after base64 decode (got {len(key)})")
     _MASTER_KEY_CACHE = key
     return key

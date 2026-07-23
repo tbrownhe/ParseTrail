@@ -59,9 +59,7 @@ async def download_plugin(
     """
 
     try:
-        model_path = resolve_artifact_path(
-            MODELS_DIR, model_file, allowed_suffixes={".mdl"}
-        )
+        model_path = resolve_artifact_path(MODELS_DIR, model_file, allowed_suffixes={".mdl"})
     except InvalidArtifactName:
         raise HTTPException(status_code=400, detail="Invalid model filename")
     if not model_path.is_file():

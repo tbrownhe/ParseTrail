@@ -110,7 +110,7 @@ def train(df: pd.DataFrame, model=LinearSVC()):
 
     # Test the accuracy of the model
     score = classifier.score(vectorizer.transform(x_test), y_test)
-    logger.info("Classifier is {a} accurate", a="{0:.1%}".format(score))
+    logger.info("Classifier is {a} accurate", a=f"{score:.1%}")
 
     # Save the trained model to disk
     save_models(vectorizer, classifier)

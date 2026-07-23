@@ -6,11 +6,10 @@ import sys
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
-from typing import Tuple, Union
-from packaging import version
 
 import pdfplumber
 from loguru import logger
+from packaging import version
 
 
 class PDFReader:
@@ -298,7 +297,7 @@ def find_regex_in_line(lines: list[str], pattern: str | re.Pattern) -> tuple[int
     raise ValueError(f"Regex pattern '{pattern}' not found in lines.")
 
 
-def find_param_in_line(lines: list[str], pattern: str, start: int = 0, case_sensitive: bool = True) -> Tuple[int, str]:
+def find_param_in_line(lines: list[str], pattern: str, start: int = 0, case_sensitive: bool = True) -> tuple[int, str]:
     """
     Finds the first line in the list that contains the search string.
 
@@ -332,7 +331,7 @@ def find_param_in_line(lines: list[str], pattern: str, start: int = 0, case_sens
     raise ValueError(f"Parameter '{pattern}' not found in lines.")
 
 
-def find_line_re_search(lines: list[str], pattern: Union[str, re.Pattern]) -> tuple[int, str]:
+def find_line_re_search(lines: list[str], pattern: str | re.Pattern) -> tuple[int, str]:
     """
     Finds the first line matching the given regex pattern.
 

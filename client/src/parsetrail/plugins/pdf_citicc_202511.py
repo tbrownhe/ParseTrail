@@ -4,6 +4,7 @@ from statistics import median
 
 from loguru import logger
 from pdfplumber.page import Page
+
 from parsetrail.core.interfaces import IParser
 from parsetrail.core.utils import (
     PDFReader,
@@ -203,7 +204,7 @@ class Parser(IParser):
         transaction_array = []
         for i, page in enumerate(self.reader.PDF.pages):
             if self.stop:
-                logger.debug(f"Found end of transactions on page {i+1}")
+                logger.debug(f"Found end of transactions on page {i + 1}")
                 return transaction_array
             if not self.vertical_lines:
                 self.get_vertical_lines(page)
@@ -258,7 +259,7 @@ class Parser(IParser):
         # Make sure there are the right number of matches, or return empty
         if len(page_words) != len(self.HEADER_COLS):
             word_list = [word.get("text") for word in page_words]
-            logger.debug("Header keywords could not be matched." f" Expected: {self.HEADER_COLS}\nGot: {word_list}")
+            logger.debug(f"Header keywords could not be matched. Expected: {self.HEADER_COLS}\nGot: {word_list}")
             return
 
         # Remap words list[dict] so it's addressable by column name
@@ -325,7 +326,7 @@ class Parser(IParser):
                 raise ValueError(f"Incorrect number of columns for row: {row}")
 
             # Skip empty rows
-            if all([item == "" for item in row]):
+            if all(item == "" for item in row):
                 continue
 
             # Include only rows that have a date or empty in date col.

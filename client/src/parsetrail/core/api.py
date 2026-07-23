@@ -1,8 +1,9 @@
 import json
-from typing import Iterable, Tuple
+from collections.abc import Iterable
 
 import requests
 from loguru import logger
+
 from parsetrail.core.auth import AuthError, AuthManager, auth_manager
 from parsetrail.core.settings import AppSettings, settings
 
@@ -70,7 +71,7 @@ class ApiClient:
 
     def _download_stream(
         self, path: str, auth_required: bool = True, chunk_size=8192
-    ) -> Iterable[Tuple[bytes, int, int]]:
+    ) -> Iterable[tuple[bytes, int, int]]:
         resp = self.get(path, auth_required=auth_required, stream=True)
         resp.raise_for_status()
 
@@ -86,7 +87,7 @@ class ApiClient:
         finally:
             resp.close()
 
-    def stream_installer(self, platform: str, version: str) -> Iterable[Tuple[bytes, int, int]]:
+    def stream_installer(self, platform: str, version: str) -> Iterable[tuple[bytes, int, int]]:
         """
         Usage:
             with fpath.open("wb") as f:
@@ -106,7 +107,7 @@ class ApiClient:
         """
         return self._download_stream(f"{CLIENT_PATH}/{platform}/{version}", auth_required=False)
 
-    def stream_plugin(self, plugin_name) -> Iterable[Tuple[bytes, int, int]]:
+    def stream_plugin(self, plugin_name) -> Iterable[tuple[bytes, int, int]]:
         """
         Usage:
             with fpath.open("wb") as f:
@@ -126,7 +127,7 @@ class ApiClient:
         """
         return self._download_stream(f"{PLUGIN_PATH}/{plugin_name}", auth_required=True)
 
-    def stream_model(self, model_name) -> Iterable[Tuple[bytes, int, int]]:
+    def stream_model(self, model_name) -> Iterable[tuple[bytes, int, int]]:
         """
         Usage:
             with fpath.open("wb") as f:

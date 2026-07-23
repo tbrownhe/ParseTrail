@@ -49,9 +49,7 @@ def configure_test_environment() -> None:
         "POSTGRES_SERVER": server,
         "POSTGRES_PORT": os.getenv("PARSETRAIL_TEST_POSTGRES_PORT", "64321"),
         "POSTGRES_USER": os.getenv("PARSETRAIL_TEST_POSTGRES_USER", "postgres"),
-        "POSTGRES_PASSWORD": os.getenv(
-            "PARSETRAIL_TEST_POSTGRES_PASSWORD", "parsetrail-test-only"
-        ),
+        "POSTGRES_PASSWORD": os.getenv("PARSETRAIL_TEST_POSTGRES_PASSWORD", "parsetrail-test-only"),
         "POSTGRES_DB": database,
         "FIRST_SUPERUSER": "admin@example.com",
         "FIRST_SUPERUSER_PASSWORD": "test-only-superuser-password",

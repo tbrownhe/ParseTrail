@@ -4,6 +4,7 @@ from statistics import median
 
 from loguru import logger
 from pdfplumber.page import Page
+
 from parsetrail.core.interfaces import IParser
 from parsetrail.core.utils import (
     PDFReader,
@@ -303,7 +304,7 @@ class Parser(IParser):
                 raise ValueError(f"Incorrect number of columns for row: {row}")
 
             # Skip empty rows
-            if all([item == "" for item in row]):
+            if all(item == "" for item in row):
                 continue
 
             # Include only rows that have a date or empty in date col.

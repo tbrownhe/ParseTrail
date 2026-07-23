@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Optional
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -22,7 +21,7 @@ class Settings(BaseSettings):
     ENVIRONMENT: str = "local"
 
     # Crypto
-    MASTER_KEY: Optional[str] = None  # base64 encoded
+    MASTER_KEY: str | None = None  # base64 encoded
 
     # Database
     POSTGRES_SERVER: str = ""

@@ -4,10 +4,11 @@ import sys
 from contextlib import suppress
 from platform import system
 
-from parsetrail.core.utils import resource_path
-from parsetrail.core.logging import logger
 from PyQt5.QtGui import QIcon
 from PyQt5.QtWidgets import QApplication
+
+from parsetrail.core.logging import logger
+from parsetrail.core.utils import resource_path
 
 # Set PyQt environment variables
 os.environ.setdefault("QT_API", "PyQt5")  # Qt bindings
@@ -19,7 +20,7 @@ if system_name == "Windows":
     os.environ["QT_QPA_PLATFORM"] = "windows"
 
 
-def handle_signal(signal, frame):
+def handle_signal(_signal, _frame):
     logger.info("Application interrupted. Exiting...")
     sys.exit(0)
 

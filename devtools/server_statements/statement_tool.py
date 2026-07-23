@@ -26,7 +26,6 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 
-
 # Make the client modules importable
 CLIENT_SRC = Path(__file__).resolve().parents[2] / "client" / "src"
 if not CLIENT_SRC.exists():
@@ -34,10 +33,10 @@ if not CLIENT_SRC.exists():
 sys.path.insert(0, str(CLIENT_SRC))
 
 try:
+    from parsetrail.build_plugins import main as build_plugins
     from parsetrail.core.parse import ParseInput
     from parsetrail.core.plugins import PluginManager
     from parsetrail.gui.plugins import ParseTestDialog
-    from parsetrail.build_plugins import main as build_plugins
 except Exception as e:  # pragma: no cover - optional dependency
     logger.warning(f"Unable to import ParseTrail client modules: {e}")
     raise
@@ -77,18 +76,14 @@ class StatementTableModel(QAbstractTableModel):
             return str(value) if value else ""
         return value or ""
 
-    def headerData(
-        self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole
-    ):  # type: ignore[override]
+    def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole):  # type: ignore[override]
         if role != Qt.DisplayRole:
             return None
         if orientation == Qt.Horizontal:
             return self.COLUMNS[section][0]
         return section + 1
 
-    def get_row(
-        self, proxy_index: QModelIndex, proxy: QSortFilterProxyModel
-    ) -> StatementUploads:
+    def get_row(self, proxy_index: QModelIndex, proxy: QSortFilterProxyModel) -> StatementUploads:
         source_index = proxy.mapToSource(proxy_index)
         return self.rows[source_index.row()]
 
@@ -188,11 +183,7 @@ class StatementTool(QMainWindow):
     def load_rows(self):
         try:
             with self.session_maker() as session:
-                rows = (
-                    session.query(StatementUploads)
-                    .order_by(StatementUploads.id.desc())
-                    .all()
-                )
+                rows = session.query(StatementUploads).order_by(StatementUploads.id.desc()).all()
             self.model.set_rows(rows)
         except Exception as e:
             QMessageBox.critical(self, "Database Error", str(e))
@@ -233,9 +224,7 @@ class StatementTool(QMainWindow):
     def decrypt_and_parse(self):
         idx = self.table.currentIndex()
         if not idx.isValid():
-            QMessageBox.information(
-                self, "Select a row", "Select a statement to decrypt."
-            )
+            QMessageBox.information(self, "Select a row", "Select a statement to decrypt.")
             return
         try:
             row = self.model.get_row(idx, self.proxy)
@@ -264,22 +253,16 @@ class StatementTool(QMainWindow):
             with self.session_maker() as session:
                 db_row = session.query(StatementUploads).get(row.id)
                 if not db_row:
-                    QMessageBox.warning(
-                        self, "Not Found", f"Row id {row.id} not found."
-                    )
+                    QMessageBox.warning(self, "Not Found", f"Row id {row.id} not found.")
                     return
                 db_row.plugin_status = status
                 session.commit()
             self.load_rows()
-            QMessageBox.information(
-                self, "Updated", f"Set plugin_status={status} for id={row.id}"
-            )
+            QMessageBox.information(self, "Updated", f"Set plugin_status={status} for id={row.id}")
         except Exception as e:
             QMessageBox.critical(self, "Database Error", str(e))
 
-    def _parse_with_client(
-        self, plaintext: bytes, enc_name: str, metadata: dict
-    ) -> str:
+    def _parse_with_client(self, plaintext: bytes, enc_name: str, metadata: dict) -> str:
         if not all([self.plugin_manager, ParseTestDialog]):
             return "Parsing unavailable: client modules not loaded"
 

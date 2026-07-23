@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
-from typing import Callable, Optional, Tuple
 
 import requests
 from loguru import logger
+
 from parsetrail.core.settings import AppSettings, save_settings, settings
 
 # Keep this in sync with backend/app/core/config.py
@@ -19,10 +20,10 @@ class AuthError(Exception):
 
 
 # Type for the UI-provided credential prompt
-PromptFunc = Callable[[], Optional[Tuple[str, str]]]
+PromptFunc = Callable[[], tuple[str, str] | None]
 
 
-def _default_prompt_for_credentials() -> Optional[Tuple[str, str]]:
+def _default_prompt_for_credentials() -> tuple[str, str] | None:
     """
     Default implementation. The core layer does not know how to get credentials.
     Your UI code should patch `prompt_for_credentials` at app startup.
@@ -48,7 +49,7 @@ class AuthManager:
         expires_ts = app_settings.token_expires_at
         if expires_ts:
             try:
-                self._token_expires_at: Optional[datetime] = datetime.fromtimestamp(expires_ts, tz=timezone.utc)
+                self._token_expires_at: datetime | None = datetime.fromtimestamp(expires_ts, tz=timezone.utc)
             except (OSError, OverflowError, ValueError) as e:
                 logger.warning(f"Ignoring invalid token_expires_at in settings: {e}")
                 self._token_expires_at = None

@@ -9,10 +9,7 @@ def test_resolves_plain_artifact_name(tmp_path: Path) -> None:
     artifact = tmp_path / "plugin.pyc"
     artifact.write_bytes(b"plugin")
 
-    assert (
-        resolve_artifact_path(tmp_path, "plugin.pyc", allowed_suffixes={".pyc"})
-        == artifact.resolve()
-    )
+    assert resolve_artifact_path(tmp_path, "plugin.pyc", allowed_suffixes={".pyc"}) == artifact.resolve()
 
 
 @pytest.mark.parametrize(

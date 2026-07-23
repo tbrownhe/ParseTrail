@@ -1,8 +1,9 @@
 import hashlib
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Callable, Optional, Union
+from typing import Any
 
 from loguru import logger
 
@@ -19,8 +20,8 @@ class Transaction:
     posting_date: datetime
     amount: float
     desc: str
-    balance: Optional[float] = None
-    md5hash: Optional[str] = None
+    balance: float | None = None
+    md5hash: str | None = None
 
     def __post_init__(self):
         """Validate all inputs immediately after instantiation.
@@ -117,7 +118,7 @@ class Transaction:
 
     @staticmethod
     def to_db_rows(
-        statement_id: Union[int, None],
+        statement_id: int | None,
         account_id: int,
         transactions: list["Transaction"],
     ) -> list[dict[str, Any]]:
@@ -190,9 +191,9 @@ class Account:
     start_balance: float
     end_balance: float
     transactions: list[Transaction]
-    account_id: Optional[int] = None
-    account_name: Optional[str] = None
-    statement_id: Optional[int] = None
+    account_id: int | None = None
+    account_name: str | None = None
+    statement_id: int | None = None
 
     def __post_init__(self):
         """Validate all inputs immediately after instantiation.
@@ -280,10 +281,10 @@ class Statement:
     start_date: datetime
     end_date: datetime
     accounts: list[Account]
-    plugin_name: Optional[str] = None
-    fpath: Optional[Path] = None
-    dpath: Optional[Path] = None
-    md5hash: Optional[str] = None
+    plugin_name: str | None = None
+    fpath: Path | None = None
+    dpath: Path | None = None
+    md5hash: str | None = None
 
     def __post_init__(self):
         """Validate all inputs immediately after instantiation.

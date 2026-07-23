@@ -54,9 +54,7 @@ async def download_plugin(
     """
 
     try:
-        plugin_path = resolve_artifact_path(
-            PLUGINS_DIR, plugin_file, allowed_suffixes={".pyc"}
-        )
+        plugin_path = resolve_artifact_path(PLUGINS_DIR, plugin_file, allowed_suffixes={".pyc"})
     except InvalidArtifactName:
         raise HTTPException(status_code=400, detail="Invalid plugin filename")
     if not plugin_path.is_file():

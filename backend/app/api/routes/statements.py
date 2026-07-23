@@ -86,9 +86,7 @@ def _apply_owner(path: Path, *, fatal: bool = False) -> None:
 
 # Load server's private key.
 with PRIVATE_KEY_PATH.open("rb") as key_file:
-    loaded_private_key = serialization.load_pem_private_key(
-        key_file.read(), password=None
-    )
+    loaded_private_key = serialization.load_pem_private_key(key_file.read(), password=None)
 if not isinstance(loaded_private_key, rsa.RSAPrivateKey):
     raise RuntimeError("Submission private key is not an RSA private key")
 PRIVATE_KEY = loaded_private_key
@@ -180,9 +178,7 @@ logging.basicConfig(
 )
 
 
-@router.post(
-    "/submit-statement", summary="Upload and store an encrypted bank statement"
-)
+@router.post("/submit-statement", summary="Upload and store an encrypted bank statement")
 async def upload_statement(
     file: UploadFile,
     request: Request,
@@ -216,9 +212,7 @@ async def upload_statement(
         max_encrypted_bytes = 36 * 1024 * 1024
         encrypted_data = await file.read(max_encrypted_bytes + 1)
         if len(encrypted_data) > max_encrypted_bytes:
-            raise HTTPException(
-                status_code=413, detail="Encrypted statement is too large"
-            )
+            raise HTTPException(status_code=413, detail="Encrypted statement is too large")
         decrypted_data = decrypt_client_data(symmetric_key, encrypted_data)
     except HTTPException:
         raise
@@ -256,9 +250,7 @@ async def upload_statement(
     try:
         client_ip = get_client_host(request)
         user_agent = get_user_agent(request)
-        sanitized_metadata = (
-            metadata[:256].replace("\n", " ").replace("\r", " ").strip()
-        )
+        sanitized_metadata = metadata[:256].replace("\n", " ").replace("\r", " ").strip()
 
         logging.info(
             "Upload received: %s from IP: %s (%s) with sanitized metadata",

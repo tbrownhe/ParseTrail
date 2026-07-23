@@ -4,6 +4,7 @@ from statistics import mode
 
 from loguru import logger
 from pdfplumber.page import Page
+
 from parsetrail.core.interfaces import IParser
 from parsetrail.core.utils import (
     PDFReader,

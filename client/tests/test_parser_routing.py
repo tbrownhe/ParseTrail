@@ -1,5 +1,4 @@
 import pytest
-
 from parsetrail.core.parser_routing import first_successful_candidate
 
 
@@ -12,12 +11,7 @@ def test_returns_first_successful_candidate() -> None:
             raise ValueError("not this layout")
         return f"parsed by {candidate}"
 
-    assert (
-        first_successful_candidate(
-            ["first", "second", "third"], parse, source="statement.csv"
-        )
-        == "parsed by second"
-    )
+    assert first_successful_candidate(["first", "second", "third"], parse, source="statement.csv") == "parsed by second"
     assert attempted == ["first", "second"]
 
 

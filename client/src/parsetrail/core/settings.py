@@ -297,7 +297,7 @@ def load_settings() -> AppSettings:
         AppSettings: The loaded settings object.
     """
     try:
-        with open(AppSettings().config_path, "r") as f:
+        with open(AppSettings().config_path) as f:
             data = json.load(f)
         settings = AppSettings.from_saved(data)
         logger.info("Settings loaded successfully.")

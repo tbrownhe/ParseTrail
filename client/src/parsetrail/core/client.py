@@ -2,12 +2,13 @@ from pathlib import Path
 
 from loguru import logger
 from packaging import version
+from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtWidgets import QApplication, QMessageBox, QProgressDialog
+
 from parsetrail.core.api import api_client
 from parsetrail.core.settings import settings
 from parsetrail.core.utils import is_newer_version, open_file_in_os
 from parsetrail.version import __version__ as current_version
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
-from PyQt5.QtWidgets import QApplication, QMessageBox, QProgressDialog
 
 
 def get_latest_installer() -> dict | None:

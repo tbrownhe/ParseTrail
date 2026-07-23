@@ -3,7 +3,6 @@ import time
 from pathlib import Path
 
 from loguru import logger
-from parsetrail.core.settings import settings
 from PyQt5.QtCore import Qt
 from PyQt5.QtWidgets import (
     QApplication,
@@ -19,9 +18,11 @@ from PyQt5.QtWidgets import (
     QTextEdit,
     QVBoxLayout,
 )
-from parsetrail.core.crypto import encrypt_file
+
 from parsetrail.core.api import api_client
 from parsetrail.core.auth import AuthError
+from parsetrail.core.crypto import encrypt_file
+from parsetrail.core.settings import settings
 
 
 class StatementSubmissionDialog(QDialog):

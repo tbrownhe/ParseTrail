@@ -8,8 +8,8 @@ from sqlalchemy import (
     Numeric,
     String,
     Text,
-    text,
     create_engine,
+    text,
 )
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 from sqlalchemy.pool import NullPool

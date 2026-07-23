@@ -7,16 +7,16 @@ from PyQt5.QtGui import QColor, QIntValidator, QPainter, QPen
 from PyQt5.QtWidgets import (
     QApplication,
     QDialog,
-    QHeaderView,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QPushButton,
+    QSizePolicy,
     QStyledItemDelegate,
     QTableView,
     QTextEdit,
     QVBoxLayout,
-    QSizePolicy,
 )
 from sqlalchemy.orm import sessionmaker
 

@@ -9,7 +9,7 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import MinMaxScaler
 
 # Download stopwords if necessary
-for attempt in range(1, 4):
+for _attempt in range(1, 4):
     try:
         from nltk.corpus import stopwords
 

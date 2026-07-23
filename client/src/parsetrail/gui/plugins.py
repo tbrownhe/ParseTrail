@@ -2,15 +2,6 @@ from pathlib import Path
 
 import pandas as pd
 from loguru import logger
-from parsetrail.core.parse import ParseInput, parse_any
-from parsetrail.core.plugins import (
-    PluginManager,
-    compare_plugins,
-    get_plugin_lists,
-    sync_plugins,
-)
-from parsetrail.core.settings import settings
-from parsetrail.core.utils import PDFReader
 from PyQt5.QtGui import QBrush, QColor, QFont
 from PyQt5.QtWidgets import (
     QDesktopWidget,
@@ -27,6 +18,16 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
 )
 from sqlalchemy.orm import sessionmaker
+
+from parsetrail.core.parse import ParseInput, parse_any
+from parsetrail.core.plugins import (
+    PluginManager,
+    compare_plugins,
+    get_plugin_lists,
+    sync_plugins,
+)
+from parsetrail.core.settings import settings
+from parsetrail.core.utils import PDFReader
 
 
 def resize_to_table(parent, table):

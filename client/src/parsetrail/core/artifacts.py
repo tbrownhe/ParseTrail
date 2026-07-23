@@ -7,9 +7,7 @@ class InvalidArtifactName(ValueError):
     """Raised when a server-provided artifact name is unsafe."""
 
 
-def resolve_artifact_destination(
-    root: Path, untrusted_name: str, *, allowed_suffixes: set[str]
-) -> Path:
+def resolve_artifact_destination(root: Path, untrusted_name: str, *, allowed_suffixes: set[str]) -> Path:
     supplied_path = Path(untrusted_name)
     if (
         not untrusted_name

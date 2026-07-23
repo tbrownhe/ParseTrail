@@ -35,7 +35,7 @@ class StatementProcessor:
             parent: Parent class for UI dialogs.
         """
         # Gather files to process
-        suffixes = set([plugin.get("SUFFIX", ".*") for plugin in self.plugin_manager.metadata.values()])
+        suffixes = {plugin.get("SUFFIX", ".*") for plugin in self.plugin_manager.metadata.values()}
         fpaths = [fpath for suffix in suffixes for fpath in settings.import_dir.glob(f"*{suffix}")]
         if not fpaths:
             QMessageBox.information(parent, "No Files", "No files found in the import directory.")

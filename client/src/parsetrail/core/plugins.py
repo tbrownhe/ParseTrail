@@ -2,13 +2,14 @@ import importlib.util
 from pathlib import Path
 
 from loguru import logger
+from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtWidgets import QApplication, QProgressDialog
+
 from parsetrail.core.api import api_client
 from parsetrail.core.artifacts import resolve_artifact_destination
 from parsetrail.core.interfaces import IParser, class_variables, validate_parser
 from parsetrail.core.settings import settings
 from parsetrail.core.utils import is_newer_version, is_version_compatible
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
-from PyQt5.QtWidgets import QApplication, QProgressDialog
 from parsetrail.version import __version__ as current_version
 
 
@@ -86,7 +87,7 @@ class PluginManager:
             logger.success(f"Loaded {success} plugins")
 
         # Build the set of supported file extensions
-        self.suffixes = sorted(set(plugin["SUFFIX"] for plugin in self.metadata.values()))
+        self.suffixes = sorted({plugin["SUFFIX"] for plugin in self.metadata.values()})
 
     def get_parser(self, plugin_id: str):
         """
@@ -107,7 +108,7 @@ def get_plugin_lists(plugin_manager: PluginManager) -> tuple[list, list]:
     Returns:
         tuple[list, list]: local_plugins, server_plugins
     """
-    local_plugins = [plugin for plugin in plugin_manager.metadata.values()]
+    local_plugins = list(plugin_manager.metadata.values())
     server_plugins = api_client.list_plugins()
     return local_plugins, server_plugins
 
@@ -117,9 +118,7 @@ def download_plugin(plugin_fname: str):
     Downloads a specific plugin from the server.
     """
     settings.plugin_dir.mkdir(parents=True, exist_ok=True)
-    dpath = resolve_artifact_destination(
-        settings.plugin_dir, plugin_fname, allowed_suffixes={".pyc"}
-    )
+    dpath = resolve_artifact_destination(settings.plugin_dir, plugin_fname, allowed_suffixes={".pyc"})
     partial_path = dpath.with_name(f"{dpath.name}.part")
     try:
         with partial_path.open("wb") as f:
@@ -131,9 +130,7 @@ def download_plugin(plugin_fname: str):
         try:
             partial_path.unlink(missing_ok=True)
         except OSError as cleanup_error:
-            logger.warning(
-                f"Could not remove incomplete plugin download {partial_path}: {cleanup_error}"
-            )
+            logger.warning(f"Could not remove incomplete plugin download {partial_path}: {cleanup_error}")
         logger.error(f"Error downloading plugin {plugin_fname}: {e}")
         raise
 
@@ -212,7 +209,7 @@ def check_for_plugin_updates(plugin_manager: PluginManager, parent=None) -> bool
     Returns:
         bool: Whether plugins were updated
     """
-    local_plugins = [plugin for plugin in plugin_manager.metadata.values()]
+    local_plugins = list(plugin_manager.metadata.values())
     server_plugins = api_client.list_plugins()
     new_plugins = compare_plugins(local_plugins, server_plugins)
     if new_plugins:

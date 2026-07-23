@@ -42,11 +42,10 @@ function VerifyEmail() {
     },
   })
 
+  const mutate = mutation.mutate
   useEffect(() => {
-    // Run once on mount to avoid re-triggering and looping between success/error states
-    mutation.mutate()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    mutate()
+  }, [mutate])
 
   const isError = mutation.isError
   const isSuccess = mutation.isSuccess

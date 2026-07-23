@@ -1,12 +1,12 @@
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, List
 
 import pandas as pd
 from loguru import logger
 from sqlalchemy.orm import Session
 
 from parsetrail.core.learn import predict
-from parsetrail.core.orm import Transactions, Categories
+from parsetrail.core.orm import Categories, Transactions
 from parsetrail.core.query import training_set
 
 
@@ -40,7 +40,7 @@ def update_db_categories(session: Session, df: pd.DataFrame) -> None:
 
     # Look up CategoryID for all predicted names
     existing = session.query(Categories.Name, Categories.CategoryID).filter(Categories.Name.in_(category_names)).all()
-    category_map = {name: cat_id for name, cat_id in existing}
+    category_map = dict(existing)
 
     # Sanity check: all predicted categories should exist in Categories
     missing_cats = [name for name in category_names if name not in category_map]
@@ -69,7 +69,7 @@ def update_db_categories(session: Session, df: pd.DataFrame) -> None:
     logger.success("Updated categories and confidence scores for {} transactions", len(df))
 
 
-def add_missing_categories(session: Session, category_names: Iterable[str], default_type: str = "Expense") -> List[str]:
+def add_missing_categories(session: Session, category_names: Iterable[str], default_type: str = "Expense") -> list[str]:
     """
     Add missing category names to the Categories table (Active=1).
 

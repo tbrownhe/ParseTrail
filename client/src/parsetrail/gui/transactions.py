@@ -343,10 +343,10 @@ class RecurringTransactionsDialog(QDialog):
             self.max_interval_slider,
             self.variance_slider,
         ]
-        for row, slider in enumerate(sliders, start=row):
-            control_layout.addWidget(slider["label"], row, 0, 1, 2)
-            control_layout.addWidget(slider["slider"], row, 2, 1, 2)
-        row += 1
+        for slider_row, slider in enumerate(sliders, start=row):
+            control_layout.addWidget(slider["label"], slider_row, 0, 1, 2)
+            control_layout.addWidget(slider["slider"], slider_row, 2, 1, 2)
+        row += len(sliders)
 
         # Analyze button
         analyze_button = QPushButton("Analyze")

@@ -4,7 +4,6 @@ import os
 import shutil
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 from alembic import command
 from alembic.config import Config
@@ -31,7 +30,7 @@ def _alembic_config(db_path: Path) -> Config:
     return alembic_config
 
 
-def _backup_database(db_path: Path) -> Optional[Path]:
+def _backup_database(db_path: Path) -> Path | None:
     if not db_path.exists():
         return None
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
@@ -54,7 +53,7 @@ def _has_version_table(db_path: Path) -> bool:
         engine.dispose()
 
 
-def _current_revision(db_path: Path) -> Optional[str]:
+def _current_revision(db_path: Path) -> str | None:
     if not db_path.exists():
         return None
 
@@ -67,12 +66,12 @@ def _current_revision(db_path: Path) -> Optional[str]:
         engine.dispose()
 
 
-def _head_revision(alembic_config: Config) -> Optional[str]:
+def _head_revision(alembic_config: Config) -> str | None:
     script = ScriptDirectory.from_config(alembic_config)
     return script.get_current_head()
 
 
-def upgrade_db(db_path: Optional[Path] = None, *, backup: bool = True) -> None:
+def upgrade_db(db_path: Path | None = None, *, backup: bool = True) -> None:
     """Run Alembic migrations against the client SQLite database."""
     target_db = Path(db_path) if db_path is not None else Path(settings.db_path)
     target_db.parent.mkdir(parents=True, exist_ok=True)

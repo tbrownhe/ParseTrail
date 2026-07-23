@@ -6,17 +6,16 @@ and attempts to parse via the in-memory parse pipeline. Summarizes failures.
 """
 
 import argparse
-from pathlib import Path
-from typing import Iterable, Sequence
-
-from loguru import logger
-
-from aes import decrypt_statement
-from db import SessionLocal
-from orm import StatementUploads
 
 # Make the client modules importable
 import sys
+from collections.abc import Iterable, Sequence
+from pathlib import Path
+
+from aes import decrypt_statement
+from db import SessionLocal
+from loguru import logger
+from orm import StatementUploads
 
 CLIENT_SRC = Path(__file__).resolve().parents[2] / "client" / "src"
 if not CLIENT_SRC.exists():
@@ -32,19 +31,14 @@ except Exception as e:  # pragma: no cover - optional dependency
     raise
 
 
-def _iter_ready_rows(
-    ids: Sequence[int] | None = None, limit: int | None = None
-) -> Iterable[StatementUploads]:
+def _iter_ready_rows(ids: Sequence[int] | None = None, limit: int | None = None) -> Iterable[StatementUploads]:
     with SessionLocal() as session:
-        q = session.query(StatementUploads).filter(
-            StatementUploads.plugin_status == "ready"
-        )
+        q = session.query(StatementUploads).filter(StatementUploads.plugin_status == "ready")
         if ids:
             q = q.filter(StatementUploads.id.in_(ids))
         if limit:
             q = q.limit(limit)
-        for row in q.order_by(StatementUploads.id.asc()):
-            yield row
+        yield from q.order_by(StatementUploads.id.asc())
 
 
 def _parse_row(row: StatementUploads, plugin_manager: PluginManager):
@@ -83,15 +77,9 @@ def run(ids: Sequence[int] | None = None, limit: int | None = None) -> int:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Batch test parsing for ready statements."
-    )
-    parser.add_argument(
-        "--ids", nargs="*", type=int, help="Optional specific statement IDs to run."
-    )
-    parser.add_argument(
-        "--limit", type=int, help="Optional limit on number of statements."
-    )
+    parser = argparse.ArgumentParser(description="Batch test parsing for ready statements.")
+    parser.add_argument("--ids", nargs="*", type=int, help="Optional specific statement IDs to run.")
+    parser.add_argument("--limit", type=int, help="Optional limit on number of statements.")
     args = parser.parse_args()
     exit_code = run(ids=args.ids, limit=args.limit)
     raise SystemExit(exit_code)

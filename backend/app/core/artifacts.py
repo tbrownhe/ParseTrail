@@ -7,9 +7,7 @@ class InvalidArtifactName(ValueError):
     """Raised when an untrusted artifact name can escape its configured root."""
 
 
-def resolve_artifact_path(
-    root: Path, untrusted_name: str, *, allowed_suffixes: set[str]
-) -> Path:
+def resolve_artifact_path(root: Path, untrusted_name: str, *, allowed_suffixes: set[str]) -> Path:
     """Resolve one plain filename below ``root`` and enforce its artifact type."""
     supplied_path = Path(untrusted_name)
     if (
