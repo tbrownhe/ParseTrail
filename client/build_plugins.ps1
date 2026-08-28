@@ -27,41 +27,46 @@ $privateKey = $env:PLUGIN_SIGNING_KEY
 $remoteUser = $env:REMOTE_USER
 $remoteHost = $env:REMOTE_HOST
 $remoteDir = $env:REMOTE_PLUGINS_DIR
+$pythonVersionFile = Join-Path $PSScriptRoot ".python-version"
 
 $required = @{
     PLUGINS_DIR = $pluginsDir
     PLUGIN_SIGNING_KEY = $privateKey
-    REMOTE_USER = $remoteUser
-    REMOTE_HOST = $remoteHost
-    REMOTE_PLUGINS_DIR = $remoteDir
 }
 $missing = @($required.GetEnumerator() | Where-Object { -not $_.Value } | ForEach-Object { $_.Key })
 if ($missing.Count -gt 0) {
     throw "Missing required environment variables: $($missing -join ', ')"
 }
+if (-not (Test-Path -LiteralPath $pythonVersionFile -PathType Leaf)) {
+    throw "Missing Python version file: $pythonVersionFile"
+}
+$pythonVersion = (Get-Content -LiteralPath $pythonVersionFile -Raw).Trim()
+if (-not $pythonVersion) {
+    throw "Python version file is empty: $pythonVersionFile"
+}
 
 Push-Location $PSScriptRoot
 try {
-    Write-Host "Synchronizing the locked client environment..."
-    uv sync --frozen
+    Write-Host "Synchronizing the locked client test environment with Python $pythonVersion..."
+    uv sync --extra dev --frozen --python $pythonVersion
     if ($LASTEXITCODE -ne 0) {
         throw "uv sync failed with exit code $LASTEXITCODE"
     }
 
     Write-Host "Running client regression tests before release..."
-    uv run --frozen pytest -q
+    uv run --extra dev --frozen --python $pythonVersion pytest -q
     if ($LASTEXITCODE -ne 0) {
         throw "Client tests failed with exit code $LASTEXITCODE"
     }
 
     Write-Host "Compiling plugins..."
-    uv run --frozen python src/parsetrail/build_plugins.py
+    uv run --frozen --python $pythonVersion python src/parsetrail/build_plugins.py
     if ($LASTEXITCODE -ne 0) {
         throw "Plugin compilation failed with exit code $LASTEXITCODE"
     }
 
     Write-Host "Signing the complete plugin catalog..."
-    uv run --frozen python scripts/plugin_release.py sign `
+    uv run --frozen --python $pythonVersion python scripts/plugin_release.py sign `
         --private-key $privateKey `
         --plugin-dir $pluginsDir
     if ($LASTEXITCODE -ne 0) {
@@ -69,7 +74,7 @@ try {
     }
 
     Write-Host "Verifying the release using only the bundled public key..."
-    uv run --frozen python scripts/plugin_release.py verify --plugin-dir $pluginsDir
+    uv run --frozen --python $pythonVersion python scripts/plugin_release.py verify --plugin-dir $pluginsDir
     if ($LASTEXITCODE -ne 0) {
         throw "Plugin release verification failed with exit code $LASTEXITCODE"
     }
@@ -78,6 +83,20 @@ try {
     if ($answer -notin @("y", "Y")) {
         Write-Host "Signed release retained locally; deployment skipped."
         exit 0
+    }
+
+    $remoteRequired = @{
+        REMOTE_USER = $remoteUser
+        REMOTE_HOST = $remoteHost
+        REMOTE_PLUGINS_DIR = $remoteDir
+    }
+    $remoteMissing = @(
+        $remoteRequired.GetEnumerator() |
+            Where-Object { -not $_.Value } |
+            ForEach-Object { $_.Key }
+    )
+    if ($remoteMissing.Count -gt 0) {
+        throw "Missing deployment environment variables: $($remoteMissing -join ', ')"
     }
 
     $manifestPath = Join-Path $pluginsDir "plugin-manifest.json"

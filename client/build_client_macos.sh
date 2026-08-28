@@ -26,7 +26,7 @@ source "$ENV_FILE"
 set +a
 
 # Required vars
-required_vars=("CLIENT_CONDA_ENV" "CLIENTS_DIR" "REMOTE_USER" "REMOTE_HOST" "REMOTE_CLIENTS_DIR")
+required_vars=("CLIENTS_DIR")
 missing=()
 for v in "${required_vars[@]}"; do
     if [[ -z "${!v:-}" ]]; then
@@ -60,32 +60,39 @@ if [[ -z "${VERSION:-}" ]]; then
     error_exit "Failed to determine version from src/parsetrail/version.py"
 fi
 DMG_PATH="${DIST_DIR}/parsetrail_${VERSION}_macos_setup.dmg"
+[[ ! -e "$DMG_PATH" ]] \
+    || error_exit "Versioned installer already exists: $DMG_PATH. Bump the client version before rebuilding."
 
 # Ensure required commands exist
-require_cmd conda
 require_cmd create-dmg
 require_cmd rsync
 require_cmd uv
 
 
-# ---------- Conda env & build ----------
+# ---------- Python environment & build ----------
 
-CONDA_ENV="${CLIENT_CONDA_ENV}"
-echo "Activating conda environment: $CONDA_ENV"
-CONDA_BASE=$(conda info --base 2>/dev/null) || error_exit "Unable to determine conda base path."
-# shellcheck source=/dev/null
-source "$CONDA_BASE/etc/profile.d/conda.sh"
-conda activate "$CONDA_ENV" || error_exit "Failed to activate conda environment '$CONDA_ENV'."
+PYTHON_VERSION_FILE="${SCRIPT_DIR}/.python-version"
+[[ -f "$PYTHON_VERSION_FILE" ]] || error_exit "Missing Python version file: $PYTHON_VERSION_FILE"
+PYTHON_VERSION=$(tr -d '[:space:]' < "$PYTHON_VERSION_FILE")
+[[ -n "$PYTHON_VERSION" ]] || error_exit "Python version file is empty: $PYTHON_VERSION_FILE"
 
-echo "Synchronizing the locked client environment..."
-uv sync --frozen || error_exit "Failed to synchronize the locked client environment."
+echo "Synchronizing the locked client environment with Python $PYTHON_VERSION..."
+uv sync --frozen --python "$PYTHON_VERSION" \
+    || error_exit "Failed to synchronize the locked client environment."
+
+ACTUAL_PYTHON_VERSION=$(uv run --frozen --python "$PYTHON_VERSION" python -c \
+    'import platform; print(platform.python_version())') \
+    || error_exit "Failed to determine the synchronized Python version."
+[[ "$ACTUAL_PYTHON_VERSION" == "$PYTHON_VERSION" ]] \
+    || error_exit "Expected Python $PYTHON_VERSION but uv selected $ACTUAL_PYTHON_VERSION."
+echo "Release interpreter: Python $ACTUAL_PYTHON_VERSION"
 
 echo "Checking bundled plugin release trust keys..."
-uv run --frozen python scripts/plugin_release.py check-trust-store \
+uv run --frozen --python "$PYTHON_VERSION" python scripts/plugin_release.py check-trust-store \
     || error_exit "Plugin trust-store check failed."
 
 echo "Building the executable with PyInstaller..."
-uv run --frozen pyinstaller \
+uv run --frozen --python "$PYTHON_VERSION" pyinstaller \
     -n "$APP_NAME" \
     --clean \
     --noconfirm \
@@ -102,14 +109,17 @@ uv run --frozen pyinstaller \
     "$MODULE_PATH" \
     || error_exit "Failed to build the executable."
 
-echo "Deactivating conda environment..."
-conda deactivate || error_exit "Failed to deactivate conda environment."
+echo "Smoke-testing the frozen executable..."
+SMOKE_EXECUTABLE="${APP_PATH}/Contents/MacOS/${APP_NAME}"
+[[ -x "$SMOKE_EXECUTABLE" ]] || error_exit "Frozen executable not found: $SMOKE_EXECUTABLE"
+"$SMOKE_EXECUTABLE" --runtime-smoke-test \
+    || error_exit "Frozen runtime smoke test failed."
+echo "Frozen runtime smoke test passed."
 
 # ---------- DMG packaging ----------
 
 echo "Creating DMG installer..."
 mkdir -p "$DIST_DIR"
-rm -f "$DMG_PATH"
 
 create-dmg \
     --volname "${APP_NAME} ${VERSION} Installer" \
@@ -134,6 +144,10 @@ create-dmg \
 
 read -r -p "Do you want to deploy the .dmg to server? (y/n): " confirm
 if [[ "$confirm" =~ ^[Yy]$ ]]; then
+    deploy_vars=("REMOTE_USER" "REMOTE_HOST" "REMOTE_CLIENTS_DIR")
+    for v in "${deploy_vars[@]}"; do
+        [[ -n "${!v:-}" ]] || error_exit "$v is required for deployment."
+    done
     echo "Deploying macOS client installer..."
     rsync -avz --progress "$DIST_DIR" "$REMOTE_USER@$REMOTE_HOST:$REMOTE_CLIENTS_DIR/"
     echo "Sync complete!"

@@ -1,4 +1,9 @@
 {
-  "schema_version": 1,
-  "keys": []
+  "keys": [
+    {
+      "key_id": "plugin-ed25519-85bb107180ef75ab92b9debcbc16472e",
+      "public_key": "lnaGwp8Usfw8JH/edHsKD+9qMBtw/y8pEazyexVwGoY="
+    }
+  ],
+  "schema_version": 1
 }

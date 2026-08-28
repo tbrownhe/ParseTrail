@@ -7,10 +7,10 @@ optional encrypted statement submission.
 
 ## Requirements
 
-Conda provisions the supported Python 3.10 runtime; uv installs and runs the
-locked project environment.
+uv provisions the exact Python patch release declared in `.python-version` and
+installs the locked project environment. Platform installer creation uses one
+native external tool.
 
-- [Miniconda](https://www.anaconda.com/docs/getting-started/miniconda/main)
 - [uv](https://docs.astral.sh/uv/)
 - [NSIS](https://nsis.sourceforge.io/Main_Page) for Windows installers
 - [create-dmg](https://github.com/create-dmg/create-dmg) for macOS installers
@@ -19,8 +19,6 @@ locked project environment.
 
 ```powershell
 cd client
-conda env create -f dev_env_win64.yml
-conda activate parsetrail-client
 uv sync --extra dev --frozen
 ```
 
@@ -28,8 +26,6 @@ uv sync --extra dev --frozen
 
 ```bash
 cd client
-conda env create -f dev_env_macos.yml
-conda activate parsetrail-client
 uv sync --extra dev --frozen
 ```
 
@@ -160,7 +156,18 @@ Windows:
 .\build_client_win64.ps1
 ```
 
-This builds the PyInstaller application and packages it with NSIS.
+This synchronizes the locked environment using the exact Python patch release in
+`.python-version`, builds the PyInstaller application, smoke-tests the frozen
+runtime, and only then packages it with NSIS. `makensis.exe` may be on `PATH`, in
+the standard NSIS installation directory. Versioned installer files are
+immutable: the build stops if that version already exists, so bump
+`src/parsetrail/version.py` first.
+
+To deploy an already-built installer without rebuilding it:
+
+```powershell
+.\build_client_win64.ps1 -DeployOnly
+```
 
 macOS:
 

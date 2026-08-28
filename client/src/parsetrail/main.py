@@ -10,6 +10,8 @@ from PyQt5.QtWidgets import QApplication
 from parsetrail.core.logging import logger
 from parsetrail.core.utils import resource_path
 
+RUNTIME_SMOKE_TEST_ARGUMENT = "--runtime-smoke-test"
+
 # Set PyQt environment variables
 os.environ.setdefault("QT_API", "PyQt5")  # Qt bindings
 os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"  # Enable HiDPI scaling
@@ -25,8 +27,18 @@ def handle_signal(_signal, _frame):
     sys.exit(0)
 
 
+def run_runtime_smoke_test() -> int:
+    """Import modules required during frozen application bootstrap."""
+    for module_name in ("_socket", "socket", "multiprocessing"):
+        __import__(module_name)
+    return 0
+
+
 # Client entry point
 def main() -> int:
+    if RUNTIME_SMOKE_TEST_ARGUMENT in sys.argv:
+        return run_runtime_smoke_test()
+
     # Imports that depend on settings
     from parsetrail.gui.bootstrap import configure_ui_hooks
     from parsetrail.gui.main_window import ParseTrail

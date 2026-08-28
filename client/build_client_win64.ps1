@@ -1,3 +1,7 @@
+param(
+    [switch]$DeployOnly
+)
+
 $ErrorActionPreference = "Stop"
 
 # --- Load project-level .env -------------------------------------------------
@@ -23,14 +27,13 @@ Get-Content $envFile | ForEach-Object {
     }
 }
 
-$condaEnv        = $env:CLIENT_CONDA_ENV
 $distDir         = $env:CLIENTS_DIR
 $remoteUser      = $env:REMOTE_USER
 $remoteHost      = $env:REMOTE_HOST
 $remoteDir       = $env:REMOTE_CLIENTS_DIR
 
-if (-not $condaEnv -or -not $distDir -or -not $remoteUser -or -not $remoteHost -or -not $remoteDir) {
-    Write-Error "One or more required environment variables are missing. Please check $envFile."
+if (-not $distDir) {
+    Write-Error "CLIENTS_DIR is missing. Please check $envFile."
     exit 1
 }
 
@@ -39,24 +42,53 @@ $prebuildDir = Join-Path $PSScriptRoot "prebuild"
 $buildDir    = Join-Path $PSScriptRoot "build"
 $srcDir      = Join-Path $PSScriptRoot "src"
 $clientDir   = Join-Path $distDir "win64"
+$pythonVersionFile = Join-Path $PSScriptRoot ".python-version"
 
-
-# --- Activate the conda environment ------------------------------------------
-try {
-    Write-Host "Activating conda environment '$condaEnv'..."
-    conda activate $condaEnv
-} catch {
-    Write-Error "ERROR: Failed to activate conda environment '$condaEnv'."
+if (-not (Test-Path -LiteralPath $pythonVersionFile)) {
+    Write-Error "Python version file not found at $pythonVersionFile"
     exit 1
 }
 
-# --- Ensure NSIS is available in this conda env ------------------------------
-
-$makensis = Join-Path $env:CONDA_PREFIX "NSIS\makensis.exe"
-if (-not (Test-Path $makensis)) {
-    Write-Error "makensis not found at $makensis (check NSIS install / conda env)"
+$pythonVersion = (Get-Content -LiteralPath $pythonVersionFile -Raw).Trim()
+if (-not $pythonVersion) {
+    Write-Error "Python version file is empty: $pythonVersionFile"
     exit 1
 }
+
+$versionFile = Join-Path $srcDir "parsetrail\version.py"
+$versionContents = Get-Content -LiteralPath $versionFile -Raw
+if ($versionContents -notmatch '(?m)^__version__\s*=\s*"([^"]+)"') {
+    Write-Error "Could not extract __version__ from $versionFile"
+    exit 1
+}
+$version = $Matches[1]
+$installerPath = Join-Path $clientDir "parsetrail_${version}_win64_setup.exe"
+if ($DeployOnly -and -not (Test-Path -LiteralPath $installerPath -PathType Leaf)) {
+    Write-Error "Installer for client version $version was not found: $installerPath"
+    exit 1
+}
+if (-not $DeployOnly -and (Test-Path -LiteralPath $installerPath)) {
+    Write-Error "Versioned installer already exists: $installerPath. Bump the client version before rebuilding."
+    exit 1
+}
+
+
+# --- Locate the external Windows installer compiler --------------------------
+if (-not $DeployOnly) {
+$makensisCommand = Get-Command "makensis.exe" -ErrorAction SilentlyContinue
+$makensisCandidates = @(
+    if ($makensisCommand) { $makensisCommand.Source }
+    (Join-Path $env:ProgramFiles "NSIS\makensis.exe")
+    (Join-Path ${env:ProgramFiles(x86)} "NSIS\makensis.exe")
+) | Where-Object { $_ }
+$makensis = $makensisCandidates |
+    Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+    Select-Object -First 1
+if (-not $makensis) {
+    Write-Error "makensis.exe was not found. Install NSIS and ensure it is on PATH or in its standard installation directory."
+    exit 1
+}
+$makensis = (Resolve-Path -LiteralPath $makensis).Path
 
 $nsisScript = Join-Path $PSScriptRoot "scripts\win64_installer.nsi"
 if (-not (Test-Path $nsisScript)) {
@@ -65,14 +97,23 @@ if (-not (Test-Path $nsisScript)) {
 }
 
 try {
-    Write-Host "Synchronizing the locked client environment..."
-    uv sync --frozen
+    Write-Host "Synchronizing the locked client environment with Python $pythonVersion..."
+    uv sync --frozen --python $pythonVersion
     if ($LASTEXITCODE -ne 0) {
         throw "uv sync failed with exit code $LASTEXITCODE"
     }
 
+    $actualPythonVersion = uv run --frozen --python $pythonVersion python -c "import platform; print(platform.python_version())"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to determine the synchronized Python version (exit code $LASTEXITCODE)"
+    }
+    if ($actualPythonVersion.Trim() -ne $pythonVersion) {
+        throw "Expected Python $pythonVersion but uv selected $($actualPythonVersion.Trim())"
+    }
+    Write-Host "Release interpreter: Python $actualPythonVersion"
+
     Write-Host "Checking bundled plugin release trust keys..."
-    uv run --frozen python scripts/plugin_release.py check-trust-store
+    uv run --frozen --python $pythonVersion python scripts/plugin_release.py check-trust-store
     if ($LASTEXITCODE -ne 0) {
         throw "Plugin trust-store check failed with exit code $LASTEXITCODE"
     }
@@ -80,7 +121,7 @@ try {
     # --- Build the executable -------------------------------------------------
     Write-Host "Running PyInstaller..."
 
-    uv run --frozen pyinstaller `
+    uv run --frozen --python $pythonVersion pyinstaller `
         --clean `
         --noconfirm `
         --noconsole `
@@ -102,52 +143,67 @@ try {
         throw "PyInstaller failed with exit code $LASTEXITCODE"
     }
 
+    # Exercise PyInstaller's runtime hooks and extension-module loader before an
+    # installer can be published. A bootstrap error in a windowed executable can
+    # otherwise leave a modal error dialog open, so enforce a timeout as well.
+    Write-Host "Smoke-testing the frozen executable..."
+    $builtExecutable = Join-Path $buildDir "ParseTrail\ParseTrail.exe"
+    if (-not (Test-Path -LiteralPath $builtExecutable)) {
+        throw "Frozen executable not found at $builtExecutable"
+    }
+
+    $smokeProcess = Start-Process `
+        -FilePath $builtExecutable `
+        -ArgumentList "--runtime-smoke-test" `
+        -WorkingDirectory $PSScriptRoot `
+        -WindowStyle Hidden `
+        -PassThru
+    if (-not $smokeProcess.WaitForExit(30000)) {
+        Stop-Process -Id $smokeProcess.Id -Force -ErrorAction SilentlyContinue
+        throw "Frozen runtime smoke test timed out after 30 seconds"
+    }
+    if ($smokeProcess.ExitCode -ne 0) {
+        throw "Frozen runtime smoke test failed with exit code $($smokeProcess.ExitCode)"
+    }
+    Write-Host "Frozen runtime smoke test passed."
+
     # --- Create Install Package at dist\win64\parsetrail_version_win64_setup.exe
     Write-Host "Creating installer with NSIS..."
 
-    $versionFile = Join-Path $srcDir "parsetrail\version.py"
-    $versionLine = Get-Content $versionFile |
-        Where-Object { $_ -match '^__version__\s*=\s*"(.*)"' } |
-        Select-Object -First 1
-
-    if (-not $versionLine -or -not $Matches[1]) {
-        Write-Error "ERROR: Could not extract __version__ from $versionFile."
-        throw
-    }
-
-    $version = $Matches[1]
     Write-Host "Found version: $version"
 
     # Package the installer using NSIS
-    New-Item -ItemType Directory -Force -Path $distDir
-    New-Item -ItemType Directory -Force -Path $clientDir
-    & $makensis /V4 "-DVERSION=$version" "-DDIST=$distDir" $nsisScript
+    New-Item -ItemType Directory -Force -Path $distDir | Out-Null
+    New-Item -ItemType Directory -Force -Path $clientDir | Out-Null
+    & $makensis /V2 "-DVERSION=$version" "-DDIST=$distDir" $nsisScript
+    if ($LASTEXITCODE -ne 0) {
+        throw "NSIS packaging failed with exit code $LASTEXITCODE"
+    }
+    if (-not (Test-Path -LiteralPath $installerPath -PathType Leaf)) {
+        throw "NSIS did not create the expected installer: $installerPath"
+    }
 
 } catch {
     Write-Error "ERROR: Build or packaging failed. $($_.Exception.Message)"
     throw
 }
-finally {
-    # --- Deactivate the conda environment ------------------------------------
-    try {
-        Write-Host "Deactivating conda environment..."
-        conda deactivate
-    } catch {
-        # ignore
-    }
 }
 
 # Prompt for deploy
-$answer = Read-Host "Deploy client installer to server? (y/n)"
+$answer = if ($DeployOnly) { "y" } else { Read-Host "Deploy client installer to server? (y/n)" }
 
 if ($answer -ne 'y' -and $answer -ne 'Y') {
-    Write-Host "Aborted."
-    exit 1
+    Write-Host "Installer built successfully; deployment skipped."
+    exit 0
 }
 
 # Deploy client installers
 try {
     Write-Host "Starting deployment..."
+
+    if (-not $remoteUser -or -not $remoteHost -or -not $remoteDir) {
+        throw "REMOTE_USER, REMOTE_HOST, and REMOTE_CLIENTS_DIR are required for deployment"
+    }
 
     if (-not (Test-Path $clientDir)) {
         Write-Warning "Local directory not found: $clientDir"
@@ -155,16 +211,18 @@ try {
     }
 
     $remoteBase = $remoteDir.TrimEnd('/')
-    $distRoot   = (Resolve-Path $distDir).Path.TrimEnd('\', '/')
+    $remotePlatformDir = "$remoteBase/win64"
+    $remoteSpecBase = "${remoteUser}@${remoteHost}"
+    ssh $remoteSpecBase "mkdir -p '$remotePlatformDir'"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Could not create the remote Windows client directory"
+    }
 
-    Get-ChildItem -Path $clientDir -File -Recurse | ForEach-Object {
-        $localPath     = $_.FullName
-        $relativePath  = $localPath.Replace($distRoot, '').TrimStart('\', '/')
-        $remotePath    = "$remoteBase/$relativePath" -replace '\\','/'
-
-        Write-Host "Syncing: $localPath -> $remotePath"
-        $remoteSpec = "${remoteUser}@${remoteHost}:$remotePath"
-        scp $localPath $remoteSpec
+    $remotePath = "$remotePlatformDir/$([System.IO.Path]::GetFileName($installerPath))"
+    Write-Host "Syncing: $installerPath -> $remotePath"
+    scp $installerPath "${remoteSpecBase}:$remotePath"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Client installer upload failed with exit code $LASTEXITCODE"
     }
 
     Write-Host "Deployment completed successfully."
@@ -173,9 +231,4 @@ try {
     throw
 }
 
-# --- Delete prebuild and build dirs ------------------------------------------
-#Write-Host "Cleaning up build directories..."
-#emove-Item -Recurse -Force $prebuildDir, $buildDir -ErrorAction SilentlyContinue
-
-pause
 exit 0

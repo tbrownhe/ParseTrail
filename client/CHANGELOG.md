@@ -1,3 +1,14 @@
+1.2.1
+=====
+- Make uv the sole owner of the release Python environment
+- Pin Windows and macOS builds to Python 3.10.19
+- Smoke-test frozen runtime imports before packaging
+- Prevent versioned installers from being overwritten accidentally
+
+1.2.0
+=====
+- Require plugins to be accompanied by a  signed manifest
+
 1.0.0
 =====
 - Initial Release
