@@ -60,7 +60,9 @@ digest, Python bytecode identity, plugin version, and minimum client version.
 The exact manifest bytes receive one detached Ed25519 signature.
 
 The server stores immutable release directories, but it never receives the
-private signing key and cannot create a release an installed client will trust.
+private signing key and cannot create a plugin or installer release an installed
+client will trust. The same offline Ed25519 release key currently signs both
+artifact types; distributed clients contain only its public key.
 Python bytecode is not encryption or obfuscation: signing detects unauthorized
 changes but does not prevent decompilation.
 
@@ -158,10 +160,17 @@ Windows:
 
 This synchronizes the locked environment using the exact Python patch release in
 `.python-version`, builds the PyInstaller application, smoke-tests the frozen
-runtime, and only then packages it with NSIS. `makensis.exe` may be on `PATH`, in
-the standard NSIS installation directory. Versioned installer files are
-immutable: the build stops if that version already exists, so bump
+runtime, packages it with NSIS, prompts for the offline release-key passphrase,
+and independently verifies the signed installer manifest. `makensis.exe` may be
+on `PATH` or in the standard NSIS installation directory. Versioned installer
+files are immutable: the build stops if that version already exists, so bump
 `src/parsetrail/version.py` first.
+
+If packaging succeeded but signing was interrupted, resume without rebuilding:
+
+```powershell
+.\build_client_win64.ps1 -SignOnly
+```
 
 To deploy an already-built installer without rebuilding it:
 
@@ -169,15 +178,24 @@ To deploy an already-built installer without rebuilding it:
 .\build_client_win64.ps1 -DeployOnly
 ```
 
+`-DeployOnly` does not access the private key. It re-verifies the local manifest
+and installer using only the bundled public key, uploads all three files to a
+new `win64/releases/<sequence>/` directory, independently compares remote sizes
+and SHA-256 hashes, and atomically changes `win64/current-release.json` last. It
+refuses to reuse a release sequence, and an interrupted upload cannot replace
+the previously active release. Deploy the backend manifest routes before the
+first installer that uses this layout.
+
 macOS:
 
 ```bash
 ./build_client_macos.sh
 ```
 
-This builds the `.app` and a drag-and-drop `.dmg`. Apple signing and notarization
-are separate from ParseTrail's application-level artifact signatures and are
-not yet enabled by default.
+This builds the `.app` and a drag-and-drop `.dmg`, signs its ParseTrail release
+manifest with the same offline key, verifies it, and uses the same immutable
+upload/atomic-pointer protocol. Apple signing and notarization are separate from
+ParseTrail's application-level artifact signature and are not yet enabled.
 
 ## Plugin architecture
 

@@ -99,18 +99,21 @@ equivalent plaintext write is introduced into either parse path.
 - [x] Define a versioned plugin release manifest with artifact type, safe
   filename, version, minimum client version, Python bytecode identity, byte size,
   SHA-256 digest, monotonic release sequence, and one detached Ed25519 signature.
-- [ ] Extend the signed manifest vocabulary and release process to client
-  installers and models.
-- [ ] Make signed manifests authoritative for installer/model listing and
-  download. Stop deriving executable artifact metadata by globbing mutable server
-  directories, and never advertise temporary, partial, or unsigned files.
+- [x] Extend the signed manifest vocabulary and offline release process to client
+  installers on Windows and macOS.
+- [ ] Extend signed releases to models.
+- [x] Make signed manifests authoritative for installer listing and download.
+  Stop deriving metadata by globbing mutable server directories, and never
+  advertise temporary, partial, or unsigned installers.
+- [ ] Make signed manifests authoritative for model listing and download.
 - [~] Implement and document an encrypted offline signing-key procedure. The
   client build embeds only a public-key trust store and refuses to build while it
   is empty; initial key generation and backup location remain a `[USER]` step.
 - [x] Apply containment/suffix checks to desktop plugin destinations and preserve
   the previous plugin until a complete download is atomically renamed.
-- [ ] Apply the same checks to model and installer destinations, and reject
-  unsupported installer platforms before constructing a path.
+- [x] Apply containment/suffix checks to installer destinations and reject
+  unsupported platforms before constructing a path.
+- [ ] Apply the same authenticated destination checks to models.
 - [x] Apply root containment, plain-filename, and suffix checks to backend plugin
   and model downloads, with cross-platform traversal regression tests.
 - [x] Download the complete plugin catalog into an immutable staging release,
@@ -119,22 +122,25 @@ equivalent plaintext write is introduced into either parse path.
 - [x] Authenticate every plugin on startup and immediately before dynamic import.
   Unsigned legacy plugins are ignored by the normal application; cancellation or
   any failed artifact preserves the previously verified release.
-- [ ] Apply the same authenticated staging behavior before `joblib.load` and
-  installer launch.
-- [ ] Upload installers and models under unique staging names, verify their exact
-  size and digest on the server, then atomically rename/activate them. A failed or
-  interrupted `scp` must leave the previous release active and the partial file
-  undiscoverable.
-- [ ] Enforce remote plugin-release immutability: fail if a release sequence
+- [x] Authenticate signed size and SHA-256 in staging before atomically publishing
+  and launching an installer; cancellation or failure preserves the prior file.
+- [ ] Apply the same authenticated staging behavior before `joblib.load`.
+- [x] Upload installers into unique immutable release directories, independently
+  verify exact remote sizes and digests, then atomically activate them. A failed
+  or interrupted `scp` leaves the previous release active and undiscoverable.
+- [ ] Apply the same immutable publication protocol to models.
+- [x] Enforce remote plugin-release immutability: fail if a release sequence
   already exists, verify every uploaded byte against the signed manifest, and
   change `current-release.json` only after that independent verification passes.
 - [x] Add plugin negative tests for altered bytes, altered manifest fields, wrong
   and unknown signing keys, malformed/oversized manifests, truncation, traversal
   names, rollback and sequence reuse, cancellation midway through a download,
   unsigned legacy plugins, and post-install tampering.
-- [ ] Add installer/model release tests for partial upload visibility, remote hash
-  mismatch, interrupted activation, sequence reuse, downgrade, cancellation, and
-  preservation of the previously trusted artifact.
+- [x] Add installer trust tests for altered metadata/signatures, semantic version
+  selection, unsafe names, altered/truncated/oversized downloads, cancellation,
+  sequence reuse, and preservation of a prior installer.
+- [ ] Add remote-publication failure tests for partial upload visibility, remote
+  hash mismatch, and interrupted activation; add the equivalent model tests.
 - [ ] `[USER]` Decide where the offline release key and recovery copy will live,
   then perform a signed Windows release rehearsal.
 - [ ] `[USER]` Add Windows Authenticode and macOS signing/notarization after the
@@ -323,8 +329,8 @@ does not provide a reliable user-existence oracle.
 - [ ] Move submission encryption, uploads, plugin sync, model sync, and installer
   downloads off the Qt UI thread with truthful progress and cancellation.
 - [x] Fix plugin synchronization when progress UI is disabled.
-- [ ] Ensure cancelled installer downloads are reported as incomplete rather than
-  successful.
+- [x] Ensure cancelled installer downloads are reported as incomplete rather than
+  successful and never launch their staging file.
 - [ ] Replace Windows `shell=True` launching; use platform-specific safe launch
   adapters for Windows, macOS, and Linux, and quit only after a confirmed launch.
 - [ ] Store long-lived desktop credentials in an OS credential store rather than

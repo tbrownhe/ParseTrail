@@ -1,4 +1,4 @@
-__version__ = "1.2.1"
+__version__ = "1.2.2"
 __year__ = "2024-2026"
 __developer__ = "Tobias Brown-Heft"
 __website__ = "https://parsetrail.com"

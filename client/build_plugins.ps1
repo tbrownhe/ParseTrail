@@ -116,9 +116,9 @@ try {
     $remoteSpecBase = "${remoteUser}@${remoteHost}"
 
     Write-Host "Creating immutable remote release directory $releaseSequence..."
-    ssh $remoteSpecBase "mkdir -p '$remoteReleaseDir'"
+    ssh $remoteSpecBase "if [ -e '$remoteReleaseDir' ]; then exit 17; fi; mkdir -p '$remoteReleaseDir'"
     if ($LASTEXITCODE -ne 0) {
-        throw "Could not create the remote plugin release directory"
+        throw "Remote plugin release $releaseSequence already exists or could not be created"
     }
 
     foreach ($releaseFile in $releaseFiles) {
@@ -128,6 +128,21 @@ try {
         scp $releaseFile.FullName $remoteSpec
         if ($LASTEXITCODE -ne 0) {
             throw "Upload failed for $($releaseFile.Name)"
+        }
+
+        $expectedSize = $releaseFile.Length
+        $expectedHash = (Get-FileHash -LiteralPath $releaseFile.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        $remoteSize = ssh $remoteSpecBase "stat -c %s '$remotePath'"
+        if ($LASTEXITCODE -ne 0 -or [Int64]$remoteSize -ne $expectedSize) {
+            throw "Remote size verification failed for $($releaseFile.Name)"
+        }
+        $remoteHashOutput = ssh $remoteSpecBase "sha256sum '$remotePath'"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Remote hash verification failed for $($releaseFile.Name)"
+        }
+        $remoteHash = ($remoteHashOutput -split '\s+')[0].ToLowerInvariant()
+        if ($remoteHash -ne $expectedHash) {
+            throw "Remote hash mismatch for $($releaseFile.Name)"
         }
     }
 

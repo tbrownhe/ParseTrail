@@ -1,8 +1,14 @@
 param(
-    [switch]$DeployOnly
+    [switch]$DeployOnly,
+    [switch]$SignOnly
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($DeployOnly -and $SignOnly) {
+    throw "DeployOnly and SignOnly cannot be used together"
+}
+$skipBuild = $DeployOnly -or $SignOnly
 
 # --- Load project-level .env -------------------------------------------------
 $projectRoot = Split-Path $PSScriptRoot -Parent
@@ -31,6 +37,7 @@ $distDir         = $env:CLIENTS_DIR
 $remoteUser      = $env:REMOTE_USER
 $remoteHost      = $env:REMOTE_HOST
 $remoteDir       = $env:REMOTE_CLIENTS_DIR
+$privateKey      = $env:PLUGIN_SIGNING_KEY
 
 if (-not $distDir) {
     Write-Error "CLIENTS_DIR is missing. Please check $envFile."
@@ -63,18 +70,20 @@ if ($versionContents -notmatch '(?m)^__version__\s*=\s*"([^"]+)"') {
 }
 $version = $Matches[1]
 $installerPath = Join-Path $clientDir "parsetrail_${version}_win64_setup.exe"
-if ($DeployOnly -and -not (Test-Path -LiteralPath $installerPath -PathType Leaf)) {
+$manifestPath = Join-Path $clientDir "client-manifest.json"
+$signaturePath = Join-Path $clientDir "client-manifest.sig"
+if ($skipBuild -and -not (Test-Path -LiteralPath $installerPath -PathType Leaf)) {
     Write-Error "Installer for client version $version was not found: $installerPath"
     exit 1
 }
-if (-not $DeployOnly -and (Test-Path -LiteralPath $installerPath)) {
+if (-not $skipBuild -and (Test-Path -LiteralPath $installerPath)) {
     Write-Error "Versioned installer already exists: $installerPath. Bump the client version before rebuilding."
     exit 1
 }
 
 
 # --- Locate the external Windows installer compiler --------------------------
-if (-not $DeployOnly) {
+if (-not $skipBuild) {
 $makensisCommand = Get-Command "makensis.exe" -ErrorAction SilentlyContinue
 $makensisCandidates = @(
     if ($makensisCommand) { $makensisCommand.Source }
@@ -189,6 +198,38 @@ try {
 }
 }
 
+# Sign new installers offline; deployment-only mode must independently verify
+# the existing release using only the bundled public trust store.
+if ($skipBuild) {
+    Write-Host "Synchronizing the locked environment for release verification..."
+    uv sync --frozen --python $pythonVersion
+    if ($LASTEXITCODE -ne 0) {
+        throw "uv sync failed with exit code $LASTEXITCODE"
+    }
+}
+
+if (-not $DeployOnly) {
+    if (-not $privateKey) {
+        throw "PLUGIN_SIGNING_KEY is required to sign the client installer"
+    }
+    Write-Host "Signing the Windows client release..."
+    uv run --frozen --python $pythonVersion python scripts/client_release.py sign `
+        --private-key $privateKey `
+        --installer $installerPath `
+        --platform win64 `
+        --version $version
+    if ($LASTEXITCODE -ne 0) {
+        throw "Client release signing failed with exit code $LASTEXITCODE"
+    }
+}
+
+Write-Host "Verifying the signed Windows client release..."
+uv run --frozen --python $pythonVersion python scripts/client_release.py verify `
+    --release-dir $clientDir
+if ($LASTEXITCODE -ne 0) {
+    throw "Client release verification failed with exit code $LASTEXITCODE"
+}
+
 # Prompt for deploy
 $answer = if ($DeployOnly) { "y" } else { Read-Host "Deploy client installer to server? (y/n)" }
 
@@ -211,21 +252,78 @@ try {
     }
 
     $remoteBase = $remoteDir.TrimEnd('/')
+    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
+    $releaseSequence = [Int64]$manifest.release_sequence
+    if ($releaseSequence -le 0) {
+        throw "Signed client manifest has an invalid release sequence"
+    }
+    if ($manifest.artifacts.Count -ne 1 -or $manifest.artifacts[0].filename -ne (Split-Path $installerPath -Leaf)) {
+        throw "Signed client manifest does not describe the expected Windows installer"
+    }
+
     $remotePlatformDir = "$remoteBase/win64"
+    $remoteReleaseDir = "$remotePlatformDir/releases/$releaseSequence"
     $remoteSpecBase = "${remoteUser}@${remoteHost}"
-    ssh $remoteSpecBase "mkdir -p '$remotePlatformDir'"
+    ssh $remoteSpecBase "if [ -e '$remoteReleaseDir' ]; then exit 17; fi; mkdir -p '$remoteReleaseDir'"
     if ($LASTEXITCODE -ne 0) {
-        throw "Could not create the remote Windows client directory"
+        throw "Remote client release $releaseSequence already exists or could not be created"
     }
 
-    $remotePath = "$remotePlatformDir/$([System.IO.Path]::GetFileName($installerPath))"
-    Write-Host "Syncing: $installerPath -> $remotePath"
-    scp $installerPath "${remoteSpecBase}:$remotePath"
-    if ($LASTEXITCODE -ne 0) {
-        throw "Client installer upload failed with exit code $LASTEXITCODE"
+    $releaseFiles = @(
+        Get-Item -LiteralPath $installerPath
+        Get-Item -LiteralPath $manifestPath
+        Get-Item -LiteralPath $signaturePath
+    )
+    foreach ($releaseFile in $releaseFiles) {
+        $remotePath = "$remoteReleaseDir/$($releaseFile.Name)"
+        Write-Host "Uploading immutable release file: $($releaseFile.Name)"
+        scp $releaseFile.FullName "${remoteSpecBase}:$remotePath"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Client release upload failed for $($releaseFile.Name)"
+        }
+
+        $expectedSize = $releaseFile.Length
+        $expectedHash = (Get-FileHash -LiteralPath $releaseFile.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+        $remoteSize = ssh $remoteSpecBase "stat -c %s '$remotePath'"
+        if ($LASTEXITCODE -ne 0 -or [Int64]$remoteSize -ne $expectedSize) {
+            throw "Remote size verification failed for $($releaseFile.Name)"
+        }
+        $remoteHashOutput = ssh $remoteSpecBase "sha256sum '$remotePath'"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Remote hash verification failed for $($releaseFile.Name)"
+        }
+        $remoteHash = ($remoteHashOutput -split '\s+')[0].ToLowerInvariant()
+        if ($remoteHash -ne $expectedHash) {
+            throw "Remote hash mismatch for $($releaseFile.Name)"
+        }
     }
 
-    Write-Host "Deployment completed successfully."
+    $pointerPath = Join-Path ([System.IO.Path]::GetTempPath()) "parsetrail-client-release-$([guid]::NewGuid().ToString('N')).json"
+    try {
+        $pointer = @{
+            schema_version = 1
+            release_sequence = $releaseSequence
+        } | ConvertTo-Json -Compress
+        [System.IO.File]::WriteAllText(
+            $pointerPath,
+            "$pointer`n",
+            [System.Text.UTF8Encoding]::new($false)
+        )
+        $remotePointerPart = "$remotePlatformDir/current-release.json.part"
+        scp $pointerPath "${remoteSpecBase}:$remotePointerPart"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not upload the client release pointer"
+        }
+        ssh $remoteSpecBase "mv '$remotePointerPart' '$remotePlatformDir/current-release.json'"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not activate client release $releaseSequence"
+        }
+    }
+    finally {
+        Remove-Item -LiteralPath $pointerPath -Force -ErrorAction SilentlyContinue
+    }
+
+    Write-Host "Signed client release $releaseSequence deployed and activated successfully."
 } catch {
     Write-Error "ERROR: Deployment failed. $($_.Exception.Message)"
     throw
