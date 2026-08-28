@@ -655,7 +655,7 @@ class ParseTrail(QMainWindow):
         self.client_update_thread.update_available.connect(self.handle_client_update)
         self.client_update_thread.start()
 
-    def handle_client_update(self, success: bool, latest_installer: dict, message: str):
+    def handle_client_update(self, success: bool, latest_installer, message: str):
         if success:
             logger.info(message)
             if latest_installer:

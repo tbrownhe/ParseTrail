@@ -5,6 +5,7 @@ import requests
 from loguru import logger
 
 from parsetrail.core.auth import AuthError, AuthManager, auth_manager
+from parsetrail.core.client_manifest import INSTALLER_SUFFIXES, MAX_CLIENT_MANIFEST_BYTES
 from parsetrail.core.settings import AppSettings, settings
 
 # API Routes
@@ -64,7 +65,7 @@ class ApiClient:
             raise
 
     def list_installers(self) -> list[dict]:
-        return self._get_list(f"{CLIENT_PATH}", "client")
+        raise NotImplementedError("Unsigned client metadata is not trusted; fetch_client_release_bytes()")
 
     def list_plugins(self) -> list[dict]:
         raise NotImplementedError("Unsigned plugin metadata is not trusted; fetch_plugin_release_bytes()")
@@ -130,6 +131,22 @@ class ApiClient:
         )
         signature = self._get_bounded_bytes(
             f"{PLUGIN_PATH}/manifest-signature",
+            maximum_bytes=ED25519_SIGNATURE_BYTES,
+            auth_required=False,
+        )
+        return manifest, signature
+
+    def fetch_client_release_bytes(self, platform: str) -> tuple[bytes, bytes]:
+        """Fetch bounded, still-untrusted installer metadata for one platform."""
+        if platform not in INSTALLER_SUFFIXES:
+            raise ValueError(f"Unsupported client platform: {platform}")
+        manifest = self._get_bounded_bytes(
+            f"{CLIENT_PATH}/{platform}/manifest",
+            maximum_bytes=MAX_CLIENT_MANIFEST_BYTES,
+            auth_required=False,
+        )
+        signature = self._get_bounded_bytes(
+            f"{CLIENT_PATH}/{platform}/manifest-signature",
             maximum_bytes=ED25519_SIGNATURE_BYTES,
             auth_required=False,
         )
