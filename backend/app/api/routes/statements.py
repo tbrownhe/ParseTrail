@@ -204,7 +204,7 @@ async def upload_statement(
     try:
         symmetric_key = decrypt_client_key(encrypted_key)
     except Exception as e:
-        logging.error(f"Failed to decrypt symmetric key: {e}")
+        logging.error("Failed to decrypt symmetric key (%s)", type(e).__name__)
         raise HTTPException(status_code=400, detail="Invalid encrypted key")
 
     # Step 2: Decrypt the file using the client's symmetric key
@@ -217,14 +217,14 @@ async def upload_statement(
     except HTTPException:
         raise
     except Exception as e:
-        logging.error(f"Failed to decrypt file: {e}")
+        logging.error("Failed to decrypt statement (%s)", type(e).__name__)
         raise HTTPException(status_code=400, detail="Invalid encrypted statement")
 
     # Step 3: Encrypt the file using AES-GCM with the master key
     try:
         iv, reencrypted_data, auth_tag = aes_encrypt_data(decrypted_data)
     except Exception as e:
-        logging.error(f"Failed to encrypt file for storage: {e}")
+        logging.error("Failed to encrypt statement for storage (%s)", type(e).__name__)
         raise HTTPException(status_code=500, detail="Statement storage failed")
 
     # Step 4: Save the AES-encrypted file to disk
@@ -243,7 +243,7 @@ async def upload_statement(
     except Exception as e:
         temp_path.unlink(missing_ok=True)
         file_path.unlink(missing_ok=True)
-        logging.error(f"Failed to save file: {e}")
+        logging.error("Failed to save encrypted statement (%s)", type(e).__name__)
         raise HTTPException(status_code=500, detail="Statement storage failed")
 
     # Step 5: Log upload details to logfile and the database
@@ -253,8 +253,7 @@ async def upload_statement(
         sanitized_metadata = metadata[:256].replace("\n", " ").replace("\r", " ").strip()
 
         logging.info(
-            "Upload received: %s from IP: %s (%s) with sanitized metadata",
-            file.filename,
+            "Encrypted statement received from IP: %s (user %s)",
             client_ip,
             getattr(current_user, "id", "unknown"),
         )
@@ -281,7 +280,7 @@ async def upload_statement(
             )
     except Exception as e:
         file_path.unlink(missing_ok=True)
-        logging.error(f"Error logging upload to database: {e}")
+        logging.error("Statement registration failed (%s)", type(e).__name__)
         raise HTTPException(status_code=500, detail="Statement registration failed")
 
     # Return a success message to client

@@ -43,9 +43,7 @@ def _iter_ready_rows(ids: Sequence[int] | None = None, limit: int | None = None)
 
 def _parse_row(row: StatementUploads, plugin_manager: PluginManager):
     plaintext, metadata = decrypt_statement(row)
-    fname = metadata.get("filename") or metadata.get("file_name") or row.file_name
-    suffix = Path(fname).suffix or ".bin"
-    parse_input = ParseInput(name=fname, suffix=suffix.lower(), data=plaintext)
+    parse_input = ParseInput.from_decrypted(plaintext, row.file_name, metadata)
     statement = parse_any(SessionLocal, plugin_manager, parse_input, hard_fail=False)
     return statement
 

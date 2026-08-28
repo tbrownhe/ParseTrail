@@ -29,6 +29,19 @@ class ParseInput:
     def from_path(cls, fpath: Path) -> "ParseInput":
         return cls(name=fpath.name, suffix=fpath.suffix.lower(), data=fpath.read_bytes())
 
+    @classmethod
+    def from_decrypted(
+        cls,
+        data: bytes,
+        fallback_name: str,
+        metadata: dict,
+    ) -> "ParseInput":
+        """Build a parse input for a decrypted submission without materializing it."""
+        metadata_name = metadata.get("filename") or metadata.get("file_name")
+        name = metadata_name if isinstance(metadata_name, str) and metadata_name else fallback_name
+        suffix = Path(name).suffix or ".bin"
+        return cls(name=name, suffix=suffix.lower(), data=data)
+
     @property
     def path_hint(self) -> Path:
         """Synthetic path used for metadata/logging without touching disk."""

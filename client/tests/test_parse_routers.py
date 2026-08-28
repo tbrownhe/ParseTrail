@@ -1,3 +1,5 @@
+import tempfile
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -58,3 +60,28 @@ def test_xlsx_router_tries_each_matching_parser(monkeypatch: Any) -> None:
 
     assert router.parse() is expected
     assert attempted == ["first", "second"]
+
+
+def test_decrypted_devtool_input_parses_when_temp_creation_is_denied(monkeypatch: Any) -> None:
+    def deny_temp_file(*_args: object, **_kwargs: object) -> None:
+        raise AssertionError("decrypted statement attempted to use temporary storage")
+
+    monkeypatch.setattr(tempfile, "NamedTemporaryFile", deny_temp_file)
+    monkeypatch.setattr(tempfile, "TemporaryFile", deny_temp_file)
+    monkeypatch.setattr(tempfile, "mkstemp", deny_temp_file)
+    monkeypatch.setattr(tempfile, "mkdtemp", deny_temp_file)
+    monkeypatch.setattr(Path, "write_bytes", deny_temp_file)
+
+    parse_input = ParseInput.from_decrypted(
+        b"marker,value\n1,2\n",
+        "encrypted-upload.bin",
+        {"filename": "statement.CSV"},
+    )
+    router = CSVRouter(None, plugin_manager_for(".csv"), parse_input)
+    expected = object()
+    monkeypatch.setattr(router, "extract_statement", lambda _plugin, _rows: expected)
+
+    assert router.parse() is expected
+    assert parse_input.name == "statement.CSV"
+    assert parse_input.suffix == ".csv"
+    assert parse_input.data == b"marker,value\n1,2\n"

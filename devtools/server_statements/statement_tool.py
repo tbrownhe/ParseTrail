@@ -270,9 +270,8 @@ class StatementTool(QMainWindow):
         build_plugins()
         self.plugin_manager.load_plugins()
 
-        fname = metadata.get("filename") or metadata.get("file_name") or enc_name
-        suffix = Path(fname).suffix or ".bin"
-        parse_input = ParseInput(name=fname, suffix=suffix.lower(), data=plaintext)
+        parse_input = ParseInput.from_decrypted(plaintext, enc_name, metadata)
+        fname = parse_input.name
 
         try:
             dialog = ParseTestDialog(

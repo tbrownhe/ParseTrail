@@ -80,12 +80,12 @@ a sentinel row in a separately configured database survives the complete suite.
 
 - [x] Correct the devtool documentation so it describes `ParseInput.data` and no
   longer claims that plaintext is written to a temporary file.
-- [ ] Add regression tests that monkeypatch or deny temporary-file creation while
+- [x] Add regression tests that monkeypatch or deny temporary-file creation while
   the devtool and batch parser successfully process in-memory bytes.
 - [x] Search every statement-submission and parser entry point for filesystem
   fallbacks. None materializes decrypted bytes; the backend `.tmp` path contains
   only newly encrypted ciphertext and is atomically renamed.
-- [ ] Configure error reporting and logging so statement bytes, extracted text,
+- [x] Configure error reporting and logging so statement bytes, extracted text,
   encryption keys, and submitted metadata cannot be attached automatically.
 - [ ] `[USER]` Exercise one authorized statement fixture through the development
   tool and confirm that no new plaintext file appears outside its original

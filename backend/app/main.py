@@ -5,6 +5,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from app.api.main import api_router
 from app.core.config import settings
+from app.core.observability import sentry_privacy_options
 
 
 def custom_generate_unique_id(route: APIRoute) -> str:
@@ -12,7 +13,10 @@ def custom_generate_unique_id(route: APIRoute) -> str:
 
 
 if settings.SENTRY_DSN and settings.ENVIRONMENT != "local":
-    sentry_sdk.init(dsn=str(settings.SENTRY_DSN), enable_tracing=True)
+    sentry_sdk.init(
+        dsn=str(settings.SENTRY_DSN),
+        **sentry_privacy_options(),
+    )
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
