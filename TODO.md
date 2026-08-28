@@ -64,8 +64,14 @@ enough to implement, test, and commit independently.
   be superseded by the repository-owner condition.
 - [x] Restore and enable backend static CI on Python 3.13; Ruff check/format and
   strict mypy now pass locally against the refreshed lock.
-- [ ] Enable non-mutating Python lint, backend tests, frontend checks, and frontend
-  build in CI. Remove stale MailCatcher/port assumptions.
+- [ ] Enable non-mutating Python lint, backend tests, client tests, frontend
+  checks/build, and Compose smoke tests on GitHub-hosted runners. Remove stale
+  MailCatcher/port assumptions and make the jobs required on `main` only after
+  they are stable.
+- [ ] Keep CI non-deploying initially: do not give hosted or self-hosted runners
+  production SSH credentials, the offline release key, or a production `.env`.
+  Retain an explicit manual approval boundary until the release path below has
+  been rehearsed and rollback is reliable.
 
 Acceptance: a fresh checkout can run its default checks without a root `.env`, and
 a sentinel row in a separately configured database survives the complete suite.
@@ -95,6 +101,9 @@ equivalent plaintext write is introduced into either parse path.
   SHA-256 digest, monotonic release sequence, and one detached Ed25519 signature.
 - [ ] Extend the signed manifest vocabulary and release process to client
   installers and models.
+- [ ] Make signed manifests authoritative for installer/model listing and
+  download. Stop deriving executable artifact metadata by globbing mutable server
+  directories, and never advertise temporary, partial, or unsigned files.
 - [~] Implement and document an encrypted offline signing-key procedure. The
   client build embeds only a public-key trust store and refuses to build while it
   is empty; initial key generation and backup location remain a `[USER]` step.
@@ -112,10 +121,20 @@ equivalent plaintext write is introduced into either parse path.
   any failed artifact preserves the previously verified release.
 - [ ] Apply the same authenticated staging behavior before `joblib.load` and
   installer launch.
+- [ ] Upload installers and models under unique staging names, verify their exact
+  size and digest on the server, then atomically rename/activate them. A failed or
+  interrupted `scp` must leave the previous release active and the partial file
+  undiscoverable.
+- [ ] Enforce remote plugin-release immutability: fail if a release sequence
+  already exists, verify every uploaded byte against the signed manifest, and
+  change `current-release.json` only after that independent verification passes.
 - [x] Add plugin negative tests for altered bytes, altered manifest fields, wrong
   and unknown signing keys, malformed/oversized manifests, truncation, traversal
   names, rollback and sequence reuse, cancellation midway through a download,
   unsigned legacy plugins, and post-install tampering.
+- [ ] Add installer/model release tests for partial upload visibility, remote hash
+  mismatch, interrupted activation, sequence reuse, downgrade, cancellation, and
+  preservation of the previously trusted artifact.
 - [ ] `[USER]` Decide where the offline release key and recovery copy will live,
   then perform a signed Windows release rehearsal.
 - [ ] `[USER]` Add Windows Authenticode and macOS signing/notarization after the
@@ -187,6 +206,9 @@ recoverable, committed data agrees with the import state, and a retry is safe.
   generator/tooling update plus a generated-client compatibility check.
 - [x] Add one universal client lock that requires Windows x64 plus macOS arm64/x64
   resolution, and make both release scripts sync/use it with `--frozen`.
+- [x] Make uv the sole owner of the client Python environment, pin release builds
+  to an exact Python patch version, remove the Conda build dependency, and require
+  frozen executables to pass a bootstrap smoke test before packaging.
 - [x] Raise the client cryptography and PDF parsing stack to patched versions; the
   installed locked Windows dependency environment has no known vulnerabilities.
 - [ ] Choose and test one supported Python baseline for Windows and macOS; evaluate
@@ -200,6 +222,36 @@ recoverable, committed data agrees with the import state, and a retry is safe.
 Acceptance: supported runtime versions are documented, lock files reproduce on CI,
 dependency audits have no known critical/high production finding without a written
 temporary exception, and the Postgres restore drill preserves expected row counts.
+
+### P0.7 Make production deployment recoverable and observable
+
+- [ ] Choose Docker Compose as the one authoritative deployment path. Remove or
+  archive the stale Docker Swarm scripts and disabled template deployment
+  workflows once their behavior has been accounted for.
+- [ ] Build backend/frontend/website images from a clean commit, tag them with the
+  Git commit rather than `latest`, pin external production images, and deploy the
+  recorded immutable tags without rebuilding source on the production host.
+- [ ] Add a pre-deploy gate that records the current image tags and schema revision,
+  verifies a recent restorable database/file backup, renders and validates the
+  production Compose configuration, and aborts before migration on any failure.
+- [ ] Separate database migration from service replacement. Capture migration
+  output, require backward-compatible expand/contract migrations where practical,
+  and document when an application rollback also requires a database restore.
+- [ ] Deploy with health waiting and bounded timeouts, then smoke-test health,
+  login, plugin manifest/download, client listing/download, statement submission,
+  dashboard, and website routes through the public proxy.
+- [ ] Automatically reactivate the previous immutable image tags when service
+  health or post-deploy smoke checks fail; never claim success merely because
+  `docker compose up -d` returned zero.
+- [ ] Write an append-only release record containing timestamp, operator, Git
+  commit, schema revision, image digests, artifact versions/hashes, smoke results,
+  and the exact rollback target.
+- [ ] `[USER]` Rehearse one successful staging deployment, one application rollback,
+  and one migration/restore rollback before enabling any deployment runner.
+
+Acceptance: a production release either passes its public smoke checks with a
+traceable record or restores the documented prior state, and no deploy depends on
+an unrecorded mutable image, workstation file, or database assumption.
 
 ## P1 - correct behavior and harden trust boundaries
 
@@ -285,6 +337,11 @@ never installs partial data, and no command shell interprets downloaded filename
 
 ### P1.5 Make releases reproducible
 
+- [ ] Refuse release builds from a dirty worktree, untagged commit, or version/tag
+  mismatch. Record the source commit in client metadata and every release record.
+- [ ] Provide one dry-run-capable release command that sequences checks, builds,
+  signing, verification, upload, activation, and smoke tests while preserving the
+  offline passphrase prompt and explicit publish approval.
 - [ ] Replace import-time `.env` reads in build scripts with validated CLI/config
   inputs and clear missing-directory errors.
 - [ ] Use semantic version parsing on the installer endpoint; reject invalid
@@ -294,9 +351,14 @@ never installs partial data, and no command shell interprets downloaded filename
 - [ ] Replace mutable/broad container inputs with pinned supported bases, run the
   backend as a non-root user, and use frozen installs (`uv sync --frozen`,
   `npm ci`) in images.
-- [ ] Add Windows and macOS build smoke tests plus a release dry-run that creates
-  signed manifests without publishing them.
-- [ ] Document rollback for client, plugin, model, API, and database releases.
+- [~] Complete the equivalent macOS frozen-runtime smoke test and add a release
+  dry-run that creates signed manifests without publishing them. The Windows
+  frozen-runtime gate is implemented and has passed an end-to-end build.
+- [ ] Record the uv, Python, PyInstaller, NSIS/create-dmg, compiler, and operating
+  system versions used for each platform artifact; generate checksums and a small
+  machine-readable release inventory.
+- [ ] Document artifact rollback for client, plugin, and model releases; keep API
+  and database rollback in the production deployment runbook from P0.7.
 
 Acceptance: the same tag produces traceable artifacts from a clean builder, and a
 dry run cannot mutate the public download directories.
