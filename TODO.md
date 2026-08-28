@@ -160,11 +160,11 @@ existing client import or execute attacker-supplied bytes.
 
 - [x] Bound the application-level ciphertext read to 36 MiB and return HTTP 413
   before decryption when it is exceeded.
-- [ ] Enforce the total request-body limit before multipart spooling; do not rely
+- [x] Enforce the total request-body limit before multipart spooling; do not rely
   on either the handler read limit or the desktop's 25 MB check.
 - [ ] Add per-user pending-statement quotas and rate limits with useful client
   errors and an administrative cleanup path.
-- [ ] Replace truncated free-form metadata JSON with a validated schema and
+- [x] Replace truncated free-form metadata JSON with a validated schema and
   per-field limits. Bound filename, institution, comments, IP, and user-agent
   values before persistence or logging.
 - [x] Stop returning raw cryptographic, filesystem, and database exception text

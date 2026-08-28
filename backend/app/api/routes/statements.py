@@ -11,6 +11,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
+from pydantic import ValidationError
 from sqlalchemy import text
 
 from app.api.deps import get_current_user
@@ -18,6 +19,15 @@ from app.api.request_utils import get_client_host, get_user_agent
 from app.api.routes.keys import PRIVATE_KEY_PATH
 from app.core.config import settings
 from app.core.db import engine
+from app.core.statement_submission import (
+    MAX_CLIENT_IP_CHARS,
+    MAX_ENCRYPTED_KEY_BYTES,
+    MAX_ENCRYPTED_STATEMENT_BYTES,
+    MAX_METADATA_JSON_BYTES,
+    MAX_USER_AGENT_CHARS,
+    StatementSubmissionMetadata,
+    bounded_log_value,
+)
 from app.models import User
 
 router = APIRouter()
@@ -129,7 +139,7 @@ def decrypt_client_key(encrypted_key_b64: str | bytes) -> bytes:
     Returns:
         bytes: Decrypted symmetric key for decrypting the incoming file
     """
-    encrypted_key = base64.b64decode(encrypted_key_b64)
+    encrypted_key = base64.b64decode(encrypted_key_b64, validate=True)
     return PRIVATE_KEY.decrypt(
         encrypted_key,
         padding.OAEP(
@@ -195,10 +205,15 @@ async def upload_statement(
     5. Log upload details to logfile and the database.
     """
 
-    # Prevent abuse
-    if not metadata or len(metadata) > 256:
-        raise HTTPException(status_code=400, detail="Invalid metadata")
-    metadata = metadata[:256].strip()
+    try:
+        if not metadata or len(metadata.encode("utf-8")) > MAX_METADATA_JSON_BYTES:
+            raise ValueError
+        submission_metadata = StatementSubmissionMetadata.model_validate_json(metadata)
+    except (ValueError, ValidationError):
+        raise HTTPException(status_code=422, detail="Invalid statement metadata")
+
+    if not encrypted_key or len(encrypted_key) > MAX_ENCRYPTED_KEY_BYTES:
+        raise HTTPException(status_code=400, detail="Invalid encrypted key")
 
     # Step 1: Decrypt the client's symmetric key using the server's private RSA key
     try:
@@ -209,9 +224,8 @@ async def upload_statement(
 
     # Step 2: Decrypt the file using the client's symmetric key
     try:
-        max_encrypted_bytes = 36 * 1024 * 1024
-        encrypted_data = await file.read(max_encrypted_bytes + 1)
-        if len(encrypted_data) > max_encrypted_bytes:
+        encrypted_data = await file.read(MAX_ENCRYPTED_STATEMENT_BYTES + 1)
+        if len(encrypted_data) > MAX_ENCRYPTED_STATEMENT_BYTES:
             raise HTTPException(status_code=413, detail="Encrypted statement is too large")
         decrypted_data = decrypt_client_data(symmetric_key, encrypted_data)
     except HTTPException:
@@ -248,9 +262,9 @@ async def upload_statement(
 
     # Step 5: Log upload details to logfile and the database
     try:
-        client_ip = get_client_host(request)
-        user_agent = get_user_agent(request)
-        sanitized_metadata = metadata[:256].replace("\n", " ").replace("\r", " ").strip()
+        client_ip = bounded_log_value(get_client_host(request), MAX_CLIENT_IP_CHARS)
+        user_agent = bounded_log_value(get_user_agent(request), MAX_USER_AGENT_CHARS)
+        canonical_metadata = submission_metadata.model_dump_json()
 
         logging.info(
             "Encrypted statement received from IP: %s (user %s)",
@@ -270,7 +284,7 @@ async def upload_statement(
                 query,
                 {
                     "file_name": guid_filename,
-                    "metadata": sanitized_metadata,
+                    "metadata": canonical_metadata,
                     "init_vector": iv,
                     "auth_tag": auth_tag,
                     "client_ip": client_ip,
