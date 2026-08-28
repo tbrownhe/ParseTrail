@@ -12,7 +12,6 @@ from parsetrail.core.settings import AppSettings, settings
 PLUGIN_PATH = "/plugins"
 CLIENT_PATH = "/clients"
 KEYS_PATH = "/keys"
-MODEL_PATH = "/models"
 STATEMENTS_PATH = "/statements"
 MAX_PLUGIN_MANIFEST_BYTES = 1024 * 1024
 ED25519_SIGNATURE_BYTES = 64
@@ -69,10 +68,6 @@ class ApiClient:
 
     def list_plugins(self) -> list[dict]:
         raise NotImplementedError("Unsigned plugin metadata is not trusted; fetch_plugin_release_bytes()")
-
-    def list_models(self) -> list[dict]:
-        raise NotImplementedError("Model listing not implemented yet")
-        # return self._get_list(f"{MODEL_PATH}", "model")
 
     def _download_stream(
         self, path: str, auth_required: bool = True, chunk_size=8192
@@ -191,26 +186,6 @@ class ApiClient:
             Iterable[Tuple[bytes, int, int]]: _description_
         """
         return self._download_stream(f"{PLUGIN_PATH}/{plugin_name}", auth_required=True)
-
-    def stream_model(self, model_name) -> Iterable[tuple[bytes, int, int]]:
-        """
-        Usage:
-            with fpath.open("wb") as f:
-                for chunk, downloaded, total in stream_model(model_name):
-                    f.write(chunk)
-                    dialog.update_progress(downloaded, total)
-                    if dialog.was_cancelled():
-                        break
-
-        Args:
-            platform (str): _description_
-            version (str): _description_
-            auth_required (bool, optional): _description_. Defaults to False.
-
-        Returns:
-            Iterable[Tuple[bytes, int, int]]: _description_
-        """
-        return self._download_stream(f"{MODEL_PATH}/{model_name}", auth_required=True)
 
     def get_public_key(self) -> bytes:
         resp = self.get(f"{KEYS_PATH}/public-key", auth_required=False)

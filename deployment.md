@@ -41,7 +41,7 @@ Edit the root `.env` before running Docker. Key fields:
 - Ensure these paths are not in the project folder to prevent accidental `git commit`.
 - `STATEMENTS_DIR`: host path for statements received by backend (ensure secure permissions).
 - `STATEMENTS_FILE_OWNER`, `STATEMENTS_FILE_GROUP`: numeric ids to chown files to.
-- `CLIENTS_DIR`, `PLUGINS_DIR`, `MODELS_DIR`: host paths mounted into the backend for distributing built clients/plugins/models.
+- `CLIENTS_DIR`, `PLUGINS_DIR`: host paths mounted into the backend for distributing signed clients and plugins. Models are local-only and are not served by the backend.
 
 **Remote helpers (optional)**
 - `REMOTE_HOST`, `REMOTE_USER`, `SSH_KEY_PATH`, `REMOTE_*_DIR`: used by build scripts when pushing artifacts to another host.

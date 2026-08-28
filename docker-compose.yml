@@ -77,7 +77,6 @@ services:
       # Bind mounts to be replaced by docker volumes someday if this scales.
       - ${CLIENTS_DIR?Variable not set}:/app/data/clients
       - ${PLUGINS_DIR?Variable not set}:/app/data/plugins
-      - ${MODELS_DIR?Variable not set}:/app/data/models
       - ${STATEMENTS_DIR?Variable not set}:/app/secure/statements
     environment:
       - MASTER_KEY=${MASTER_KEY}

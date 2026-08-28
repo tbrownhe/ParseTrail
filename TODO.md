@@ -101,11 +101,14 @@ equivalent plaintext write is introduced into either parse path.
   SHA-256 digest, monotonic release sequence, and one detached Ed25519 signature.
 - [x] Extend the signed manifest vocabulary and offline release process to client
   installers on Windows and macOS.
-- [ ] Extend signed releases to models.
+- [x] Remove the unused unsigned model API, client download helper, and backend
+  model bind mount. Models remain local-only unless a real distribution workflow
+  justifies adding signed releases later.
 - [x] Make signed manifests authoritative for installer listing and download.
   Stop deriving metadata by globbing mutable server directories, and never
   advertise temporary, partial, or unsigned installers.
-- [ ] Make signed manifests authoritative for model listing and download.
+- [x] Expose no server model listing or download while signed model releases do
+  not exist.
 - [~] Implement and document an encrypted offline signing-key procedure. The
   client build embeds only a public-key trust store and refuses to build while it
   is empty; initial key generation and backup location remain a `[USER]` step.
@@ -113,7 +116,7 @@ equivalent plaintext write is introduced into either parse path.
   the previous plugin until a complete download is atomically renamed.
 - [x] Apply containment/suffix checks to installer destinations and reject
   unsupported platforms before constructing a path.
-- [ ] Apply the same authenticated destination checks to models.
+- [x] Remove remote model destinations along with the unused download workflow.
 - [x] Apply root containment, plain-filename, and suffix checks to backend plugin
   and model downloads, with cross-platform traversal regression tests.
 - [x] Download the complete plugin catalog into an immutable staging release,
@@ -124,11 +127,13 @@ equivalent plaintext write is introduced into either parse path.
   any failed artifact preserves the previously verified release.
 - [x] Authenticate signed size and SHA-256 in staging before atomically publishing
   and launching an installer; cancellation or failure preserves the prior file.
-- [ ] Apply the same authenticated staging behavior before `joblib.load`.
+- [x] Confirm every current `joblib.load` path is a locally trained or
+  user-selected model; remove the unused remote model source.
 - [x] Upload installers into unique immutable release directories, independently
   verify exact remote sizes and digests, then atomically activate them. A failed
   or interrupted `scp` leaves the previous release active and undiscoverable.
-- [ ] Apply the same immutable publication protocol to models.
+- [x] Remove model publication configuration until a signed consumer workflow is
+  deliberately introduced.
 - [x] Enforce remote plugin-release immutability: fail if a release sequence
   already exists, verify every uploaded byte against the signed manifest, and
   change `current-release.json` only after that independent verification passes.
@@ -140,7 +145,9 @@ equivalent plaintext write is introduced into either parse path.
   selection, unsafe names, altered/truncated/oversized downloads, cancellation,
   sequence reuse, and preservation of a prior installer.
 - [ ] Add remote-publication failure tests for partial upload visibility, remote
-  hash mismatch, and interrupted activation; add the equivalent model tests.
+  hash mismatch, and interrupted activation.
+- [x] Add a backend regression test proving unsigned model distribution remains
+  unrouted.
 - [ ] `[USER]` Decide where the offline release key and recovery copy will live,
   then perform a signed Windows release rehearsal.
 - [ ] `[USER]` Add Windows Authenticode and macOS signing/notarization after the
