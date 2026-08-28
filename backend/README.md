@@ -126,6 +126,23 @@ Arguments are forwarded to Pytest. For example, to stop on the first failure:
 uv run --frozen bash scripts/tests-start.sh -x
 ```
 
+## Encrypted statement reconciliation
+
+Statement uploads are limited per user (pending queue and rolling 24-hour
+volume), with the final quota check serialized in the same transaction as the
+database row. To compare encrypted storage with registered rows without opening
+any statement contents, run:
+
+```console
+$ uv run --frozen python scripts/reconcile_statements.py
+```
+
+The command is read-only by default and exits nonzero when it finds drift. To
+move encrypted orphan files into an explicit recovery directory, review the dry
+run first, then add both `--quarantine-orphans /recovery/path` and `--apply`.
+Rows whose encrypted files are missing are only reported; they are never deleted
+automatically.
+
 ## Signed plugin artifacts
 
 The backend is an untrusted file host for plugin releases; it never has the

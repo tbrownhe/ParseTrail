@@ -162,7 +162,7 @@ existing client import or execute attacker-supplied bytes.
   before decryption when it is exceeded.
 - [x] Enforce the total request-body limit before multipart spooling; do not rely
   on either the handler read limit or the desktop's 25 MB check.
-- [ ] Add per-user pending-statement quotas and rate limits with useful client
+- [x] Add per-user pending-statement quotas and rate limits with useful client
   errors and an administrative cleanup path.
 - [x] Replace truncated free-form metadata JSON with a validated schema and
   per-field limits. Bound filename, institution, comments, IP, and user-agent
@@ -173,7 +173,8 @@ existing client import or execute attacker-supplied bytes.
   correlation details.
 - [x] Delete temporary/final ciphertext when file finalization or database
   registration fails, without ever writing decrypted bytes.
-- [ ] Add safe reconciliation for legacy orphan statement files/rows.
+- [x] Add safe reconciliation for legacy orphan statement files/rows, with
+  read-only reporting by default and explicit encrypted-file quarantine.
 - [ ] Move RSA submission-key provisioning out of module import. Create the pair
   atomically under a single startup/maintenance owner, load a matching pair, and
   make rotation explicit and overlap-safe across multiple workers.

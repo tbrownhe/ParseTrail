@@ -19,6 +19,7 @@ from app.api.request_utils import get_client_host, get_user_agent
 from app.api.routes.keys import PRIVATE_KEY_PATH
 from app.core.config import settings
 from app.core.db import engine
+from app.core.statement_quota import StatementQuotaExceeded, enforce_statement_quota
 from app.core.statement_submission import (
     MAX_CLIENT_IP_CHARS,
     MAX_ENCRYPTED_KEY_BYTES,
@@ -215,6 +216,15 @@ async def upload_statement(
     if not encrypted_key or len(encrypted_key) > MAX_ENCRYPTED_KEY_BYTES:
         raise HTTPException(status_code=400, detail="Invalid encrypted key")
 
+    try:
+        with engine.connect() as conn:
+            enforce_statement_quota(conn, current_user.id, lock_user=False)
+    except StatementQuotaExceeded as exc:
+        raise HTTPException(status_code=429, detail=str(exc))
+    except Exception as exc:
+        logging.error("Statement quota preflight failed (%s)", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Statement submission is temporarily unavailable")
+
     # Step 1: Decrypt the client's symmetric key using the server's private RSA key
     try:
         symmetric_key = decrypt_client_key(encrypted_key)
@@ -274,12 +284,17 @@ async def upload_statement(
 
         query = text(
             """
-            INSERT INTO statement_uploads (file_name, metadata, init_vector, auth_tag, client_ip, user_agent, user_id)
-            VALUES (:file_name, :metadata, :init_vector, :auth_tag, :client_ip, :user_agent, :user_id)
+            INSERT INTO statement_uploads (
+                file_name, metadata, init_vector, auth_tag, client_ip, user_agent, user_id, plugin_status
+            )
+            VALUES (
+                :file_name, :metadata, :init_vector, :auth_tag, :client_ip, :user_agent, :user_id, :plugin_status
+            )
             """
         )
 
         with engine.begin() as conn:
+            enforce_statement_quota(conn, current_user.id, lock_user=True)
             conn.execute(
                 query,
                 {
@@ -290,8 +305,12 @@ async def upload_statement(
                     "client_ip": client_ip,
                     "user_agent": user_agent,
                     "user_id": str(current_user.id),
+                    "plugin_status": "pending",
                 },
             )
+    except StatementQuotaExceeded as exc:
+        file_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=429, detail=str(exc))
     except Exception as e:
         file_path.unlink(missing_ok=True)
         logging.error("Statement registration failed (%s)", type(e).__name__)
