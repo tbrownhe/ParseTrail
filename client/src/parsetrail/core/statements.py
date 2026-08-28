@@ -17,6 +17,10 @@ from parsetrail.core.validation import Statement, Transaction
 from parsetrail.gui.accounts import AssignAccountNumber
 
 
+class ArchivePendingError(RuntimeError):
+    """Database commit succeeded but the source statement still needs archiving."""
+
+
 class StatementProcessor:
     def __init__(self, Session: sessionmaker, plugin_manager: PluginManager) -> None:
         """Initialize the statement processor
@@ -26,6 +30,27 @@ class StatementProcessor:
         """
         self.Session = Session
         self.plugin_manager = plugin_manager
+
+    def find_pending_archives(self) -> list[tuple[Path, Path]]:
+        """Report committed imports whose original file still awaits archiving."""
+        suffixes = {plugin.get("SUFFIX", ".*") for plugin in self.plugin_manager.metadata.values()}
+        pending: list[tuple[Path, Path]] = []
+        for source in sorted({path for suffix in suffixes for path in settings.import_dir.glob(f"*{suffix}")}):
+            try:
+                archive_name = self.file_already_imported(hash_file(source))
+            except Exception as exc:
+                logger.warning(
+                    "Could not inspect {} for archive recovery ({})",
+                    source.name,
+                    type(exc).__name__,
+                )
+                continue
+            if not archive_name:
+                continue
+            destination = settings.success_dir / archive_name
+            if not destination.exists():
+                pending.append((source, destination))
+        return pending
 
     def import_all(self, parent=None) -> None:
         """
@@ -132,9 +157,17 @@ class StatementProcessor:
                 self.handle_duplicate(fpath, statement.dpath.name)
                 return "duplicate"
 
-            # Insert data into the database and move the file to the success directory
+            # Commit before moving the only source file. If archiving fails, the
+            # committed hash lets the next import recover it deterministically.
             with self.Session() as session:
                 self.complete_data_transaction(session, statement)
+            try:
+                self.move_file_safely(statement.fpath, statement.dpath)
+            except Exception as exc:
+                raise ArchivePendingError(
+                    "The statement data was committed, but its source file could not be archived. "
+                    "The source remains recoverable; leave it in the import folder and retry the import."
+                ) from exc
 
             logger.success(f"Imported {fpath}")
             return "success"
@@ -155,10 +188,17 @@ class StatementProcessor:
             data = query.statements_with_hash(session, md5hash)
         if len(data) == 0:
             return ""
-        if len(data) > 1:
-            raise KeyError(f"Multiple files found with MD5={md5hash}")
-        statement_id, filename = data[0]
-        logger.debug(f"Previously imported {filename} (StatementID: {statement_id}) has identical hash {md5hash}")
+        filenames = {filename for _, filename in data}
+        if len(filenames) > 1:
+            raise KeyError(f"Identical file hash is associated with multiple filenames: {sorted(filenames)}")
+        filename = filenames.pop()
+        statement_ids = [statement_id for statement_id, _ in data]
+        logger.debug(
+            "Previously imported {} (StatementIDs: {}) has identical hash {}",
+            filename,
+            statement_ids,
+            md5hash,
+        )
         return filename
 
     def statement_already_imported(self, filename: Path) -> bool:
@@ -202,11 +242,13 @@ class StatementProcessor:
         if (settings.success_dir / filename).exists():
             # Move to duplicate dir
             dpath = settings.duplicate_dir / filename
+            action = "Duplicate statement moved"
         else:
-            # Restore missing file in success dir
+            # Recover a prior database commit whose archive move did not finish.
             dpath = settings.success_dir / filename
+            action = "Recovered committed statement archive"
         self.move_file_safely(fpath, dpath)
-        logger.debug("Duplicate statement moved to {d}", d=dpath)
+        logger.info("{} to {}", action, dpath)
 
     def move_file_safely(self, fpath: Path, dpath: Path):
         """
@@ -346,7 +388,3 @@ class StatementProcessor:
 
                 # Insert transactions using insert_rows_carefully
                 query.insert_rows_carefully(session, Transactions, transactions_table, skip_duplicates=True)
-
-            # Attempt to move file to destination.
-            # If it fails in this context, the whole transaction is rolled back.
-            self.move_file_safely(statement.fpath, statement.dpath)

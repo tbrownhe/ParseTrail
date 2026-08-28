@@ -643,6 +643,18 @@ class ParseTrail(QMainWindow):
         self.plugin_manager = PluginManager()
         self.plugin_manager.load_plugins()
 
+        pending_archives = StatementProcessor(self.Session, self.plugin_manager).find_pending_archives()
+        if pending_archives:
+            logger.warning("Found {} committed statement archive(s) awaiting recovery", len(pending_archives))
+            QMessageBox.warning(
+                self,
+                "Statement Archive Recovery Needed",
+                (
+                    f"{len(pending_archives)} committed statement file(s) are still in the import folder. "
+                    "Run Import All Statements to finish archiving them safely."
+                ),
+            )
+
         # Update all tables, checklists, and graphs
         with self.Session() as session:
             self.update_main_gui(session)

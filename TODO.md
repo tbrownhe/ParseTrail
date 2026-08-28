@@ -191,16 +191,16 @@ request leaves either one consistent encrypted-file/row pair or neither.
 
 ### P0.5 Prevent importer data loss and silent corruption
 
-- [ ] Refactor import coordination so database commit and source-file movement
+- [x] Refactor import coordination so database commit and source-file movement
   cannot leave a rolled-back import whose only source was moved. Use a recoverable
   staging/state transition and report recovery actions on next startup.
-- [ ] Fix duplicate insertion at flush time using a savepoint, conflict-aware
+- [x] Fix duplicate insertion at flush time using a savepoint, conflict-aware
   insert, or precomputed set; catching `IntegrityError` around `session.add()` is
   ineffective.
-- [ ] Define statement identity separately from transaction identity. Make retries
-  of multi-account statements deterministic instead of assuming one statement row
-  per file hash.
-- [ ] Add failure-injection tests at staging, parse, flush, commit, archive move,
+- [x] Treat the physical file hash and canonical archive filename as the import
+  identity while retaining one `Statements` row per account. Multi-account retry
+  accepts multiple statement IDs when they resolve to that one archive.
+- [x] Add failure-injection tests at source retention, parse, flush/commit, archive move,
   and cleanup boundaries.
 - [ ] `[USER]` Import overlapping and multi-account fixture statements into a copy
   of an existing SQLite database, cancel once, and force one archive failure.

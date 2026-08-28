@@ -1,10 +1,9 @@
-import sqlite3
 from datetime import datetime
 from typing import Any
 
 from loguru import logger
 from sqlalchemy import Float, asc
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import cast, func, select, text
 
@@ -727,7 +726,7 @@ def insert_rows_batched(session: Session, model: BaseModel, rows: list[dict]) ->
         objects = [model(**row) for row in rows]
         session.bulk_save_objects(objects)
         session.commit()
-    except sqlite3.IntegrityError as e:
+    except IntegrityError as e:
         session.rollback()
         raise RuntimeError(f"Batch insertion failed: {e}")
 
@@ -756,8 +755,10 @@ def insert_rows_carefully(
 
     for row in data:
         try:
-            session.add(model(**row))
-        except sqlite3.IntegrityError:
+            with session.begin_nested():
+                session.add(model(**row))
+                session.flush()
+        except IntegrityError:
             if skip_duplicates:
                 skipped += 1
             else:
