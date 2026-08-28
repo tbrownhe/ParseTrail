@@ -1,12 +1,13 @@
 import asyncio
 import json
 from collections.abc import Generator
-from typing import Any
+from typing import cast
 
 import pytest
 from app.core.request_limits import RequestBodyLimitMiddleware
 from app.core.statement_submission import StatementSubmissionMetadata, bounded_log_value
 from pydantic import ValidationError
+from starlette.types import Message, Receive, Scope, Send
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -20,10 +21,10 @@ def _run_request(
     chunks: list[bytes],
     maximum_bytes: int,
     content_length: str | None = None,
-) -> tuple[list[dict[str, Any]], bool]:
+) -> tuple[list[Message], bool]:
     called = False
 
-    async def app(_scope, receive, send) -> None:
+    async def app(_scope: Scope, receive: Receive, send: Send) -> None:
         nonlocal called
         called = True
         while True:
@@ -33,7 +34,7 @@ def _run_request(
         await send({"type": "http.response.start", "status": 204, "headers": []})
         await send({"type": "http.response.body", "body": b""})
 
-    messages = [
+    messages: list[Message] = [
         {
             "type": "http.request",
             "body": chunk,
@@ -41,19 +42,19 @@ def _run_request(
         }
         for index, chunk in enumerate(chunks)
     ]
-    sent: list[dict[str, Any]] = []
+    sent: list[Message] = []
 
-    async def receive() -> dict[str, Any]:
+    async def receive() -> Message:
         return messages.pop(0)
 
-    async def send(message: dict[str, Any]) -> None:
+    async def send(message: Message) -> None:
         sent.append(message)
 
     headers = [] if content_length is None else [(b"content-length", content_length.encode())]
     middleware = RequestBodyLimitMiddleware(app, maximum_bytes=maximum_bytes)
     asyncio.run(
         middleware(
-            {"type": "http", "method": "POST", "path": "/upload", "headers": headers},
+            cast(Scope, {"type": "http", "method": "POST", "path": "/upload", "headers": headers}),
             receive,
             send,
         )

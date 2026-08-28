@@ -7,8 +7,6 @@ from os import urandom
 from pathlib import Path
 
 from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
 from pydantic import ValidationError
@@ -16,7 +14,6 @@ from sqlalchemy import text
 
 from app.api.deps import get_current_user
 from app.api.request_utils import get_client_host, get_user_agent
-from app.api.routes.keys import PRIVATE_KEY_PATH
 from app.core.config import settings
 from app.core.db import engine
 from app.core.statement_quota import StatementQuotaExceeded, enforce_statement_quota
@@ -29,6 +26,7 @@ from app.core.statement_submission import (
     StatementSubmissionMetadata,
     bounded_log_value,
 )
+from app.core.submission_keys import decrypt_submission_key
 from app.models import User
 
 router = APIRouter()
@@ -95,14 +93,6 @@ def _apply_owner(path: Path, *, fatal: bool = False) -> None:
         raise HTTPException(status_code=500, detail=message) from exc
 
 
-# Load server's private key.
-with PRIVATE_KEY_PATH.open("rb") as key_file:
-    loaded_private_key = serialization.load_pem_private_key(key_file.read(), password=None)
-if not isinstance(loaded_private_key, rsa.RSAPrivateKey):
-    raise RuntimeError("Submission private key is not an RSA private key")
-PRIVATE_KEY = loaded_private_key
-
-
 def load_master_key() -> bytes:
     """Load MASTER_KEY from env vars and ensure it's 32 bytes for AES"""
     master_key_b64 = os.getenv("MASTER_KEY")
@@ -141,14 +131,7 @@ def decrypt_client_key(encrypted_key_b64: str | bytes) -> bytes:
         bytes: Decrypted symmetric key for decrypting the incoming file
     """
     encrypted_key = base64.b64decode(encrypted_key_b64, validate=True)
-    return PRIVATE_KEY.decrypt(
-        encrypted_key,
-        padding.OAEP(
-            mgf=padding.MGF1(algorithm=hashes.SHA256()),
-            algorithm=hashes.SHA256(),
-            label=None,
-        ),
-    )
+    return decrypt_submission_key(encrypted_key)
 
 
 def decrypt_client_data(symmetric_key: bytes, encrypted_data: bytes) -> bytes:

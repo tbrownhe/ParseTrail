@@ -143,6 +143,32 @@ run first, then add both `--quarantine-orphans /recovery/path` and `--apply`.
 Rows whose encrypted files are missing are only reported; they are never deleted
 automatically.
 
+## Statement-submission key lifecycle
+
+The Compose `prestart` service is the single provisioning owner for the RSA
+submission keyring. It validates an existing active generation, migrates the
+matching legacy `keys/private_key.pem` and `keys/public_key.pem` pair on first
+run, or provisions the initial generation atomically. Importing the FastAPI app
+never generates or rotates keys.
+
+Rotation is explicit:
+
+```console
+$ docker compose run --rm prestart python -m app.core.submission_keys rotate
+```
+
+The active pointer changes atomically. Prior private generations remain in the
+backend-only key volume, allowing every worker to decrypt an upload encrypted
+immediately before rotation. Inspect the selected generation with
+`python -m app.core.submission_keys show-active`. Do not manually delete retained
+generations until every client has refreshed the public key and the maximum
+in-flight/retry interval has passed.
+
+For a non-Compose local backend, run the `provision` command once before starting
+Uvicorn. Submission envelope encryption protects copied statement storage and
+backups when the key volume/master key are kept separately; it does not protect
+against a live backend compromise that can read both ciphertext and keys.
+
 ## Signed plugin artifacts
 
 The backend is an untrusted file host for plugin releases; it never has the

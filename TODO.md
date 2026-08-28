@@ -175,10 +175,10 @@ existing client import or execute attacker-supplied bytes.
   registration fails, without ever writing decrypted bytes.
 - [x] Add safe reconciliation for legacy orphan statement files/rows, with
   read-only reporting by default and explicit encrypted-file quarantine.
-- [ ] Move RSA submission-key provisioning out of module import. Create the pair
+- [x] Move RSA submission-key provisioning out of module import. Create the pair
   atomically under a single startup/maintenance owner, load a matching pair, and
   make rotation explicit and overlap-safe across multiple workers.
-- [ ] Document that server-side envelope encryption protects offline disks and
+- [x] Document that server-side envelope encryption protects offline disks and
   backups, but not a live server compromise that can read both ciphertext and the
   master key.
 - [ ] Test oversized multipart bodies, malformed envelopes, corrupted tags,

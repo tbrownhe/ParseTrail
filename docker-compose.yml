@@ -34,6 +34,10 @@ services:
     command: bash scripts/prestart.sh
     env_file:
       - .env
+    volumes:
+      # The single prestart owner provisions/validates submission keys before
+      # any backend worker starts. Old generations remain for rotation overlap.
+      - app-keys-data:/app/keys
     environment:
       - DOMAIN=${DOMAIN}
       - FRONTEND_HOST=${FRONTEND_HOST?Variable not set}
