@@ -169,7 +169,7 @@ existing client import or execute attacker-supplied bytes.
   values before persistence or logging.
 - [x] Stop returning raw cryptographic, filesystem, and database exception text
   from the statement-submission endpoint.
-- [ ] Audit exception logging/error reporting and retain only non-sensitive
+- [x] Audit exception logging/error reporting and retain only non-sensitive
   correlation details.
 - [x] Delete temporary/final ciphertext when file finalization or database
   registration fails, without ever writing decrypted bytes.
@@ -181,9 +181,10 @@ existing client import or execute attacker-supplied bytes.
 - [x] Document that server-side envelope encryption protects offline disks and
   backups, but not a live server compromise that can read both ciphertext and the
   master key.
-- [ ] Test oversized multipart bodies, malformed envelopes, corrupted tags,
-  parallel cold starts, key rotation with an in-flight upload, database failure
-  after file creation, and filesystem failure before row creation.
+- [x] Test oversized multipart bodies, malformed envelopes, corrupted tags,
+  non-provisioning worker startup, key rotation with an in-flight upload,
+  database failure after file creation, and filesystem failure before row
+  creation.
 
 Acceptance: hostile requests have bounded memory/disk impact, and every completed
 request leaves either one consistent encrypted-file/row pair or neither.
