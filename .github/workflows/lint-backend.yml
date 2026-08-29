@@ -29,9 +29,9 @@ jobs:
           version: "0.9.5"
           enable-cache: true
       - name: Check Python lint
-        run: uvx ruff==0.15.22 check backend/app client/src client/tests
+        run: uvx ruff==0.15.22 check backend/app client/src client/tests scripts/deployment
       - name: Check Python formatting
-        run: uvx ruff==0.15.22 format --check backend/app client/src client/tests
+        run: uvx ruff==0.15.22 format --check backend/app client/src client/tests scripts/deployment
 
   backend-types:
     runs-on: ubuntu-latest

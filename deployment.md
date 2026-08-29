@@ -1,72 +1,203 @@
-# ParseTrail Deployment
+# ParseTrail deployment
 
-This repo ships the ParseTrail backend, frontend dashboard, and static site. It no longer bundles a production reverse proxy; bring your own (Caddy, NGINX, or Traefik in a separate repo) to terminate TLS and route to the app containers. A stock `docker-compose.traefik.yml` is included for illustration only (a different one is used in production) but can be a starting point if you want to run Traefik yourself. See the [full-stack-fastapi-template
-](https://github.com/fastapi/full-stack-fastapi-template) for thorough details on Traefik setup for a stack like this one.
+Docker Compose is the only supported server deployment path. The former Docker
+Swarm scripts and template deployment workflows have been removed. Deployment
+is manual on a trusted Linux host until the staging success/rollback/restore
+rehearsals are complete; no GitHub runner receives production credentials,
+release-signing keys, SSH access, or a production `.env`.
 
-## What you need
-- Docker Engine on the target host (use Docker Desktop only for local dev; production should run Docker Engine on a Linux server or similar).
-- A domain or LAN IP and DNS pointing to the host.
-- A reverse proxy you control that can forward:
-  - `api.${DOMAIN}` → backend container port 8000
-  - `dashboard.${DOMAIN}` → frontend container port 80
-  - `${DOMAIN}` and `www.${DOMAIN}` → website container port 80
-- (Optional) GitHub Actions runner if you want CI/CD.
+Traefik remains in the separate infrastructure repository. This repository owns
+the database and the backend, dashboard, and website containers behind it.
 
-## Configure `.env`
-Edit the root `.env` before running Docker. Key fields:
+## Release properties
 
-**Core**
-- `ENVIRONMENT`: `local`, `staging`, or `production`.
-- `DOMAIN`: `localhost` for local, LAN IP for intranet, public domain for prod.
-- `BACKEND_CORS_ORIGINS`: Comma list with scheme/host/port. Examples:
-  - Local: `"http://localhost,http://localhost:5173"`
-  - Prod: `"https://api.${DOMAIN},https://dashboard.${DOMAIN}"`
-- `FRONTEND_HOST`: URL the backend uses in emails. Match your dashboard origin (e.g., `http://localhost:5173` or `https://dashboard.${DOMAIN}`).
+- Backend, dashboard, and website images are built once on a clean checkout.
+- Each build is tagged with the full Git commit, pushed, resolved to a registry
+  digest, and recorded in a release descriptor. Production never rebuilds source.
+- Base images and dependency installs are pinned. Production Compose accepts
+  digest references supplied by the release tool.
+- Alembic runs as a separate, logged phase. Normal `prestart` and service
+  replacement never migrate the schema.
+- A deploy must have a recent restore-drill evidence file and a recorded previous
+  immutable release.
+- Service health is bounded by a timeout. Public smoke failure automatically
+  reactivates the previous image digests and smokes them again.
+- Final JSON records under the release-state directory are append-only from the
+  tool's perspective. The mutable `current-release.json` is only a pointer to the
+  active rollback baseline.
 
-**Secrets**
-- `MASTER_KEY`, `BACKUP_KEY`, `SECRET_KEY`, `FIRST_SUPERUSER_PASSWORD`:
-  - Generate with `python -c "import secrets; print(secrets.token_urlsafe(32))"`
-- `FIRST_SUPERUSER`: email for the initial admin.
-- SMTP: `SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD`, `EMAILS_FROM_EMAIL`, `SMTP_TLS`, `SMTP_SSL`, `SMTP_PORT`.
-- Swagger basic auth: create `SWAGGER_HASH` with `htpasswd -nb admin SWAGGER_PW`.
+The automated path permits only backward-compatible database migrations. A
+contract/destructive migration needs a separate maintenance plan, a database
+restore point, and an explicit data-reconciliation decision; do not feed one to
+this automatic application-rollback path.
 
-**Database**
-- `POSTGRES_PASSWORD` (required), `POSTGRES_USER`, `POSTGRES_DB`, `POSTGRES_PORT` (usually 5432). Host is fixed to the `db` service inside Compose.
+## Configuration
 
-**Images and permissions**
-- `DOCKER_IMAGE_BACKEND`, `DOCKER_IMAGE_FRONTEND`: image names/tags to use or push.
-- `DOCKER_GID`: host docker group id if you run a proxy with docker access.
+The production `.env` remains on the server with mode `600`. Existing application,
+SMTP, PostgreSQL, bind-mount, and Traefik values remain required. Add:
 
-**Data locations**
-- Ensure these paths are not in the project folder to prevent accidental `git commit`.
-- `STATEMENTS_DIR`: host path for statements received by backend (ensure secure permissions).
-- `STATEMENTS_FILE_OWNER`, `STATEMENTS_FILE_GROUP`: numeric ids to chown files to.
-- `CLIENTS_DIR`, `PLUGINS_DIR`: host paths mounted into the backend for distributing signed clients and plugins. Models are local-only and are not served by the backend.
+```dotenv
+DOCKER_IMAGE_BACKEND=registry.example.com/parsetrail/backend
+DOCKER_IMAGE_FRONTEND=registry.example.com/parsetrail/frontend
+DOCKER_IMAGE_WEBSITE=registry.example.com/parsetrail/website
+POSTGRES_IMAGE=postgres:17.11-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
+POSTGRES_VOLUME_NAME=parsetrail_app-db-data-pg17
+```
 
-**Remote helpers (optional)**
-- `REMOTE_HOST`, `REMOTE_USER`, `SSH_KEY_PATH`, `REMOTE_*_DIR`: used by build scripts when pushing artifacts to another host.
+Keep the PostgreSQL 12 image and volume values until the separate
+[PostgreSQL 17 dump/restore runbook](docs/postgresql-17-upgrade.md) is complete.
+Changing the image without changing to the restored volume is forbidden.
 
-## Reverse proxy notes
-- Local/dev (`docker compose up`): hit containers directly with `DOMAIN=localhost` and no reverse proxy.
-- Staging/prod: bring your own proxy. Either:
-  1) Run a proxy separately and point it at the container ports above, or
-  2) If you still use Traefik elsewhere, attach this stack to the expected network name (`traefik-public` by default) or strip/replace the Traefik labels and network entries in `docker-compose.yml`.
-- In staging/prod, terminate TLS at the proxy and forward plain HTTP to the containers.
+Use three external, access-controlled locations on the server:
 
-## Running locally vs. production
-- **Local/dev:** `docker compose up` (includes `docker-compose.override.yml`, exposes dev ports). Use `DOMAIN=localhost` and simple CORS.
-- **Production/staging:** `docker compose -f docker-compose.yml up -d` (omit the override). Set real domain, tighten CORS, and run behind your proxy. Ensure the external network and labels are adjusted if you removed Traefik.
+- `/srv/parsetrail/release-state` for preflight, migration, and final records;
+- `/srv/parsetrail/release-input` for release and backup-evidence JSON;
+- `/srv/parsetrail/secrets/smoke.json` for a dedicated active smoke account.
 
-## Helpful commands
-- Check resolved config: `docker compose -f docker-compose.yml config`
-- Start/stop: `docker compose up -d` / `docker compose down`
-- Rebuild: `docker compose -f docker-compose.yml up --build -d`
-- Logs: `docker compose logs -f backend`
-- DB shell: `docker exec -it parsetrail-db-1 psql -U postgres -d app`
+Copy [the smoke example](deployment/smoke-config.example.json), fill in the public
+URLs and dedicated account, and set its mode to `600`. The credentials are used
+in memory and are never written to release records.
 
-## Permissions and security
-- On the server, tighten perms: dirs `750`, files `640`, `.env` and sensitive files `600`.
-- If you manage secrets outside `.env` (e.g., Docker Swarm secrets), update the compose or runtime env accordingly.
+## 1. Build and publish away from production
 
-## CI/CD (optional)
-You can run GitHub Actions runners on your host. Provide the same `.env` values as secrets, plus any registry credentials. Label runners by environment (e.g., `staging`, `production`) and have workflows target those labels.
+Copy [the build environment example](deployment/build.env.example) outside the
+checkout and set the three registry repositories and public API URL. This file
+contains no production secrets.
+
+From a clean commit, with registry authentication already configured:
+
+```bash
+python3 scripts/deployment/release.py build \
+  --build-env /secure/parsetrail/build.env \
+  --output /secure/parsetrail/releases/release.json \
+  --push
+```
+
+The build refuses a dirty worktree. Without `--push`, it can write a
+non-deployable local descriptor. `--dry-run` prints the commit-tagged build/push
+plan and writes nothing. Transfer the pushed release descriptor to the server;
+do not transfer source-built images by an unrecorded side channel.
+
+## 2. Bootstrap the rollback baseline once
+
+The gated workflow will not deploy until the currently running backend,
+dashboard, and website are digest-pinned. For the first staging transition only:
+
+1. Put the three digest references from a release descriptor into
+   `BACKEND_IMAGE_REF`, `FRONTEND_IMAGE_REF`, and `WEBSITE_IMAGE_REF` in staging.
+2. Pull them, run `backend/scripts/migrate.sh` explicitly through Compose, replace
+   services with `--no-build --wait`, and run `public_smoke.py` manually.
+3. Record that verified stack as the initial rollback baseline:
+
+   ```bash
+   python3 scripts/deployment/release.py adopt \
+     --deploy-env /srv/parsetrail/.env \
+     --state-dir /srv/parsetrail/release-state \
+     --source-commit FULL_40_CHARACTER_COMMIT
+   ```
+
+Do not bootstrap production until this transition and an application rollback
+have succeeded in staging.
+
+## 3. Record recent restore evidence
+
+After restoring the database dump, encrypted statement/file backup, and
+submission-key volume into disposable targets, record the three drill IDs:
+
+```bash
+python3 scripts/deployment/release.py backup-evidence \
+  --database-dump /srv/backups/parsetrail/database.dump \
+  --database-restore-id staging-db-restore-20260828 \
+  --files-restore-id staging-files-restore-20260828 \
+  --submission-keys-restore-id staging-keys-restore-20260828 \
+  --output /srv/parsetrail/release-input/backup-evidence.json
+```
+
+The tool hashes the dump immediately. Preflight re-hashes it and rejects evidence
+older than 48 hours by default. The restore IDs are operator attestations to real
+completed drills, not substitutes for doing them.
+
+## 4. Preflight
+
+Check out the exact clean commit named in the release descriptor, then run:
+
+```bash
+python3 scripts/deployment/release.py preflight \
+  --deploy-env /srv/parsetrail/.env \
+  --state-dir /srv/parsetrail/release-state \
+  --release /srv/parsetrail/release-input/release.json \
+  --backup-evidence /srv/parsetrail/release-input/backup-evidence.json
+```
+
+Preflight validates the commit and all image digests, renders Compose, requires a
+digest-pinned PostgreSQL image, pulls application images, re-hashes the database
+backup, records the current Alembic revision and signed artifact inventories, and
+captures the exact rollback target. It prints a deployment ID used below.
+
+## 5. Migrate without replacing application services
+
+Enter the maintenance window and run:
+
+```bash
+python3 scripts/deployment/release.py migrate DEPLOYMENT_ID \
+  --deploy-env /srv/parsetrail/.env \
+  --state-dir /srv/parsetrail/release-state
+```
+
+Migration output is streamed to the operator and saved under
+`release-state/migration-logs`. Its SHA-256 and resulting Alembic revision are
+added to the pending record. Failure stops here; application images are not
+replaced.
+
+## 6. Deploy, wait, smoke, and record
+
+```bash
+python3 scripts/deployment/release.py deploy DEPLOYMENT_ID \
+  --deploy-env /srv/parsetrail/.env \
+  --state-dir /srv/parsetrail/release-state \
+  --smoke-config /srv/parsetrail/secrets/smoke.json \
+  --timeout 180
+```
+
+The tool uses `docker compose up --no-build --wait` and then tests through the
+public proxy:
+
+- backend health, dashboard, and website;
+- login with the dedicated smoke account;
+- signed plugin manifest/signature plus a one-byte authenticated range download;
+- client listing, signed manifest/signature, and a one-byte range download;
+- authenticated statement submission with a deliberately invalid envelope,
+  which must be rejected before any statement file is created.
+
+On success, the final record contains timestamp, operator/host, Git commit,
+schema revisions, exact image digests, signed artifact versions/hashes, backup
+evidence, migration-log hash, smoke timings, and the exact rollback target.
+
+If health or smoke fails, the previous image digests are automatically reactivated
+and smoked. If that rollback also fails, the command exits with a critical error:
+keep traffic in maintenance and use the recorded state rather than improvising.
+
+## Explicit application rollback
+
+To rehearse or intentionally reactivate the rollback target from a successful
+deployment record:
+
+```bash
+python3 scripts/deployment/release.py rollback DEPLOYMENT_ID \
+  --deploy-env /srv/parsetrail/.env \
+  --state-dir /srv/parsetrail/release-state \
+  --smoke-config /srv/parsetrail/secrets/smoke.json
+```
+
+This is an application-image rollback only. If the released migration was not
+backward compatible or production accepted data that the old schema cannot
+represent, keep maintenance enabled and restore/reconcile the database according
+to the migration plan.
+
+## CI boundary
+
+Hosted CI only lints, tests, builds the dashboard, and starts a disposable smoke
+stack. It has `contents: read` permission and no production or signing secrets.
+Do not reintroduce automatic production deployment until the required successful
+staging deployment, application rollback, and migration/restore rollback have all
+been observed and recorded.

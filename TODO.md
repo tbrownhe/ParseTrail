@@ -243,25 +243,25 @@ temporary exception, and the Postgres restore drill preserves expected row count
 
 ### P0.7 Make production deployment recoverable and observable
 
-- [ ] Choose Docker Compose as the one authoritative deployment path. Remove or
+- [x] Choose Docker Compose as the one authoritative deployment path. Remove or
   archive the stale Docker Swarm scripts and disabled template deployment
   workflows once their behavior has been accounted for.
-- [ ] Build backend/frontend/website images from a clean commit, tag them with the
+- [x] Build backend/frontend/website images from a clean commit, tag them with the
   Git commit rather than `latest`, pin external production images, and deploy the
   recorded immutable tags without rebuilding source on the production host.
-- [ ] Add a pre-deploy gate that records the current image tags and schema revision,
+- [x] Add a pre-deploy gate that records the current image tags and schema revision,
   verifies a recent restorable database/file backup, renders and validates the
   production Compose configuration, and aborts before migration on any failure.
-- [ ] Separate database migration from service replacement. Capture migration
+- [x] Separate database migration from service replacement. Capture migration
   output, require backward-compatible expand/contract migrations where practical,
   and document when an application rollback also requires a database restore.
-- [ ] Deploy with health waiting and bounded timeouts, then smoke-test health,
+- [x] Deploy with health waiting and bounded timeouts, then smoke-test health,
   login, plugin manifest/download, client listing/download, statement submission,
   dashboard, and website routes through the public proxy.
-- [ ] Automatically reactivate the previous immutable image tags when service
+- [x] Automatically reactivate the previous immutable image tags when service
   health or post-deploy smoke checks fail; never claim success merely because
   `docker compose up -d` returned zero.
-- [ ] Write an append-only release record containing timestamp, operator, Git
+- [x] Write an append-only release record containing timestamp, operator, Git
   commit, schema revision, image digests, artifact versions/hashes, smoke results,
   and the exact rollback target.
 - [ ] `[USER]` Rehearse one successful staging deployment, one application rollback,

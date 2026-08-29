@@ -1,0 +1,21 @@
+name: parsetrail-build
+
+services:
+  backend:
+    image: ${BACKEND_IMAGE_REF?Set BACKEND_IMAGE_REF}
+    build:
+      context: ./backend
+
+  frontend:
+    image: ${FRONTEND_IMAGE_REF?Set FRONTEND_IMAGE_REF}
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: ${VITE_API_URL?Set VITE_API_URL}
+        NODE_ENV: production
+
+  website:
+    image: ${WEBSITE_IMAGE_REF?Set WEBSITE_IMAGE_REF}
+    build:
+      context: .
+      dockerfile: website/Dockerfile
