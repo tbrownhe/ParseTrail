@@ -26,6 +26,10 @@ Unreleased
   export and spreadsheet-report generation behind a headless artifact service
 - Atomically replace account-config exports and keep external file/plot launching at
   the GUI boundary
+- Move statement-submission validation, memory-only encryption, cancellation, upload,
+  response cleanup, and server confirmation behind a headless service
+- Exclude local statement paths from submission metadata and require an existing,
+  readable file before starting a worker
 
 1.3.1
 =====

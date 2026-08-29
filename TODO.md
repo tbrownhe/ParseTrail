@@ -491,7 +491,7 @@ with networking disabled and never pause for an implicit package-data download.
   CRUD/number assignment are covered, as are budget range, grouping, sign, proration,
   and inactive-category semantics. Verification coverage locks down filtering,
   archived-category state, atomic edits, missing references, and model-category retry.
-- [~] Define small application services for parse/import, transaction querying,
+- [x] Define small application services for parse/import, transaction querying,
   categories, accounts, artifact updates, and statement submission. The headless
   `StatementImportService` now owns import persistence, deduplication, and archive
   state while `StatementImportController` owns Qt decisions and progress;
@@ -501,9 +501,10 @@ with networking disabled and never pause for an implicit package-data download.
   range queries and report calculations; `TransactionReviewService` now owns review
   queries, atomic edits, and model-category compatibility retry; `TransactionService`
   now owns common account/balance/range queries and atomic manual entry. Artifact
-  updates now have an `ArtifactService`, while statement submission still needs a
-  boundary; `DashboardQueryService` owns balances, checklists, chart inputs,
-  discrepancy inputs, and verified training data for the main window.
+  updates have an `ArtifactService`; `DashboardQueryService` owns balances,
+  checklists, chart inputs, discrepancy inputs, and verified training data for the
+  main window; `StatementSubmissionService` owns validation, memory-only encryption,
+  cancellation checkpoints, upload, response cleanup, and server confirmation.
 - [x] Introduce repositories or explicit query services so GUI code does not manage
   SQLAlchemy sessions directly. Category, account, budget, verification, transaction,
   dashboard, and artifact workflows now delegate every query and mutation to
