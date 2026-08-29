@@ -7,11 +7,14 @@ A quick-start for working on ParseTrail locally with Docker. Designed for a skil
 - A populated `.env` in the repo root (start from `.env.local.example`)
 
 ## Run the stack
-Local dev uses both `docker-compose.yml` and `docker-compose.override.yml` (auto-applied). To start:
+Local development explicitly combines the production definition with
+`docker-compose.dev.yml`. The development file is intentionally not auto-applied,
+so a production command cannot accidentally publish local ports or disable
+Traefik labels. To start:
 
 ```bash
-docker compose run --rm prestart bash scripts/migrate.sh
-docker compose up --build
+docker compose -f docker-compose.yml -f docker-compose.dev.yml run --rm prestart bash scripts/migrate.sh
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
 
 Migration is a separate command by design. Normal service startup never changes
@@ -25,21 +28,21 @@ Key ports (override file):
 - Postgres exposed for tools: localhost:5432
 
 Useful commands:
-- Follow logs: `docker compose logs -f`
-- Service logs: `docker compose logs -f backend`
-- Rebuild after code/env changes: `docker compose up --build`
-- Stop: `docker compose down`
+- Follow logs: `docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f`
+- Service logs: `docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f backend`
+- Rebuild after code/env changes: `docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build`
+- Stop: `docker compose -f docker-compose.yml -f docker-compose.dev.yml down`
 
 ## Working on services
 - **Backend**: With containers running, code changes auto-reload via volume mounts. To run locally instead of in Docker:
   ```bash
-  docker compose stop backend prestart
+  docker compose -f docker-compose.yml -f docker-compose.dev.yml stop backend prestart
   cd backend
   fastapi dev app/main.py
   ```
 - **Frontend**: To use Vite dev server instead of the container:
   ```bash
-  docker compose stop frontend
+  docker compose -f docker-compose.yml -f docker-compose.dev.yml stop frontend
   cd frontend
   npm install   # first time
   npm run dev -- --host
@@ -52,7 +55,9 @@ Useful commands:
 
 ## Env hints
 - `DOMAIN=localhost` and `BACKEND_CORS_ORIGINS` in `.env` should include your dev origins (`http://localhost:8000`, `http://localhost:8080`, etc.).
-- If you change `.env`, restart the stack (`docker compose up --build`) to propagate values.
+- If you change `.env`, restart the stack
+  (`docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build`)
+  to propagate values.
 
 ## Testing without a proxy
 Local dev hits containers directly. Reverse proxies are only required for staging/prod; you can ignore proxy setup while developing locally.

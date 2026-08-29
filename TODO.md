@@ -243,9 +243,12 @@ recoverable, committed data agrees with the import state, and a retry is safe.
   PostgreSQL 12 image and existing PostgreSQL 12 volume. Confirm the new Alembic
   head, database health, expected table counts, login, artifact downloads, and
   statement submission before treating the application release as healthy.
-- [ ] Restore a fresh production PostgreSQL 12 dump into a uniquely named,
+- [x] Restore a fresh production PostgreSQL 12 dump into a uniquely named,
   isolated PostgreSQL 17 staging volume; preserve the source volume and compare
   every public-table count before allowing application traffic to the restore.
+  The production rehearsal created a checksum-verified dump, retained the
+  PostgreSQL 12 source unchanged, and matched every table in the isolated
+  `parsetrail_app-db-data-pg17-staging-20260829T1927Z` volume.
 - [ ] `[USER]` Verify account/login, plugin download, statement submission, admin
   retrieval, email, and backup/restore against the upgraded staging stack before
   the production PostgreSQL 17 cutover.
@@ -277,6 +280,9 @@ temporary exception, and the Postgres restore drill preserves expected row count
 - [x] Write an append-only release record containing timestamp, operator, Git
   commit, schema revision, image digests, artifact versions/hashes, smoke results,
   and the exact rollback target.
+- [x] Make development Compose overrides explicitly opt-in. Do not keep a tracked
+  `docker-compose.override.yml` that production can auto-load and use to expose
+  local ports, remove Traefik labels, or redirect the default network.
 - [ ] Treat staging as a configuration-only deployment target using the same
   Compose definition, images, migrations, and signed artifacts as production;
   do not introduce staging-only application behavior.

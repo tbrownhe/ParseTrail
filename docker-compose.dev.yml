@@ -1,10 +1,9 @@
-# FOR LOCAL DEVELOPMENT ONLY
-
-# Running `docker-compose up --build -d` reads docker-compose.yml and
-# docker-compose.override.yml, with override values taking precedence.
-
-# In production, skip override by running:
-# `docker-compose -f docker-compose.yml up --build -d`
+# EXPLICIT LOCAL DEVELOPMENT OVERRIDES
+#
+# This file is deliberately not named docker-compose.override.yml because Docker
+# Compose auto-loads that filename. Opt in to local ports and Adminer with:
+#
+# docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 
 services:
 
