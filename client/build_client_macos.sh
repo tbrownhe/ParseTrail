@@ -70,7 +70,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo "Validating clean client-v${VERSION} release source..."
-uv run --frozen --python "$PYTHON_VERSION" python scripts/release_source.py client \
+uv run --frozen --python "$PYTHON_VERSION" python -m scripts.release_source client \
     --version "$VERSION" \
     --platform macos \
     --metadata-output "$BUILD_METADATA" \
@@ -92,7 +92,7 @@ echo "Running client regression tests..."
 uv run --extra dev --frozen --python "$PYTHON_VERSION" pytest -q \
     || error_exit "Client tests failed."
 echo "Checking bundled plugin release trust keys..."
-uv run --frozen --python "$PYTHON_VERSION" python scripts/plugin_release.py check-trust-store \
+uv run --frozen --python "$PYTHON_VERSION" python -m scripts.plugin_release check-trust-store \
     || error_exit "Plugin trust-store check failed."
 
 echo "Building the executable with PyInstaller..."
@@ -137,18 +137,18 @@ create-dmg \
     "$APP_PATH"
 
 echo "Signing and independently verifying the macOS release..."
-uv run --frozen --python "$PYTHON_VERSION" python scripts/client_release.py sign \
+uv run --frozen --python "$PYTHON_VERSION" python -m scripts.client_release sign \
     --private-key "$SIGNING_KEY" \
     --installer "$DMG_PATH" \
     --platform macos \
     --version "$VERSION" \
     || error_exit "Client release signing failed."
-uv run --frozen --python "$PYTHON_VERSION" python scripts/client_release.py verify \
+uv run --frozen --python "$PYTHON_VERSION" python -m scripts.client_release verify \
     --release-dir "$DIST_DIR" \
     || error_exit "Client release verification failed."
 
 echo "Recording checksums and release-tool versions..."
-uv run --frozen --python "$PYTHON_VERSION" python scripts/release_inventory.py \
+uv run --frozen --python "$PYTHON_VERSION" python -m scripts.release_inventory \
     --release-dir "$DIST_DIR" \
     --source-commit "$SOURCE_COMMIT" \
     --source-tag "$SOURCE_TAG" \
@@ -164,7 +164,7 @@ if ! $PUBLISH; then
 fi
 
 REMOTE_PLATFORM_DIR="${REMOTE_CLIENTS_DIR%/}/macos"
-uv run --frozen --python "$PYTHON_VERSION" python scripts/immutable_publish.py \
+uv run --frozen --python "$PYTHON_VERSION" python -m scripts.immutable_publish \
     --release-dir "$DIST_DIR" \
     --manifest client-manifest.json \
     --signature client-manifest.sig \

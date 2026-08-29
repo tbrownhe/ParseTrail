@@ -33,7 +33,7 @@ if (-not $pythonVersion) {
 Push-Location $PSScriptRoot
 try {
     Write-Host "Validating clean, tagged release source..."
-    $sourceJson = uv run --frozen --python $pythonVersion python scripts/release_source.py plugins `
+    $sourceJson = uv run --frozen --python $pythonVersion python -m scripts.release_source plugins `
         --tag $SourceTag
     if ($LASTEXITCODE -ne 0) {
         throw "Release source validation failed with exit code $LASTEXITCODE"
@@ -60,7 +60,7 @@ try {
     }
 
     Write-Host "Signing the complete plugin catalog..."
-    uv run --frozen --python $pythonVersion python scripts/plugin_release.py sign `
+    uv run --frozen --python $pythonVersion python -m scripts.plugin_release sign `
         --private-key $signingKeyPath `
         --plugin-dir $pluginsDirPath `
         --source-commit $releaseSource.source_commit
@@ -69,14 +69,14 @@ try {
     }
 
     Write-Host "Verifying the release using only the bundled public key..."
-    uv run --frozen --python $pythonVersion python scripts/plugin_release.py verify `
+    uv run --frozen --python $pythonVersion python -m scripts.plugin_release verify `
         --plugin-dir $pluginsDirPath
     if ($LASTEXITCODE -ne 0) {
         throw "Plugin release verification failed with exit code $LASTEXITCODE"
     }
 
     Write-Host "Recording checksums and release-tool versions..."
-    uv run --frozen --python $pythonVersion python scripts/release_inventory.py `
+    uv run --frozen --python $pythonVersion python -m scripts.release_inventory `
         --release-dir $pluginsDirPath `
         --source-commit $releaseSource.source_commit `
         --source-tag $releaseSource.source_tag `
@@ -95,7 +95,7 @@ try {
         throw "RemoteUser, RemoteHost, and RemotePluginsDir are required with -Publish"
     }
 
-    uv run --frozen --python $pythonVersion python scripts/immutable_publish.py `
+    uv run --frozen --python $pythonVersion python -m scripts.immutable_publish `
         --release-dir $pluginsDirPath `
         --manifest plugin-manifest.json `
         --signature plugin-manifest.sig `

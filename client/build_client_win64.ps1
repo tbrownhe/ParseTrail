@@ -53,7 +53,7 @@ if ($versionContents -notmatch '(?m)^__version__\s*=\s*"([^"]+)"') {
 }
 $version = $Matches[1]
 $buildMetadataPath = Join-Path ([System.IO.Path]::GetTempPath()) "parsetrail-build-$([guid]::NewGuid().ToString('N')).json"
-$sourceJson = uv run --frozen --python $pythonVersion python scripts/release_source.py client `
+$sourceJson = uv run --frozen --python $pythonVersion python -m scripts.release_source client `
     --version $version `
     --platform win64 `
     --metadata-output $buildMetadataPath
@@ -120,7 +120,7 @@ try {
     }
 
     Write-Host "Checking bundled plugin release trust keys..."
-    uv run --frozen --python $pythonVersion python scripts/plugin_release.py check-trust-store
+    uv run --frozen --python $pythonVersion python -m scripts.plugin_release check-trust-store
     if ($LASTEXITCODE -ne 0) {
         throw "Plugin trust-store check failed with exit code $LASTEXITCODE"
     }
@@ -214,7 +214,7 @@ if ($DeployOnly) {
 
 if (-not $DeployOnly) {
     Write-Host "Signing the Windows client release..."
-    uv run --frozen --python $pythonVersion python scripts/client_release.py sign `
+    uv run --frozen --python $pythonVersion python -m scripts.client_release sign `
         --private-key $privateKey `
         --installer $installerPath `
         --platform win64 `
@@ -225,7 +225,7 @@ if (-not $DeployOnly) {
 }
 
 Write-Host "Verifying the signed Windows client release..."
-uv run --frozen --python $pythonVersion python scripts/client_release.py verify `
+uv run --frozen --python $pythonVersion python -m scripts.client_release verify `
     --release-dir $clientDir
 if ($LASTEXITCODE -ne 0) {
     throw "Client release verification failed with exit code $LASTEXITCODE"
@@ -233,7 +233,7 @@ if ($LASTEXITCODE -ne 0) {
 
 if (-not $DeployOnly) {
     Write-Host "Recording checksums and release-tool versions..."
-    uv run --frozen --python $pythonVersion python scripts/release_inventory.py `
+    uv run --frozen --python $pythonVersion python -m scripts.release_inventory `
         --release-dir $clientDir `
         --source-commit $releaseSource.source_commit `
         --source-tag $releaseSource.source_tag `
@@ -284,7 +284,7 @@ try {
     }
 
     $remotePlatformDir = "$($remoteDir.TrimEnd('/'))/win64"
-    uv run --frozen --python $pythonVersion python scripts/immutable_publish.py `
+    uv run --frozen --python $pythonVersion python -m scripts.immutable_publish `
         --release-dir $clientDir `
         --manifest client-manifest.json `
         --signature client-manifest.sig `

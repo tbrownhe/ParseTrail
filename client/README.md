@@ -141,7 +141,7 @@ recommended.
 From `client/`, run:
 
 ```powershell
-uv run --frozen python scripts/plugin_release.py generate-key `
+uv run --frozen python -m scripts.plugin_release generate-key `
     --private-key "X:\ParseTrail\plugin-signing-key.pem"
 ```
 
@@ -181,7 +181,7 @@ Plugin tags are explicit operator-chosen identifiers, such as
 From `client/`, the same command works on Windows and macOS:
 
 ```powershell
-uv run --frozen python scripts/release.py `
+uv run --frozen python -m scripts.release `
     --config release-config.json plugins `
     --tag plugins-2026.08.29.1
 ```
@@ -229,7 +229,7 @@ versions and file checksums in `release-inventory.json`.
 Windows:
 
 ```powershell
-uv run --frozen python scripts/release.py `
+uv run --frozen python -m scripts.release `
     --config release-config.json client --platform win64
 ```
 
@@ -248,7 +248,7 @@ one. The same publisher is used for both installer platforms and plugins.
 macOS:
 
 ```bash
-uv run --frozen python scripts/release.py \
+uv run --frozen python -m scripts.release \
     --config release-config.json client --platform macos
 ```
 
