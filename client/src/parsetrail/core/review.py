@@ -164,6 +164,8 @@ class TransactionReviewService:
         model_path: Path,
         *,
         missing_category_decision: MissingCategoryDecision,
+        unverified: bool = True,
+        uncategorized: bool = False,
     ) -> AutoCategorizationResult:
         # Imported lazily to keep ordinary review queries lightweight.
         from parsetrail.core import learn
@@ -176,8 +178,8 @@ class TransactionReviewService:
                     categorize_transactions(
                         session=session,
                         model_path=model_path,
-                        unverified=True,
-                        uncategorized=False,
+                        unverified=unverified,
+                        uncategorized=uncategorized,
                     )
                     return AutoCategorizationResult(completed=True)
                 except learn.CategoryCompatibilityError as exc:
@@ -188,8 +190,8 @@ class TransactionReviewService:
                     categorize_transactions(
                         session=session,
                         model_path=model_path,
-                        unverified=True,
-                        uncategorized=False,
+                        unverified=unverified,
+                        uncategorized=uncategorized,
                     )
                     return AutoCategorizationResult(completed=True, added_categories=missing)
         except TransactionReviewError:

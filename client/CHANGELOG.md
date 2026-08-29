@@ -18,6 +18,10 @@ Unreleased
   a characterized headless service
 - Report manual-entry duplicates accurately and make empty recurring-analysis results
   and category columns safe in the transaction dialog
+- Move dashboard balances, checklists, chart inputs, discrepancy inputs, and verified
+  training queries behind a headless service with deterministic account ordering
+- Reuse the characterized model-category compatibility workflow after statement
+  imports instead of maintaining a second GUI-owned database implementation
 
 1.3.1
 =====

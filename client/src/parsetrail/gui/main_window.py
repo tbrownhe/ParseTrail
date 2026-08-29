@@ -36,18 +36,17 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from sqlalchemy.orm import Session
 
-from parsetrail.core import config, learn, plot, query, reports
+from parsetrail.core import config, learn, plot, reports
 from parsetrail.core.build_metadata import build_provenance_label
-from parsetrail.core.categorize import add_missing_categories
-from parsetrail.core.categorize import transactions as categorize_transactions
 from parsetrail.core.client import (
     ClientUpdateThread,
     install_client,
 )
+from parsetrail.core.dashboard import DashboardQueryService, DashboardServiceError
 from parsetrail.core.initialize import initialize_db
 from parsetrail.core.plugins import PluginManager, PluginUpdateThread
+from parsetrail.core.review import TransactionReviewError, TransactionReviewService
 from parsetrail.core.settings import save_settings, settings
 from parsetrail.core.utils import open_file_in_os
 from parsetrail.gui.accounts import (
@@ -641,6 +640,8 @@ class ParseTrail(QMainWindow):
 
         # Attach Session to budget tab after DB initialization
         self.budget_tab.set_session_factory(self.Session)
+        self.dashboard_service = DashboardQueryService(self.Session)
+        self.review_service = TransactionReviewService(self.Session)
 
         # Initialize the plugin manager
         self.plugin_manager = PluginManager()
@@ -663,8 +664,7 @@ class ParseTrail(QMainWindow):
             )
 
         # Update all tables, checklists, and graphs
-        with self.Session() as session:
-            self.update_main_gui(session)
+        self.update_main_gui()
 
         # A documented, optional background check runs only after the event loop
         # starts, so networking can never delay construction or first paint.
@@ -759,8 +759,10 @@ class ParseTrail(QMainWindow):
         if dialog.exec() == QDialog.Accepted:
             try:
                 self.Session = initialize_db()
-                with self.Session() as session:
-                    self.update_main_gui(session)
+                self.budget_tab.set_session_factory(self.Session)
+                self.dashboard_service = DashboardQueryService(self.Session)
+                self.review_service = TransactionReviewService(self.Session)
+                self.update_main_gui()
             except RuntimeError as e:
                 QMessageBox.warning(self, "Database Required", str(e))
 
@@ -795,8 +797,7 @@ class ParseTrail(QMainWindow):
         dialog.exec()
 
         # Update all GUI elements
-        with self.Session() as session:
-            self.update_main_gui(session)
+        self.update_main_gui()
 
     def appreciation_calc(self):
         dialog = AppreciationDialog()
@@ -806,9 +807,7 @@ class ParseTrail(QMainWindow):
     def insert_transaction(self):
         dialog = InsertTransactionDialog(self.Session)
         if dialog.exec() == QDialog.Accepted:
-            # Update all GUI elements
-            with self.Session() as session:
-                self.update_main_gui(session)
+            self.update_main_gui()
 
     def recurring_transactions(self):
         dialog = RecurringTransactionsDialog(self.Session)
@@ -822,13 +821,11 @@ class ParseTrail(QMainWindow):
             processor.import_all()
         finally:
             # Categorize new transactions and update all GUI elements
-            with self.Session() as session:
-                self._categorize_with_missing_category_prompt(
-                    session,
-                    model_path=settings.model_path,
-                    uncategorized=True,
-                )
-                self.update_main_gui(session)
+            self._categorize_with_missing_category_prompt(
+                model_path=settings.model_path,
+                uncategorized=True,
+            )
+            self.update_main_gui()
 
     def import_one_statement(self):
         # Show file selection dialog
@@ -861,44 +858,45 @@ class ParseTrail(QMainWindow):
         processor.import_one(fpath)
 
         # Categorize new transactions and update all GUI elements
-        with self.Session() as session:
-            self._categorize_with_missing_category_prompt(
-                session,
-                model_path=settings.model_path,
-                uncategorized=True,
-            )
-            self.update_main_gui(session)
+        self._categorize_with_missing_category_prompt(
+            model_path=settings.model_path,
+            uncategorized=True,
+        )
+        self.update_main_gui()
 
     def _categorize_with_missing_category_prompt(
         self,
-        session: Session,
         model_path: Path,
         unverified: bool = True,
         uncategorized: bool = False,
     ) -> None:
         try:
-            categorize_transactions(
-                session=session,
-                model_path=model_path,
+            result = self.review_service.auto_categorize(
+                model_path,
+                missing_category_decision=self._prompt_add_missing_categories,
                 unverified=unverified,
                 uncategorized=uncategorized,
             )
-        except learn.CategoryCompatibilityError as exc:
-            if not self._prompt_add_missing_categories(session, exc.missing_categories):
+            if not result.completed:
                 QMessageBox.information(
                     self,
                     "Auto-categorization Skipped",
                     "Missing model categories were not added.",
                 )
-                return
-            categorize_transactions(
-                session=session,
-                model_path=model_path,
-                unverified=unverified,
-                uncategorized=uncategorized,
-            )
+            elif result.added_categories:
+                QMessageBox.information(
+                    self,
+                    "Categories Added",
+                    (
+                        "Missing categories were added with Type set to 'Expense'.\n\n"
+                        "Please update the type as needed in the Category Manager."
+                    ),
+                )
+        except TransactionReviewError:
+            logger.exception("Auto-categorization failed after statement import")
+            QMessageBox.critical(self, "Auto-categorization Failed", "See the log for details.")
 
-    def _prompt_add_missing_categories(self, session: Session, missing: list[str]) -> bool:
+    def _prompt_add_missing_categories(self, missing: list[str]) -> bool:
         missing_text = ", ".join(missing)
         reply = QMessageBox.question(
             self,
@@ -911,18 +909,7 @@ class ParseTrail(QMainWindow):
             QMessageBox.Yes | QMessageBox.No,
             QMessageBox.Yes,
         )
-        if reply != QMessageBox.Yes:
-            return False
-        add_missing_categories(session, missing)
-        QMessageBox.information(
-            self,
-            "Categories Added",
-            (
-                "Missing categories were added with Type set to 'Expense'.\n\n"
-                "Please update the type as needed in the Category Manager."
-            ),
-        )
-        return True
+        return reply == QMessageBox.Yes
 
     def statement_matrix(self):
         dialog = CompletenessDialog(self.Session)
@@ -930,27 +917,31 @@ class ParseTrail(QMainWindow):
             pass
 
     def statement_discrepancies(self):
-        # Fetch data for the table
-        with self.Session() as session:
-            data = query.latest_balances(session)
-            max_date = query.statement_max_date(session)
+        try:
+            discrepancy_data = self.dashboard_service.statement_discrepancy_data()
+        except DashboardServiceError:
+            logger.exception("Failed to inspect statement discrepancies")
+            QMessageBox.critical(self, "Error", "Failed to inspect statement discrepancies. See log for details.")
+            return
 
         # Prompt the user whether they want to correct the issue
         count = 0
-        for account_name, balance, date in data:
-            days = (max_date - date).days
-            if days < 120 or balance == 0:
+        for latest in discrepancy_data.balances:
+            days = (discrepancy_data.latest_statement_date - latest.date).days
+            if days < 120 or latest.balance == 0:
                 continue
             count += 1
-            balance_dialog = BalanceCheckDialog(account_name, balance)
+            balance_dialog = BalanceCheckDialog(latest.account_name, latest.balance)
             if balance_dialog.exec() != QDialog.Accepted:
                 continue
 
-            insert_dialog = InsertTransactionDialog(self.Session, account_name=account_name, close_account=True)
+            insert_dialog = InsertTransactionDialog(
+                self.Session,
+                account_name=latest.account_name,
+                close_account=True,
+            )
             if insert_dialog.exec() == QDialog.Accepted:
-                # Update all GUI elements
-                with self.Session() as session:
-                    self.update_main_gui(session)
+                self.update_main_gui()
 
         # Completed dialog
         QMessageBox.information(
@@ -988,8 +979,7 @@ class ParseTrail(QMainWindow):
     def open_category_manager(self):
         dialog = CategoryManagerDialog(self.Session)
         if dialog.exec():
-            with self.Session() as session:
-                self.update_main_gui(session)
+            self.update_main_gui()
 
     def open_transaction_review(self):
         if self.transaction_review_window is None:
@@ -1012,12 +1002,15 @@ class ParseTrail(QMainWindow):
 
     def _on_transaction_review_closed(self, _obj=None):
         self.transaction_review_window = None
-        with self.Session() as session:
-            self.update_main_gui(session)
+        self.update_main_gui()
 
     def train_pipeline_test(self):
-        with self.Session() as session:
-            data, columns = query.training_set(session, verified=True)
+        try:
+            data, columns = self.dashboard_service.training_set()
+        except DashboardServiceError:
+            logger.exception("Failed to load model-training data")
+            QMessageBox.critical(self, "Error", "Failed to load model-training data. See log for details.")
+            return
         if len(data) == 0:
             QMessageBox.information(
                 self,
@@ -1045,8 +1038,12 @@ class ParseTrail(QMainWindow):
         model_path = Path(save_path).resolve()
 
         # Retrieve verified transactions
-        with self.Session() as session:
-            data, columns = query.training_set(session, verified=True)
+        try:
+            data, columns = self.dashboard_service.training_set()
+        except DashboardServiceError:
+            logger.exception("Failed to load model-training data")
+            QMessageBox.critical(self, "Error", "Failed to load model-training data. See log for details.")
+            return
         if len(data) == 0:
             QMessageBox.information(
                 self,
@@ -1068,18 +1065,16 @@ class ParseTrail(QMainWindow):
     # CENTRAL WIDGET FUNCTIONS
 
     def update_balance_history_button(self):
-        with self.Session() as session:
-            self.update_balance_history_chart(session)
+        self.update_balance_history_chart()
 
     def update_category_spending_button(self):
-        with self.Session() as session:
-            self.update_category_spending_chart(session)
+        self.update_category_spending_chart()
 
-    def update_main_gui(self, session: Session):
+    def update_main_gui(self):
         """Update all tables, checklists, and charts in the main GUI window"""
         self.setWindowTitle(f"ParseTrail v{__version__} - {settings.db_path}")
         try:
-            self.update_balances_table(session)
+            self.update_balances_table()
         except Exception as e:
             QMessageBox.critical(
                 self,
@@ -1088,8 +1083,8 @@ class ParseTrail(QMainWindow):
             )
 
         try:
-            self.update_accounts_checklist(session)
-            self.update_balance_history_chart(session)
+            self.update_accounts_checklist()
+            self.update_balance_history_chart()
         except Exception as e:
             QMessageBox.critical(
                 self,
@@ -1098,8 +1093,8 @@ class ParseTrail(QMainWindow):
             )
 
         try:
-            self.update_category_checklist(session)
-            self.update_category_spending_chart(session)
+            self.update_category_checklist()
+            self.update_category_spending_chart()
         except Exception as e:
             QMessageBox.critical(
                 self,
@@ -1107,10 +1102,13 @@ class ParseTrail(QMainWindow):
                 f"Failed to update category spending chart: {e}",
             )
 
-    def update_balances_table(self, session: Session):
+    def update_balances_table(self):
         # Fetch data for the table
-        data = query.latest_balances(session)
-        df_balances = pd.DataFrame(data, columns=["AccountName", "LatestBalance", "LatestDate"])
+        balances = self.dashboard_service.latest_balances()
+        df_balances = pd.DataFrame(
+            [(row.account_name, row.balance, row.date) for row in balances],
+            columns=["AccountName", "LatestBalance", "LatestDate"],
+        )
 
         # Update the table contents
         table_model = PandasModel(df_balances)
@@ -1126,37 +1124,32 @@ class ParseTrail(QMainWindow):
         table_width = total_width + vertical_scrollbar_width + 30
         self.table_view.setFixedWidth(table_width)
 
-    def update_accounts_checklist(self, session: Session):
+    def update_accounts_checklist(self):
         self.update_generic_checklist(
-            session=session,
             list_widget=self.account_select_list,
             initial_checked=["Net Worth", "Total Assets", "Total Debts"],
-            query_func=query.account_names,
+            names=self.dashboard_service.account_names(),
         )
 
-    def update_category_checklist(self, session: Session):
+    def update_category_checklist(self):
         self.update_generic_checklist(
-            session=session,
             list_widget=self.category_select_list,
             initial_checked=[],
-            query_func=query.distinct_categories,
+            names=self.dashboard_service.category_names(),
         )
 
     def update_generic_checklist(
         self,
-        session: Session,
         list_widget: QListWidget,
         initial_checked: list[str],
-        query_func,
+        names: list[str],
     ):
-        items = query_func(session)
-
         if list_widget.count() == 0:
             # App just started, initialize checklist
-            self.initialize_checklist(list_widget, initial_checked, items)
+            self.initialize_checklist(list_widget, initial_checked, names)
         else:
             # Update based on previous checked/unchecked state
-            self.update_checklist(list_widget, initial_checked + items)
+            self.update_checklist(list_widget, initial_checked + names)
 
     def initialize_checklist(self, list_widget: QListWidget, checked: list[str], unchecked: list[str]):
         list_widget.clear()
@@ -1200,7 +1193,7 @@ class ParseTrail(QMainWindow):
             line_edit.setText(str(fallback))
             return fallback
 
-    def update_balance_history_chart(self, session: Session):
+    def update_balance_history_chart(self):
         QApplication.processEvents()
         # Get filter prefs
         smoothing_days = self.validate_int(self.balance_smoothing_input, 0)
@@ -1208,7 +1201,7 @@ class ParseTrail(QMainWindow):
         selected_accounts, _ = self.get_checked_items(self.account_select_list)
 
         # Plot all balances on the same chart
-        df, debt_cols = plot.get_balance_data(session)
+        df, debt_cols = self.dashboard_service.balance_history()
 
         # Limit the data to the specified year range
         now = datetime.now()
@@ -1232,7 +1225,7 @@ class ParseTrail(QMainWindow):
             dashed=debt_cols,
         )
 
-    def update_category_spending_chart(self, session: Session):
+    def update_category_spending_chart(self):
         QApplication.processEvents()
         # Get filter prefs
         smoothing_months = self.validate_int(self.category_smoothing_input, 0)
@@ -1240,7 +1233,7 @@ class ParseTrail(QMainWindow):
         selected_cats, _ = self.get_checked_items(self.category_select_list)
 
         # Get the category spending data by month
-        df = plot.get_category_data(session)
+        df = self.dashboard_service.category_spending()
 
         # Limit the data to the specified year range
         now = datetime.now()
