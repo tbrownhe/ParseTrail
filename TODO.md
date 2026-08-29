@@ -414,10 +414,11 @@ does not provide a reliable user-existence oracle.
   beside their decrypting key in the user profile.
 - [x] Add fake-server tests for timeouts, slow streams, disconnects, cancellation,
   401 refresh/login paths, and error-body redaction.
-- [ ] When an artifact update rejects stored credentials, prompt for replacement
+- [x] When an artifact update rejects stored credentials, prompt for replacement
   credentials immediately and resume the original update after successful login.
-  Do not return silently to the main UI and require the user to request the same
-  update a second time.
+  Plugin synchronization now reports authentication separately from artifact
+  failures, preserves the selected signed release, and permits exactly one
+  UI-thread credential retry before failing safely.
 
 Acceptance: the interface remains responsive during network failure, cancellation
 never installs partial data, and no command shell interprets downloaded filenames.

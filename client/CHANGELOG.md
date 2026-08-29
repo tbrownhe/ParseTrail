@@ -1,3 +1,8 @@
+Unreleased
+==========
+- Prompt immediately when saved credentials are rejected during a plugin update
+  and resume the same signed catalog operation after successful authentication
+
 1.3.1
 =====
 - Make macOS release regression tests deterministic with explicit Qt worker
