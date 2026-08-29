@@ -6,9 +6,9 @@ from loguru import logger
 from pdfplumber.page import Page
 
 from parsetrail.core.interfaces import IParser
+from parsetrail.core.money import parse_money
 from parsetrail.core.utils import (
     PDFReader,
-    convert_amount_to_float,
     find_param_in_line,
     find_regex_in_line,
     get_absolute_date,
@@ -19,8 +19,8 @@ from parsetrail.core.validation import Account, Statement, Transaction
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_synchrony-amzncc_202501"
-    VERSION = "0.2.0"
-    MIN_CLIENT_VERSION = "1.2.2"
+    VERSION = "0.3.0"
+    MIN_CLIENT_VERSION = "1.3.0"
     SUFFIX = ".pdf"
     COMPANY = "Synchrony"
     STATEMENT_TYPE = "Amazon Store Card by Synchrony Bank"
@@ -182,7 +182,7 @@ class Parser(IParser):
                 _, balance_line = find_param_in_line(self.lower, pattern)
                 balance_line_right = balance_line.split(pattern)[-1]
                 amount_str = balance_line_right.split()[1]
-                balance = -convert_amount_to_float(amount_str)
+                balance = -parse_money(amount_str)
                 balances.append(balance)
             except ValueError as e:
                 raise ValueError(f"Failed to extract balance for pattern '{pattern}': {e}")
@@ -374,7 +374,7 @@ class Parser(IParser):
             i_row += multilines
             if amount_str is None:
                 continue
-            amount = -convert_amount_to_float(amount_str)
+            amount = -parse_money(amount_str)
 
             # Append transaction
             transactions.append(

@@ -259,7 +259,7 @@ class PandasModel(QAbstractTableModel):
                     return QColor(140, 225, 140)  # Light green
                 elif numeric_value < 0:
                     return QColor(225, 160, 160)  # Light red
-            except ValueError:
+            except (TypeError, ValueError):
                 return None
         return None
 
@@ -921,8 +921,8 @@ class ParseTrail(QMainWindow):
         # Prompt the user whether they want to correct the issue
         count = 0
         for account_name, balance, date in data:
-            days = (max_date - datetime.strptime(date, r"%Y-%m-%d")).days
-            if days < 120 or balance == 0.0:
+            days = (max_date - date).days
+            if days < 120 or balance == 0:
                 continue
             count += 1
             balance_dialog = BalanceCheckDialog(account_name, balance)

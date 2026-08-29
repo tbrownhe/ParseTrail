@@ -424,37 +424,7 @@ def remove_stop_words(description: str, stop_words=None) -> str:
     return " ".join(clean_words)
 
 
-def convert_amount_to_float(amount_str: str) -> float:
-    """
-    Parses USD amount strings of various formats into positive or negative float.
-
-    Examples:
-        $12.34   -> +12.34
-        -$12.34  -> -12.34
-        ($12.34) -> -12.34
-        $12.34CR -> -12.34
-        $12.34-  -> -12.34
-    """
-    # Remove common characters and normalize string
-    normalized_str = amount_str.replace(",", "").replace("$", "").replace(" ", "").upper()
-
-    # Determine negativity from indicators
-    negative = (
-        normalized_str.startswith("-")
-        or normalized_str.endswith("-")
-        or normalized_str.endswith("CR")
-        or (normalized_str.startswith("(") and normalized_str.endswith(")"))
-    )
-
-    # Remove negative indicators
-    cleaned_str = normalized_str.replace("-", "").replace("CR", "").replace("(", "").replace(")", "")
-
-    # Convert to float and apply negativity if applicable
-    amount = float(cleaned_str)
-    return -amount if negative else amount
-
-
-def hash_file(fpath: Path) -> str:
+def hash_file(fpath: Path, algorithm: str = "sha256") -> str:
     """
     Hashes the byte contents of a file to prevent duplicate imports.
 
@@ -462,7 +432,12 @@ def hash_file(fpath: Path) -> str:
         fpath (Path): The path to the file.
 
     Returns:
-        str: The MD5 hash of the file contents.
+        str: Hex digest of the file contents.
     """
+    if algorithm not in {"md5", "sha256"}:
+        raise ValueError(f"Unsupported file hash algorithm: {algorithm}")
+    digest = hashlib.new(algorithm)
     with fpath.open("rb") as f:
-        return hashlib.md5(f.read()).hexdigest()
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()

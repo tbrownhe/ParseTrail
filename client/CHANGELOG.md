@@ -1,3 +1,13 @@
+1.3.0
+=====
+- Store money as integer minor units with explicit currency codes
+- Use typed calendar dates and UTC import timestamps
+- Replace ambiguous MD5 transaction keys with framed, versioned SHA-256 fingerprints
+- Represent overlapping statement membership with a statement-transaction join table
+- Enforce SQLite foreign keys and explicit delete behavior on every connection
+- Validate and migrate shadow database copies before atomic replacement
+- Require exact-Decimal parser output and client 1.3 compatibility for updated plugins
+
 1.2.2
 =====
 - Move the supported desktop runtime to Python 3.13.15

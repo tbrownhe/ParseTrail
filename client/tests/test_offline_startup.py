@@ -97,6 +97,7 @@ def test_first_launch_initializes_offline_with_a_fresh_database(tmp_path: Path) 
     code = """
 from pathlib import Path
 import socket
+import sys
 import urllib.request
 
 network_calls = []
@@ -127,7 +128,11 @@ QMessageBox.warning = lambda *args, **kwargs: dialogs.append("warning")
 QMessageBox.critical = lambda *args, **kwargs: dialogs.append("critical")
 
 app = QApplication([])
-window = ParseTrail()
+try:
+    window = ParseTrail()
+except Exception:
+    sys.excepthook = sys.__excepthook__
+    raise
 app.processEvents()
 
 assert settings.db_path == db_path.resolve()

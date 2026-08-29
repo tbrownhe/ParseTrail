@@ -1,4 +1,5 @@
 import json
+from decimal import Decimal
 from pathlib import Path
 
 from loguru import logger
@@ -16,7 +17,7 @@ class Account(BaseModel):
     AccountTypeID: int
     Company: str
     Description: str
-    AppreciationRate: float
+    AppreciationRate: Decimal
 
 
 class AccountNumber(BaseModel):
@@ -36,7 +37,7 @@ def export_init_accounts(session: Session):
 
     data = {"Accounts": accounts, "AccountNumbers": account_numbers}
     with settings.accounts_json.open("w") as f:
-        json.dump(data, f, indent=2)
+        json.dump(data, f, indent=2, default=str)
 
     msg_box = QMessageBox()
     msg_box.setIcon(QMessageBox.Information)
@@ -91,8 +92,8 @@ def import_init_accounts(session: Session, parent=None):
         raise
 
     # Convert Pydantic models to dicts for database insertion
-    accounts = [item.dict() for item in validated_data.Accounts]
-    account_numbers = [item.dict() for item in validated_data.AccountNumbers]
+    accounts = [item.model_dump() for item in validated_data.Accounts]
+    account_numbers = [item.model_dump() for item in validated_data.AccountNumbers]
 
     # Load into new database
     query.insert_rows_batched(

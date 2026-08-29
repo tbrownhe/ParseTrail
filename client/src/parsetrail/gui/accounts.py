@@ -1,3 +1,4 @@
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from PySide6.QtCore import QDate, Qt
@@ -119,7 +120,7 @@ class AppreciationDialog(QDialog):
 
 
 class BalanceCheckDialog(QDialog):
-    def __init__(self, account_name: str, balance: float, parent=None):
+    def __init__(self, account_name: str, balance: Decimal, parent=None):
         super().__init__(parent)
 
         self.setWindowTitle("Account Balance Alert")
@@ -326,7 +327,7 @@ class EditAccountsDialog(QDialog):
             "Company": self.company_edit.text(),
             "Description": self.description_edit.text(),
             "AccountName": self.account_name_edit.text(),
-            "AppreciationRate": appreciation_rate or 0.0,
+            "AppreciationRate": appreciation_rate or Decimal(0),
         }
 
         try:
@@ -365,7 +366,7 @@ class EditAccountsDialog(QDialog):
                     account_type_id=account_type_id,
                     company=self.company_edit.text(),
                     desc=self.description_edit.text(),
-                    appreciation=appreciation_rate or 0.0,
+                    appreciation=appreciation_rate or Decimal(0),
                 )
             QMessageBox.information(self, "Success", "Account updated successfully.")
         except Exception as e:
@@ -410,21 +411,21 @@ class EditAccountsDialog(QDialog):
             return False
         return True
 
-    def get_appreciation_rate(self) -> float:
+    def get_appreciation_rate(self) -> Decimal | None:
         """
         Get the appreciation rate value.
         """
         if self.appreciation_edit.isEnabled():
             try:
-                return float(self.appreciation_edit.text())
-            except ValueError:
+                return Decimal(self.appreciation_edit.text())
+            except (InvalidOperation, ValueError):
                 QMessageBox.warning(
                     self,
                     "Invalid Input",
                     "Please enter a valid number for appreciation rate.",
                 )
                 return None
-        return 0.0
+        return Decimal(0)
 
     def refresh_table(self):
         """

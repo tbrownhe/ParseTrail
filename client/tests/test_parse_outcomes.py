@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import date
+from decimal import Decimal
 from types import SimpleNamespace
 
 import pytest
@@ -12,21 +13,21 @@ from parsetrail.core.parser_routing import (
 from parsetrail.core.validation import Account, Statement, Transaction
 
 
-def _statement(*, end_balance: float = 10.0, unusual_date_gap: bool = False) -> Statement:
-    transaction_date = datetime(2026, 1, 1) if unusual_date_gap else datetime(2026, 3, 15)
+def _statement(*, end_balance: Decimal = Decimal("10.00"), unusual_date_gap: bool = False) -> Statement:
+    transaction_date = date(2026, 1, 1) if unusual_date_gap else date(2026, 3, 15)
     return Statement(
-        start_date=datetime(2026, 3, 1),
-        end_date=datetime(2026, 3, 31),
+        start_date=date(2026, 3, 1),
+        end_date=date(2026, 3, 31),
         accounts=[
             Account(
                 account_num="confidential-account-number",
-                start_balance=0.0,
+                start_balance=Decimal("0.00"),
                 end_balance=end_balance,
                 transactions=[
                     Transaction(
                         transaction_date=transaction_date,
-                        posting_date=datetime(2026, 3, 15),
-                        amount=10.0,
+                        posting_date=date(2026, 3, 15),
+                        amount=Decimal("10.00"),
                         desc="confidential transaction description",
                     )
                 ],
@@ -59,7 +60,7 @@ def test_validation_warning_returns_a_typed_result_and_requires_acceptance() -> 
 def test_hard_validation_failure_is_redacted() -> None:
     class InvalidParser:
         def parse(self, _input: object) -> Statement:
-            return _statement(end_balance=11.0)
+            return _statement(end_balance=Decimal("11.00"))
 
     with pytest.raises(StatementValidationError) as exc_info:
         _router(InvalidParser).extract_statement("invalid_plugin", object())

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date
+from decimal import Decimal
 
 import pandas as pd
 from loguru import logger
@@ -19,10 +21,10 @@ from parsetrail.core.settings import settings
 @dataclass
 class TransactionRecord:
     transaction_id: int
-    date: str
+    date: date
     account_name: str
     description: str
-    amount: float
+    amount: Decimal
     category_id: int | None
     category_name: str
     verified: bool
@@ -493,7 +495,7 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
                         joinedload(Transactions.accounts),
                         joinedload(Transactions.category),
                     )
-                    .order_by(Transactions.Date)
+                    .order_by(Transactions.PostingDate)
                 )
 
                 only_unverified = (
@@ -529,10 +531,10 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
                 records.append(
                     TransactionRecord(
                         transaction_id=tx.TransactionID,
-                        date=tx.Date,
+                        date=tx.PostingDate,
                         account_name=tx.accounts.AccountName,
                         description=tx.Description or "",
-                        amount=float(tx.Amount) if tx.Amount is not None else 0.0,
+                        amount=tx.Amount,
                         category_id=category_id,
                         category_name=category_name,
                         verified=bool(tx.Verified),

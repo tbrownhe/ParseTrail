@@ -43,7 +43,7 @@ class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_fidelity401k"
     VERSION = "0.1.0"
-    MIN_CLIENT_VERSION = "1.2.2"
+    MIN_CLIENT_VERSION = "1.3.0"
     SUFFIX = ".pdf"
     COMPANY = "Fidelity"
     STATEMENT_TYPE = "Retirement Savings Monthly Statement"

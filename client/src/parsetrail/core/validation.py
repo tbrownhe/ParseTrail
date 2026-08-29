@@ -1,13 +1,15 @@
-import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
 
 from parsetrail.core.diagnostics import Diagnostic, DiagnosticSeverity
+from parsetrail.core.fingerprint import TRANSACTION_FINGERPRINT_VERSION, transaction_fingerprint
+from parsetrail.core.money import DEFAULT_CURRENCY, require_minor_units, to_minor_units
 
 
 # Exceptions
@@ -15,15 +17,23 @@ class ValidationError(Exception):
     pass
 
 
+def _date_only(value: date, field: str) -> date:
+    if isinstance(value, datetime):
+        return value.date()
+    if not isinstance(value, date):
+        raise TypeError(f"{field} must be date, got {type(value).__name__}")
+    return value
+
+
 # Data structures
 @dataclass
 class Transaction:
-    transaction_date: datetime
-    posting_date: datetime
-    amount: float
+    transaction_date: date
+    posting_date: date
+    amount: Decimal
     desc: str
-    balance: float | None = None
-    md5hash: str | None = None
+    balance: Decimal | None = None
+    fingerprint: str | None = None
 
     def __post_init__(self):
         """Validate all inputs immediately after instantiation.
@@ -32,25 +42,31 @@ class Transaction:
             TypeError: Any invalid types
         """
         errors = []
-        if not isinstance(self.transaction_date, datetime):
-            errors.append(f"transaction_date must be datetime, got {type(self.transaction_date).__name__}")
-        if not isinstance(self.posting_date, datetime):
-            errors.append(f"posting_date must be datetime, got {type(self.posting_date).__name__}")
-        if not isinstance(self.amount, float):
-            errors.append(f"amount must be float, got {type(self.amount).__name__}")
+        try:
+            self.transaction_date = _date_only(self.transaction_date, "transaction_date")
+            self.posting_date = _date_only(self.posting_date, "posting_date")
+        except TypeError as exc:
+            errors.append(str(exc))
+        try:
+            self.amount = require_minor_units(self.amount)
+        except (TypeError, ValueError) as exc:
+            errors.append(f"invalid amount: {exc}")
         if not isinstance(self.desc, str):
             errors.append(f"desc must be str, got {type(self.desc).__name__}")
         if not self.desc:
             errors.append("desc cannot be empty")
-        if self.balance is not None and not isinstance(self.balance, float):
-            errors.append(f"balance must be float or None, got {type(self.balance).__name__}")
-        if self.md5hash is not None and not isinstance(self.md5hash, str):
-            errors.append(f"md5hash must be str or None, got {type(self.md5hash).__name__}")
+        if self.balance is not None:
+            try:
+                self.balance = require_minor_units(self.balance)
+            except (TypeError, ValueError) as exc:
+                errors.append(f"invalid balance: {exc}")
+        if self.fingerprint is not None and not isinstance(self.fingerprint, str):
+            errors.append(f"fingerprint must be str or None, got {type(self.fingerprint).__name__}")
         if errors:
             raise TypeError("\n".join(errors))
 
     @staticmethod
-    def sort_and_compute_balances(transactions: list["Transaction"], start_balance: float) -> list["Transaction"]:
+    def sort_and_compute_balances(transactions: list["Transaction"], start_balance: Decimal) -> list["Transaction"]:
         """
         Sorts transactions by posting date and computes running balances.
         Note the sorted() method is stable and preserves transaction order
@@ -58,7 +74,7 @@ class Transaction:
 
         Args:
             transactions (list[Transaction]): List of transactions to process.
-            start_balance (float): The starting balance for the account.
+            start_balance (Decimal): The starting balance for the account.
 
         Returns:
             list[Transaction]: Transactions sorted by posting date with computed balances.
@@ -69,60 +85,60 @@ class Transaction:
         sorted_transactions = sorted(transactions, key=lambda t: t.posting_date)
 
         # Check if all transactions already have balances
-        if all(isinstance(t.balance, float) for t in sorted_transactions):
+        if all(isinstance(t.balance, Decimal) for t in sorted_transactions):
             logger.trace("Balances are already populated; skipping recalculation.")
             return sorted_transactions
 
         current_balance = start_balance
         for transaction in sorted_transactions:
-            current_balance = round(current_balance + transaction.amount, 2)
+            current_balance = require_minor_units(current_balance + transaction.amount)
             transaction.balance = current_balance
 
         return sorted_transactions
 
     @staticmethod
-    def hash_transactions(account_id: int, transactions: list["Transaction"]) -> list["Transaction"]:
+    def hash_transactions(
+        account_id: int,
+        transactions: list["Transaction"],
+        currency_code: str = DEFAULT_CURRENCY,
+    ) -> list["Transaction"]:
         """
-        Generates and appends MD5 hashes for the transactions.
+        Generates versioned SHA-256 fingerprints for the transactions.
         """
-        if any(not isinstance(t.balance, float) for t in transactions):
+        if any(not isinstance(t.balance, Decimal) for t in transactions):
             raise ValueError(
                 "All transactions must have valid balances to hash. Run the sort_and_compute_balances() method."
             )
 
-        md5hash_set = set()
+        fingerprints: set[str] = set()
         for transaction in transactions:
-            attempt = 0
+            occurrence = 0
             while True:
-                # Build the hash string
-                hash_str = "".join(
-                    [
-                        str(account_id),
-                        transaction.posting_date.strftime(r"%Y-%m-%d"),
-                        f"{transaction.amount:.2f}",
-                        f"{transaction.balance:.2f}",
-                        transaction.desc,
-                        str(attempt),
-                    ]
+                fingerprint = transaction_fingerprint(
+                    account_id=account_id,
+                    posting_date=transaction.posting_date,
+                    amount=transaction.amount,
+                    balance=transaction.balance,
+                    description=transaction.desc,
+                    occurrence=occurrence,
+                    currency_code=currency_code,
                 )
-                md5hash = hashlib.md5(hash_str.encode()).hexdigest()
-
-                if md5hash not in md5hash_set:
-                    md5hash_set.add(md5hash)
+                if fingerprint not in fingerprints:
+                    fingerprints.add(fingerprint)
                     break
 
                 logger.warning("Transaction fingerprint collision detected; retrying with an occurrence index.")
-                attempt += 1
+                occurrence += 1
 
-            transaction.md5hash = md5hash
+            transaction.fingerprint = fingerprint
 
         return transactions
 
     @staticmethod
     def to_db_rows(
-        statement_id: int | None,
         account_id: int,
         transactions: list["Transaction"],
+        currency_code: str = DEFAULT_CURRENCY,
     ) -> list[dict[str, Any]]:
         """
         Converts the Transaction instance to a tuple compatible with database insertion.
@@ -132,19 +148,21 @@ class Transaction:
         """
         rows = []
         for row_number, t in enumerate(transactions, start=1):
-            if not isinstance(t.balance, float):
+            if not isinstance(t.balance, Decimal):
                 raise ValueError(f"Transaction row {row_number} is missing a balance and cannot be inserted.")
-            if not isinstance(t.md5hash, str):
+            if not isinstance(t.fingerprint, str):
                 raise ValueError(f"Transaction row {row_number} is missing a fingerprint and cannot be inserted.")
             rows.append(
                 {
-                    "StatementID": statement_id,
                     "AccountID": account_id,
-                    "Date": t.posting_date.strftime(r"%Y-%m-%d"),
-                    "Amount": t.amount,
-                    "Balance": t.balance,
+                    "TransactionDate": t.transaction_date,
+                    "PostingDate": t.posting_date,
+                    "AmountMinor": to_minor_units(t.amount, currency_code),
+                    "BalanceMinor": to_minor_units(t.balance, currency_code),
+                    "CurrencyCode": currency_code,
                     "Description": t.desc,
-                    "MD5": t.md5hash,
+                    "Fingerprint": t.fingerprint,
+                    "FingerprintVersion": TRANSACTION_FINGERPRINT_VERSION,
                 }
             )
         return rows
@@ -157,7 +175,7 @@ class Transaction:
         errors = [
             f"Invalid balance for transaction row {row_number}"
             for row_number, transaction in enumerate(transactions, start=1)
-            if not isinstance(transaction.balance, float)
+            if not isinstance(transaction.balance, Decimal)
         ]
         return errors
 
@@ -175,15 +193,15 @@ class Transaction:
         errors = []
         for i, t in enumerate(transactions):
             # Validate balance
-            if t.balance is not None and not isinstance(t.balance, (int, float)):
+            if t.balance is not None and not isinstance(t.balance, Decimal):
                 errors.append(
                     f"Transaction {i + 1}: 'balance' must be a number or None, got {type(t.balance).__name__}."
                 )
 
-            # Validate md5
-            if t.md5hash is not None and not isinstance(t.md5hash, str):
+            # Validate fingerprint
+            if t.fingerprint is not None and not isinstance(t.fingerprint, str):
                 errors.append(
-                    f"Transaction {i + 1}: 'md5hash' must be a string or None, got {type(t.md5hash).__name__}."
+                    f"Transaction {i + 1}: 'fingerprint' must be a string or None, got {type(t.fingerprint).__name__}."
                 )
 
         return errors
@@ -192,9 +210,10 @@ class Transaction:
 @dataclass
 class Account:
     account_num: str
-    start_balance: float
-    end_balance: float
+    start_balance: Decimal
+    end_balance: Decimal
     transactions: list[Transaction]
+    currency_code: str = DEFAULT_CURRENCY
     account_id: int | None = None
     account_name: str | None = None
     statement_id: int | None = None
@@ -208,10 +227,11 @@ class Account:
         errors = []
         if not isinstance(self.account_num, str):
             errors.append(f"account_num must be str, got {type(self.account_num).__name__}")
-        if not isinstance(self.start_balance, float):
-            errors.append(f"start_balance must be float, got {type(self.start_balance).__name__}")
-        if not isinstance(self.end_balance, float):
-            errors.append(f"end_balance must be float, got {type(self.end_balance).__name__}")
+        try:
+            self.start_balance = require_minor_units(self.start_balance, self.currency_code)
+            self.end_balance = require_minor_units(self.end_balance, self.currency_code)
+        except (TypeError, ValueError) as exc:
+            errors.append(f"invalid account balance: {exc}")
         if not isinstance(self.transactions, list):
             errors.append(f"transactions must be list, got {type(self.transactions).__name__}")
         if not all(isinstance(tx, Transaction) for tx in self.transactions):
@@ -240,7 +260,11 @@ class Account:
         self.account_name = account_name
 
     def hash_transactions(self):
-        self.transactions = Transaction.hash_transactions(self.account_id, self.transactions)
+        self.transactions = Transaction.hash_transactions(
+            self.account_id,
+            self.transactions,
+            self.currency_code,
+        )
 
     def add_statement_id(self, statement_id: int):
         if not isinstance(statement_id, int):
@@ -255,10 +279,10 @@ class Account:
 
         if not isinstance(self.account_num, str):
             errors.append("account_num must be a string")
-        if not isinstance(self.start_balance, float):
-            errors.append("start_balance must be a float")
-        if not isinstance(self.end_balance, float):
-            errors.append("end_balance must be a float")
+        if not isinstance(self.start_balance, Decimal):
+            errors.append("start_balance must be a Decimal")
+        if not isinstance(self.end_balance, Decimal):
+            errors.append("end_balance must be a Decimal")
         if errors:
             raise ValidationError("\n".join(errors))
 
@@ -282,13 +306,14 @@ class Account:
 
 @dataclass
 class Statement:
-    start_date: datetime
-    end_date: datetime
+    start_date: date
+    end_date: date
     accounts: list[Account]
     plugin_name: str | None = None
     fpath: Path | None = None
     dpath: Path | None = None
-    md5hash: str | None = None
+    content_hash: str | None = None
+    content_hash_algorithm: str = "sha256"
 
     def __post_init__(self):
         """Validate all inputs immediately after instantiation.
@@ -297,10 +322,11 @@ class Statement:
             TypeError: Any invalid types
         """
         errors = []
-        if not isinstance(self.start_date, datetime):
-            errors.append(f"start_date must be datetime, got {type(self.start_date).__name__}")
-        if not isinstance(self.end_date, datetime):
-            errors.append(f"end_date must be datetime, got {type(self.end_date).__name__}")
+        try:
+            self.start_date = _date_only(self.start_date, "start_date")
+            self.end_date = _date_only(self.end_date, "end_date")
+        except TypeError as exc:
+            errors.append(str(exc))
         if not isinstance(self.accounts, list):
             errors.append(f"accounts must be list, got {type(self.accounts).__name__}")
         if not all(isinstance(acc, Account) for acc in self.accounts):
@@ -311,8 +337,8 @@ class Statement:
             errors.append(f"fpath must be Path or None, got {type(self.fpath).__name__}")
         if self.dpath is not None and not isinstance(self.dpath, Path):
             errors.append(f"dpath must be Path or None, got {type(self.dpath).__name__}")
-        if self.md5hash is not None and not isinstance(self.md5hash, str):
-            errors.append(f"md5hash must be str or None, got {type(self.md5hash).__name__}")
+        if self.content_hash is not None and not isinstance(self.content_hash, str):
+            errors.append(f"content_hash must be str or None, got {type(self.content_hash).__name__}")
         if errors:
             raise TypeError("\n".join(errors))
 
@@ -324,10 +350,13 @@ class Statement:
         self.fpath = fpath
         self.plugin_name = plugin_name
 
-    def add_md5hash(self, md5hash: str):
-        if not isinstance(md5hash, str):
-            raise ValidationError("md5hash must be a str")
-        self.md5hash = md5hash
+    def add_content_hash(self, content_hash: str, algorithm: str = "sha256"):
+        if not isinstance(content_hash, str):
+            raise ValidationError("content_hash must be a str")
+        if algorithm not in {"md5", "sha256"}:
+            raise ValidationError("Unsupported content hash algorithm")
+        self.content_hash = content_hash
+        self.content_hash_algorithm = algorithm
 
     def set_standard_dpath(self, success_dir: Path):
         if not isinstance(self.accounts[0].account_name, str):
@@ -347,14 +376,16 @@ class Statement:
     def to_db_row(self, account: Account):
         metadata = {
             "AccountID": account.account_id,
-            "ImportDate": datetime.now().strftime(r"%Y-%m-%d"),
-            "StartDate": self.start_date.strftime(r"%Y-%m-%d"),
-            "EndDate": self.end_date.strftime(r"%Y-%m-%d"),
-            "StartBalance": account.start_balance,
-            "EndBalance": account.end_balance,
+            "ImportedAt": datetime.now(timezone.utc),
+            "StartDate": self.start_date,
+            "EndDate": self.end_date,
+            "StartBalanceMinor": to_minor_units(account.start_balance, account.currency_code),
+            "EndBalanceMinor": to_minor_units(account.end_balance, account.currency_code),
+            "CurrencyCode": account.currency_code,
             "TransactionCount": len(account.transactions),
             "Filename": self.dpath.name,
-            "MD5": self.md5hash,
+            "ContentHash": self.content_hash,
+            "ContentHashAlgorithm": self.content_hash_algorithm,
         }
         return metadata
 
@@ -370,8 +401,8 @@ class Statement:
         errors = []
         if not isinstance(self.dpath, Path):
             errors.append("dpath must be a Path")
-        if not isinstance(self.md5hash, str):
-            errors.append("md5hash must be str")
+        if not isinstance(self.content_hash, str):
+            errors.append("content_hash must be str")
         return errors
 
 
@@ -421,7 +452,7 @@ def validate_transactions(statement: Statement) -> list[Diagnostic]:
         for row_number, transaction in enumerate(account.transactions, start=1):
             row = f"account {account_number}, transaction row {row_number}"
             # Posting date must be within the satement date range
-            if not isinstance(transaction.posting_date, datetime):
+            if not isinstance(transaction.posting_date, date):
                 diagnostics.append(
                     Diagnostic(
                         code="transaction.posting_date.invalid",
@@ -445,7 +476,7 @@ def validate_transactions(statement: Statement) -> list[Diagnostic]:
             # Foreign transactions in particular can take over a month to post
             posting_days = 60
             if transaction.transaction_date:
-                if not isinstance(transaction.transaction_date, datetime):
+                if not isinstance(transaction.transaction_date, date):
                     diagnostics.append(
                         Diagnostic(
                             code="transaction.transaction_date.invalid",
@@ -453,7 +484,7 @@ def validate_transactions(statement: Statement) -> list[Diagnostic]:
                             severity=DiagnosticSeverity.ERROR,
                         )
                     )
-                elif isinstance(transaction.posting_date, datetime) and (
+                elif isinstance(transaction.posting_date, date) and (
                     abs((transaction.transaction_date - transaction.posting_date).days) > posting_days
                 ):
                     diagnostics.append(
@@ -467,7 +498,7 @@ def validate_transactions(statement: Statement) -> list[Diagnostic]:
                     )
 
             # Amount, balance, and description must exist with correct type
-            if not isinstance(transaction.amount, float):
+            if not isinstance(transaction.amount, Decimal):
                 diagnostics.append(
                     Diagnostic(
                         code="transaction.amount.invalid",
@@ -475,7 +506,7 @@ def validate_transactions(statement: Statement) -> list[Diagnostic]:
                         severity=DiagnosticSeverity.ERROR,
                     )
                 )
-            if not isinstance(transaction.balance, float):
+            if not isinstance(transaction.balance, Decimal):
                 diagnostics.append(
                     Diagnostic(
                         code="transaction.balance.invalid",
@@ -508,9 +539,9 @@ def validate_balances(statement: Statement) -> list[Diagnostic]:
     for account_number, account in enumerate(statement.accounts, start=1):
         # Ensure transaction amounts add up to statement balance difference
         balance_change = account.end_balance - account.start_balance
-        sum_amounts = sum(transaction.amount for transaction in account.transactions)
+        sum_amounts = sum((transaction.amount for transaction in account.transactions), start=Decimal(0))
         discrepancy = abs(balance_change - sum_amounts)
-        if discrepancy > 0.01:
+        if discrepancy > Decimal("0.01"):
             diagnostics.append(
                 Diagnostic(
                     code="account.balance.discrepancy",

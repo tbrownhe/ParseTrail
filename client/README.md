@@ -60,6 +60,38 @@ uv run --frozen python src/parsetrail/run_plugins_locally.py
 The parser-development launcher explicitly enables unsigned local plugins and
 logs that mode. The normal application has no unsigned mode.
 
+## Local database and exact financial values
+
+Client 1.3 stores monetary values as integer minor units with an explicit
+currency code. Parser and application code use `Decimal`; conversion to float
+occurs only at chart presentation boundaries. USD (two minor-unit digits) is the
+only admitted currency today, so an unsupported currency fails explicitly
+instead of being silently treated as dollars. Calendar-only statement and
+transaction dates have no invented time zone. Generated import timestamps are
+aware UTC values.
+
+Transactions and statements have many-to-many membership. Overlapping CSV/XLSX
+exports can therefore share one canonical transaction while both statements
+retain their full row counts. Transaction identity uses a versioned,
+length-framed SHA-256 fingerprint. New statement files use SHA-256 content
+digests; migrated MD5 content digests remain only for duplicate-file
+compatibility.
+
+Database upgrades run against a same-directory shadow copy. ParseTrail validates
+SQLite integrity, foreign keys, and the Alembic revision before atomically
+replacing the original, and creates a collision-safe `.dbb` recovery copy first.
+This precise-schema migration is intentionally not downgradable in place. To
+recover, close ParseTrail, preserve the failed database for diagnosis, copy the
+newest pre-migration `.dbb` beside it, and give the recovery copy the configured
+`.db` filename.
+
+Run a read-only, redacted preflight without printing account numbers,
+descriptions, filenames, or balances:
+
+```powershell
+uv run --frozen python scripts/audit_client_database.py C:\path\to\client.db
+```
+
 ## Offline startup and update checks
 
 Parsing, categorization, clustering, and SQLite storage use bundled resources

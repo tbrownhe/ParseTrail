@@ -4,9 +4,9 @@ from datetime import datetime, timedelta
 from loguru import logger
 
 from parsetrail.core.interfaces import IParser
+from parsetrail.core.money import parse_money
 from parsetrail.core.utils import (
     PDFReader,
-    convert_amount_to_float,
     find_param_in_line,
     get_absolute_date,
 )
@@ -16,8 +16,8 @@ from parsetrail.core.validation import Account, Statement, Transaction
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_yamahafin_202306"
-    VERSION = "0.1.1"
-    MIN_CLIENT_VERSION = "1.1.1"
+    VERSION = "0.2.0"
+    MIN_CLIENT_VERSION = "1.3.0"
     SUFFIX = ".pdf"
     COMPANY = "Yamaha Motor Finance"
     STATEMENT_TYPE = "Auto Loan Monthly Statement"
@@ -166,7 +166,7 @@ class Parser(IParser):
             try:
                 _, balance_line = find_param_in_line(self.lines, pattern)
                 balance_str = balance_line.split(pattern)[-1].strip().split()[0]
-                balance = -convert_amount_to_float(balance_str)
+                balance = -parse_money(balance_str)
                 balances[pattern] = balance
             except ValueError as e:
                 raise ValueError(f"Failed to extract balance for pattern '{pattern}': {e}")
@@ -218,7 +218,7 @@ class Parser(IParser):
 
             # Extract the first amount-like string
             i_amount, amount_str = [(i, word) for i, word in enumerate(words) if "$" in word][0]
-            amount = -convert_amount_to_float(amount_str)
+            amount = -parse_money(amount_str)
 
             # Extract the description
             desc = " ".join(words[:i_amount])

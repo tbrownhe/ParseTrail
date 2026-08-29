@@ -303,20 +303,23 @@ batch runner can execute with no Qt application or display server.
 
 ### P1.2 Make the local financial schema precise
 
-- [ ] Store currency as integer minor units or exact decimal values end to end;
+- [x] Store currency as integer minor units or exact decimal values end to end;
   eliminate `Float` columns and float-based validation/rounding.
-- [ ] Replace string dates with typed dates and define timezone handling for actual
+- [x] Replace string dates with typed dates and define timezone handling for actual
   timestamps.
-- [ ] Enable SQLite foreign-key enforcement on every connection and define delete
+- [x] Enable SQLite foreign-key enforcement on every connection and define delete
   behavior for statements, accounts, transactions, balances, and categories.
-- [ ] Replace ambiguous MD5 concatenation with a versioned canonical fingerprint
+- [x] Replace ambiguous MD5 concatenation with a versioned canonical fingerprint
   using a collision-resistant digest and explicit field framing.
-- [ ] Decide whether overlapping statements require a statement-transaction join
+- [x] Decide whether overlapping statements require a statement-transaction join
   table so transaction membership and statement counts remain truthful.
-- [ ] Validate an unversioned database before stamping an Alembic baseline; remove
+- [x] Validate an unversioned database before stamping an Alembic baseline; remove
   `create_all()` behavior that can conceal migration drift.
-- [ ] Make pre-migration backup names collision-safe and test upgrade, downgrade
+- [x] Make pre-migration backup names collision-safe and test upgrade, downgrade
   where supported, interrupted migration, and restore on copied real databases.
+  The precise schema is deliberately non-downgradable; recovery restores the
+  validated automatic backup. A redacted migration and populated-GUI rehearsal
+  passed on a temporary copy of the 18,668-row production client database.
 - [ ] `[USER]` Review rounding, duplicate, and overlapping-statement results in the
   GUI before accepting the data migration.
 

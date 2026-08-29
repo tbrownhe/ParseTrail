@@ -1,37 +1,69 @@
+import hashlib
 from contextlib import AbstractContextManager
-from datetime import datetime
+from datetime import date
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
 from parsetrail.core import query
-from parsetrail.core.orm import Transactions, create_database
+from parsetrail.core.migrate import upgrade_db
+from parsetrail.core.orm import (
+    Accounts,
+    AccountTypes,
+    Statements,
+    StatementTransactions,
+    Transactions,
+    create_database,
+)
 from parsetrail.core.parser_routing import ParseResult
 from parsetrail.core.settings import settings
 from parsetrail.core.statements import ArchivePendingError, StatementProcessor
-from parsetrail.core.validation import Account, Statement
+from parsetrail.core.validation import Account, Statement, Transaction
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 
-def _transaction_row(md5hash: str) -> dict[str, Any]:
+def _transaction_row(fingerprint_seed: str) -> dict[str, Any]:
     return {
-        "StatementID": None,
         "AccountID": 1,
-        "Date": "2026-08-28",
-        "Amount": 10.0,
-        "Balance": 100.0,
+        "TransactionDate": date(2026, 8, 28),
+        "PostingDate": date(2026, 8, 28),
+        "Amount": Decimal("10.00"),
+        "Balance": Decimal("100.00"),
+        "CurrencyCode": "USD",
         "Description": "Example",
-        "MD5": md5hash,
+        "Fingerprint": hashlib.sha256(fingerprint_seed.encode()).hexdigest(),
+        "FingerprintVersion": 1,
         "CategoryID": None,
-        "Verified": 0,
+        "Verified": False,
         "ConfidenceScore": None,
     }
 
 
+def _empty_database(path: Path):
+    upgrade_db(path)
+    Session = create_database(path)
+    with Session() as session:
+        session.add(AccountTypes(AccountTypeID=1, AccountType="Checking", AssetType="Asset"))
+        session.add(
+            Accounts(
+                AccountID=1,
+                AccountName="Checking",
+                AccountTypeID=1,
+                CurrencyCode="USD",
+                Company="Example",
+                Description="Fixture",
+                AppreciationRate=Decimal(0),
+            )
+        )
+        session.commit()
+    return Session
+
+
 def test_duplicate_insert_is_detected_at_flush_and_savepoint_keeps_session_usable(tmp_path: Path) -> None:
-    Session = create_database(tmp_path / "duplicates.db")
+    Session = _empty_database(tmp_path / "duplicates.db")
 
     with Session() as session, session.begin():
         query.insert_rows_carefully(
@@ -46,7 +78,7 @@ def test_duplicate_insert_is_detected_at_flush_and_savepoint_keeps_session_usabl
 
 
 def test_duplicate_insert_raises_when_skipping_is_disabled(tmp_path: Path) -> None:
-    Session = create_database(tmp_path / "strict-duplicates.db")
+    Session = _empty_database(tmp_path / "strict-duplicates.db")
 
     with pytest.raises(IntegrityError), Session() as session, session.begin():
         query.insert_rows_carefully(
@@ -71,13 +103,13 @@ def _processor() -> StatementProcessor:
 
 def _statement(source: Path) -> Statement:
     return Statement(
-        start_date=datetime(2026, 7, 1),
-        end_date=datetime(2026, 7, 31),
+        start_date=date(2026, 7, 1),
+        end_date=date(2026, 7, 31),
         accounts=[
             Account(
                 account_num="1234",
-                start_balance=0.0,
-                end_balance=0.0,
+                start_balance=Decimal("0.00"),
+                end_balance=Decimal("0.00"),
                 transactions=[],
                 account_id=1,
                 account_name="Checking",
@@ -99,7 +131,11 @@ def _prepare_import(
     events: list[str] = []
 
     monkeypatch.setattr(settings, "db_path", tmp_path / "parsetrail.db")
-    monkeypatch.setattr("parsetrail.core.statements.hash_file", lambda _path: "file-hash")
+    monkeypatch.setattr(
+        processor,
+        "_content_hashes",
+        lambda _path: {"sha256": "f" * 64, "md5": "f" * 32},
+    )
     monkeypatch.setattr(
         "parsetrail.core.statements.parse_any",
         lambda *_args, **_kwargs: ParseResult(statement=statement, plugin_name="example"),
@@ -224,8 +260,62 @@ def test_multi_account_statement_hash_resolves_one_archive_name(monkeypatch: pyt
     processor = _processor()
     monkeypatch.setattr(
         query,
-        "statements_with_hash",
-        lambda _session, _hash: [(10, "shared.pdf"), (11, "shared.pdf")],
+        "statements_with_hashes",
+        lambda _session, _hashes: [(10, "shared.pdf"), (11, "shared.pdf")],
     )
 
-    assert processor.file_already_imported("same-file") == "shared.pdf"
+    assert processor.file_already_imported({"sha256": "same-file"}) == "shared.pdf"
+
+
+def test_overlapping_statements_share_transaction_and_keep_both_memberships(tmp_path: Path) -> None:
+    Session = _empty_database(tmp_path / "overlap.db")
+    manager = SimpleNamespace(
+        metadata={
+            "csv_fixture": {
+                "PLUGIN_NAME": "csv_fixture",
+                "VERSION": "1.0.0",
+                "SUFFIX": ".csv",
+                "COMPANY": "Example",
+                "STATEMENT_TYPE": "Checking",
+            }
+        }
+    )
+    processor = StatementProcessor(Session, manager)
+
+    def overlapping_statement(filename: str, content_hash: str) -> Statement:
+        account = Account(
+            account_num="fixture-account",
+            start_balance=Decimal("100.00"),
+            end_balance=Decimal("112.34"),
+            transactions=[
+                Transaction(
+                    transaction_date=date(2026, 8, 15),
+                    posting_date=date(2026, 8, 15),
+                    amount=Decimal("12.34"),
+                    balance=Decimal("112.34"),
+                    desc="Overlapping transaction",
+                )
+            ],
+            account_id=1,
+            account_name="Checking",
+        )
+        account.hash_transactions()
+        return Statement(
+            start_date=date(2026, 8, 1),
+            end_date=date(2026, 8, 31),
+            accounts=[account],
+            plugin_name="csv_fixture",
+            dpath=tmp_path / filename,
+            content_hash=content_hash,
+        )
+
+    with Session() as session:
+        processor.complete_data_transaction(session, overlapping_statement("first.csv", "a" * 64))
+    with Session() as session:
+        processor.complete_data_transaction(session, overlapping_statement("second.csv", "b" * 64))
+
+    with Session() as session:
+        assert session.scalar(select(func.count()).select_from(Statements)) == 2
+        assert session.scalar(select(func.count()).select_from(Transactions)) == 1
+        assert session.scalar(select(func.count()).select_from(StatementTransactions)) == 2
+        assert session.scalars(select(Statements.TransactionCount)).all() == [1, 1]

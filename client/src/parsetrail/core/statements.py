@@ -5,10 +5,11 @@ from pathlib import Path
 from loguru import logger
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QMessageBox, QProgressDialog
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from parsetrail.core import query
-from parsetrail.core.orm import Plugins, Statements, Transactions
+from parsetrail.core.orm import Plugins, Statements, StatementTransactions, Transactions
 from parsetrail.core.parse import parse_any
 from parsetrail.core.parser_routing import ParseResult, ParseWarningsRejectedError
 from parsetrail.core.plugin_manager import PluginManager
@@ -38,7 +39,7 @@ class StatementProcessor:
         pending: list[tuple[Path, Path]] = []
         for source in sorted({path for suffix in suffixes for path in settings.import_dir.glob(f"*{suffix}")}):
             try:
-                archive_name = self.file_already_imported(hash_file(source))
+                archive_name = self.file_already_imported(self._content_hashes(source))
             except Exception as exc:
                 logger.warning(
                     "Could not inspect {} for archive recovery ({})",
@@ -137,10 +138,10 @@ class StatementProcessor:
             str: "success" if successfully imported, "duplicate" if already imported.
         """
         try:
-            md5hash = hash_file(fpath)
+            content_hashes = self._content_hashes(fpath)
 
-            # Check for duplicates by MD5 hash
-            filename = self.file_already_imported(md5hash)
+            # Check both the current digest and legacy MD5 rows during migration.
+            filename = self.file_already_imported(content_hashes)
             if filename:
                 self.handle_duplicate(fpath, filename)
                 return "duplicate"
@@ -152,7 +153,7 @@ class StatementProcessor:
                 raise TypeError("Parsing module must return a Statement dataclass.")
 
             # Attach metadata
-            statement.add_md5hash(md5hash)
+            statement.add_content_hash(content_hashes["sha256"])
             self.attach_account_info(statement)  # Modifies in place
             for account in statement.accounts:
                 account.hash_transactions()
@@ -200,17 +201,24 @@ class StatementProcessor:
             )
         return result.require_statement(accept_warnings=accepted)
 
-    def file_already_imported(self, md5hash: str) -> str:
+    @staticmethod
+    def _content_hashes(fpath: Path) -> dict[str, str]:
+        return {
+            "sha256": hash_file(fpath, "sha256"),
+            "md5": hash_file(fpath, "md5"),
+        }
+
+    def file_already_imported(self, content_hashes: dict[str, str]) -> str:
         """Check if the file has already been saved to the db
 
         Args:
-            md5hash (str): Byte hash of passed file
+            content_hashes: Byte hashes keyed by algorithm.
 
         Returns:
-            bool: Whether md5hash exists in the db already
+            bool: Whether any supplied content hash exists in the database.
         """
         with self.Session() as session:
-            data = query.statements_with_hash(session, md5hash)
+            data = query.statements_with_hashes(session, content_hashes)
         if len(data) == 0:
             return ""
         filenames = {filename for _, filename in data}
@@ -218,12 +226,7 @@ class StatementProcessor:
             raise KeyError(f"Identical file hash is associated with multiple filenames: {sorted(filenames)}")
         filename = filenames.pop()
         statement_ids = [statement_id for statement_id, _ in data]
-        logger.debug(
-            "Previously imported {} (StatementIDs: {}) has identical hash {}",
-            filename,
-            statement_ids,
-            md5hash,
-        )
+        logger.debug("Previously imported {} (StatementIDs: {}) has identical content", filename, statement_ids)
         return filename
 
     def statement_already_imported(self, filename: Path) -> bool:
@@ -408,8 +411,35 @@ class StatementProcessor:
                 session.flush()
                 statement_id = statements_table.StatementID
 
-                # Prepare transactions for insertion
-                transactions_table = Transaction.to_db_rows(statement_id, account.account_id, account.transactions)
+                transaction_rows = Transaction.to_db_rows(
+                    account.account_id,
+                    account.transactions,
+                    account.currency_code,
+                )
+                for row_number, row in enumerate(transaction_rows, start=1):
+                    transaction = session.scalar(
+                        select(Transactions).where(Transactions.Fingerprint == row["Fingerprint"])
+                    )
+                    if transaction is None:
+                        transaction = Transactions(**row)
+                        session.add(transaction)
+                        session.flush()
+                    elif any(
+                        (
+                            transaction.AccountID != account.account_id,
+                            transaction.PostingDate != row["PostingDate"],
+                            transaction.AmountMinor != row["AmountMinor"],
+                            transaction.BalanceMinor != row["BalanceMinor"],
+                            transaction.CurrencyCode != row["CurrencyCode"],
+                            transaction.Description != row["Description"],
+                        )
+                    ):
+                        raise RuntimeError("A transaction fingerprint resolved to different canonical fields.")
 
-                # Insert transactions using insert_rows_carefully
-                query.insert_rows_carefully(session, Transactions, transactions_table, skip_duplicates=True)
+                    session.add(
+                        StatementTransactions(
+                            StatementID=statement_id,
+                            TransactionID=transaction.TransactionID,
+                            StatementRow=row_number,
+                        )
+                    )

@@ -1,11 +1,12 @@
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 from typing import Any
 
 from loguru import logger
-from sqlalchemy import Float, asc
+from sqlalchemy import asc, or_
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
-from sqlalchemy.sql import cast, func, select, text
+from sqlalchemy.sql import func, select, text
 
 from parsetrail.core.orm import (
     AccountNumbers,
@@ -47,7 +48,7 @@ def accounts_table(session: Session) -> list[dict]:
         Accounts.AccountTypeID,
         Accounts.Company,
         Accounts.Description,
-        cast(Accounts.AppreciationRate, Float).label("AppreciationRate"),
+        Accounts.AppreciationRate,
     )
 
     # Fetch all data
@@ -209,7 +210,7 @@ def update_account_details(
     account_type_id: int,
     company: str,
     desc: str,
-    appreciation: float,
+    appreciation: Decimal,
 ):
     session.query(Accounts).filter_by(AccountName=account_name).update(
         {
@@ -342,17 +343,23 @@ def asset_types(session: Session) -> dict[str, str]:
     return asset_dict
 
 
-def statement_id_unique(session: Session, account_id: int, md5hash: str) -> int:
+def statement_id_unique(
+    session: Session,
+    account_id: int,
+    content_hash: str,
+    algorithm: str = "sha256",
+) -> int:
     """
-    Retrieves unique StatementID based on account_id and md5hash.
+    Retrieves a unique StatementID based on account and content hash.
     Some statements contain data for multiple accounts, and each account
-    within statement gets a line in the Statements table, so the statement
-    md5hash alone is not unique.
+    within a statement gets a line in the Statements table, so the content hash
+    alone is not unique.
 
     Args:
         session (Session): The SQLAlchemy session to use for the query.
         account_id (int): The ID of the account.
-        md5hash (str): The MD5 hash of the statement.
+        content_hash: The content hash of the statement.
+        algorithm: The content hash algorithm.
 
     Raises:
         KeyError: If no matching StatementID is found or if multiple matches are found.
@@ -362,20 +369,24 @@ def statement_id_unique(session: Session, account_id: int, md5hash: str) -> int:
     """
     results = (
         session.execute(
-            select(Statements.StatementID).where(Statements.AccountID == account_id, Statements.MD5 == md5hash)
+            select(Statements.StatementID).where(
+                Statements.AccountID == account_id,
+                Statements.ContentHashAlgorithm == algorithm,
+                Statements.ContentHash == content_hash,
+            )
         )
         .scalars()
         .all()
     )
 
     if len(results) == 0:
-        raise KeyError(f"StatementID could not be found for AccountID = {account_id} and MD5 = '{md5hash}'")
+        raise KeyError(f"StatementID could not be found for AccountID = {account_id}")
     if len(results) > 1:
-        raise KeyError(f"StatementID is not unique for AccountID = {account_id} and MD5 = '{md5hash}'")
+        raise KeyError(f"StatementID is not unique for AccountID = {account_id}")
     return results[0]
 
 
-def statement_date_ranges(session: Session, months: int = 15) -> tuple[list[tuple[str, datetime, datetime]], list[str]]:
+def statement_date_ranges(session: Session, months: int = 15) -> tuple[list[tuple[str, date, date]], list[str]]:
     """
     Get the list of statement dates joined with account names.
 
@@ -399,7 +410,7 @@ def statement_date_ranges(session: Session, months: int = 15) -> tuple[list[tupl
     return data, columns
 
 
-def statement_max_date(session: Session) -> datetime:
+def statement_max_date(session: Session) -> date:
     """
     Retrieves the most recent date from the Statements table.
 
@@ -417,22 +428,28 @@ def statement_max_date(session: Session) -> datetime:
     if result is None:
         raise ValueError("The Statements table is empty. No dates found.")
 
-    return datetime.strptime(result, r"%Y-%m-%d")
+    return result
 
 
-def statements_with_hash(session: Session, md5hash: str) -> list[tuple]:
+def statements_with_hashes(session: Session, content_hashes: dict[str, str]) -> list[tuple]:
     """
-    Retrieves StatementID and Filename based on the md5hash.
+    Retrieve StatementID and Filename for current or legacy content hashes.
 
     Args:
         session (Session): SQLAlchemy session for database interaction.
-        md5hash (str): The MD5 hash to filter by.
+        content_hashes: Content hashes keyed by algorithm.
 
     Returns:
         list[tuple]: A list of tuples containing StatementID and Filename.
     """
     try:
-        results = session.query(Statements.StatementID, Statements.Filename).filter(Statements.MD5 == md5hash).all()
+        conditions = [
+            (Statements.ContentHashAlgorithm == algorithm) & (Statements.ContentHash == digest)
+            for algorithm, digest in content_hashes.items()
+        ]
+        if not conditions:
+            return []
+        results = session.query(Statements.StatementID, Statements.Filename).filter(or_(*conditions)).all()
         return results
     except SQLAlchemyError as e:
         session.rollback()
@@ -478,7 +495,7 @@ def transactions(session: Session, months: int = None) -> tuple[list[tuple], lis
             Transactions.TransactionID,
             Accounts.AccountName,
             AccountTypes.AssetType,
-            Transactions.Date,
+            Transactions.PostingDate.label("Date"),
             Transactions.Amount,
             Transactions.Balance,
             Transactions.Description,
@@ -487,12 +504,12 @@ def transactions(session: Session, months: int = None) -> tuple[list[tuple], lis
         .join(Accounts, Transactions.AccountID == Accounts.AccountID)
         .join(AccountTypes, Accounts.AccountTypeID == AccountTypes.AccountTypeID)
         .outerjoin(Categories, Transactions.CategoryID == Categories.CategoryID)
-        .order_by(asc(Transactions.Date), asc(Transactions.TransactionID))
+        .order_by(asc(Transactions.PostingDate), asc(Transactions.TransactionID))
     )
 
     # Apply date filtering if months is specified
     if months is not None:
-        query = query.filter(Transactions.Date >= func.date("now", f"-{months} month"))
+        query = query.filter(Transactions.PostingDate >= func.date("now", f"-{months} month"))
 
     # Execute the query and fetch results
     data = query.all()
@@ -501,7 +518,7 @@ def transactions(session: Session, months: int = None) -> tuple[list[tuple], lis
     return data, columns
 
 
-def latest_balance(session: Session, account_id: int) -> tuple[str, float] | None:
+def latest_balance(session: Session, account_id: int) -> tuple[date, Decimal] | None:
     """
     Retrieves the most recent balance and transaction date for a given account.
 
@@ -514,16 +531,16 @@ def latest_balance(session: Session, account_id: int) -> tuple[str, float] | Non
         and balance, or None if no transactions exist for the account.
     """
     result = (
-        session.query(Transactions.Date, Transactions.Balance)
+        session.query(Transactions.PostingDate, Transactions.Balance)
         .filter(Transactions.AccountID == account_id)
-        .order_by(Transactions.Date.desc(), Transactions.TransactionID.desc())
+        .order_by(Transactions.PostingDate.desc(), Transactions.TransactionID.desc())
         .first()
     )
 
     return result
 
 
-def latest_balances(session: Session) -> list[tuple[str, str, float]]:
+def latest_balances(session: Session) -> list[tuple[str, Decimal, date]]:
     """
     Retrieves the latest balance and transaction date for each account.
 
@@ -538,7 +555,7 @@ def latest_balances(session: Session) -> list[tuple[str, str, float]]:
     subquery = (
         session.query(
             Transactions.AccountID,
-            func.max(Transactions.Date).label("LatestDate"),
+            func.max(Transactions.PostingDate).label("LatestDate"),
         )
         .group_by(Transactions.AccountID)
         .subquery()
@@ -551,7 +568,7 @@ def latest_balances(session: Session) -> list[tuple[str, str, float]]:
             Transactions.TransactionID,
         )
         .join(subquery, subquery.c.AccountID == Transactions.AccountID)
-        .filter(Transactions.Date == subquery.c.LatestDate)
+        .filter(Transactions.PostingDate == subquery.c.LatestDate)
         .group_by(Transactions.AccountID)
         .having(func.max(Transactions.TransactionID))
         .subquery()
@@ -577,8 +594,8 @@ def latest_balances(session: Session) -> list[tuple[str, str, float]]:
 
 def transactions_in_range(
     session: Session,
-    start_date: datetime | None = None,
-    end_date: datetime | None = None,
+    start_date: date | datetime | None = None,
+    end_date: date | datetime | None = None,
 ) -> tuple[list[tuple], list[str]]:
     """
     Retrieves transaction data within a date range.
@@ -596,7 +613,7 @@ def transactions_in_range(
     query = (
         session.query(
             Accounts.AccountName,
-            Transactions.Date,
+            Transactions.PostingDate.label("Date"),
             Transactions.Amount,
             Categories.Name,
             Transactions.Description,
@@ -604,14 +621,14 @@ def transactions_in_range(
         .join(Accounts, Transactions.AccountID == Accounts.AccountID)
         .join(AccountTypes, Accounts.AccountTypeID == AccountTypes.AccountTypeID)
         .outerjoin(Categories, Transactions.CategoryID == Categories.CategoryID)
-        .order_by(asc(Transactions.Date), asc(Transactions.TransactionID))
+        .order_by(asc(Transactions.PostingDate), asc(Transactions.TransactionID))
     )
 
     # Apply filters
     if start_date:
-        query = query.filter(Transactions.Date >= start_date.strftime(r"%Y-%m-%d"))
-    elif end_date:
-        query = query.filter(Transactions.Date <= end_date.strftime(r"%Y-%m-%d"))
+        query = query.filter(Transactions.PostingDate >= start_date)
+    if end_date:
+        query = query.filter(Transactions.PostingDate <= end_date)
 
     # Execute query and fetch results
     data = query.all()
@@ -665,7 +682,7 @@ def training_set(
         .join(Accounts, Transactions.AccountID == Accounts.AccountID)
         .join(AccountTypes, Accounts.AccountTypeID == AccountTypes.AccountTypeID)
         .outerjoin(Categories, Transactions.CategoryID == Categories.CategoryID)
-        .order_by(asc(Transactions.Date), asc(Transactions.TransactionID))
+        .order_by(asc(Transactions.PostingDate), asc(Transactions.TransactionID))
     )
 
     # Apply verification filter

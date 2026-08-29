@@ -4,15 +4,16 @@ from datetime import datetime
 from loguru import logger
 
 from parsetrail.core.interfaces import IParser
-from parsetrail.core.utils import PDFReader, convert_amount_to_float, find_param_in_line
+from parsetrail.core.money import parse_money
+from parsetrail.core.utils import PDFReader, find_param_in_line
 from parsetrail.core.validation import Account, Statement, Transaction
 
 
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_capitaloneauto_202402"
-    VERSION = "0.1.1"
-    MIN_CLIENT_VERSION = "1.1.1"
+    VERSION = "0.2.0"
+    MIN_CLIENT_VERSION = "1.3.0"
     SUFFIX = ".pdf"
     COMPANY = "Capital One"
     STATEMENT_TYPE = "Auto Finance Monthly Statement"
@@ -151,7 +152,7 @@ class Parser(IParser):
         try:
             _, balance_line = find_param_in_line(self.lines, pattern)
             balance_str = balance_line.split(pattern)[-1].strip().split()[0]
-            self.end_balance = -convert_amount_to_float(balance_str)
+            self.end_balance = -parse_money(balance_str)
         except ValueError as e:
             raise ValueError(f"Failed to extract balance for pattern '{pattern}': {e}")
 
@@ -181,7 +182,7 @@ class Parser(IParser):
                 # reached end of table
                 break
 
-        self.start_balance = float(self.end_balance)
+        self.start_balance = self.end_balance
         transactions = []
         for line in transaction_lines:
             words = line.split()
@@ -201,7 +202,7 @@ class Parser(IParser):
             for i, col in enumerate(reversed(columns)):
                 if col == "Principal":
                     break
-                amount = convert_amount_to_float(words[-1 - i])
+                amount = parse_money(words[-1 - i])
                 amounts[col] = amount if col == "Interest" else -amount
 
             # Get the description
