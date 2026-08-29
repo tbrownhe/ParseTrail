@@ -293,10 +293,10 @@ an unrecorded mutable image, workstation file, or database assumption.
   batch, and future CLI adapters to present independently.
 - [x] Add unit tests for zero, one, and multiple matching plugins; CSV/XLSX/PDF
   routing; malformed output; validation warnings; and hard-fail behavior.
-- [~] `[USER]` Run the authorized statement collection against source and built
+- [x] `[USER]` Run the authorized statement collection against source and built
   plugins entirely in memory, review redacted diffs, and bless expected outputs.
-  All 18 supplied statements now route uniquely and reconcile in the headless
-  source-plugin batch; final output review in the desktop UI remains.
+  All 18 supplied statements routed uniquely in the headless batch and imported
+  successfully through the signed ParseTrail 1.3.0 desktop build.
 - [x] Adapt the Citi `202511` layout family to its 2026 accessible-PDF rendering,
   including obscured rows, continuation-page rows, single-date payments, and
   multiline fees, without weakening older Citi routing signatures.
