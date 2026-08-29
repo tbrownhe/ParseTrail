@@ -49,7 +49,6 @@ from parsetrail.core.client import (
 from parsetrail.core.initialize import initialize_db
 from parsetrail.core.plugins import PluginManager, PluginUpdateThread
 from parsetrail.core.settings import save_settings, settings
-from parsetrail.core.statements import StatementProcessor
 from parsetrail.core.utils import open_file_in_os
 from parsetrail.gui.accounts import (
     AppreciationDialog,
@@ -58,6 +57,7 @@ from parsetrail.gui.accounts import (
 )
 from parsetrail.gui.budget_view import BudgetTab
 from parsetrail.gui.category import CategoryManagerDialog
+from parsetrail.gui.importing import StatementImportController
 from parsetrail.gui.plugins import (
     ParseTestDialog,
     PluginManagerDialog,
@@ -646,7 +646,11 @@ class ParseTrail(QMainWindow):
         self.plugin_manager = PluginManager()
         self.plugin_manager.load_plugins()
 
-        pending_archives = StatementProcessor(self.Session, self.plugin_manager).find_pending_archives()
+        pending_archives = StatementImportController(
+            self.Session,
+            self.plugin_manager,
+            parent=self,
+        ).find_pending_archives()
         if pending_archives:
             logger.warning("Found {} committed statement archive(s) awaiting recovery", len(pending_archives))
             QMessageBox.warning(
@@ -814,8 +818,8 @@ class ParseTrail(QMainWindow):
     def import_all_statements(self):
         # Import everything
         try:
-            processor = StatementProcessor(self.Session, self.plugin_manager)
-            processor.import_all(parent=self)
+            processor = StatementImportController(self.Session, self.plugin_manager, parent=self)
+            processor.import_all()
         finally:
             # Categorize new transactions and update all GUI elements
             with self.Session() as session:
@@ -853,7 +857,7 @@ class ParseTrail(QMainWindow):
             return
 
         # Import statement
-        processor = StatementProcessor(self.Session, self.plugin_manager)
+        processor = StatementImportController(self.Session, self.plugin_manager, parent=self)
         processor.import_one(fpath)
 
         # Categorize new transactions and update all GUI elements

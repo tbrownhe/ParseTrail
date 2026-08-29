@@ -2,6 +2,8 @@ Unreleased
 ==========
 - Prompt immediately when saved credentials are rejected during a plugin update
   and resume the same signed catalog operation after successful authentication
+- Separate statement import persistence, deduplication, and archive state from Qt
+  prompts and progress behind a characterized headless application service
 
 1.3.1
 =====

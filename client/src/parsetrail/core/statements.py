@@ -1,37 +1,66 @@
 import os
 import shutil
+from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
 
 from loguru import logger
-from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QDialog, QMessageBox, QProgressDialog
 from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from parsetrail.core import query
+from parsetrail.core.diagnostics import Diagnostic
 from parsetrail.core.orm import Plugins, Statements, StatementTransactions, Transactions
 from parsetrail.core.parse import parse_any
-from parsetrail.core.parser_routing import ParseResult, ParseWarningsRejectedError
+from parsetrail.core.parser_routing import ParseResult
 from parsetrail.core.plugin_manager import PluginManager
 from parsetrail.core.settings import settings
 from parsetrail.core.utils import hash_file
 from parsetrail.core.validation import Statement, Transaction
-from parsetrail.gui.accounts import AssignAccountNumber
 
 
 class ArchivePendingError(RuntimeError):
     """Database commit succeeded but the source statement still needs archiving."""
 
 
-class StatementProcessor:
-    def __init__(self, Session: sessionmaker, plugin_manager: PluginManager) -> None:
-        """Initialize the statement processor
+class AccountAssignmentRequiredError(RuntimeError):
+    """An imported account number needs an adapter-provided account assignment."""
+
+    def __init__(self, account_num: str) -> None:
+        self.account_num = account_num
+        super().__init__(f"Account {account_num} must be assigned before the statement can be imported.")
+
+
+class SourceArchiveError(RuntimeError):
+    """The source statement could not be moved to its requested destination."""
+
+
+WarningDecision = Callable[[Sequence[Diagnostic]], bool]
+AccountResolver = Callable[[Path, str, Mapping[str, str] | None], int]
+MoveRetryDecision = Callable[[Path, Path, PermissionError], bool]
+
+
+class StatementImportService:
+    """Headless statement import, persistence, deduplication, and archive service."""
+
+    def __init__(
+        self,
+        Session: sessionmaker,
+        plugin_manager: PluginManager,
+        *,
+        warning_decision: WarningDecision | None = None,
+        account_resolver: AccountResolver | None = None,
+        move_retry_decision: MoveRetryDecision | None = None,
+    ) -> None:
+        """Initialize the statement import service.
 
         Args:
             plugin_manager: (PluginManager)
         """
         self.Session = Session
         self.plugin_manager = plugin_manager
+        self.warning_decision = warning_decision
+        self.account_resolver = account_resolver
+        self.move_retry_decision = move_retry_decision
 
     def find_pending_archives(self) -> list[tuple[Path, Path]]:
         """Report committed imports whose original file still awaits archiving."""
@@ -54,80 +83,7 @@ class StatementProcessor:
                 pending.append((source, destination))
         return pending
 
-    def import_all(self, parent=None) -> None:
-        """
-        Find all statements in the import directory and process them.
-
-        Args:
-            parent: Parent class for UI dialogs.
-        """
-        # Gather files to process
-        suffixes = {plugin.get("SUFFIX", ".*") for plugin in self.plugin_manager.metadata.values()}
-        fpaths = [fpath for suffix in suffixes for fpath in settings.import_dir.glob(f"*{suffix}")]
-        if not fpaths:
-            QMessageBox.information(parent, "No Files", "No files found in the import directory.")
-            return
-
-        # Initialize counters
-        success, duplicate, fail = 0, 0, 0
-
-        # Progress dialog
-        progress = QProgressDialog("Processing statements...", "Cancel", 0, len(fpaths), parent)
-        progress.setWindowTitle("Import Progress")
-        progress.setWindowModality(Qt.WindowModal)
-        progress.setValue(0)
-
-        for idx, fpath in enumerate(sorted(fpaths)):
-            progress.setLabelText(f"Processing {fpath.name}...")
-            if progress.wasCanceled():
-                QMessageBox.information(parent, "Import Canceled", "The import was canceled.")
-                break
-
-            try:
-                result = self.import_one(fpath, parent=parent)
-                if result == "success":
-                    success += 1
-                elif result == "duplicate":
-                    duplicate += 1
-            except ParseWarningsRejectedError as e:
-                progress.close()
-                QMessageBox.information(parent, "Import Canceled", str(e))
-                break
-            except RuntimeError as e:
-                # Stop the import loop immediately if a critical failure occurs
-                progress.close()
-                dialog = QMessageBox(parent)
-                dialog.setIcon(QMessageBox.Critical)
-                dialog.setWindowTitle("Import Canceled")
-                dialog.setText(str(e))
-                dialog.setStandardButtons(QMessageBox.Ok)
-                dialog.setWindowModality(Qt.ApplicationModal)  # Ensure it's on top
-                dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowStaysOnTopHint)
-                dialog.exec()
-                break
-            except Exception as e:
-                fail += 1
-                self.handle_failure(fpath, e)
-
-            progress.setValue(idx + 1)
-
-        progress.close()
-
-        # Summary dialog
-        total = len(fpaths)
-        remain = total - success - duplicate - fail
-        QMessageBox.information(
-            parent,
-            "Import Summary",
-            (
-                f"Successfully imported: {success} of {total} files\n"
-                f"Duplicates: {duplicate}\n"
-                f"Failures: {fail}\n"
-                f"Remaining: {remain}"
-            ),
-        )
-
-    def import_one(self, fpath: Path, parent=None) -> str:
+    def import_one(self, fpath: Path) -> str:
         """
         Process a single statement file and import its data.
 
@@ -148,7 +104,7 @@ class StatementProcessor:
 
             # Parse the statement and validate its structure
             parse_result = parse_any(self.plugin_manager, fpath)
-            statement = self._statement_from_result(parse_result, parent=parent)
+            statement = self._statement_from_result(parse_result)
             if not isinstance(statement, Statement):
                 raise TypeError("Parsing module must return a Statement dataclass.")
 
@@ -182,23 +138,10 @@ class StatementProcessor:
             logger.error(f"Failed to import {fpath.name}: {e}")
             raise
 
-    @staticmethod
-    def _statement_from_result(result: ParseResult, *, parent=None) -> Statement:
+    def _statement_from_result(self, result: ParseResult) -> Statement:
         if not result.warnings:
             return result.statement
-        warning_text = "\n".join(f"- {warning.message}" for warning in result.warnings)
-        accepted = False
-        if parent is not None:
-            accepted = (
-                QMessageBox.question(
-                    parent,
-                    "Statement Validation Warnings",
-                    f"The parser reported:\n\n{warning_text}\n\nImport this statement anyway?",
-                    QMessageBox.Yes | QMessageBox.No,
-                    QMessageBox.No,
-                )
-                == QMessageBox.Yes
-            )
+        accepted = self.warning_decision(result.warnings) if self.warning_decision is not None else False
         return result.require_statement(accept_warnings=accepted)
 
     @staticmethod
@@ -279,15 +222,14 @@ class StatementProcessor:
         logger.info("{} to {}", action, dpath)
 
     def move_file_safely(self, fpath: Path, dpath: Path):
-        """
-        Move a file to the destination path safely. Ensure the destination directory exists.
+        """Move a file, delegating only the locked-file retry decision.
 
         Args:
             fpath (Path): Source file path.
             dpath (Path): Destination file path.
 
         Raises:
-            RuntimeError: If the move operation is cancelled or fails.
+            SourceArchiveError: If the move operation is cancelled or fails.
         """
         dpath.parent.mkdir(parents=True, exist_ok=True)
 
@@ -298,21 +240,11 @@ class StatementProcessor:
                 shutil.move(fpath, dpath)
                 return
             except PermissionError as e:
-                # File is likely open in another program
-                dialog = QMessageBox(None)
-                dialog.setIcon(QMessageBox.Warning)
-                dialog.setWindowTitle("Unable to Move File")
-                dialog.setText(
-                    f"The file {fpath.name} could not be moved. "
-                    "It might be open in another program. Please close it and try again.",
-                )
-                dialog.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
-                dialog.setWindowModality(Qt.ApplicationModal)  # Ensure it's on top
-                dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowStaysOnTopHint)
-                if dialog.exec() == QMessageBox.Cancel:
-                    raise RuntimeError(f"File move operation for <pre>{fpath}</pre> was cancelled by the user.") from e
+                if self.move_retry_decision is not None and self.move_retry_decision(fpath, dpath, e):
+                    continue
+                raise SourceArchiveError(f"The file {fpath.name} could not be moved.") from e
             except Exception as e:
-                raise RuntimeError(f"An unexpected error occurred while moving <pre>{fpath}</pre>: {e}") from e
+                raise SourceArchiveError(f"An unexpected error occurred while moving {fpath.name}.") from e
 
     def attach_account_info(self, statement: Statement) -> Statement:
         """
@@ -326,13 +258,10 @@ class StatementProcessor:
                 with self.Session() as session:
                     account_id = query.account_id_of_account_number(session, account.account_num)
             except KeyError:
-                # Prompt user to select account to associate with this account_num
                 plugin_metadata = self.plugin_manager.metadata.get(statement.plugin_name)
-                try:
-                    account_id = self.prompt_account_num(statement.fpath, account.account_num, plugin_metadata)
-                except RuntimeError as e:
-                    logger.error(f"Account assignment canceled: {e}")
-                    raise
+                if self.account_resolver is None:
+                    raise AccountAssignmentRequiredError(account.account_num)
+                account_id = self.account_resolver(statement.fpath, account.account_num, plugin_metadata)
 
             # Get the account_name for this account_id
             with self.Session() as session:
@@ -340,15 +269,6 @@ class StatementProcessor:
 
             # Add the new data to the account
             account.add_account_info(account_id, account_name)
-
-    def prompt_account_num(self, fpath: Path, account_num: str, plugin_metadata: dict, parent=None) -> int:
-        """
-        Ask user to associate this unknown account_num with an Accounts.AccountID
-        """
-        dialog = AssignAccountNumber(self.Session, fpath, plugin_metadata, account_num)
-        if dialog.exec() == QDialog.Accepted:
-            return dialog.get_account_id()
-        raise RuntimeError("Account assignment dialog was closed without selection.")
 
     def complete_data_transaction(self, session: Session, statement: Statement) -> None:
         """
@@ -443,3 +363,7 @@ class StatementProcessor:
                             StatementRow=row_number,
                         )
                     )
+
+
+# Retain the established import name while callers migrate to the service name.
+StatementProcessor = StatementImportService

@@ -485,11 +485,15 @@ with networking disabled and never pause for an implicit package-data download.
 
 ### P2.1 Introduce application boundaries incrementally
 
-- [ ] Add characterization tests around the current import, category, account,
-  verification, plugin-sync, and budget behavior before moving code.
-- [ ] Define small application services for parse/import, transaction querying,
-  categories, accounts, artifact updates, and statement submission. Keep Qt widgets
-  as adapters rather than owners of database/network transactions.
+- [~] Add characterization tests around the current import, category, account,
+  verification, plugin-sync, and budget behavior before moving code. Import
+  persistence/recovery and plugin synchronization are covered; category, account,
+  verification, and budget characterization remain.
+- [~] Define small application services for parse/import, transaction querying,
+  categories, accounts, artifact updates, and statement submission. The headless
+  `StatementImportService` now owns import persistence, deduplication, and archive
+  state while `StatementImportController` owns Qt decisions and progress; the
+  remaining workflows still need equivalent boundaries.
 - [ ] Introduce repositories or explicit query services so GUI code does not manage
   SQLAlchemy sessions directly.
 - [ ] Split the largest GUI modules by workflow while preserving behavior; avoid a
