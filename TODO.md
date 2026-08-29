@@ -295,13 +295,13 @@ an unrecorded mutable image, workstation file, or database assumption.
   routing; malformed output; validation warnings; and hard-fail behavior.
 - [~] `[USER]` Run the authorized statement collection against source and built
   plugins entirely in memory, review redacted diffs, and bless expected outputs.
-  The six revised Citi statements now route uniquely and reconcile; five new
-  Chase Sapphire and seven LendingClub/Happen Bank statements still need parser
-  coverage before final output review.
+  The six revised Citi and five Chase Sapphire statements now route uniquely and
+  reconcile; seven LendingClub/Happen Bank statements still need parser coverage
+  before final output review.
 - [x] Adapt the Citi `202511` layout family to its 2026 accessible-PDF rendering,
   including obscured rows, continuation-page rows, single-date payments, and
   multiline fees, without weakening older Citi routing signatures.
-- [ ] Add and validate a Chase Sapphire credit-card parser against all five
+- [x] Add and validate a Chase Sapphire credit-card parser against all five
   authorized statements.
 - [ ] Update or version the LendingClub LevelUp Savings parser for the seven
   authorized statements and the Happen Bank rename/layout transition.

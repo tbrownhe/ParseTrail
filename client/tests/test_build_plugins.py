@@ -16,6 +16,6 @@ def test_compiles_complete_source_catalog_and_removes_stale_output(
     source_count = len([path for path in build_plugins.SOURCE_DIR.glob("*.py") if path.stem != "__init__"])
     compiled_plugins = list(plugin_output.glob("*.pyc"))
     assert len(compiled_plugins) == source_count
-    assert source_count == 19
+    assert source_count == 20
     assert not stale_plugin.exists()
     assert {load_plugin(path)[0] for path in compiled_plugins} == {path.stem for path in compiled_plugins}
