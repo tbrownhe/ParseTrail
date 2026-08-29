@@ -2,10 +2,10 @@ import json
 from collections.abc import Iterable
 
 import requests
-from loguru import logger
 
 from parsetrail.core.auth import AuthError, AuthManager, auth_manager
 from parsetrail.core.client_manifest import INSTALLER_SUFFIXES, MAX_CLIENT_MANIFEST_BYTES
+from parsetrail.core.network import UPLOAD_TIMEOUT, HttpTransport, raise_for_response
 from parsetrail.core.settings import AppSettings, settings
 
 # API Routes
@@ -15,31 +15,44 @@ KEYS_PATH = "/keys"
 STATEMENTS_PATH = "/statements"
 MAX_PLUGIN_MANIFEST_BYTES = 1024 * 1024
 ED25519_SIGNATURE_BYTES = 64
-DEFAULT_REQUEST_TIMEOUT = (10, 60)
 
 
 class ApiClient:
-    def __init__(self, settings: AppSettings, auth_manager: AuthManager):
+    def __init__(
+        self,
+        settings: AppSettings,
+        auth_manager: AuthManager,
+        *,
+        transport: HttpTransport | None = None,
+    ):
         self.settings = settings
         self.auth = auth_manager
+        self.transport = transport or auth_manager.transport
 
     def _request(self, method: str, path: str, *, auth_required: bool, **kwargs) -> requests.Response:
         url = f"{self.auth.base_url}{path}"
-
-        headers = kwargs.pop("headers", {})
-        kwargs.setdefault("timeout", DEFAULT_REQUEST_TIMEOUT)
+        action = kwargs.pop("action", "contacting the ParseTrail service")
+        headers = dict(kwargs.pop("headers", {}))
+        timeout = kwargs.pop("timeout", None)
 
         if auth_required:
-            # may auto-login via UI
             headers.update(self.auth.get_auth_headers())
 
-        resp = requests.request(method, url, headers=headers, **kwargs)
+        resp = self.transport.request(
+            method,
+            url,
+            action=action,
+            headers=headers,
+            timeout=timeout,
+            **kwargs,
+        )
 
         if auth_required and resp.status_code == 401:
-            # only treat 401 as "auth broken" if we actually used auth
             self.auth.clear_token()
-            raise AuthError("Token rejected by server")
+            resp.close()
+            raise AuthError("The saved login was rejected. Please sign in again.")
 
+        raise_for_response(resp, action)
         return resp
 
     # Convenience wrappers
@@ -48,20 +61,6 @@ class ApiClient:
 
     def post(self, path: str, auth_required: bool = True, **kwargs) -> requests.Response:
         return self._request("POST", path, auth_required=auth_required, **kwargs)
-
-    def _get_list(self, path: str, name: str) -> list[dict]:
-        try:
-            resp = self.get(path, auth_required=False, stream=False)
-            resp.raise_for_status()
-            data = resp.json()
-
-            if isinstance(data, list):
-                return data
-
-            raise ValueError(f"{name} endpoint returned {type(data).__name__}, expected list[dict].")
-        except requests.RequestException as e:
-            logger.error(f"Error fetching {name} list: {e}")
-            raise
 
     def list_installers(self) -> list[dict]:
         raise NotImplementedError("Unsigned client metadata is not trusted; fetch_client_release_bytes()")
@@ -72,14 +71,23 @@ class ApiClient:
     def _download_stream(
         self, path: str, auth_required: bool = True, chunk_size=8192
     ) -> Iterable[tuple[bytes, int, int]]:
-        resp = self.get(path, auth_required=auth_required, stream=True)
-        resp.raise_for_status()
+        action = "downloading an authenticated artifact"
+        resp = self.get(
+            path,
+            auth_required=auth_required,
+            stream=True,
+            action=action,
+        )
 
         total = int(resp.headers.get("Content-Length", 0))
         downloaded = 0
 
         try:
-            for chunk in resp.iter_content(chunk_size=chunk_size):
+            for chunk in self.transport.iter_content(
+                resp,
+                action=action,
+                chunk_size=chunk_size,
+            ):
                 if not chunk:
                     continue
                 downloaded += len(chunk)
@@ -94,8 +102,13 @@ class ApiClient:
         maximum_bytes: int,
         auth_required: bool,
     ) -> bytes:
-        resp = self.get(path, auth_required=auth_required, stream=True)
-        resp.raise_for_status()
+        action = "fetching authenticated release metadata"
+        resp = self.get(
+            path,
+            auth_required=auth_required,
+            stream=True,
+            action=action,
+        )
         try:
             content_length = resp.headers.get("Content-Length")
             if content_length is not None:
@@ -107,7 +120,10 @@ class ApiClient:
                     raise ValueError(f"Response exceeds {maximum_bytes} bytes")
 
             payload = bytearray()
-            for chunk in resp.iter_content(chunk_size=8192):
+            for chunk in self.transport.iter_content(
+                resp,
+                action=action,
+            ):
                 if not chunk:
                     continue
                 payload.extend(chunk)
@@ -188,13 +204,19 @@ class ApiClient:
         return self._download_stream(f"{PLUGIN_PATH}/{plugin_name}", auth_required=True)
 
     def get_public_key(self) -> bytes:
-        resp = self.get(f"{KEYS_PATH}/public-key", auth_required=False)
-        resp.raise_for_status()
+        resp = self.get(
+            f"{KEYS_PATH}/public-key",
+            auth_required=False,
+            action="fetching the statement-encryption key",
+        )
         return resp.content
 
     def get_public_key_hash(self) -> str:
-        resp = self.get(f"{KEYS_PATH}/public-key-hash", auth_required=False)
-        resp.raise_for_status()
+        resp = self.get(
+            f"{KEYS_PATH}/public-key-hash",
+            auth_required=False,
+            action="validating the statement-encryption key",
+        )
         return resp.json()["hash"]
 
     def submit_statement(self, encrypted_file: bytes, encrypted_key: str, metadata: dict[str]) -> requests.Response:
@@ -203,6 +225,8 @@ class ApiClient:
         return self.post(
             f"{STATEMENTS_PATH}/submit-statement",
             auth_required=True,
+            action="submitting the encrypted statement",
+            timeout=UPLOAD_TIMEOUT,
             files=files,
             data=data,
         )

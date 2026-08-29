@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, timezone
 import requests
 from loguru import logger
 
+from parsetrail.core.network import HttpTransport, NetworkError, raise_for_response
 from parsetrail.core.settings import AppSettings, save_settings, settings
 
 # Keep this in sync with backend/app/core/config.py
@@ -41,9 +42,15 @@ class AuthManager:
     Totally UI-agnostic: it just calls `prompt_for_credentials()` when needed.
     """
 
-    def __init__(self, app_settings: AppSettings):
+    def __init__(
+        self,
+        app_settings: AppSettings,
+        *,
+        transport: HttpTransport | None = None,
+    ):
         self.settings = app_settings
-        self.base_url = str(settings.server_url).rstrip("/")
+        self.base_url = str(app_settings.server_url).rstrip("/")
+        self.transport = transport or HttpTransport()
         self._token: str = app_settings.access_token or ""
 
         expires_ts = app_settings.token_expires_at
@@ -81,17 +88,25 @@ class AuthManager:
         email, password = creds
 
         try:
-            resp = requests.post(
+            resp = self.transport.request(
+                "POST",
                 f"{self.base_url}{LOGIN_PATH}",
+                action="signing in",
                 data={"username": email, "password": password},
             )
-            resp.raise_for_status()
-        except requests.RequestException as e:
+            raise_for_response(resp, "signing in")
+        except NetworkError as e:
             logger.error("{}", e)
             return False
 
-        payload = resp.json()
-        token = payload["access_token"]
+        try:
+            payload = resp.json()
+            token = payload["access_token"]
+            if not isinstance(token, str) or not token:
+                raise ValueError
+        except (KeyError, requests.JSONDecodeError, TypeError, ValueError):
+            logger.error("Sign-in response did not match the expected schema")
+            return False
 
         self._token = token
         self._token_expires_at = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)

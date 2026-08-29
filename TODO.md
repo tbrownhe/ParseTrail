@@ -348,7 +348,7 @@ does not provide a reliable user-existence oracle.
 
 ### P1.4 Make client networking responsive and explicit
 
-- [ ] Put connect/read timeouts and bounded retries on every HTTP call; centralize
+- [x] Put connect/read timeouts and bounded retries on every HTTP call; centralize
   API error translation and never retry non-idempotent operations implicitly.
 - [ ] Move submission encryption, uploads, plugin sync, model sync, and installer
   downloads off the Qt UI thread with truthful progress and cancellation.
