@@ -4,6 +4,8 @@ Unreleased
   and resume the same signed catalog operation after successful authentication
 - Separate statement import persistence, deduplication, and archive state from Qt
   prompts and progress behind a characterized headless application service
+- Move category queries and atomic add, update, rename, and merge operations behind
+  a characterized headless service with typed failures
 
 1.3.1
 =====
