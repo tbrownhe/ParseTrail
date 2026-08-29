@@ -1,0 +1,96 @@
+name: parsetrail-ci
+
+x-backend-environment: &backend-environment
+  PARSETRAIL_ENV_FILE: ""
+  PROJECT_NAME: ParseTrail CI
+  ENVIRONMENT: local
+  DOMAIN: localhost
+  FRONTEND_HOST: http://localhost:8080
+  BACKEND_CORS_ORIGINS: '["http://localhost:8080"]'
+  SECRET_KEY: ci-only-secret-key
+  FIRST_SUPERUSER: admin@example.com
+  FIRST_SUPERUSER_PASSWORD: ci-only-superuser-password
+  POSTGRES_SERVER: db
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: parsetrail_ci
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: parsetrail-ci-only
+  MASTER_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+  SENTRY_DSN: ""
+
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_DB: parsetrail_ci
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: parsetrail-ci-only
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d parsetrail_ci"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - ci-db-data:/var/lib/postgresql/data
+
+  prestart:
+    build:
+      context: ./backend
+    environment: *backend-environment
+    depends_on:
+      db:
+        condition: service_healthy
+    command: bash scripts/prestart.sh
+    volumes:
+      - ci-keys-data:/app/keys
+
+  backend:
+    build:
+      context: ./backend
+    environment: *backend-environment
+    depends_on:
+      db:
+        condition: service_healthy
+      prestart:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://localhost:8000/api/v1/utils/health-check/', timeout=2)
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - ci-keys-data:/app/keys
+      - ci-clients-data:/app/data/clients
+      - ci-plugins-data:/app/data/plugins
+      - ci-statements-data:/app/secure/statements
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        VITE_API_URL: http://localhost:8000
+        NODE_ENV: production
+    ports:
+      - "127.0.0.1:8080:80"
+
+  website:
+    build:
+      context: .
+      dockerfile: website/Dockerfile
+    ports:
+      - "127.0.0.1:8081:80"
+
+volumes:
+  ci-db-data:
+  ci-keys-data:
+  ci-clients-data:
+  ci-plugins-data:
+  ci-statements-data:

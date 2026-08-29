@@ -5,12 +5,16 @@ on:
     branches:
       - main
   pull_request:
-    types:
-      - opened
-      - synchronize
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  pre-commit:
+  python:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -24,8 +28,10 @@ jobs:
         with:
           version: "0.9.5"
           enable-cache: true
-      - name: Run repository checks
-        run: uvx --from pre-commit==4.6.0 pre-commit run --all-files --show-diff-on-failure
+      - name: Check Python lint
+        run: uvx ruff==0.15.22 check backend/app client/src client/tests
+      - name: Check Python formatting
+        run: uvx ruff==0.15.22 format --check backend/app client/src client/tests
 
   backend-types:
     runs-on: ubuntu-latest

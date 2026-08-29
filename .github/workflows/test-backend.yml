@@ -1,42 +1,112 @@
-name: Test Backend
+name: Tests
 
 on:
   push:
     branches:
       - main
   pull_request:
-    types:
-      - opened
-      - synchronize
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test-backend:
-    if: ${{ false }}  # Disabled for now; remove to enable
+  backend:
+    name: Backend / Python 3.13 / PostgreSQL 17
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: parsetrail_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: parsetrail-test-only
+        ports:
+          - 64321:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d parsetrail_test"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
     steps:
       - name: Checkout
         uses: actions/checkout@v6
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.10"
+          python-version: "3.13"
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
-          version: "0.4.15"
+          version: "0.9.5"
           enable-cache: true
-      - run: docker compose down -v --remove-orphans
-      - run: docker compose up -d db mailcatcher
-      - name: Migrate DB
-        run: uv run bash scripts/prestart.sh
+      - name: Install locked dependencies
+        run: uv sync --extra dev --frozen
         working-directory: backend
-      - name: Run tests
-        run: uv run bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
+      - name: Run migrations and tests
+        run: uv run --frozen bash scripts/tests-start.sh "Coverage for ${{ github.sha }}"
         working-directory: backend
-      - run: docker compose down -v --remove-orphans
-      - name: Store coverage files
+      - name: Store coverage report
+        if: ${{ always() && hashFiles('backend/htmlcov/**') != '' }}
         uses: actions/upload-artifact@v6
         with:
-          name: coverage-html
+          name: backend-coverage-html
           path: backend/htmlcov
           include-hidden-files: true
+
+  client:
+    name: Client / ${{ matrix.name }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows x64
+            os: windows-latest
+          - name: macOS
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
+    env:
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.10.19"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          version: "0.9.5"
+          enable-cache: true
+      - name: Install locked dependencies
+        run: uv sync --extra dev --frozen --python 3.10.19
+        working-directory: client
+      - name: Run client tests
+        run: uv run --frozen --python 3.10.19 pytest -q
+        working-directory: client
+
+  frontend:
+    name: Frontend / Node 20
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+        working-directory: frontend
+      - name: Check formatting and lint
+        run: npm run lint:check
+        working-directory: frontend
+      - name: Build production bundle
+        run: npm run build
+        working-directory: frontend

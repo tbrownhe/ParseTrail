@@ -53,7 +53,7 @@ enough to implement, test, and commit independently.
 - [x] Add a dedicated test-settings path that refuses non-test database names and
   ignores the repository `.env` unless explicitly requested.
 - [x] Start Postgres 17 for backend integration tests under a unique Compose
-  project and non-external disposable volume. All migrations and 73 backend tests
+  project and non-external disposable volume. All migrations and 116 backend tests
   pass against the isolated database.
 - [x] Replace global user/item deletion in backend test teardown with baseline-aware
   cleanup that removes only records created by the suite. A pre-existing sentinel
@@ -64,11 +64,12 @@ enough to implement, test, and commit independently.
   be superseded by the repository-owner condition.
 - [x] Restore and enable backend static CI on Python 3.13; Ruff check/format and
   strict mypy now pass locally against the refreshed lock.
-- [ ] Enable non-mutating Python lint, backend tests, client tests, frontend
+- [~] Enable non-mutating Python lint, backend tests, client tests, frontend
   checks/build, and Compose smoke tests on GitHub-hosted runners. Remove stale
   MailCatcher/port assumptions and make the jobs required on `main` only after
-  they are stable.
-- [ ] Keep CI non-deploying initially: do not give hosted or self-hosted runners
+  they are stable. The workflows and isolated CI stack pass locally; the first
+  hosted Windows/macOS run and branch-protection gate remain to be observed.
+- [x] Keep CI non-deploying initially: do not give hosted or self-hosted runners
   production SSH credentials, the offline release key, or a production `.env`.
   Retain an explicit manual approval boundary until the release path below has
   been rehearsed and rollback is reliable.

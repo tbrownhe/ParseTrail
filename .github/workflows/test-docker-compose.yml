@@ -1,27 +1,35 @@
-name: Test Docker Compose
+name: Container smoke test
 
 on:
   push:
     branches:
       - main
   pull_request:
-    types:
-      - opened
-      - synchronize
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compose-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-
-  test-docker-compose:
-    if: ${{ false }}  # Disabled for now; remove to enable
+  compose:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-      - run: docker compose build
-      - run: docker compose down -v --remove-orphans
-      - run: docker compose up -d --wait
-      - name: Test backend is up
-        run: curl http://localhost:8000/api/v1/utils/health-check
-      - name: Test frontend is up
-        run: curl http://localhost:5173
-      - run: docker compose down -v --remove-orphans
+      - name: Build and start disposable stack
+        run: docker compose -f docker-compose.ci.yml up --build --detach --wait
+      - name: Test backend
+        run: curl --fail --show-error http://localhost:8000/api/v1/utils/health-check/
+      - name: Test dashboard
+        run: curl --fail --show-error http://localhost:8080/
+      - name: Test website
+        run: curl --fail --show-error http://localhost:8081/
+      - name: Show container logs after failure
+        if: ${{ failure() }}
+        run: docker compose -f docker-compose.ci.yml logs --no-color
+      - name: Remove disposable stack
+        if: ${{ always() }}
+        run: docker compose -f docker-compose.ci.yml down --volumes --remove-orphans
