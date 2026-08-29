@@ -12,6 +12,8 @@ Unreleased
   unrelated account when the create-account dialog adds nothing
 - Move budget range queries, grouping, sign handling, and proration behind a
   characterized headless reporting service
+- Move transaction-review filtering, atomic edits, and model-category compatibility
+  retry behind a characterized headless service with typed failures
 
 1.3.1
 =====

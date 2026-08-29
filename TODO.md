@@ -485,11 +485,12 @@ with networking disabled and never pause for an implicit package-data download.
 
 ### P2.1 Introduce application boundaries incrementally
 
-- [~] Add characterization tests around the current import, category, account,
+- [x] Add characterization tests around the current import, category, account,
   verification, plugin-sync, and budget behavior before moving code. Import
   persistence/recovery, plugin synchronization, category CRUD/migration, and account
   CRUD/number assignment are covered, as are budget range, grouping, sign, proration,
-  and inactive-category semantics; verification characterization remains.
+  and inactive-category semantics. Verification coverage locks down filtering,
+  archived-category state, atomic edits, missing references, and model-category retry.
 - [~] Define small application services for parse/import, transaction querying,
   categories, accounts, artifact updates, and statement submission. The headless
   `StatementImportService` now owns import persistence, deduplication, and archive
@@ -497,21 +498,25 @@ with networking disabled and never pause for an implicit package-data download.
   `CategoryService` now owns category queries, validation, and atomic rename/merge
   transactions; `AccountService` now owns account queries, mutations, deletion
   constraints, and account-number assignment; `BudgetQueryService` now owns budget
-  range queries and report calculations. The remaining workflows still need
-  equivalent boundaries.
+  range queries and report calculations; `TransactionReviewService` now owns review
+  queries, atomic edits, and model-category compatibility retry. Artifact updates,
+  statement submission, and remaining main-window workflows still need boundaries.
 - [~] Introduce repositories or explicit query services so GUI code does not manage
   SQLAlchemy sessions directly. Category and account management now delegate all
   persistence to headless services, and the budget view delegates its reporting
-  query; verification and other GUI queries remain.
+  query; verification now delegates all of its persistence as well. Main-window and
+  transaction-browser queries remain.
 - [~] Split the largest GUI modules by workflow while preserving behavior; avoid a
   full rewrite. Category and account persistence and budget reporting moved out of
-  their GUI modules without changing their interaction flows; the other large
-  workflow modules remain.
+  their GUI modules without changing their interaction flows; transaction-review
+  persistence moved out of its window and its module shrank by roughly 130 lines.
+  The other large workflow modules remain.
 - [~] Replace broad exception catches with typed boundary errors and user-safe
   messages while retaining exception chains for local diagnostics. Category input,
   lookup, duplicate, and persistence failures and account validation, duplicate,
   assignment, in-use, and persistence failures are now typed at service boundaries;
-  invalid budget reports and query failures are typed as well.
+  invalid budget reports and query failures are typed, as are invalid or stale review
+  edits and auto-categorization failures.
 
 Acceptance: core application tests run without Qt, each extracted service has one
 clear transaction owner, and module size trends downward without feature drift.

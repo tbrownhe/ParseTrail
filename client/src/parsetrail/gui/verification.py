@@ -1,42 +1,20 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import date
-from decimal import Decimal
+from collections.abc import Sequence
 
 import pandas as pd
 from loguru import logger
 from PySide6 import QtCore, QtGui, QtWidgets
-from sqlalchemy.orm import joinedload, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
-from parsetrail.core import learn
-from parsetrail.core.categorize import add_missing_categories
-from parsetrail.core.categorize import transactions as categorize_transactions
 from parsetrail.core.cluster import recurring_transactions
-from parsetrail.core.orm import Categories, Transactions
-from parsetrail.core.query import update_db_where
+from parsetrail.core.review import (
+    InvalidReviewChangesError,
+    TransactionRecord,
+    TransactionReviewError,
+    TransactionReviewService,
+)
 from parsetrail.core.settings import settings
-
-
-@dataclass
-class TransactionRecord:
-    transaction_id: int
-    date: date
-    account_name: str
-    description: str
-    amount: Decimal
-    category_id: int | None
-    category_name: str
-    verified: bool
-    category_active: bool
-    confidence: float | None = None
-    cluster: int | None = None
-    orig_category_id: int | None = field(init=False)
-    orig_verified: bool = field(init=False)
-
-    def __post_init__(self):
-        self.orig_category_id = self.category_id
-        self.orig_verified = self.verified
 
 
 class TransactionTableModel(QtCore.QAbstractTableModel):
@@ -226,7 +204,7 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
     Main UI for reviewing, categorizing, and verifying transactions.
 
     - Uses normalized Categories table via Transactions.CategoryID.
-    - Does not create or modify Categories; it only assigns existing ones.
+    - Assigns existing categories and can restore categories required by a model.
     - Edits are kept in-memory until the user clicks "Save Changes".
     """
 
@@ -239,7 +217,7 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
         parent=None,
     ):
         super().__init__(parent)
-        self.Session = Session
+        self.review_service = TransactionReviewService(Session)
 
         self.categories: list[tuple[int, str]] = []  # (CategoryID, Name)
 
@@ -449,15 +427,7 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
         The set of categories is assumed to remain stable while this window is open.
         """
         try:
-            session = self.Session()
-            try:
-                rows: list[Categories] = (
-                    session.query(Categories).filter(Categories.Active == 1).order_by(Categories.Name).all()
-                )
-            finally:
-                session.close()
-
-            self.categories = [(c.CategoryID, c.Name) for c in rows]
+            self.categories = self.review_service.active_categories()
 
             self.combo_category.clear()
             for cat_id, name in self.categories:
@@ -471,9 +441,9 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
                 self.combo_category.setEnabled(True)
                 self.btn_apply_category.setEnabled(True)
 
-        except Exception as exc:
+        except TransactionReviewError:
             logger.exception("Failed to load categories")
-            QtWidgets.QMessageBox.critical(self, "Error", f"Failed to load categories:\n{exc}")
+            QtWidgets.QMessageBox.critical(self, "Error", "Failed to load categories. See log for details.")
             self.categories = []
             self.combo_category.clear()
             self.combo_category.addItem("(Error loading categories)", None)
@@ -486,63 +456,15 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
         """
         try:
             logger.info("Loading unverified transactions for review")
-            session = self.Session()
-
-            try:
-                query = (
-                    session.query(Transactions)
-                    .options(
-                        joinedload(Transactions.accounts),
-                        joinedload(Transactions.category),
-                    )
-                    .order_by(Transactions.PostingDate)
-                )
-
-                only_unverified = (
-                    getattr(self, "chk_only_unverified", None) is None or self.chk_only_unverified.isChecked()
-                )
-                if only_unverified:
-                    query = query.filter(Transactions.Verified == 0)
-
-                only_archived = (
-                    getattr(self, "show_archived_only_checkbox", None) is not None
-                    and self.show_archived_only_checkbox.isChecked()
-                )
-                if only_archived:
-                    query = query.join(Transactions.category).filter(Categories.Active == 0)
-
-                rows: list[Transactions] = query.all()
-            finally:
-                session.close()
-
-            records: list[TransactionRecord] = []
-            for tx in rows:
-                if tx.category is not None and tx.CategoryID is not None:
-                    category_id = tx.CategoryID
-                    category_name = tx.category.Name
-                else:
-                    category_id = None
-                    category_name = ""
-
-                is_active = True
-                if tx.category is not None and tx.category.Active is not None:
-                    is_active = bool(tx.category.Active)
-
-                records.append(
-                    TransactionRecord(
-                        transaction_id=tx.TransactionID,
-                        date=tx.PostingDate,
-                        account_name=tx.accounts.AccountName,
-                        description=tx.Description or "",
-                        amount=tx.Amount,
-                        category_id=category_id,
-                        category_name=category_name,
-                        verified=bool(tx.Verified),
-                        category_active=is_active,
-                        confidence=(float(tx.ConfidenceScore) if tx.ConfidenceScore is not None else None),
-                        cluster=None,
-                    )
-                )
+            only_unverified = getattr(self, "chk_only_unverified", None) is None or self.chk_only_unverified.isChecked()
+            only_archived = (
+                getattr(self, "show_archived_only_checkbox", None) is not None
+                and self.show_archived_only_checkbox.isChecked()
+            )
+            records = self.review_service.list_transactions(
+                only_unverified=only_unverified,
+                only_archived_categories=only_archived,
+            )
 
             self.model.set_records(records)
             self._resize_columns()
@@ -550,9 +472,9 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
                 self.status_label.setText(f"Loaded {len(records)} unverified transactions.")
             else:
                 self.status_label.setText(f"Loaded {len(records)} transactions (verified + unverified).")
-        except Exception as exc:
+        except TransactionReviewError:
             logger.exception("Failed to load transactions")
-            QtWidgets.QMessageBox.critical(self, "Error", f"Failed to load transactions:\n{exc}")
+            QtWidgets.QMessageBox.critical(self, "Error", "Failed to load transactions. See log for details.")
 
     def _resize_columns(self):
         header = self.table_view.horizontalHeader()
@@ -684,57 +606,21 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.information(self, "No Changes", "There are no changes to save.")
             return
 
-        # Ensure no records have category_id None if they changed category
-        invalid = [rec for rec in modified if rec.category_id is None]
-        if invalid:
-            QtWidgets.QMessageBox.warning(
-                self,
-                "Missing Category",
-                "Some modified transactions have no category selected. Please apply a valid category before saving.",
-            )
-            return
-
         try:
-            session = self.Session()
-            try:
-                logger.info(f"Saving changes for {len(modified)} transactions")
-
-                update_cols = ["CategoryID", "Verified", "ConfidenceScore"]
-                update_list = []
-                for rec in modified:
-                    # If category or verified changed, clear confidence
-                    if rec.category_id != rec.orig_category_id or rec.verified != rec.orig_verified:
-                        confidence = None
-                    else:
-                        confidence = rec.confidence
-
-                    update_list.append((rec.category_id, int(rec.verified), confidence))
-
-                where_cols = ["TransactionID"]
-                where_list = [(rec.transaction_id,) for rec in modified]
-
-                update_db_where(
-                    session,
-                    Transactions,
-                    update_cols,
-                    update_list,
-                    where_cols,
-                    where_list,
-                )
-                # update_db_where commits internally
-
-            finally:
-                session.close()
+            logger.info("Saving changes for {} transactions", len(modified))
+            saved_count = self.review_service.save_changes(modified)
 
             # Reload unverified transactions (these will drop out if Verified=1)
             self.load_transactions()
-            self.status_label.setText(f"Saved changes for {len(modified)} transactions.")
+            self.status_label.setText(f"Saved changes for {saved_count} transactions.")
 
             # Notify main window that db changed
             self.data_changed.emit()
-        except Exception as exc:
+        except InvalidReviewChangesError as exc:
+            QtWidgets.QMessageBox.warning(self, "Invalid Changes", str(exc))
+        except TransactionReviewError:
             logger.exception("Failed to save changes")
-            QtWidgets.QMessageBox.critical(self, "Error", f"Failed to save changes:\n{exc}")
+            QtWidgets.QMessageBox.critical(self, "Error", "Failed to save changes. See log for details.")
 
     def auto_categorize_unverified(self):
         if settings.model_path is None:
@@ -769,39 +655,34 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
 
         try:
             logger.info("Running auto-categorization on unverified transactions")
-            session = self.Session()
-            try:
-                # Update db with predicted categories
-                try:
-                    categorize_transactions(
-                        session=session,
-                        model_path=settings.model_path,
-                        unverified=True,
-                        uncategorized=False,
-                    )
-                except learn.CategoryCompatibilityError as exc:
-                    if not self._prompt_add_missing_categories(session, exc.missing_categories):
-                        self.status_label.setText("Auto-categorization skipped (missing categories).")
-                        return
-                    categorize_transactions(
-                        session=session,
-                        model_path=settings.model_path,
-                        unverified=True,
-                        uncategorized=False,
-                    )
-            finally:
-                session.close()
+            result = self.review_service.auto_categorize(
+                settings.model_path,
+                missing_category_decision=self._prompt_add_missing_categories,
+            )
+            if not result.completed:
+                self.status_label.setText("Auto-categorization skipped (missing categories).")
+                return
+            if result.added_categories:
+                QtWidgets.QMessageBox.information(
+                    self,
+                    "Categories Added",
+                    (
+                        "Missing categories were added with Type set to 'Expense'.\n\n"
+                        "Please update the type as needed in the Category Manager."
+                    ),
+                )
 
             # Load predicted categories
+            self._load_categories()
             self.load_transactions()
             self.status_label.setText("Auto-categorization complete.")
-        except Exception as exc:
+        except TransactionReviewError:
             logger.exception("Auto-categorization failed")
-            QtWidgets.QMessageBox.critical(self, "Error", f"Auto-categorization failed:\n{exc}")
+            QtWidgets.QMessageBox.critical(self, "Error", "Auto-categorization failed. See log for details.")
         finally:
             progress.close()
 
-    def _prompt_add_missing_categories(self, session, missing: list[str]) -> bool:
+    def _prompt_add_missing_categories(self, missing: Sequence[str]) -> bool:
         missing_text = ", ".join(missing)
         reply = QtWidgets.QMessageBox.question(
             self,
@@ -814,18 +695,7 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
             QtWidgets.QMessageBox.Yes,
         )
-        if reply != QtWidgets.QMessageBox.Yes:
-            return False
-        add_missing_categories(session, missing)
-        QtWidgets.QMessageBox.information(
-            self,
-            "Categories Added",
-            (
-                "Missing categories were added with Type set to 'Expense'.\n\n"
-                "Please update the type as needed in the Category Manager."
-            ),
-        )
-        return True
+        return reply == QtWidgets.QMessageBox.Yes
 
     def _build_clustering_kwargs(self):
         """
