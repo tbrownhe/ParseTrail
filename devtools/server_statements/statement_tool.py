@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from settings import settings
+from settings import require_runtime_settings, settings
 
 # Make the client modules importable
 CLIENT_SRC = Path(__file__).resolve().parents[2] / "client" / "src"
@@ -118,6 +118,7 @@ class StatementFilterProxy(QSortFilterProxyModel):
 
 class StatementTool(QMainWindow):
     def __init__(self):
+        require_runtime_settings()
         super().__init__()
         self.setWindowTitle("Statement Browser (dev)")
         self.resize(1100, 700)

@@ -31,8 +31,11 @@ hibernation, and crash dumps is outside that application-level guarantee.
 
 ## Configuration
 
-`settings.py` reads the top-level `.env` and reports an error if it is absent.
-Configure at least:
+`settings.py` uses the top-level `.env` when it exists. Set
+`PARSETRAIL_ENV_FILE` to select another environment file (for example, a staging
+profile); an explicit empty value disables dotenv loading for import and test
+isolation. Runtime operations still reject incomplete configuration. Configure
+at least:
 
 ```dotenv
 ENVIRONMENT=local

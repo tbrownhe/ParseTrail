@@ -16,7 +16,7 @@ from aes import decrypt_statement
 from db import get_sessionmaker
 from loguru import logger
 from orm import StatementUploads
-from settings import settings
+from settings import require_runtime_settings, settings
 
 CLIENT_SRC = Path(__file__).resolve().parents[2] / "client" / "src"
 if not CLIENT_SRC.exists():
@@ -109,6 +109,7 @@ def run(
     status: str = "ready",
     diagnose_routing: bool = False,
 ) -> int:
+    require_runtime_settings()
     plugin_dir = Path(settings.PLUGINS_DIR).expanduser().resolve()
     compile_plugins(plugin_dir)
     plugin_manager = PluginManager(plugin_dir=plugin_dir, allow_unsigned=True)

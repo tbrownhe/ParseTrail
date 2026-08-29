@@ -1,3 +1,4 @@
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -26,6 +27,7 @@ print("headless imports ok")
     result = subprocess.run(
         [sys.executable, "-c", code],
         cwd=client_root,
+        env={**os.environ, "PARSETRAIL_ENV_FILE": ""},
         capture_output=True,
         text=True,
         timeout=30,
