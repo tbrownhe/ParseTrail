@@ -37,7 +37,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from parsetrail.core import config, learn, plot, reports
+from parsetrail.core import learn, plot
+from parsetrail.core.artifacts import ArtifactService, ArtifactServiceError
 from parsetrail.core.build_metadata import build_provenance_label
 from parsetrail.core.client import (
     ClientUpdateThread,
@@ -640,6 +641,7 @@ class ParseTrail(QMainWindow):
 
         # Attach Session to budget tab after DB initialization
         self.budget_tab.set_session_factory(self.Session)
+        self.artifact_service = ArtifactService(self.Session)
         self.dashboard_service = DashboardQueryService(self.Session)
         self.review_service = TransactionReviewService(self.Session)
 
@@ -760,6 +762,7 @@ class ParseTrail(QMainWindow):
             try:
                 self.Session = initialize_db()
                 self.budget_tab.set_session_factory(self.Session)
+                self.artifact_service = ArtifactService(self.Session)
                 self.dashboard_service = DashboardQueryService(self.Session)
                 self.review_service = TransactionReviewService(self.Session)
                 self.update_main_gui()
@@ -779,8 +782,17 @@ class ParseTrail(QMainWindow):
         )
         if reply != QMessageBox.Yes:
             return
-        with self.Session() as session:
-            config.export_init_accounts(session)
+        try:
+            result = self.artifact_service.export_accounts(settings.accounts_json)
+        except ArtifactServiceError:
+            logger.exception("Failed to export account configuration")
+            QMessageBox.critical(self, "Export Failed", "Failed to export account configuration. See log for details.")
+            return
+        QMessageBox.information(
+            self,
+            "Configuration Saved",
+            (f"Exported {result.account_count} account(s) and {result.account_number_count} account number(s)."),
+        )
 
     def manage_plugins(self):
         dialog = PluginManagerDialog(self.plugin_manager)
@@ -951,30 +963,42 @@ class ParseTrail(QMainWindow):
         )
 
     def plot_balances(self):
-        with self.Session() as session:
-            plot.plot_balance_history(session)
+        try:
+            data, debt_columns = self.dashboard_service.balance_history()
+            plot.show_balance_history(data, debt_columns)
+        except DashboardServiceError:
+            logger.exception("Failed to open balance history plot")
+            QMessageBox.critical(self, "Plot Failed", "Failed to load balance history. See log for details.")
 
     def plot_categories(self):
-        with self.Session() as session:
-            plot.plot_category_spending(session)
+        try:
+            plot.show_category_spending(self.dashboard_service.category_spending())
+        except DashboardServiceError:
+            logger.exception("Failed to open category spending plot")
+            QMessageBox.critical(self, "Plot Failed", "Failed to load category spending. See log for details.")
 
     def report_all_time(self):
         timestamp = datetime.now().strftime(r"%Y%m%d%H%M%S")
         dpath = settings.report_dir / f"{timestamp}_Report_AllTime.xlsx"
-        with self.Session() as session:
-            reports.report(session, dpath)
+        self._generate_report(dpath)
 
     def report_1year(self):
         timestamp = datetime.now().strftime(r"%Y%m%d%H%M%S")
         dpath = settings.report_dir / f"{timestamp}_Report_OneYear.xlsx"
-        with self.Session() as session:
-            reports.report(session, dpath, months=12)
+        self._generate_report(dpath, months=12)
 
     def report_3months(self):
         timestamp = datetime.now().strftime(r"%Y%m%d%H%M%S")
         dpath = settings.report_dir / f"{timestamp}_Report_ThreeMonths.xlsx"
-        with self.Session() as session:
-            reports.report(session, dpath, months=3)
+        self._generate_report(dpath, months=3)
+
+    def _generate_report(self, destination: Path, *, months: int | None = None) -> None:
+        try:
+            report_path = self.artifact_service.generate_report(destination, months=months)
+            open_file_in_os(report_path)
+        except ArtifactServiceError:
+            logger.exception("Failed to generate transaction report")
+            QMessageBox.critical(self, "Report Failed", "Failed to generate report. See log for details.")
 
     def open_category_manager(self):
         dialog = CategoryManagerDialog(self.Session)
@@ -997,8 +1021,6 @@ class ParseTrail(QMainWindow):
     def _handle_transactions_data_changed(self):
         """Behavior when user clicks Save Changes in TransactionReviewWindow"""
         pass
-        # with self.Session() as session:
-        #    self.update_main_gui(session)
 
     def _on_transaction_review_closed(self, _obj=None):
         self.transaction_review_window = None

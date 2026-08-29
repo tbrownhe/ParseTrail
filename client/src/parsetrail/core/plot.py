@@ -132,6 +132,11 @@ def get_balance_data(session: Session) -> None:
 
 def plot_balance_history(session: Session):
     df_pivot, debt_cols = get_balance_data(session)
+    show_balance_history(df_pivot, debt_cols)
+
+
+def show_balance_history(df_pivot: pd.DataFrame, debt_cols: list[str]) -> None:
+    """Show already-queried balance history data."""
 
     # Plot all balances on the same chart
     fig, ax1 = plt.subplots(figsize=(14, 8))
@@ -185,6 +190,11 @@ def get_category_data(session: Session) -> None:
 def plot_category_spending(session: Session):
     # Get data from db
     df_pivot = get_category_data(session)
+    show_category_spending(df_pivot)
+
+
+def show_category_spending(df_pivot: pd.DataFrame) -> None:
+    """Show already-queried category spending data."""
 
     plt.figure(figsize=(14, 8))
     for category in df_pivot.columns.values:

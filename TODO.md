@@ -501,16 +501,14 @@ with networking disabled and never pause for an implicit package-data download.
   range queries and report calculations; `TransactionReviewService` now owns review
   queries, atomic edits, and model-category compatibility retry; `TransactionService`
   now owns common account/balance/range queries and atomic manual entry. Artifact
-  updates and statement submission still need boundaries; `DashboardQueryService`
-  now owns balances, checklists, chart inputs, discrepancy inputs, and verified
-  training data for the main window.
-- [~] Introduce repositories or explicit query services so GUI code does not manage
-  SQLAlchemy sessions directly. Category and account management now delegate all
-  persistence to headless services, and the budget view delegates its reporting
-  query; verification now delegates all of its persistence as well. Main-window and
-  transaction-browser queries now delegate to `TransactionService`; main-window
-  dashboard queries delegate to `DashboardQueryService`. Only main-window
-  export/report/standalone-plot artifact actions still manage sessions directly.
+  updates now have an `ArtifactService`, while statement submission still needs a
+  boundary; `DashboardQueryService` owns balances, checklists, chart inputs,
+  discrepancy inputs, and verified training data for the main window.
+- [x] Introduce repositories or explicit query services so GUI code does not manage
+  SQLAlchemy sessions directly. Category, account, budget, verification, transaction,
+  dashboard, and artifact workflows now delegate every query and mutation to
+  headless services; a source audit confirms no GUI module opens a session or issues
+  an ORM query.
 - [~] Split the largest GUI modules by workflow while preserving behavior; avoid a
   full rewrite. Category and account persistence and budget reporting moved out of
   their GUI modules without changing their interaction flows; transaction-review
@@ -524,7 +522,7 @@ with networking disabled and never pause for an implicit package-data download.
   invalid budget reports and query failures are typed, as are invalid or stale review
   edits and auto-categorization failures. Manual-entry validation, missing accounts,
   and transaction query/persistence failures are typed, as are dashboard data and
-  persistence failures.
+  persistence failures and artifact query/write failures.
 
 Acceptance: core application tests run without Qt, each extracted service has one
 clear transaction owner, and module size trends downward without feature drift.

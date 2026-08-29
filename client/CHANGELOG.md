@@ -22,6 +22,10 @@ Unreleased
   training queries behind a headless service with deterministic account ordering
 - Reuse the characterized model-category compatibility workflow after statement
   imports instead of maintaining a second GUI-owned database implementation
+- Remove SQLAlchemy session management from all GUI modules by moving account-config
+  export and spreadsheet-report generation behind a headless artifact service
+- Atomically replace account-config exports and keep external file/plot launching at
+  the GUI boundary
 
 1.3.1
 =====
