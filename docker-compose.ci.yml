@@ -40,7 +40,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    command: bash scripts/prestart.sh
+    command: bash -c "bash scripts/migrate.sh && bash scripts/prestart.sh"
     volumes:
       - ci-keys-data:/app/keys
 

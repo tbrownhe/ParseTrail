@@ -9,6 +9,15 @@
 
 Start the local development environment with Docker Compose following the guide in [../development.md](../development.md).
 
+Run schema migration explicitly before starting a fresh or upgraded stack:
+
+```console
+$ docker compose run --rm prestart bash scripts/migrate.sh
+```
+
+`prestart.sh` validates connectivity, provisions statement-submission keys, and
+initializes required data, but deliberately does not run Alembic.
+
 ## General Workflow
 
 By default, the dependencies are managed with [uv](https://docs.astral.sh/uv/), go there and install it.

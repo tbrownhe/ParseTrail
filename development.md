@@ -10,8 +10,12 @@ A quick-start for working on ParseTrail locally with Docker. Designed for a skil
 Local dev uses both `docker-compose.yml` and `docker-compose.override.yml` (auto-applied). To start:
 
 ```bash
+docker compose run --rm prestart bash scripts/migrate.sh
 docker compose up --build
 ```
+
+Migration is a separate command by design. Normal service startup never changes
+the database schema as a side effect.
 
 Key ports (override file):
 - Backend API: http://localhost:8000 (docs at /docs, ReDoc at /redoc)
