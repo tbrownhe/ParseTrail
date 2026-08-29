@@ -14,6 +14,7 @@ class SearchExpressionError(ValueError):
 
 class TokenKind(StrEnum):
     LITERAL = "literal"
+    NOT = "!"
     AND = "&&"
     OR = "||"
     OPEN = "("
@@ -44,7 +45,12 @@ class Or:
     right: Expression
 
 
-Expression: TypeAlias = Literal | And | Or
+@dataclass(frozen=True, slots=True)
+class Not:
+    expression: Expression
+
+
+Expression: TypeAlias = Literal | Not | And | Or
 
 
 def _decode_literal(raw: str, offset: int) -> str:
@@ -115,6 +121,14 @@ def tokenize(expression: str) -> tuple[Token, ...]:
             index += 2
             literal_offset = index
             continue
+        # Treat ! as unary negation only at an operand boundary. This keeps
+        # literal content such as <!DOCTYPE or Wow!Bank backward compatible.
+        if char == "!" and not "".join(literal).strip():
+            flush_literal()
+            tokens.append(Token(TokenKind.NOT, char, index))
+            index += 1
+            literal_offset = index
+            continue
         if char in "()":
             flush_literal()
             kind = TokenKind.OPEN if char == "(" else TokenKind.CLOSE
@@ -168,6 +182,9 @@ class _Parser:
         if token.kind is TokenKind.LITERAL:
             self.index += 1
             return Literal(token.value)
+        if token.kind is TokenKind.NOT:
+            self.index += 1
+            return Not(self.parse_primary())
         if token.kind is TokenKind.OPEN:
             self.index += 1
             expression = self.parse_or()
@@ -192,7 +209,7 @@ class _Parser:
 
 
 def parse_search_string(search_string: str) -> Expression:
-    """Parse with conventional precedence: parentheses, ``&&``, then ``||``."""
+    """Parse with conventional precedence: parentheses/``!``, ``&&``, then ``||``."""
     return _Parser(tokenize(search_string)).parse()
 
 
@@ -202,6 +219,8 @@ def evaluate_search_expression(expression: Expression, text: str) -> bool:
     def evaluate(node: Expression) -> bool:
         if isinstance(node, Literal):
             return node.value in searchable
+        if isinstance(node, Not):
+            return not evaluate(node.expression)
         if isinstance(node, And):
             return evaluate(node.left) and evaluate(node.right)
         return evaluate(node.left) or evaluate(node.right)

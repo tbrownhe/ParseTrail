@@ -61,15 +61,17 @@ def test_citi_layout_headers_route_to_one_plugin_each() -> None:
         plugin_id, _, metadata = load_plugin(plugin_path)
         catalog[plugin_id] = metadata
 
-    cases = {
-        "Date Description Amount": "pdf_citicc_201505",
-        "Trans. Post Description Amount": "pdf_citicc_202506",
-        "Sale Post Description Amount": "pdf_citicc_202511",
-    }
-    for header, expected in cases.items():
+    cases = (
+        ("Date Description Amount", "pdf_citicc_201505"),
+        ("Trans. Post Description Amount", "pdf_citicc_202506"),
+        ("Sale Post Description Amount", "pdf_citicc_202511"),
+        ("Sale Post\nDate Date Description Amount", "pdf_citicc_202511"),
+    )
+    for header, expected in cases:
         features = DocumentFeatures(
             suffix=".pdf",
             body_text="www.citicards.com",
             header_text=header,
+            pdf_metadata=normalize_pdf_metadata({"Author": "Citibank, N.A."}),
         )
         assert matching_plugins(features, catalog) == (expected,)

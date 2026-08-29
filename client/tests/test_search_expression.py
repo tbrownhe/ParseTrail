@@ -27,6 +27,14 @@ def test_quotes_inside_an_unquoted_literal_remain_literal_content() -> None:
     assert match_search_string(expression, expression)
 
 
+def test_unary_not_excludes_a_more_specific_layout() -> None:
+    expression = '"date description amount" && !("date date description amount")'
+
+    assert match_search_string(expression, "Date Description Amount")
+    assert not match_search_string(expression, "Sale Post Date Date Description Amount")
+    assert match_search_string("alpha && ! beta", "alpha gamma")
+
+
 @pytest.mark.parametrize(
     "expression",
     ["", "alpha&&", "||alpha", "alpha beta", "alpha&(beta)", "(alpha||beta", '"unterminated'],

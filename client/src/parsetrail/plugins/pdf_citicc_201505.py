@@ -23,7 +23,9 @@ class Parser(IParser):
     COMPANY = "Citibank"
     STATEMENT_TYPE = "Credit Account Monthly Statement"
     SEARCH_STRING = "www.citicards.com"
-    ROUTING_RULE = {"header": '"date description amount"'}
+    ROUTING_RULE = {
+        "header": '"date description amount" && !("date date description amount")',
+    }
     INSTRUCTIONS = (
         "Login to https://www.citi.com/, then navigate to your account."
         " Click 'View Statements', then click 'View All Statements'."

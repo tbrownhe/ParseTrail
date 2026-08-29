@@ -1,4 +1,5 @@
 import re
+from collections import Counter
 from datetime import datetime
 from statistics import median
 
@@ -19,13 +20,16 @@ from parsetrail.core.validation import Account, Statement, Transaction
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_citicc_202511"
-    VERSION = "0.3.0"
+    VERSION = "0.4.0"
     MIN_CLIENT_VERSION = "1.3.0"
     SUFFIX = ".pdf"
     COMPANY = "Citibank"
     STATEMENT_TYPE = "Credit Account Monthly Statement"
     SEARCH_STRING = "www.citicards.com"
-    ROUTING_RULE = {"header": '"sale post description amount"'}
+    ROUTING_RULE = {
+        "pdf_metadata": {"Author": '"Citibank, N.A."'},
+        "header": '"sale post description amount" || ("sale post" && "date date description amount")',
+    }
     INSTRUCTIONS = (
         "Login to https://www.citi.com/, then navigate to your account."
         " Click 'View Statements', then click 'View All Statements'."
@@ -46,6 +50,13 @@ class Parser(IParser):
     ]
     INTEREST_LINE = r"^\d{2}/\d{2} INTEREST CHARGED TO STANDARD PURCH"
     MAX_DESC_LINES = 4
+    TEXT_TRANSACTION = re.compile(
+        r"^\s*(?:\d+\s+)*(?:(?P<transaction_date>\d{2}/\d{2})\s+"
+        r"(?P<posting_date>\d{2}/\d{2})|(?P<single_date>\d{2}/\d{2}))\s+"
+        r"(?P<description>.+?)\s+"
+        r"(?P<amount>-?\$\d{1,3}(?:,\d{3})*\.\d{2})\s*$"
+    )
+    DATE_PREFIX = re.compile(r"^\s*(?:\d+\s+)*(?P<date>\d{2}/\d{2})\s+(?P<description>.+)$")
 
     def __init__(self):
         self.vertical_lines = None
@@ -66,6 +77,7 @@ class Parser(IParser):
             self.lines = reader.extract_lines_clean()
             if not self.lines:
                 raise ValueError("No lines extracted from the PDF.")
+            reader.extract_text_simple()
             self.reader = reader
             # Extract raw chars from first page
             self.chars = "".join([c["text"] for c in self.reader.PDF.pages[0].chars])
@@ -150,6 +162,8 @@ class Parser(IParser):
         # Parse transactions
         try:
             transactions = self.parse_transaction_array(transaction_array)
+            transactions.extend(self.extract_missing_text_transactions(transactions))
+            transactions.extend(self.extract_missing_fees(transactions))
         except Exception as e:
             raise ValueError(f"Failed to parse transactions for account {account_num}: {e}") from e
 
@@ -326,6 +340,10 @@ class Parser(IParser):
             if len(row) != len(self.vertical_lines) - 1:
                 raise ValueError(f"Incorrect number of columns for row: {row}")
 
+            # pdfplumber represents empty table cells as either None or an empty
+            # string depending on the PDF producer. Normalize before matching.
+            row = [cell or "" for cell in row]
+
             # Skip empty rows
             if all(item == "" for item in row):
                 continue
@@ -344,10 +362,15 @@ class Parser(IParser):
             self.stop = True
 
             # Table extraction misses the interest fee. Find and append it manually.
-            _, line, _ = find_regex_in_line(txt.splitlines(), self.INTEREST_LINE)
-            parts = line.split()
-            row = ["", parts[0], " ".join(parts[1:-1]), parts[-1]]
-            array.append(row)
+            try:
+                _, line, _ = find_regex_in_line(txt.splitlines(), self.INTEREST_LINE)
+            except ValueError:
+                # Zero-interest statements contain only the total line.
+                pass
+            else:
+                parts = line.split()
+                row = ["", parts[0], " ".join(parts[1:-1]), parts[-1]]
+                array.append(row)
 
         return array
 
@@ -388,16 +411,19 @@ class Parser(IParser):
         while i_row < len(array):
             row = array[i_row]
 
-            # Return early if this is not a transaction start line
-            valid = bool(self.TRANSACTION_DATE.search(row[tdate_col])) or bool(
-                self.TRANSACTION_DATE.search(row[pdate_col])
-            )
-            if not valid:
+            # Accessible-PDF tags can leak adjacent text into a date cell. Use
+            # only the first mm/dd token rather than passing the full cell on.
+            transaction_match = self.TRANSACTION_DATE.search(row[tdate_col])
+            posting_match = self.TRANSACTION_DATE.search(row[pdate_col])
+            if not transaction_match and not posting_match:
                 i_row += 1
                 continue
 
             # Extract main part of the transaction
-            tdate, pdate = self._normalize_dates(row[tdate_col], row[pdate_col])
+            tdate, pdate = self._normalize_dates(
+                transaction_match.group() if transaction_match else "",
+                posting_match.group() if posting_match else "",
+            )
             transaction_date = get_absolute_date(tdate, self.start_date, self.end_date)
             posting_date = get_absolute_date(pdate, self.start_date, self.end_date)
 
@@ -421,6 +447,87 @@ class Parser(IParser):
             i_row += 1
 
         return transactions
+
+    def extract_missing_text_transactions(self, extracted: list[Transaction]) -> list[Transaction]:
+        """Recover rows omitted by PDF table geometry without duplicating rows.
+
+        Citi's accessible-PDF renderer can place decorative digits over a row or
+        put a continuation-page row above the first horizontal rule. Those rows
+        remain intact in simple text even though ``extract_table`` omits them.
+        """
+        extracted_keys = Counter(
+            (transaction.transaction_date, transaction.posting_date, transaction.amount) for transaction in extracted
+        )
+        missing: list[Transaction] = []
+        for page_text in self.reader.pages_simple or []:
+            for line in page_text.splitlines():
+                match = self.TEXT_TRANSACTION.match(line)
+                if not match:
+                    continue
+                transaction_mmdd = match.group("transaction_date") or match.group("single_date")
+                posting_mmdd = match.group("posting_date") or match.group("single_date")
+                transaction_date = get_absolute_date(transaction_mmdd, self.start_date, self.end_date)
+                posting_date = get_absolute_date(posting_mmdd, self.start_date, self.end_date)
+                amount = -parse_money(match.group("amount"))
+                candidate = Transaction(
+                    transaction_date=transaction_date,
+                    posting_date=posting_date,
+                    amount=amount,
+                    desc=" ".join(match.group("description").split()),
+                )
+                key = (candidate.transaction_date, candidate.posting_date, candidate.amount)
+                if extracted_keys[key]:
+                    extracted_keys[key] -= 1
+                    continue
+                missing.append(candidate)
+        if missing:
+            logger.debug("Recovered {} transaction row(s) from text.", len(missing))
+        return missing
+
+    def extract_missing_fees(self, extracted: list[Transaction]) -> list[Transaction]:
+        """Recover multiline fee rows emitted outside Citi's table geometry."""
+        extracted_keys = Counter((transaction.posting_date, transaction.amount) for transaction in extracted)
+        missing: list[Transaction] = []
+        for page_text in self.reader.pages_simple or []:
+            in_fees = False
+            pending: tuple[str, list[str]] | None = None
+            for raw_line in page_text.splitlines():
+                line = " ".join(raw_line.split())
+                if line == "Fees Charged":
+                    in_fees = True
+                    continue
+                if not in_fees:
+                    continue
+                if "TOTAL FEES FOR THIS PERIOD" in line:
+                    pending = None
+                    break
+                date_match = self.DATE_PREFIX.match(line)
+                if date_match:
+                    pending = (date_match.group("date"), [date_match.group("description")])
+                elif pending:
+                    pending[1].append(line)
+                if not pending:
+                    continue
+                amount_match = self.AMOUNT.search(line)
+                if not amount_match:
+                    continue
+                date = get_absolute_date(pending[0], self.start_date, self.end_date)
+                amount = -parse_money(amount_match.group())
+                candidate = Transaction(
+                    transaction_date=date,
+                    posting_date=date,
+                    amount=amount,
+                    desc=" ".join(pending[1]),
+                )
+                key = (candidate.posting_date, candidate.amount)
+                if extracted_keys[key]:
+                    extracted_keys[key] -= 1
+                else:
+                    missing.append(candidate)
+                pending = None
+        if missing:
+            logger.debug("Recovered {} fee row(s) from text.", len(missing))
+        return missing
 
     def _normalize_dates(self, tdate: str, pdate: str) -> tuple[str, str]:
         if tdate and not pdate:
