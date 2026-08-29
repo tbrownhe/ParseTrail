@@ -238,9 +238,17 @@ recoverable, committed data agrees with the import state, and a retry is safe.
   helper has completed a synthetic 12-to-17 rehearsal with whole-schema table
   count comparison; staging and production still use PostgreSQL 12. Do not point
   a newer server at the old data directory.
+- [ ] `[USER]` After review and merge, take a verified production backup and
+  deploy the current application release while explicitly retaining both the
+  PostgreSQL 12 image and existing PostgreSQL 12 volume. Confirm the new Alembic
+  head, database health, expected table counts, login, artifact downloads, and
+  statement submission before treating the application release as healthy.
+- [ ] Restore a fresh production PostgreSQL 12 dump into a uniquely named,
+  isolated PostgreSQL 17 staging volume; preserve the source volume and compare
+  every public-table count before allowing application traffic to the restore.
 - [ ] `[USER]` Verify account/login, plugin download, statement submission, admin
   retrieval, email, and backup/restore against the upgraded staging stack before
-  production cutover.
+  the production PostgreSQL 17 cutover.
 
 Acceptance: supported runtime versions are documented, lock files reproduce on CI,
 dependency audits have no known critical/high production finding without a written
@@ -269,6 +277,27 @@ temporary exception, and the Postgres restore drill preserves expected row count
 - [x] Write an append-only release record containing timestamp, operator, Git
   commit, schema revision, image digests, artifact versions/hashes, smoke results,
   and the exact rollback target.
+- [ ] Treat staging as a configuration-only deployment target using the same
+  Compose definition, images, migrations, and signed artifacts as production;
+  do not introduce staging-only application behavior.
+- [ ] Parameterize the external submission-key volume and validate that staging
+  uses a distinct `STACK_NAME`, PostgreSQL volume, submission-key volume, secrets,
+  bind-mount directories, release state, and smoke credentials. Refuse a staging
+  deployment whose protected storage resolves to a production target.
+- [ ] Move the dashboard API origin from build-time `VITE_API_URL` to validated
+  container-startup configuration so the exact frontend image digest can be
+  promoted from staging to production.
+- [ ] Add an isolated desktop staging profile and process-local launcher for the
+  installed client. Separate AppData, SQLite/import paths, OS credential-store
+  entry, cached submission public key, plugin store, logs, and reports; show a
+  persistent `STAGING` marker and never modify the production profile.
+- [ ] Let the server-statement devtool select an explicit environment file,
+  recognize staging, display its target prominently, and retain the memory-only
+  plaintext invariant.
+- [ ] Provision a LAN/VPN-only `parsetrail-staging` Compose project behind the
+  existing Traefik instance with private staging hostnames and trusted HTTPS.
+  Capture all outbound staging mail locally or restrict it to an explicit test
+  recipient allowlist.
 - [ ] `[USER]` Rehearse one successful staging deployment, one application rollback,
   and one migration/restore rollback before enabling any deployment runner.
 
@@ -454,7 +483,8 @@ clear transaction owner, and module size trends downward without feature drift.
   restore action.
 - [ ] `[USER]` Walk through first run, account login, plugin install, one-off import,
   folder import, overlap handling, statement contribution, and restore on Windows.
-- [ ] `[USER]` Have Jacob perform the same fresh-user walkthrough on macOS.
+- [ ] `[USER]` Repeat the fresh-user walkthrough on the owner's MacBook. Reserve
+  Jacob's macOS testing for official-release usability and product-gap feedback.
 
 Acceptance: both walkthroughs can be completed without source-code knowledge and
 every action that moves or retains a statement is explained before it occurs.
