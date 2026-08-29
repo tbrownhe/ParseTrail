@@ -228,6 +228,10 @@ export type UserPublic = {
      * Id
      */
     id: string;
+    /**
+     * Pending Email
+     */
+    pending_email?: string | null;
 };
 
 /**

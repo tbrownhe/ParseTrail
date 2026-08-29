@@ -9,10 +9,15 @@ client.setConfig({
 })
 
 client.interceptors.error.use((error, response, request) => {
-  if (error instanceof ApiError) {
-    return error
+  const apiError =
+    error instanceof ApiError ? error : new ApiError(error, response, request)
+  if (apiError.status === 401 && localStorage.getItem("access_token")) {
+    localStorage.removeItem("access_token")
+    if (window.location.pathname !== "/login") {
+      window.location.assign("/login")
+    }
   }
-  return new ApiError(error, response, request)
+  return apiError
 })
 
 export type * from "./generated/types.gen"

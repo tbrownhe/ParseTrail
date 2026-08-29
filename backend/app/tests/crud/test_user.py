@@ -1,4 +1,5 @@
 from fastapi.encoders import jsonable_encoder
+from pwdlib.hashers.bcrypt import BcryptHasher
 from sqlmodel import Session
 
 from app import crud
@@ -31,6 +32,27 @@ def test_not_authenticate_user(db: Session) -> None:
     password = random_lower_string()
     user = crud.authenticate(session=db, email=email, password=password)
     assert user is None
+
+
+def test_authenticate_migrates_legacy_bcrypt_hash(db: Session) -> None:
+    email = random_email()
+    password = random_lower_string()
+    user = crud.create_user(
+        session=db,
+        user_create=UserCreate(email=email, password=password),
+    )
+    user.hashed_password = BcryptHasher().hash(password)
+    db.add(user)
+    db.commit()
+
+    authenticated_user = crud.authenticate(
+        session=db,
+        email=email,
+        password=password,
+    )
+
+    assert authenticated_user is not None
+    assert authenticated_user.hashed_password.startswith("$argon2id$")
 
 
 def test_check_if_user_is_active(db: Session) -> None:

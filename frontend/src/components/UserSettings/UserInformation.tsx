@@ -12,7 +12,7 @@ import {
   useColorModeValue,
 } from "@chakra-ui/react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { type SubmitHandler, useForm } from "react-hook-form"
 
 import {
@@ -37,7 +37,7 @@ const UserInformation = () => {
     reset,
     getValues,
     formState: { isSubmitting, errors, isDirty },
-  } = useForm<UserPublic>({
+  } = useForm<UserUpdateMe>({
     mode: "onBlur",
     criteriaMode: "all",
     defaultValues: {
@@ -46,15 +46,24 @@ const UserInformation = () => {
     },
   })
 
-  const toggleEditMode = () => {
-    setEditMode(!editMode)
-  }
-
   const mutation = useMutation({
     mutationFn: (data: UserUpdateMe) =>
       UsersService.updateUserMe({ requestBody: data }),
-    onSuccess: () => {
-      showToast("Success!", "User updated successfully.", "success")
+    onSuccess: (updatedUser: UserPublic) => {
+      setEditMode(false)
+      reset({
+        full_name: updatedUser.full_name,
+        email: updatedUser.email,
+      })
+      if (updatedUser.pending_email) {
+        showToast(
+          "Verification required",
+          `Check ${updatedUser.pending_email} to finish changing your email address.`,
+          "success",
+        )
+      } else {
+        showToast("Success!", "User updated successfully.", "success")
+      }
     },
     onError: (err: ApiError) => {
       handleError(err, showToast)
@@ -69,9 +78,21 @@ const UserInformation = () => {
   }
 
   const onCancel = () => {
-    reset()
-    toggleEditMode()
+    reset({
+      full_name: currentUser?.full_name,
+      email: currentUser?.email,
+    })
+    setEditMode(false)
   }
+
+  useEffect(() => {
+    if (!editMode) {
+      reset({
+        full_name: currentUser?.full_name,
+        email: currentUser?.email,
+      })
+    }
+  }, [currentUser, editMode, reset])
 
   return (
     <>
@@ -131,13 +152,18 @@ const UserInformation = () => {
             {errors.email && (
               <FormErrorMessage>{errors.email.message}</FormErrorMessage>
             )}
+            {!editMode && currentUser?.pending_email && (
+              <Text color="orange.500" fontSize="sm" mt={1}>
+                Pending verification: {currentUser.pending_email}
+              </Text>
+            )}
           </FormControl>
           <Flex mt={4} gap={3}>
             <Button
               variant="primary"
-              onClick={toggleEditMode}
-              type={editMode ? "button" : "submit"}
-              isLoading={editMode ? isSubmitting : false}
+              onClick={editMode ? undefined : () => setEditMode(true)}
+              type={editMode ? "submit" : "button"}
+              isLoading={editMode ? mutation.isPending : false}
               isDisabled={editMode ? !isDirty || !getValues("email") : false}
             >
               {editMode ? "Save" : "Edit"}

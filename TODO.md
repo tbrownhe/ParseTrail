@@ -329,18 +329,18 @@ with actionable recovery instructions.
 
 ### P1.3 Harden authentication and account state
 
-- [ ] Return the same password-recovery response and timing envelope whether an
+- [x] Return the same password-recovery response and timing envelope whether an
   email exists or not.
-- [ ] Require verification after an email-address change before granting the new
+- [x] Require verification after an email-address change before granting the new
   address normal account privileges.
-- [ ] Invalidate reset links after use and revoke existing sessions after password,
+- [x] Invalidate reset links after use and revoke existing sessions after password,
   email, activation, or privilege changes using token/session versioning.
 - [x] Return a deliberate 404 for a missing admin-selected user.
-- [ ] Normalize authorization status codes without leaking existence
+- [x] Normalize authorization status codes without leaking existence
   unnecessarily.
-- [ ] Review password policy and replace the aging password-hash dependency stack
+- [x] Review password policy and replace the aging password-hash dependency stack
   with a supported algorithm and migration-on-login strategy.
-- [ ] Test enumeration resistance, token replay, privilege changes, deleted users,
+- [x] Test enumeration resistance, token replay, privilege changes, deleted users,
   concurrent reset requests, and old-hash migration.
 
 Acceptance: account-state changes invalidate inappropriate credentials and the API

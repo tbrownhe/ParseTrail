@@ -7,7 +7,6 @@ dependencies = [
     "fastapi[standard-no-fastapi-cloud-cli]<1.0.0,>=0.139.2",
     "python-multipart<1.0.0,>=0.0.7",
     "email-validator<3.0.0.0,>=2.1.0.post1",
-    "passlib[bcrypt]<2.0.0,>=1.7.4",
     "tenacity<9.0.0,>=8.2.3",
     "pydantic>2.0",
     "emails<1.0,>=0.6",
@@ -16,12 +15,11 @@ dependencies = [
     "httpx<1.0.0,>=0.25.1",
     "psycopg[binary]<4.0.0,>=3.1.13",
     "sqlmodel<1.0.0,>=0.0.21",
-    # Pin bcrypt until passlib supports the latest
-    "bcrypt==4.0.1",
     "pydantic-settings<3.0.0,>=2.2.1",
     "sentry-sdk[fastapi]<3.0.0,>=2.0.0",
     "pyjwt<3.0.0,>=2.8.0",
     "cryptography>=48.0.1,<50.0.0",
+    "pwdlib[argon2,bcrypt]>=0.3,<1",
 ]
 
 [project.optional-dependencies]
@@ -29,7 +27,6 @@ dev = [
     "pytest>=7.4.3,<8.0.0",
     "mypy>=1.8.0,<2.0.0",
     "ruff>=0.2.2,<1.0.0",
-    "types-passlib>=1.7.7.20240106,<2.0.0.0",
     "coverage>=7.4.3,<8.0.0",
 ]
 

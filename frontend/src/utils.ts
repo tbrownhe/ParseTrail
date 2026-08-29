@@ -13,8 +13,12 @@ export const namePattern = {
 export const passwordRules = (isRequired = true) => {
   const rules: any = {
     minLength: {
-      value: 8,
-      message: "Password must be at least 8 characters",
+      value: 12,
+      message: "Password must be at least 12 characters",
+    },
+    maxLength: {
+      value: 128,
+      message: "Password must be no more than 128 characters",
     },
   }
 

@@ -27,6 +27,7 @@ function VerifyEmail() {
       await LoginService.verifyEmail({ requestBody: { token } })
     },
     onSuccess: () => {
+      localStorage.removeItem("access_token")
       showToast(
         "Email verified",
         "Your email has been verified. You can now log in.",
