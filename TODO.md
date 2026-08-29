@@ -488,27 +488,30 @@ with networking disabled and never pause for an implicit package-data download.
 - [~] Add characterization tests around the current import, category, account,
   verification, plugin-sync, and budget behavior before moving code. Import
   persistence/recovery, plugin synchronization, category CRUD/migration, and account
-  CRUD/number assignment are covered; verification and budget characterization
-  remain.
+  CRUD/number assignment are covered, as are budget range, grouping, sign, proration,
+  and inactive-category semantics; verification characterization remains.
 - [~] Define small application services for parse/import, transaction querying,
   categories, accounts, artifact updates, and statement submission. The headless
   `StatementImportService` now owns import persistence, deduplication, and archive
   state while `StatementImportController` owns Qt decisions and progress;
   `CategoryService` now owns category queries, validation, and atomic rename/merge
   transactions; `AccountService` now owns account queries, mutations, deletion
-  constraints, and account-number assignment. The remaining workflows still need
+  constraints, and account-number assignment; `BudgetQueryService` now owns budget
+  range queries and report calculations. The remaining workflows still need
   equivalent boundaries.
 - [~] Introduce repositories or explicit query services so GUI code does not manage
   SQLAlchemy sessions directly. Category and account management now delegate all
-  persistence to headless services; verification, budget, and other GUI queries
-  remain.
+  persistence to headless services, and the budget view delegates its reporting
+  query; verification and other GUI queries remain.
 - [~] Split the largest GUI modules by workflow while preserving behavior; avoid a
-  full rewrite. Category and account persistence moved out of their dialogs without
-  changing their interaction flows; the other large workflow modules remain.
+  full rewrite. Category and account persistence and budget reporting moved out of
+  their GUI modules without changing their interaction flows; the other large
+  workflow modules remain.
 - [~] Replace broad exception catches with typed boundary errors and user-safe
   messages while retaining exception chains for local diagnostics. Category input,
   lookup, duplicate, and persistence failures and account validation, duplicate,
-  assignment, in-use, and persistence failures are now typed at service boundaries.
+  assignment, in-use, and persistence failures are now typed at service boundaries;
+  invalid budget reports and query failures are typed as well.
 
 Acceptance: core application tests run without Qt, each extracted service has one
 clear transaction owner, and module size trends downward without feature drift.

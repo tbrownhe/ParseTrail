@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 from decimal import Decimal
+from typing import cast
 
 import pandas as pd
 from loguru import logger
@@ -24,10 +25,9 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 
-from parsetrail.core.orm import Categories, Transactions
+from parsetrail.core.budgets import BudgetGrouping, BudgetQueryService
 
 
 class BudgetTab(QWidget):
@@ -38,12 +38,12 @@ class BudgetTab(QWidget):
 
     def __init__(self, session_factory: sessionmaker | None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
-        self.Session = session_factory
+        self.budget_service = BudgetQueryService(session_factory) if session_factory is not None else None
         self._build_ui()
 
     def set_session_factory(self, session_factory: sessionmaker) -> None:
         """Allow main window to attach Session after DB initialization."""
-        self.Session = session_factory
+        self.budget_service = BudgetQueryService(session_factory)
 
     def _build_ui(self) -> None:
         main_layout = QHBoxLayout(self)
@@ -142,7 +142,7 @@ class BudgetTab(QWidget):
         """
         Entry point for Refresh button. For now, render placeholder until data wiring is added.
         """
-        if self.Session is None:
+        if self.budget_service is None:
             self._render_placeholder("Database not ready yet. Please wait for initialization.")
             return
         try:
@@ -163,10 +163,9 @@ class BudgetTab(QWidget):
                 prorate = False
                 range_label = month_start.strftime("%Y-%m")
 
-            range_days = max(1, (end_dt - start_dt).days)
             include_inactive = self.include_inactive_checkbox.isChecked()
             group_by = self.group_by_combo.currentText()
-            df = self._load_budget_data(start_dt, end_dt, include_inactive, group_by, prorate, range_days)
+            df = self._load_budget_data(start_dt, end_dt, include_inactive, group_by, prorate)
             self._populate_table(df)
             self._plot(df, start_dt, end_dt, group_by)
             self._plot_utilization(df, range_label)
@@ -189,102 +188,34 @@ class BudgetTab(QWidget):
         include_inactive: bool,
         group_by: str,
         prorate: bool,
-        range_days: int,
     ) -> pd.DataFrame:
         """
         Fetch budgets and actuals for the given range. Returns a DataFrame with columns:
         label, budget, actual, variance, pct_used, tx_count.
         """
-        with self.Session() as session:
-            cat_query = session.query(Categories)
-            if not include_inactive:
-                cat_query = cat_query.filter(Categories.Active == 1)
-            categories = cat_query.all()
-
-            tx_rows = (
-                session.query(
-                    Transactions.CategoryID,
-                    func.sum(Transactions.Amount),
-                    func.count(Transactions.TransactionID),
-                )
-                .filter(
-                    Transactions.PostingDate >= start,
-                    Transactions.PostingDate < end,
-                )
-                .group_by(Transactions.CategoryID)
-                .all()
-            )
-
-        actual_map = {cid: Decimal(total or 0) for cid, total, _ in tx_rows}
-        count_map = {cid: int(cnt or 0) for cid, _, cnt in tx_rows}
-
-        rows = []
-
-        # Helper to flip budgets for expenses so math aligns with negative actual outflows
-        def signed_budget(raw_budget: Decimal | None, cat_type: str | None) -> Decimal | None:
-            if raw_budget is None:
-                return None
-            if (cat_type or "").lower() == "expense":
-                return -abs(raw_budget)
-            return raw_budget
-
-        def prorated_budget(raw_budget: Decimal | None, cat_type: str | None) -> Decimal | None:
-            if raw_budget is None:
-                return None
-            if not prorate:
-                return signed_budget(raw_budget, cat_type)
-            daily_rate = raw_budget / Decimal(30)  # approximate month length
-            return signed_budget(daily_rate * range_days, cat_type)
-
-        if group_by == "Type":
-            aggregates: dict[str, dict[str, Decimal | int]] = {}
-            for cat in categories:
-                label = cat.Type or "Unspecified"
-                agg = aggregates.setdefault(label, {"budget": Decimal(0), "actual": Decimal(0), "tx_count": 0})
-                sb = prorated_budget(cat.Budget, cat.Type) if cat.Budget is not None else None
-                if sb is not None:
-                    agg["budget"] += sb
-                agg["actual"] += actual_map.get(cat.CategoryID, Decimal(0))
-                agg["tx_count"] += count_map.get(cat.CategoryID, 0)
-
-            for label, metrics in aggregates.items():
-                budget = metrics["budget"] if metrics["budget"] != 0 else None
-                actual = metrics["actual"]
-                variance = actual - budget if budget is not None else None
-                pct_used = (actual / budget * 100) if budget not in (None, 0) else None
-                rows.append(
-                    {
-                        "label": label,
-                        "budget": budget,
-                        "actual": actual,
-                        "variance": variance,
-                        "pct_used": pct_used,
-                        "tx_count": metrics["tx_count"],
-                    }
-                )
-        else:
-            for cat in categories:
-                budget = prorated_budget(cat.Budget, cat.Type) if cat.Budget is not None else None
-                actual = actual_map.get(cat.CategoryID, Decimal(0))
-                variance = actual - budget if budget is not None else None
-                pct_used = (actual / budget * 100) if budget not in (None, 0) else None
-                rows.append(
-                    {
-                        "label": cat.Name,
-                        "budget": budget,
-                        "actual": actual,
-                        "variance": variance,
-                        "pct_used": pct_used,
-                        "tx_count": count_map.get(cat.CategoryID, 0),
-                    }
-                )
-
-        df = pd.DataFrame(
-            rows,
+        if self.budget_service is None:
+            raise RuntimeError("Database not ready.")
+        report = self.budget_service.report(
+            start=start,
+            end=end,
+            include_inactive=include_inactive,
+            group_by=cast(BudgetGrouping, group_by if group_by in ("Category", "Type") else "Category"),
+            prorate=prorate,
+        )
+        return pd.DataFrame(
+            [
+                {
+                    "label": row.label,
+                    "budget": row.budget,
+                    "actual": row.actual,
+                    "variance": row.variance,
+                    "pct_used": row.pct_used,
+                    "tx_count": row.transaction_count,
+                }
+                for row in report
+            ],
             columns=["label", "budget", "actual", "variance", "pct_used", "tx_count"],
         )
-        df = df.sort_values(by="actual", ascending=False).reset_index(drop=True)
-        return df
 
     def _populate_table(self, df: pd.DataFrame) -> None:
         model = QtGui.QStandardItemModel(df.shape[0], df.shape[1])

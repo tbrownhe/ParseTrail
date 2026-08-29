@@ -10,6 +10,8 @@ Unreleased
   assignment behind a characterized headless service with typed failures
 - Do not silently store a zero appreciation rate after invalid input or select an
   unrelated account when the create-account dialog adds nothing
+- Move budget range queries, grouping, sign handling, and proration behind a
+  characterized headless reporting service
 
 1.3.1
 =====
