@@ -2,6 +2,7 @@ from pathlib import Path
 
 from parsetrail.core.parser_classification import (
     DocumentFeatures,
+    classification_trace,
     matching_plugins,
     normalize_pdf_metadata,
 )
@@ -35,6 +36,8 @@ def test_classification_tree_uses_suffix_metadata_header_then_body() -> None:
     )
 
     assert matching_plugins(features, catalog) == ("specific",)
+    assert classification_trace(features, catalog).suffix_candidates == ("specific", "wrong_header")
+    assert classification_trace(features, catalog).header_candidates == ("specific",)
 
 
 def test_document_features_repr_never_contains_statement_content() -> None:

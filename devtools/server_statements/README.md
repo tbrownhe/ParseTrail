@@ -75,6 +75,13 @@ For a headless regression pass over rows marked `plugin_status='ready'`:
 python devtools/server_statements/batch_plugin_tester.py
 ```
 
+Use `--status pending` to diagnose submitted statements that do not yet have a
+blessed parser baseline, or `--status all` for an explicitly requested complete
+pass. These modes are read-only and do not change submission status.
+Add `--diagnose-routing` to failures to log only the candidate plugin identifiers
+remaining after the suffix, PDF metadata, header, and body stages. It never logs
+the extracted statement text or PDF metadata values.
+
 Warnings fail the headless run by default. After reviewing them, pass
 `--accept-warnings` explicitly to bless warning-bearing results. Importing the
 batch module or requesting `--help` does not open a database connection or import

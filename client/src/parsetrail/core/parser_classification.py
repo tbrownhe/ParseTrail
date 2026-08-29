@@ -23,6 +23,16 @@ class DocumentFeatures:
     page_count: int | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class ClassificationTrace:
+    """Candidate identifiers at each routing stage; never includes document content."""
+
+    suffix_candidates: tuple[str, ...]
+    metadata_candidates: tuple[str, ...]
+    header_candidates: tuple[str, ...]
+    body_candidates: tuple[str, ...]
+
+
 def normalize_pdf_metadata(metadata: Mapping[str, Any] | None) -> dict[str, str]:
     if not metadata:
         return {}
@@ -80,10 +90,10 @@ def _matches_pdf_metadata(rule: Mapping[str, Any], features: DocumentFeatures) -
     return True
 
 
-def matching_plugins(
+def classification_trace(
     features: DocumentFeatures,
     plugin_metadata: Mapping[str, Mapping[str, Any]],
-) -> tuple[str, ...]:
+) -> ClassificationTrace:
     """Walk suffix, PDF metadata, header, and body nodes in that order."""
     suffix_candidates = [
         (plugin_name, metadata)
@@ -103,8 +113,22 @@ def matching_plugins(
         if header_expression is None or match_search_string(header_expression, features.header_text):
             header_candidates.append((plugin_name, metadata))
 
-    return tuple(
+    body_candidates = tuple(
         plugin_name
         for plugin_name, metadata in header_candidates
         if match_search_string(metadata["SEARCH_STRING"], features.body_text)
     )
+    return ClassificationTrace(
+        suffix_candidates=tuple(plugin_name for plugin_name, _metadata in suffix_candidates),
+        metadata_candidates=tuple(plugin_name for plugin_name, _metadata in metadata_candidates),
+        header_candidates=tuple(plugin_name for plugin_name, _metadata in header_candidates),
+        body_candidates=body_candidates,
+    )
+
+
+def matching_plugins(
+    features: DocumentFeatures,
+    plugin_metadata: Mapping[str, Mapping[str, Any]],
+) -> tuple[str, ...]:
+    """Return the plugins at the final leaf of the deterministic feature tree."""
+    return classification_trace(features, plugin_metadata).body_candidates
