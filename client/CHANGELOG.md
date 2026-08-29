@@ -1,3 +1,8 @@
+1.3.1
+=====
+- Make macOS release regression tests deterministic with explicit Qt worker
+  synchronization and transport-independent upload cancellation checks
+
 1.3.0
 =====
 - Store money as integer minor units with explicit currency codes
