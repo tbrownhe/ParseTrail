@@ -357,7 +357,7 @@ does not provide a reliable user-existence oracle.
 - [x] Fix plugin synchronization when progress UI is disabled.
 - [x] Ensure cancelled installer downloads are reported as incomplete rather than
   successful and never launch their staging file.
-- [ ] Replace Windows `shell=True` launching; use platform-specific safe launch
+- [x] Replace Windows `shell=True` launching; use platform-specific safe launch
   adapters for Windows, macOS, and Linux, and quit only after a confirmed launch.
 - [ ] Store long-lived desktop credentials in an OS credential store rather than
   beside their decrypting key in the user profile.

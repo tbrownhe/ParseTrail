@@ -47,19 +47,16 @@ def download_client_installer(
         raise RuntimeError(f"Failed to authenticate installer: {e}") from e
 
 
-def quit_and_update(installer_path: Path):
+def quit_and_update(installer_path: Path) -> None:
     """
     Launch the installer and cleanly quit the client app.
 
     Args:
         installer_path (Path): Path to the installer.
     """
-    try:
-        open_file_in_os(installer_path)
-        logger.info("Installer launched. Closing the application.")
-        QApplication.quit()  # Ensure this is called in the main thread
-    except Exception as e:
-        logger.error(f"Failed to launch installer: {e}")
+    open_file_in_os(installer_path)
+    logger.info("Installer launched. Closing the application.")
+    QApplication.quit()
 
 
 class InstallerDownloadThread(QThread):
@@ -133,7 +130,15 @@ def install_client(installer: ClientInstallerArtifact, parent=None) -> Installer
             QMessageBox.Yes | QMessageBox.No,
         )
         if response == QMessageBox.Yes:
-            quit_and_update(installer_path)
+            try:
+                quit_and_update(installer_path)
+            except Exception as exc:
+                logger.error(f"Failed to launch installer: {exc}")
+                QMessageBox.critical(
+                    parent,
+                    "Installer Launch Failed",
+                    f"ParseTrail remains open because the installer could not be launched:\n{exc}",
+                )
         else:
             QMessageBox.information(
                 parent,

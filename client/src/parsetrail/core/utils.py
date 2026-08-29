@@ -207,20 +207,31 @@ def is_version_compatible(current_version: str, minimum_version: str) -> bool:
     return version.parse(current_version) >= version.parse(minimum_version)
 
 
-def open_file_in_os(fpath: Path):
-    try:
-        if not fpath.exists():
-            raise FileNotFoundError(f"File not found: {fpath}")
+def open_file_in_os(fpath: Path) -> None:
+    """Ask the platform to open one literal path without invoking a shell."""
+    resolved = fpath.expanduser().resolve()
+    if not resolved.exists():
+        raise FileNotFoundError(f"File not found: {resolved}")
 
-        name = os.name
-        if name == "nt":
-            subprocess.run(["start", "", str(fpath)], shell=True, check=True)
-        elif name == "posix":
-            subprocess.run(["open", str(fpath)], check=True)
-        else:
-            raise ValueError(f"Unsupported OS type: {name}")
-    except Exception as e:
-        print(f"Error opening {fpath}: {e}")
+    if sys.platform == "win32":
+        startfile = getattr(os, "startfile", None)
+        if startfile is None:
+            raise RuntimeError("Windows file launching is unavailable")
+        startfile(str(resolved))
+    elif sys.platform == "darwin":
+        subprocess.run(
+            ["/usr/bin/open", str(resolved)],
+            check=True,
+            shell=False,
+        )
+    elif sys.platform.startswith("linux"):
+        subprocess.run(
+            ["xdg-open", str(resolved)],
+            check=True,
+            shell=False,
+        )
+    else:
+        raise RuntimeError(f"Unsupported operating system: {sys.platform}")
 
 
 def create_directory(folder: Path):
