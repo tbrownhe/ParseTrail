@@ -32,12 +32,20 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _command_version(command: tuple[str, ...]) -> str:
-    executable = shutil.which(command[0])
-    if executable is None:
+def _command_version(
+    command: tuple[str, ...],
+    *,
+    executable: Path | None = None,
+) -> str:
+    resolved_executable: str | Path | None = executable
+    if resolved_executable is None:
+        resolved_executable = shutil.which(command[0])
+    elif not resolved_executable.expanduser().is_file():
+        raise RuntimeError(f"Required release tool was not found: {resolved_executable}")
+    if resolved_executable is None:
         raise RuntimeError(f"Required release tool was not found: {command[0]}")
     completed = subprocess.run(
-        [executable, *command[1:]],
+        [str(resolved_executable), *command[1:]],
         check=False,
         capture_output=True,
         text=True,
@@ -98,6 +106,7 @@ def create_inventory(
     target_platform: str,
     version: str | None,
     packager: str,
+    packager_executable: Path | None = None,
 ) -> dict[str, object]:
     release_dir = release_dir.expanduser().resolve()
     if not release_dir.is_dir():
@@ -125,7 +134,17 @@ def create_inventory(
     except importlib.metadata.PackageNotFoundError:
         tools["pyinstaller"] = "not-used"
     packager_command = PACKAGER_COMMANDS[packager]
-    tools["packager"] = "not-used" if packager_command is None else _command_version(packager_command)
+    if packager_command is None:
+        if packager_executable is not None:
+            raise ValueError("packager_executable cannot be used when the packager is none")
+        tools["packager"] = "not-used"
+    elif packager_executable is None:
+        tools["packager"] = _command_version(packager_command)
+    else:
+        tools["packager"] = _command_version(
+            packager_command,
+            executable=packager_executable,
+        )
 
     inventory: dict[str, object] = {
         "schema_version": 1,
@@ -155,6 +174,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--platform", required=True)
     parser.add_argument("--version")
     parser.add_argument("--packager", choices=tuple(PACKAGER_COMMANDS), default="none")
+    parser.add_argument("--packager-executable", type=Path)
     return parser
 
 
@@ -169,6 +189,7 @@ def main() -> int:
             target_platform=args.platform,
             version=args.version,
             packager=args.packager,
+            packager_executable=args.packager_executable,
         )
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

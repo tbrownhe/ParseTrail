@@ -11,6 +11,8 @@ def test_records_source_tools_and_all_release_checksums(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    packager_executable = tmp_path / "makensis.exe"
+    packager_executable.write_bytes(b"test executable")
     installer = b"installer bytes"
     installer_name = "parsetrail_1.3.0_win64_setup.exe"
     (tmp_path / installer_name).write_bytes(installer)
@@ -27,7 +29,13 @@ def test_records_source_tools_and_all_release_checksums(
     }
     (tmp_path / "client-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
     (tmp_path / "client-manifest.sig").write_bytes(b"s" * 64)
-    monkeypatch.setattr(release_inventory, "_command_version", lambda command: f"{command[0]} test")
+    observed_commands: list[tuple[tuple[str, ...], Path | None]] = []
+
+    def command_version(command: tuple[str, ...], *, executable: Path | None = None) -> str:
+        observed_commands.append((command, executable))
+        return f"{command[0]} test"
+
+    monkeypatch.setattr(release_inventory, "_command_version", command_version)
 
     inventory = release_inventory.create_inventory(
         release_dir=tmp_path,
@@ -37,17 +45,30 @@ def test_records_source_tools_and_all_release_checksums(
         target_platform="win64",
         version="1.3.0",
         packager="nsis",
+        packager_executable=packager_executable,
     )
 
     assert inventory["source_commit"] == "b" * 40
     assert inventory["tools"]["uv"] == "uv test"
     assert inventory["tools"]["packager"] == "makensis.exe test"
+    assert observed_commands == [
+        (("uv", "--version"), None),
+        (("makensis.exe", "/VERSION"), packager_executable),
+    ]
     assert {item["filename"] for item in inventory["files"]} == {
         installer_name,
         "client-manifest.json",
         "client-manifest.sig",
     }
     assert (tmp_path / "release-inventory.json").is_file()
+
+
+def test_explicit_packager_executable_must_exist(tmp_path: Path) -> None:
+    with pytest.raises(RuntimeError, match="Required release tool was not found"):
+        release_inventory._command_version(
+            ("makensis.exe", "/VERSION"),
+            executable=tmp_path / "missing-makensis.exe",
+        )
 
 
 def test_plugin_inventory_requires_signed_source_commit(

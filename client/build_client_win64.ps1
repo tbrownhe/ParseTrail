@@ -240,7 +240,8 @@ if (-not $DeployOnly) {
         --kind client `
         --platform win64 `
         --version $version `
-        --packager nsis
+        --packager nsis `
+        --packager-executable $makensis
     if ($LASTEXITCODE -ne 0) {
         throw "Release inventory generation failed with exit code $LASTEXITCODE"
     }

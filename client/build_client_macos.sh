@@ -37,6 +37,7 @@ fi
 
 require_cmd create-dmg
 require_cmd uv
+CREATE_DMG=$(command -v create-dmg)
 
 SCRIPT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
@@ -156,6 +157,7 @@ uv run --frozen --python "$PYTHON_VERSION" python -m scripts.release_inventory \
     --platform macos \
     --version "$VERSION" \
     --packager create-dmg \
+    --packager-executable "$CREATE_DMG" \
     || error_exit "Release inventory generation failed."
 
 if ! $PUBLISH; then
