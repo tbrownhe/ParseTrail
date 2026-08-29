@@ -30,6 +30,8 @@ Unreleased
   response cleanup, and server confirmation behind a headless service
 - Exclude local statement paths from submission metadata and require an existing,
   readable file before starting a worker
+- Split reusable dashboard canvas/table models and transaction-review table/filter
+  models out of the two largest GUI workflow modules
 
 1.3.1
 =====

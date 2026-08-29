@@ -3,16 +3,11 @@ import traceback
 from datetime import datetime, timedelta
 from pathlib import Path
 
-import matplotlib.dates as mdates
 import pandas as pd
 from loguru import logger
-from matplotlib import rcParams
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
-from matplotlib.figure import Figure
-from matplotlib.ticker import FuncFormatter, MaxNLocator
-from PySide6.QtCore import QAbstractTableModel, Qt, QTimer
-from PySide6.QtGui import QColor, QFontMetrics
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QFontMetrics
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -57,6 +52,7 @@ from parsetrail.gui.accounts import (
 )
 from parsetrail.gui.budget_view import BudgetTab
 from parsetrail.gui.category import CategoryManagerDialog
+from parsetrail.gui.dashboard_widgets import MatplotlibCanvas, PandasModel
 from parsetrail.gui.importing import StatementImportController
 from parsetrail.gui.plugins import (
     ParseTestDialog,
@@ -81,209 +77,6 @@ from parsetrail.version import (
 )
 
 AUTOMATIC_UPDATE_DELAY_MS = 3000
-
-
-class MatplotlibCanvas(FigureCanvas):
-    def __init__(self, parent=None, width=3, height=4, dpi=100):
-        self.fig = Figure(figsize=(width, height), dpi=dpi, constrained_layout=True)
-        self.axes = self.fig.add_subplot(111)
-        super().__init__(self.fig)
-        self.setParent(parent)
-
-        # Set higher resolution for toolbar exports
-        rcParams["savefig.dpi"] = 300
-
-        # Connect the resize event
-        self.resize_event_id = self.fig.canvas.mpl_connect("resize_event", self.on_resize)
-
-        # Connect the legend pick event
-        self.fig.canvas.mpl_connect("pick_event", self.on_legend_click)
-
-        # Connect mouse events for moving the legend
-        self.fig.canvas.mpl_connect("button_press_event", self.on_mouse_press)
-        self.fig.canvas.mpl_connect("button_release_event", self.on_mouse_release)
-        self.fig.canvas.mpl_connect("motion_notify_event", self.on_mouse_move)
-        self.legend_dragging = False
-
-    def on_resize(self, event):
-        # Get the canvas size in pixels
-        width, height = self.get_width_height()
-
-        # Calculate maximum ticks based on canvas size and ticks per pixel
-        max_x_ticks = int(width / 80)
-        max_y_ticks = int(height / 50)
-
-        # Update tick locators dynamically
-        locator = mdates.AutoDateLocator(maxticks=max_x_ticks)
-        formatter = mdates.ConciseDateFormatter(locator)
-        self.axes.xaxis.set_major_locator(locator)
-        self.axes.xaxis.set_major_formatter(formatter)
-        self.axes.yaxis.set_major_locator(MaxNLocator(nbins=max_y_ticks))
-
-        # Apply custom Y-axis formatting for accounting format
-        self.axes.yaxis.set_major_formatter(FuncFormatter(lambda x, _: f"-${abs(x):,.0f}" if x < 0 else f"${x:,.0f}"))
-
-        # Redraw the canvas to apply changes
-        self.draw()
-
-    def plot(
-        self,
-        df: pd.DataFrame,
-        selected_accounts: list[str],
-        left=None,
-        right=None,
-        title="",
-        xlabel="",
-        ylabel="",
-        dashed=None,
-    ):
-        self.axes.clear()
-        dashed = dashed or []
-
-        # Handle empty data
-        if df.empty or not selected_accounts:
-            self.axes.text(
-                0.5,
-                0.5,
-                "No data selected",
-                transform=self.axes.transAxes,
-                ha="center",
-            )
-            self.draw()
-            return
-
-        # Plot the lines
-        self.lines = {}
-        for account_name in selected_accounts:
-            linestyle = "dashed" if account_name in dashed else "solid"
-            (line,) = self.axes.plot(
-                df.index,
-                df[account_name],
-                label=account_name,
-                picker=True,
-                linestyle=linestyle,
-            )
-            self.lines[account_name] = line
-
-        # Handle options
-        left = left if left else df.index.min()
-        right = right if right else df.index.max()
-
-        # Customize appearance
-        self.axes.set_xlim(left=left, right=right)
-        self.axes.axhline(0, color="black", linewidth=1.5, linestyle="-")
-        self.axes.axvline(right, color="red", linewidth=1.5, linestyle="-")
-        self.axes.set_title(title)
-        self.axes.set_xlabel(xlabel)
-        self.axes.set_ylabel(ylabel)
-        self.axes.grid(True)
-
-        self.axes.fmt_xdata = lambda x: mdates.num2date(x).strftime(r"%Y-%m-%d")
-
-        # Add legend with picking enabled
-        self.legend = self.axes.legend(loc="upper left", fontsize="x-small")
-        hitbox = 5.0
-        for legend_entry in self.legend.get_lines():
-            legend_entry.set_picker(hitbox)
-
-        # Set consistent tick format. Includes self.draw().
-        self.on_resize(None)
-
-    def on_legend_click(self, event):
-        # Get the corresponding label
-        legend_entry = event.artist
-        label = legend_entry.get_label()
-
-        # Find the line corresponding to the label
-        line = self.lines.get(label)
-
-        if line is None:
-            logger.warning(f"No line found for label {label}")
-            return
-
-        if line:
-            # Toggle the line's visibility
-            visible = not line.get_visible()
-            line.set_visible(visible)
-
-            # Toggle legend entry alpha (fade when hidden)
-            legend_entry.set_alpha(1.0 if visible else 0.2)
-
-            # Redraw the canvas
-            self.draw()
-
-    def on_mouse_press(self, event):
-        if self.legend and self.legend.contains(event)[0]:
-            self.legend_dragging = True
-
-    def on_mouse_release(self, event):
-        if self.legend_dragging:
-            self.legend_dragging = False
-
-    def on_mouse_move(self, event):
-        if self.legend_dragging and event.inaxes:
-            self.legend.set_bbox_to_anchor((event.xdata, event.ydata), transform=self.axes.transData)
-            self.draw()
-
-
-class PandasModel(QAbstractTableModel):
-    def __init__(self, data):
-        super().__init__()
-        self._data = data
-
-    def rowCount(self, parent=None):
-        return self._data.shape[0]
-
-    def columnCount(self, parent=None):
-        return self._data.shape[1]
-
-    def data(self, index, role=Qt.DisplayRole):
-        if not index.isValid():
-            return None
-
-        value = self._data.iloc[index.row(), index.column()]
-
-        if role == Qt.DisplayRole:
-            if index.column() == 1:
-                try:
-                    return f"{float(value):,.2f}"
-                except (TypeError, ValueError):
-                    return str(value)
-            return str(value)
-        elif role == Qt.TextAlignmentRole:
-            return Qt.AlignCenter  # Center-align text in cells
-        elif role == Qt.BackgroundRole:
-            # Apply background color based on positive/negative value
-            try:
-                numeric_value = float(value)
-                if numeric_value > 0:
-                    return QColor(140, 225, 140)  # Light green
-                elif numeric_value < 0:
-                    return QColor(225, 160, 160)  # Light red
-            except (TypeError, ValueError):
-                return None
-        return None
-
-    def headerData(self, section, orientation, role=Qt.DisplayRole):
-        if role == Qt.DisplayRole:
-            if orientation == Qt.Horizontal:
-                return self._data.columns[section]
-            if orientation == Qt.Vertical:
-                return self._data.index[section]
-        return None
-
-    def sort(self, column, order):
-        """
-        Sort the model by the given column.
-        :param column: The column index to sort by.
-        :param order: Qt.AscendingOrder or Qt.DescendingOrder
-        """
-        column_name = self._data.columns[column]
-        ascending = order == Qt.AscendingOrder
-        self.layoutAboutToBeChanged.emit()
-        self._data.sort_values(by=column_name, ascending=ascending, inplace=True)
-        self._data.reset_index(drop=True, inplace=True)
-        self.layoutChanged.emit()
 
 
 class ParseTrail(QMainWindow):

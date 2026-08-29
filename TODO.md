@@ -510,12 +510,14 @@ with networking disabled and never pause for an implicit package-data download.
   dashboard, and artifact workflows now delegate every query and mutation to
   headless services; a source audit confirms no GUI module opens a session or issues
   an ORM query.
-- [~] Split the largest GUI modules by workflow while preserving behavior; avoid a
+- [x] Split the largest GUI modules by workflow while preserving behavior; avoid a
   full rewrite. Category and account persistence and budget reporting moved out of
   their GUI modules without changing their interaction flows; transaction-review
   persistence moved out of its window and its module shrank by roughly 130 lines.
   Transaction-browser persistence also moved out without changing its primary flows.
-  The other large workflow modules remain.
+  Dashboard canvas/table models and review table/filter models now live in focused
+  modules, reducing `main_window.py` to about 1,080 lines and `verification.py` to
+  about 590 while keeping their public model imports compatible.
 - [~] Replace broad exception catches with typed boundary errors and user-safe
   messages while retaining exception chains for local diagnostics. Category input,
   lookup, duplicate, and persistence failures and account validation, duplicate,
