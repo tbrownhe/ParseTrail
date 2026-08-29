@@ -6,6 +6,10 @@ Unreleased
   prompts and progress behind a characterized headless application service
 - Move category queries and atomic add, update, rename, and merge operations behind
   a characterized headless service with typed failures
+- Move account queries, mutations, deletion constraints, and account-number
+  assignment behind a characterized headless service with typed failures
+- Do not silently store a zero appreciation rate after invalid input or select an
+  unrelated account when the create-account dialog adds nothing
 
 1.3.1
 =====
