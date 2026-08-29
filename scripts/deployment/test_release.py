@@ -154,6 +154,7 @@ class ReleaseValidationTests(unittest.TestCase):
                 ),
                 encoding="utf-8",
             )
+            smoke_config.chmod(0o600)
             args = SimpleNamespace(
                 state_dir=state,
                 deployment_id=identifier,
