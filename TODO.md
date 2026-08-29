@@ -154,10 +154,6 @@ equivalent plaintext write is introduced into either parse path.
   then perform a signed Windows release rehearsal. The encrypted local key has a
   password-manager recovery copy, and client 1.3.0 plus the 22-plugin catalog
   completed the offline signing and verification path.
-- [ ] `[USER]` Add Windows Authenticode after the application-level signature path
-  works.
-- [ ] `[USER]` Add macOS signing/notarization after the application-level signature
-  path works.
 
 Acceptance: compromising the download server alone is insufficient to make an
 existing client import or execute attacker-supplied bytes.
@@ -520,6 +516,16 @@ the privacy claims match observable code and deployment behavior.
 - [ ] Decide whether the dashboard should remain a small account/download/admin
   surface or gain privacy-safe operational features. Delete it if it has no clear
   job rather than carrying template code indefinitely.
+
+### P3.4 Paid platform distribution trust
+
+Defer paid OS-vendor signing until external adoption or distribution friction
+justifies recurring developer-program costs. The application-level Ed25519
+release signatures remain the required update-channel trust boundary.
+
+- [ ] Add Windows Authenticode signing and RFC 3161 timestamping for the frozen
+  executable and installer.
+- [ ] Add macOS Developer ID signing, hardened runtime, and notarization.
 
 ## Sibling infrastructure follow-up
 
