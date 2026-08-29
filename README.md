@@ -91,6 +91,10 @@ See [pdf_fidelity401k_201810](client/src/parsetrail/plugins/pdf_fidelity401k_201
 
 To set up a local development environment, see the [client README](client/README.md).
 
+Server operators should follow the guarded
+[PostgreSQL 12 to 17 dump/restore runbook](docs/postgresql-17-upgrade.md) before
+changing either the database image or volume.
+
 
 ## Contributing
 

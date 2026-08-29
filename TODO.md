@@ -229,8 +229,10 @@ recoverable, committed data agrees with the import state, and a retry is safe.
   installed locked Windows dependency environment has no known vulnerabilities.
 - [ ] Choose and test one supported Python baseline for Windows and macOS; evaluate
   PySide6 as the maintained Qt binding before leaving Python 3.10.
-- [ ] Upgrade PostgreSQL 12 using a dump/restore or supported major-upgrade process
-  into a new volume. Do not point a newer server at the old data directory.
+- [~] Upgrade PostgreSQL 12 using a dump/restore into a new volume. The guarded
+  helper has completed a synthetic 12-to-17 rehearsal with whole-schema table
+  count comparison; staging and production still use PostgreSQL 12. Do not point
+  a newer server at the old data directory.
 - [ ] `[USER]` Verify account/login, plugin download, statement submission, admin
   retrieval, email, and backup/restore against the upgraded staging stack before
   production cutover.

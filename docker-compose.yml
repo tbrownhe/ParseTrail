@@ -1,7 +1,10 @@
 services:
 
   db:
-    image: postgres:12
+    # Keep the old image/volume defaults until the documented dump/restore has
+    # completed. Cutover changes both variables together; a newer server must
+    # never be pointed at the PostgreSQL 12 data directory.
+    image: ${POSTGRES_IMAGE:-postgres:12}
     restart: always
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
@@ -243,7 +246,7 @@ services:
 volumes:
   app-db-data:
     external: true
-    name: parsetrail_app-db-data
+    name: ${POSTGRES_VOLUME_NAME:-parsetrail_app-db-data}
   app-keys-data:
     external: true
     name: parsetrail_app-keys-data
