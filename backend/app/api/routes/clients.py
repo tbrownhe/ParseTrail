@@ -2,9 +2,10 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, HTTPException, Request
+from fastapi import Path as ApiPath
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 from sqlalchemy import text
@@ -24,6 +25,15 @@ CLIENT_RELEASES_DIR = "releases"
 MAX_CLIENT_MANIFEST_BYTES = 1024 * 1024
 MAX_RELEASE_POINTER_BYTES = 1024
 SUPPORTED_PLATFORMS = {"macos": ".dmg", "win64": ".exe"}
+SEMVER_PATTERN = (
+    r"(0|[1-9][0-9]*)\."
+    r"(0|[1-9][0-9]*)\."
+    r"(0|[1-9][0-9]*)"
+    r"(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)"
+    r"(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?"
+    r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
+)
+ClientVersion = Annotated[str, ApiPath(pattern=rf"^(?:latest|{SEMVER_PATTERN})$")]
 
 logging.basicConfig(
     filename="client_downloads.log",
@@ -39,7 +49,7 @@ class ClientInstallerArtifact(BaseModel):
 
     artifact_type: Literal["client_installer"]
     filename: str
-    version: str = Field(min_length=1, max_length=64)
+    version: str = Field(pattern=rf"^{SEMVER_PATTERN}$", max_length=64)
     platform: Literal["macos", "win64"]
     size: int = Field(gt=0, le=1024 * 1024 * 1024)
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
@@ -208,7 +218,7 @@ async def download_client_manifest_signature(platform: str) -> FileResponse:
 
 
 @router.get("/{platform}/{version}", summary="Download a client installer")
-async def download_client(platform: str, version: str, request: Request) -> FileResponse:
+async def download_client(platform: str, version: ClientVersion, request: Request) -> FileResponse:
     """Serve only an installer named in the platform's active manifest."""
     release_dir, manifest = _active_manifest(platform)
     artifacts = list(manifest.artifacts)

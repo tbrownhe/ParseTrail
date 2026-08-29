@@ -11,6 +11,7 @@ sync_resources.*
 certs/
 scratch/
 keys/
+client/release-config.json
 
 # Python tooling and test output
 **/__pycache__/

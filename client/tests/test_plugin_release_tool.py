@@ -98,10 +98,12 @@ def test_signs_and_verifies_complete_plugin_directory(tmp_path: Path) -> None:
         private_key_path,
         trust_store_path,
         passphrase,
+        source_commit="a" * 40,
         release_sequence=202607230001,
     )
     verified = verify_release(plugin_dir, trust_store_path)
 
     assert manifest == verified
     assert manifest.artifacts[0].plugin_name == "release_plugin"
+    assert manifest.source_commit == "a" * 40
     assert not list(plugin_dir.glob("*.pem"))

@@ -10,82 +10,87 @@ require_cmd() {
     command -v "$1" >/dev/null 2>&1 || error_exit "Required command '$1' not found in PATH."
 }
 
-# ---------- Load project .env ----------
-SCRIPT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-ENV_FILE="$PROJECT_ROOT/.env"
-
-if [[ ! -f "$ENV_FILE" ]]; then
-  error_exit "Missing env file: $ENV_FILE"
-fi
-
-# Load environment variables from the project-level .env
-set -a
-# shellcheck disable=SC1090
-source "$ENV_FILE"
-set +a
-
-# Required vars
-required_vars=("CLIENTS_DIR")
-missing=()
-for v in "${required_vars[@]}"; do
-    if [[ -z "${!v:-}" ]]; then
-        missing+=("$v")
-    fi
+CLIENTS_DIR=""
+SIGNING_KEY=""
+PUBLISH=false
+REMOTE_USER=""
+REMOTE_HOST=""
+REMOTE_CLIENTS_DIR=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --clients-dir) CLIENTS_DIR="${2:-}"; shift 2 ;;
+        --signing-key) SIGNING_KEY="${2:-}"; shift 2 ;;
+        --publish) PUBLISH=true; shift ;;
+        --remote-user) REMOTE_USER="${2:-}"; shift 2 ;;
+        --remote-host) REMOTE_HOST="${2:-}"; shift 2 ;;
+        --remote-clients-dir) REMOTE_CLIENTS_DIR="${2:-}"; shift 2 ;;
+        *) error_exit "Unknown argument: $1" ;;
+    esac
 done
 
-if (( ${#missing[@]} > 0 )); then
-    error_exit "Missing required environment variables: ${missing[*]}"
+[[ -d "$CLIENTS_DIR" ]] || error_exit "clients directory does not exist: $CLIENTS_DIR"
+[[ -f "$SIGNING_KEY" ]] || error_exit "signing key does not exist: $SIGNING_KEY"
+if $PUBLISH; then
+    [[ -n "$REMOTE_USER" && -n "$REMOTE_HOST" && -n "$REMOTE_CLIENTS_DIR" ]] \
+        || error_exit "remote user, host, and clients directory are required with --publish"
 fi
 
-echo "Environment loaded successfully."
+require_cmd create-dmg
+require_cmd uv
 
+SCRIPT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$SCRIPT_DIR"
+CLIENTS_DIR="$(cd "$CLIENTS_DIR" && pwd)"
+SIGNING_KEY="$(cd "$(dirname "$SIGNING_KEY")" && pwd)/$(basename "$SIGNING_KEY")"
+PYTHON_VERSION_FILE="${SCRIPT_DIR}/.python-version"
+[[ -f "$PYTHON_VERSION_FILE" ]] || error_exit "Missing Python version file: $PYTHON_VERSION_FILE"
+PYTHON_VERSION=$(tr -d '[:space:]' < "$PYTHON_VERSION_FILE")
+[[ -n "$PYTHON_VERSION" ]] || error_exit "Python version file is empty: $PYTHON_VERSION_FILE"
 
-# ---------- Initial setup ----------
+VERSION=$(sed -nE "s/^__version__[[:space:]]*=[[:space:]]*['\"]([^'\"]+)['\"]/\1/p" \
+    src/parsetrail/version.py)
+[[ -n "$VERSION" ]] || error_exit "Failed to determine client version"
 
-# Navigate to the script directory
-cd "$(dirname "$0")" || error_exit "Failed to navigate to script directory."
-
-echo "Setting variables..."
 APP_NAME="ParseTrail"
 SRC_DIR="./src"
 MODULE_PATH="./src/parsetrail/main.py"
 BUILD_DIR="./build"
 APP_PATH="${BUILD_DIR}/${APP_NAME}.app"
 DIST_DIR="${CLIENTS_DIR}/macos"
-
-# Extract version from version.py
-VERSION=$(grep "^__version__" ./src/parsetrail/version.py | sed -E "s/__version__ = ['\"]([^'\"]+)['\"]/\1/") || true
-if [[ -z "${VERSION:-}" ]]; then
-    error_exit "Failed to determine version from src/parsetrail/version.py"
-fi
 DMG_PATH="${DIST_DIR}/parsetrail_${VERSION}_macos_setup.dmg"
 [[ ! -e "$DMG_PATH" ]] \
-    || error_exit "Versioned installer already exists: $DMG_PATH. Bump the client version before rebuilding."
+    || error_exit "Versioned installer already exists: $DMG_PATH. Bump the client version first."
 
-# Ensure required commands exist
-require_cmd create-dmg
-require_cmd uv
+METADATA_DIR=$(mktemp -d -t parsetrail-release.XXXXXX)
+BUILD_METADATA="${METADATA_DIR}/build-metadata.json"
+cleanup() {
+    rm -f -- "$BUILD_METADATA"
+    rmdir -- "$METADATA_DIR" 2>/dev/null || true
+}
+trap cleanup EXIT
 
-
-# ---------- Python environment & build ----------
-
-PYTHON_VERSION_FILE="${SCRIPT_DIR}/.python-version"
-[[ -f "$PYTHON_VERSION_FILE" ]] || error_exit "Missing Python version file: $PYTHON_VERSION_FILE"
-PYTHON_VERSION=$(tr -d '[:space:]' < "$PYTHON_VERSION_FILE")
-[[ -n "$PYTHON_VERSION" ]] || error_exit "Python version file is empty: $PYTHON_VERSION_FILE"
+echo "Validating clean client-v${VERSION} release source..."
+uv run --frozen --python "$PYTHON_VERSION" python scripts/release_source.py client \
+    --version "$VERSION" \
+    --platform macos \
+    --metadata-output "$BUILD_METADATA" \
+    || error_exit "Release source validation failed."
+SOURCE_COMMIT=$(uv run --frozen --python "$PYTHON_VERSION" python -c \
+    'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["source_commit"])' \
+    "$BUILD_METADATA")
+SOURCE_TAG="client-v${VERSION}"
 
 echo "Synchronizing the locked client environment with Python $PYTHON_VERSION..."
-uv sync --frozen --python "$PYTHON_VERSION" \
+uv sync --extra dev --frozen --python "$PYTHON_VERSION" \
     || error_exit "Failed to synchronize the locked client environment."
-
 ACTUAL_PYTHON_VERSION=$(uv run --frozen --python "$PYTHON_VERSION" python -c \
-    'import platform; print(platform.python_version())') \
-    || error_exit "Failed to determine the synchronized Python version."
+    'import platform; print(platform.python_version())')
 [[ "$ACTUAL_PYTHON_VERSION" == "$PYTHON_VERSION" ]] \
     || error_exit "Expected Python $PYTHON_VERSION but uv selected $ACTUAL_PYTHON_VERSION."
-echo "Release interpreter: Python $ACTUAL_PYTHON_VERSION"
 
+echo "Running client regression tests..."
+uv run --extra dev --frozen --python "$PYTHON_VERSION" pytest -q \
+    || error_exit "Client tests failed."
 echo "Checking bundled plugin release trust keys..."
 uv run --frozen --python "$PYTHON_VERSION" python scripts/plugin_release.py check-trust-store \
     || error_exit "Plugin trust-store check failed."
@@ -101,6 +106,7 @@ uv run --frozen --python "$PYTHON_VERSION" pyinstaller \
     --paths "$SRC_DIR" \
     --hidden-import=openpyxl.cell._writer \
     --add-data "src/parsetrail/assets:parsetrail/assets" \
+    --add-data "${BUILD_METADATA}:parsetrail" \
     --add-data "THIRD_PARTY_NOTICES.md:." \
     --add-data "licenses:licenses" \
     --add-data "migrations:migrations" \
@@ -113,15 +119,10 @@ uv run --frozen --python "$PYTHON_VERSION" pyinstaller \
 echo "Smoke-testing the frozen executable..."
 SMOKE_EXECUTABLE="${APP_PATH}/Contents/MacOS/${APP_NAME}"
 [[ -x "$SMOKE_EXECUTABLE" ]] || error_exit "Frozen executable not found: $SMOKE_EXECUTABLE"
-"$SMOKE_EXECUTABLE" --runtime-smoke-test \
-    || error_exit "Frozen runtime smoke test failed."
-echo "Frozen runtime smoke test passed."
-
-# ---------- DMG packaging ----------
+"$SMOKE_EXECUTABLE" --runtime-smoke-test || error_exit "Frozen runtime smoke test failed."
 
 echo "Creating DMG installer..."
 mkdir -p "$DIST_DIR"
-
 create-dmg \
     --volname "${APP_NAME} ${VERSION} Installer" \
     --volicon "./assets/parsetrail.icns" \
@@ -135,49 +136,41 @@ create-dmg \
     "$DMG_PATH" \
     "$APP_PATH"
 
-# ---------- Code signing / notarization (TODO) ----------
-# codesign --force --sign "Developer ID Application: Your Name (Team ID)" "$DMG_PATH"
-# xcrun altool --notarize-app --primary-bundle-id "com.yourcompany.ParseTrail" --username "your-apple-id" --password "app-specific-password" --file "$DMG_PATH"
-# xcrun altool --notarization-info <RequestUUID> --username "your-apple-id" --password "app-specific-password"
-# xcrun stapler staple "$DMG_PATH"
-
-# ---------- Application-level release signing ----------
-
-[[ -n "${PLUGIN_SIGNING_KEY:-}" ]] \
-    || error_exit "PLUGIN_SIGNING_KEY is required to sign the client installer."
-
-echo "Signing the macOS client release..."
+echo "Signing and independently verifying the macOS release..."
 uv run --frozen --python "$PYTHON_VERSION" python scripts/client_release.py sign \
-    --private-key "$PLUGIN_SIGNING_KEY" \
+    --private-key "$SIGNING_KEY" \
     --installer "$DMG_PATH" \
     --platform macos \
     --version "$VERSION" \
     || error_exit "Client release signing failed."
-
-echo "Verifying the signed macOS client release..."
 uv run --frozen --python "$PYTHON_VERSION" python scripts/client_release.py verify \
     --release-dir "$DIST_DIR" \
     || error_exit "Client release verification failed."
 
-# ---------- Optional deploy ----------
+echo "Recording checksums and release-tool versions..."
+uv run --frozen --python "$PYTHON_VERSION" python scripts/release_inventory.py \
+    --release-dir "$DIST_DIR" \
+    --source-commit "$SOURCE_COMMIT" \
+    --source-tag "$SOURCE_TAG" \
+    --kind client \
+    --platform macos \
+    --version "$VERSION" \
+    --packager create-dmg \
+    || error_exit "Release inventory generation failed."
 
-read -r -p "Do you want to deploy the .dmg to server? (y/n): " confirm
-if [[ "$confirm" =~ ^[Yy]$ ]]; then
-    deploy_vars=("REMOTE_USER" "REMOTE_HOST" "REMOTE_CLIENTS_DIR")
-    for v in "${deploy_vars[@]}"; do
-        [[ -n "${!v:-}" ]] || error_exit "$v is required for deployment."
-    done
-    REMOTE_BASE="${REMOTE_CLIENTS_DIR%/}"
-    REMOTE_PLATFORM_DIR="${REMOTE_BASE}/macos"
-    uv run --frozen --python "$PYTHON_VERSION" python scripts/immutable_publish.py \
-        --release-dir "$DIST_DIR" \
-        --manifest client-manifest.json \
-        --signature client-manifest.sig \
-        --remote "${REMOTE_USER}@${REMOTE_HOST}" \
-        --remote-root "$REMOTE_PLATFORM_DIR" \
-        || error_exit "Immutable macOS client publication failed."
-else
-    echo "Deployment cancelled."
+if ! $PUBLISH; then
+    echo "Signed macOS dry run completed; publication skipped."
+    exit 0
 fi
 
-echo "Script execution completed successfully!"
+REMOTE_PLATFORM_DIR="${REMOTE_CLIENTS_DIR%/}/macos"
+uv run --frozen --python "$PYTHON_VERSION" python scripts/immutable_publish.py \
+    --release-dir "$DIST_DIR" \
+    --manifest client-manifest.json \
+    --signature client-manifest.sig \
+    --inventory release-inventory.json \
+    --remote "${REMOTE_USER}@${REMOTE_HOST}" \
+    --remote-root "$REMOTE_PLATFORM_DIR" \
+    || error_exit "Immutable macOS client publication failed."
+
+echo "macOS release completed successfully."

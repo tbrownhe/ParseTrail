@@ -17,6 +17,7 @@ from pathlib import Path, PurePosixPath
 from typing import Protocol
 
 MAX_POINTER_BYTES = 1024
+MAX_INVENTORY_BYTES = 1024 * 1024
 REMOTE_SPEC_PATTERN = re.compile(r"^[A-Za-z0-9._-]+@[A-Za-z0-9._:-]+$")
 REMOTE_ROOT_PATTERN = re.compile(r"^/[A-Za-z0-9._/-]+$")
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
@@ -136,6 +137,7 @@ def _load_release(
     release_dir: Path,
     manifest_name: str,
     signature_name: str,
+    inventory_name: str | None = None,
 ) -> tuple[int, tuple[LocalArtifact, ...]]:
     manifest_name = _safe_filename(manifest_name)
     signature_name = _safe_filename(signature_name)
@@ -182,6 +184,51 @@ def _load_release(
             LocalArtifact(signature_path, signature_name, len(signature_bytes), _sha256(signature_bytes)),
         ]
     )
+    if inventory_name is not None:
+        inventory_name = _safe_filename(inventory_name)
+        inventory_path = release_dir / inventory_name
+        try:
+            inventory_bytes = inventory_path.read_bytes()
+            inventory = json.loads(inventory_bytes)
+        except (OSError, json.JSONDecodeError) as exc:
+            raise PublishError("Release inventory could not be read") from exc
+        if not inventory_bytes or len(inventory_bytes) > MAX_INVENTORY_BYTES:
+            raise PublishError("Release inventory is empty or too large")
+        if (
+            not isinstance(inventory, dict)
+            or inventory.get("schema_version") != 1
+            or inventory.get("release_sequence") != sequence
+            or not isinstance(inventory.get("files"), list)
+        ):
+            raise PublishError("Release inventory does not describe this release")
+        inventory_files: dict[str, tuple[int, str]] = {}
+        for item in inventory["files"]:
+            if not isinstance(item, dict):
+                raise PublishError("Release inventory contains invalid file metadata")
+            filename = _safe_filename(item.get("filename"))
+            size = item.get("size")
+            sha256 = item.get("sha256")
+            if (
+                not isinstance(size, int)
+                or isinstance(size, bool)
+                or size <= 0
+                or not isinstance(sha256, str)
+                or not SHA256_PATTERN.fullmatch(sha256)
+                or filename in inventory_files
+            ):
+                raise PublishError("Release inventory contains invalid file metadata")
+            inventory_files[filename] = (size, sha256)
+        expected_inventory_files = {artifact.filename: (artifact.size, artifact.sha256) for artifact in local_artifacts}
+        if inventory_files != expected_inventory_files:
+            raise PublishError("Release inventory file checksums do not match this release")
+        local_artifacts.append(
+            LocalArtifact(
+                inventory_path,
+                inventory_name,
+                len(inventory_bytes),
+                _sha256(inventory_bytes),
+            )
+        )
     filenames = [artifact.filename for artifact in local_artifacts]
     if len(filenames) != len(set(filenames)):
         raise PublishError("Release filenames must be unique")
@@ -200,13 +247,19 @@ def publish_release(
     release_dir: Path,
     manifest_name: str,
     signature_name: str,
+    inventory_name: str | None = None,
     remote_root: str,
     transport: RemoteTransport,
 ) -> int:
     if not REMOTE_ROOT_PATTERN.fullmatch(remote_root) or ".." in PurePosixPath(remote_root).parts:
         raise PublishError("Remote root must be an absolute safe POSIX path")
     remote_root = remote_root.rstrip("/")
-    sequence, artifacts = _load_release(release_dir, manifest_name, signature_name)
+    sequence, artifacts = _load_release(
+        release_dir,
+        manifest_name,
+        signature_name,
+        inventory_name,
+    )
     releases_root = _remote_join(remote_root, "releases")
     remote_release = _remote_join(releases_root, str(sequence))
     if transport.exists(remote_release):
@@ -259,6 +312,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--release-dir", type=Path, required=True)
     result.add_argument("--manifest", required=True)
     result.add_argument("--signature", required=True)
+    result.add_argument("--inventory")
     result.add_argument("--remote", required=True)
     result.add_argument("--remote-root", required=True)
     return result
@@ -270,6 +324,7 @@ def main() -> int:
         release_dir=args.release_dir.resolve(),
         manifest_name=args.manifest,
         signature_name=args.signature,
+        inventory_name=args.inventory,
         remote_root=args.remote_root,
         transport=SshTransport(args.remote),
     )

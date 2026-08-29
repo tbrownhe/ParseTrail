@@ -84,6 +84,12 @@ def test_selects_latest_version_semantically() -> None:
     assert latest_installer(release, "win64").version == "1.10.0"
 
 
+@pytest.mark.parametrize("version", ["1.2", "01.2.3", "v1.2.3"])
+def test_rejects_non_semantic_installer_versions(version: str) -> None:
+    with pytest.raises(ValidationError, match="semantic version"):
+        _artifact(version=version)
+
+
 def test_rejects_altered_or_unknown_signature() -> None:
     release = _signed_client_release((_artifact(),))
     altered = release.manifest_bytes.replace(b'"version":"1.2.3"', b'"version":"9.0.0"')

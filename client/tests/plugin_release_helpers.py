@@ -24,12 +24,14 @@ def signed_release(
     release_sequence: int = 1,
     plugin_name: str = "example_plugin",
     version: str = "1.0.0",
+    minimum_client_version: str = "1.0.0",
     private_key: Ed25519PrivateKey | None = None,
 ) -> tuple[VerifiedPluginRelease, dict[str, Ed25519PublicKey]]:
     return signed_catalog(
         {plugin_name: artifact_bytes},
         release_sequence=release_sequence,
         version=version,
+        minimum_client_version=minimum_client_version,
         private_key=private_key,
     )
 
@@ -39,6 +41,7 @@ def signed_catalog(
     *,
     release_sequence: int = 1,
     version: str = "1.0.0",
+    minimum_client_version: str = "1.0.0",
     private_key: Ed25519PrivateKey | None = None,
 ) -> tuple[VerifiedPluginRelease, dict[str, Ed25519PublicKey]]:
     signing_key = private_key or Ed25519PrivateKey.generate()
@@ -52,7 +55,7 @@ def signed_catalog(
             filename=f"{plugin_name}.pyc",
             plugin_name=plugin_name,
             version=version,
-            minimum_client_version="1.0.0",
+            minimum_client_version=minimum_client_version,
             python_tag=current_python_tag(),
             python_magic=current_python_magic(),
             size=len(artifact_bytes),
@@ -67,6 +70,7 @@ def signed_catalog(
         release_sequence=release_sequence,
         published_at=datetime.now(timezone.utc),
         key_id=key_id,
+        source_commit="a" * 40,
         artifacts=artifacts,
     )
     manifest_bytes = serialize_manifest(manifest)

@@ -75,11 +75,17 @@ def _release(tmp_path: Path, sequence: int = 2) -> Path:
     return release_dir
 
 
-def _publish(release_dir: Path, transport: FakeTransport) -> int:
+def _publish(
+    release_dir: Path,
+    transport: FakeTransport,
+    *,
+    inventory_name: str | None = None,
+) -> int:
     return publish_release(
         release_dir=release_dir,
         manifest_name="plugin-manifest.json",
         signature_name="plugin-manifest.sig",
+        inventory_name=inventory_name,
         remote_root="/catalog",
         transport=transport,
     )
@@ -139,3 +145,33 @@ def test_existing_release_sequence_is_never_reused(tmp_path: Path) -> None:
         _publish(release_dir, transport)
 
     assert transport.upload_count == 0
+
+
+def test_publishes_and_verifies_release_inventory(tmp_path: Path) -> None:
+    release_dir = _release(tmp_path)
+    inventory_files = []
+    for filename in ("parser.pyc", "plugin-manifest.json", "plugin-manifest.sig"):
+        payload = (release_dir / filename).read_bytes()
+        inventory_files.append(
+            {
+                "filename": filename,
+                "size": len(payload),
+                "sha256": hashlib.sha256(payload).hexdigest(),
+            }
+        )
+    inventory = (
+        json.dumps(
+            {
+                "schema_version": 1,
+                "release_sequence": 2,
+                "files": inventory_files,
+            }
+        ).encode()
+        + b"\n"
+    )
+    (release_dir / "release-inventory.json").write_bytes(inventory)
+    transport = FakeTransport()
+
+    _publish(release_dir, transport, inventory_name="release-inventory.json")
+
+    assert transport.files["/catalog/releases/2/release-inventory.json"] == inventory

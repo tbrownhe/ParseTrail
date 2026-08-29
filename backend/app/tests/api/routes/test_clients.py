@@ -166,6 +166,28 @@ def test_rejects_unlisted_installer_version(
     assert response.json()["detail"] == "Client installer not found"
 
 
+@pytest.mark.parametrize("version", ["1.2", "01.2.3", "not-a-version"])
+def test_rejects_invalid_semantic_version(
+    client: TestClient,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    version: str,
+) -> None:
+    _write_release(tmp_path)
+    monkeypatch.setattr(clients, "CLIENTS_DIR", tmp_path)
+
+    response = client.get(f"{settings.API_V1_STR}/clients/win64/{version}")
+
+    assert response.status_code == 422
+
+
+def test_rejects_invalid_platform_with_4xx(client: TestClient) -> None:
+    response = client.get(f"{settings.API_V1_STR}/clients/linux/latest")
+
+    assert response.status_code == 404
+    assert response.json()["detail"] == "Platform not found"
+
+
 @pytest.mark.parametrize("version", ["1.2.3", "latest"])
 def test_downloads_only_the_active_manifest_installer(
     client: TestClient,

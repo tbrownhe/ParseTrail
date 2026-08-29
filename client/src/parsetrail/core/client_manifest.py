@@ -10,7 +10,7 @@ from typing import Literal
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-from packaging.version import InvalidVersion, Version
+from packaging.version import Version
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from parsetrail.core.plugin_manifest import (
@@ -18,6 +18,7 @@ from parsetrail.core.plugin_manifest import (
     KEY_ID_PATTERN,
     SHA256_PATTERN,
 )
+from parsetrail.core.versioning import validate_semver
 
 CLIENT_MANIFEST_FILENAME = "client-manifest.json"
 CLIENT_SIGNATURE_FILENAME = "client-manifest.sig"
@@ -49,12 +50,7 @@ class ClientArtifactError(ClientTrustError):
 
 
 def _validate_version(value: str) -> str:
-    normalized = value.strip()
-    try:
-        Version(normalized)
-    except InvalidVersion as exc:
-        raise ValueError("must be a valid version") from exc
-    return normalized
+    return validate_semver(value)
 
 
 def _validate_plain_installer_filename(value: str) -> str:

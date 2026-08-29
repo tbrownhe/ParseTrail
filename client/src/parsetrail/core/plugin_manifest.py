@@ -15,8 +15,9 @@ from typing import Literal
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-from packaging.version import InvalidVersion, Version
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from parsetrail.core.versioning import validate_semver
 
 MANIFEST_FILENAME = "plugin-manifest.json"
 SIGNATURE_FILENAME = "plugin-manifest.sig"
@@ -32,6 +33,7 @@ SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 KEY_ID_PATTERN = re.compile(r"^plugin-ed25519-[0-9a-f]{32}$")
 PYTHON_TAG_PATTERN = re.compile(r"^cp[0-9]{2,3}$")
 PYTHON_MAGIC_PATTERN = re.compile(r"^[0-9a-f]{8}$")
+SOURCE_COMMIT_PATTERN = re.compile(r"^[0-9a-f]{40}$")
 
 
 class PluginTrustError(RuntimeError):
@@ -59,12 +61,7 @@ class PluginDownloadCancelled(PluginTrustError):
 
 
 def _validate_version(value: str) -> str:
-    normalized = value.strip()
-    try:
-        Version(normalized)
-    except InvalidVersion as exc:
-        raise ValueError("must be a valid version") from exc
-    return normalized
+    return validate_semver(value)
 
 
 def _validate_plain_plugin_filename(value: str) -> str:
@@ -164,6 +161,7 @@ class PluginManifest(BaseModel):
     release_sequence: int = Field(gt=0)
     published_at: datetime
     key_id: str
+    source_commit: str | None = None
     artifacts: tuple[PluginArtifact, ...] = Field(min_length=1)
 
     @field_validator("key_id")
@@ -179,6 +177,13 @@ class PluginManifest(BaseModel):
     def validate_published_at(cls, value: datetime) -> datetime:
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("must include a timezone")
+        return value
+
+    @field_validator("source_commit")
+    @classmethod
+    def validate_source_commit(cls, value: str | None) -> str | None:
+        if value is not None and not SOURCE_COMMIT_PATTERN.fullmatch(value):
+            raise ValueError("must be a full lowercase Git commit")
         return value
 
     @model_validator(mode="after")
@@ -257,7 +262,7 @@ def key_id_for_public_key(raw_public_key: bytes) -> str:
 
 def serialize_manifest(manifest: PluginManifest) -> bytes:
     """Serialize deterministically; the resulting exact bytes are signed."""
-    payload = manifest.model_dump(mode="json")
+    payload = manifest.model_dump(mode="json", exclude_none=True)
     return (
         json.dumps(
             payload,

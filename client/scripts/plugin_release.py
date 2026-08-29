@@ -165,6 +165,7 @@ def sign_release(
     trust_store_path: Path,
     passphrase: bytes,
     *,
+    source_commit: str,
     release_sequence: int | None = None,
 ) -> PluginManifest:
     """Create and verify a signed catalog for all compiled plugins."""
@@ -203,6 +204,7 @@ def sign_release(
         release_sequence=sequence,
         published_at=datetime.now(timezone.utc),
         key_id=key_id,
+        source_commit=source_commit,
         artifacts=tuple(_manifest_artifact(path) for path in plugin_paths),
     )
     manifest_bytes = serialize_manifest(manifest)
@@ -254,6 +256,7 @@ def _build_parser() -> argparse.ArgumentParser:
     sign.add_argument("--plugin-dir", type=Path, required=True)
     sign.add_argument("--trust-store", type=Path, default=DEFAULT_TRUST_STORE)
     sign.add_argument("--sequence", type=int)
+    sign.add_argument("--source-commit", required=True)
 
     verify = subparsers.add_parser(
         "verify",
@@ -288,6 +291,7 @@ def main() -> int:
                 args.private_key,
                 args.trust_store,
                 _read_passphrase(confirm=False),
+                source_commit=args.source_commit,
                 release_sequence=args.sequence,
             )
             print(f"Signed plugin release {manifest.release_sequence} with {len(manifest.artifacts)} artifacts")

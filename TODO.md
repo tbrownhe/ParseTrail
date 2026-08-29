@@ -369,16 +369,16 @@ never installs partial data, and no command shell interprets downloaded filename
 
 ### P1.5 Make releases reproducible
 
-- [ ] Refuse release builds from a dirty worktree, untagged commit, or version/tag
+- [x] Refuse release builds from a dirty worktree, untagged commit, or version/tag
   mismatch. Record the source commit in client metadata and every release record.
-- [ ] Provide one dry-run-capable release command that sequences checks, builds,
+- [x] Provide one dry-run-capable release command that sequences checks, builds,
   signing, verification, upload, activation, and smoke tests while preserving the
   offline passphrase prompt and explicit publish approval.
-- [ ] Replace import-time `.env` reads in build scripts with validated CLI/config
+- [x] Replace import-time `.env` reads in build scripts with validated CLI/config
   inputs and clear missing-directory errors.
-- [ ] Use semantic version parsing on the installer endpoint; reject invalid
+- [x] Use semantic version parsing on the installer endpoint; reject invalid
   platforms with a 4xx response instead of a `KeyError`/500.
-- [ ] Build plugins in a clean pinned interpreter, record source and Python bytecode
+- [x] Build plugins in a clean pinned interpreter, record source and Python bytecode
   compatibility in the signed manifest, and test minimum-client rejection.
 - [~] Replace mutable/broad container inputs with pinned supported bases, run the
   backend as a non-root user, and use frozen installs (`uv sync --frozen`,
@@ -386,12 +386,13 @@ never installs partial data, and no command shell interprets downloaded filename
   production bind-mount ownership migration required for a non-root backend
   remains.
 - [~] Complete the equivalent macOS frozen-runtime smoke test and add a release
-  dry-run that creates signed manifests without publishing them. The Windows
-  frozen-runtime gate is implemented and has passed an end-to-end build.
-- [ ] Record the uv, Python, PyInstaller, NSIS/create-dmg, compiler, and operating
+  dry-run that creates signed manifests without publishing them. Both builders
+  now contain the real frozen-runtime and signed dry-run gates; Windows has passed
+  end to end, while the macOS gate still needs one run on a supported Mac.
+- [x] Record the uv, Python, PyInstaller, NSIS/create-dmg, compiler, and operating
   system versions used for each platform artifact; generate checksums and a small
   machine-readable release inventory.
-- [ ] Document artifact rollback for client, plugin, and model releases; keep API
+- [x] Document artifact rollback for client, plugin, and model releases; keep API
   and database rollback in the production deployment runbook from P0.7.
 
 Acceptance: the same tag produces traceable artifacts from a clean builder, and a

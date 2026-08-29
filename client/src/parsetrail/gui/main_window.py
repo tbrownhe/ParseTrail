@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
 from sqlalchemy.orm import Session
 
 from parsetrail.core import config, learn, plot, query, reports
+from parsetrail.core.build_metadata import build_provenance_label
 from parsetrail.core.categorize import add_missing_categories
 from parsetrail.core.categorize import transactions as categorize_transactions
 from parsetrail.core.client import (
@@ -738,6 +739,7 @@ class ParseTrail(QMainWindow):
             f"<b>ParseTrail v{__version__}</b><br>"
             f"(c) {__year__} ParseTrail contributors<br>"
             f"Original author: {__developer__}<br>"
+            f"Build: {build_provenance_label()}<br>"
             f'<a href="{__website__}">Website</a> | '
             f'<a href="{__repo__}">GitHub</a>'
         )

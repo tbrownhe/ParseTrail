@@ -226,6 +226,29 @@ def test_plugin_is_verified_before_dynamic_import(tmp_path: Path) -> None:
     assert "signed_plugin" in manager.plugins
 
 
+def test_plugin_requiring_newer_client_is_not_loaded(tmp_path: Path) -> None:
+    marker_path = tmp_path / "marker.txt"
+    plugin_bytes = _compile_plugin(
+        tmp_path,
+        plugin_name="future_plugin",
+        marker_path=marker_path,
+    )
+    release, trusted_keys = signed_release(
+        plugin_bytes,
+        release_sequence=301,
+        plugin_name="future_plugin",
+        minimum_client_version="99.0.0",
+    )
+    plugin_root = tmp_path / "plugins"
+    install_plugin_release(plugin_root, release, lambda _: _chunks(plugin_bytes))
+
+    manager = PluginManager(plugin_dir=plugin_root, trusted_keys=trusted_keys)
+    manager.load_plugins()
+
+    assert not marker_path.exists()
+    assert "future_plugin" not in manager.plugins
+
+
 def test_tampered_installed_plugin_is_not_executed(tmp_path: Path) -> None:
     marker_path = tmp_path / "marker.txt"
     plugin_bytes = _compile_plugin(

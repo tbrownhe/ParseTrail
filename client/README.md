@@ -158,40 +158,45 @@ change. Never copy the private key to `parsetrail.com`, CI, this repository,
 `parsetrail-resources`, or a client package. Do not store its passphrase in
 `.env`, command arguments, or logs.
 
-Set these non-secret paths and deployment values in the repository `.env`:
+### Configure a local release builder
 
-```dotenv
-PLUGIN_SIGNING_KEY=X:\ParseTrail\plugin-signing-key.pem
-PLUGINS_DIR=C:\path\to\parsetrail-resources\plugins
-REMOTE_HOST=example
-REMOTE_USER=example
-REMOTE_PLUGINS_DIR=/path/to/data/plugins
-```
+Copy `release-config.example.json` to the ignored
+`release-config.json` and enter explicit local artifact directories, the
+external signing-key path, and optional SSH deployment values. Build scripts do
+not read the repository `.env`. The config contains no passphrase; signing
+always prompts through the terminal.
 
-### Build, sign, verify, and deploy on Windows
+Every release requires a clean worktree and an exact tag at `HEAD`. Client tags
+are derived from `src/parsetrail/version.py`, for example:
 
 ```powershell
-.\build_plugins.ps1
+git tag client-v1.3.0
 ```
 
-The script runs the client tests, compiles every source plugin, removes stale
-compiled output, prompts for the private-key passphrase, signs and independently
-verifies the complete catalog, and asks before deployment. It uploads the
-immutable release first and atomically changes `current-release.json` last.
+Plugin tags are explicit operator-chosen identifiers, such as
+`plugins-2026.08.29.1`. Push a tag only after the dry run succeeds.
 
-### Compile and sign on macOS
+### Run a plugin release
 
-The automated deployment wrapper is currently Windows-only. Compilation,
-signing, and verification are platform-independent:
+From `client/`, the same command works on Windows and macOS:
 
-```bash
-uv run --frozen python src/parsetrail/build_plugins.py
-uv run --frozen python scripts/plugin_release.py sign \
-    --private-key /Volumes/ParseTrail/plugin-signing-key.pem \
-    --plugin-dir /path/to/plugins
-uv run --frozen python scripts/plugin_release.py verify \
-    --plugin-dir /path/to/plugins
+```powershell
+uv run --frozen python scripts/release.py `
+    --config release-config.json plugins `
+    --tag plugins-2026.08.29.1
 ```
+
+The default is a dry run: it validates the clean tagged source, synchronizes the
+locked Python patch release, runs all client tests, compiles the complete plugin
+catalog, removes stale compiled output, prompts for the offline-key passphrase,
+signs, independently verifies, and writes `release-inventory.json`. It does not
+connect to or change the public server.
+
+Add `--publish` only after inspecting the dry-run output. Publication requires a
+second typed confirmation, uploads all files into a new immutable release
+directory, compares their remote sizes and SHA-256 hashes, and atomically changes
+`current-release.json` last. It then compares the public manifest and signature
+with the local bytes and smokes the public listing or installer range endpoint.
 
 For key rotation, first release a client that contains both old and new public
 keys. Only start signing catalogs with the new key after that client is
@@ -213,62 +218,52 @@ The normal application:
 Existing unsigned `.pyc` files are left in place but ignored. Cancellation or
 any failed artifact preserves the previously verified release.
 
-## Build the desktop installer
+## Build and release the desktop installer
 
-Before building, update `src/parsetrail/version.py`. Both build scripts refuse to
-package a client while the plugin public-key trust store is empty.
+Before building, update `src/parsetrail/version.py`, commit it, and create the
+matching `client-v<version>` tag. Both platform builders refuse a dirty tree,
+missing/mismatched tag, reused versioned installer, or empty public-key trust
+store. The source commit is embedded in the installed app and included with tool
+versions and file checksums in `release-inventory.json`.
 
 Windows:
 
 ```powershell
-.\build_client_win64.ps1
+uv run --frozen python scripts/release.py `
+    --config release-config.json client --platform win64
 ```
 
 This synchronizes the locked environment using the exact Python patch release in
 `.python-version`, builds the PyInstaller application, smoke-tests the frozen
 runtime, packages it with NSIS, prompts for the offline release-key passphrase,
-and independently verifies the signed installer manifest. `makensis.exe` may be
-on `PATH` or in the standard NSIS installation directory. Versioned installer
-files are immutable: the build stops if that version already exists, so bump
-`src/parsetrail/version.py` first.
+and independently verifies the signed installer manifest. Install NSIS normally;
+`makensis.exe` may be on `PATH` or in its standard installation directory. No
+`MAKENSIS_PATH` setting is used.
 
-If packaging succeeded but signing was interrupted, resume without rebuilding:
-
-```powershell
-.\build_client_win64.ps1 -SignOnly
-```
-
-To deploy an already-built installer without rebuilding it:
-
-```powershell
-.\build_client_win64.ps1 -DeployOnly
-```
-
-`-DeployOnly` does not access the private key. It re-verifies the local manifest
-and installer using only the bundled public key, uploads all three files to a
-new `win64/releases/<sequence>/` directory, independently compares remote sizes
-and SHA-256 hashes, and atomically changes `win64/current-release.json` last. It
-refuses to reuse a release sequence, and an interrupted upload cannot replace
-the previously active release. If SSH drops during the atomic move, the publisher
-reads the authoritative pointer and distinguishes a completed activation from a
-failed one. The same tested publisher is used for Windows/macOS installers and
-the plugin catalog. Deploy the backend manifest routes before the first installer
-that uses this layout.
-
-Python bytecode changed with the 3.13 client baseline. Publish client 1.2.2 (or
-newer) before publishing plugins compiled with Python 3.13. Older clients reject
-the incompatible catalog and retain their previously verified plugin release.
+To publish, repeat the command with `--publish`. An interrupted upload cannot
+replace the active release. If SSH drops during activation, the publisher reads
+the authoritative pointer and distinguishes a completed activation from a failed
+one. The same publisher is used for both installer platforms and plugins.
 
 macOS:
 
 ```bash
-./build_client_macos.sh
+uv run --frozen python scripts/release.py \
+    --config release-config.json client --platform macos
 ```
 
 This builds the `.app` and a drag-and-drop `.dmg`, signs its ParseTrail release
-manifest with the same offline key, verifies it, and uses the same immutable
-upload/atomic-pointer protocol. Apple signing and notarization are separate from
-ParseTrail's application-level artifact signature and are not yet enabled.
+manifest with the same offline key, verifies it, and smoke-tests the actual
+frozen executable. Run this gate on a real supported Mac. Apple signing and
+notarization are separate from ParseTrail's application-level artifact signature
+and are not yet enabled.
+
+Client 1.3 understands the plugin manifest's signed source-commit field. Publish
+the 1.3 client before the first plugin catalog generated by this release command;
+older clients reject that catalog and retain their previously verified plugins.
+
+See [artifact rollback](../docs/artifact-rollback.md) for restoring an earlier
+immutable release without rebuilding or deleting release evidence.
 
 ## Plugin architecture
 

@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "clients_dir": "C:/path/to/parsetrail-resources/clients",
+  "plugins_dir": "C:/path/to/parsetrail-resources/plugins",
+  "signing_key": "X:/ParseTrail/plugin-signing-key.pem",
+  "public_api_base_url": "https://api.parsetrail.com/api/v1",
+  "remote": {
+    "user": "deploy-user",
+    "host": "parsetrail-server",
+    "clients_dir": "/srv/parsetrail/data/clients",
+    "plugins_dir": "/srv/parsetrail/data/plugins"
+  }
+}

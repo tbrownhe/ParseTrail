@@ -1,47 +1,30 @@
 param(
-    [switch]$DeployOnly,
-    [switch]$SignOnly
+    [Parameter(Mandatory = $true)]
+    [string]$ClientsDir,
+    [string]$SigningKey,
+    [switch]$Publish,
+    [string]$RemoteUser,
+    [string]$RemoteHost,
+    [string]$RemoteClientsDir,
+    [switch]$DeployOnly
 )
 
 $ErrorActionPreference = "Stop"
 
-if ($DeployOnly -and $SignOnly) {
-    throw "DeployOnly and SignOnly cannot be used together"
+if (-not (Test-Path -LiteralPath $ClientsDir -PathType Container)) {
+    throw "ClientsDir does not exist or is not a directory: $ClientsDir"
 }
-$skipBuild = $DeployOnly -or $SignOnly
-
-# --- Load project-level .env -------------------------------------------------
-$projectRoot = Split-Path $PSScriptRoot -Parent
-$envFile = Join-Path $projectRoot ".env"
-
-if (-not (Test-Path $envFile)) {
-    Write-Error "ERROR: .env file not found at $envFile"
-    exit 1
-}
-
-Get-Content $envFile | ForEach-Object {
-    $line = $_.Trim()
-    if (-not $line -or $line.StartsWith('#')) { return }
-
-    $parts = $line -split '=', 2
-    if ($parts.Count -eq 2) {
-        $key   = $parts[0].Trim()
-        $value = $parts[1].Trim()
-        if ($key) {
-            [System.Environment]::SetEnvironmentVariable($key, $value, "Process")
-        }
+$distDir = (Resolve-Path -LiteralPath $ClientsDir).Path
+$privateKey = $SigningKey
+$remoteDir = $RemoteClientsDir
+if (-not $DeployOnly) {
+    if (-not $privateKey -or -not (Test-Path -LiteralPath $privateKey -PathType Leaf)) {
+        throw "SigningKey must name the encrypted release key for build/sign operations"
     }
+    $privateKey = (Resolve-Path -LiteralPath $privateKey).Path
 }
-
-$distDir         = $env:CLIENTS_DIR
-$remoteUser      = $env:REMOTE_USER
-$remoteHost      = $env:REMOTE_HOST
-$remoteDir       = $env:REMOTE_CLIENTS_DIR
-$privateKey      = $env:PLUGIN_SIGNING_KEY
-
-if (-not $distDir) {
-    Write-Error "CLIENTS_DIR is missing. Please check $envFile."
-    exit 1
+if ($DeployOnly) {
+    $Publish = $true
 }
 
 # --- Define dirs for build stages --------------------------------------------
@@ -69,21 +52,30 @@ if ($versionContents -notmatch '(?m)^__version__\s*=\s*"([^"]+)"') {
     exit 1
 }
 $version = $Matches[1]
+$buildMetadataPath = Join-Path ([System.IO.Path]::GetTempPath()) "parsetrail-build-$([guid]::NewGuid().ToString('N')).json"
+$sourceJson = uv run --frozen --python $pythonVersion python scripts/release_source.py client `
+    --version $version `
+    --platform win64 `
+    --metadata-output $buildMetadataPath
+if ($LASTEXITCODE -ne 0) {
+    throw "Release source validation failed with exit code $LASTEXITCODE"
+}
+$releaseSource = $sourceJson | ConvertFrom-Json
 $installerPath = Join-Path $clientDir "parsetrail_${version}_win64_setup.exe"
 $manifestPath = Join-Path $clientDir "client-manifest.json"
 $signaturePath = Join-Path $clientDir "client-manifest.sig"
-if ($skipBuild -and -not (Test-Path -LiteralPath $installerPath -PathType Leaf)) {
+if ($DeployOnly -and -not (Test-Path -LiteralPath $installerPath -PathType Leaf)) {
     Write-Error "Installer for client version $version was not found: $installerPath"
     exit 1
 }
-if (-not $skipBuild -and (Test-Path -LiteralPath $installerPath)) {
+if (-not $DeployOnly -and (Test-Path -LiteralPath $installerPath)) {
     Write-Error "Versioned installer already exists: $installerPath. Bump the client version before rebuilding."
     exit 1
 }
 
 
 # --- Locate the external Windows installer compiler --------------------------
-if (-not $skipBuild) {
+if (-not $DeployOnly) {
 $makensisCommand = Get-Command "makensis.exe" -ErrorAction SilentlyContinue
 $makensisCandidates = @(
     if ($makensisCommand) { $makensisCommand.Source }
@@ -107,7 +99,7 @@ if (-not (Test-Path $nsisScript)) {
 
 try {
     Write-Host "Synchronizing the locked client environment with Python $pythonVersion..."
-    uv sync --frozen --python $pythonVersion
+    uv sync --extra dev --frozen --python $pythonVersion
     if ($LASTEXITCODE -ne 0) {
         throw "uv sync failed with exit code $LASTEXITCODE"
     }
@@ -120,6 +112,12 @@ try {
         throw "Expected Python $pythonVersion but uv selected $($actualPythonVersion.Trim())"
     }
     Write-Host "Release interpreter: Python $actualPythonVersion"
+
+    Write-Host "Running client regression tests..."
+    uv run --extra dev --frozen --python $pythonVersion pytest -q
+    if ($LASTEXITCODE -ne 0) {
+        throw "Client tests failed with exit code $LASTEXITCODE"
+    }
 
     Write-Host "Checking bundled plugin release trust keys..."
     uv run --frozen --python $pythonVersion python scripts/plugin_release.py check-trust-store
@@ -140,6 +138,7 @@ try {
         --paths $srcDir `
         --add-data "assets;assets" `
         --add-data "src\parsetrail\assets;parsetrail\assets" `
+        --add-data "$buildMetadataPath;parsetrail" `
         --add-data "THIRD_PARTY_NOTICES.md;." `
         --add-data "licenses;licenses" `
         --add-data "migrations;migrations" `
@@ -195,14 +194,17 @@ try {
     }
 
 } catch {
+    Remove-Item -LiteralPath $buildMetadataPath -Force -ErrorAction SilentlyContinue
     Write-Error "ERROR: Build or packaging failed. $($_.Exception.Message)"
     throw
 }
 }
 
+Remove-Item -LiteralPath $buildMetadataPath -Force -ErrorAction SilentlyContinue
+
 # Sign new installers offline; deployment-only mode must independently verify
 # the existing release using only the bundled public trust store.
-if ($skipBuild) {
+if ($DeployOnly) {
     Write-Host "Synchronizing the locked environment for release verification..."
     uv sync --frozen --python $pythonVersion
     if ($LASTEXITCODE -ne 0) {
@@ -211,9 +213,6 @@ if ($skipBuild) {
 }
 
 if (-not $DeployOnly) {
-    if (-not $privateKey) {
-        throw "PLUGIN_SIGNING_KEY is required to sign the client installer"
-    }
     Write-Host "Signing the Windows client release..."
     uv run --frozen --python $pythonVersion python scripts/client_release.py sign `
         --private-key $privateKey `
@@ -232,10 +231,32 @@ if ($LASTEXITCODE -ne 0) {
     throw "Client release verification failed with exit code $LASTEXITCODE"
 }
 
-# Prompt for deploy
-$answer = if ($DeployOnly) { "y" } else { Read-Host "Deploy client installer to server? (y/n)" }
+if (-not $DeployOnly) {
+    Write-Host "Recording checksums and release-tool versions..."
+    uv run --frozen --python $pythonVersion python scripts/release_inventory.py `
+        --release-dir $clientDir `
+        --source-commit $releaseSource.source_commit `
+        --source-tag $releaseSource.source_tag `
+        --kind client `
+        --platform win64 `
+        --version $version `
+        --packager nsis
+    if ($LASTEXITCODE -ne 0) {
+        throw "Release inventory generation failed with exit code $LASTEXITCODE"
+    }
+}
+$inventoryPath = Join-Path $clientDir "release-inventory.json"
+if (-not (Test-Path -LiteralPath $inventoryPath -PathType Leaf)) {
+    throw "Release inventory was not found: $inventoryPath"
+}
+$inventory = Get-Content -LiteralPath $inventoryPath -Raw | ConvertFrom-Json
+if ($inventory.source_commit -ne $releaseSource.source_commit -or $inventory.source_tag -ne $releaseSource.source_tag) {
+    throw "Release inventory does not match the checked-out source"
+}
 
-if ($answer -ne 'y' -and $answer -ne 'Y') {
+# Publication requires the explicit -Publish switch. The unified release command
+# obtains an additional typed confirmation before setting it.
+if (-not $Publish) {
     Write-Host "Installer built successfully; deployment skipped."
     exit 0
 }
@@ -267,7 +288,8 @@ try {
         --release-dir $clientDir `
         --manifest client-manifest.json `
         --signature client-manifest.sig `
-        --remote "${remoteUser}@${remoteHost}" `
+        --inventory release-inventory.json `
+        --remote "${RemoteUser}@${RemoteHost}" `
         --remote-root $remotePlatformDir
     if ($LASTEXITCODE -ne 0) {
         throw "Immutable Windows client publication failed with exit code $LASTEXITCODE"
