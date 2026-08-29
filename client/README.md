@@ -183,8 +183,11 @@ and installer using only the bundled public key, uploads all three files to a
 new `win64/releases/<sequence>/` directory, independently compares remote sizes
 and SHA-256 hashes, and atomically changes `win64/current-release.json` last. It
 refuses to reuse a release sequence, and an interrupted upload cannot replace
-the previously active release. Deploy the backend manifest routes before the
-first installer that uses this layout.
+the previously active release. If SSH drops during the atomic move, the publisher
+reads the authoritative pointer and distinguishes a completed activation from a
+failed one. The same tested publisher is used for Windows/macOS installers and
+the plugin catalog. Deploy the backend manifest routes before the first installer
+that uses this layout.
 
 macOS:
 

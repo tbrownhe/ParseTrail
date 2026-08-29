@@ -99,78 +99,15 @@ try {
         throw "Missing deployment environment variables: $($remoteMissing -join ', ')"
     }
 
-    $manifestPath = Join-Path $pluginsDir "plugin-manifest.json"
-    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-    $releaseSequence = [Int64]$manifest.release_sequence
-    if ($releaseSequence -le 0) {
-        throw "Signed manifest has an invalid release sequence"
-    }
-
-    $releaseFiles = @(
-        Get-ChildItem -LiteralPath $pluginsDir -File -Filter "*.pyc"
-        Get-Item -LiteralPath $manifestPath
-        Get-Item -LiteralPath (Join-Path $pluginsDir "plugin-manifest.sig")
-    )
-    $remoteBase = $remoteDir.TrimEnd("/")
-    $remoteReleaseDir = "$remoteBase/releases/$releaseSequence"
-    $remoteSpecBase = "${remoteUser}@${remoteHost}"
-
-    Write-Host "Creating immutable remote release directory $releaseSequence..."
-    ssh $remoteSpecBase "if [ -e '$remoteReleaseDir' ]; then exit 17; fi; mkdir -p '$remoteReleaseDir'"
+    uv run --frozen --python $pythonVersion python scripts/immutable_publish.py `
+        --release-dir $pluginsDir `
+        --manifest plugin-manifest.json `
+        --signature plugin-manifest.sig `
+        --remote "${remoteUser}@${remoteHost}" `
+        --remote-root $remoteDir
     if ($LASTEXITCODE -ne 0) {
-        throw "Remote plugin release $releaseSequence already exists or could not be created"
+        throw "Immutable plugin publication failed with exit code $LASTEXITCODE"
     }
-
-    foreach ($releaseFile in $releaseFiles) {
-        $remotePath = "$remoteReleaseDir/$($releaseFile.Name)"
-        $remoteSpec = "${remoteUser}@${remoteHost}:$remotePath"
-        Write-Host "Uploading signed release file: $($releaseFile.Name)"
-        scp $releaseFile.FullName $remoteSpec
-        if ($LASTEXITCODE -ne 0) {
-            throw "Upload failed for $($releaseFile.Name)"
-        }
-
-        $expectedSize = $releaseFile.Length
-        $expectedHash = (Get-FileHash -LiteralPath $releaseFile.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-        $remoteSize = ssh $remoteSpecBase "stat -c %s '$remotePath'"
-        if ($LASTEXITCODE -ne 0 -or [Int64]$remoteSize -ne $expectedSize) {
-            throw "Remote size verification failed for $($releaseFile.Name)"
-        }
-        $remoteHashOutput = ssh $remoteSpecBase "sha256sum '$remotePath'"
-        if ($LASTEXITCODE -ne 0) {
-            throw "Remote hash verification failed for $($releaseFile.Name)"
-        }
-        $remoteHash = ($remoteHashOutput -split '\s+')[0].ToLowerInvariant()
-        if ($remoteHash -ne $expectedHash) {
-            throw "Remote hash mismatch for $($releaseFile.Name)"
-        }
-    }
-
-    $pointerPath = Join-Path ([System.IO.Path]::GetTempPath()) "parsetrail-current-release-$([guid]::NewGuid().ToString('N')).json"
-    try {
-        $pointer = @{
-            schema_version = 1
-            release_sequence = $releaseSequence
-        } | ConvertTo-Json -Compress
-        [System.IO.File]::WriteAllText(
-            $pointerPath,
-            "$pointer`n",
-            [System.Text.UTF8Encoding]::new($false)
-        )
-        $remotePointerPart = "$remoteBase/current-release.json.part"
-        scp $pointerPath "${remoteSpecBase}:$remotePointerPart"
-        if ($LASTEXITCODE -ne 0) {
-            throw "Could not upload the plugin release pointer"
-        }
-        ssh $remoteSpecBase "mv '$remotePointerPart' '$remoteBase/current-release.json'"
-        if ($LASTEXITCODE -ne 0) {
-            throw "Could not activate plugin release $releaseSequence"
-        }
-    }
-    finally {
-        Remove-Item -LiteralPath $pointerPath -Force -ErrorAction SilentlyContinue
-    }
-    Write-Host "Signed plugin release deployed successfully."
 }
 finally {
     Pop-Location

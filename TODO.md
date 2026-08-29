@@ -145,7 +145,7 @@ equivalent plaintext write is introduced into either parse path.
 - [x] Add installer trust tests for altered metadata/signatures, semantic version
   selection, unsafe names, altered/truncated/oversized downloads, cancellation,
   sequence reuse, and preservation of a prior installer.
-- [ ] Add remote-publication failure tests for partial upload visibility, remote
+- [x] Add remote-publication failure tests for partial upload visibility, remote
   hash mismatch, and interrupted activation.
 - [x] Add a backend regression test proving unsigned model distribution remains
   unrouted.

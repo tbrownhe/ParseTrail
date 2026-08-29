@@ -251,7 +251,6 @@ try {
         exit 1
     }
 
-    $remoteBase = $remoteDir.TrimEnd('/')
     $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
     $releaseSequence = [Int64]$manifest.release_sequence
     if ($releaseSequence -le 0) {
@@ -261,69 +260,16 @@ try {
         throw "Signed client manifest does not describe the expected Windows installer"
     }
 
-    $remotePlatformDir = "$remoteBase/win64"
-    $remoteReleaseDir = "$remotePlatformDir/releases/$releaseSequence"
-    $remoteSpecBase = "${remoteUser}@${remoteHost}"
-    ssh $remoteSpecBase "if [ -e '$remoteReleaseDir' ]; then exit 17; fi; mkdir -p '$remoteReleaseDir'"
+    $remotePlatformDir = "$($remoteDir.TrimEnd('/'))/win64"
+    uv run --frozen --python $pythonVersion python scripts/immutable_publish.py `
+        --release-dir $clientDir `
+        --manifest client-manifest.json `
+        --signature client-manifest.sig `
+        --remote "${remoteUser}@${remoteHost}" `
+        --remote-root $remotePlatformDir
     if ($LASTEXITCODE -ne 0) {
-        throw "Remote client release $releaseSequence already exists or could not be created"
+        throw "Immutable Windows client publication failed with exit code $LASTEXITCODE"
     }
-
-    $releaseFiles = @(
-        Get-Item -LiteralPath $installerPath
-        Get-Item -LiteralPath $manifestPath
-        Get-Item -LiteralPath $signaturePath
-    )
-    foreach ($releaseFile in $releaseFiles) {
-        $remotePath = "$remoteReleaseDir/$($releaseFile.Name)"
-        Write-Host "Uploading immutable release file: $($releaseFile.Name)"
-        scp $releaseFile.FullName "${remoteSpecBase}:$remotePath"
-        if ($LASTEXITCODE -ne 0) {
-            throw "Client release upload failed for $($releaseFile.Name)"
-        }
-
-        $expectedSize = $releaseFile.Length
-        $expectedHash = (Get-FileHash -LiteralPath $releaseFile.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-        $remoteSize = ssh $remoteSpecBase "stat -c %s '$remotePath'"
-        if ($LASTEXITCODE -ne 0 -or [Int64]$remoteSize -ne $expectedSize) {
-            throw "Remote size verification failed for $($releaseFile.Name)"
-        }
-        $remoteHashOutput = ssh $remoteSpecBase "sha256sum '$remotePath'"
-        if ($LASTEXITCODE -ne 0) {
-            throw "Remote hash verification failed for $($releaseFile.Name)"
-        }
-        $remoteHash = ($remoteHashOutput -split '\s+')[0].ToLowerInvariant()
-        if ($remoteHash -ne $expectedHash) {
-            throw "Remote hash mismatch for $($releaseFile.Name)"
-        }
-    }
-
-    $pointerPath = Join-Path ([System.IO.Path]::GetTempPath()) "parsetrail-client-release-$([guid]::NewGuid().ToString('N')).json"
-    try {
-        $pointer = @{
-            schema_version = 1
-            release_sequence = $releaseSequence
-        } | ConvertTo-Json -Compress
-        [System.IO.File]::WriteAllText(
-            $pointerPath,
-            "$pointer`n",
-            [System.Text.UTF8Encoding]::new($false)
-        )
-        $remotePointerPart = "$remotePlatformDir/current-release.json.part"
-        scp $pointerPath "${remoteSpecBase}:$remotePointerPart"
-        if ($LASTEXITCODE -ne 0) {
-            throw "Could not upload the client release pointer"
-        }
-        ssh $remoteSpecBase "mv '$remotePointerPart' '$remotePlatformDir/current-release.json'"
-        if ($LASTEXITCODE -ne 0) {
-            throw "Could not activate client release $releaseSequence"
-        }
-    }
-    finally {
-        Remove-Item -LiteralPath $pointerPath -Force -ErrorAction SilentlyContinue
-    }
-
-    Write-Host "Signed client release $releaseSequence deployed and activated successfully."
 } catch {
     Write-Error "ERROR: Deployment failed. $($_.Exception.Message)"
     throw

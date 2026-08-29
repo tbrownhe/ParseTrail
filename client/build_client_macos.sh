@@ -165,65 +165,15 @@ if [[ "$confirm" =~ ^[Yy]$ ]]; then
     for v in "${deploy_vars[@]}"; do
         [[ -n "${!v:-}" ]] || error_exit "$v is required for deployment."
     done
-    require_cmd scp
-    require_cmd shasum
-    require_cmd ssh
-
-    MANIFEST_PATH="${DIST_DIR}/client-manifest.json"
-    SIGNATURE_PATH="${DIST_DIR}/client-manifest.sig"
-    RELEASE_SEQUENCE=$(uv run --frozen --python "$PYTHON_VERSION" python -c \
-        'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["release_sequence"])' \
-        "$MANIFEST_PATH") \
-        || error_exit "Could not read the signed client release sequence."
-    [[ "$RELEASE_SEQUENCE" =~ ^[1-9][0-9]*$ ]] \
-        || error_exit "Signed client manifest has an invalid release sequence."
-
     REMOTE_BASE="${REMOTE_CLIENTS_DIR%/}"
     REMOTE_PLATFORM_DIR="${REMOTE_BASE}/macos"
-    REMOTE_RELEASE_DIR="${REMOTE_PLATFORM_DIR}/releases/${RELEASE_SEQUENCE}"
-    REMOTE_SPEC="${REMOTE_USER}@${REMOTE_HOST}"
-
-    echo "Creating immutable remote client release ${RELEASE_SEQUENCE}..."
-    ssh "$REMOTE_SPEC" \
-        "if [ -e '$REMOTE_RELEASE_DIR' ]; then exit 17; fi; mkdir -p '$REMOTE_RELEASE_DIR'" \
-        || error_exit "Remote client release already exists or could not be created."
-
-    for release_file in "$DMG_PATH" "$MANIFEST_PATH" "$SIGNATURE_PATH"; do
-        filename=$(basename "$release_file")
-        remote_path="${REMOTE_RELEASE_DIR}/${filename}"
-        echo "Uploading immutable release file: ${filename}"
-        scp "$release_file" "${REMOTE_SPEC}:${remote_path}" \
-            || error_exit "Upload failed for ${filename}."
-
-        expected_size=$(wc -c < "$release_file" | tr -d '[:space:]')
-        remote_size=$(ssh "$REMOTE_SPEC" "stat -c %s '$remote_path'") \
-            || error_exit "Remote size check failed for ${filename}."
-        [[ "$remote_size" == "$expected_size" ]] \
-            || error_exit "Remote size mismatch for ${filename}."
-
-        expected_hash_output=$(shasum -a 256 "$release_file") \
-            || error_exit "Local hash check failed for ${filename}."
-        expected_hash=${expected_hash_output%% *}
-        remote_hash_output=$(ssh "$REMOTE_SPEC" "sha256sum '$remote_path'") \
-            || error_exit "Remote hash check failed for ${filename}."
-        remote_hash=${remote_hash_output%% *}
-        [[ "$remote_hash" == "$expected_hash" ]] \
-            || error_exit "Remote hash mismatch for ${filename}."
-    done
-
-    pointer_path=$(mktemp "${TMPDIR:-/tmp}/parsetrail-client-release.XXXXXX") \
-        || error_exit "Could not create a local release-pointer staging file."
-    printf '{"release_sequence":%s,"schema_version":1}\n' "$RELEASE_SEQUENCE" > "$pointer_path"
-    remote_pointer_part="${REMOTE_PLATFORM_DIR}/current-release.json.part"
-    if ! scp "$pointer_path" "${REMOTE_SPEC}:${remote_pointer_part}"; then
-        rm -f -- "$pointer_path"
-        error_exit "Could not upload the client release pointer."
-    fi
-    rm -f -- "$pointer_path"
-    ssh "$REMOTE_SPEC" \
-        "mv '$remote_pointer_part' '$REMOTE_PLATFORM_DIR/current-release.json'" \
-        || error_exit "Could not activate client release ${RELEASE_SEQUENCE}."
-    echo "Signed client release ${RELEASE_SEQUENCE} deployed and activated."
+    uv run --frozen --python "$PYTHON_VERSION" python scripts/immutable_publish.py \
+        --release-dir "$DIST_DIR" \
+        --manifest client-manifest.json \
+        --signature client-manifest.sig \
+        --remote "${REMOTE_USER}@${REMOTE_HOST}" \
+        --remote-root "$REMOTE_PLATFORM_DIR" \
+        || error_exit "Immutable macOS client publication failed."
 else
     echo "Deployment cancelled."
 fi
