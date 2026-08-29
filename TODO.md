@@ -350,8 +350,10 @@ does not provide a reliable user-existence oracle.
 
 - [x] Put connect/read timeouts and bounded retries on every HTTP call; centralize
   API error translation and never retry non-idempotent operations implicitly.
-- [ ] Move submission encryption, uploads, plugin sync, model sync, and installer
+- [x] Move submission encryption, uploads, plugin sync, model sync, and installer
   downloads off the Qt UI thread with truthful progress and cancellation.
+  There is currently no remote model-sync workflow; any future implementation
+  must use the same worker boundary.
 - [x] Fix plugin synchronization when progress UI is disabled.
 - [x] Ensure cancelled installer downloads are reported as incomplete rather than
   successful and never launch their staging file.

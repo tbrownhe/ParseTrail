@@ -74,6 +74,43 @@ class AuthManager:
             return True
         return datetime.now(timezone.utc) < self._token_expires_at.astimezone(timezone.utc)
 
+    def credentials_if_needed(self) -> tuple[str, str] | None:
+        """Prompt on the caller's thread, returning credentials for worker login."""
+        if self._is_token_valid():
+            return None
+        credentials = prompt_for_credentials()
+        if credentials is None:
+            raise AuthError("Sign-in was cancelled.")
+        return credentials
+
+    def login(self, email: str, password: str) -> None:
+        """Authenticate over the network without invoking any UI callback."""
+        try:
+            resp = self.transport.request(
+                "POST",
+                f"{self.base_url}{LOGIN_PATH}",
+                action="signing in",
+                data={"username": email, "password": password},
+            )
+            raise_for_response(resp, "signing in")
+        except NetworkError as exc:
+            raise AuthError(str(exc)) from exc
+
+        try:
+            payload = resp.json()
+            token = payload["access_token"]
+            if not isinstance(token, str) or not token:
+                raise ValueError
+        except (KeyError, requests.JSONDecodeError, TypeError, ValueError) as exc:
+            raise AuthError("The sign-in response was invalid.") from exc
+
+        self._token = token
+        self._token_expires_at = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        self.settings.email = email
+        self.settings.access_token = token
+        self.settings.token_expires_at = self._token_expires_at.timestamp()
+        save_settings(self.settings)
+
     def _login(self) -> bool:
         """
         Prompt the user for email/password (via the patched UI callback)
@@ -88,34 +125,10 @@ class AuthManager:
         email, password = creds
 
         try:
-            resp = self.transport.request(
-                "POST",
-                f"{self.base_url}{LOGIN_PATH}",
-                action="signing in",
-                data={"username": email, "password": password},
-            )
-            raise_for_response(resp, "signing in")
-        except NetworkError as e:
-            logger.error("{}", e)
+            self.login(email, password)
+        except AuthError as exc:
+            logger.error("{}", exc)
             return False
-
-        try:
-            payload = resp.json()
-            token = payload["access_token"]
-            if not isinstance(token, str) or not token:
-                raise ValueError
-        except (KeyError, requests.JSONDecodeError, TypeError, ValueError):
-            logger.error("Sign-in response did not match the expected schema")
-            return False
-
-        self._token = token
-        self._token_expires_at = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-
-        # Persist token
-        self.settings.email = email
-        self.settings.access_token = token
-        self.settings.token_expires_at = self._token_expires_at.timestamp()
-        save_settings(self.settings)
         return True
 
     def clear_token(self) -> None:

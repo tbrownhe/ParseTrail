@@ -1,11 +1,10 @@
 import os
-import time
 from pathlib import Path
+from threading import Event
 
 from loguru import logger
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import (
-    QApplication,
     QComboBox,
     QDialog,
     QFileDialog,
@@ -19,10 +18,76 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from parsetrail.core.api import api_client
+from parsetrail.core.api import (
+    StatementSubmissionCancelled,
+    api_client,
+)
 from parsetrail.core.auth import AuthError
 from parsetrail.core.crypto import encrypt_file
 from parsetrail.core.settings import settings
+
+
+class StatementSubmissionThread(QThread):
+    """Encrypt and upload a statement without blocking the Qt event loop."""
+
+    stage_changed = Signal(str)
+    progress_changed = Signal(int, int)
+    submitted = Signal()
+    submission_failed = Signal(str)
+    submission_cancelled = Signal()
+
+    def __init__(
+        self,
+        fpath: Path,
+        metadata: dict[str, object],
+        *,
+        credentials: tuple[str, str] | None,
+        parent=None,
+    ) -> None:
+        super().__init__(parent)
+        self.fpath = fpath
+        self.metadata = metadata
+        self.credentials = credentials
+        self._cancel_event = Event()
+
+    def cancel(self) -> None:
+        self._cancel_event.set()
+
+    def run(self) -> None:
+        try:
+            if self.credentials is not None:
+                email, password = self.credentials
+                self.credentials = None
+                self.stage_changed.emit("Signing in...")
+                api_client.auth.login(email, password)
+            if self._cancel_event.is_set():
+                raise StatementSubmissionCancelled("Statement submission cancelled")
+
+            self.stage_changed.emit("Encrypting statement in memory...")
+            encrypted_file, encrypted_key = encrypt_file(self.fpath)
+            if self._cancel_event.is_set():
+                raise StatementSubmissionCancelled("Statement submission cancelled")
+
+            self.stage_changed.emit("Uploading encrypted statement...")
+            response = api_client.submit_statement(
+                encrypted_file,
+                encrypted_key,
+                self.metadata,
+                cancelled=self._cancel_event.is_set,
+                progress=self.progress_changed.emit,
+            )
+            try:
+                message = response.json().get("message")
+            finally:
+                response.close()
+            if message != "SUCCESS":
+                raise RuntimeError("The server did not confirm statement storage.")
+        except StatementSubmissionCancelled:
+            self.submission_cancelled.emit()
+        except Exception as exc:
+            self.submission_failed.emit(str(exc))
+        else:
+            self.submitted.emit()
 
 
 class StatementSubmissionDialog(QDialog):
@@ -113,7 +178,6 @@ class StatementSubmissionDialog(QDialog):
         if not self.confirm():
             return
         self.send_statement()
-        self.clear_fields()
 
     def validate(self) -> bool:
         file_path = self.file_path_input.text().strip()
@@ -173,67 +237,85 @@ class StatementSubmissionDialog(QDialog):
 
         fpath = Path(fpath).resolve()
 
-        # Logging to user
+        try:
+            credentials = api_client.auth.credentials_if_needed()
+        except AuthError:
+            QMessageBox.information(self, "Submission Canceled", "Sign-in was canceled.")
+            return
+
         logger.info(f"Sending {fpath} to server")
-        progress = QProgressDialog("Sending statement for plugin development...", "Cancel", 0, 4, self)
+        progress = QProgressDialog("Preparing encrypted statement...", "Cancel", 0, 0, self)
         progress.setMinimumWidth(400)
         progress.setWindowTitle("Sending Encrypted Statement")
         progress.setWindowModality(Qt.WindowModal)
         progress.setMinimumDuration(0)
-        progress.setValue(0)
-        progress.setMaximum(4)
-        progress.show()
-        QApplication.processEvents()
+        progress.setAutoClose(False)
+        progress.setAutoReset(False)
 
-        # Last chance to abort
-        for t in range(1, 4):
-            time.sleep(1)
-            progress.setValue(t)
-            QApplication.processEvents()
-            if progress.wasCanceled():
-                QMessageBox.information(
-                    self,
-                    "Aborted",
-                    "Aborted statement submission.",
-                )
-                return
+        metadata = {k: v for k, v in self.metadata.items() if k != "file_path"}
+        thread = StatementSubmissionThread(
+            fpath,
+            metadata,
+            credentials=credentials,
+            parent=progress,
+        )
+        self._submission_thread = thread
+        progress._submission_thread = thread
+        progress.canceled.connect(thread.cancel)
+        thread.stage_changed.connect(progress.setLabelText)
 
-        try:
-            metadata = {k: v for k, v in self.metadata.items() if k != "file_path"}
-            encrypted_file, encrypted_key = encrypt_file(fpath)
-            resp = api_client.submit_statement(encrypted_file, encrypted_key, metadata)
-            message = resp.json().get("message")
+        def update_progress(sent: int, total: int) -> None:
+            progress.setRange(0, total)
+            progress.setValue(sent)
 
+        def submitted() -> None:
             progress.setValue(progress.maximum())
-
-            # Confirm server received and stored the file
-            if message == "SUCCESS":
-                logger.success(f"Sent {fpath.name} to server")
-                QMessageBox.information(
-                    self,
-                    "Statement Sent",
-                    "Server confirmed End-to-End encrypted file transfer.",
-                )
-            else:
-                logger.error(f"Server responded with error: {message}")
-                QMessageBox.critical(
-                    self,
-                    "Statement Not Sent",
-                    f"Server responded with error: {message}",
-                )
-        except AuthError as e:
-            logger.error(f"Authentication error during statement send: {e}")
-            QMessageBox.warning(
-                self,
-                "Authentication Required",
-                "Could not authenticate with the server. Please log in and try again.",
-            )
-        except Exception as e:
-            logger.error(f"Failed to send statement to server: {e}")
-            QMessageBox.critical(
-                self,
-                "Statement Not Sent",
-                f"Failed to send statement:\n{e}",
-            )
-        finally:
             progress.close()
+            self.submit_button.setEnabled(True)
+            self.cancel_button.setEnabled(True)
+            self.clear_fields()
+            logger.success(f"Sent {fpath.name} to server")
+            QMessageBox.information(
+                self,
+                "Statement Sent",
+                "Server confirmed the end-to-end encrypted file transfer.",
+            )
+
+        def failed(message: str) -> None:
+            progress.close()
+            self.submit_button.setEnabled(True)
+            self.cancel_button.setEnabled(True)
+            logger.error(f"Failed to send statement to server: {message}")
+            QMessageBox.critical(self, "Statement Not Sent", f"Failed to send statement:\n{message}")
+
+        def cancelled() -> None:
+            progress.close()
+            self.submit_button.setEnabled(True)
+            self.cancel_button.setEnabled(True)
+            QMessageBox.information(self, "Submission Canceled", "The statement was not confirmed as received.")
+
+        thread.progress_changed.connect(update_progress)
+        thread.submitted.connect(submitted)
+        thread.submission_failed.connect(failed)
+        thread.submission_cancelled.connect(cancelled)
+        thread.finished.connect(lambda: setattr(self, "_submission_thread", None))
+        thread.finished.connect(thread.deleteLater)
+        self.submit_button.setEnabled(False)
+        self.cancel_button.setEnabled(False)
+        thread.start()
+        progress.show()
+
+    def reject(self) -> None:
+        thread = getattr(self, "_submission_thread", None)
+        if thread is not None and thread.isRunning():
+            thread.cancel()
+            return
+        super().reject()
+
+    def closeEvent(self, event) -> None:
+        thread = getattr(self, "_submission_thread", None)
+        if thread is not None and thread.isRunning():
+            thread.cancel()
+            event.ignore()
+            return
+        super().closeEvent(event)

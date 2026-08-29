@@ -1,4 +1,6 @@
+from collections.abc import Callable
 from pathlib import Path
+from threading import Event
 
 from loguru import logger
 from PySide6.QtCore import Qt, QThread, Signal
@@ -6,7 +8,11 @@ from PySide6.QtWidgets import QApplication, QMessageBox, QProgressDialog
 
 from parsetrail.core.api import api_client
 from parsetrail.core.client_manifest import ClientInstallerArtifact
-from parsetrail.core.client_store import download_installer, fetch_latest_installer
+from parsetrail.core.client_store import (
+    ClientDownloadCancelled,
+    download_installer,
+    fetch_latest_installer,
+)
 from parsetrail.core.settings import settings
 from parsetrail.core.utils import is_newer_version, open_file_in_os
 from parsetrail.version import __version__ as current_version
@@ -19,25 +25,23 @@ def get_latest_installer() -> ClientInstallerArtifact | None:
 
 def download_client_installer(
     installer: ClientInstallerArtifact,
-    progress: QProgressDialog | None = None,
+    *,
+    cancelled: Callable[[], bool] | None = None,
+    progress: Callable[[int, int], None] | None = None,
 ) -> Path:
     """Download an installer into authenticated atomic storage."""
-
-    def update_progress(downloaded: int, total: int) -> None:
-        if progress is not None:
-            progress.setMaximum(total)
-            progress.setValue(downloaded)
-
     try:
         installer_path = download_installer(
             settings.download_dir,
             installer,
             api_client,
-            cancelled=progress.wasCanceled if progress is not None else None,
-            progress=update_progress,
+            cancelled=cancelled,
+            progress=progress,
         )
         logger.success(f"Downloaded and authenticated installer to {installer_path}")
         return installer_path
+    except ClientDownloadCancelled:
+        raise
     except Exception as e:
         logger.error(f"Failed to download installer: {e}")
         raise RuntimeError(f"Failed to authenticate installer: {e}") from e
@@ -58,7 +62,38 @@ def quit_and_update(installer_path: Path):
         logger.error(f"Failed to launch installer: {e}")
 
 
-def install_client(installer: ClientInstallerArtifact, parent=None):
+class InstallerDownloadThread(QThread):
+    """Download and authenticate an installer without blocking Qt."""
+
+    progress_changed = Signal(int, int)
+    downloaded = Signal(object)
+    failed = Signal(str)
+    download_cancelled = Signal()
+
+    def __init__(self, installer: ClientInstallerArtifact, parent=None) -> None:
+        super().__init__(parent)
+        self.installer = installer
+        self._cancel_event = Event()
+
+    def cancel(self) -> None:
+        self._cancel_event.set()
+
+    def run(self) -> None:
+        try:
+            installer_path = download_client_installer(
+                self.installer,
+                cancelled=self._cancel_event.is_set,
+                progress=self.progress_changed.emit,
+            )
+        except ClientDownloadCancelled:
+            self.download_cancelled.emit()
+        except Exception as exc:
+            self.failed.emit(str(exc))
+        else:
+            self.downloaded.emit(installer_path)
+
+
+def install_client(installer: ClientInstallerArtifact, parent=None) -> InstallerDownloadThread | None:
     reply = QMessageBox.question(
         parent,
         "Client Update Available",
@@ -72,17 +107,25 @@ def install_client(installer: ClientInstallerArtifact, parent=None):
     )
 
     if reply != QMessageBox.Yes:
-        return
+        return None
 
-    try:
-        progress = QProgressDialog("Downloading update...", "Cancel", 0, 100, parent)
-        progress.setWindowTitle("Update in Progress")
-        progress.setWindowModality(Qt.WindowModal)
-        progress.setMinimumDuration(0)
-        progress.setFixedWidth(400)
-        installer_path = download_client_installer(installer, progress=progress)
+    progress = QProgressDialog("Downloading and authenticating update...", "Cancel", 0, installer.size, parent)
+    progress.setWindowTitle("Update in Progress")
+    progress.setWindowModality(Qt.WindowModal)
+    progress.setMinimumDuration(0)
+    progress.setFixedWidth(400)
+    progress.setAutoClose(False)
+    progress.setAutoReset(False)
+
+    thread = InstallerDownloadThread(installer, parent=progress)
+    progress._download_thread = thread
+    progress.canceled.connect(thread.cancel)
+    thread.progress_changed.connect(lambda downloaded, total: progress.setRange(0, total))
+    thread.progress_changed.connect(lambda downloaded, total: progress.setValue(downloaded))
+
+    def handle_downloaded(installer_path: Path) -> None:
+        progress.setValue(progress.maximum())
         progress.close()
-
         response = QMessageBox.question(
             parent,
             "Update Ready",
@@ -97,52 +140,26 @@ def install_client(installer: ClientInstallerArtifact, parent=None):
                 "Update Canceled",
                 f"The update process has been canceled.\nInstaller: {installer_path}",
             )
-    except Exception as e:
+
+    def handle_failure(message: str) -> None:
+        progress.close()
         QMessageBox.critical(
             parent,
             "Update Failed",
-            f"An error occurred while preparing the update:\n{e}",
+            f"An error occurred while preparing the update:\n{message}",
         )
 
+    def handle_cancelled() -> None:
+        progress.close()
+        QMessageBox.information(parent, "Update Canceled", "The installer download was canceled.")
 
-def check_for_client_updates(parent=None) -> bool:
-    """
-    Check for client updates and prompt the user to update if needed.
-
-    Args:
-        manual (bool): Whether this check was triggered manually.
-        parent: The parent widget for dialogs.
-
-    Returns:
-        bool: True if an update was downloaded and launched, False otherwise.
-    """
-    try:
-        latest_installer = get_latest_installer()
-        if latest_installer is None:
-            if parent:
-                QMessageBox.information(
-                    parent,
-                    "No Updates Found",
-                    f"No installers found for platform: {settings.platform}.",
-                )
-            return False
-
-        if is_newer_version(current_version, latest_installer.version):
-            install_client(latest_installer, parent)
-            return True  # App may close before this is called
-
-        if parent:
-            QMessageBox.information(
-                parent,
-                "Client Up To Date",
-                "You are already using the latest version.",
-            )
-        return False
-    except Exception as e:
-        logger.error(f"Error checking for updates: {e}")
-        if parent:
-            QMessageBox.critical(parent, "Error", f"An error occurred while checking for updates:\n{e}")
-        return False
+    thread.downloaded.connect(handle_downloaded)
+    thread.failed.connect(handle_failure)
+    thread.download_cancelled.connect(handle_cancelled)
+    thread.finished.connect(thread.deleteLater)
+    thread.start()
+    progress.show()
+    return thread
 
 
 class ClientUpdateThread(QThread):

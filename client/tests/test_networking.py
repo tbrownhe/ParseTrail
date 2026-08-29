@@ -9,7 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
 
 import pytest
-from parsetrail.core.api import ApiClient
+from parsetrail.core.api import ApiClient, StatementSubmissionCancelled
 from parsetrail.core.auth import AuthError
 from parsetrail.core.network import (
     HttpTransport,
@@ -173,3 +173,55 @@ def test_error_body_is_redacted_and_401_clears_saved_login() -> None:
             client.get("/auth", auth_required=True)
         assert auth.clear_count == 1
         assert secret not in str(auth_error.value)
+
+
+def test_statement_upload_is_length_known_and_reports_true_progress() -> None:
+    captured: dict[str, object] = {}
+
+    def handler(request: BaseHTTPRequestHandler, _method: str) -> None:
+        length = int(request.headers["Content-Length"])
+        captured["content_type"] = request.headers["Content-Type"]
+        captured["transfer_encoding"] = request.headers.get("Transfer-Encoding")
+        captured["body"] = request.rfile.read(length)
+        _reply(request, 200, b'{"message":"SUCCESS"}')
+
+    with _server(handler) as base_url:
+        client, _ = _api(base_url, HttpTransport(retries=0))
+        updates: list[tuple[int, int]] = []
+        response = client.submit_statement(
+            b"encrypted-statement",
+            "encrypted-key",
+            {"institution": "Example Bank"},
+            progress=lambda sent, total: updates.append((sent, total)),
+        )
+        response.close()
+
+    body = captured["body"]
+    assert isinstance(body, bytes)
+    assert b"encrypted-statement" in body
+    assert b'name="metadata"' in body
+    assert b"Example Bank" in body
+    assert captured["transfer_encoding"] is None
+    assert str(captured["content_type"]).startswith("multipart/form-data; boundary=ParseTrail-")
+    assert updates[0][0] == 0
+    assert updates[-1] == (len(body), len(body))
+
+
+def test_statement_upload_can_cancel_before_sending_body() -> None:
+    handled = threading.Event()
+
+    def handler(request: BaseHTTPRequestHandler, _method: str) -> None:
+        handled.set()
+        _reply(request, 200, b'{"message":"SUCCESS"}')
+
+    with _server(handler) as base_url:
+        client, _ = _api(base_url, HttpTransport(retries=0))
+        with pytest.raises(StatementSubmissionCancelled, match="cancelled"):
+            client.submit_statement(
+                b"encrypted-statement",
+                "encrypted-key",
+                {"institution": "Example Bank"},
+                cancelled=lambda: True,
+            )
+
+    assert handled.wait(timeout=1)

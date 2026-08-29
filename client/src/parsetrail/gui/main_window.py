@@ -43,11 +43,10 @@ from parsetrail.core.categorize import add_missing_categories
 from parsetrail.core.categorize import transactions as categorize_transactions
 from parsetrail.core.client import (
     ClientUpdateThread,
-    check_for_client_updates,
     install_client,
 )
 from parsetrail.core.initialize import initialize_db
-from parsetrail.core.plugins import PluginManager, PluginUpdateThread, sync_plugins
+from parsetrail.core.plugins import PluginManager, PluginUpdateThread
 from parsetrail.core.settings import save_settings, settings
 from parsetrail.core.statements import StatementProcessor
 from parsetrail.core.utils import open_file_in_os
@@ -62,6 +61,7 @@ from parsetrail.gui.plugins import (
     ParseTestDialog,
     PluginManagerDialog,
     PluginSyncDialog,
+    start_plugin_sync,
 )
 from parsetrail.gui.preferences import PreferencesDialog
 from parsetrail.gui.send import StatementSubmissionDialog
@@ -362,7 +362,7 @@ class ParseTrail(QMainWindow):
         help_menu.addAction("About", self.about)
         help_menu.addAction(
             "Check for Updates",
-            lambda: check_for_client_updates(parent=self),
+            lambda: self.check_for_client_updates_async(manual=True),
         )
 
         # CENTRAL WIDGET
@@ -672,18 +672,31 @@ class ParseTrail(QMainWindow):
                 self.check_for_client_updates_async,
             )
 
-    def check_for_client_updates_async(self):
+    def check_for_client_updates_async(self, manual: bool = False):
+        if getattr(self, "client_update_thread", None) and self.client_update_thread.isRunning():
+            return
         self.client_update_thread = ClientUpdateThread()
-        self.client_update_thread.update_available.connect(self.handle_client_update)
+        self.client_update_thread.update_available.connect(
+            lambda success, installer, message: self.handle_client_update(
+                success,
+                installer,
+                message,
+                manual=manual,
+            )
+        )
         self.client_update_thread.start()
 
-    def handle_client_update(self, success: bool, latest_installer, message: str):
+    def handle_client_update(self, success: bool, latest_installer, message: str, *, manual: bool = False):
         if success:
             logger.info(message)
             if latest_installer:
                 install_client(latest_installer, self)
+            elif manual:
+                QMessageBox.information(self, "Client Up to Date", "You are already using the latest version.")
         else:
             logger.error(message)
+            if manual:
+                QMessageBox.critical(self, "Update Check Failed", message)
 
         # Check for plugin update after client check is done
         self.check_for_plugin_updates_async()
@@ -700,14 +713,12 @@ class ParseTrail(QMainWindow):
         server_plugins = remote_release.legacy_metadata()
         dialog = PluginSyncDialog(local_plugins, server_plugins, parent=self)
         if dialog.exec() == QDialog.Accepted:
-            sync_plugins(
+            start_plugin_sync(
+                self,
                 local_plugins,
                 remote_release,
-                plugin_manager=self.plugin_manager,
-                progress=True,
-                parent=self,
+                self.plugin_manager,
             )
-            self.plugin_manager.load_plugins()
         else:
             logger.info("User declined to sync plugins")
 

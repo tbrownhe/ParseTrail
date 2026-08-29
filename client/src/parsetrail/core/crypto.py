@@ -91,7 +91,7 @@ def encrypt_symmetric_key(_symmetric_key: bytes) -> str:
     return base64.b64encode(encrypted_key).decode("utf-8")
 
 
-def encrypt_file(fpath: Path) -> tuple[bytes, bytes]:
+def encrypt_file(fpath: Path) -> tuple[bytes, str]:
     """Encrypt each file with a unique symmetric key.
 
     Args:

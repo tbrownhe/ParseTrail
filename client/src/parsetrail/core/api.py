@@ -1,5 +1,6 @@
 import json
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Iterator
+from secrets import token_hex
 
 import requests
 
@@ -15,6 +16,71 @@ KEYS_PATH = "/keys"
 STATEMENTS_PATH = "/statements"
 MAX_PLUGIN_MANIFEST_BYTES = 1024 * 1024
 ED25519_SIGNATURE_BYTES = 64
+
+
+class StatementSubmissionCancelled(RuntimeError):
+    """Raised before the encrypted upload has completed."""
+
+
+class _MultipartStatementBody:
+    """Length-known, cancellable multipart body backed by an encrypted blob."""
+
+    def __init__(
+        self,
+        encrypted_file: bytes,
+        encrypted_key: str,
+        metadata: dict[str, object],
+        *,
+        cancelled: Callable[[], bool] | None,
+        progress: Callable[[int, int], None] | None,
+        chunk_size: int = 64 * 1024,
+    ) -> None:
+        self.boundary = f"ParseTrail-{token_hex(16)}"
+        self._cancelled = cancelled or (lambda: False)
+        self._progress = progress or (lambda _sent, _total: None)
+        self._chunk_size = chunk_size
+        self._encrypted_file = encrypted_file
+        self._prefix = self._field("metadata", json.dumps(metadata)) + self._field(
+            "encrypted_key",
+            encrypted_key,
+        )
+        self._file_header = (
+            f"--{self.boundary}\r\n"
+            'Content-Disposition: form-data; name="file"; filename="statement.enc"\r\n'
+            "Content-Type: application/octet-stream\r\n\r\n"
+        ).encode()
+        self._suffix = f"\r\n--{self.boundary}--\r\n".encode()
+        self._length = len(self._prefix) + len(self._file_header) + len(encrypted_file) + len(self._suffix)
+
+    def _field(self, name: str, value: str) -> bytes:
+        return (f'--{self.boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n').encode()
+
+    def __len__(self) -> int:
+        return self._length
+
+    def __iter__(self) -> Iterator[bytes]:
+        sent = 0
+        self._progress(0, self._length)
+        for part in (self._prefix, self._file_header):
+            self._check_cancelled()
+            sent += len(part)
+            yield part
+            self._progress(sent, self._length)
+        view = memoryview(self._encrypted_file)
+        for offset in range(0, len(view), self._chunk_size):
+            self._check_cancelled()
+            part = bytes(view[offset : offset + self._chunk_size])
+            sent += len(part)
+            yield part
+            self._progress(sent, self._length)
+        self._check_cancelled()
+        sent += len(self._suffix)
+        yield self._suffix
+        self._progress(sent, self._length)
+
+    def _check_cancelled(self) -> None:
+        if self._cancelled():
+            raise StatementSubmissionCancelled("Statement submission cancelled")
 
 
 class ApiClient:
@@ -219,16 +285,32 @@ class ApiClient:
         )
         return resp.json()["hash"]
 
-    def submit_statement(self, encrypted_file: bytes, encrypted_key: str, metadata: dict[str]) -> requests.Response:
-        files = {"file": encrypted_file}
-        data = {"metadata": json.dumps(metadata), "encrypted_key": encrypted_key}
+    def submit_statement(
+        self,
+        encrypted_file: bytes,
+        encrypted_key: str,
+        metadata: dict[str, object],
+        *,
+        cancelled: Callable[[], bool] | None = None,
+        progress: Callable[[int, int], None] | None = None,
+    ) -> requests.Response:
+        body = _MultipartStatementBody(
+            encrypted_file,
+            encrypted_key,
+            metadata,
+            cancelled=cancelled,
+            progress=progress,
+        )
         return self.post(
             f"{STATEMENTS_PATH}/submit-statement",
             auth_required=True,
             action="submitting the encrypted statement",
             timeout=UPLOAD_TIMEOUT,
-            files=files,
-            data=data,
+            headers={
+                "Content-Length": str(len(body)),
+                "Content-Type": f"multipart/form-data; boundary={body.boundary}",
+            },
+            data=body,
         )
 
 

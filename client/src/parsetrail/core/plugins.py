@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from threading import Event
+
 from loguru import logger
-from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtWidgets import QApplication, QProgressDialog
+from PySide6.QtCore import QThread, Signal
 
 from parsetrail.core.api import ApiClient, api_client
 from parsetrail.core.plugin_manager import (
@@ -13,6 +15,7 @@ from parsetrail.core.plugin_manager import (
     _is_plugin_compatible,
 )
 from parsetrail.core.plugin_manifest import (
+    PluginDownloadCancelled,
     VerifiedPluginRelease,
     require_no_rollback,
     verify_manifest,
@@ -90,79 +93,39 @@ def sync_plugins(
     remote_release: VerifiedPluginRelease,
     *,
     plugin_manager: PluginManager,
-    progress: bool = False,
-    parent=None,
+    progress: Callable[[int, int, str], None] | None = None,
+    cancelled: Callable[[], bool] | None = None,
     client: ApiClient = api_client,
 ) -> InstalledPluginRelease:
     """Download and authenticate the complete catalog before activating it."""
     del local_plugins  # Kept in the API because callers already display this state.
-    dialog: QProgressDialog | None = None
-    if progress:
-        dialog = QProgressDialog(
-            "Updating Plugins",
-            "Cancel",
-            0,
-            len(remote_release.manifest.artifacts),
-            parent,
-        )
-        dialog.setMinimumWidth(400)
-        dialog.setWindowTitle("Updating Plugins")
-        dialog.setWindowModality(Qt.WindowModal)
-        dialog.setMinimumDuration(100)
-        dialog.setValue(0)
-        dialog.show()
-        QApplication.processEvents()
-
-    def cancelled() -> bool:
-        QApplication.processEvents()
-        return dialog is not None and dialog.wasCanceled()
+    report_progress = progress or (lambda _completed, _total, _label: None)
+    cancellation_requested = cancelled or (lambda: False)
+    total = len(remote_release.manifest.artifacts)
+    completed = 0
 
     def stream_plugin_bytes(plugin_name: str):
-        if dialog is not None:
-            dialog.setLabelText(f"Downloading and verifying {plugin_name}")
+        nonlocal completed
+        report_progress(completed, total, f"Downloading and verifying {plugin_name}")
         for chunk, _, _ in client.stream_plugin(plugin_name):
             yield chunk
-        if dialog is not None:
-            dialog.setValue(dialog.value() + 1)
-            QApplication.processEvents()
+        completed += 1
+        report_progress(completed, total, f"Downloaded {plugin_name}")
 
-    try:
-        installed = install_plugin_release(
-            plugin_manager.plugin_dir,
-            remote_release,
-            stream_plugin_bytes,
-            current=plugin_manager.active_release,
-            cancelled=cancelled,
-        )
-        logger.success(
-            "Installed signed plugin release {sequence} with {count} plugins.",
-            sequence=remote_release.manifest.release_sequence,
-            count=len(remote_release.manifest.artifacts),
-        )
-        return installed
-    finally:
-        if dialog is not None:
-            dialog.close()
-
-
-def check_for_plugin_updates(
-    plugin_manager: PluginManager,
-    parent=None,
-) -> bool:
-    local_plugins, remote_release = get_plugin_lists(plugin_manager)
-    server_plugins = remote_release.legacy_metadata()
-    new_plugins = compare_plugins(local_plugins, server_plugins)
-    if new_plugins or release_update_available(plugin_manager, remote_release):
-        sync_plugins(
-            local_plugins,
-            remote_release,
-            plugin_manager=plugin_manager,
-            progress=True,
-            parent=parent,
-        )
-        plugin_manager.load_plugins()
-        return True
-    return False
+    installed = install_plugin_release(
+        plugin_manager.plugin_dir,
+        remote_release,
+        stream_plugin_bytes,
+        current=plugin_manager.active_release,
+        cancelled=cancellation_requested,
+    )
+    report_progress(total, total, "Authenticated plugin catalog")
+    logger.success(
+        "Installed signed plugin release {sequence} with {count} plugins.",
+        sequence=remote_release.manifest.release_sequence,
+        count=len(remote_release.manifest.artifacts),
+    )
+    return installed
 
 
 class PluginUpdateThread(QThread):
@@ -191,3 +154,54 @@ class PluginUpdateThread(QThread):
                 self.update_complete.emit(True, "Plugins are up to date.")
         except Exception as exc:
             self.update_complete.emit(False, f"Plugin update failed: {exc}")
+
+
+class PluginSyncThread(QThread):
+    """Authenticate and atomically install a plugin catalog off the UI thread."""
+
+    progress_changed = Signal(int, int, str)
+    sync_completed = Signal(object)
+    sync_failed = Signal(str)
+    sync_cancelled = Signal()
+
+    def __init__(
+        self,
+        local_plugins: list[dict[str, str]],
+        remote_release: VerifiedPluginRelease,
+        *,
+        plugin_manager: PluginManager,
+        credentials: tuple[str, str] | None = None,
+        client: ApiClient = api_client,
+        parent=None,
+    ) -> None:
+        super().__init__(parent)
+        self.local_plugins = local_plugins
+        self.remote_release = remote_release
+        self.plugin_manager = plugin_manager
+        self.credentials = credentials
+        self.client = client
+        self._cancel_event = Event()
+
+    def cancel(self) -> None:
+        self._cancel_event.set()
+
+    def run(self) -> None:
+        try:
+            if self.credentials is not None:
+                email, password = self.credentials
+                self.credentials = None
+                self.client.auth.login(email, password)
+            installed = sync_plugins(
+                self.local_plugins,
+                self.remote_release,
+                plugin_manager=self.plugin_manager,
+                progress=self.progress_changed.emit,
+                cancelled=self._cancel_event.is_set,
+                client=self.client,
+            )
+        except PluginDownloadCancelled:
+            self.sync_cancelled.emit()
+        except Exception as exc:
+            self.sync_failed.emit(str(exc))
+        else:
+            self.sync_completed.emit(installed)
