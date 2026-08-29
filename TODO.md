@@ -440,13 +440,26 @@ never installs partial data, and no command shell interprets downloaded filename
   `npm ci`) in images. Base manifests and installs are pinned/frozen; the
   production bind-mount ownership migration required for a non-root backend
   remains.
-- [~] Complete the equivalent macOS frozen-runtime smoke test and add a release
-  dry-run that creates signed manifests without publishing them. Both builders
-  now contain the real frozen-runtime and signed dry-run gates; Windows has passed
-  end to end, while the macOS gate still needs one run on a supported Mac.
+- [x] Complete the equivalent macOS frozen-runtime smoke test and add a release
+  dry-run that creates signed manifests without publishing them. Windows 1.3.0
+  and Intel macOS 1.3.1 passed their full native build, test, frozen-runtime,
+  signing, immutable publication, public-download, install, credential-store, and
+  plugin-update gates.
 - [x] Record the uv, Python, PyInstaller, NSIS/create-dmg, compiler, and operating
   system versions used for each platform artifact; generate checksums and a small
   machine-readable release inventory.
+- [ ] Pin or enforce a tested minimum uv release in the client-release bootstrap,
+  explicitly provision the `.python-version` interpreter, and fail before syncing
+  dependencies when uv cannot resolve that exact interpreter for the host.
+- [ ] Preflight and document the Intel macOS source-build toolchain for packages
+  without x86_64 wheels (`openssl@3`, Rust, and pkg-config). Build cryptography
+  against static OpenSSL so distributed clients do not require Homebrew at runtime.
+- [ ] Make macOS artifact architecture explicit in manifests, API responses, and
+  filenames; choose universal2 or separate x86_64/arm64 releases before claiming
+  native Apple Silicon support.
+- [ ] Allow a successfully built, signed, and verified dry-run artifact to be
+  published without rebuilding it, while preserving immutable-version and explicit
+  activation checks.
 - [x] Document artifact rollback for client, plugin, and model releases; keep API
   and database rollback in the production deployment runbook from P0.7.
 
