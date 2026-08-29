@@ -7,16 +7,26 @@ from os import urandom
 from pathlib import Path
 
 from cryptography.fernet import Fernet
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
+from pydantic import ValidationError
 from sqlalchemy import text
 
 from app.api.deps import get_current_user
-from app.api.routes.keys import PRIVATE_KEY_PATH
+from app.api.request_utils import get_client_host, get_user_agent
 from app.core.config import settings
 from app.core.db import engine
+from app.core.statement_quota import StatementQuotaExceeded, enforce_statement_quota
+from app.core.statement_submission import (
+    MAX_CLIENT_IP_CHARS,
+    MAX_ENCRYPTED_KEY_BYTES,
+    MAX_ENCRYPTED_STATEMENT_BYTES,
+    MAX_METADATA_JSON_BYTES,
+    MAX_USER_AGENT_CHARS,
+    StatementSubmissionMetadata,
+    bounded_log_value,
+)
+from app.core.submission_keys import decrypt_submission_key
 from app.models import User
 
 router = APIRouter()
@@ -41,25 +51,11 @@ def _resolve_owner_from_settings() -> tuple[int, int] | None:
     if not owner and not group:
         return None
 
-    def _uid(value: str | None) -> int:
-        if not value:
-            return -1  # -1 leaves uid unchanged
-        try:
-            return int(value)
-        except ValueError as exc:
-            raise RuntimeError(
-                "STATEMENTS_FILE_OWNER must be a numeric uid (or unset)."
-            ) from exc
+    def _uid(value: int | None) -> int:
+        return value if value is not None else -1
 
-    def _gid(value: str | None) -> int:
-        if not value:
-            return -1  # -1 leaves gid unchanged
-        try:
-            return int(value)
-        except ValueError as exc:
-            raise RuntimeError(
-                "STATEMENTS_FILE_GROUP must be a numeric gid (or unset)."
-            ) from exc
+    def _gid(value: int | None) -> int:
+        return value if value is not None else -1
 
     return _uid(owner), _gid(group)
 
@@ -77,7 +73,10 @@ def _apply_owner(path: Path, *, fatal: bool = False) -> None:
 
     uid, gid = STATEMENTS_OWNER_IDS
     try:
-        os.chown(path, uid, gid)
+        chown = getattr(os, "chown", None)
+        if chown is None:
+            raise OSError("File ownership changes are unavailable on this platform")
+        chown(path, uid, gid)
     except PermissionError as exc:
         message = (
             f"Failed to set ownership on {path} to STATEMENTS_FILE_OWNER/STATEMENTS_FILE_GROUP "
@@ -94,12 +93,7 @@ def _apply_owner(path: Path, *, fatal: bool = False) -> None:
         raise HTTPException(status_code=500, detail=message) from exc
 
 
-# Load server's private key.
-with PRIVATE_KEY_PATH.open("rb") as key_file:
-    PRIVATE_KEY = serialization.load_pem_private_key(key_file.read(), password=None)
-
-
-def load_master_key():
+def load_master_key() -> bytes:
     """Load MASTER_KEY from env vars and ensure it's 32 bytes for AES"""
     master_key_b64 = os.getenv("MASTER_KEY")
     if not master_key_b64:
@@ -110,7 +104,7 @@ def load_master_key():
     return master_key
 
 
-def load_master_key_from_docker_secrets():
+def load_master_key_from_docker_secrets() -> bytes:
     """
     Note: This is not currently used.
     For when I decide to use Docker Swarm with Docker Secrets.
@@ -125,7 +119,7 @@ def load_master_key_from_docker_secrets():
         raise HTTPException(status_code=500, detail="Master key not found in secrets")
 
 
-def decrypt_client_key(encrypted_key_b64: str) -> bytes:
+def decrypt_client_key(encrypted_key_b64: str | bytes) -> bytes:
     """Uses server's private key to decrypt the client's symmetric key
     that was encrypted using the server's public key.
     Encrypted key is encoded as Base64.
@@ -136,15 +130,8 @@ def decrypt_client_key(encrypted_key_b64: str) -> bytes:
     Returns:
         bytes: Decrypted symmetric key for decrypting the incoming file
     """
-    encrypted_key = base64.b64decode(encrypted_key_b64)
-    return PRIVATE_KEY.decrypt(
-        encrypted_key,
-        padding.OAEP(
-            mgf=padding.MGF1(algorithm=hashes.SHA256()),
-            algorithm=hashes.SHA256(),
-            label=None,
-        ),
-    )
+    encrypted_key = base64.b64decode(encrypted_key_b64, validate=True)
+    return decrypt_submission_key(encrypted_key)
 
 
 def decrypt_client_data(symmetric_key: bytes, encrypted_data: bytes) -> bytes:
@@ -185,16 +172,14 @@ logging.basicConfig(
 )
 
 
-@router.post(
-    "/submit-statement", summary="Upload and store an encrypted bank statement"
-)
+@router.post("/submit-statement", summary="Upload and store an encrypted bank statement")
 async def upload_statement(
     file: UploadFile,
     request: Request,
     metadata: str = Form(...),
     encrypted_key: bytes = Form(...),
     current_user: User = Depends(get_current_user),
-):
+) -> dict[str, str]:
     """
     Handles encrypted bank statement uploads.
     1. Decrypt the client's symmetric key.
@@ -204,36 +189,50 @@ async def upload_statement(
     5. Log upload details to logfile and the database.
     """
 
-    # Prevent abuse
-    if not metadata or len(metadata) > 256:
-        raise HTTPException(status_code=400, detail="Invalid metadata")
-    metadata = metadata[:256].strip()
+    try:
+        if not metadata or len(metadata.encode("utf-8")) > MAX_METADATA_JSON_BYTES:
+            raise ValueError
+        submission_metadata = StatementSubmissionMetadata.model_validate_json(metadata)
+    except (ValueError, ValidationError):
+        raise HTTPException(status_code=422, detail="Invalid statement metadata")
+
+    if not encrypted_key or len(encrypted_key) > MAX_ENCRYPTED_KEY_BYTES:
+        raise HTTPException(status_code=400, detail="Invalid encrypted key")
+
+    try:
+        with engine.connect() as conn:
+            enforce_statement_quota(conn, current_user.id, lock_user=False)
+    except StatementQuotaExceeded as exc:
+        raise HTTPException(status_code=429, detail=str(exc))
+    except Exception as exc:
+        logging.error("Statement quota preflight failed (%s)", type(exc).__name__)
+        raise HTTPException(status_code=503, detail="Statement submission is temporarily unavailable")
 
     # Step 1: Decrypt the client's symmetric key using the server's private RSA key
     try:
         symmetric_key = decrypt_client_key(encrypted_key)
     except Exception as e:
-        logging.error(f"Failed to decrypt symmetric key: {e}")
-        raise HTTPException(
-            status_code=400, detail=f"Failed to decrypt symmetric key: {e}"
-        )
+        logging.error("Failed to decrypt symmetric key (%s)", type(e).__name__)
+        raise HTTPException(status_code=400, detail="Invalid encrypted key")
 
     # Step 2: Decrypt the file using the client's symmetric key
     try:
-        encrypted_data = await file.read()
+        encrypted_data = await file.read(MAX_ENCRYPTED_STATEMENT_BYTES + 1)
+        if len(encrypted_data) > MAX_ENCRYPTED_STATEMENT_BYTES:
+            raise HTTPException(status_code=413, detail="Encrypted statement is too large")
         decrypted_data = decrypt_client_data(symmetric_key, encrypted_data)
+    except HTTPException:
+        raise
     except Exception as e:
-        logging.error(f"Failed to decrypt file: {e}")
-        raise HTTPException(status_code=400, detail=f"Failed to decrypt file: {e}")
+        logging.error("Failed to decrypt statement (%s)", type(e).__name__)
+        raise HTTPException(status_code=400, detail="Invalid encrypted statement")
 
     # Step 3: Encrypt the file using AES-GCM with the master key
     try:
         iv, reencrypted_data, auth_tag = aes_encrypt_data(decrypted_data)
     except Exception as e:
-        logging.error(f"Failed to encrypt file for storage: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to encrypt file for storage, aborting: {e}"
-        )
+        logging.error("Failed to encrypt statement for storage (%s)", type(e).__name__)
+        raise HTTPException(status_code=500, detail="Statement storage failed")
 
     # Step 4: Save the AES-encrypted file to disk
     guid_filename = f"{uuid.uuid4()}.enc"
@@ -249,47 +248,56 @@ async def upload_statement(
         _apply_owner(file_path)
 
     except Exception as e:
-        logging.error(f"Failed to save file: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to save file: {e}")
+        temp_path.unlink(missing_ok=True)
+        file_path.unlink(missing_ok=True)
+        logging.error("Failed to save encrypted statement (%s)", type(e).__name__)
+        raise HTTPException(status_code=500, detail="Statement storage failed")
 
     # Step 5: Log upload details to logfile and the database
     try:
-        client_ip = request.client.host
-        user_agent = request.headers.get("User-Agent", "Unknown")
-        sanitized_metadata = (
-            metadata[:256].replace("\n", " ").replace("\r", " ").strip()
-        )
+        client_ip = bounded_log_value(get_client_host(request), MAX_CLIENT_IP_CHARS)
+        user_agent = bounded_log_value(get_user_agent(request), MAX_USER_AGENT_CHARS)
+        canonical_metadata = submission_metadata.model_dump_json()
 
         logging.info(
-            "Upload received: %s from IP: %s (%s) with sanitized metadata",
-            file.filename,
+            "Encrypted statement received from IP: %s (user %s)",
             client_ip,
             getattr(current_user, "id", "unknown"),
         )
 
         query = text(
             """
-            INSERT INTO statement_uploads (file_name, metadata, init_vector, auth_tag, client_ip, user_agent, user_id)
-            VALUES (:file_name, :metadata, :init_vector, :auth_tag, :client_ip, :user_agent, :user_id)
+            INSERT INTO statement_uploads (
+                file_name, metadata, init_vector, auth_tag, client_ip, user_agent, user_id, plugin_status
+            )
+            VALUES (
+                :file_name, :metadata, :init_vector, :auth_tag, :client_ip, :user_agent, :user_id, :plugin_status
+            )
             """
         )
 
         with engine.begin() as conn:
+            enforce_statement_quota(conn, current_user.id, lock_user=True)
             conn.execute(
                 query,
                 {
                     "file_name": guid_filename,
-                    "metadata": sanitized_metadata,
+                    "metadata": canonical_metadata,
                     "init_vector": iv,
                     "auth_tag": auth_tag,
                     "client_ip": client_ip,
                     "user_agent": user_agent,
                     "user_id": str(current_user.id),
+                    "plugin_status": "pending",
                 },
             )
+    except StatementQuotaExceeded as exc:
+        file_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=429, detail=str(exc))
     except Exception as e:
-        logging.error(f"Error logging upload to database: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to log upload: {e}")
+        file_path.unlink(missing_ok=True)
+        logging.error("Statement registration failed (%s)", type(e).__name__)
+        raise HTTPException(status_code=500, detail="Statement registration failed")
 
     # Return a success message to client
     return {"message": "SUCCESS"}

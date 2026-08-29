@@ -1,116 +1,111 @@
+param(
+    [Parameter(Mandatory = $true)]
+    [string]$PluginsDir,
+    [Parameter(Mandatory = $true)]
+    [string]$SigningKey,
+    [Parameter(Mandatory = $true)]
+    [string]$SourceTag,
+    [switch]$Publish,
+    [string]$RemoteUser,
+    [string]$RemoteHost,
+    [string]$RemotePluginsDir
+)
+
 $ErrorActionPreference = "Stop"
 
-# --- Load project-level .env -------------------------------------------------
-$projectRoot = Split-Path $PSScriptRoot -Parent
-$envFile = Join-Path $projectRoot ".env"
-
-if (-not (Test-Path $envFile)) {
-    Write-Error "ERROR: .env file not found at $envFile"
-    exit 1
+if (-not (Test-Path -LiteralPath $PluginsDir -PathType Container)) {
+    throw "PluginsDir does not exist or is not a directory: $PluginsDir"
+}
+if (-not (Test-Path -LiteralPath $SigningKey -PathType Leaf)) {
+    throw "SigningKey does not exist or is not a file: $SigningKey"
+}
+$pluginsDirPath = (Resolve-Path -LiteralPath $PluginsDir).Path
+$signingKeyPath = (Resolve-Path -LiteralPath $SigningKey).Path
+$pythonVersionFile = Join-Path $PSScriptRoot ".python-version"
+if (-not (Test-Path -LiteralPath $pythonVersionFile -PathType Leaf)) {
+    throw "Missing Python version file: $pythonVersionFile"
+}
+$pythonVersion = (Get-Content -LiteralPath $pythonVersionFile -Raw).Trim()
+if (-not $pythonVersion) {
+    throw "Python version file is empty: $pythonVersionFile"
 }
 
-Get-Content $envFile | ForEach-Object {
-    $line = $_.Trim()
-    if (-not $line -or $line.StartsWith('#')) { return }
-
-    $parts = $line -split '=', 2
-    if ($parts.Count -eq 2) {
-        $key   = $parts[0].Trim()
-        $value = $parts[1].Trim()
-        if ($key) {
-            [System.Environment]::SetEnvironmentVariable($key, $value, "Process")
-        }
-    }
-}
-
-$condaEnv        = $env:CLIENT_CONDA_ENV
-$pluginsDir      = $env:PLUGINS_DIR
-$remoteUser      = $env:REMOTE_USER
-$remoteHost      = $env:REMOTE_HOST
-$remoteDir       = $env:REMOTE_PLUGINS_DIR
-
-if (-not $condaEnv -or -not $pluginsDir -or -not $remoteUser -or -not $remoteHost -or -not $remoteDir) {
-    Write-Error "One or more required environment variables are missing. Please check $envFile."
-    exit 1
-}
-
-# --- Paths -------------------------------------------------------------------
-$buildScript = Join-Path $PSScriptRoot "src\parsetrail\build_plugins.py"
-
-# --- Activate conda env and build plugins ------------------------------------
+Push-Location $PSScriptRoot
 try {
-    Write-Host "Activating conda environment '$condaEnv'..."
-    conda activate $condaEnv
-} catch {
-    Write-Error "ERROR: Failed to activate conda environment '$condaEnv'."
-    exit 1
-}
+    Write-Host "Validating clean, tagged release source..."
+    $sourceJson = uv run --frozen --python $pythonVersion python -m scripts.release_source plugins `
+        --tag $SourceTag
+    if ($LASTEXITCODE -ne 0) {
+        throw "Release source validation failed with exit code $LASTEXITCODE"
+    }
+    $releaseSource = $sourceJson | ConvertFrom-Json
 
-try {
-    if (-not (Test-Path $buildScript)) {
-        Write-Error "Build script not found at $buildScript"
-        throw
+    Write-Host "Synchronizing the locked client test environment with Python $pythonVersion..."
+    uv sync --extra dev --frozen --python $pythonVersion
+    if ($LASTEXITCODE -ne 0) {
+        throw "uv sync failed with exit code $LASTEXITCODE"
     }
 
-    Write-Host "Building plugins using $buildScript ..."
-    python $buildScript
-
-    if (-not (Test-Path $pluginsDir)) {
-        Write-Error "Plugins directory not found at $pluginsDir after build."
-        throw
+    Write-Host "Running client regression tests before release..."
+    uv run --extra dev --frozen --python $pythonVersion pytest -q
+    if ($LASTEXITCODE -ne 0) {
+        throw "Client tests failed with exit code $LASTEXITCODE"
     }
 
-} catch {
-    Write-Error "ERROR: Plugin build failed. $($_.Exception.Message)"
-    throw
+    Write-Host "Compiling the complete plugin catalog in the pinned interpreter..."
+    uv run --frozen --python $pythonVersion python src/parsetrail/build_plugins.py `
+        --output-dir $pluginsDirPath
+    if ($LASTEXITCODE -ne 0) {
+        throw "Plugin compilation failed with exit code $LASTEXITCODE"
+    }
+
+    Write-Host "Signing the complete plugin catalog..."
+    uv run --frozen --python $pythonVersion python -m scripts.plugin_release sign `
+        --private-key $signingKeyPath `
+        --plugin-dir $pluginsDirPath `
+        --source-commit $releaseSource.source_commit
+    if ($LASTEXITCODE -ne 0) {
+        throw "Plugin signing failed with exit code $LASTEXITCODE"
+    }
+
+    Write-Host "Verifying the release using only the bundled public key..."
+    uv run --frozen --python $pythonVersion python -m scripts.plugin_release verify `
+        --plugin-dir $pluginsDirPath
+    if ($LASTEXITCODE -ne 0) {
+        throw "Plugin release verification failed with exit code $LASTEXITCODE"
+    }
+
+    Write-Host "Recording checksums and release-tool versions..."
+    uv run --frozen --python $pythonVersion python -m scripts.release_inventory `
+        --release-dir $pluginsDirPath `
+        --source-commit $releaseSource.source_commit `
+        --source-tag $releaseSource.source_tag `
+        --kind plugins `
+        --platform python-$pythonVersion `
+        --packager none
+    if ($LASTEXITCODE -ne 0) {
+        throw "Release inventory generation failed with exit code $LASTEXITCODE"
+    }
+
+    if (-not $Publish) {
+        Write-Host "Signed plugin dry run completed; publication skipped."
+        exit 0
+    }
+    if (-not $RemoteUser -or -not $RemoteHost -or -not $RemotePluginsDir) {
+        throw "RemoteUser, RemoteHost, and RemotePluginsDir are required with -Publish"
+    }
+
+    uv run --frozen --python $pythonVersion python -m scripts.immutable_publish `
+        --release-dir $pluginsDirPath `
+        --manifest plugin-manifest.json `
+        --signature plugin-manifest.sig `
+        --inventory release-inventory.json `
+        --remote "${RemoteUser}@${RemoteHost}" `
+        --remote-root $RemotePluginsDir
+    if ($LASTEXITCODE -ne 0) {
+        throw "Immutable plugin publication failed with exit code $LASTEXITCODE"
+    }
 }
 finally {
-    try {
-        Write-Host "Deactivating conda environment..."
-        conda deactivate
-    } catch {
-        # ignore
-    }
+    Pop-Location
 }
-
-
-# --- Deploy plugins to server ------------------------------------------------
-# Prompt for deploy
-$answer = Read-Host "Deploy plugins to server? (y/n)"
-
-if ($answer -ne 'y' -and $answer -ne 'Y') {
-    Write-Host "Aborted."
-    exit 1
-}
-
-try {
-    Write-Host "Starting plugin deployment..."
-
-    if (-not (Test-Path $pluginsDir)) {
-        Write-Error "Local plugins directory not found: $pluginsDir"
-        exit 1
-    }
-
-    $remoteBase = $remoteDir.TrimEnd('/')
-
-    Get-ChildItem -Path $pluginsDir -File | ForEach-Object {
-        $localPath  = $_.FullName
-        $fileName   = $_.Name
-        $remotePath = "$remoteBase/$fileName"
-
-        Write-Host "Syncing: $localPath -> $remotePath"
-
-        # Avoid PowerShell parsing '$var:' as a drive reference
-        $remoteSpec = "${remoteUser}@${remoteHost}:$remotePath"
-
-        scp $localPath $remoteSpec
-    }
-
-    Write-Host "Plugin deployment completed successfully."
-} catch {
-    Write-Error "ERROR: Deployment failed. $($_.Exception.Message)"
-    throw
-}
-
-pause
-exit 0

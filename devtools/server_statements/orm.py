@@ -21,6 +21,4 @@ class StatementUploads(Base):
     user_agent = Column(String(255), nullable=True)
     timestamp = Column(TIMESTAMP, server_default=func.now(), nullable=False)
     user_id = Column(UUID(as_uuid=True), nullable=True)
-    plugin_status = Column(
-        PluginStatusEnum, nullable=False, server_default="pending", default="pending"
-    )
+    plugin_status = Column(PluginStatusEnum, nullable=False, server_default="pending", default="pending")

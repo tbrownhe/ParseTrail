@@ -18,8 +18,8 @@ import { type SubmitHandler, useForm } from "react-hook-form"
 import {
   type ApiError,
   type ItemPublic,
-  type ItemUpdate,
   ItemsService,
+  type ItemUpdate,
 } from "../../client"
 import useCustomToast from "../../hooks/useCustomToast"
 import { handleError } from "../../utils"

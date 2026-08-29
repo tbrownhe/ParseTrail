@@ -2,9 +2,19 @@ import logging
 
 from sqlalchemy import Engine
 from sqlmodel import Session, select
-from tenacity import after_log, before_log, retry, stop_after_attempt, wait_fixed
+from tenacity import (
+    after_log,
+    before_log,
+    retry,
+    stop_after_attempt,
+    wait_fixed,
+)
 
-from app.core.db import engine
+from app.tests.safety import configure_test_environment
+
+configure_test_environment()
+
+from app.core.db import engine  # noqa: E402
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

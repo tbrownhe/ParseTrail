@@ -1,17 +1,20 @@
-name: Lint Backend
+name: Lint
 
 on:
   push:
     branches:
       - main
   pull_request:
-    types:
-      - opened
-      - synchronize
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  lint-backend:
-    if: ${{ false }}  # Disabled for now; remove to enable
+  python:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -19,11 +22,32 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.10"
+          python-version: "3.13.15"
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
-          version: "0.4.15"
+          version: "0.12.5"
           enable-cache: true
-      - run: uv run bash scripts/lint.sh
+      - name: Check Python lint
+        run: uvx ruff==0.15.22 check backend/app client/src client/tests scripts/deployment
+      - name: Check Python formatting
+        run: uvx ruff==0.15.22 format --check backend/app client/src client/tests scripts/deployment
+
+  backend-types:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13.15"
+      - name: Install uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.5"
+          enable-cache: true
+      - run: uv sync --extra dev --frozen
+        working-directory: backend
+      - run: uv run --frozen mypy app
         working-directory: backend

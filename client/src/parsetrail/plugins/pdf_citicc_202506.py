@@ -4,10 +4,11 @@ from statistics import median
 
 from loguru import logger
 from pdfplumber.page import Page
+
 from parsetrail.core.interfaces import IParser
+from parsetrail.core.money import parse_money
 from parsetrail.core.utils import (
     PDFReader,
-    convert_amount_to_float,
     find_param_in_line,
     get_absolute_date,
 )
@@ -17,11 +18,13 @@ from parsetrail.core.validation import Account, Statement, Transaction
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_citicc_202506"
-    VERSION = "0.1.1"
+    VERSION = "0.3.0"
+    MIN_CLIENT_VERSION = "1.3.0"
     SUFFIX = ".pdf"
     COMPANY = "Citibank"
     STATEMENT_TYPE = "Credit Account Monthly Statement"
     SEARCH_STRING = "www.citicards.com"
+    ROUTING_RULE = {"header": '"trans. post description amount"'}
     INSTRUCTIONS = (
         "Login to https://www.citi.com/, then navigate to your account."
         " Click 'View Statements', then click 'View All Statements'."
@@ -60,7 +63,7 @@ class Parser(IParser):
             self.chars = "".join([c["text"] for c in self.reader.PDF.pages[0].chars])
             return self.extract_statement()
         except Exception as e:
-            logger.error(f"Error parsing {self.STATEMENT_TYPE} statement: {e}")
+            logger.error("Parser {} failed with {}.", self.PLUGIN_NAME, type(e).__name__)
             raise
 
     def extract_statement(self) -> Statement:
@@ -171,7 +174,7 @@ class Parser(IParser):
             try:
                 _, balance_line = find_param_in_line(self.reader.lines_clean, pattern)
                 balance_str = balance_line.split()[-1]
-                balance = -convert_amount_to_float(balance_str)
+                balance = -parse_money(balance_str)
                 balances.append(balance)
             except ValueError as e:
                 raise ValueError(f"Failed to extract balance for pattern '{pattern}': {e}")
@@ -302,7 +305,7 @@ class Parser(IParser):
                 raise ValueError(f"Incorrect number of columns for row: {row}")
 
             # Skip empty rows
-            if all([item == "" for item in row]):
+            if all(item == "" for item in row):
                 continue
 
             # Include only rows that have a date or empty in date col.
@@ -368,7 +371,7 @@ class Parser(IParser):
             i_row += multilines
             if amount_str is None:
                 continue
-            amount = -convert_amount_to_float(amount_str)
+            amount = -parse_money(amount_str)
 
             # Append transaction
             transactions.append(

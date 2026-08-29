@@ -1,3 +1,4 @@
+import os
 import secrets
 import warnings
 from typing import Annotated, Any, Literal
@@ -10,7 +11,6 @@ from pydantic import (
     computed_field,
     model_validator,
 )
-from pydantic_core import MultiHostUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing_extensions import Self
 
@@ -37,16 +37,12 @@ class Settings(BaseSettings):
     FRONTEND_HOST: str = "http://localhost:5173"
     ENVIRONMENT: Literal["local", "staging", "production"] = "local"
 
-    BACKEND_CORS_ORIGINS: Annotated[
-        list[AnyUrl] | str, BeforeValidator(parse_cors)
-    ] = []
+    BACKEND_CORS_ORIGINS: Annotated[list[AnyUrl] | str, BeforeValidator(parse_cors)] = []
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def all_cors_origins(self) -> list[str]:
-        return [str(origin).rstrip("/") for origin in self.BACKEND_CORS_ORIGINS] + [
-            self.FRONTEND_HOST
-        ]
+        return [str(origin).rstrip("/") for origin in self.BACKEND_CORS_ORIGINS] + [self.FRONTEND_HOST]
 
     PROJECT_NAME: str
     SENTRY_DSN: HttpUrl | None = None
@@ -59,7 +55,7 @@ class Settings(BaseSettings):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> PostgresDsn:
-        return MultiHostUrl.build(
+        return PostgresDsn.build(
             scheme="postgresql+psycopg",
             username=self.POSTGRES_USER,
             password=self.POSTGRES_PASSWORD,
@@ -105,8 +101,7 @@ class Settings(BaseSettings):
     def _check_default_secret(self, var_name: str, value: str | None) -> None:
         if value == "changethis":
             message = (
-                f'The value of {var_name} is "changethis", '
-                "for security, please change it, at least for deployments."
+                f'The value of {var_name} is "changethis", for security, please change it, at least for deployments.'
             )
             if self.ENVIRONMENT == "local":
                 warnings.warn(message, stacklevel=1)
@@ -117,11 +112,17 @@ class Settings(BaseSettings):
     def _enforce_non_default_secrets(self) -> Self:
         self._check_default_secret("SECRET_KEY", self.SECRET_KEY)
         self._check_default_secret("POSTGRES_PASSWORD", self.POSTGRES_PASSWORD)
-        self._check_default_secret(
-            "FIRST_SUPERUSER_PASSWORD", self.FIRST_SUPERUSER_PASSWORD
-        )
+        self._check_default_secret("FIRST_SUPERUSER_PASSWORD", self.FIRST_SUPERUSER_PASSWORD)
 
         return self
 
 
-settings = Settings()  # type: ignore
+def _settings_env_file() -> str | None:
+    """Return the configured dotenv path, with an empty override disabling it."""
+    configured_path = os.getenv("PARSETRAIL_ENV_FILE")
+    if configured_path is None:
+        return "../.env"
+    return configured_path or None
+
+
+settings = Settings(_env_file=_settings_env_file())  # type: ignore

@@ -1,40 +1,124 @@
 import json
-from typing import Iterable, Tuple
+from collections.abc import Callable, Iterable, Iterator
+from secrets import token_hex
 
 import requests
-from loguru import logger
+
 from parsetrail.core.auth import AuthError, AuthManager, auth_manager
+from parsetrail.core.client_manifest import INSTALLER_SUFFIXES, MAX_CLIENT_MANIFEST_BYTES
+from parsetrail.core.network import UPLOAD_TIMEOUT, HttpTransport, raise_for_response
 from parsetrail.core.settings import AppSettings, settings
 
 # API Routes
 PLUGIN_PATH = "/plugins"
 CLIENT_PATH = "/clients"
 KEYS_PATH = "/keys"
-MODEL_PATH = "/models"
 STATEMENTS_PATH = "/statements"
+MAX_PLUGIN_MANIFEST_BYTES = 1024 * 1024
+ED25519_SIGNATURE_BYTES = 64
+
+
+class StatementSubmissionCancelled(RuntimeError):
+    """Raised before the encrypted upload has completed."""
+
+
+class _MultipartStatementBody:
+    """Length-known, cancellable multipart body backed by an encrypted blob."""
+
+    def __init__(
+        self,
+        encrypted_file: bytes,
+        encrypted_key: str,
+        metadata: dict[str, object],
+        *,
+        cancelled: Callable[[], bool] | None,
+        progress: Callable[[int, int], None] | None,
+        chunk_size: int = 64 * 1024,
+    ) -> None:
+        self.boundary = f"ParseTrail-{token_hex(16)}"
+        self._cancelled = cancelled or (lambda: False)
+        self._progress = progress or (lambda _sent, _total: None)
+        self._chunk_size = chunk_size
+        self._encrypted_file = encrypted_file
+        self._prefix = self._field("metadata", json.dumps(metadata)) + self._field(
+            "encrypted_key",
+            encrypted_key,
+        )
+        self._file_header = (
+            f"--{self.boundary}\r\n"
+            'Content-Disposition: form-data; name="file"; filename="statement.enc"\r\n'
+            "Content-Type: application/octet-stream\r\n\r\n"
+        ).encode()
+        self._suffix = f"\r\n--{self.boundary}--\r\n".encode()
+        self._length = len(self._prefix) + len(self._file_header) + len(encrypted_file) + len(self._suffix)
+
+    def _field(self, name: str, value: str) -> bytes:
+        return (f'--{self.boundary}\r\nContent-Disposition: form-data; name="{name}"\r\n\r\n{value}\r\n').encode()
+
+    def __len__(self) -> int:
+        return self._length
+
+    def __iter__(self) -> Iterator[bytes]:
+        sent = 0
+        self._progress(0, self._length)
+        for part in (self._prefix, self._file_header):
+            self._check_cancelled()
+            sent += len(part)
+            yield part
+            self._progress(sent, self._length)
+        view = memoryview(self._encrypted_file)
+        for offset in range(0, len(view), self._chunk_size):
+            self._check_cancelled()
+            part = bytes(view[offset : offset + self._chunk_size])
+            sent += len(part)
+            yield part
+            self._progress(sent, self._length)
+        self._check_cancelled()
+        sent += len(self._suffix)
+        yield self._suffix
+        self._progress(sent, self._length)
+
+    def _check_cancelled(self) -> None:
+        if self._cancelled():
+            raise StatementSubmissionCancelled("Statement submission cancelled")
 
 
 class ApiClient:
-    def __init__(self, settings: AppSettings, auth_manager: AuthManager):
+    def __init__(
+        self,
+        settings: AppSettings,
+        auth_manager: AuthManager,
+        *,
+        transport: HttpTransport | None = None,
+    ):
         self.settings = settings
         self.auth = auth_manager
+        self.transport = transport or auth_manager.transport
 
     def _request(self, method: str, path: str, *, auth_required: bool, **kwargs) -> requests.Response:
         url = f"{self.auth.base_url}{path}"
-
-        headers = kwargs.pop("headers", {})
+        action = kwargs.pop("action", "contacting the ParseTrail service")
+        headers = dict(kwargs.pop("headers", {}))
+        timeout = kwargs.pop("timeout", None)
 
         if auth_required:
-            # may auto-login via UI
             headers.update(self.auth.get_auth_headers())
 
-        resp = requests.request(method, url, headers=headers, **kwargs)
+        resp = self.transport.request(
+            method,
+            url,
+            action=action,
+            headers=headers,
+            timeout=timeout,
+            **kwargs,
+        )
 
         if auth_required and resp.status_code == 401:
-            # only treat 401 as "auth broken" if we actually used auth
             self.auth.clear_token()
-            raise AuthError("Token rejected by server")
+            resp.close()
+            raise AuthError("The saved login was rejected. Please sign in again.")
 
+        raise_for_response(resp, action)
         return resp
 
     # Convenience wrappers
@@ -44,41 +128,32 @@ class ApiClient:
     def post(self, path: str, auth_required: bool = True, **kwargs) -> requests.Response:
         return self._request("POST", path, auth_required=auth_required, **kwargs)
 
-    def _get_list(self, path: str, name: str) -> list[dict]:
-        try:
-            resp = self.get(path, auth_required=False, stream=False)
-            resp.raise_for_status()
-            data = resp.json()
-
-            if isinstance(data, list):
-                return data
-
-            raise ValueError(f"{name} endpoint returned {type(data).__name__}, expected list[dict].")
-        except requests.RequestException as e:
-            logger.error(f"Error fetching {name} list: {e}")
-            raise
-
     def list_installers(self) -> list[dict]:
-        return self._get_list(f"{CLIENT_PATH}", "client")
+        raise NotImplementedError("Unsigned client metadata is not trusted; fetch_client_release_bytes()")
 
     def list_plugins(self) -> list[dict]:
-        return self._get_list(f"{PLUGIN_PATH}", "plugin")
-
-    def list_models(self) -> list[dict]:
-        raise NotImplementedError("Model listing not implemented yet")
-        # return self._get_list(f"{MODEL_PATH}", "model")
+        raise NotImplementedError("Unsigned plugin metadata is not trusted; fetch_plugin_release_bytes()")
 
     def _download_stream(
         self, path: str, auth_required: bool = True, chunk_size=8192
-    ) -> Iterable[Tuple[bytes, int, int]]:
-        resp = self.get(path, auth_required=auth_required, stream=True)
-        resp.raise_for_status()
+    ) -> Iterable[tuple[bytes, int, int]]:
+        action = "downloading an authenticated artifact"
+        resp = self.get(
+            path,
+            auth_required=auth_required,
+            stream=True,
+            action=action,
+        )
 
         total = int(resp.headers.get("Content-Length", 0))
         downloaded = 0
 
         try:
-            for chunk in resp.iter_content(chunk_size=chunk_size):
+            for chunk in self.transport.iter_content(
+                resp,
+                action=action,
+                chunk_size=chunk_size,
+            ):
                 if not chunk:
                     continue
                 downloaded += len(chunk)
@@ -86,7 +161,75 @@ class ApiClient:
         finally:
             resp.close()
 
-    def stream_installer(self, platform: str, version: str) -> Iterable[Tuple[bytes, int, int]]:
+    def _get_bounded_bytes(
+        self,
+        path: str,
+        *,
+        maximum_bytes: int,
+        auth_required: bool,
+    ) -> bytes:
+        action = "fetching authenticated release metadata"
+        resp = self.get(
+            path,
+            auth_required=auth_required,
+            stream=True,
+            action=action,
+        )
+        try:
+            content_length = resp.headers.get("Content-Length")
+            if content_length is not None:
+                try:
+                    advertised_size = int(content_length)
+                except ValueError as exc:
+                    raise ValueError("Server returned an invalid Content-Length") from exc
+                if advertised_size > maximum_bytes:
+                    raise ValueError(f"Response exceeds {maximum_bytes} bytes")
+
+            payload = bytearray()
+            for chunk in self.transport.iter_content(
+                resp,
+                action=action,
+            ):
+                if not chunk:
+                    continue
+                payload.extend(chunk)
+                if len(payload) > maximum_bytes:
+                    raise ValueError(f"Response exceeds {maximum_bytes} bytes")
+            return bytes(payload)
+        finally:
+            resp.close()
+
+    def fetch_plugin_release_bytes(self) -> tuple[bytes, bytes]:
+        """Fetch bounded, still-untrusted manifest bytes and detached signature."""
+        manifest = self._get_bounded_bytes(
+            f"{PLUGIN_PATH}/manifest",
+            maximum_bytes=MAX_PLUGIN_MANIFEST_BYTES,
+            auth_required=False,
+        )
+        signature = self._get_bounded_bytes(
+            f"{PLUGIN_PATH}/manifest-signature",
+            maximum_bytes=ED25519_SIGNATURE_BYTES,
+            auth_required=False,
+        )
+        return manifest, signature
+
+    def fetch_client_release_bytes(self, platform: str) -> tuple[bytes, bytes]:
+        """Fetch bounded, still-untrusted installer metadata for one platform."""
+        if platform not in INSTALLER_SUFFIXES:
+            raise ValueError(f"Unsupported client platform: {platform}")
+        manifest = self._get_bounded_bytes(
+            f"{CLIENT_PATH}/{platform}/manifest",
+            maximum_bytes=MAX_CLIENT_MANIFEST_BYTES,
+            auth_required=False,
+        )
+        signature = self._get_bounded_bytes(
+            f"{CLIENT_PATH}/{platform}/manifest-signature",
+            maximum_bytes=ED25519_SIGNATURE_BYTES,
+            auth_required=False,
+        )
+        return manifest, signature
+
+    def stream_installer(self, platform: str, version: str) -> Iterable[tuple[bytes, int, int]]:
         """
         Usage:
             with fpath.open("wb") as f:
@@ -106,7 +249,7 @@ class ApiClient:
         """
         return self._download_stream(f"{CLIENT_PATH}/{platform}/{version}", auth_required=False)
 
-    def stream_plugin(self, plugin_name) -> Iterable[Tuple[bytes, int, int]]:
+    def stream_plugin(self, plugin_name: str) -> Iterable[tuple[bytes, int, int]]:
         """
         Usage:
             with fpath.open("wb") as f:
@@ -126,44 +269,48 @@ class ApiClient:
         """
         return self._download_stream(f"{PLUGIN_PATH}/{plugin_name}", auth_required=True)
 
-    def stream_model(self, model_name) -> Iterable[Tuple[bytes, int, int]]:
-        """
-        Usage:
-            with fpath.open("wb") as f:
-                for chunk, downloaded, total in stream_model(model_name):
-                    f.write(chunk)
-                    dialog.update_progress(downloaded, total)
-                    if dialog.was_cancelled():
-                        break
-
-        Args:
-            platform (str): _description_
-            version (str): _description_
-            auth_required (bool, optional): _description_. Defaults to False.
-
-        Returns:
-            Iterable[Tuple[bytes, int, int]]: _description_
-        """
-        return self._download_stream(f"{MODEL_PATH}/{model_name}", auth_required=True)
-
     def get_public_key(self) -> bytes:
-        resp = self.get(f"{KEYS_PATH}/public-key", auth_required=False)
-        resp.raise_for_status()
+        resp = self.get(
+            f"{KEYS_PATH}/public-key",
+            auth_required=False,
+            action="fetching the statement-encryption key",
+        )
         return resp.content
 
     def get_public_key_hash(self) -> str:
-        resp = self.get(f"{KEYS_PATH}/public-key-hash", auth_required=False)
-        resp.raise_for_status()
+        resp = self.get(
+            f"{KEYS_PATH}/public-key-hash",
+            auth_required=False,
+            action="validating the statement-encryption key",
+        )
         return resp.json()["hash"]
 
-    def submit_statement(self, encrypted_file: bytes, encrypted_key: str, metadata: dict[str]) -> requests.Response:
-        files = {"file": encrypted_file}
-        data = {"metadata": json.dumps(metadata), "encrypted_key": encrypted_key}
+    def submit_statement(
+        self,
+        encrypted_file: bytes,
+        encrypted_key: str,
+        metadata: dict[str, object],
+        *,
+        cancelled: Callable[[], bool] | None = None,
+        progress: Callable[[int, int], None] | None = None,
+    ) -> requests.Response:
+        body = _MultipartStatementBody(
+            encrypted_file,
+            encrypted_key,
+            metadata,
+            cancelled=cancelled,
+            progress=progress,
+        )
         return self.post(
             f"{STATEMENTS_PATH}/submit-statement",
             auth_required=True,
-            files=files,
-            data=data,
+            action="submitting the encrypted statement",
+            timeout=UPLOAD_TIMEOUT,
+            headers={
+                "Content-Length": str(len(body)),
+                "Content-Type": f"multipart/form-data; boundary={body.boundary}",
+            },
+            data=body,
         )
 
 

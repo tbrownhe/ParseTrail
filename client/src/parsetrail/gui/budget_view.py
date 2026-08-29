@@ -1,17 +1,16 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
-from typing import Optional
+from decimal import Decimal
 
 import pandas as pd
 from loguru import logger
-from matplotlib.ticker import FuncFormatter
-from PyQt5 import QtCore, QtGui
-
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-from PyQt5.QtCore import QDate
-from PyQt5.QtWidgets import (
+from matplotlib.ticker import FuncFormatter
+from PySide6 import QtCore, QtGui
+from PySide6.QtCore import QDate
+from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDateEdit,
@@ -25,8 +24,8 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from sqlalchemy.orm import sessionmaker
 from sqlalchemy import func
+from sqlalchemy.orm import sessionmaker
 
 from parsetrail.core.orm import Categories, Transactions
 
@@ -37,7 +36,7 @@ class BudgetTab(QWidget):
     Data wiring lives here so ParseTrail stays lean.
     """
 
-    def __init__(self, session_factory: Optional[sessionmaker], parent: Optional[QWidget] = None) -> None:
+    def __init__(self, session_factory: sessionmaker | None, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.Session = session_factory
         self._build_ui()
@@ -209,43 +208,43 @@ class BudgetTab(QWidget):
                     func.count(Transactions.TransactionID),
                 )
                 .filter(
-                    Transactions.Date >= start.isoformat(),
-                    Transactions.Date < end.isoformat(),
+                    Transactions.PostingDate >= start,
+                    Transactions.PostingDate < end,
                 )
                 .group_by(Transactions.CategoryID)
                 .all()
             )
 
-        actual_map = {cid: float(total or 0) for cid, total, _ in tx_rows}
+        actual_map = {cid: Decimal(total or 0) for cid, total, _ in tx_rows}
         count_map = {cid: int(cnt or 0) for cid, _, cnt in tx_rows}
 
         rows = []
 
         # Helper to flip budgets for expenses so math aligns with negative actual outflows
-        def signed_budget(raw_budget: Optional[float], cat_type: Optional[str]) -> Optional[float]:
+        def signed_budget(raw_budget: Decimal | None, cat_type: str | None) -> Decimal | None:
             if raw_budget is None:
                 return None
             if (cat_type or "").lower() == "expense":
                 return -abs(raw_budget)
             return raw_budget
 
-        def prorated_budget(raw_budget: Optional[float], cat_type: Optional[str]) -> Optional[float]:
+        def prorated_budget(raw_budget: Decimal | None, cat_type: str | None) -> Decimal | None:
             if raw_budget is None:
                 return None
             if not prorate:
                 return signed_budget(raw_budget, cat_type)
-            daily_rate = raw_budget / 30.0  # approximate month length
+            daily_rate = raw_budget / Decimal(30)  # approximate month length
             return signed_budget(daily_rate * range_days, cat_type)
 
         if group_by == "Type":
-            aggregates: dict[str, dict[str, float]] = {}
+            aggregates: dict[str, dict[str, Decimal | int]] = {}
             for cat in categories:
                 label = cat.Type or "Unspecified"
-                agg = aggregates.setdefault(label, {"budget": 0.0, "actual": 0.0, "tx_count": 0})
-                sb = prorated_budget(float(cat.Budget), cat.Type) if cat.Budget is not None else None
+                agg = aggregates.setdefault(label, {"budget": Decimal(0), "actual": Decimal(0), "tx_count": 0})
+                sb = prorated_budget(cat.Budget, cat.Type) if cat.Budget is not None else None
                 if sb is not None:
                     agg["budget"] += sb
-                agg["actual"] += actual_map.get(cat.CategoryID, 0.0)
+                agg["actual"] += actual_map.get(cat.CategoryID, Decimal(0))
                 agg["tx_count"] += count_map.get(cat.CategoryID, 0)
 
             for label, metrics in aggregates.items():
@@ -265,8 +264,8 @@ class BudgetTab(QWidget):
                 )
         else:
             for cat in categories:
-                budget = prorated_budget(float(cat.Budget), cat.Type) if cat.Budget is not None else None
-                actual = actual_map.get(cat.CategoryID, 0.0)
+                budget = prorated_budget(cat.Budget, cat.Type) if cat.Budget is not None else None
+                actual = actual_map.get(cat.CategoryID, Decimal(0))
                 variance = actual - budget if budget is not None else None
                 pct_used = (actual / budget * 100) if budget not in (None, 0) else None
                 rows.append(
@@ -291,10 +290,10 @@ class BudgetTab(QWidget):
         model = QtGui.QStandardItemModel(df.shape[0], df.shape[1])
         model.setHorizontalHeaderLabels(["Label", "Budget", "Actual", "Variance", "% Used", "Transactions"])
 
-        def fmt_money(val: Optional[float]) -> str:
+        def fmt_money(val: Decimal | None) -> str:
             return "" if val is None or pd.isna(val) else f"${val:,.2f}"
 
-        def fmt_pct(val: Optional[float]) -> str:
+        def fmt_pct(val: float | None) -> str:
             return "" if val is None or pd.isna(val) else f"{val:.0f}%"
 
         for row_idx, row in df.iterrows():
@@ -335,8 +334,8 @@ class BudgetTab(QWidget):
             return
 
         labels = df["label"].tolist()
-        budget_values = [b if b is not None else 0 for b in df["budget"].tolist()]
-        actual_values = df["actual"].tolist()
+        budget_values = [float(b) if b is not None else 0.0 for b in df["budget"].tolist()]
+        actual_values = [float(value) for value in df["actual"].tolist()]
 
         x = range(len(labels))
         width = 0.4
@@ -407,7 +406,7 @@ class BudgetTab(QWidget):
 
         slices = []
         other_total = 0.0
-        for label, value in zip(spend_df["label"], magnitudes):
+        for label, value in zip(spend_df["label"], magnitudes, strict=True):
             pct = value / total
             if pct < 0.03:
                 other_total += value
@@ -425,7 +424,7 @@ class BudgetTab(QWidget):
             values,
             labels=None,
             startangle=90,
-            wedgeprops=dict(width=0.4),
+            wedgeprops={"width": 0.4},
         )
         self.util_axes.legend(
             wedges,

@@ -1,13 +1,6 @@
-#! /usr/bin/env bash
+#!/usr/bin/env bash
 
-set -e
-set -x
+set -euo pipefail
 
-cd backend
-python -c "import app.main; import json; print(json.dumps(app.main.app.openapi()))" > ../openapi.json
-cd ..
-node frontend/modify-openapi-operationids.js
-mv openapi.json frontend/
-cd frontend
-npm run generate-client
-npx biome format --write ./src/client
+repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+npm --prefix "${repo_root}/frontend" run generate-client

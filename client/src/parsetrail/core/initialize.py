@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from loguru import logger
-from PyQt5.QtWidgets import QFileDialog, QMessageBox
+from PySide6.QtWidgets import QFileDialog, QMessageBox
 from sqlalchemy.orm import sessionmaker
 
 from parsetrail.core import orm
@@ -131,7 +131,7 @@ def _prompt_for_db_path(default_path: Path, parent=None) -> str:
     dialog.setDirectory(str(default_dir.resolve()))
     dialog.selectFile(str(default_path.name))
 
-    if dialog.exec_():
+    if dialog.exec():
         selected_files = dialog.selectedFiles()
         return selected_files[0] if selected_files else ""
     return ""

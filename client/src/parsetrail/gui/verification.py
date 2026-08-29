@@ -1,33 +1,37 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import List, Optional
+from datetime import date
+from decimal import Decimal
 
 import pandas as pd
 from loguru import logger
+from PySide6 import QtCore, QtGui, QtWidgets
+from sqlalchemy.orm import joinedload, sessionmaker
+
+from parsetrail.core import learn
+from parsetrail.core.categorize import add_missing_categories
 from parsetrail.core.categorize import transactions as categorize_transactions
 from parsetrail.core.cluster import recurring_transactions
 from parsetrail.core.orm import Categories, Transactions
 from parsetrail.core.query import update_db_where
-from PyQt5 import QtCore, QtWidgets, QtGui
-from sqlalchemy.orm import sessionmaker, joinedload
 from parsetrail.core.settings import settings
 
 
 @dataclass
 class TransactionRecord:
     transaction_id: int
-    date: str
+    date: date
     account_name: str
     description: str
-    amount: float
-    category_id: Optional[int]
+    amount: Decimal
+    category_id: int | None
     category_name: str
     verified: bool
     category_active: bool
-    confidence: Optional[float] = None
-    cluster: Optional[int] = None
-    orig_category_id: Optional[int] = field(init=False)
+    confidence: float | None = None
+    cluster: int | None = None
+    orig_category_id: int | None = field(init=False)
     orig_verified: bool = field(init=False)
 
     def __post_init__(self):
@@ -63,11 +67,11 @@ class TransactionTableModel(QtCore.QAbstractTableModel):
         "Cluster",
     ]
 
-    def __init__(self, records: List[TransactionRecord] | None = None, parent=None):
+    def __init__(self, records: list[TransactionRecord] | None = None, parent=None):
         super().__init__(parent)
-        self._records: List[TransactionRecord] = records or []
+        self._records: list[TransactionRecord] = records or []
 
-    def set_records(self, records: List[TransactionRecord]):
+    def set_records(self, records: list[TransactionRecord]):
         self.beginResetModel()
         self._records = records
         self.endResetModel()
@@ -227,7 +231,7 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
     """
 
     # Signal to main window when db is updated
-    data_changed = QtCore.pyqtSignal()
+    data_changed = QtCore.Signal()
 
     def __init__(
         self,
@@ -447,7 +451,7 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
         try:
             session = self.Session()
             try:
-                rows: List[Categories] = (
+                rows: list[Categories] = (
                     session.query(Categories).filter(Categories.Active == 1).order_by(Categories.Name).all()
                 )
             finally:
@@ -491,7 +495,7 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
                         joinedload(Transactions.accounts),
                         joinedload(Transactions.category),
                     )
-                    .order_by(Transactions.Date)
+                    .order_by(Transactions.PostingDate)
                 )
 
                 only_unverified = (
@@ -507,11 +511,11 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
                 if only_archived:
                     query = query.join(Transactions.category).filter(Categories.Active == 0)
 
-                rows: List[Transactions] = query.all()
+                rows: list[Transactions] = query.all()
             finally:
                 session.close()
 
-            records: List[TransactionRecord] = []
+            records: list[TransactionRecord] = []
             for tx in rows:
                 if tx.category is not None and tx.CategoryID is not None:
                     category_id = tx.CategoryID
@@ -527,10 +531,10 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
                 records.append(
                     TransactionRecord(
                         transaction_id=tx.TransactionID,
-                        date=tx.Date,
+                        date=tx.PostingDate,
                         account_name=tx.accounts.AccountName,
                         description=tx.Description or "",
-                        amount=float(tx.Amount) if tx.Amount is not None else 0.0,
+                        amount=tx.Amount,
                         category_id=category_id,
                         category_name=category_name,
                         verified=bool(tx.Verified),
@@ -559,12 +563,12 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
             else:
                 header.setSectionResizeMode(col, QtWidgets.QHeaderView.ResizeToContents)
 
-    def _get_selected_records(self) -> List[TransactionRecord]:
+    def _get_selected_records(self) -> list[TransactionRecord]:
         selection_model = self.table_view.selectionModel()
         if not selection_model:
             return []
 
-        records: List[TransactionRecord] = []
+        records: list[TransactionRecord] = []
         for index in selection_model.selectedRows():
             source_index = self.proxy.mapToSource(index)
             records.append(self.model.record_at(source_index.row()))
@@ -587,7 +591,7 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
             idx = self.model.index(row, TransactionTableModel.COL_VERIFIED)
             self.model.dataChanged.emit(idx, idx, [QtCore.Qt.CheckStateRole])
 
-        msg = f"Marked {len(records)-skipped} transactions as verified (not yet saved)."
+        msg = f"Marked {len(records) - skipped} transactions as verified (not yet saved)."
         if skipped > 0:
             msg += f" Skipped {skipped} uncategorized lines."
         self.status_label.setText(msg)
@@ -663,7 +667,7 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
         progress.close()
 
         self.status_label.setText(
-            f"Applied category '{cat_name}' and marked {len(records)} transactions as verified " "(not yet saved)."
+            f"Applied category '{cat_name}' and marked {len(records)} transactions as verified (not yet saved)."
         )
 
     def save_changes(self):
@@ -686,7 +690,7 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.warning(
                 self,
                 "Missing Category",
-                "Some modified transactions have no category selected. " "Please apply a valid category before saving.",
+                "Some modified transactions have no category selected. Please apply a valid category before saving.",
             )
             return
 
@@ -768,12 +772,23 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
             session = self.Session()
             try:
                 # Update db with predicted categories
-                categorize_transactions(
-                    session=session,
-                    model_path=settings.model_path,
-                    unverified=True,
-                    uncategorized=False,
-                )
+                try:
+                    categorize_transactions(
+                        session=session,
+                        model_path=settings.model_path,
+                        unverified=True,
+                        uncategorized=False,
+                    )
+                except learn.CategoryCompatibilityError as exc:
+                    if not self._prompt_add_missing_categories(session, exc.missing_categories):
+                        self.status_label.setText("Auto-categorization skipped (missing categories).")
+                        return
+                    categorize_transactions(
+                        session=session,
+                        model_path=settings.model_path,
+                        unverified=True,
+                        uncategorized=False,
+                    )
             finally:
                 session.close()
 
@@ -785,6 +800,32 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
             QtWidgets.QMessageBox.critical(self, "Error", f"Auto-categorization failed:\n{exc}")
         finally:
             progress.close()
+
+    def _prompt_add_missing_categories(self, session, missing: list[str]) -> bool:
+        missing_text = ", ".join(missing)
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            "Add Missing Categories?",
+            (
+                "The trained model expects categories that are missing from this database:\n\n"
+                f"{missing_text}\n\n"
+                "Would you like to add these categories now and continue auto-categorizing?"
+            ),
+            QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+            QtWidgets.QMessageBox.Yes,
+        )
+        if reply != QtWidgets.QMessageBox.Yes:
+            return False
+        add_missing_categories(session, missing)
+        QtWidgets.QMessageBox.information(
+            self,
+            "Categories Added",
+            (
+                "Missing categories were added with Type set to 'Expense'.\n\n"
+                "Please update the type as needed in the Category Manager."
+            ),
+        )
+        return True
 
     def _build_clustering_kwargs(self):
         """

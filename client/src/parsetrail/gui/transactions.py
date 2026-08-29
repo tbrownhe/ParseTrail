@@ -1,9 +1,10 @@
 import math
-from datetime import datetime, timedelta
+from datetime import timedelta
+from decimal import Decimal
 
 import pandas as pd
-from PyQt5.QtCore import QAbstractTableModel, QDate, Qt
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import QAbstractTableModel, QDate, Qt
+from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
@@ -27,6 +28,7 @@ from PyQt5.QtWidgets import (
 from sqlalchemy.orm import sessionmaker
 
 from parsetrail.core import cluster, query
+from parsetrail.core.money import parse_money, require_minor_units
 from parsetrail.core.orm import Transactions
 from parsetrail.core.validation import Transaction, ValidationError
 
@@ -131,7 +133,7 @@ class InsertTransactionDialog(QDialog):
 
                 # Handle account closure shortcut
                 if self.close_account:
-                    close_date = datetime.strptime(latest_date, r"%Y-%m-%d") + timedelta(days=30)
+                    close_date = latest_date + timedelta(days=30)
                     self.date_selector.setDate(QDate(close_date.year, close_date.month, close_date.day))
                     self.amount_input.setText(f"{-latest_balance:.2f}")
                     self.description_input.setText("Account Closed Manually")
@@ -149,7 +151,7 @@ class InsertTransactionDialog(QDialog):
         # Get inputs
         account_id = self.account_dropdown.currentData()
         q_date = self.date_selector.date()
-        date = datetime(q_date.year(), q_date.month(), q_date.day())
+        date = q_date.toPython()
         amount = self.amount_input.text()
         balance = self.latest_balance_value.text()
         desc = self.description_input.text()
@@ -161,9 +163,9 @@ class InsertTransactionDialog(QDialog):
 
         # Ensure the amount is a valid number
         try:
-            amount = float(amount)
-            balance = round(float(balance) + amount, 2)
-        except ValueError:
+            amount = parse_money(amount)
+            balance = require_minor_units(parse_money(balance) + amount)
+        except (TypeError, ValueError):
             QMessageBox.warning(
                 self,
                 "Invalid Amount",
@@ -199,8 +201,7 @@ class InsertTransactionDialog(QDialog):
             raise ValidationError("\n".join(errors))
 
             # Convert to list of dict for db insertion
-        statement_id = None
-        rows = Transaction.to_db_rows(statement_id, account_id, transactions)
+        rows = Transaction.to_db_rows(account_id, transactions)
 
         # Insert transaction into the database
         with self.Session() as session:
@@ -246,7 +247,7 @@ class TransactionTableModel(QAbstractTableModel):
         if role == Qt.DisplayRole:
             return str(value)  # Display as a string
         if role == Qt.TextAlignmentRole:
-            return Qt.AlignRight if isinstance(value, (int, float)) else Qt.AlignLeft
+            return Qt.AlignRight if isinstance(value, (int, float, Decimal)) else Qt.AlignLeft
 
         return None
 
@@ -343,10 +344,10 @@ class RecurringTransactionsDialog(QDialog):
             self.max_interval_slider,
             self.variance_slider,
         ]
-        for row, slider in enumerate(sliders, start=row):
-            control_layout.addWidget(slider["label"], row, 0, 1, 2)
-            control_layout.addWidget(slider["slider"], row, 2, 1, 2)
-        row += 1
+        for slider_row, slider in enumerate(sliders, start=row):
+            control_layout.addWidget(slider["label"], slider_row, 0, 1, 2)
+            control_layout.addWidget(slider["slider"], slider_row, 2, 1, 2)
+        row += len(sliders)
 
         # Analyze button
         analyze_button = QPushButton("Analyze")

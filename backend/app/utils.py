@@ -1,4 +1,5 @@
 import logging
+import uuid
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -18,10 +19,21 @@ class EmailData:
     subject: str
 
 
+@dataclass(frozen=True)
+class PasswordResetClaims:
+    user_id: uuid.UUID
+    version: int
+
+
+@dataclass(frozen=True)
+class EmailVerificationClaims:
+    user_id: uuid.UUID
+    version: int
+    email: str
+
+
 def render_email_template(*, template_name: str, context: dict[str, Any]) -> str:
-    template_str = (
-        Path(__file__).parent / "email-templates" / "build" / template_name
-    ).read_text()
+    template_str = (Path(__file__).parent / "email-templates" / "build" / template_name).read_text()
     html_content = Template(template_str).render(context)
     return html_content
 
@@ -95,47 +107,79 @@ def generate_new_account_email(email_to: str, username: str, token: str) -> Emai
     return EmailData(html_content=html_content, subject=subject)
 
 
-def generate_password_reset_token(email: str) -> str:
+def generate_password_reset_token(*, user_id: uuid.UUID, reset_version: int) -> str:
     delta = timedelta(hours=settings.EMAIL_RESET_TOKEN_EXPIRE_HOURS)
     now = datetime.now(timezone.utc)
     expires = now + delta
     exp = expires.timestamp()
     encoded_jwt = jwt.encode(
-        {"exp": exp, "nbf": now, "sub": email, "scope": "password_reset"},
+        {
+            "exp": exp,
+            "nbf": now,
+            "sub": str(user_id),
+            "scope": "password_reset",
+            "version": reset_version,
+        },
         settings.SECRET_KEY,
         algorithm="HS256",
     )
     return encoded_jwt
 
 
-def verify_password_reset_token(token: str) -> str | None:
+def verify_password_reset_token(token: str) -> PasswordResetClaims | None:
     try:
         decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
         if decoded_token.get("scope") != "password_reset":
             return None
-        return str(decoded_token["sub"])
-    except InvalidTokenError:
+        version = decoded_token.get("version")
+        if not isinstance(version, int) or version < 0:
+            return None
+        return PasswordResetClaims(
+            user_id=uuid.UUID(str(decoded_token["sub"])),
+            version=version,
+        )
+    except (InvalidTokenError, KeyError, TypeError, ValueError):
         return None
 
 
-def generate_email_verification_token(email: str) -> str:
+def generate_email_verification_token(
+    *,
+    user_id: uuid.UUID,
+    email: str,
+    verification_version: int,
+) -> str:
     delta = timedelta(hours=settings.EMAIL_VERIFICATION_TOKEN_EXPIRE_HOURS)
     now = datetime.now(timezone.utc)
     expires = now + delta
     exp = expires.timestamp()
     encoded_jwt = jwt.encode(
-        {"exp": exp, "nbf": now, "sub": email, "scope": "email_verification"},
+        {
+            "exp": exp,
+            "nbf": now,
+            "sub": str(user_id),
+            "scope": "email_verification",
+            "email": email,
+            "version": verification_version,
+        },
         settings.SECRET_KEY,
         algorithm="HS256",
     )
     return encoded_jwt
 
 
-def verify_email_verification_token(token: str) -> str | None:
+def verify_email_verification_token(token: str) -> EmailVerificationClaims | None:
     try:
         decoded_token = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
         if decoded_token.get("scope") != "email_verification":
             return None
-        return str(decoded_token["sub"])
-    except InvalidTokenError:
+        version = decoded_token.get("version")
+        email = decoded_token.get("email")
+        if not isinstance(version, int) or version < 0 or not isinstance(email, str):
+            return None
+        return EmailVerificationClaims(
+            user_id=uuid.UUID(str(decoded_token["sub"])),
+            version=version,
+            email=email,
+        )
+    except (InvalidTokenError, KeyError, TypeError, ValueError):
         return None

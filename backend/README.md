@@ -9,6 +9,15 @@
 
 Start the local development environment with Docker Compose following the guide in [../development.md](../development.md).
 
+Run schema migration explicitly before starting a fresh or upgraded stack:
+
+```console
+$ docker compose run --rm prestart bash scripts/migrate.sh
+```
+
+`prestart.sh` validates connectivity, provisions statement-submission keys, and
+initializes required data, but deliberately does not run Alembic.
+
 ## General Workflow
 
 By default, the dependencies are managed with [uv](https://docs.astral.sh/uv/), go there and install it.
@@ -91,31 +100,109 @@ Nevertheless, if it doesn't detect a change but a syntax error, it will just sto
 
 ## Backend tests
 
-To test the backend run:
+Backend tests are hard-wired to a dedicated local database name and port. They
+ignore the repository `.env` and refuse production-like database names or remote
+database hosts.
+
+Start the disposable Postgres service from the repository root:
 
 ```console
-$ bash ./scripts/test.sh
+$ docker compose -p parsetrail-tests -f docker-compose.test.yml up -d --wait
 ```
 
-The tests run with Pytest, modify and add tests to `./backend/app/tests/`.
+Then install the locked development environment and run the suite:
 
-If you use GitHub Actions the tests will run automatically.
+```console
+$ cd backend
+$ uv sync --extra dev --frozen
+$ uv run --frozen bash scripts/tests-start.sh
+```
 
-### Test running stack
+When finished, remove the test container and its non-external volume:
 
-If your stack is already up and you just want to run the tests, you can use:
+```console
+$ docker compose -p parsetrail-tests -f docker-compose.test.yml down -v
+```
+
+The tests run with Pytest. Modify and add tests under `./backend/app/tests/`.
+
+Backend static checks run in GitHub Actions. The isolated PostgreSQL 17 suite has
+also been verified locally.
+
+Arguments are forwarded to Pytest. For example, to stop on the first failure:
 
 ```bash
-docker compose exec backend bash scripts/tests-start.sh
+uv run --frozen bash scripts/tests-start.sh -x
 ```
 
-That `/app/scripts/tests-start.sh` script just calls `pytest` after making sure that the rest of the stack is running. If you need to pass extra arguments to `pytest`, you can pass them to that command and they will be forwarded.
+## Encrypted statement reconciliation
 
-For example, to stop on first error:
+Statement uploads are limited per user (pending queue and rolling 24-hour
+volume), with the final quota check serialized in the same transaction as the
+database row. To compare encrypted storage with registered rows without opening
+any statement contents, run:
 
-```bash
-docker compose exec backend bash scripts/tests-start.sh -x
+```console
+$ uv run --frozen python scripts/reconcile_statements.py
 ```
+
+The command is read-only by default and exits nonzero when it finds drift. To
+move encrypted orphan files into an explicit recovery directory, review the dry
+run first, then add both `--quarantine-orphans /recovery/path` and `--apply`.
+Rows whose encrypted files are missing are only reported; they are never deleted
+automatically.
+
+## Statement-submission key lifecycle
+
+The Compose `prestart` service is the single provisioning owner for the RSA
+submission keyring. It validates an existing active generation, migrates the
+matching legacy `keys/private_key.pem` and `keys/public_key.pem` pair on first
+run, or provisions the initial generation atomically. Importing the FastAPI app
+never generates or rotates keys.
+
+Rotation is explicit:
+
+```console
+$ docker compose run --rm prestart python -m app.core.submission_keys rotate
+```
+
+The active pointer changes atomically. Prior private generations remain in the
+backend-only key volume, allowing every worker to decrypt an upload encrypted
+immediately before rotation. Inspect the selected generation with
+`python -m app.core.submission_keys show-active`. Do not manually delete retained
+generations until every client has refreshed the public key and the maximum
+in-flight/retry interval has passed.
+
+For a non-Compose local backend, run the `provision` command once before starting
+Uvicorn. Submission envelope encryption protects copied statement storage and
+backups when the key volume/master key are kept separately; it does not protect
+against a live backend compromise that can read both ciphertext and keys.
+
+## Signed plugin artifacts
+
+The backend is an untrusted file host for plugin releases; it never has the
+Ed25519 private release key. A deployment is stored as:
+
+```text
+data/plugins/
+  current-release.json
+  releases/
+    <release-sequence>/
+      plugin-manifest.json
+      plugin-manifest.sig
+      *.pyc
+```
+
+Release files are uploaded completely before `current-release.json` is
+atomically replaced. `/api/v1/plugins/manifest` and
+`/api/v1/plugins/manifest-signature` serve the exact signed bytes. The public
+website's `/api/v1/plugins/` list is derived from the active manifest, while the
+desktop client authenticates the exact manifest itself and then verifies every
+downloaded plugin digest.
+
+A flat signed manifest is accepted temporarily for migration, but new
+deployments use immutable release directories. See `client/README.md` for
+offline key generation, signing, verification, deployment, and key rotation.
 
 ### Test Coverage
 

@@ -7,52 +7,13 @@ import matplotlib.dates as mdates
 import pandas as pd
 from loguru import logger
 from matplotlib import rcParams
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter, MaxNLocator
-from parsetrail.core import config, learn, plot, query, reports
-from parsetrail.core.categorize import transactions as categorize_transactions
-from parsetrail.core.client import (
-    ClientUpdateThread,
-    check_for_client_updates,
-    install_client,
-)
-from parsetrail.core.initialize import initialize_db
-from parsetrail.core.plugins import PluginManager, PluginUpdateThread, sync_plugins
-from parsetrail.core.settings import save_settings, settings
-from parsetrail.core.statements import StatementProcessor
-from parsetrail.core.utils import open_file_in_os
-from parsetrail.gui.accounts import (
-    AppreciationDialog,
-    BalanceCheckDialog,
-    EditAccountsDialog,
-)
-from parsetrail.gui.budget_view import BudgetTab
-from parsetrail.gui.category import CategoryManagerDialog
-from parsetrail.gui.plugins import (
-    ParseTestDialog,
-    PluginManagerDialog,
-    PluginSyncDialog,
-)
-from parsetrail.gui.preferences import PreferencesDialog
-from parsetrail.gui.send import StatementSubmissionDialog
-from parsetrail.gui.statements import CompletenessDialog
-from parsetrail.gui.transactions import (
-    InsertTransactionDialog,
-    RecurringTransactionsDialog,
-)
-from parsetrail.gui.verification import TransactionReviewWindow
-from parsetrail.version import (
-    __developer__,
-    __repo__,
-    __version__,
-    __website__,
-    __year__,
-)
-from PyQt5.QtCore import QAbstractTableModel, Qt
-from PyQt5.QtGui import QColor, QFontMetrics
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import QAbstractTableModel, Qt, QTimer
+from PySide6.QtGui import QColor, QFontMetrics
+from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QDialog,
@@ -76,6 +37,50 @@ from PyQt5.QtWidgets import (
     QWidget,
 )
 from sqlalchemy.orm import Session
+
+from parsetrail.core import config, learn, plot, query, reports
+from parsetrail.core.build_metadata import build_provenance_label
+from parsetrail.core.categorize import add_missing_categories
+from parsetrail.core.categorize import transactions as categorize_transactions
+from parsetrail.core.client import (
+    ClientUpdateThread,
+    install_client,
+)
+from parsetrail.core.initialize import initialize_db
+from parsetrail.core.plugins import PluginManager, PluginUpdateThread
+from parsetrail.core.settings import save_settings, settings
+from parsetrail.core.statements import StatementProcessor
+from parsetrail.core.utils import open_file_in_os
+from parsetrail.gui.accounts import (
+    AppreciationDialog,
+    BalanceCheckDialog,
+    EditAccountsDialog,
+)
+from parsetrail.gui.budget_view import BudgetTab
+from parsetrail.gui.category import CategoryManagerDialog
+from parsetrail.gui.plugins import (
+    ParseTestDialog,
+    PluginManagerDialog,
+    PluginSyncDialog,
+    start_plugin_sync,
+)
+from parsetrail.gui.preferences import PreferencesDialog
+from parsetrail.gui.send import StatementSubmissionDialog
+from parsetrail.gui.statements import CompletenessDialog
+from parsetrail.gui.transactions import (
+    InsertTransactionDialog,
+    RecurringTransactionsDialog,
+)
+from parsetrail.gui.verification import TransactionReviewWindow
+from parsetrail.version import (
+    __developer__,
+    __repo__,
+    __version__,
+    __website__,
+    __year__,
+)
+
+AUTOMATIC_UPDATE_DELAY_MS = 3000
 
 
 class MatplotlibCanvas(FigureCanvas):
@@ -130,9 +135,10 @@ class MatplotlibCanvas(FigureCanvas):
         title="",
         xlabel="",
         ylabel="",
-        dashed=[],
+        dashed=None,
     ):
         self.axes.clear()
+        dashed = dashed or []
 
         # Handle empty data
         if df.empty or not selected_accounts:
@@ -254,7 +260,7 @@ class PandasModel(QAbstractTableModel):
                     return QColor(140, 225, 140)  # Light green
                 elif numeric_value < 0:
                     return QColor(225, 160, 160)  # Light red
-            except ValueError:
+            except (TypeError, ValueError):
                 return None
         return None
 
@@ -357,7 +363,7 @@ class ParseTrail(QMainWindow):
         help_menu.addAction("About", self.about)
         help_menu.addAction(
             "Check for Updates",
-            lambda: check_for_client_updates(parent=self),
+            lambda: self.check_for_client_updates_async(manual=True),
         )
 
         # CENTRAL WIDGET
@@ -623,7 +629,7 @@ class ParseTrail(QMainWindow):
         # Set layout and display
         dialog.setLayout(layout)
         dialog.resize(max_width, max_height)
-        dialog.exec_()
+        dialog.exec()
 
     def initialize_all_elements(self):
         # Make sure the config file exists and load into memory
@@ -640,25 +646,58 @@ class ParseTrail(QMainWindow):
         self.plugin_manager = PluginManager()
         self.plugin_manager.load_plugins()
 
+        pending_archives = StatementProcessor(self.Session, self.plugin_manager).find_pending_archives()
+        if pending_archives:
+            logger.warning("Found {} committed statement archive(s) awaiting recovery", len(pending_archives))
+            QMessageBox.warning(
+                self,
+                "Statement Archive Recovery Needed",
+                (
+                    f"{len(pending_archives)} committed statement file(s) are still in the import folder. "
+                    "Run Import All Statements to finish archiving them safely."
+                ),
+            )
+
         # Update all tables, checklists, and graphs
         with self.Session() as session:
             self.update_main_gui(session)
 
-        # Check for new versions of client and plugins
-        self.check_for_client_updates_async()
+        # A documented, optional background check runs only after the event loop
+        # starts, so networking can never delay construction or first paint.
+        self.schedule_automatic_update_check()
 
-    def check_for_client_updates_async(self):
+    def schedule_automatic_update_check(self):
+        if settings.automatic_update_checks:
+            QTimer.singleShot(
+                AUTOMATIC_UPDATE_DELAY_MS,
+                self.check_for_client_updates_async,
+            )
+
+    def check_for_client_updates_async(self, manual: bool = False):
+        if getattr(self, "client_update_thread", None) and self.client_update_thread.isRunning():
+            return
         self.client_update_thread = ClientUpdateThread()
-        self.client_update_thread.update_available.connect(self.handle_client_update)
+        self.client_update_thread.update_available.connect(
+            lambda success, installer, message: self.handle_client_update(
+                success,
+                installer,
+                message,
+                manual=manual,
+            )
+        )
         self.client_update_thread.start()
 
-    def handle_client_update(self, success: bool, latest_installer: dict, message: str):
+    def handle_client_update(self, success: bool, latest_installer, message: str, *, manual: bool = False):
         if success:
             logger.info(message)
             if latest_installer:
                 install_client(latest_installer, self)
+            elif manual:
+                QMessageBox.information(self, "Client Up to Date", "You are already using the latest version.")
         else:
             logger.error(message)
+            if manual:
+                QMessageBox.critical(self, "Update Check Failed", message)
 
         # Check for plugin update after client check is done
         self.check_for_plugin_updates_async()
@@ -671,11 +710,16 @@ class ParseTrail(QMainWindow):
         self.plugin_update_thread.update_complete.connect(self.handle_plugin_update_complete)
         self.plugin_update_thread.start()
 
-    def handle_plugin_update_available(self, local_plugins: list, server_plugins: list):
+    def handle_plugin_update_available(self, local_plugins: list, remote_release):
+        server_plugins = remote_release.legacy_metadata()
         dialog = PluginSyncDialog(local_plugins, server_plugins, parent=self)
-        if dialog.exec_() == QDialog.Accepted:
-            sync_plugins(local_plugins, server_plugins, progress=True, parent=self)
-            self.plugin_manager.load_plugins()
+        if dialog.exec() == QDialog.Accepted:
+            start_plugin_sync(
+                self,
+                local_plugins,
+                remote_release,
+                self.plugin_manager,
+            )
         else:
             logger.info("User declined to sync plugins")
 
@@ -692,24 +736,23 @@ class ParseTrail(QMainWindow):
         msg_box.setTextFormat(Qt.RichText)
         msg_box.setTextInteractionFlags(Qt.TextBrowserInteraction)
         msg_box.setText(
-            (
-                f"<b>ParseTrail v{__version__}</b><br>"
-                f"(c) {__year__} ParseTrail contributors<br>"
-                f"Original author: {__developer__}<br>"
-                f'<a href="{__website__}">Website</a> | '
-                f'<a href="{__repo__}">GitHub</a>'
-            )
+            f"<b>ParseTrail v{__version__}</b><br>"
+            f"(c) {__year__} ParseTrail contributors<br>"
+            f"Original author: {__developer__}<br>"
+            f"Build: {build_provenance_label()}<br>"
+            f'<a href="{__website__}">Website</a> | '
+            f'<a href="{__repo__}">GitHub</a>'
         )
         msg_box.setWindowTitle("About")
         msg_box.setStandardButtons(QMessageBox.Ok)
-        msg_box.exec_()
+        msg_box.exec()
 
     def open_db(self):
         open_file_in_os(settings.db_path)
 
     def preferences(self):
         dialog = PreferencesDialog()
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.Accepted:
             try:
                 self.Session = initialize_db()
                 with self.Session() as session:
@@ -735,17 +778,17 @@ class ParseTrail(QMainWindow):
 
     def manage_plugins(self):
         dialog = PluginManagerDialog(self.plugin_manager)
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.Accepted:
             return
 
     def parse_test(self):
         dialog = ParseTestDialog(self.Session, self.plugin_manager)
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.Accepted:
             return
 
     def edit_accounts(self):
         dialog = EditAccountsDialog(self.Session)
-        dialog.exec_()
+        dialog.exec()
 
         # Update all GUI elements
         with self.Session() as session:
@@ -753,19 +796,19 @@ class ParseTrail(QMainWindow):
 
     def appreciation_calc(self):
         dialog = AppreciationDialog()
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.Accepted:
             pass
 
     def insert_transaction(self):
         dialog = InsertTransactionDialog(self.Session)
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.Accepted:
             # Update all GUI elements
             with self.Session() as session:
                 self.update_main_gui(session)
 
     def recurring_transactions(self):
         dialog = RecurringTransactionsDialog(self.Session)
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.Accepted:
             pass
 
     def import_all_statements(self):
@@ -776,7 +819,11 @@ class ParseTrail(QMainWindow):
         finally:
             # Categorize new transactions and update all GUI elements
             with self.Session() as session:
-                categorize_transactions(session, settings.model_path, uncategorized=True)
+                self._categorize_with_missing_category_prompt(
+                    session,
+                    model_path=settings.model_path,
+                    uncategorized=True,
+                )
                 self.update_main_gui(session)
 
     def import_one_statement(self):
@@ -802,7 +849,7 @@ class ParseTrail(QMainWindow):
             msg_box.setText("Cannot import statements from the SUCCESS folder.")
             msg_box.setWindowTitle("Protected Folder")
             msg_box.setStandardButtons(QMessageBox.Ok)
-            msg_box.exec_()
+            msg_box.exec()
             return
 
         # Import statement
@@ -811,12 +858,71 @@ class ParseTrail(QMainWindow):
 
         # Categorize new transactions and update all GUI elements
         with self.Session() as session:
-            categorize_transactions(session, settings.model_path, uncategorized=True)
+            self._categorize_with_missing_category_prompt(
+                session,
+                model_path=settings.model_path,
+                uncategorized=True,
+            )
             self.update_main_gui(session)
+
+    def _categorize_with_missing_category_prompt(
+        self,
+        session: Session,
+        model_path: Path,
+        unverified: bool = True,
+        uncategorized: bool = False,
+    ) -> None:
+        try:
+            categorize_transactions(
+                session=session,
+                model_path=model_path,
+                unverified=unverified,
+                uncategorized=uncategorized,
+            )
+        except learn.CategoryCompatibilityError as exc:
+            if not self._prompt_add_missing_categories(session, exc.missing_categories):
+                QMessageBox.information(
+                    self,
+                    "Auto-categorization Skipped",
+                    "Missing model categories were not added.",
+                )
+                return
+            categorize_transactions(
+                session=session,
+                model_path=model_path,
+                unverified=unverified,
+                uncategorized=uncategorized,
+            )
+
+    def _prompt_add_missing_categories(self, session: Session, missing: list[str]) -> bool:
+        missing_text = ", ".join(missing)
+        reply = QMessageBox.question(
+            self,
+            "Add Missing Categories?",
+            (
+                "The trained model expects categories that are missing from this database:\n\n"
+                f"{missing_text}\n\n"
+                "Would you like to add these categories now and continue auto-categorizing?"
+            ),
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
+        )
+        if reply != QMessageBox.Yes:
+            return False
+        add_missing_categories(session, missing)
+        QMessageBox.information(
+            self,
+            "Categories Added",
+            (
+                "Missing categories were added with Type set to 'Expense'.\n\n"
+                "Please update the type as needed in the Category Manager."
+            ),
+        )
+        return True
 
     def statement_matrix(self):
         dialog = CompletenessDialog(self.Session)
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.Accepted:
             pass
 
     def statement_discrepancies(self):
@@ -828,16 +934,16 @@ class ParseTrail(QMainWindow):
         # Prompt the user whether they want to correct the issue
         count = 0
         for account_name, balance, date in data:
-            days = (max_date - datetime.strptime(date, r"%Y-%m-%d")).days
-            if days < 120 or balance == 0.0:
+            days = (max_date - date).days
+            if days < 120 or balance == 0:
                 continue
             count += 1
             balance_dialog = BalanceCheckDialog(account_name, balance)
-            if balance_dialog.exec_() != QDialog.Accepted:
+            if balance_dialog.exec() != QDialog.Accepted:
                 continue
 
             insert_dialog = InsertTransactionDialog(self.Session, account_name=account_name, close_account=True)
-            if insert_dialog.exec_() == QDialog.Accepted:
+            if insert_dialog.exec() == QDialog.Accepted:
                 # Update all GUI elements
                 with self.Session() as session:
                     self.update_main_gui(session)
@@ -877,7 +983,7 @@ class ParseTrail(QMainWindow):
 
     def open_category_manager(self):
         dialog = CategoryManagerDialog(self.Session)
-        if dialog.exec_():
+        if dialog.exec():
             with self.Session() as session:
                 self.update_main_gui(session)
 
@@ -1155,5 +1261,5 @@ class ParseTrail(QMainWindow):
 
     def send_statement(self):
         dialog = StatementSubmissionDialog()
-        if dialog.exec_():
+        if dialog.exec():
             pass

@@ -6,9 +6,9 @@ from loguru import logger
 from pdfplumber.page import Page
 
 from parsetrail.core.interfaces import IParser
+from parsetrail.core.money import parse_money
 from parsetrail.core.utils import (
     PDFReader,
-    convert_amount_to_float,
     find_line_startswith,
     get_absolute_date,
 )
@@ -18,7 +18,8 @@ from parsetrail.core.validation import Account, Statement, Transaction
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_wfbankbus_202110"
-    VERSION = "0.1.0"
+    VERSION = "0.2.0"
+    MIN_CLIENT_VERSION = "1.3.0"
     SUFFIX = ".pdf"
     COMPANY = "Wells Fargo"
     STATEMENT_TYPE = "Business Banking Monthly Statement"
@@ -61,7 +62,7 @@ class Parser(IParser):
             self.reader = reader
             return self.extract_statement()
         except Exception as e:
-            logger.error(f"Error parsing {self.STATEMENT_TYPE} statement: {e}")
+            logger.error("Parser {} failed with {}.", self.PLUGIN_NAME, type(e).__name__)
             raise
 
     def extract_statement(self) -> Statement:
@@ -195,7 +196,7 @@ class Parser(IParser):
                 _, balance_line = find_line_startswith(self.reader.lines_simple, pattern)
                 result = self.AMOUNT.search(balance_line)
                 amount_str = result.group()
-                balance = convert_amount_to_float(amount_str)
+                balance = parse_money(amount_str)
                 balances[pattern] = balance
                 patterns.append(pattern)
             except Exception as e:
@@ -348,10 +349,10 @@ class Parser(IParser):
 
             # Extract main part of the transaction
             posting_date = get_absolute_date(row[0], self.start_date, self.end_date)
-            additions = convert_amount_to_float(row[3]) if row[3] else 0.0
-            subtractions = convert_amount_to_float(row[4]) if row[4] else 0.0
+            additions = parse_money(row[3]) if row[3] else parse_money("0")
+            subtractions = parse_money(row[4]) if row[4] else parse_money("0")
             amount = additions - subtractions
-            balance = convert_amount_to_float(row[5]) if row[5] else None
+            balance = parse_money(row[5]) if row[5] else None
             desc, multilines = get_full_description(i_row)
             i_row += multilines
 

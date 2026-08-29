@@ -1,0 +1,8 @@
+{
+  "api_base_url": "https://api.example.com/api/v1",
+  "dashboard_url": "https://dashboard.example.com/",
+  "website_url": "https://example.com/",
+  "username": "deployment-smoke@example.com",
+  "password": "replace-with-a-dedicated-account-password",
+  "timeout_seconds": 15
+}

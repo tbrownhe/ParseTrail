@@ -4,10 +4,11 @@ from statistics import mode
 
 from loguru import logger
 from pdfplumber.page import Page
+
 from parsetrail.core.interfaces import IParser
+from parsetrail.core.money import parse_money
 from parsetrail.core.utils import (
     PDFReader,
-    convert_amount_to_float,
     find_line_startswith,
     find_param_in_line,
     find_regex_in_line,
@@ -19,7 +20,8 @@ from parsetrail.core.validation import Account, Statement, Transaction
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_lendingclublus_202506"
-    VERSION = "0.1.0"
+    VERSION = "0.2.0"
+    MIN_CLIENT_VERSION = "1.3.0"
     SUFFIX = ".pdf"
     COMPANY = "LendingClub"
     STATEMENT_TYPE = "LevelUp Savings Monthly Statement"
@@ -64,7 +66,7 @@ class Parser(IParser):
             self.reader.lines_layout = self.reader.PDF.pages[0].extract_text(layout=True, x_density=3.45)
             return self.extract_statement()
         except Exception as e:
-            logger.error(f"Error parsing {self.STATEMENT_TYPE} statement: {e}")
+            logger.error("Parser {} failed with {}.", self.PLUGIN_NAME, type(e).__name__)
             raise
 
     def extract_statement(self) -> Statement:
@@ -175,8 +177,8 @@ class Parser(IParser):
             r"Balance.*Deposits.*Paid.*Withdrawals.*Charge.*Balance",
         )
         amount_strs = self.reader.lines_clean[index + 1].split()
-        self.start_balance = convert_amount_to_float(amount_strs[0])
-        self.end_balance = convert_amount_to_float(amount_strs[-1])
+        self.start_balance = parse_money(amount_strs[0])
+        self.end_balance = parse_money(amount_strs[-1])
 
     def get_transaction_array(self) -> list[list[str]]:
         """Extract lines containing transaction information.
@@ -349,10 +351,10 @@ class Parser(IParser):
 
             # Extract main part of the transaction
             posting_date = get_absolute_date(row[date_col], self.start_date, self.end_date)
-            additions = convert_amount_to_float(row[cred_col]) if row[cred_col] else 0.0
-            subtractions = convert_amount_to_float(row[debit_col]) if row[debit_col] else 0.0
+            additions = parse_money(row[cred_col]) if row[cred_col] else parse_money("0")
+            subtractions = parse_money(row[debit_col]) if row[debit_col] else parse_money("0")
             amount = additions + subtractions
-            balance = convert_amount_to_float(row[bal_col]) if row[bal_col] else None
+            balance = parse_money(row[bal_col]) if row[bal_col] else None
             desc, multilines = get_full_description(i_row)
             i_row += multilines
 

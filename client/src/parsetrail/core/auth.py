@@ -1,11 +1,19 @@
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
-from typing import Callable, Optional, Tuple
 
 import requests
 from loguru import logger
-from parsetrail.core.settings import AppSettings, save_settings, settings
+
+from parsetrail.core.credentials import TokenStore, credential_store
+from parsetrail.core.network import HttpTransport, NetworkError, raise_for_response
+from parsetrail.core.settings import (
+    AppSettings,
+    retire_legacy_credential_key,
+    save_settings,
+    settings,
+)
 
 # Keep this in sync with backend/app/core/config.py
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 2
@@ -19,10 +27,10 @@ class AuthError(Exception):
 
 
 # Type for the UI-provided credential prompt
-PromptFunc = Callable[[], Optional[Tuple[str, str]]]
+PromptFunc = Callable[[], tuple[str, str] | None]
 
 
-def _default_prompt_for_credentials() -> Optional[Tuple[str, str]]:
+def _default_prompt_for_credentials() -> tuple[str, str] | None:
     """
     Default implementation. The core layer does not know how to get credentials.
     Your UI code should patch `prompt_for_credentials` at app startup.
@@ -40,15 +48,31 @@ class AuthManager:
     Totally UI-agnostic: it just calls `prompt_for_credentials()` when needed.
     """
 
-    def __init__(self, app_settings: AppSettings):
+    def __init__(
+        self,
+        app_settings: AppSettings,
+        *,
+        transport: HttpTransport | None = None,
+        token_store: TokenStore = credential_store,
+    ):
         self.settings = app_settings
-        self.base_url = str(settings.server_url).rstrip("/")
-        self._token: str = app_settings.access_token or ""
+        self.base_url = str(app_settings.server_url).rstrip("/")
+        self.transport = transport or HttpTransport()
+        self.token_store = token_store
+        stored_token = token_store.get_token()
+        legacy_token = app_settings.access_token or ""
+        self._token: str = stored_token or legacy_token
+        if legacy_token:
+            if stored_token is None:
+                token_store.set_token(legacy_token)
+            app_settings.access_token = ""
+            save_settings(app_settings)
+        retire_legacy_credential_key()
 
         expires_ts = app_settings.token_expires_at
         if expires_ts:
             try:
-                self._token_expires_at: Optional[datetime] = datetime.fromtimestamp(expires_ts, tz=timezone.utc)
+                self._token_expires_at: datetime | None = datetime.fromtimestamp(expires_ts, tz=timezone.utc)
             except (OSError, OverflowError, ValueError) as e:
                 logger.warning(f"Ignoring invalid token_expires_at in settings: {e}")
                 self._token_expires_at = None
@@ -66,6 +90,43 @@ class AuthManager:
             return True
         return datetime.now(timezone.utc) < self._token_expires_at.astimezone(timezone.utc)
 
+    def credentials_if_needed(self) -> tuple[str, str] | None:
+        """Prompt on the caller's thread, returning credentials for worker login."""
+        if self._is_token_valid():
+            return None
+        credentials = prompt_for_credentials()
+        if credentials is None:
+            raise AuthError("Sign-in was cancelled.")
+        return credentials
+
+    def login(self, email: str, password: str) -> None:
+        """Authenticate over the network without invoking any UI callback."""
+        try:
+            resp = self.transport.request(
+                "POST",
+                f"{self.base_url}{LOGIN_PATH}",
+                action="signing in",
+                data={"username": email, "password": password},
+            )
+            raise_for_response(resp, "signing in")
+        except NetworkError as exc:
+            raise AuthError(str(exc)) from exc
+
+        try:
+            payload = resp.json()
+            token = payload["access_token"]
+            if not isinstance(token, str) or not token:
+                raise ValueError
+        except (KeyError, requests.JSONDecodeError, TypeError, ValueError) as exc:
+            raise AuthError("The sign-in response was invalid.") from exc
+
+        self._token = token
+        self._token_expires_at = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+        self.settings.email = email
+        self.settings.token_expires_at = self._token_expires_at.timestamp()
+        self.token_store.set_token(token)
+        save_settings(self.settings)
+
     def _login(self) -> bool:
         """
         Prompt the user for email/password (via the patched UI callback)
@@ -80,26 +141,10 @@ class AuthManager:
         email, password = creds
 
         try:
-            resp = requests.post(
-                f"{self.base_url}{LOGIN_PATH}",
-                data={"username": email, "password": password},
-            )
-            resp.raise_for_status()
-        except requests.RequestException as e:
-            logger.error("{}", e)
+            self.login(email, password)
+        except AuthError as exc:
+            logger.error("{}", exc)
             return False
-
-        payload = resp.json()
-        token = payload["access_token"]
-
-        self._token = token
-        self._token_expires_at = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-
-        # Persist token
-        self.settings.email = email
-        self.settings.access_token = token
-        self.settings.token_expires_at = self._token_expires_at.timestamp()
-        save_settings(self.settings)
         return True
 
     def clear_token(self) -> None:
@@ -108,6 +153,7 @@ class AuthManager:
         self._token_expires_at = None
         self.settings.access_token = ""
         self.settings.token_expires_at = 0.0
+        self.token_store.delete_token()
         save_settings(self.settings)
 
     def get_auth_headers(self) -> dict:

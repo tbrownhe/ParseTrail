@@ -3,18 +3,17 @@ import importlib.util
 import socket
 import subprocess
 import time
-from typing import Optional, Tuple
 
 from settings import settings
-from ssh import fetch_remote_env
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from ssh import fetch_remote_env
 
-_tunnel_proc: Optional[subprocess.Popen] = None
+_tunnel_proc: subprocess.Popen | None = None
 _engine = None
-_SessionLocal: Optional[sessionmaker] = None
+_SessionLocal: sessionmaker | None = None
 _atexit_registered = False
-_REMOTE_DB_ENV: Optional[dict] = None
+_REMOTE_DB_ENV: dict | None = None
 
 
 def _load_remote_db_env() -> dict:
@@ -49,10 +48,7 @@ def _driver_prefix() -> str:
 def _build_database_url(host: str, port: int) -> str:
     prefix = _driver_prefix()
     db_env = _load_remote_db_env()
-    return (
-        f"{prefix}{db_env['POSTGRES_USER']}:{db_env['POSTGRES_PASSWORD']}"
-        f"@{host}:{port}/{db_env['POSTGRES_DB']}"
-    )
+    return f"{prefix}{db_env['POSTGRES_USER']}:{db_env['POSTGRES_PASSWORD']}@{host}:{port}/{db_env['POSTGRES_DB']}"
 
 
 def _get_container_ip() -> str:
@@ -85,7 +81,7 @@ def _wait_for_port(host: str, port: int, timeout: float = 8.0) -> None:
     raise TimeoutError(f"Tunnel to {host}:{port} did not become ready")
 
 
-def _start_tunnel() -> Tuple[str, int]:
+def _start_tunnel() -> tuple[str, int]:
     global _tunnel_proc
     if not settings.REMOTE_HOST or not settings.REMOTE_USER:
         raise ValueError("REMOTE_HOST and REMOTE_USER are required for SSH tunneling")
@@ -116,7 +112,7 @@ def _stop_tunnel():
     _tunnel_proc = None
 
 
-def _ensure_tunnel() -> Tuple[str, int]:
+def _ensure_tunnel() -> tuple[str, int]:
     global _atexit_registered
     if _tunnel_proc and _tunnel_proc.poll() is None:
         return "127.0.0.1", settings.SSH_TUNNEL_LOCAL_PORT
@@ -150,8 +146,3 @@ def get_sessionmaker() -> sessionmaker:
     if _SessionLocal is None:
         get_engine()
     return _SessionLocal  # type: ignore
-
-
-# Eagerly initialize so existing imports still work
-get_engine()
-SessionLocal = get_sessionmaker()

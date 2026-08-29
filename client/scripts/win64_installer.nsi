@@ -1,5 +1,6 @@
 # NSIS Script for installing a Python application packed with PyInstaller.
-# NSIS can be installed like `conda install nsis`
+# The build script locates makensis.exe from PATH or the standard installation
+# directory.
 
 # ------------------------------------------------
 # Argument Variables

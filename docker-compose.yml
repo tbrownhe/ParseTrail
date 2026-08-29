@@ -1,7 +1,10 @@
 services:
 
   db:
-    image: postgres:12
+    # Keep the old image/volume defaults until the documented dump/restore has
+    # completed. Cutover changes both variables together; a newer server must
+    # never be pointed at the PostgreSQL 12 data directory.
+    image: ${POSTGRES_IMAGE:-postgres:12.22@sha256:2f2a8c2a7d10862e7fba2602e304523554f9df8244c632dafe2628ccb398fb5c}
     restart: always
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
@@ -21,7 +24,7 @@ services:
 
 
   prestart:
-    image: '${DOCKER_IMAGE_BACKEND?Variable not set}:${TAG-latest}'
+    image: '${BACKEND_IMAGE_REF:-${DOCKER_IMAGE_BACKEND?Variable not set}:local}'
     build:
       context: ./backend
     networks:
@@ -34,6 +37,10 @@ services:
     command: bash scripts/prestart.sh
     env_file:
       - .env
+    volumes:
+      # The single prestart owner provisions/validates submission keys before
+      # any backend worker starts. Old generations remain for rotation overlap.
+      - app-keys-data:/app/keys
     environment:
       - DOMAIN=${DOMAIN}
       - FRONTEND_HOST=${FRONTEND_HOST?Variable not set}
@@ -55,7 +62,7 @@ services:
 
 
   backend:
-    image: '${DOCKER_IMAGE_BACKEND?Variable not set}:${TAG-latest}'
+    image: '${BACKEND_IMAGE_REF:-${DOCKER_IMAGE_BACKEND?Variable not set}:local}'
     restart: always
     build:
       context: ./backend
@@ -77,7 +84,6 @@ services:
       # Bind mounts to be replaced by docker volumes someday if this scales.
       - ${CLIENTS_DIR?Variable not set}:/app/data/clients
       - ${PLUGINS_DIR?Variable not set}:/app/data/plugins
-      - ${MODELS_DIR?Variable not set}:/app/data/models
       - ${STATEMENTS_DIR?Variable not set}:/app/secure/statements
     environment:
       - MASTER_KEY=${MASTER_KEY}
@@ -101,7 +107,13 @@ services:
       - STATEMENTS_FILE_OWNER=${STATEMENTS_FILE_OWNER}
       - STATEMENTS_FILE_GROUP=${STATEMENTS_FILE_GROUP}
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/utils/health-check/" ]
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://localhost:8000/api/v1/utils/health-check/', timeout=2)
       interval: 10s
       timeout: 5s
       retries: 5
@@ -154,7 +166,7 @@ services:
 
 
   frontend:
-    image: '${DOCKER_IMAGE_FRONTEND?Variable not set}:${TAG-latest}'
+    image: '${FRONTEND_IMAGE_REF:-${DOCKER_IMAGE_FRONTEND?Variable not set}:local}'
     restart: always
     networks:
       - traefik-public
@@ -185,11 +197,11 @@ services:
 
   website:
     # Static site for Marketing, FAQ and latest client downloads
-    image: nginx:latest
+    image: '${WEBSITE_IMAGE_REF:-parsetrail-website:local}'
     restart: always
-    volumes:
-      # In production, freeze static website via Dockerfile.web and remove the bind mount
-      - ./website:/usr/share/nginx/html
+    build:
+      context: .
+      dockerfile: website/Dockerfile
     environment:
       # Base URLs used by website JS; written into env.js at container start.
       - BACKEND_HOST=${BACKEND_HOST?Variable not set}
@@ -240,7 +252,7 @@ services:
 volumes:
   app-db-data:
     external: true
-    name: parsetrail_app-db-data
+    name: ${POSTGRES_VOLUME_NAME:-parsetrail_app-db-data}
   app-keys-data:
     external: true
     name: parsetrail_app-keys-data

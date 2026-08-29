@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any
 
 import joblib
 import matplotlib.pyplot as plt
@@ -20,7 +21,18 @@ from sklearn.svm import LinearSVC
 
 MODEL_VERSION = "1.0-category-bundle"
 
-ModelBundle = Dict[str, Any]
+ModelBundle = dict[str, Any]
+
+
+class CategoryCompatibilityError(RuntimeError):
+    def __init__(self, missing_categories: Iterable[str]) -> None:
+        self.missing_categories = sorted(set(missing_categories))
+        message = (
+            "The trained model uses categories that no longer exist in the current category set: "
+            + ", ".join(self.missing_categories)
+            + ". Please either restore these categories or retrain the model."
+        )
+        super().__init__(message)
 
 
 def save_model(model_path: Path, bundle: ModelBundle) -> None:
@@ -47,14 +59,13 @@ def load_model(model_path: Path) -> ModelBundle:
 
     if bundle["version"] != MODEL_VERSION:
         raise RuntimeError(
-            f"Incompatible model version '{bundle['version']}' "
-            f"(expected '{MODEL_VERSION}'). Please retrain the model."
+            f"Incompatible model version '{bundle['version']}' (expected '{MODEL_VERSION}'). Please retrain the model."
         )
 
     required_keys = {"pipeline", "amount", "categories", "features", "meta"}
     missing = required_keys - set(bundle.keys())
     if missing:
-        raise RuntimeError(f"Model bundle is missing required keys: {sorted(missing)}. " "Please retrain the model.")
+        raise RuntimeError(f"Model bundle is missing required keys: {sorted(missing)}. Please retrain the model.")
 
     return bundle
 
@@ -62,8 +73,8 @@ def load_model(model_path: Path) -> ModelBundle:
 def prepare_data(
     df: pd.DataFrame,
     amount: bool,
-    features: Optional[Dict[str, Any]] = None,
-) -> Tuple[pd.DataFrame, Optional[pd.Series], Dict[str, Any]]:
+    features: dict[str, Any] | None = None,
+) -> tuple[pd.DataFrame, pd.Series | None, dict[str, Any]]:
     """
     Prepare input features X and labels y (if present) from a DataFrame.
 
@@ -125,12 +136,12 @@ def prepare_data(
     return X, y, features_out
 
 
-def prepare_pipeline(features: Dict[str, Any]) -> Pipeline:
+def prepare_pipeline(features: dict[str, Any]) -> Pipeline:
     """
     Construct the sklearn Pipeline given a feature configuration dict.
     """
     text_column = features["text_column"]
-    numeric_features: List[str] = features.get("numeric_features", [])
+    numeric_features: list[str] = features.get("numeric_features", [])
 
     transformers = [("text", TfidfVectorizer(), text_column)]
     if numeric_features:
@@ -152,7 +163,7 @@ def prepare_pipeline(features: Dict[str, Any]) -> Pipeline:
 def plot_confusion_matrix(
     y_test: pd.Series,
     y_pred: np.ndarray,
-    categories: List[str],
+    categories: list[str],
     normalized: bool = True,
 ) -> None:
     """
@@ -219,7 +230,7 @@ def train_pipeline_test(df: pd.DataFrame, amount: bool = False) -> None:
     # Report accuracy and display confusion matrix
     y_pred = pipeline.predict(x_test)
     acc = accuracy_score(y_test, y_pred)
-    logger.info("Validation accuracy: {0:.1%}".format(acc))
+    logger.info(f"Validation accuracy: {acc:.1%}")
 
     categories = sorted(y.unique())
     plot_confusion_matrix(y_test, y_pred, categories=categories)
@@ -298,7 +309,7 @@ def confidence_score(pipeline: Pipeline, X: pd.DataFrame) -> np.ndarray:
 
 def _check_category_compatibility(
     model_categories: Iterable[str],
-    current_categories: Optional[Iterable[str]],
+    current_categories: Iterable[str] | None,
 ) -> None:
     """
     Optional compatibility check between the model's training categories and the
@@ -317,11 +328,7 @@ def _check_category_compatibility(
     missing_in_current = sorted(model_set - current_set)
     if missing_in_current:
         # Model can predict labels that the current system does not support
-        raise RuntimeError(
-            "The trained model uses categories that no longer exist in the current category set: "
-            + ", ".join(missing_in_current)
-            + ". Please either restore these categories or retrain the model."
-        )
+        raise CategoryCompatibilityError(missing_in_current)
 
     extra_in_current = sorted(current_set - model_set)
     if extra_in_current:
@@ -337,7 +344,7 @@ def _check_category_compatibility(
 def predict(
     model_path: Path,
     df: pd.DataFrame,
-    current_categories: Optional[Iterable[str]] = None,
+    current_categories: Iterable[str] | None = None,
 ) -> pd.DataFrame:
     """
     Predict categories and confidence scores for new transactions.
@@ -362,8 +369,8 @@ def predict(
 
     pipeline: Pipeline = bundle["pipeline"]
     amount: bool = bundle["amount"]
-    model_categories: List[str] = bundle["categories"]
-    features: Dict[str, Any] = bundle["features"]
+    model_categories: list[str] = bundle["categories"]
+    features: dict[str, Any] = bundle["features"]
 
     # Optional compatibility check
     _check_category_compatibility(model_categories, current_categories)

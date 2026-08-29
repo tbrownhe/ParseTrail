@@ -1,0 +1,20 @@
+services:
+  db-test:
+    image: postgres:17
+    restart: "no"
+    environment:
+      POSTGRES_DB: parsetrail_test
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: parsetrail-test-only
+    ports:
+      - "127.0.0.1:${PARSETRAIL_TEST_POSTGRES_PORT:-64321}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d parsetrail_test"]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+    volumes:
+      - test-db-data:/var/lib/postgresql/data
+
+volumes:
+  test-db-data:

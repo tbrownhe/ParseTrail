@@ -13,6 +13,7 @@ import { useMutation } from "@tanstack/react-query"
 import { type SubmitHandler, useForm } from "react-hook-form"
 
 import { type ApiError, type UpdatePassword, UsersService } from "../../client"
+import useAuth from "../../hooks/useAuth"
 import useCustomToast from "../../hooks/useCustomToast"
 import { confirmPasswordRules, handleError, passwordRules } from "../../utils"
 
@@ -23,6 +24,7 @@ interface UpdatePasswordForm extends UpdatePassword {
 const ChangePassword = () => {
   const color = useColorModeValue("inherit", "ui.light")
   const showToast = useCustomToast()
+  const { logout } = useAuth()
   const {
     register,
     handleSubmit,
@@ -40,6 +42,7 @@ const ChangePassword = () => {
     onSuccess: () => {
       showToast("Success!", "Password updated successfully.", "success")
       reset()
+      logout()
     },
     onError: (err: ApiError) => {
       handleError(err, showToast)

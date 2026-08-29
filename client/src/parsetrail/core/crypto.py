@@ -2,14 +2,13 @@ import base64
 import hashlib
 from pathlib import Path
 
-
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from loguru import logger
 
-from parsetrail.core.settings import settings
 from parsetrail.core.api import api_client
+from parsetrail.core.settings import settings
 
 
 def cache_public_key(force: bool = False):
@@ -92,7 +91,7 @@ def encrypt_symmetric_key(_symmetric_key: bytes) -> str:
     return base64.b64encode(encrypted_key).decode("utf-8")
 
 
-def encrypt_file(fpath: Path) -> tuple[bytes, bytes]:
+def encrypt_file(fpath: Path) -> tuple[bytes, str]:
     """Encrypt each file with a unique symmetric key.
 
     Args:

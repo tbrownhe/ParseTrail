@@ -4,12 +4,12 @@ import sys
 from pathlib import Path
 
 from aes import decrypt_statement
-from db import SessionLocal
+from db import get_sessionmaker
 from loguru import logger
 from orm import StatementUploads
-from PyQt5.QtCore import QAbstractTableModel, QModelIndex, QSortFilterProxyModel, Qt
-from PyQt5.QtGui import QFont, QIcon
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QSortFilterProxyModel, Qt
+from PySide6.QtGui import QFont, QIcon
+from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QHBoxLayout,
@@ -25,7 +25,7 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-
+from settings import require_runtime_settings, settings
 
 # Make the client modules importable
 CLIENT_SRC = Path(__file__).resolve().parents[2] / "client" / "src"
@@ -34,10 +34,10 @@ if not CLIENT_SRC.exists():
 sys.path.insert(0, str(CLIENT_SRC))
 
 try:
+    from parsetrail.build_plugins import compile_plugins
     from parsetrail.core.parse import ParseInput
-    from parsetrail.core.plugins import PluginManager
+    from parsetrail.core.plugin_manager import PluginManager
     from parsetrail.gui.plugins import ParseTestDialog
-    from parsetrail.build_plugins import main as build_plugins
 except Exception as e:  # pragma: no cover - optional dependency
     logger.warning(f"Unable to import ParseTrail client modules: {e}")
     raise
@@ -77,18 +77,14 @@ class StatementTableModel(QAbstractTableModel):
             return str(value) if value else ""
         return value or ""
 
-    def headerData(
-        self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole
-    ):  # type: ignore[override]
+    def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole):  # type: ignore[override]
         if role != Qt.DisplayRole:
             return None
         if orientation == Qt.Horizontal:
             return self.COLUMNS[section][0]
         return section + 1
 
-    def get_row(
-        self, proxy_index: QModelIndex, proxy: QSortFilterProxyModel
-    ) -> StatementUploads:
+    def get_row(self, proxy_index: QModelIndex, proxy: QSortFilterProxyModel) -> StatementUploads:
         source_index = proxy.mapToSource(proxy_index)
         return self.rows[source_index.row()]
 
@@ -122,6 +118,7 @@ class StatementFilterProxy(QSortFilterProxyModel):
 
 class StatementTool(QMainWindow):
     def __init__(self):
+        require_runtime_settings()
         super().__init__()
         self.setWindowTitle("Statement Browser (dev)")
         self.resize(1100, 700)
@@ -179,8 +176,9 @@ class StatementTool(QMainWindow):
         container.setLayout(layout)
         self.setCentralWidget(container)
 
-        self.plugin_manager = PluginManager()
-        self.session_maker = SessionLocal
+        plugin_dir = Path(settings.PLUGINS_DIR).expanduser().resolve()
+        self.plugin_manager = PluginManager(plugin_dir=plugin_dir, allow_unsigned=True)
+        self.session_maker = get_sessionmaker()
 
         self.table.clicked.connect(self.show_metadata_dialog)
         self.load_rows()
@@ -188,11 +186,7 @@ class StatementTool(QMainWindow):
     def load_rows(self):
         try:
             with self.session_maker() as session:
-                rows = (
-                    session.query(StatementUploads)
-                    .order_by(StatementUploads.id.desc())
-                    .all()
-                )
+                rows = session.query(StatementUploads).order_by(StatementUploads.id.desc()).all()
             self.model.set_rows(rows)
         except Exception as e:
             QMessageBox.critical(self, "Database Error", str(e))
@@ -228,14 +222,12 @@ class StatementTool(QMainWindow):
         layout.addWidget(table)
         dialog.setLayout(layout)
         dialog.resize(700, 400)
-        dialog.exec_()
+        dialog.exec()
 
     def decrypt_and_parse(self):
         idx = self.table.currentIndex()
         if not idx.isValid():
-            QMessageBox.information(
-                self, "Select a row", "Select a statement to decrypt."
-            )
+            QMessageBox.information(self, "Select a row", "Select a statement to decrypt.")
             return
         try:
             row = self.model.get_row(idx, self.proxy)
@@ -264,32 +256,25 @@ class StatementTool(QMainWindow):
             with self.session_maker() as session:
                 db_row = session.query(StatementUploads).get(row.id)
                 if not db_row:
-                    QMessageBox.warning(
-                        self, "Not Found", f"Row id {row.id} not found."
-                    )
+                    QMessageBox.warning(self, "Not Found", f"Row id {row.id} not found.")
                     return
                 db_row.plugin_status = status
                 session.commit()
             self.load_rows()
-            QMessageBox.information(
-                self, "Updated", f"Set plugin_status={status} for id={row.id}"
-            )
+            QMessageBox.information(self, "Updated", f"Set plugin_status={status} for id={row.id}")
         except Exception as e:
             QMessageBox.critical(self, "Database Error", str(e))
 
-    def _parse_with_client(
-        self, plaintext: bytes, enc_name: str, metadata: dict
-    ) -> str:
+    def _parse_with_client(self, plaintext: bytes, enc_name: str, metadata: dict) -> str:
         if not all([self.plugin_manager, ParseTestDialog]):
             return "Parsing unavailable: client modules not loaded"
 
         # Recompile plugins for each call, since dev may have updated them.
-        build_plugins()
+        compile_plugins(self.plugin_manager.plugin_dir)
         self.plugin_manager.load_plugins()
 
-        fname = metadata.get("filename") or metadata.get("file_name") or enc_name
-        suffix = Path(fname).suffix or ".bin"
-        parse_input = ParseInput(name=fname, suffix=suffix.lower(), data=plaintext)
+        parse_input = ParseInput.from_decrypted(plaintext, enc_name, metadata)
+        fname = parse_input.name
 
         try:
             dialog = ParseTestDialog(
@@ -299,7 +284,7 @@ class StatementTool(QMainWindow):
                 parent=self,
             )
             dialog.setWindowTitle(f"Parse Test: {fname}")
-            dialog.exec_()
+            dialog.exec()
             return "Exited cleanly: processed in-memory bytes"
         finally:
             # Drop strong references to encourage GC of plaintext
@@ -326,7 +311,7 @@ def main():
     app.setWindowIcon(QIcon(str(icon)))
     window = StatementTool()
     window.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

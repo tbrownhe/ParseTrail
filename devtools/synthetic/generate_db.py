@@ -167,9 +167,7 @@ def generate_transactions_for_account(
             if category_type in {"Income", "Transfer"}:
                 continue
             # Per-account spend range
-            amount = round(
-                random.uniform(spec.spend_min, spec.spend_max) * spec.expense_bias, 2
-            )
+            amount = round(random.uniform(spec.spend_min, spec.spend_max) * spec.expense_bias, 2)
             balance -= amount
             merchant = pick_merchant(category_name)
             txs.append(
@@ -243,9 +241,7 @@ def _populate(session: Session, years: int) -> None:
         ("Brokerage", "Asset"),  # used by synthetic accounts
     ]
     for name, asset in required_types:
-        existing = (
-            session.query(orm.AccountTypes).filter_by(AccountType=name).one_or_none()
-        )
+        existing = session.query(orm.AccountTypes).filter_by(AccountType=name).one_or_none()
         if existing:
             # Ensure AssetType matches desired value
             if existing.AssetType != asset:
@@ -360,9 +356,7 @@ def _populate(session: Session, years: int) -> None:
     end_date = date.today()
 
     for spec in specs:
-        existing_account = (
-            session.query(orm.Accounts).filter_by(AccountName=spec.name).one_or_none()
-        )
+        existing_account = session.query(orm.Accounts).filter_by(AccountName=spec.name).one_or_none()
         if existing_account:
             account = existing_account
         else:
@@ -389,9 +383,7 @@ def _populate(session: Session, years: int) -> None:
                 )
             )
 
-        txs = generate_transactions_for_account(
-            spec, start_date, end_date, category_map
-        )
+        txs = generate_transactions_for_account(spec, start_date, end_date, category_map)
 
         # Group into monthly statements
         month = 0
@@ -401,11 +393,7 @@ def _populate(session: Session, years: int) -> None:
             if period_start > end_date:
                 break
             period_end = min(period_end, end_date)
-            monthly_txs = [
-                t
-                for t in txs
-                if period_start.isoformat() <= t["Date"] <= period_end.isoformat()
-            ]
+            monthly_txs = [t for t in txs if period_start.isoformat() <= t["Date"] <= period_end.isoformat()]
             if not monthly_txs:
                 continue
             start_balance = monthly_txs[0]["Balance"] - monthly_txs[0]["Amount"]
@@ -437,9 +425,7 @@ def _populate(session: Session, years: int) -> None:
                         Amount=tx["Amount"],
                         Balance=tx["Balance"],
                         Description=desc,
-                        MD5=sha_md5(
-                            tx["Date"], str(tx["Amount"]), spec.account_number, desc
-                        ),
+                        MD5=sha_md5(tx["Date"], str(tx["Amount"]), spec.account_number, desc),
                         CategoryID=category_id,
                         Verified=tx["Verified"],
                         ConfidenceScore=0.9,
@@ -461,9 +447,7 @@ def _set_alembic_version(session: Session) -> None:
         )
     )
     session.execute(text("DELETE FROM alembic_version"))
-    session.execute(
-        text("INSERT INTO alembic_version (version_num) VALUES ('e0ecdd6abcc6')")
-    )
+    session.execute(text("INSERT INTO alembic_version (version_num) VALUES ('e0ecdd6abcc6')"))
 
 
 def _reset_tables(session: Session) -> None:
@@ -490,21 +474,15 @@ def _reset_tables(session: Session) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Generate a synthetic ParseTrail SQLite database."
-    )
+    parser = argparse.ArgumentParser(description="Generate a synthetic ParseTrail SQLite database.")
     parser.add_argument(
         "--output",
         type=Path,
         default=Path("synthetic.parsetrail.db"),
         help="Path to write DB file.",
     )
-    parser.add_argument(
-        "--years", type=int, default=3, help="Years of history to generate."
-    )
-    parser.add_argument(
-        "--seed", type=int, default=1234, help="Random seed for reproducibility."
-    )
+    parser.add_argument("--years", type=int, default=3, help="Years of history to generate.")
+    parser.add_argument("--seed", type=int, default=1234, help="Random seed for reproducibility.")
     args = parser.parse_args()
 
     out_path = create_synthetic_db(args.output, args.years, args.seed)

@@ -81,6 +81,9 @@ def get_balance_data(session: Session) -> None:
 
     df = pd.DataFrame(data, columns=columns)
     df["Date"] = pd.to_datetime(df["Date"])
+    # Matplotlib/pandas interpolation is an explicitly inexact presentation
+    # boundary; persisted and queried values remain Decimal.
+    df["Balance"] = df["Balance"].map(float)
 
     # Make a pivot table containing the EOD balance for each day
     df_pivot = df.pivot_table(index="Date", columns="AccountName", values="Balance", aggfunc="last")
@@ -163,6 +166,8 @@ def get_category_data(session: Session) -> None:
     # Get all the transactions
     data, columns = query.transactions(session)
     df = pd.DataFrame(data, columns=columns)
+    # Plotting is the only float boundary for exact transaction amounts.
+    df["Amount"] = df["Amount"].map(float)
 
     # Create month column for pivot tables
     df["Date"] = pd.to_datetime(df["Date"])

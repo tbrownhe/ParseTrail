@@ -66,9 +66,12 @@ test.describe("Edit user full name and email successfully", () => {
     await page.getByRole("button", { name: "Edit" }).click()
     await page.getByLabel("Email").fill(updatedEmail)
     await page.getByRole("button", { name: "Save" }).click()
-    await expect(page.getByText("User updated successfully")).toBeVisible()
+    await expect(page.getByText("Verification required")).toBeVisible()
     await expect(
-      page.getByLabel("My profile").getByText(updatedEmail, { exact: true }),
+      page.getByText(`Pending verification: ${updatedEmail}`),
+    ).toBeVisible()
+    await expect(
+      page.getByLabel("My profile").getByText(email, { exact: true }),
     ).toBeVisible()
   })
 })
@@ -166,7 +169,7 @@ test.describe("Change password successfully", () => {
     await page.getByRole("button", { name: "Save" }).click()
     await expect(page.getByText("Password updated successfully.")).toBeVisible()
 
-    await logOutUser(page)
+    await page.waitForURL("/login")
 
     // Check if the user can log in with the new password
     await logInUser(page, email, NewPassword)
@@ -194,7 +197,7 @@ test.describe("Change password with invalid data", () => {
     await page.getByLabel("Set Password*").fill(weakPassword)
     await page.getByLabel("Confirm Password*").fill(weakPassword)
     await expect(
-      page.getByText("Password must be at least 8 characters"),
+      page.getByText("Password must be at least 12 characters"),
     ).toBeVisible()
   })
 

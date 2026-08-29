@@ -6,17 +6,17 @@ and attempts to parse via the in-memory parse pipeline. Summarizes failures.
 """
 
 import argparse
-from pathlib import Path
-from typing import Iterable, Sequence
-
-from loguru import logger
-
-from aes import decrypt_statement
-from db import SessionLocal
-from orm import StatementUploads
 
 # Make the client modules importable
 import sys
+from collections.abc import Iterable, Sequence
+from pathlib import Path
+
+from aes import decrypt_statement
+from db import get_sessionmaker
+from loguru import logger
+from orm import StatementUploads
+from settings import require_runtime_settings, settings
 
 CLIENT_SRC = Path(__file__).resolve().parents[2] / "client" / "src"
 if not CLIENT_SRC.exists():
@@ -24,55 +24,115 @@ if not CLIENT_SRC.exists():
 sys.path.insert(0, str(CLIENT_SRC))
 
 try:
-    from parsetrail.build_plugins import main as build_plugins  # noqa: E402
-    from parsetrail.core.parse import ParseInput, parse_any  # noqa: E402
-    from parsetrail.core.plugins import PluginManager  # noqa: E402
+    from parsetrail.build_plugins import compile_plugins  # noqa: E402
+    from parsetrail.core.parse import ParseInput, extract_pdf_features, parse_any  # noqa: E402
+    from parsetrail.core.parser_classification import classification_trace  # noqa: E402
+    from parsetrail.core.plugin_manager import PluginManager  # noqa: E402
+    from parsetrail.core.utils import PDFReader  # noqa: E402
 except Exception as e:  # pragma: no cover - optional dependency
     logger.warning(f"Unable to import ParseTrail client modules: {e}")
     raise
 
 
-def _iter_ready_rows(
-    ids: Sequence[int] | None = None, limit: int | None = None
+def _iter_rows(
+    session_maker,
+    ids: Sequence[int] | None = None,
+    limit: int | None = None,
+    status: str = "ready",
 ) -> Iterable[StatementUploads]:
-    with SessionLocal() as session:
-        q = session.query(StatementUploads).filter(
-            StatementUploads.plugin_status == "ready"
-        )
+    with session_maker() as session:
+        q = session.query(StatementUploads)
+        if status != "all":
+            q = q.filter(StatementUploads.plugin_status == status)
         if ids:
             q = q.filter(StatementUploads.id.in_(ids))
         if limit:
             q = q.limit(limit)
-        for row in q.order_by(StatementUploads.id.asc()):
-            yield row
+        yield from q.order_by(StatementUploads.id.asc())
 
 
-def _parse_row(row: StatementUploads, plugin_manager: PluginManager):
+def _routing_diagnostic(plaintext: bytes, row: StatementUploads, metadata: dict, plugin_manager: PluginManager) -> str:
+    parse_input = ParseInput.from_decrypted(plaintext, row.file_name, metadata)
+    if parse_input.suffix != ".pdf":
+        return f"routing trace unavailable for unsupported suffix {parse_input.suffix}"
+    with PDFReader(parse_input.data, parse_input.path_hint) as reader:
+        features = extract_pdf_features(reader)
+    trace = classification_trace(features, plugin_manager.metadata)
+
+    def candidates(values: tuple[str, ...]) -> str:
+        return ",".join(values) if values else "<none>"
+
+    return (
+        f"suffix=[{candidates(trace.suffix_candidates)}] "
+        f"metadata=[{candidates(trace.metadata_candidates)}] "
+        f"header=[{candidates(trace.header_candidates)}] "
+        f"body=[{candidates(trace.body_candidates)}]"
+    )
+
+
+def _parse_row(
+    row: StatementUploads,
+    plugin_manager: PluginManager,
+    *,
+    accept_warnings: bool = False,
+    diagnose_routing: bool = False,
+):
     plaintext, metadata = decrypt_statement(row)
-    fname = metadata.get("filename") or metadata.get("file_name") or row.file_name
-    suffix = Path(fname).suffix or ".bin"
-    parse_input = ParseInput(name=fname, suffix=suffix.lower(), data=plaintext)
-    statement = parse_any(SessionLocal, plugin_manager, parse_input, hard_fail=False)
-    return statement
+    try:
+        parse_input = ParseInput.from_decrypted(plaintext, row.file_name, metadata)
+        result = parse_any(plugin_manager, parse_input)
+        return result.require_statement(accept_warnings=accept_warnings)
+    except Exception:
+        if diagnose_routing:
+            try:
+                logger.info(
+                    "Routing trace for submission id={}: {}",
+                    row.id,
+                    _routing_diagnostic(plaintext, row, metadata, plugin_manager),
+                )
+            except Exception as diagnostic_error:
+                logger.warning(
+                    "Routing trace unavailable for submission id={}: {}",
+                    row.id,
+                    type(diagnostic_error).__name__,
+                )
+        raise
+    finally:
+        plaintext = b""
 
 
-def run(ids: Sequence[int] | None = None, limit: int | None = None) -> int:
-    build_plugins()
-    plugin_manager = PluginManager()
+def run(
+    ids: Sequence[int] | None = None,
+    limit: int | None = None,
+    *,
+    accept_warnings: bool = False,
+    status: str = "ready",
+    diagnose_routing: bool = False,
+) -> int:
+    require_runtime_settings()
+    plugin_dir = Path(settings.PLUGINS_DIR).expanduser().resolve()
+    compile_plugins(plugin_dir)
+    plugin_manager = PluginManager(plugin_dir=plugin_dir, allow_unsigned=True)
     plugin_manager.load_plugins()
 
     failures: list[tuple[int, str]] = []
     total = 0
 
-    for row in _iter_ready_rows(ids, limit):
+    session_maker = get_sessionmaker()
+    for row in _iter_rows(session_maker, ids, limit, status):
         total += 1
         try:
-            _parse_row(row, plugin_manager)
-            logger.success(f"Parsed id={row.id} file={row.file_name}")
+            _parse_row(
+                row,
+                plugin_manager,
+                accept_warnings=accept_warnings,
+                diagnose_routing=diagnose_routing,
+            )
+            logger.success(f"Parsed statement submission id={row.id}")
         except Exception as e:
             err = str(e)
             failures.append((row.id, err))
-            logger.error(f"Failed id={row.id} file={row.file_name}: {err}")
+            logger.error(f"Failed statement submission id={row.id}: {err}")
 
     logger.info(f"Processed {total} statements; {len(failures)} failures.")
     if failures:
@@ -83,17 +143,33 @@ def run(ids: Sequence[int] | None = None, limit: int | None = None) -> int:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Batch test parsing for ready statements."
+    parser = argparse.ArgumentParser(description="Batch test parsing for ready statements.")
+    parser.add_argument("--ids", nargs="*", type=int, help="Optional specific statement IDs to run.")
+    parser.add_argument("--limit", type=int, help="Optional limit on number of statements.")
+    parser.add_argument(
+        "--status",
+        choices=("ready", "pending", "all"),
+        default="ready",
+        help="Submission status to test (default: ready).",
     )
     parser.add_argument(
-        "--ids", nargs="*", type=int, help="Optional specific statement IDs to run."
+        "--accept-warnings",
+        action="store_true",
+        help="Treat validated parses with warnings as successful.",
     )
     parser.add_argument(
-        "--limit", type=int, help="Optional limit on number of statements."
+        "--diagnose-routing",
+        action="store_true",
+        help="Log redacted candidate IDs at each routing stage for failures.",
     )
     args = parser.parse_args()
-    exit_code = run(ids=args.ids, limit=args.limit)
+    exit_code = run(
+        ids=args.ids,
+        limit=args.limit,
+        accept_warnings=args.accept_warnings,
+        status=args.status,
+        diagnose_routing=args.diagnose_routing,
+    )
     raise SystemExit(exit_code)
 
 

@@ -4,9 +4,9 @@ from datetime import datetime
 from loguru import logger
 
 from parsetrail.core.interfaces import IParser
+from parsetrail.core.money import parse_money
 from parsetrail.core.utils import (
     PDFReader,
-    convert_amount_to_float,
     find_line_startswith,
     find_param_in_line,
     find_regex_in_line,
@@ -17,7 +17,8 @@ from parsetrail.core.validation import Account, Statement, Transaction
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_hehsa_201810"
-    VERSION = "0.1.0"
+    VERSION = "0.2.0"
+    MIN_CLIENT_VERSION = "1.3.0"
     SUFFIX = ".pdf"
     COMPANY = "HealthEquity"
     STATEMENT_TYPE = "Health Savings Account Monthly Statement"
@@ -54,7 +55,7 @@ class Parser(IParser):
             self.reader = reader
             return self.extract_statement()
         except Exception as e:
-            logger.error(f"Error parsing {self.STATEMENT_TYPE} statement: {e}")
+            logger.error("Parser {} failed with {}.", self.PLUGIN_NAME, type(e).__name__)
             raise
 
     def extract_statement(self) -> Statement:
@@ -175,7 +176,7 @@ class Parser(IParser):
             i_line, balance_line = find_line_startswith(self.lines, pattern)
             balance_str = balance_line.split()[-1]
 
-            balance = convert_amount_to_float(balance_str)
+            balance = parse_money(balance_str)
             logger.trace(f"Extracted {pattern}: {balance}")
         except ValueError as e:
             logger.warning(f"Failed to extract balance for pattern '{pattern}': {e}")
@@ -229,8 +230,8 @@ class Parser(IParser):
 
             # Extract amount and balance
             try:
-                amount = convert_amount_to_float(words[-2])
-                balance = convert_amount_to_float(words[-1])
+                amount = parse_money(words[-2])
+                balance = parse_money(words[-1])
             except ValueError as e:
                 raise ValueError(f"Error parsing amounts in line '{line}': {e}")
 

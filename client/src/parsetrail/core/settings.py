@@ -3,7 +3,6 @@ import os
 from datetime import datetime
 from pathlib import Path
 from platform import architecture, system
-from typing import ClassVar
 
 from cryptography.fernet import Fernet
 from loguru import logger
@@ -64,35 +63,32 @@ APPDATA_DIR = (
     )
 )
 
-# Ensure APPDATA_DIR exists
 APPDATA_DIR.mkdir(parents=True, exist_ok=True)
+LEGACY_CREDENTIAL_KEY = Path.home() / ".parsetrail.key"
 
 
-def load_secret_key() -> bytes:
-    """
-    Retrieve the secret key used for field encryption.
-    If it doesn't exist, generate and store it.
-    """
-    key_path = Path.home() / ".parsetrail.key"
-    if not key_path.exists():
-        # Generate a new secret key and store it securely
-        key = Fernet.generate_key()
-        key_path.write_bytes(key)
-        logger.info("Generated new secret key.")
-        return key
-    return key_path.read_bytes()
+def _decrypt_legacy_token(encrypted_token: str) -> str | None:
+    """Read the old file-encrypted token once without ever creating a new key."""
+    try:
+        key = LEGACY_CREDENTIAL_KEY.read_bytes()
+        return Fernet(key).decrypt(encrypted_token.encode()).decode()
+    except Exception as exc:
+        logger.warning(
+            "Could not migrate the legacy server login ({})",
+            type(exc).__name__,
+        )
+        return None
 
 
-# Consistent SECRET_KEY and CIPHER for all app runs
-CIPHER = Fernet(load_secret_key())
-
-
-def encrypt(value: str) -> str:
-    return CIPHER.encrypt(value.encode()).decode()
-
-
-def decrypt(value: str) -> str:
-    return CIPHER.decrypt(value.encode()).decode()
+def retire_legacy_credential_key() -> None:
+    """Remove the obsolete same-profile decrypting key after token migration."""
+    try:
+        LEGACY_CREDENTIAL_KEY.unlink(missing_ok=True)
+    except OSError as exc:
+        logger.warning(
+            "Could not remove obsolete credential key ({})",
+            type(exc).__name__,
+        )
 
 
 class AppSettings(BaseSettings):
@@ -109,9 +105,6 @@ class AppSettings(BaseSettings):
 
     # Ignore any extra fields in the JSON
     model_config = SettingsConfigDict(extra="ignore")
-
-    # List of sensitive fields to encrypt/decrypt on config.json save/load
-    sensitive_fields: ClassVar[list[str]] = ["access_token"]
 
     # Internal settings hidden from dialogs and config.py
     _platform: str = get_platform()
@@ -152,7 +145,7 @@ class AppSettings(BaseSettings):
         return self._server_public_key
 
     # Internal settings written to config.json but not editable in PreferencesDialog
-    config_version: str = Field("1.0.0", description="NO EDIT")
+    config_version: str = Field("1.1.0", description="NO EDIT")
     server_url: AnyHttpUrl = Field(
         "https://api.parsetrail.com/api/v1",
         description="NO EDIT",
@@ -160,6 +153,7 @@ class AppSettings(BaseSettings):
     access_token: str = Field(
         "",
         description="NO EDIT",
+        exclude=True,
         json_schema_extra={"sensitive": True},
     )
     token_expires_at: float = Field(0, description="NO EDIT")
@@ -182,9 +176,10 @@ class AppSettings(BaseSettings):
     )
     plugin_dir: Path = Field(APPDATA_DIR / "plugins", description="Plugins Directory")
     log_file: Path = Field(APPDATA_DIR / "logs" / "parsetrail.log", description="Logs Directory")
-
-    # Statement imports
-    hard_fail: bool = Field(False, description="Stop Importing on Fail")
+    automatic_update_checks: bool = Field(
+        True,
+        description="Check for Client and Plugin Updates After Startup",
+    )
 
     # Reports
     report_dir: Path = Field(
@@ -213,53 +208,29 @@ class AppSettings(BaseSettings):
 
     # config.json handling
     def prepare_for_save(self) -> dict:
-        """
-        Prepare the settings for saving, ensuring sensitive fields are encrypted.
-        Returns:
-            dict: Serialized settings with sensitive fields encrypted.
-        """
-        data = self.model_dump(mode="json", exclude=self.sensitive_fields)
-
-        # Encrypt sensitive hidden fields and store them in the output json
-        for field in self.sensitive_fields:
-            sensitive_value = getattr(self, field)
-            if sensitive_value:
-                data[f"encrypted_{field}"] = encrypt(sensitive_value)
-
-        return data
+        """Serialize non-secret settings; access tokens belong in the OS store."""
+        return self.model_dump(mode="json", exclude={"access_token"})
 
     @classmethod
     def from_saved(cls, data: dict) -> "AppSettings":
         """
-        Load settings from a dictionary, decrypting any encrypted fields into hidden attributes.
+        Load settings and recover a legacy file-encrypted token for migration.
         Args:
             data (dict): The data loaded from the config file.
         Returns:
             AppSettings: The initialized settings object.
         """
-        # Decrypt encrypted fields and store them as hidden
-        sensitive_data = {}
-        success = 0
-        for field in cls.sensitive_fields:
-            encrypted_value = data.pop(f"encrypted_{field}", None)
-            if encrypted_value:
-                try:
-                    sensitive_data[field] = decrypt(encrypted_value)
-                    success += 1
-                except Exception:
-                    logger.error(f"Failed to decrypt {field}")
-
-        if success > 0:
-            logger.success(f"Decrypted {success} config parameter(s)")
+        data = dict(data)
+        data.pop("config_version", None)
+        data.pop("access_token", None)
+        encrypted_token = data.pop("encrypted_access_token", None)
+        legacy_token = _decrypt_legacy_token(encrypted_token) if isinstance(encrypted_token, str) else None
 
         # Validate with defaults to ensure missing fields are populated
         # Ensure any missing fields from config.json are filled with defaults.
         instance = cls(**{**cls().model_dump(mode="python"), **data})
-
-        # Add the decrypted fields
-        for key, value in sensitive_data.items():
-            setattr(instance, key, value)
-
+        if legacy_token:
+            instance.access_token = legacy_token
         return instance
 
 
@@ -297,7 +268,7 @@ def load_settings() -> AppSettings:
         AppSettings: The loaded settings object.
     """
     try:
-        with open(AppSettings().config_path, "r") as f:
+        with open(AppSettings().config_path) as f:
             data = json.load(f)
         settings = AppSettings.from_saved(data)
         logger.info("Settings loaded successfully.")

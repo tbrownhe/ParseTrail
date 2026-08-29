@@ -3,14 +3,15 @@ from datetime import datetime
 from loguru import logger
 
 from parsetrail.core.interfaces import IParser
-from parsetrail.core.utils import convert_amount_to_float
+from parsetrail.core.money import parse_money
 from parsetrail.core.validation import Account, Statement, Transaction
 
 
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "csv_mohela_202411"
-    VERSION = "0.1.0"
+    VERSION = "0.2.0"
+    MIN_CLIENT_VERSION = "1.3.0"
     SUFFIX = ".csv"
     COMPANY = "MOHELA Student Loan Servicing"
     STATEMENT_TYPE = "Life of Loan Statement"
@@ -44,7 +45,7 @@ class Parser(IParser):
             self.array = array
             return self.extract_statement()
         except Exception as e:
-            logger.error(f"Error parsing {self.STATEMENT_TYPE} statement: {e}")
+            logger.error("Parser {} failed with {}.", self.PLUGIN_NAME, type(e).__name__)
             raise
 
     def extract_statement(self) -> Statement:
@@ -84,7 +85,7 @@ class Parser(IParser):
 
         return Account(
             account_num=account_num,
-            start_balance=0.0,
+            start_balance=parse_money("0"),
             end_balance=transactions[-1].balance,
             transactions=transactions,
         )
@@ -109,11 +110,11 @@ class Parser(IParser):
             data.append(entry)
 
         transactions = []
-        balance = 0
+        balance = parse_money("0")
         for entry in sorted(data, key=lambda x: x["Date"]):
             # Melt table into individual transactions
-            total = -convert_amount_to_float(entry["Total"])
-            interest = convert_amount_to_float(entry["Interest"])
+            total = -parse_money(entry["Total"])
+            interest = parse_money(entry["Interest"])
 
             balance += total
             transactions.append(

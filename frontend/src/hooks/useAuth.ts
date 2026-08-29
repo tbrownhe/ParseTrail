@@ -2,7 +2,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
 import { useState } from "react"
 
-import { AxiosError } from "axios"
 import {
   type Body_login_login_access_token as AccessToken,
   type ApiError,
@@ -41,11 +40,7 @@ const useAuth = () => {
       )
     },
     onError: (err: ApiError) => {
-      let errDetail = (err.body as any)?.detail
-
-      if (err instanceof AxiosError) {
-        errDetail = err.message
-      }
+      const errDetail = (err.body as any)?.detail
 
       showToast("Something went wrong.", errDetail, "error")
     },
@@ -69,10 +64,6 @@ const useAuth = () => {
     onError: (err: ApiError) => {
       let errDetail = (err.body as any)?.detail
 
-      if (err instanceof AxiosError) {
-        errDetail = err.message
-      }
-
       if (Array.isArray(errDetail)) {
         errDetail = "Something went wrong"
       }
@@ -83,6 +74,7 @@ const useAuth = () => {
 
   const logout = () => {
     localStorage.removeItem("access_token")
+    queryClient.clear()
     navigate({ to: "/login" })
   }
 

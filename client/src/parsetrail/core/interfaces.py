@@ -19,6 +19,7 @@ class IParser(Protocol):
     # Plugin metadata
     PLUGIN_NAME = ""
     VERSION = ""
+    MIN_CLIENT_VERSION = ""
     SUFFIX = ""
     COMPANY = ""
     STATEMENT_TYPE = ""

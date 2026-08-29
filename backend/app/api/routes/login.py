@@ -1,16 +1,19 @@
+import uuid
 from datetime import timedelta
+from time import monotonic, sleep
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from fastapi.responses import HTMLResponse
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlmodel import select
 
 from app import crud
 from app.api.deps import CurrentUser, SessionDep, get_current_active_superuser
 from app.core import security
 from app.core.config import settings
 from app.core.security import get_password_hash
-from app.models import Message, NewPassword, Token, UserPublic, VerificationToken
+from app.models import Message, NewPassword, Token, User, UserPublic, VerificationToken
 from app.utils import (
     generate_password_reset_token,
     generate_reset_password_email,
@@ -20,26 +23,27 @@ from app.utils import (
 )
 
 router = APIRouter()
+PASSWORD_RECOVERY_MIN_RESPONSE_SECONDS = 0.25
 
 
 @router.post("/login/access-token")
-def login_access_token(
-    session: SessionDep, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]
-) -> Token:
+def login_access_token(session: SessionDep, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]) -> Token:
     """
     OAuth2 compatible token login, get an access token for future requests
     """
-    user = crud.authenticate(
-        session=session, email=form_data.username, password=form_data.password
-    )
-    if not user:
-        raise HTTPException(status_code=400, detail="Incorrect email or password")
-    elif not user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
+    user = crud.authenticate(session=session, email=form_data.username, password=form_data.password)
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=401,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     return Token(
         access_token=security.create_access_token(
-            user.id, expires_delta=access_token_expires
+            user.id,
+            expires_delta=access_token_expires,
+            session_version=user.session_version,
         )
     )
 
@@ -53,27 +57,48 @@ def test_token(current_user: CurrentUser) -> Any:
 
 
 @router.post("/password-recovery/{email}")
-def recover_password(email: str, session: SessionDep) -> Message:
+def recover_password(
+    email: str,
+    session: SessionDep,
+    background_tasks: BackgroundTasks,
+) -> Message:
     """
     Password Recovery
     """
-    user = crud.get_user_by_email(session=session, email=email)
+    started_at = monotonic()
+    user = crud.get_user_by_email(session=session, email=email, for_update=True)
+    eligible_user = user if user is not None and user.is_active else None
+    if eligible_user is not None:
+        eligible_user.password_reset_version += 1
+        session.add(eligible_user)
+        session.commit()
+        session.refresh(eligible_user)
+        user_id = eligible_user.id
+        reset_version = eligible_user.password_reset_version
+    else:
+        user_id = uuid.uuid4()
+        reset_version = 0
 
-    if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="The user with this email does not exist in the system.",
-        )
-    password_reset_token = generate_password_reset_token(email=email)
+    password_reset_token = generate_password_reset_token(
+        user_id=user_id,
+        reset_version=reset_version,
+    )
     email_data = generate_reset_password_email(
-        email_to=user.email, email=email, token=password_reset_token
+        email_to=email,
+        email=email,
+        token=password_reset_token,
     )
-    send_email(
-        email_to=user.email,
-        subject=email_data.subject,
-        html_content=email_data.html_content,
-    )
-    return Message(message="Password recovery email sent")
+    if eligible_user is not None and settings.emails_enabled:
+        background_tasks.add_task(
+            send_email,
+            email_to=eligible_user.email,
+            subject=email_data.subject,
+            html_content=email_data.html_content,
+        )
+    remaining = PASSWORD_RECOVERY_MIN_RESPONSE_SECONDS - (monotonic() - started_at)
+    if remaining > 0:
+        sleep(remaining)
+    return Message(message="If the account exists, a password recovery email has been sent")
 
 
 @router.post("/reset-password/")
@@ -81,19 +106,16 @@ def reset_password(session: SessionDep, body: NewPassword) -> Message:
     """
     Reset password
     """
-    email = verify_password_reset_token(token=body.token)
-    if not email:
-        raise HTTPException(status_code=400, detail="Invalid token")
-    user = crud.get_user_by_email(session=session, email=email)
-    if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="The user with this email does not exist in the system.",
-        )
-    elif not user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
+    claims = verify_password_reset_token(token=body.token)
+    if claims is None:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
+    user = session.exec(select(User).where(User.id == claims.user_id).with_for_update()).one_or_none()
+    if user is None or not user.is_active or user.password_reset_version != claims.version:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
     hashed_password = get_password_hash(password=body.new_password)
     user.hashed_password = hashed_password
+    user.password_reset_version += 1
+    user.session_version += 1
     session.add(user)
     session.commit()
     return Message(message="Password updated successfully")
@@ -108,21 +130,24 @@ def recover_password_html_content(email: str, session: SessionDep) -> Any:
     """
     HTML Content for Password Recovery
     """
-    user = crud.get_user_by_email(session=session, email=email)
+    user = crud.get_user_by_email(session=session, email=email, for_update=True)
 
     if not user:
         raise HTTPException(
             status_code=404,
             detail="The user with this username does not exist in the system.",
         )
-    password_reset_token = generate_password_reset_token(email=email)
-    email_data = generate_reset_password_email(
-        email_to=user.email, email=email, token=password_reset_token
+    user.password_reset_version += 1
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    password_reset_token = generate_password_reset_token(
+        user_id=user.id,
+        reset_version=user.password_reset_version,
     )
+    email_data = generate_reset_password_email(email_to=user.email, email=email, token=password_reset_token)
 
-    return HTMLResponse(
-        content=email_data.html_content, headers={"subject:": email_data.subject}
-    )
+    return HTMLResponse(content=email_data.html_content, headers={"subject:": email_data.subject})
 
 
 @router.post("/verify-email/")
@@ -130,22 +155,34 @@ def verify_email(session: SessionDep, body: VerificationToken) -> Message:
     """
     Verify user email from a token.
     """
-    email = verify_email_verification_token(token=body.token)
-    if not email:
-        raise HTTPException(status_code=400, detail="Invalid token")
+    claims = verify_email_verification_token(token=body.token)
+    if claims is None:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
 
-    user = crud.get_user_by_email(session=session, email=email)
-    if not user:
-        raise HTTPException(
-            status_code=404,
-            detail="The user with this email does not exist in the system.",
-        )
+    user = session.exec(select(User).where(User.id == claims.user_id).with_for_update()).one_or_none()
+    if user is None or user.email_verification_version != claims.version:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
 
-    if user.is_active:
-        return Message(message="Account already verified")
+    if user.pending_email is not None:
+        if user.pending_email != claims.email:
+            raise HTTPException(status_code=400, detail="Invalid or expired token")
+        if crud.email_is_claimed(
+            session=session,
+            email=claims.email,
+            excluding_user_id=user.id,
+        ):
+            raise HTTPException(status_code=409, detail="Email address is no longer available")
+        user.email = claims.email
+        user.pending_email = None
+        message = "Email address verified successfully"
+    elif not user.is_active and user.email == claims.email:
+        user.is_active = True
+        message = "Account verified successfully"
+    else:
+        raise HTTPException(status_code=400, detail="Invalid or expired token")
 
-    user.is_active = True
+    user.email_verification_version += 1
+    user.session_version += 1
     session.add(user)
     session.commit()
-
-    return Message(message="Account verified successfully")
+    return Message(message=message)

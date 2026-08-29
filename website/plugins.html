@@ -46,17 +46,20 @@
                 plugins.forEach(plugin => {
                     const row = document.createElement("tr");
 
-                    row.innerHTML = `
-                        <td>${plugin.COMPANY}</td>
-                        <td>${plugin.STATEMENT_TYPE}</td>
-                        <td>${plugin.PLUGIN_NAME}</td>
-					`;
+                    [plugin.COMPANY, plugin.STATEMENT_TYPE, plugin.PLUGIN_NAME]
+                        .forEach(value => {
+                            const cell = document.createElement("td");
+                            cell.textContent = value == null ? "" : String(value);
+                            row.appendChild(cell);
+                        });
 
                     tableBody.appendChild(row);
                 });
             } catch (error) {
                 console.error("Error fetching plugins:", error);
-                document.getElementById("plugin-section").innerHTML = "<p>Failed to load plugins. Please try again later.</p>";
+                const message = document.createElement("p");
+                message.textContent = "Failed to load plugins. Please try again later.";
+                document.getElementById("plugin-section").replaceChildren(message);
             }
         });
     </script>

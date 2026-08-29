@@ -18,13 +18,13 @@ If you just want to use the app, download the ready-made client from [parsetrail
 ## Technical Details
 
 ParseTrail is built using:
-- [PyQt5](https://www.riverbankcomputing.com/static/Docs/PyQt5/) for the graphical user interface (GUI)
+- [PySide6](https://doc.qt.io/qtforpython-6/) for the graphical user interface (GUI)
 - [pdfplumber](https://pypi.org/project/pdfplumber/) for PDF mining
 - [SQLAlchemy](https://www.sqlalchemy.org/) for database operations
 - [alembic](https://alembic.sqlalchemy.org/en/latest/) for database migrations
 - [pandas](https://pandas.pydata.org/) for table operations
 - [matplotlib](https://matplotlib.org/) and [seaborn](https://seaborn.pydata.org/) for dashboards and visualizations
-- [nltk](https://www.nltk.org/) and [scikit-learn](https://scikit-learn.org/) to categorize transactions based on description
+- [scikit-learn](https://scikit-learn.org/) to categorize transactions based on description
 
 ### Plugin Architecture
 
@@ -37,11 +37,13 @@ The plugin architecture allows for easy extension by adding new parsers for diff
 ```python
 from parsetrail.core.interfaces import IParser
 from parsetrail.core.validation import Account, Statement, Transaction
-client/src/parsetrail/plugins/pdf_fidelity401k.py
+
+
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_fidelity401k"
     VERSION = "0.1.0"
+    MIN_CLIENT_VERSION = "1.3.0"
     SUFFIX = ".pdf"
     COMPANY = "Fidelity"
     STATEMENT_TYPE = "Retirement Savings Monthly Statement"
@@ -85,11 +87,35 @@ class Parser(IParser):
 ```
 See [pdf_fidelity401k_201810](client/src/parsetrail/plugins/pdf_fidelity401k_201810.py) for the full module.
 
+Plugin routing is deterministic. It first filters by suffix, then optional PDF
+document-metadata and per-page header rules, and finally `SEARCH_STRING` against
+normalized body text. Exactly one plugin must remain. `&&` binds more tightly
+than `||`, parentheses override precedence, and quoted phrases match literally.
+For template generations that share a body marker, add an optional rule such as:
+
+```python
+ROUTING_RULE = {
+    "pdf_metadata_keys": ["Creator", "Producer"],
+    "pdf_metadata": {"Creator": "statement engine"},
+    "header": '"Sale Post Description Amount"',
+}
+```
+
+Routing expressions are validated when plugins are built and loaded. Raw text
+and PDF metadata remain in memory and are never included in parser diagnostics.
+
 ## Development and Deployment
 
 ### Local Development
 
 To set up a local development environment, see the [client README](client/README.md).
+
+Server builds, preflight, migration, deployment, public smoke checks, release
+records, and rollback are documented in the [deployment runbook](deployment.md).
+
+Server operators should follow the guarded
+[PostgreSQL 12 to 17 dump/restore runbook](docs/postgresql-17-upgrade.md) before
+changing either the database image or volume.
 
 
 ## Contributing
@@ -100,7 +126,7 @@ Our development team can also develop plugins for statement files submitted via 
 
 ## License
 
-ParseTrail is released under the MIT License. See `LICENSE.txt` for more details.
+ParseTrail is released under the MIT License. See `LICENSE` for more details.
 
 ## Acknowledgments
 

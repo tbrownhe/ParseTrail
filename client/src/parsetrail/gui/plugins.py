@@ -2,24 +2,17 @@ from pathlib import Path
 
 import pandas as pd
 from loguru import logger
-from parsetrail.core.parse import ParseInput, parse_any
-from parsetrail.core.plugins import (
-    PluginManager,
-    compare_plugins,
-    get_plugin_lists,
-    sync_plugins,
-)
-from parsetrail.core.settings import settings
-from parsetrail.core.utils import PDFReader
-from PyQt5.QtGui import QBrush, QColor, QFont
-from PyQt5.QtWidgets import (
-    QDesktopWidget,
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QBrush, QColor, QFont
+from PySide6.QtWidgets import (
+    QApplication,
     QDialog,
     QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
+    QProgressDialog,
     QPushButton,
     QTableWidget,
     QTableWidgetItem,
@@ -27,6 +20,17 @@ from PyQt5.QtWidgets import (
     QVBoxLayout,
 )
 from sqlalchemy.orm import sessionmaker
+
+from parsetrail.core.api import api_client
+from parsetrail.core.auth import AuthError
+from parsetrail.core.parse import ParseInput, parse_any
+from parsetrail.core.plugins import (
+    PluginManager,
+    PluginSyncThread,
+    PluginUpdateThread,
+)
+from parsetrail.core.settings import settings
+from parsetrail.core.utils import PDFReader
 
 
 def resize_to_table(parent, table):
@@ -37,7 +41,10 @@ def resize_to_table(parent, table):
     table_height = table.verticalHeader().length() + table.horizontalHeader().height() + 75
 
     # Get screen dimensions
-    screen_rect = QDesktopWidget().screenGeometry()
+    screen = QApplication.primaryScreen()
+    if screen is None:
+        return
+    screen_rect = screen.availableGeometry()
     screen_width = screen_rect.width()
     screen_height = screen_rect.height()
 
@@ -47,6 +54,70 @@ def resize_to_table(parent, table):
 
     # Set dialog size
     parent.resize(min(table_width, max_width), min(table_height, max_height))
+
+
+def start_plugin_sync(
+    parent,
+    local_plugins: list[dict[str, str]],
+    remote_release,
+    plugin_manager: PluginManager,
+    *,
+    on_complete=None,
+) -> PluginSyncThread | None:
+    """Prompt on Qt, then authenticate and install the catalog in a worker."""
+    try:
+        credentials = api_client.auth.credentials_if_needed()
+    except AuthError:
+        QMessageBox.information(parent, "Plugin Update Canceled", "Sign-in was canceled.")
+        return None
+
+    total = len(remote_release.manifest.artifacts)
+    progress = QProgressDialog("Preparing plugin update...", "Cancel", 0, total, parent)
+    progress.setWindowTitle("Updating Plugins")
+    progress.setWindowModality(Qt.WindowModal)
+    progress.setMinimumDuration(0)
+    progress.setMinimumWidth(400)
+    progress.setAutoClose(False)
+    progress.setAutoReset(False)
+
+    thread = PluginSyncThread(
+        local_plugins,
+        remote_release,
+        plugin_manager=plugin_manager,
+        credentials=credentials,
+        parent=progress,
+    )
+    progress._plugin_sync_thread = thread
+    progress.canceled.connect(thread.cancel)
+
+    def update_progress(completed: int, count: int, label: str) -> None:
+        progress.setRange(0, count)
+        progress.setLabelText(label)
+        progress.setValue(completed)
+
+    def complete(_installed) -> None:
+        progress.setValue(progress.maximum())
+        progress.close()
+        plugin_manager.load_plugins()
+        if on_complete is not None:
+            on_complete()
+
+    def failed(message: str) -> None:
+        progress.close()
+        QMessageBox.critical(parent, "Plugin Update Failed", message)
+
+    def cancelled() -> None:
+        progress.close()
+        QMessageBox.information(parent, "Plugin Update Canceled", "No partial plugin release was activated.")
+
+    thread.progress_changed.connect(update_progress)
+    thread.sync_completed.connect(complete)
+    thread.sync_failed.connect(failed)
+    thread.sync_cancelled.connect(cancelled)
+    thread.finished.connect(thread.deleteLater)
+    thread.start()
+    progress.show()
+    return thread
 
 
 class PluginManagerDialog(QDialog):
@@ -153,19 +224,46 @@ class PluginManagerDialog(QDialog):
         """
         Check for updates to plugins and update the table if plugins are synchronized.
         """
+        if getattr(self, "plugin_update_thread", None) and self.plugin_update_thread.isRunning():
+            return
         self.plugin_manager.load_plugins()
-        try:
-            local_plugins, server_plugins = get_plugin_lists(self.plugin_manager)
-            new_plugins = compare_plugins(local_plugins, server_plugins)
-            if new_plugins:
-                dialog = PluginSyncDialog(local_plugins, server_plugins, parent=self)
-                if dialog.exec_() == QDialog.Accepted:
-                    sync_plugins(local_plugins, server_plugins, progress=True, parent=self)
-            else:
-                QMessageBox.information(self, "Plugins Up to Date", "Plugins are already up to date.")
-        except Exception as e:
-            QMessageBox.critical(self, "Update Failed", f"Update failed: {e}")
+        self.check_updates_button.setEnabled(False)
+        progress = QProgressDialog("Checking authenticated plugin catalog...", None, 0, 0, self)
+        progress.setWindowTitle("Checking for Plugin Updates")
+        progress.setWindowModality(Qt.WindowModal)
+        progress.setMinimumDuration(0)
+        progress.show()
+        self._check_progress = progress
 
+        self.plugin_update_thread = PluginUpdateThread(self.plugin_manager)
+        self.plugin_update_thread.update_available.connect(self._update_available)
+        self.plugin_update_thread.update_complete.connect(self._update_check_complete)
+        self.plugin_update_thread.finished.connect(lambda: self.check_updates_button.setEnabled(True))
+        self.plugin_update_thread.finished.connect(lambda: setattr(self, "plugin_update_thread", None))
+        self.plugin_update_thread.finished.connect(self.plugin_update_thread.deleteLater)
+        self.plugin_update_thread.start()
+
+    def _update_available(self, local_plugins, remote_release) -> None:
+        self._check_progress.close()
+        server_plugins = remote_release.legacy_metadata()
+        dialog = PluginSyncDialog(local_plugins, server_plugins, parent=self)
+        if dialog.exec() == QDialog.Accepted:
+            start_plugin_sync(
+                self,
+                local_plugins,
+                remote_release,
+                self.plugin_manager,
+                on_complete=self._refresh_after_update,
+            )
+
+    def _update_check_complete(self, success: bool, message: str) -> None:
+        self._check_progress.close()
+        if success:
+            QMessageBox.information(self, "Plugins Up to Date", message)
+        else:
+            QMessageBox.critical(self, "Update Failed", message)
+
+    def _refresh_after_update(self) -> None:
         self.plugin_manager.load_plugins()
         self.update_table()
         resize_to_table(self, self.table)
@@ -182,7 +280,7 @@ class PluginSyncDialog(QDialog):
         layout = QVBoxLayout(self)
 
         # Table for plugin status
-        layout.addWidget(QLabel("Some plugins are out of date:"))
+        layout.addWidget(QLabel("A signed plugin catalog update is available:"))
         self.table = self.create_table()
         layout.addWidget(self.table)
 
@@ -454,10 +552,13 @@ class ParseTestDialog(QDialog):
                 return
 
             # Return the statement object
-            statement = parse_any(self.Session, self.plugin_manager, parse_input, hard_fail=False)
+            parse_result = parse_any(self.plugin_manager, parse_input)
+            statement = parse_result.statement
 
             # Display results
             self.output_display.clear()
+            for warning in parse_result.warnings:
+                self.display_output(f"Warning [{warning.code}]: {warning.message}")
             self.display_output(f"File: {statement.fpath}")
             self.display_output(f"Plugin Name: {statement.plugin_name}")
             self.display_output(f"Start Date: {statement.start_date}")

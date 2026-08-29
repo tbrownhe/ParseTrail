@@ -3,18 +3,24 @@ import shutil
 from pathlib import Path
 
 from loguru import logger
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QDialog, QMessageBox, QProgressDialog
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QDialog, QMessageBox, QProgressDialog
+from sqlalchemy import select
 from sqlalchemy.orm import Session, sessionmaker
 
 from parsetrail.core import query
-from parsetrail.core.orm import Plugins, Statements, Transactions
+from parsetrail.core.orm import Plugins, Statements, StatementTransactions, Transactions
 from parsetrail.core.parse import parse_any
-from parsetrail.core.plugins import PluginManager
+from parsetrail.core.parser_routing import ParseResult, ParseWarningsRejectedError
+from parsetrail.core.plugin_manager import PluginManager
 from parsetrail.core.settings import settings
 from parsetrail.core.utils import hash_file
 from parsetrail.core.validation import Statement, Transaction
 from parsetrail.gui.accounts import AssignAccountNumber
+
+
+class ArchivePendingError(RuntimeError):
+    """Database commit succeeded but the source statement still needs archiving."""
 
 
 class StatementProcessor:
@@ -27,6 +33,27 @@ class StatementProcessor:
         self.Session = Session
         self.plugin_manager = plugin_manager
 
+    def find_pending_archives(self) -> list[tuple[Path, Path]]:
+        """Report committed imports whose original file still awaits archiving."""
+        suffixes = {plugin.get("SUFFIX", ".*") for plugin in self.plugin_manager.metadata.values()}
+        pending: list[tuple[Path, Path]] = []
+        for source in sorted({path for suffix in suffixes for path in settings.import_dir.glob(f"*{suffix}")}):
+            try:
+                archive_name = self.file_already_imported(self._content_hashes(source))
+            except Exception as exc:
+                logger.warning(
+                    "Could not inspect {} for archive recovery ({})",
+                    source.name,
+                    type(exc).__name__,
+                )
+                continue
+            if not archive_name:
+                continue
+            destination = settings.success_dir / archive_name
+            if not destination.exists():
+                pending.append((source, destination))
+        return pending
+
     def import_all(self, parent=None) -> None:
         """
         Find all statements in the import directory and process them.
@@ -35,7 +62,7 @@ class StatementProcessor:
             parent: Parent class for UI dialogs.
         """
         # Gather files to process
-        suffixes = set([plugin.get("SUFFIX", ".*") for plugin in self.plugin_manager.metadata.values()])
+        suffixes = {plugin.get("SUFFIX", ".*") for plugin in self.plugin_manager.metadata.values()}
         fpaths = [fpath for suffix in suffixes for fpath in settings.import_dir.glob(f"*{suffix}")]
         if not fpaths:
             QMessageBox.information(parent, "No Files", "No files found in the import directory.")
@@ -57,11 +84,15 @@ class StatementProcessor:
                 break
 
             try:
-                result = self.import_one(fpath)
+                result = self.import_one(fpath, parent=parent)
                 if result == "success":
                     success += 1
                 elif result == "duplicate":
                     duplicate += 1
+            except ParseWarningsRejectedError as e:
+                progress.close()
+                QMessageBox.information(parent, "Import Canceled", str(e))
+                break
             except RuntimeError as e:
                 # Stop the import loop immediately if a critical failure occurs
                 progress.close()
@@ -72,7 +103,7 @@ class StatementProcessor:
                 dialog.setStandardButtons(QMessageBox.Ok)
                 dialog.setWindowModality(Qt.ApplicationModal)  # Ensure it's on top
                 dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowStaysOnTopHint)
-                dialog.exec_()
+                dialog.exec()
                 break
             except Exception as e:
                 fail += 1
@@ -96,7 +127,7 @@ class StatementProcessor:
             ),
         )
 
-    def import_one(self, fpath: Path) -> str:
+    def import_one(self, fpath: Path, parent=None) -> str:
         """
         Process a single statement file and import its data.
 
@@ -107,21 +138,22 @@ class StatementProcessor:
             str: "success" if successfully imported, "duplicate" if already imported.
         """
         try:
-            md5hash = hash_file(fpath)
+            content_hashes = self._content_hashes(fpath)
 
-            # Check for duplicates by MD5 hash
-            filename = self.file_already_imported(md5hash)
+            # Check both the current digest and legacy MD5 rows during migration.
+            filename = self.file_already_imported(content_hashes)
             if filename:
                 self.handle_duplicate(fpath, filename)
                 return "duplicate"
 
             # Parse the statement and validate its structure
-            statement = parse_any(self.Session, self.plugin_manager, fpath)
+            parse_result = parse_any(self.plugin_manager, fpath)
+            statement = self._statement_from_result(parse_result, parent=parent)
             if not isinstance(statement, Statement):
                 raise TypeError("Parsing module must return a Statement dataclass.")
 
             # Attach metadata
-            statement.add_md5hash(md5hash)
+            statement.add_content_hash(content_hashes["sha256"])
             self.attach_account_info(statement)  # Modifies in place
             for account in statement.accounts:
                 account.hash_transactions()
@@ -132,9 +164,17 @@ class StatementProcessor:
                 self.handle_duplicate(fpath, statement.dpath.name)
                 return "duplicate"
 
-            # Insert data into the database and move the file to the success directory
+            # Commit before moving the only source file. If archiving fails, the
+            # committed hash lets the next import recover it deterministically.
             with self.Session() as session:
                 self.complete_data_transaction(session, statement)
+            try:
+                self.move_file_safely(statement.fpath, statement.dpath)
+            except Exception as exc:
+                raise ArchivePendingError(
+                    "The statement data was committed, but its source file could not be archived. "
+                    "The source remains recoverable; leave it in the import folder and retry the import."
+                ) from exc
 
             logger.success(f"Imported {fpath}")
             return "success"
@@ -142,23 +182,51 @@ class StatementProcessor:
             logger.error(f"Failed to import {fpath.name}: {e}")
             raise
 
-    def file_already_imported(self, md5hash: str) -> str:
+    @staticmethod
+    def _statement_from_result(result: ParseResult, *, parent=None) -> Statement:
+        if not result.warnings:
+            return result.statement
+        warning_text = "\n".join(f"- {warning.message}" for warning in result.warnings)
+        accepted = False
+        if parent is not None:
+            accepted = (
+                QMessageBox.question(
+                    parent,
+                    "Statement Validation Warnings",
+                    f"The parser reported:\n\n{warning_text}\n\nImport this statement anyway?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No,
+                )
+                == QMessageBox.Yes
+            )
+        return result.require_statement(accept_warnings=accepted)
+
+    @staticmethod
+    def _content_hashes(fpath: Path) -> dict[str, str]:
+        return {
+            "sha256": hash_file(fpath, "sha256"),
+            "md5": hash_file(fpath, "md5"),
+        }
+
+    def file_already_imported(self, content_hashes: dict[str, str]) -> str:
         """Check if the file has already been saved to the db
 
         Args:
-            md5hash (str): Byte hash of passed file
+            content_hashes: Byte hashes keyed by algorithm.
 
         Returns:
-            bool: Whether md5hash exists in the db already
+            bool: Whether any supplied content hash exists in the database.
         """
         with self.Session() as session:
-            data = query.statements_with_hash(session, md5hash)
+            data = query.statements_with_hashes(session, content_hashes)
         if len(data) == 0:
             return ""
-        if len(data) > 1:
-            raise KeyError(f"Multiple files found with MD5={md5hash}")
-        statement_id, filename = data[0]
-        logger.debug(f"Previously imported {filename} (StatementID: {statement_id}) has identical hash {md5hash}")
+        filenames = {filename for _, filename in data}
+        if len(filenames) > 1:
+            raise KeyError(f"Identical file hash is associated with multiple filenames: {sorted(filenames)}")
+        filename = filenames.pop()
+        statement_ids = [statement_id for statement_id, _ in data]
+        logger.debug("Previously imported {} (StatementIDs: {}) has identical content", filename, statement_ids)
         return filename
 
     def statement_already_imported(self, filename: Path) -> bool:
@@ -202,11 +270,13 @@ class StatementProcessor:
         if (settings.success_dir / filename).exists():
             # Move to duplicate dir
             dpath = settings.duplicate_dir / filename
+            action = "Duplicate statement moved"
         else:
-            # Restore missing file in success dir
+            # Recover a prior database commit whose archive move did not finish.
             dpath = settings.success_dir / filename
+            action = "Recovered committed statement archive"
         self.move_file_safely(fpath, dpath)
-        logger.debug("Duplicate statement moved to {d}", d=dpath)
+        logger.info("{} to {}", action, dpath)
 
     def move_file_safely(self, fpath: Path, dpath: Path):
         """
@@ -239,7 +309,7 @@ class StatementProcessor:
                 dialog.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
                 dialog.setWindowModality(Qt.ApplicationModal)  # Ensure it's on top
                 dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowStaysOnTopHint)
-                if dialog.exec_() == QMessageBox.Cancel:
+                if dialog.exec() == QMessageBox.Cancel:
                     raise RuntimeError(f"File move operation for <pre>{fpath}</pre> was cancelled by the user.") from e
             except Exception as e:
                 raise RuntimeError(f"An unexpected error occurred while moving <pre>{fpath}</pre>: {e}") from e
@@ -276,7 +346,7 @@ class StatementProcessor:
         Ask user to associate this unknown account_num with an Accounts.AccountID
         """
         dialog = AssignAccountNumber(self.Session, fpath, plugin_metadata, account_num)
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.Accepted:
             return dialog.get_account_id()
         raise RuntimeError("Account assignment dialog was closed without selection.")
 
@@ -341,12 +411,35 @@ class StatementProcessor:
                 session.flush()
                 statement_id = statements_table.StatementID
 
-                # Prepare transactions for insertion
-                transactions_table = Transaction.to_db_rows(statement_id, account.account_id, account.transactions)
+                transaction_rows = Transaction.to_db_rows(
+                    account.account_id,
+                    account.transactions,
+                    account.currency_code,
+                )
+                for row_number, row in enumerate(transaction_rows, start=1):
+                    transaction = session.scalar(
+                        select(Transactions).where(Transactions.Fingerprint == row["Fingerprint"])
+                    )
+                    if transaction is None:
+                        transaction = Transactions(**row)
+                        session.add(transaction)
+                        session.flush()
+                    elif any(
+                        (
+                            transaction.AccountID != account.account_id,
+                            transaction.PostingDate != row["PostingDate"],
+                            transaction.AmountMinor != row["AmountMinor"],
+                            transaction.BalanceMinor != row["BalanceMinor"],
+                            transaction.CurrencyCode != row["CurrencyCode"],
+                            transaction.Description != row["Description"],
+                        )
+                    ):
+                        raise RuntimeError("A transaction fingerprint resolved to different canonical fields.")
 
-                # Insert transactions using insert_rows_carefully
-                query.insert_rows_carefully(session, Transactions, transactions_table, skip_duplicates=True)
-
-            # Attempt to move file to destination.
-            # If it fails in this context, the whole transaction is rolled back.
-            self.move_file_safely(statement.fpath, statement.dpath)
+                    session.add(
+                        StatementTransactions(
+                            StatementID=statement_id,
+                            TransactionID=transaction.TransactionID,
+                            StatementRow=row_number,
+                        )
+                    )

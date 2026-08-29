@@ -11,8 +11,8 @@ import {
   Text,
 } from "@chakra-ui/react"
 import {
-  Link as RouterLink,
   createFileRoute,
+  Link as RouterLink,
   redirect,
 } from "@tanstack/react-router"
 import { type SubmitHandler, useForm } from "react-hook-form"

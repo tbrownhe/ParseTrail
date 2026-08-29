@@ -6,11 +6,10 @@ import sys
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
-from typing import Tuple, Union
-from packaging import version
 
 import pdfplumber
 from loguru import logger
+from packaging import version
 
 
 class PDFReader:
@@ -201,20 +200,38 @@ def is_newer_version(local_version, server_version) -> bool:
     return version.parse(server_version) > version.parse(local_version)
 
 
-def open_file_in_os(fpath: Path):
-    try:
-        if not fpath.exists():
-            raise FileNotFoundError(f"File not found: {fpath}")
+def is_version_compatible(current_version: str, minimum_version: str) -> bool:
+    """
+    Check if the current version meets or exceeds a minimum version.
+    """
+    return version.parse(current_version) >= version.parse(minimum_version)
 
-        name = os.name
-        if name == "nt":
-            subprocess.run(["start", "", str(fpath)], shell=True, check=True)
-        elif name == "posix":
-            subprocess.run(["open", str(fpath)], check=True)
-        else:
-            raise ValueError(f"Unsupported OS type: {name}")
-    except Exception as e:
-        print(f"Error opening {fpath}: {e}")
+
+def open_file_in_os(fpath: Path) -> None:
+    """Ask the platform to open one literal path without invoking a shell."""
+    resolved = fpath.expanduser().resolve()
+    if not resolved.exists():
+        raise FileNotFoundError(f"File not found: {resolved}")
+
+    if sys.platform == "win32":
+        startfile = getattr(os, "startfile", None)
+        if startfile is None:
+            raise RuntimeError("Windows file launching is unavailable")
+        startfile(str(resolved))
+    elif sys.platform == "darwin":
+        subprocess.run(
+            ["/usr/bin/open", str(resolved)],
+            check=True,
+            shell=False,
+        )
+    elif sys.platform.startswith("linux"):
+        subprocess.run(
+            ["xdg-open", str(resolved)],
+            check=True,
+            shell=False,
+        )
+    else:
+        raise RuntimeError(f"Unsupported operating system: {sys.platform}")
 
 
 def create_directory(folder: Path):
@@ -291,7 +308,7 @@ def find_regex_in_line(lines: list[str], pattern: str | re.Pattern) -> tuple[int
     raise ValueError(f"Regex pattern '{pattern}' not found in lines.")
 
 
-def find_param_in_line(lines: list[str], pattern: str, start: int = 0, case_sensitive: bool = True) -> Tuple[int, str]:
+def find_param_in_line(lines: list[str], pattern: str, start: int = 0, case_sensitive: bool = True) -> tuple[int, str]:
     """
     Finds the first line in the list that contains the search string.
 
@@ -325,7 +342,7 @@ def find_param_in_line(lines: list[str], pattern: str, start: int = 0, case_sens
     raise ValueError(f"Parameter '{pattern}' not found in lines.")
 
 
-def find_line_re_search(lines: list[str], pattern: Union[str, re.Pattern]) -> tuple[int, str]:
+def find_line_re_search(lines: list[str], pattern: str | re.Pattern) -> tuple[int, str]:
     """
     Finds the first line matching the given regex pattern.
 
@@ -418,37 +435,7 @@ def remove_stop_words(description: str, stop_words=None) -> str:
     return " ".join(clean_words)
 
 
-def convert_amount_to_float(amount_str: str) -> float:
-    """
-    Parses USD amount strings of various formats into positive or negative float.
-
-    Examples:
-        $12.34   -> +12.34
-        -$12.34  -> -12.34
-        ($12.34) -> -12.34
-        $12.34CR -> -12.34
-        $12.34-  -> -12.34
-    """
-    # Remove common characters and normalize string
-    normalized_str = amount_str.replace(",", "").replace("$", "").replace(" ", "").upper()
-
-    # Determine negativity from indicators
-    negative = (
-        normalized_str.startswith("-")
-        or normalized_str.endswith("-")
-        or normalized_str.endswith("CR")
-        or (normalized_str.startswith("(") and normalized_str.endswith(")"))
-    )
-
-    # Remove negative indicators
-    cleaned_str = normalized_str.replace("-", "").replace("CR", "").replace("(", "").replace(")", "")
-
-    # Convert to float and apply negativity if applicable
-    amount = float(cleaned_str)
-    return -amount if negative else amount
-
-
-def hash_file(fpath: Path) -> str:
+def hash_file(fpath: Path, algorithm: str = "sha256") -> str:
     """
     Hashes the byte contents of a file to prevent duplicate imports.
 
@@ -456,7 +443,12 @@ def hash_file(fpath: Path) -> str:
         fpath (Path): The path to the file.
 
     Returns:
-        str: The MD5 hash of the file contents.
+        str: Hex digest of the file contents.
     """
+    if algorithm not in {"md5", "sha256"}:
+        raise ValueError(f"Unsupported file hash algorithm: {algorithm}")
+    digest = hashlib.new(algorithm)
     with fpath.open("rb") as f:
-        return hashlib.md5(f.read()).hexdigest()
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()

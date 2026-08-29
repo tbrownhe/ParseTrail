@@ -20,11 +20,16 @@ import { type SubmitHandler, useForm } from "react-hook-form"
 import {
   type ApiError,
   type UserPublic,
-  type UserUpdate,
   UsersService,
+  type UserUpdate,
 } from "../../client"
 import useCustomToast from "../../hooks/useCustomToast"
-import { emailPattern, handleError } from "../../utils"
+import {
+  confirmPasswordRules,
+  emailPattern,
+  handleError,
+  passwordRules,
+} from "../../utils"
 
 interface EditUserProps {
   user: UserPublic
@@ -115,12 +120,7 @@ const EditUser = ({ user, isOpen, onClose }: EditUserProps) => {
               <FormLabel htmlFor="password">Set Password</FormLabel>
               <Input
                 id="password"
-                {...register("password", {
-                  minLength: {
-                    value: 8,
-                    message: "Password must be at least 8 characters",
-                  },
-                })}
+                {...register("password", passwordRules(false))}
                 placeholder="Password"
                 type="password"
               />
@@ -132,11 +132,10 @@ const EditUser = ({ user, isOpen, onClose }: EditUserProps) => {
               <FormLabel htmlFor="confirm_password">Confirm Password</FormLabel>
               <Input
                 id="confirm_password"
-                {...register("confirm_password", {
-                  validate: (value) =>
-                    value === getValues().password ||
-                    "The passwords do not match",
-                })}
+                {...register(
+                  "confirm_password",
+                  confirmPasswordRules(getValues, false),
+                )}
                 placeholder="Password"
                 type="password"
               />
