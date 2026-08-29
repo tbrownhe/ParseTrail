@@ -11,3 +11,12 @@ sync_resources.*
 certs/
 scratch/
 keys/
+
+# Python tooling and test output
+**/__pycache__/
+*.py[cod]
+.coverage
+htmlcov/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
