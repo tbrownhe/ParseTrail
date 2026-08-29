@@ -88,9 +88,10 @@ a sentinel row in a separately configured database survives the complete suite.
   only newly encrypted ciphertext and is atomically renamed.
 - [x] Configure error reporting and logging so statement bytes, extracted text,
   encryption keys, and submitted metadata cannot be attached automatically.
-- [ ] `[USER]` Exercise one authorized statement fixture through the development
+- [x] `[USER]` Exercise one authorized statement fixture through the development
   tool and confirm that no new plaintext file appears outside its original
-  fixture location.
+  fixture location. The server-statement UI successfully decrypted and parsed an
+  authorized encrypted submission through the in-memory handoff.
 
 Acceptance: the regression test fails if `NamedTemporaryFile`, `mkstemp`, or an
 equivalent plaintext write is introduced into either parse path.
@@ -149,10 +150,14 @@ equivalent plaintext write is introduced into either parse path.
   hash mismatch, and interrupted activation.
 - [x] Add a backend regression test proving unsigned model distribution remains
   unrouted.
-- [ ] `[USER]` Decide where the offline release key and recovery copy will live,
-  then perform a signed Windows release rehearsal.
-- [ ] `[USER]` Add Windows Authenticode and macOS signing/notarization after the
-  application-level signature path works.
+- [x] `[USER]` Decide where the offline release key and recovery copy will live,
+  then perform a signed Windows release rehearsal. The encrypted local key has a
+  password-manager recovery copy, and client 1.3.0 plus the 22-plugin catalog
+  completed the offline signing and verification path.
+- [ ] `[USER]` Add Windows Authenticode after the application-level signature path
+  works.
+- [ ] `[USER]` Add macOS signing/notarization after the application-level signature
+  path works.
 
 Acceptance: compromising the download server alone is insufficient to make an
 existing client import or execute attacker-supplied bytes.
