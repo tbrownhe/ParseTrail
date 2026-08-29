@@ -9,6 +9,10 @@ release-signing keys, SSH access, or a production `.env`.
 Traefik remains in the separate infrastructure repository. This repository owns
 the database and the backend, dashboard, and website containers behind it.
 
+Production uses `docker-compose.yml` alone. Local ports and Adminer live in the
+explicit `docker-compose.dev.yml`; the repository deliberately has no
+auto-discovered `docker-compose.override.yml`.
+
 ## Release properties
 
 - Backend, dashboard, and website images are built once on a clean checkout.

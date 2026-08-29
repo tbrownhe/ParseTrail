@@ -64,11 +64,11 @@ enough to implement, test, and commit independently.
   be superseded by the repository-owner condition.
 - [x] Restore and enable backend static CI on Python 3.13; Ruff check/format and
   strict mypy now pass locally against the refreshed lock.
-- [~] Enable non-mutating Python lint, backend tests, client tests, frontend
+- [x] Enable non-mutating Python lint, backend tests, client tests, frontend
   checks/build, and Compose smoke tests on GitHub-hosted runners. Remove stale
   MailCatcher/port assumptions and make the jobs required on `main` only after
-  they are stable. The workflows and isolated CI stack pass locally; the first
-  hosted Windows/macOS run and branch-protection gate remain to be observed.
+  they are stable. The full hosted Windows/macOS/Linux matrix passed on the
+  merged application PR, and the solo-maintainer branch rules were exercised.
 - [x] Keep CI non-deploying initially: do not give hosted or self-hosted runners
   production SSH credentials, the offline release key, or a production `.env`.
   Retain an explicit manual approval boundary until the release path below has
@@ -111,9 +111,10 @@ equivalent plaintext write is introduced into either parse path.
   advertise temporary, partial, or unsigned installers.
 - [x] Expose no server model listing or download while signed model releases do
   not exist.
-- [~] Implement and document an encrypted offline signing-key procedure. The
+- [x] Implement and document an encrypted offline signing-key procedure. The
   client build embeds only a public-key trust store and refuses to build while it
-  is empty; initial key generation and backup location remain a `[USER]` step.
+  is empty. The encrypted private key and its passphrase have separate
+  password-manager recovery copies; only the public key ships with clients.
 - [x] Apply containment/suffix checks to desktop plugin destinations and preserve
   the previous plugin until a complete download is atomically renamed.
 - [x] Apply containment/suffix checks to installer destinations and reject
@@ -238,14 +239,22 @@ recoverable, committed data agrees with the import state, and a retry is safe.
   helper has completed a synthetic 12-to-17 rehearsal with whole-schema table
   count comparison; staging and production still use PostgreSQL 12. Do not point
   a newer server at the old data directory.
-- [ ] `[USER]` After review and merge, take a verified production backup and
+- [x] `[USER]` After review and merge, take a verified production backup and
   deploy the current application release while explicitly retaining both the
   PostgreSQL 12 image and existing PostgreSQL 12 volume. Confirm the new Alembic
   head, database health, expected table counts, login, artifact downloads, and
-  statement submission before treating the application release as healthy.
-- [ ] Restore a fresh production PostgreSQL 12 dump into a uniquely named,
+  statement submission before treating the application release as healthy. The
+  deployment retained PostgreSQL 12.22 and its original volume, migrated to
+  `39e1c1c2a803`, activated the signed client/plugin releases, and passed owner
+  login, fresh plugin-store download, multi-statement submission, encrypted
+  devtool retrieval, and parser execution. The stale bootstrap password was
+  rotated after confirming it no longer represented the current account password.
+- [x] Restore a fresh production PostgreSQL 12 dump into a uniquely named,
   isolated PostgreSQL 17 staging volume; preserve the source volume and compare
   every public-table count before allowing application traffic to the restore.
+  The production rehearsal created a checksum-verified dump, retained the
+  PostgreSQL 12 source unchanged, and matched every table in the isolated
+  `parsetrail_app-db-data-pg17-staging-20260829T1927Z` volume.
 - [ ] `[USER]` Verify account/login, plugin download, statement submission, admin
   retrieval, email, and backup/restore against the upgraded staging stack before
   the production PostgreSQL 17 cutover.
@@ -277,6 +286,9 @@ temporary exception, and the Postgres restore drill preserves expected row count
 - [x] Write an append-only release record containing timestamp, operator, Git
   commit, schema revision, image digests, artifact versions/hashes, smoke results,
   and the exact rollback target.
+- [x] Make development Compose overrides explicitly opt-in. Do not keep a tracked
+  `docker-compose.override.yml` that production can auto-load and use to expose
+  local ports, remove Traefik labels, or redirect the default network.
 - [ ] Treat staging as a configuration-only deployment target using the same
   Compose definition, images, migrations, and signed artifacts as production;
   do not introduce staging-only application behavior.
@@ -402,6 +414,10 @@ does not provide a reliable user-existence oracle.
   beside their decrypting key in the user profile.
 - [x] Add fake-server tests for timeouts, slow streams, disconnects, cancellation,
   401 refresh/login paths, and error-body redaction.
+- [ ] When an artifact update rejects stored credentials, prompt for replacement
+  credentials immediately and resume the original update after successful login.
+  Do not return silently to the main UI and require the user to request the same
+  update a second time.
 
 Acceptance: the interface remains responsive during network failure, cancellation
 never installs partial data, and no command shell interprets downloaded filenames.
