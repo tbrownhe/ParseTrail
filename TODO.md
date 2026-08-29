@@ -394,11 +394,13 @@ dry run cannot mutate the public download directories.
 
 ### P1.6 Keep startup offline and deterministic
 
-- [ ] Remove the import-time `nltk.download("stopwords")` retry loop. Bundle a
+- [x] Remove the import-time `nltk.download("stopwords")` retry loop. Bundle a
   reviewed corpus or use an internal stable stop-word set.
-- [ ] Audit imports and normal application startup for DNS/HTTP access; allow
+- [x] Audit imports and normal application startup for DNS/HTTP access; allow
   network activity only after an explicit user action or documented update check.
-- [ ] Test first startup in a network-denied environment on Windows and macOS.
+- [~] Test first startup in a network-denied environment on Windows and macOS.
+  The automated Windows test constructs the real GUI, migrates a fresh SQLite
+  database, and denies socket/HTTP access; the equivalent macOS run remains.
 
 Acceptance: parsing, categorization, and database startup work on a clean machine
 with networking disabled and never pause for an implicit package-data download.

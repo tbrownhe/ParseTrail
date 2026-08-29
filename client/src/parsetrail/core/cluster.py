@@ -1,33 +1,20 @@
 import re
 
-import nltk
 import pandas as pd
-from loguru import logger
 from scipy.sparse import hstack
 from sklearn.cluster import DBSCAN
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import MinMaxScaler
 
-# Download stopwords if necessary
-for _attempt in range(1, 4):
-    try:
-        from nltk.corpus import stopwords
-
-        STOP_WORDS = set(stopwords.words("english"))
-
-    except Exception:
-        logger.debug("Downloading Stopwords for 'nltk' corpus... Attempt {attempt} of 3")
-        nltk.download("stopwords")
-        continue
-    break
+from parsetrail.core.english_stopwords import ENGLISH_STOP_WORDS, normalize_words
 
 
-def preprocess_text(description: str, stopwords: set | None = None) -> str:
+def preprocess_text(description: str, stopwords: set[str] | frozenset[str] | None = None) -> str:
     """
     Normalize and preprocess the transaction description.
     """
-    if not stopwords:
-        stopwords = STOP_WORDS  # default global set
+    if stopwords is None:
+        stopwords = ENGLISH_STOP_WORDS
 
     # Normalize text and remove special characters
     description = description.lower()
@@ -55,9 +42,9 @@ def cluster_transactions(
         pd.DataFrame: Transactions with an additional 'Cluster' column.
     """
     if extra_stopwords:
-        local_stopwords = STOP_WORDS.union(w.lower() for w in extra_stopwords)
+        local_stopwords = ENGLISH_STOP_WORDS.union(word for extra in extra_stopwords for word in normalize_words(extra))
     else:
-        local_stopwords = STOP_WORDS
+        local_stopwords = ENGLISH_STOP_WORDS
 
     # Preprocess text
     transactions["Normalized"] = transactions["Description"].apply(

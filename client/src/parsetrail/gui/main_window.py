@@ -11,7 +11,7 @@ from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter, MaxNLocator
-from PySide6.QtCore import QAbstractTableModel, Qt
+from PySide6.QtCore import QAbstractTableModel, Qt, QTimer
 from PySide6.QtGui import QColor, QFontMetrics
 from PySide6.QtWidgets import (
     QApplication,
@@ -78,6 +78,8 @@ from parsetrail.version import (
     __website__,
     __year__,
 )
+
+AUTOMATIC_UPDATE_DELAY_MS = 3000
 
 
 class MatplotlibCanvas(FigureCanvas):
@@ -659,8 +661,16 @@ class ParseTrail(QMainWindow):
         with self.Session() as session:
             self.update_main_gui(session)
 
-        # Check for new versions of client and plugins
-        self.check_for_client_updates_async()
+        # A documented, optional background check runs only after the event loop
+        # starts, so networking can never delay construction or first paint.
+        self.schedule_automatic_update_check()
+
+    def schedule_automatic_update_check(self):
+        if settings.automatic_update_checks:
+            QTimer.singleShot(
+                AUTOMATIC_UPDATE_DELAY_MS,
+                self.check_for_client_updates_async,
+            )
 
     def check_for_client_updates_async(self):
         self.client_update_thread = ClientUpdateThread()

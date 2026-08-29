@@ -16,7 +16,6 @@ from sklearn.metrics import confusion_matrix
 from sklearn.model_selection import cross_val_score, train_test_split
 from sklearn.naive_bayes import MultinomialNB
 from sklearn.svm import LinearSVC
-from tqdm import tqdm
 
 """
 Most of this was lifted from these:
@@ -134,7 +133,7 @@ def compare_models(features, labels):
     cv_df = pd.DataFrame(index=range(CV * len(models)))
     entries = []
 
-    for model in tqdm(models, total=len(models)):
+    for model in models:
         model_name = model.__class__.__name__
         accuracies = cross_val_score(model, features, labels, scoring="accuracy", cv=CV)
 

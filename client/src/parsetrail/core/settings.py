@@ -182,6 +182,10 @@ class AppSettings(BaseSettings):
     )
     plugin_dir: Path = Field(APPDATA_DIR / "plugins", description="Plugins Directory")
     log_file: Path = Field(APPDATA_DIR / "logs" / "parsetrail.log", description="Logs Directory")
+    automatic_update_checks: bool = Field(
+        True,
+        description="Check for Client and Plugin Updates After Startup",
+    )
 
     # Reports
     report_dir: Path = Field(

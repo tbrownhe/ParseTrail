@@ -60,6 +60,19 @@ uv run --frozen python src/parsetrail/run_plugins_locally.py
 The parser-development launcher explicitly enables unsigned local plugins and
 logs that mode. The normal application has no unsigned mode.
 
+## Offline startup and update checks
+
+Parsing, categorization, clustering, and SQLite storage use bundled resources
+and do not download package data. In particular, recurring-transaction
+clustering uses ParseTrail's versioned English stop-word set instead of an NLTK
+corpus.
+
+By default, ParseTrail schedules a client/plugin update check three seconds
+after the window is initialized. It never delays construction or first paint,
+and a network failure does not prevent local use. Disable **Check for Client and
+Plugin Updates After Startup** in Preferences for a completely network-silent
+launch; manual update checks and optional statement submission remain available.
+
 ## Signed plugin releases
 
 Plugins are compiled into `.pyc` files and authenticated as one catalog. The

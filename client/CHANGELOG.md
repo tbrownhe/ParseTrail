@@ -9,6 +9,10 @@
   redacted failures
 - Correct the Synchrony/Amazon plugin identity and remove its malformed `.py.pyc`
   artifact name
+- Remove NLTK's startup corpus download and bundle deterministic English stop
+  words for local clustering
+- Delay automatic update checks until after first paint and make them optional
+- Add network-denied module-import and fresh-database startup regression tests
 
 1.2.1
 =====
