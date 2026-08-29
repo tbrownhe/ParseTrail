@@ -146,8 +146,3 @@ def get_sessionmaker() -> sessionmaker:
     if _SessionLocal is None:
         get_engine()
     return _SessionLocal  # type: ignore
-
-
-# Eagerly initialize so existing imports still work
-get_engine()
-SessionLocal = get_sessionmaker()

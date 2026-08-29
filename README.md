@@ -24,7 +24,7 @@ ParseTrail is built using:
 - [alembic](https://alembic.sqlalchemy.org/en/latest/) for database migrations
 - [pandas](https://pandas.pydata.org/) for table operations
 - [matplotlib](https://matplotlib.org/) and [seaborn](https://seaborn.pydata.org/) for dashboards and visualizations
-- [nltk](https://www.nltk.org/) and [scikit-learn](https://scikit-learn.org/) to categorize transactions based on description
+- [scikit-learn](https://scikit-learn.org/) to categorize transactions based on description
 
 ### Plugin Architecture
 
@@ -37,11 +37,13 @@ The plugin architecture allows for easy extension by adding new parsers for diff
 ```python
 from parsetrail.core.interfaces import IParser
 from parsetrail.core.validation import Account, Statement, Transaction
-client/src/parsetrail/plugins/pdf_fidelity401k.py
+
+
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_fidelity401k"
     VERSION = "0.1.0"
+    MIN_CLIENT_VERSION = "1.2.2"
     SUFFIX = ".pdf"
     COMPANY = "Fidelity"
     STATEMENT_TYPE = "Retirement Savings Monthly Statement"
@@ -84,6 +86,23 @@ class Parser(IParser):
         ...
 ```
 See [pdf_fidelity401k_201810](client/src/parsetrail/plugins/pdf_fidelity401k_201810.py) for the full module.
+
+Plugin routing is deterministic. It first filters by suffix, then optional PDF
+document-metadata and per-page header rules, and finally `SEARCH_STRING` against
+normalized body text. Exactly one plugin must remain. `&&` binds more tightly
+than `||`, parentheses override precedence, and quoted phrases match literally.
+For template generations that share a body marker, add an optional rule such as:
+
+```python
+ROUTING_RULE = {
+    "pdf_metadata_keys": ["Creator", "Producer"],
+    "pdf_metadata": {"Creator": "statement engine"},
+    "header": '"Sale Post Description Amount"',
+}
+```
+
+Routing expressions are validated when plugins are built and loaded. Raw text
+and PDF metadata remain in memory and are never included in parser diagnostics.
 
 ## Development and Deployment
 

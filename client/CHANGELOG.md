@@ -3,6 +3,12 @@
 - Move the supported desktop runtime to Python 3.13.15
 - Replace GPL-only PyQt5 with the official LGPLv3 PySide6 binding
 - Preserve the Windows and macOS frozen-runtime smoke gates
+- Require deterministic, unique parser classification using format, optional PDF
+  metadata, page headers, and body markers
+- Return headless typed parser results with explicitly accepted warnings and
+  redacted failures
+- Correct the Synchrony/Amazon plugin identity and remove its malformed `.py.pyc`
+  artifact name
 
 1.2.1
 =====

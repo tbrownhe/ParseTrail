@@ -17,12 +17,13 @@ from parsetrail.core.validation import Account, Statement, Transaction
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_citicc_201505"
-    VERSION = "0.1.1"
-    MIN_CLIENT_VERSION = "1.1.1"
+    VERSION = "0.2.0"
+    MIN_CLIENT_VERSION = "1.2.2"
     SUFFIX = ".pdf"
     COMPANY = "Citibank"
     STATEMENT_TYPE = "Credit Account Monthly Statement"
     SEARCH_STRING = "www.citicards.com"
+    ROUTING_RULE = {"header": '"date description amount"'}
     INSTRUCTIONS = (
         "Login to https://www.citi.com/, then navigate to your account."
         " Click 'View Statements', then click 'View All Statements'."
@@ -54,7 +55,7 @@ class Parser(IParser):
             self.reader = reader
             return self.extract_statement()
         except Exception as e:
-            logger.error(f"Error parsing {self.STATEMENT_TYPE} statement: {e}")
+            logger.error("Parser {} failed with {}.", self.PLUGIN_NAME, type(e).__name__)
             raise
 
     def extract_statement(self) -> Statement:

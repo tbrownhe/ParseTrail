@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 from parsetrail.core import query
 from parsetrail.core.orm import Transactions, create_database
+from parsetrail.core.parser_routing import ParseResult
 from parsetrail.core.settings import settings
 from parsetrail.core.statements import ArchivePendingError, StatementProcessor
 from parsetrail.core.validation import Account, Statement
@@ -99,7 +100,10 @@ def _prepare_import(
 
     monkeypatch.setattr(settings, "db_path", tmp_path / "parsetrail.db")
     monkeypatch.setattr("parsetrail.core.statements.hash_file", lambda _path: "file-hash")
-    monkeypatch.setattr("parsetrail.core.statements.parse_any", lambda *_args, **_kwargs: statement)
+    monkeypatch.setattr(
+        "parsetrail.core.statements.parse_any",
+        lambda *_args, **_kwargs: ParseResult(statement=statement, plugin_name="example"),
+    )
     monkeypatch.setattr(processor, "file_already_imported", lambda _hash: "")
     monkeypatch.setattr(processor, "statement_already_imported", lambda _name: False)
     monkeypatch.setattr(processor, "attach_account_info", lambda _statement: None)

@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 from aes import decrypt_statement
-from db import SessionLocal
+from db import get_sessionmaker
 from loguru import logger
 from orm import StatementUploads
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QSortFilterProxyModel, Qt
@@ -35,7 +35,7 @@ sys.path.insert(0, str(CLIENT_SRC))
 try:
     from parsetrail.build_plugins import main as build_plugins
     from parsetrail.core.parse import ParseInput
-    from parsetrail.core.plugins import PluginManager
+    from parsetrail.core.plugin_manager import PluginManager
     from parsetrail.gui.plugins import ParseTestDialog
 except Exception as e:  # pragma: no cover - optional dependency
     logger.warning(f"Unable to import ParseTrail client modules: {e}")
@@ -174,8 +174,8 @@ class StatementTool(QMainWindow):
         container.setLayout(layout)
         self.setCentralWidget(container)
 
-        self.plugin_manager = PluginManager()
-        self.session_maker = SessionLocal
+        self.plugin_manager = PluginManager(allow_unsigned=True)
+        self.session_maker = get_sessionmaker()
 
         self.table.clicked.connect(self.show_metadata_dialog)
         self.load_rows()

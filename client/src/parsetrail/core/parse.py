@@ -1,20 +1,32 @@
 import csv
-import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from io import BytesIO, StringIO
 from pathlib import Path
-from typing import Generic, TypeVar
+from typing import Any, Generic, Protocol, TypeVar
 
 import openpyxl
 from loguru import logger
-from sqlalchemy.orm import sessionmaker
 
 from parsetrail.core.interfaces import IParser
-from parsetrail.core.parser_routing import first_successful_candidate
-from parsetrail.core.plugins import PluginManager
+from parsetrail.core.parser_classification import (
+    DocumentFeatures,
+    matching_plugins,
+    normalize_pdf_metadata,
+)
+from parsetrail.core.parser_routing import (
+    InvalidPluginSearchError,
+    ParseResult,
+    ParserOutputError,
+    StatementValidationError,
+    UnsupportedStatementFormatError,
+    raise_execution_error,
+    require_unique_candidate,
+)
+from parsetrail.core.search_expression import SearchExpressionError
+from parsetrail.core.search_expression import parse_search_string as parse_search_string
 from parsetrail.core.utils import PDFReader
-from parsetrail.core.validation import Statement, ValidationError, validate_statement
-from parsetrail.gui.statements import ValidationErrorDialog
+from parsetrail.core.validation import Statement, validate_statement
 
 
 @dataclass
@@ -48,112 +60,13 @@ class ParseInput:
         return Path(self.name)
 
 
-def parse_search_string(search_string: str):
-    """
-    Parses the SEARCH_STRING into a logical tree structure.
-
-    Args:
-        search_string (str): The SEARCH_STRING from the plugin metadata.
-
-    Returns:
-        tuple: A tree-like structure representing the parsed logical expression.
-    """
-
-    def tokenize(expr: str) -> list[str]:
-        return re.findall(r'&&|\|\||\(|\)|"[^"]*"|[^()&|]+', expr.lower())
-
-    def build_tree(tokens: list[str]):
-        stack = []
-        current = []
-
-        for token in tokens:
-            if token == "(":
-                stack.append(current)
-                current = []
-            elif token == ")":
-                if not stack:
-                    raise ValueError("Unmatched closing parenthesis")
-                last = current
-                current = stack.pop()
-                current.append(last)
-            elif token in ("&&", "||"):
-                current.append(token)
-            else:
-                current.append(token)
-
-        if stack:
-            raise ValueError("Unmatched opening parenthesis")
-        return current
-
-    tokens = tokenize(search_string)
-    return build_tree(tokens)
-
-
-def evaluate_tree(tokens: list[str], text: str):
-    """
-    Evaluate a tokenized search string against the input text.
-
-    Args:
-        tokens (list): Tokenized search string.
-        text (str): Text to evaluate against.
-
-    Returns:
-        bool: True if the search string matches the text, False otherwise.
-
-    Raises:
-        ValueError: If the expression is malformed or an unknown token is encountered.
-    """
-    text = text.lower()
-    stack = []
-    while tokens:
-        token = tokens.pop(0)
-
-        if token == "&&":
-            # Evaluate both sides of the AND operation
-            if len(stack) < 1:
-                raise ValueError("Malformed expression: missing left operand for '&&'")
-            left = stack.pop()
-            right = evaluate_tree(tokens, text)  # Process the right side
-            stack.append(left and right)
-        elif token == "||":
-            # Evaluate both sides of the OR operation
-            if len(stack) < 1:
-                raise ValueError("Malformed expression: missing left operand for '||'")
-            left = stack.pop()
-            right = evaluate_tree(tokens, text)  # Process the right side
-            stack.append(left or right)
-        elif isinstance(token, list):
-            # Handle nested expressions
-            stack.append(evaluate_tree(token, text))
-        else:
-            # Treat the token as a literal string
-            result = token in text
-            stack.append(result)
-
-    if len(stack) != 1:
-        raise ValueError(f"Malformed expression. Final Stack: {stack}")
-    return stack[0]
-
-
-def match_search_string(search_string: str, text: str) -> bool:
-    """
-    Matches the search string logic against the text.
-
-    Args:
-        search_string (str): The SEARCH_STRING from the plugin metadata.
-        text (str): The plain text of the statement.
-
-    Returns:
-        bool: True if the text matches the search string, False otherwise.
-    """
-    try:
-        tree = parse_search_string(search_string)
-        return evaluate_tree(tree, text)
-    except ValueError as e:
-        raise ValueError(f"Error in SEARCH_STRING '{search_string}': {e}")
-
-
 T = TypeVar("T")
+
+
+class ParserRegistry(Protocol):
+    metadata: Mapping[str, Mapping[str, Any]]
+
+    def get_parser(self, plugin_id: str) -> Any: ...
 
 
 class BaseRouter(Generic[T]):
@@ -165,49 +78,39 @@ class BaseRouter(Generic[T]):
 
     def __init__(
         self,
-        Session: sessionmaker,
-        plugin_manager: PluginManager,
+        plugin_manager: ParserRegistry,
         parse_input: ParseInput,
         path_hint: Path | None = None,
-        hard_fail=True,
     ):
-        self.Session = Session
         self.plugin_manager = plugin_manager
         self.parse_input = parse_input
         # Use the provided hint for metadata/logging; otherwise default to the ParseInput name.
         self.fpath = path_hint or parse_input.path_hint
-        self.hard_fail = hard_fail
 
-    def select_parser(self, text: str, suffix="") -> list[str]:
-        """Uses plugin metadata to find the parser name for this statement.
+    def select_parser(self, features: DocumentFeatures) -> str:
+        """Require plugin metadata to identify exactly one parser.
 
         Args:
-            text (str): Plaintext contents of statement
-            suffix (str, optional): suffix of statement file. Defaults to "".
-
-        Raises:
-            ValueError: Statement is not recognized. A parser likely needs to be built.
+            features: Normalized in-memory statement features.
 
         Returns:
-            list[str]: Matching plugin names in metadata order.
+            str: The one matching plugin identifier.
         """
-        plugins = []
-        for plugin_name, metadata in self.plugin_manager.metadata.items():
-            if suffix and metadata["SUFFIX"] != suffix:
-                continue
-            search_string = metadata["SEARCH_STRING"]
-            if match_search_string(search_string, text):
-                plugins.append(plugin_name)
-        if not plugins:
-            raise ValueError("Statement type not recognized.")
-        if len(plugins) > 1:
-            logger.debug(f"Found {len(plugins)} matching plugins.")
-        return plugins
+        try:
+            plugins = matching_plugins(features, self.plugin_manager.metadata)
+        except SearchExpressionError as exc:
+            raise InvalidPluginSearchError("plugin catalog") from exc
+        return require_unique_candidate(plugins, suffix=features.suffix)
 
-    def extract_statement(self, plugin_name: str, input_data: T) -> Statement:
+    def extract_statement(self, plugin_name: str, input_data: T) -> ParseResult:
         """Dynamically loads and runs the parser to extract the statement data."""
-        ParserClass = self.plugin_manager.get_parser(plugin_name)
-        statement = self.run_parser(ParserClass, input_data)
+        try:
+            parser_class = self.plugin_manager.get_parser(plugin_name)
+            statement = self.run_parser(plugin_name, parser_class, input_data)
+        except ParserOutputError:
+            raise
+        except Exception as exc:
+            raise_execution_error(plugin_name, exc)
 
         # Make sure all balances are populated
         for account in statement.accounts:
@@ -216,32 +119,15 @@ class BaseRouter(Generic[T]):
         # Attach parser metadata
         statement.add_metadata(self.fpath, plugin_name)
 
-        # Validate and return statement data
-        errors = validate_statement(statement)
-        if errors:
-            err = "\n".join(errors)
-            logger.error(f"Validation failed for statement imported using parser '{plugin_name}':\n{err}")
+        # Validate without importing or invoking any UI adapter.
+        report = validate_statement(statement)
+        diagnostics = tuple(item.for_plugin(plugin_name) for item in report.diagnostics)
+        if report.errors:
+            logger.error("Parser {} produced {} validation error(s).", plugin_name, len(report.errors))
+            raise StatementValidationError(plugin_name, diagnostics)
+        return ParseResult(statement=statement, plugin_name=plugin_name, diagnostics=diagnostics)
 
-            # Show validation error dialog
-            dialog = ValidationErrorDialog(statement, errors)
-            dialog.exec()
-
-            raise ValidationError(err)
-        return statement
-
-    def extract_from_candidates(self, plugins: list[str], input_data: T) -> Statement:
-        """Try each metadata match consistently for every supported file format."""
-        try:
-            return first_successful_candidate(
-                plugins,
-                lambda plugin: self.extract_statement(plugin, input_data),
-                source=str(self.fpath),
-            )
-        except ValueError as exc:
-            logger.debug(str(exc))
-            raise
-
-    def run_parser(self, parser: IParser, input_data: T) -> Statement:
+    def run_parser(self, plugin_name: str, parser: IParser, input_data: T) -> Statement:
         """
         Run the parser and enforce return type.
 
@@ -254,7 +140,7 @@ class BaseRouter(Generic[T]):
         """
         result = parser().parse(input_data)
         if not isinstance(result, Statement):
-            raise TypeError(f"{parser.__name__} did not return a Statement. Check its parse() method.")
+            raise ParserOutputError(plugin_name)
         return result
 
 
@@ -267,15 +153,13 @@ class PDFRouter(BaseRouter[PDFReader]):
 
     def __init__(
         self,
-        Session: sessionmaker,
-        plugin_manager: PluginManager,
+        plugin_manager: ParserRegistry,
         parse_input: ParseInput,
         path_hint: Path | None = None,
-        **kwargs,
     ):
-        super().__init__(Session, plugin_manager, parse_input, path_hint=path_hint, **kwargs)
+        super().__init__(plugin_manager, parse_input, path_hint=path_hint)
 
-    def parse(self) -> Statement:
+    def parse(self) -> ParseResult:
         """Opens the PDF file, determines its type, and routes its reader
         to the appropriate parsing module.
 
@@ -284,8 +168,18 @@ class PDFRouter(BaseRouter[PDFReader]):
         """
         with PDFReader(self.parse_input.data, self.fpath) as reader:
             text = reader.extract_text_simple()
-            plugins = self.select_parser(text, suffix=".pdf")
-            return self.extract_from_candidates(plugins, reader)
+            header = "\n".join(
+                " ".join(line.split()) for page in (reader.pages_simple or []) for line in page.splitlines()[:40]
+            )
+            features = DocumentFeatures(
+                suffix=".pdf",
+                body_text=text,
+                header_text=header,
+                pdf_metadata=normalize_pdf_metadata(reader.PDF.metadata),
+                page_count=len(reader.PDF.pages),
+            )
+            plugin = self.select_parser(features)
+            return self.extract_statement(plugin, reader)
 
 
 class CSVRouter(BaseRouter[list[list[str]]]):
@@ -293,15 +187,13 @@ class CSVRouter(BaseRouter[list[list[str]]]):
 
     def __init__(
         self,
-        Session: sessionmaker,
-        plugin_manager: PluginManager,
+        plugin_manager: ParserRegistry,
         parse_input: ParseInput,
         path_hint: Path | None = None,
-        **kwargs,
     ):
-        super().__init__(Session, plugin_manager, parse_input, path_hint=path_hint, **kwargs)
+        super().__init__(plugin_manager, parse_input, path_hint=path_hint)
 
-    def parse(self) -> Statement:
+    def parse(self) -> ParseResult:
         """Opens the CSV file, determines its type, and routes its contents
         to the appropriate parsing script.
 
@@ -313,8 +205,13 @@ class CSVRouter(BaseRouter[list[list[str]]]):
         array = self.read_csv_as_array()
 
         # Extract the statement data
-        plugins = self.select_parser(text, suffix=".csv")
-        return self.extract_from_candidates(plugins, array)
+        features = DocumentFeatures(
+            suffix=".csv",
+            body_text=text,
+            header_text="\n".join(text.splitlines()[:25]),
+        )
+        plugin = self.select_parser(features)
+        return self.extract_statement(plugin, array)
 
     def read_csv_as_text(self) -> str:
         """Reads the CSV file and returns its contents as plain text."""
@@ -329,15 +226,13 @@ class CSVRouter(BaseRouter[list[list[str]]]):
 class XLSXRouter(BaseRouter):
     def __init__(
         self,
-        Session: sessionmaker,
-        plugin_manager: PluginManager,
+        plugin_manager: ParserRegistry,
         parse_input: ParseInput,
         path_hint: Path | None = None,
-        **kwargs,
     ):
-        super().__init__(Session, plugin_manager, parse_input, path_hint=path_hint, **kwargs)
+        super().__init__(plugin_manager, parse_input, path_hint=path_hint)
 
-    def parse(self) -> Statement:
+    def parse(self) -> ParseResult:
         """Opens the XLSX file, determines its type, and routes its contents
         to the appropriate parsing script.
 
@@ -346,8 +241,13 @@ class XLSXRouter(BaseRouter):
         """
         sheets = self.read_xlsx()
         text = self.plain_text(sheets)
-        plugins = self.select_parser(text, suffix=".xlsx")
-        return self.extract_from_candidates(plugins, sheets)
+        features = DocumentFeatures(
+            suffix=".xlsx",
+            body_text=text,
+            header_text="\n".join(text.splitlines()[:25]),
+        )
+        plugin = self.select_parser(features)
+        return self.extract_statement(plugin, sheets)
 
     def plain_text(self, sheets) -> str:
         """Convert all workbook data to plaintext"""
@@ -377,18 +277,18 @@ register_router(".csv", CSVRouter)
 register_router(".xlsx", XLSXRouter)
 
 
-def parse_any(Session: sessionmaker, plugin_manager: PluginManager, source: Path | ParseInput, **kwargs) -> Statement:
+def parse_any(plugin_manager: ParserRegistry, source: Path | ParseInput) -> ParseResult:
     """Routes the file (on disk or in memory) to the appropriate parser based on its suffix.
 
     Args:
-        db_path (Path): Path to database file
+        plugin_manager: Loaded parser registry.
         source (Path | ParseInput): Statement data to be parsed
 
     Raises:
-        ValueError: Unsupported file suffix
+        UnsupportedStatementFormatError: Unsupported file suffix.
 
     Returns:
-        tuple[dict[str, Any], dict[str, list[tuple]]]: metadata and data dicts
+        ParseResult: Parsed statement and redacted validation diagnostics.
     """
     if isinstance(source, ParseInput):
         parse_input = source
@@ -401,6 +301,6 @@ def parse_any(Session: sessionmaker, plugin_manager: PluginManager, source: Path
 
     suffix = parse_input.suffix.lower()
     if suffix in ROUTERS:
-        router = ROUTERS[suffix](Session, plugin_manager, parse_input, path_hint=path_hint, **kwargs)
+        router = ROUTERS[suffix](plugin_manager, parse_input, path_hint=path_hint)
         return router.parse()
-    raise ValueError(f"Unsupported file suffix: {suffix}")
+    raise UnsupportedStatementFormatError(suffix)

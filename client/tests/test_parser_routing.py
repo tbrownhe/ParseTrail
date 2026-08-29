@@ -1,33 +1,44 @@
 import pytest
-from parsetrail.core.parser_routing import first_successful_candidate
+from parsetrail.core.diagnostics import Diagnostic, DiagnosticSeverity
+from parsetrail.core.parser_routing import (
+    AmbiguousParserMatchError,
+    NoParserMatchError,
+    ParseResult,
+    ParseWarningsRejectedError,
+    require_unique_candidate,
+)
 
 
-def test_returns_first_successful_candidate() -> None:
-    attempted: list[str] = []
-
-    def parse(candidate: str) -> str:
-        attempted.append(candidate)
-        if candidate == "first":
-            raise ValueError("not this layout")
-        return f"parsed by {candidate}"
-
-    assert first_successful_candidate(["first", "second", "third"], parse, source="statement.csv") == "parsed by second"
-    assert attempted == ["first", "second"]
+def test_returns_the_only_matching_candidate() -> None:
+    assert require_unique_candidate(["csv_a"], suffix=".csv") == "csv_a"
 
 
-def test_reports_every_failed_candidate() -> None:
-    def fail(candidate: str) -> str:
-        raise ValueError(f"{candidate} failed")
+def test_rejects_multiple_matching_candidates() -> None:
+    with pytest.raises(AmbiguousParserMatchError) as exc_info:
+        require_unique_candidate(["pdf_a", "pdf_b"], suffix=".pdf")
 
-    with pytest.raises(ValueError) as exc_info:
-        first_successful_candidate(["csv_a", "csv_b"], fail, source="statement.csv")
-
-    message = str(exc_info.value)
-    assert "statement.csv" in message
-    assert "csv_a: csv_a failed" in message
-    assert "csv_b: csv_b failed" in message
+    assert exc_info.value.candidates == ("pdf_a", "pdf_b")
+    assert exc_info.value.code == "routing.ambiguous"
 
 
 def test_rejects_empty_candidate_list() -> None:
-    with pytest.raises(ValueError, match="No parser candidates"):
-        first_successful_candidate([], lambda candidate: candidate, source="statement.xlsx")
+    with pytest.raises(NoParserMatchError) as exc_info:
+        require_unique_candidate([], suffix=".xlsx")
+
+    assert exc_info.value.suffix == ".xlsx"
+    assert exc_info.value.code == "routing.no_match"
+
+
+def test_parse_result_requires_explicit_warning_acceptance() -> None:
+    warning = Diagnostic(
+        code="transaction.dates.unusual_gap",
+        message="Transaction and posting dates at account 1, transaction row 1 are more than 60 days apart.",
+        severity=DiagnosticSeverity.WARNING,
+        plugin_name="example",
+    )
+    statement = object()
+    result = ParseResult(statement=statement, plugin_name="example", diagnostics=(warning,))  # type: ignore[arg-type]
+
+    with pytest.raises(ParseWarningsRejectedError):
+        result.require_statement()
+    assert result.require_statement(accept_warnings=True) is statement

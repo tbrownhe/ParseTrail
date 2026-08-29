@@ -7,6 +7,8 @@ from typing import Any
 
 from loguru import logger
 
+from parsetrail.core.diagnostics import Diagnostic, DiagnosticSeverity
+
 
 # Exceptions
 class ValidationError(Exception):
@@ -109,7 +111,7 @@ class Transaction:
                     md5hash_set.add(md5hash)
                     break
 
-                logger.warning(f"Hash collision detected for transaction '{transaction.desc}'. Retrying...")
+                logger.warning("Transaction fingerprint collision detected; retrying with an occurrence index.")
                 attempt += 1
 
             transaction.md5hash = md5hash
@@ -129,11 +131,11 @@ class Transaction:
             tuple: A tuple of the transaction's fields in the required order.
         """
         rows = []
-        for t in transactions:
+        for row_number, t in enumerate(transactions, start=1):
             if not isinstance(t.balance, float):
-                raise ValueError(f"Transaction {t.desc} is missing a balance and cannot be inserted.")
+                raise ValueError(f"Transaction row {row_number} is missing a balance and cannot be inserted.")
             if not isinstance(t.md5hash, str):
-                raise ValueError(f"Transaction {t.desc} is missing an MD5 hash and cannot be inserted.")
+                raise ValueError(f"Transaction row {row_number} is missing a fingerprint and cannot be inserted.")
             rows.append(
                 {
                     "StatementID": statement_id,
@@ -153,7 +155,9 @@ class Transaction:
         Validates that all transactions have valid balances.
         """
         errors = [
-            f"Invalid balance for transaction: {t.desc}" for t in transactions if not isinstance(t.balance, float)
+            f"Invalid balance for transaction row {row_number}"
+            for row_number, transaction in enumerate(transactions, start=1)
+            if not isinstance(transaction.balance, float)
         ]
         return errors
 
@@ -372,36 +376,69 @@ class Statement:
 
 
 # Validation framework
-VALIDATION_CHECKS: list[Callable[[Statement], list[str]]] = []
+VALIDATION_CHECKS: list[Callable[[Statement], list[Diagnostic]]] = []
 
 
-def register_validation(check: Callable[[Statement], list[str]]):
+@dataclass(frozen=True, slots=True)
+class ValidationReport:
+    diagnostics: tuple[Diagnostic, ...]
+
+    @property
+    def errors(self) -> tuple[Diagnostic, ...]:
+        return tuple(item for item in self.diagnostics if item.severity is DiagnosticSeverity.ERROR)
+
+    @property
+    def warnings(self) -> tuple[Diagnostic, ...]:
+        return tuple(item for item in self.diagnostics if item.severity is DiagnosticSeverity.WARNING)
+
+
+def register_validation(check: Callable[[Statement], list[Diagnostic]]):
     VALIDATION_CHECKS.append(check)
 
 
-def validate_statement(statement: Statement):
-    errors = []
+def validate_statement(statement: Statement) -> ValidationReport:
+    diagnostics: list[Diagnostic] = []
     for check in VALIDATION_CHECKS:
-        errors.extend(check(statement))
-    return errors
+        diagnostics.extend(check(statement))
+    return ValidationReport(tuple(diagnostics))
 
 
 # Validation functions
-def validate_metadata(statement: Statement) -> list[str]:
-    return statement.validate_metadata()
+def validate_metadata(statement: Statement) -> list[Diagnostic]:
+    return [
+        Diagnostic(
+            code="statement.metadata.invalid",
+            message=message,
+            severity=DiagnosticSeverity.ERROR,
+        )
+        for message in statement.validate_metadata()
+    ]
 
 
-def validate_transactions(statement: Statement) -> list[str]:
-    errors = []
-    for account in statement.accounts:
-        for transaction in account.transactions:
+def validate_transactions(statement: Statement) -> list[Diagnostic]:
+    diagnostics: list[Diagnostic] = []
+    for account_number, account in enumerate(statement.accounts, start=1):
+        for row_number, transaction in enumerate(account.transactions, start=1):
+            row = f"account {account_number}, transaction row {row_number}"
             # Posting date must be within the satement date range
             if not isinstance(transaction.posting_date, datetime):
-                errors.append(f"Invalid date: {transaction.posting_date}")
-            if (transaction.posting_date < statement.start_date) or (transaction.posting_date > statement.end_date):
-                errors.append(
-                    f"Transaction date {transaction.posting_date} is outside the statement"
-                    f" date range {statement.start_date} - {statement.end_date}"
+                diagnostics.append(
+                    Diagnostic(
+                        code="transaction.posting_date.invalid",
+                        message=f"Invalid posting date type at {row}.",
+                        severity=DiagnosticSeverity.ERROR,
+                    )
+                )
+            elif (transaction.posting_date < statement.start_date) or (transaction.posting_date > statement.end_date):
+                diagnostics.append(
+                    Diagnostic(
+                        code="transaction.posting_date.outside_statement",
+                        message=(
+                            f"Posting date at {row} is outside statement range "
+                            f"{statement.start_date:%Y-%m-%d} through {statement.end_date:%Y-%m-%d}."
+                        ),
+                        severity=DiagnosticSeverity.ERROR,
+                    )
                 )
 
             # Transaction date (if available) must be within 60 days of the posting date
@@ -409,41 +446,83 @@ def validate_transactions(statement: Statement) -> list[str]:
             posting_days = 60
             if transaction.transaction_date:
                 if not isinstance(transaction.transaction_date, datetime):
-                    errors.append(f"Invalid date: {transaction.transaction_date}")
-                if abs((transaction.transaction_date - transaction.posting_date).days) > posting_days:
-                    errors.append(
-                        f"Transaction date {transaction.transaction_date} is more than {posting_days} days"
-                        f" from posting date {transaction.posting_date}"
+                    diagnostics.append(
+                        Diagnostic(
+                            code="transaction.transaction_date.invalid",
+                            message=f"Invalid transaction date type at {row}.",
+                            severity=DiagnosticSeverity.ERROR,
+                        )
+                    )
+                elif isinstance(transaction.posting_date, datetime) and (
+                    abs((transaction.transaction_date - transaction.posting_date).days) > posting_days
+                ):
+                    diagnostics.append(
+                        Diagnostic(
+                            code="transaction.dates.unusual_gap",
+                            message=(
+                                f"Transaction and posting dates at {row} are more than {posting_days} days apart."
+                            ),
+                            severity=DiagnosticSeverity.WARNING,
+                        )
                     )
 
             # Amount, balance, and description must exist with correct type
             if not isinstance(transaction.amount, float):
-                errors.append(f"Invalid amount: {transaction.amount}")
+                diagnostics.append(
+                    Diagnostic(
+                        code="transaction.amount.invalid",
+                        message=f"Invalid amount type at {row}.",
+                        severity=DiagnosticSeverity.ERROR,
+                    )
+                )
             if not isinstance(transaction.balance, float):
-                errors.append(f"Invalid balance: {transaction.balance}")
+                diagnostics.append(
+                    Diagnostic(
+                        code="transaction.balance.invalid",
+                        message=f"Invalid balance type at {row}.",
+                        severity=DiagnosticSeverity.ERROR,
+                    )
+                )
             if not isinstance(transaction.desc, str):
-                errors.append(f"Invalid description: {transaction.desc}")
-            if transaction.desc.strip() == "":
-                errors.append(f"Empty description: {transaction}")
+                diagnostics.append(
+                    Diagnostic(
+                        code="transaction.description.invalid",
+                        message=f"Invalid description type at {row}.",
+                        severity=DiagnosticSeverity.ERROR,
+                    )
+                )
+            elif transaction.desc.strip() == "":
+                diagnostics.append(
+                    Diagnostic(
+                        code="transaction.description.empty",
+                        message=f"Empty description at {row}.",
+                        severity=DiagnosticSeverity.ERROR,
+                    )
+                )
 
-    return errors
+    return diagnostics
 
 
-def validate_balances(statement: Statement) -> list[str]:
-    errors = []
-    for account in statement.accounts:
+def validate_balances(statement: Statement) -> list[Diagnostic]:
+    diagnostics: list[Diagnostic] = []
+    for account_number, account in enumerate(statement.accounts, start=1):
         # Ensure transaction amounts add up to statement balance difference
         balance_change = account.end_balance - account.start_balance
         sum_amounts = sum(transaction.amount for transaction in account.transactions)
         discrepancy = abs(balance_change - sum_amounts)
         if discrepancy > 0.01:
-            errors.append(
-                f"Validation failed for account '{account.account_num}'. "
-                f"Balance change ({balance_change:.2f}) does not match "
-                f"sum of transactions ({sum_amounts:.2f}). Discrepancy: {discrepancy:.2f}"
+            diagnostics.append(
+                Diagnostic(
+                    code="account.balance.discrepancy",
+                    message=(
+                        f"Balance change for account {account_number} ({balance_change:.2f}) does not match "
+                        f"the transaction sum ({sum_amounts:.2f}); discrepancy {discrepancy:.2f}."
+                    ),
+                    severity=DiagnosticSeverity.ERROR,
+                )
             )
 
-    return errors
+    return diagnostics
 
 
 # Register validation checks

@@ -74,6 +74,11 @@ For a headless regression pass over rows marked `plugin_status='ready'`:
 python devtools/server_statements/batch_plugin_tester.py
 ```
 
+Warnings fail the headless run by default. After reviewing them, pass
+`--accept-warnings` explicitly to bless warning-bearing results. Importing the
+batch module or requesting `--help` does not open a database connection or import
+Qt; the database and optional SSH tunnel are initialized only when a run starts.
+
 ## Safety notes
 
 - Use the same virtual environment as the desktop client.

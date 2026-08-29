@@ -281,16 +281,21 @@ an unrecorded mutable image, workstation file, or database assumption.
 
 - [x] Fix CSV and XLSX routers to evaluate parser candidates the same way the PDF
   router does; they currently pass the candidate list as though it were one parser.
-- [x] Extract candidate execution into one format-independent, headless helper with
-  tests for fallback, early success, and aggregate failure.
-- [ ] Specify and test precedence for mixed `&&`/`||` search expressions.
-- [ ] Remove Qt dialogs from core parsing. Return typed errors/results for GUI,
+- [x] Extract format-independent feature classification into a headless helper;
+  CSV, XLSX, and PDF adapters now produce the same routing contract.
+- [x] Specify and test conventional precedence for search expressions:
+  parentheses, then `&&`, then `||`; validate strict expressions at plugin build
+  and load time.
+- [x] Route by a deterministic feature tree: suffix, optional PDF document
+  metadata, normalized per-page headers, then body expressions. Require exactly
+  one match without exposing raw routing inputs in diagnostics.
+- [x] Remove Qt dialogs from core parsing. Return typed errors/results for GUI,
   batch, and future CLI adapters to present independently.
-- [ ] Add unit tests for zero, one, and multiple matching plugins; CSV/XLSX/PDF
+- [x] Add unit tests for zero, one, and multiple matching plugins; CSV/XLSX/PDF
   routing; malformed output; validation warnings; and hard-fail behavior.
 - [ ] `[USER]` Run the authorized statement collection against source and built
   plugins entirely in memory, review redacted diffs, and bless expected outputs.
-- [ ] Correct and version the Synchrony/Amazon plugin whose declared name currently
+- [x] Correct and version the Synchrony/Amazon plugin whose declared name currently
   produces a `.py.pyc` artifact; migrate or remove the malformed filename.
 
 Acceptance: all supported formats share the same tested routing contract and the

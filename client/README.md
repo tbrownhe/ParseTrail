@@ -223,3 +223,8 @@ without shipping a new application:
 - Plugins may import stable interfaces from the client codebase.
 - The signed manifest carries compatibility metadata, so a plugin never needs
   to execute merely to determine whether it can be loaded.
+- Parsing is headless: the core returns typed results, warnings, and redacted
+  failures. GUI and batch adapters independently decide how to present or accept
+  warnings.
+- Routing walks suffix, optional PDF metadata, normalized page-header markers,
+  and body-text expressions, then refuses zero or multiple matches.

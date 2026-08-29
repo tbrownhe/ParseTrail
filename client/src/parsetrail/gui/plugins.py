@@ -469,10 +469,13 @@ class ParseTestDialog(QDialog):
                 return
 
             # Return the statement object
-            statement = parse_any(self.Session, self.plugin_manager, parse_input, hard_fail=False)
+            parse_result = parse_any(self.plugin_manager, parse_input)
+            statement = parse_result.statement
 
             # Display results
             self.output_display.clear()
+            for warning in parse_result.warnings:
+                self.display_output(f"Warning [{warning.code}]: {warning.message}")
             self.display_output(f"File: {statement.fpath}")
             self.display_output(f"Plugin Name: {statement.plugin_name}")
             self.display_output(f"Start Date: {statement.start_date}")

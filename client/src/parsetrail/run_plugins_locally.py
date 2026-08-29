@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QApplication
 
 from parsetrail.build_plugins import PLUGINS_DIR, compile_plugins
 from parsetrail.core.initialize import initialize_db
-from parsetrail.core.plugins import PluginManager
+from parsetrail.core.plugin_manager import PluginManager
 from parsetrail.core.settings import settings
 from parsetrail.gui.plugins import ParseTestDialog
 

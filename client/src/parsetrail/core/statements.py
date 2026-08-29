@@ -10,7 +10,8 @@ from sqlalchemy.orm import Session, sessionmaker
 from parsetrail.core import query
 from parsetrail.core.orm import Plugins, Statements, Transactions
 from parsetrail.core.parse import parse_any
-from parsetrail.core.plugins import PluginManager
+from parsetrail.core.parser_routing import ParseResult, ParseWarningsRejectedError
+from parsetrail.core.plugin_manager import PluginManager
 from parsetrail.core.settings import settings
 from parsetrail.core.utils import hash_file
 from parsetrail.core.validation import Statement, Transaction
@@ -82,11 +83,15 @@ class StatementProcessor:
                 break
 
             try:
-                result = self.import_one(fpath)
+                result = self.import_one(fpath, parent=parent)
                 if result == "success":
                     success += 1
                 elif result == "duplicate":
                     duplicate += 1
+            except ParseWarningsRejectedError as e:
+                progress.close()
+                QMessageBox.information(parent, "Import Canceled", str(e))
+                break
             except RuntimeError as e:
                 # Stop the import loop immediately if a critical failure occurs
                 progress.close()
@@ -121,7 +126,7 @@ class StatementProcessor:
             ),
         )
 
-    def import_one(self, fpath: Path) -> str:
+    def import_one(self, fpath: Path, parent=None) -> str:
         """
         Process a single statement file and import its data.
 
@@ -141,7 +146,8 @@ class StatementProcessor:
                 return "duplicate"
 
             # Parse the statement and validate its structure
-            statement = parse_any(self.Session, self.plugin_manager, fpath)
+            parse_result = parse_any(self.plugin_manager, fpath)
+            statement = self._statement_from_result(parse_result, parent=parent)
             if not isinstance(statement, Statement):
                 raise TypeError("Parsing module must return a Statement dataclass.")
 
@@ -174,6 +180,25 @@ class StatementProcessor:
         except Exception as e:
             logger.error(f"Failed to import {fpath.name}: {e}")
             raise
+
+    @staticmethod
+    def _statement_from_result(result: ParseResult, *, parent=None) -> Statement:
+        if not result.warnings:
+            return result.statement
+        warning_text = "\n".join(f"- {warning.message}" for warning in result.warnings)
+        accepted = False
+        if parent is not None:
+            accepted = (
+                QMessageBox.question(
+                    parent,
+                    "Statement Validation Warnings",
+                    f"The parser reported:\n\n{warning_text}\n\nImport this statement anyway?",
+                    QMessageBox.Yes | QMessageBox.No,
+                    QMessageBox.No,
+                )
+                == QMessageBox.Yes
+            )
+        return result.require_statement(accept_warnings=accepted)
 
     def file_already_imported(self, md5hash: str) -> str:
         """Check if the file has already been saved to the db

@@ -18,9 +18,9 @@ from parsetrail.core.validation import Account, Statement, Transaction
 
 class Parser(IParser):
     # Plugin metadata required by IParser
-    PLUGIN_NAME = "pdf_synchrony-amzncc_202501.py"
-    VERSION = "0.1.1"
-    MIN_CLIENT_VERSION = "1.1.2"
+    PLUGIN_NAME = "pdf_synchrony-amzncc_202501"
+    VERSION = "0.2.0"
+    MIN_CLIENT_VERSION = "1.2.2"
     SUFFIX = ".pdf"
     COMPANY = "Synchrony"
     STATEMENT_TYPE = "Amazon Store Card by Synchrony Bank"
@@ -65,7 +65,7 @@ class Parser(IParser):
             self.chars = "".join([c["text"] for c in self.reader.PDF.pages[0].chars])
             return self.extract_statement()
         except Exception as e:
-            logger.error(f"Error parsing {self.STATEMENT_TYPE} statement: {e}")
+            logger.error("Parser {} failed with {}.", self.PLUGIN_NAME, type(e).__name__)
             raise
 
     def extract_statement(self) -> Statement:

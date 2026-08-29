@@ -183,9 +183,6 @@ class AppSettings(BaseSettings):
     plugin_dir: Path = Field(APPDATA_DIR / "plugins", description="Plugins Directory")
     log_file: Path = Field(APPDATA_DIR / "logs" / "parsetrail.log", description="Logs Directory")
 
-    # Statement imports
-    hard_fail: bool = Field(False, description="Stop Importing on Fail")
-
     # Reports
     report_dir: Path = Field(
         Path.home() / "Documents" / "ParseTrail" / "Reports",
