@@ -1,3 +1,9 @@
+1.2.2
+=====
+- Move the supported desktop runtime to Python 3.13.15
+- Replace GPL-only PyQt5 with the official LGPLv3 PySide6 binding
+- Preserve the Windows and macOS frozen-runtime smoke gates
+
 1.2.1
 =====
 - Make uv the sole owner of the release Python environment

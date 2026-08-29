@@ -7,13 +7,13 @@ import matplotlib.dates as mdates
 import pandas as pd
 from loguru import logger
 from matplotlib import rcParams
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qtagg import NavigationToolbar2QT as NavigationToolbar
 from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter, MaxNLocator
-from PyQt5.QtCore import QAbstractTableModel, Qt
-from PyQt5.QtGui import QColor, QFontMetrics
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import QAbstractTableModel, Qt
+from PySide6.QtGui import QColor, QFontMetrics
+from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QDialog,
@@ -626,7 +626,7 @@ class ParseTrail(QMainWindow):
         # Set layout and display
         dialog.setLayout(layout)
         dialog.resize(max_width, max_height)
-        dialog.exec_()
+        dialog.exec()
 
     def initialize_all_elements(self):
         # Make sure the config file exists and load into memory
@@ -689,7 +689,7 @@ class ParseTrail(QMainWindow):
     def handle_plugin_update_available(self, local_plugins: list, remote_release):
         server_plugins = remote_release.legacy_metadata()
         dialog = PluginSyncDialog(local_plugins, server_plugins, parent=self)
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.Accepted:
             sync_plugins(
                 local_plugins,
                 remote_release,
@@ -722,14 +722,14 @@ class ParseTrail(QMainWindow):
         )
         msg_box.setWindowTitle("About")
         msg_box.setStandardButtons(QMessageBox.Ok)
-        msg_box.exec_()
+        msg_box.exec()
 
     def open_db(self):
         open_file_in_os(settings.db_path)
 
     def preferences(self):
         dialog = PreferencesDialog()
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.Accepted:
             try:
                 self.Session = initialize_db()
                 with self.Session() as session:
@@ -755,17 +755,17 @@ class ParseTrail(QMainWindow):
 
     def manage_plugins(self):
         dialog = PluginManagerDialog(self.plugin_manager)
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.Accepted:
             return
 
     def parse_test(self):
         dialog = ParseTestDialog(self.Session, self.plugin_manager)
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.Accepted:
             return
 
     def edit_accounts(self):
         dialog = EditAccountsDialog(self.Session)
-        dialog.exec_()
+        dialog.exec()
 
         # Update all GUI elements
         with self.Session() as session:
@@ -773,19 +773,19 @@ class ParseTrail(QMainWindow):
 
     def appreciation_calc(self):
         dialog = AppreciationDialog()
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.Accepted:
             pass
 
     def insert_transaction(self):
         dialog = InsertTransactionDialog(self.Session)
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.Accepted:
             # Update all GUI elements
             with self.Session() as session:
                 self.update_main_gui(session)
 
     def recurring_transactions(self):
         dialog = RecurringTransactionsDialog(self.Session)
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.Accepted:
             pass
 
     def import_all_statements(self):
@@ -826,7 +826,7 @@ class ParseTrail(QMainWindow):
             msg_box.setText("Cannot import statements from the SUCCESS folder.")
             msg_box.setWindowTitle("Protected Folder")
             msg_box.setStandardButtons(QMessageBox.Ok)
-            msg_box.exec_()
+            msg_box.exec()
             return
 
         # Import statement
@@ -899,7 +899,7 @@ class ParseTrail(QMainWindow):
 
     def statement_matrix(self):
         dialog = CompletenessDialog(self.Session)
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.Accepted:
             pass
 
     def statement_discrepancies(self):
@@ -916,11 +916,11 @@ class ParseTrail(QMainWindow):
                 continue
             count += 1
             balance_dialog = BalanceCheckDialog(account_name, balance)
-            if balance_dialog.exec_() != QDialog.Accepted:
+            if balance_dialog.exec() != QDialog.Accepted:
                 continue
 
             insert_dialog = InsertTransactionDialog(self.Session, account_name=account_name, close_account=True)
-            if insert_dialog.exec_() == QDialog.Accepted:
+            if insert_dialog.exec() == QDialog.Accepted:
                 # Update all GUI elements
                 with self.Session() as session:
                     self.update_main_gui(session)
@@ -960,7 +960,7 @@ class ParseTrail(QMainWindow):
 
     def open_category_manager(self):
         dialog = CategoryManagerDialog(self.Session)
-        if dialog.exec_():
+        if dialog.exec():
             with self.Session() as session:
                 self.update_main_gui(session)
 
@@ -1238,5 +1238,5 @@ class ParseTrail(QMainWindow):
 
     def send_statement(self):
         dialog = StatementSubmissionDialog()
-        if dialog.exec_():
+        if dialog.exec():
             pass

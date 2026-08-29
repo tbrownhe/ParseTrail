@@ -101,6 +101,8 @@ uv run --frozen --python "$PYTHON_VERSION" pyinstaller \
     --paths "$SRC_DIR" \
     --hidden-import=openpyxl.cell._writer \
     --add-data "src/parsetrail/assets:parsetrail/assets" \
+    --add-data "THIRD_PARTY_NOTICES.md:." \
+    --add-data "licenses:licenses" \
     --add-data "migrations:migrations" \
     --add-data "alembic.ini:." \
     --add-data "assets:assets" \

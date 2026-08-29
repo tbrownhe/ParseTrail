@@ -7,9 +7,9 @@ from aes import decrypt_statement
 from db import SessionLocal
 from loguru import logger
 from orm import StatementUploads
-from PyQt5.QtCore import QAbstractTableModel, QModelIndex, QSortFilterProxyModel, Qt
-from PyQt5.QtGui import QFont, QIcon
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, QSortFilterProxyModel, Qt
+from PySide6.QtGui import QFont, QIcon
+from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QHBoxLayout,
@@ -219,7 +219,7 @@ class StatementTool(QMainWindow):
         layout.addWidget(table)
         dialog.setLayout(layout)
         dialog.resize(700, 400)
-        dialog.exec_()
+        dialog.exec()
 
     def decrypt_and_parse(self):
         idx = self.table.currentIndex()
@@ -281,7 +281,7 @@ class StatementTool(QMainWindow):
                 parent=self,
             )
             dialog.setWindowTitle(f"Parse Test: {fname}")
-            dialog.exec_()
+            dialog.exec()
             return "Exited cleanly: processed in-memory bytes"
         finally:
             # Drop strong references to encourage GC of plaintext
@@ -308,7 +308,7 @@ def main():
     app.setWindowIcon(QIcon(str(icon)))
     window = StatementTool()
     window.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

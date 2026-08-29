@@ -228,8 +228,11 @@ recoverable, committed data agrees with the import state, and a retry is safe.
   frozen executables to pass a bootstrap smoke test before packaging.
 - [x] Raise the client cryptography and PDF parsing stack to patched versions; the
   installed locked Windows dependency environment has no known vulnerabilities.
-- [ ] Choose and test one supported Python baseline for Windows and macOS; evaluate
-  PySide6 as the maintained Qt binding before leaving Python 3.10.
+- [x] Move Windows and macOS to the exact Python 3.13.15 baseline and PySide6
+  Essentials 6.11.2. The universal lock resolves both macOS architectures, all
+  71 client tests pass on Windows, Qt-heavy imports pass headlessly, and the
+  PyInstaller executable passes its frozen-runtime smoke test. Hosted macOS
+  execution remains part of the non-deploying CI gate.
 - [~] Upgrade PostgreSQL 12 using a dump/restore into a new volume. The guarded
   helper has completed a synthetic 12-to-17 rehearsal with whole-schema table
   count comparison; staging and production still use PostgreSQL 12. Do not point

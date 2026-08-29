@@ -11,9 +11,17 @@ uv provisions the exact Python patch release declared in `.python-version` and
 installs the locked project environment. Platform installer creation uses one
 native external tool.
 
+- Python 3.13.15 (provisioned by uv; do not substitute another patch release)
+- PySide6 Essentials 6.11.2 / Qt 6.11.2
+- Windows 10 1809 or newer, or macOS 13 or newer
 - [uv](https://docs.astral.sh/uv/)
 - [NSIS](https://nsis.sourceforge.io/Main_Page) for Windows installers
 - [create-dmg](https://github.com/create-dmg/create-dmg) for macOS installers
+
+PySide6 replaced PyQt5 because ParseTrail is MIT-licensed while the freely
+downloadable PyQt bindings are GPL-licensed. Desktop packages include the
+PySide/Qt third-party notice and LGPLv3 text. Keep Qt libraries dynamically
+replaceable when changing the packaging layout.
 
 ### Windows development environment
 
@@ -188,6 +196,10 @@ reads the authoritative pointer and distinguishes a completed activation from a
 failed one. The same tested publisher is used for Windows/macOS installers and
 the plugin catalog. Deploy the backend manifest routes before the first installer
 that uses this layout.
+
+Python bytecode changed with the 3.13 client baseline. Publish client 1.2.2 (or
+newer) before publishing plugins compiled with Python 3.13. Older clients reject
+the incompatible catalog and retain their previously verified plugin release.
 
 macOS:
 

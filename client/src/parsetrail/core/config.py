@@ -3,7 +3,7 @@ from pathlib import Path
 
 from loguru import logger
 from pydantic import BaseModel, ValidationError
-from PyQt5.QtWidgets import QMessageBox
+from PySide6.QtWidgets import QMessageBox
 from sqlalchemy.orm import Session
 
 from parsetrail.core import orm, query
@@ -43,7 +43,7 @@ def export_init_accounts(session: Session):
     msg_box.setText("Successfully exported Accounts configuration.")
     msg_box.setWindowTitle("Configuration Saved")
     msg_box.setStandardButtons(QMessageBox.Ok)
-    msg_box.exec_()
+    msg_box.exec()
 
 
 def validate_using_model(fpath: Path, model: BaseModel):

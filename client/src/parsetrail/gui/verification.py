@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 
 import pandas as pd
 from loguru import logger
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 from sqlalchemy.orm import joinedload, sessionmaker
 
 from parsetrail.core import learn
@@ -229,7 +229,7 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
     """
 
     # Signal to main window when db is updated
-    data_changed = QtCore.pyqtSignal()
+    data_changed = QtCore.Signal()
 
     def __init__(
         self,

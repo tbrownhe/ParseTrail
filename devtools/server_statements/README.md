@@ -25,7 +25,7 @@ hibernation, and crash dumps is outside that application-level guarantee.
 
 - The client is installed editable or otherwise importable. Running from the
   repository root adds `client/src` to `sys.path` automatically.
-- PyQt5, SQLAlchemy, psycopg/psycopg2, cryptography, pydantic-settings, and loguru.
+- PySide6, SQLAlchemy, psycopg/psycopg2, cryptography, pydantic-settings, and loguru.
 - SSH access to the host containing encrypted statements and Postgres.
 - Access to the statement master key.
 

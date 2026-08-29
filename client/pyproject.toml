@@ -8,9 +8,9 @@ description = "ParseTrail Desktop Client"
 readme = "README.md"
 authors = [{ name = "Tobias Brown-Heft" }]
 
-requires-python = ">=3.10,<3.11"
+requires-python = ">=3.13,<3.14"
 dependencies = [
-  "PyQt5<6.0,>=5.0",
+  "PySide6-Essentials==6.11.2",
   "pyinstaller<7.0,>=6.17",
   "loguru<1.0,>=0.7",
   "openpyxl<4.0,>=3.1",

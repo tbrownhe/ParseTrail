@@ -18,7 +18,7 @@ If you just want to use the app, download the ready-made client from [parsetrail
 ## Technical Details
 
 ParseTrail is built using:
-- [PyQt5](https://www.riverbankcomputing.com/static/Docs/PyQt5/) for the graphical user interface (GUI)
+- [PySide6](https://doc.qt.io/qtforpython-6/) for the graphical user interface (GUI)
 - [pdfplumber](https://pypi.org/project/pdfplumber/) for PDF mining
 - [SQLAlchemy](https://www.sqlalchemy.org/) for database operations
 - [alembic](https://alembic.sqlalchemy.org/en/latest/) for database migrations
@@ -107,7 +107,7 @@ Our development team can also develop plugins for statement files submitted via 
 
 ## License
 
-ParseTrail is released under the MIT License. See `LICENSE.txt` for more details.
+ParseTrail is released under the MIT License. See `LICENSE` for more details.
 
 ## Acknowledgments
 

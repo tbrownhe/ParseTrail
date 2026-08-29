@@ -2,7 +2,7 @@
 
 import sys
 
-from PyQt5.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication
 
 from parsetrail.build_plugins import PLUGINS_DIR, compile_plugins
 from parsetrail.core.initialize import initialize_db
@@ -25,7 +25,7 @@ def main() -> None:
     app = QApplication(sys.argv)
     window = ParseTestDialog(session_maker, plugin_manager)
     window.show()
-    sys.exit(app.exec_())
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":

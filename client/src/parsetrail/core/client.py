@@ -1,8 +1,8 @@
 from pathlib import Path
 
 from loguru import logger
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
-from PyQt5.QtWidgets import QApplication, QMessageBox, QProgressDialog
+from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtWidgets import QApplication, QMessageBox, QProgressDialog
 
 from parsetrail.core.api import api_client
 from parsetrail.core.client_manifest import ClientInstallerArtifact
@@ -149,7 +149,7 @@ class ClientUpdateThread(QThread):
     """Checks for plugins in a separate thread"""
 
     # Success, latest_installer or None, message
-    update_available = pyqtSignal(bool, object, str)
+    update_available = Signal(bool, object, str)
 
     def __init__(self):
         super().__init__()

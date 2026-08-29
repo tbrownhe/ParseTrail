@@ -6,8 +6,8 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from loguru import logger
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
-from PyQt5.QtWidgets import QApplication, QProgressDialog
+from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtWidgets import QApplication, QProgressDialog
 
 from parsetrail.core.api import ApiClient, api_client
 from parsetrail.core.plugin_loader import load_plugin
@@ -300,8 +300,8 @@ def check_for_plugin_updates(
 class PluginUpdateThread(QThread):
     """Check for a newer authenticated plugin catalog without blocking the UI."""
 
-    update_available = pyqtSignal(object, object)
-    update_complete = pyqtSignal(bool, str)
+    update_available = Signal(object, object)
+    update_complete = Signal(bool, str)
 
     def __init__(self, plugin_manager: PluginManager):
         super().__init__()

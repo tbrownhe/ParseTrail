@@ -2,8 +2,8 @@ import math
 from datetime import datetime, timedelta
 
 import pandas as pd
-from PyQt5.QtCore import QAbstractTableModel, QDate, Qt
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import QAbstractTableModel, QDate, Qt
+from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,

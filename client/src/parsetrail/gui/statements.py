@@ -2,9 +2,9 @@ from dataclasses import asdict, is_dataclass
 from datetime import timedelta
 
 import pandas as pd
-from PyQt5.QtCore import QAbstractTableModel, QSize, Qt
-from PyQt5.QtGui import QColor, QIntValidator, QPainter, QPen
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import QAbstractTableModel, QSize, Qt
+from PySide6.QtGui import QColor, QIntValidator, QPainter, QPen
+from PySide6.QtWidgets import (
     QApplication,
     QDialog,
     QHBoxLayout,

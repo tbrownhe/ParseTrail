@@ -224,7 +224,7 @@ class BaseRouter(Generic[T]):
 
             # Show validation error dialog
             dialog = ValidationErrorDialog(statement, errors)
-            dialog.exec_()
+            dialog.exec()
 
             raise ValidationError(err)
         return statement

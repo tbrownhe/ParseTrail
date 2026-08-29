@@ -37,11 +37,11 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.13"
+          python-version: "3.13.15"
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v9
         with:
-          version: "0.9.5"
+          version: "0.12.5"
           enable-cache: true
       - name: Install locked dependencies
         run: uv sync --extra dev --frozen
@@ -76,17 +76,17 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.10.19"
+          python-version: "3.13.15"
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@v9
         with:
-          version: "0.9.5"
+          version: "0.12.5"
           enable-cache: true
       - name: Install locked dependencies
-        run: uv sync --extra dev --frozen --python 3.10.19
+        run: uv sync --extra dev --frozen --python 3.13.15
         working-directory: client
       - name: Run client tests
-        run: uv run --frozen --python 3.10.19 pytest -q
+        run: uv run --frozen --python 3.13.15 pytest -q
         working-directory: client
 
   frontend:
@@ -120,6 +120,6 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.13"
+          python-version: "3.13.15"
       - name: Run offline deployment tests
         run: python -m unittest discover -s scripts/deployment -p "test_*.py" -v

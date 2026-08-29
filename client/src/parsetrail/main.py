@@ -4,16 +4,13 @@ import sys
 from contextlib import suppress
 from platform import system
 
-from PyQt5.QtGui import QIcon
-from PyQt5.QtWidgets import QApplication
-
-from parsetrail.core.logging import logger
-from parsetrail.core.utils import resource_path
+from PySide6.QtGui import QIcon
+from PySide6.QtWidgets import QApplication
 
 RUNTIME_SMOKE_TEST_ARGUMENT = "--runtime-smoke-test"
 
-# Set PyQt environment variables
-os.environ.setdefault("QT_API", "PyQt5")  # Qt bindings
+# Set Qt environment variables
+os.environ.setdefault("QT_API", "PySide6")  # Qt bindings
 os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"  # Enable HiDPI scaling
 
 # Platform-specific environment configurations
@@ -23,6 +20,8 @@ if system_name == "Windows":
 
 
 def handle_signal(_signal, _frame):
+    from parsetrail.core.logging import logger
+
     logger.info("Application interrupted. Exiting...")
     sys.exit(0)
 
@@ -40,6 +39,8 @@ def main() -> int:
         return run_runtime_smoke_test()
 
     # Imports that depend on settings
+    from parsetrail.core.logging import logger
+    from parsetrail.core.utils import resource_path
     from parsetrail.gui.bootstrap import configure_ui_hooks
     from parsetrail.gui.main_window import ParseTrail
 
@@ -60,7 +61,7 @@ def main() -> int:
         configure_ui_hooks()  # bootstrap login ui to AuthManager
         window = ParseTrail()
         window.show()
-        sys.exit(app.exec_())
+        sys.exit(app.exec())
     except Exception:
         logger.exception("An error occurred during application execution")
         sys.exit(1)

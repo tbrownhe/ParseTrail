@@ -2,9 +2,9 @@ from pathlib import Path
 
 import pandas as pd
 from loguru import logger
-from PyQt5.QtGui import QBrush, QColor, QFont
-from PyQt5.QtWidgets import (
-    QDesktopWidget,
+from PySide6.QtGui import QBrush, QColor, QFont
+from PySide6.QtWidgets import (
+    QApplication,
     QDialog,
     QFileDialog,
     QHBoxLayout,
@@ -39,7 +39,10 @@ def resize_to_table(parent, table):
     table_height = table.verticalHeader().length() + table.horizontalHeader().height() + 75
 
     # Get screen dimensions
-    screen_rect = QDesktopWidget().screenGeometry()
+    screen = QApplication.primaryScreen()
+    if screen is None:
+        return
+    screen_rect = screen.availableGeometry()
     screen_width = screen_rect.width()
     screen_height = screen_rect.height()
 
@@ -165,7 +168,7 @@ class PluginManagerDialog(QDialog):
                 remote_release,
             ):
                 dialog = PluginSyncDialog(local_plugins, server_plugins, parent=self)
-                if dialog.exec_() == QDialog.Accepted:
+                if dialog.exec() == QDialog.Accepted:
                     sync_plugins(
                         local_plugins,
                         remote_release,

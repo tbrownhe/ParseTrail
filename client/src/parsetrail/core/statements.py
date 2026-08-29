@@ -3,8 +3,8 @@ import shutil
 from pathlib import Path
 
 from loguru import logger
-from PyQt5.QtCore import Qt
-from PyQt5.QtWidgets import QDialog, QMessageBox, QProgressDialog
+from PySide6.QtCore import Qt
+from PySide6.QtWidgets import QDialog, QMessageBox, QProgressDialog
 from sqlalchemy.orm import Session, sessionmaker
 
 from parsetrail.core import query
@@ -97,7 +97,7 @@ class StatementProcessor:
                 dialog.setStandardButtons(QMessageBox.Ok)
                 dialog.setWindowModality(Qt.ApplicationModal)  # Ensure it's on top
                 dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowStaysOnTopHint)
-                dialog.exec_()
+                dialog.exec()
                 break
             except Exception as e:
                 fail += 1
@@ -281,7 +281,7 @@ class StatementProcessor:
                 dialog.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
                 dialog.setWindowModality(Qt.ApplicationModal)  # Ensure it's on top
                 dialog.setWindowFlags(dialog.windowFlags() | Qt.WindowStaysOnTopHint)
-                if dialog.exec_() == QMessageBox.Cancel:
+                if dialog.exec() == QMessageBox.Cancel:
                     raise RuntimeError(f"File move operation for <pre>{fpath}</pre> was cancelled by the user.") from e
             except Exception as e:
                 raise RuntimeError(f"An unexpected error occurred while moving <pre>{fpath}</pre>: {e}") from e
@@ -318,7 +318,7 @@ class StatementProcessor:
         Ask user to associate this unknown account_num with an Accounts.AccountID
         """
         dialog = AssignAccountNumber(self.Session, fpath, plugin_metadata, account_num)
-        if dialog.exec_() == QDialog.Accepted:
+        if dialog.exec() == QDialog.Accepted:
             return dialog.get_account_id()
         raise RuntimeError("Account assignment dialog was closed without selection.")
 

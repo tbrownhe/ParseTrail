@@ -4,12 +4,12 @@ from datetime import date, timedelta
 
 import pandas as pd
 from loguru import logger
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib.ticker import FuncFormatter
-from PyQt5 import QtCore, QtGui
-from PyQt5.QtCore import QDate
-from PyQt5.QtWidgets import (
+from PySide6 import QtCore, QtGui
+from PySide6.QtCore import QDate
+from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDateEdit,

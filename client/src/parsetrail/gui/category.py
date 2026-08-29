@@ -3,7 +3,7 @@ from __future__ import annotations
 from decimal import Decimal, InvalidOperation
 
 from loguru import logger
-from PyQt5 import QtCore, QtGui, QtWidgets
+from PySide6 import QtCore, QtGui, QtWidgets
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
@@ -496,7 +496,7 @@ class CategoryManagerDialog(QtWidgets.QDialog):
             return
 
         dlg = RenameCategoryDialog(self, categories)
-        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+        if dlg.exec() != QtWidgets.QDialog.Accepted:
             return
 
         src_id, new_name, unverify = dlg.get_values()
@@ -620,7 +620,7 @@ class CategoryManagerDialog(QtWidgets.QDialog):
             return
 
         dlg = MergeCategoryDialog(self, categories)
-        if dlg.exec_() != QtWidgets.QDialog.Accepted:
+        if dlg.exec() != QtWidgets.QDialog.Accepted:
             return
 
         src_id, tgt_id, unverify = dlg.get_values()

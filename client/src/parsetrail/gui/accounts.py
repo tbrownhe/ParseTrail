@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from PyQt5.QtCore import QDate, Qt
-from PyQt5.QtWidgets import (
+from PySide6.QtCore import QDate, Qt
+from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QComboBox,
@@ -530,7 +530,7 @@ class AssignAccountNumber(QDialog):
 
     def new_account(self):
         dialog = EditAccountsDialog(self.Session, self.company, self.statement_type)
-        dialog.exec_()
+        dialog.exec()
 
         with self.Session() as session:
             update_accounts_table(self, session, self.accounts_table)
