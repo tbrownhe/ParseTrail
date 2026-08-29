@@ -371,8 +371,9 @@ batch runner can execute with no Qt application or display server.
   The precise schema is deliberately non-downgradable; recovery restores the
   validated automatic backup. A redacted migration and populated-GUI rehearsal
   passed on a temporary copy of the 18,668-row production client database.
-- [ ] `[USER]` Review rounding, duplicate, and overlapping-statement results in the
-  GUI before accepting the data migration.
+- [x] `[USER]` Review rounding, duplicate, and overlapping-statement results in the
+  GUI before accepting the data migration. A migrated copy of the populated live
+  database passed review with no visible correctness concerns.
 
 Acceptance: schema constraints are enforced, exact-money round trips pass property
 tests, and every existing copied database either migrates successfully or stops
