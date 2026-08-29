@@ -20,8 +20,8 @@ import { type SubmitHandler, useForm } from "react-hook-form"
 import {
   type ApiError,
   type UserPublic,
-  type UserUpdate,
   UsersService,
+  type UserUpdate,
 } from "../../client"
 import useCustomToast from "../../hooks/useCustomToast"
 import { emailPattern, handleError } from "../../utils"

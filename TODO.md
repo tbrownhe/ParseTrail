@@ -217,9 +217,10 @@ recoverable, committed data agrees with the import state, and a retry is safe.
 - [x] Remove the unused direct frontend `form-data` dependency, upgrade Axios and
   affected transitive production dependencies, and refresh the lock file. The
   production audit is now clear and the dashboard production build passes.
-- [ ] Upgrade the vulnerable development-only OpenAPI generator/build chain. The
-  remaining audit findings are confined to dev dependencies and require a breaking
-  generator/tooling update plus a generated-client compatibility check.
+- [x] Upgrade the development-only OpenAPI generator and frontend build chain to
+  maintained Node 22 tooling. Generation now exports the schema reproducibly from
+  the locked backend, isolates generated code behind a compatibility facade, the
+  full npm audit is clear, and regeneration plus the production build pass.
 - [x] Add one universal client lock that requires Windows x64 plus macOS arm64/x64
   resolution, and make both release scripts sync/use it with `--frozen`.
 - [x] Make uv the sole owner of the client Python environment, pin release builds

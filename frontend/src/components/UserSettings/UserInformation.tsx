@@ -18,8 +18,8 @@ import { type SubmitHandler, useForm } from "react-hook-form"
 import {
   type ApiError,
   type UserPublic,
-  type UserUpdateMe,
   UsersService,
+  type UserUpdateMe,
 } from "../../client"
 import useAuth from "../../hooks/useAuth"
 import useCustomToast from "../../hooks/useCustomToast"

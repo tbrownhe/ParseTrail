@@ -76,36 +76,26 @@ But it would be only to clean them up, leaving them won't really have any effect
 
 ### Automatically
 
-* Activate the backend virtual environment.
-* From the top level project directory, run the script:
+Install `uv` and Node 22.18 or newer, then run this from the repository root:
 
 ```bash
-./scripts/generate-frontend-client.sh
+./scripts/generate-client.sh
 ```
 
-* Commit the changes.
+The script exports OpenAPI from the locked backend environment, normalizes operation
+IDs, and regenerates only `frontend/src/client/generated`. Commit the generated
+changes with the backend schema change.
 
 ### Manually
 
-* Start the Docker Compose stack.
-
-* Download the OpenAPI JSON file from `http://localhost/api/v1/openapi.json` and copy it to a new file `openapi.json` at the root of the `frontend` directory.
-
-* To simplify the names in the generated frontend client code, modify the `openapi.json` file by running the following script:
-
-```bash
-node modify-openapi-operationids.js
-```
-
-* To generate the frontend client, run:
+The equivalent cross-platform command from `frontend` is:
 
 ```bash
 npm run generate-client
 ```
 
-* Commit the changes.
-
-Notice that everytime the backend changes (changing the OpenAPI schema), you should follow these steps again to update the frontend client.
+Do not edit `src/client/generated` by hand. Compatibility code for the dashboard
+lives one directory above it and is not removed by regeneration.
 
 ## Using a Remote API
 

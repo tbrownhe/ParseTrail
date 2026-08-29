@@ -9,7 +9,10 @@ type Email = {
 async function findEmail({
   request,
   filter,
-}: { request: APIRequestContext; filter?: (email: Email) => boolean }) {
+}: {
+  request: APIRequestContext
+  filter?: (email: Email) => boolean
+}) {
   const response = await request.get("http://localhost:1080/messages")
 
   let emails = await response.json()

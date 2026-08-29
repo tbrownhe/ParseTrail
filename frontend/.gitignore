@@ -12,6 +12,7 @@ dist
 dist-ssr
 *.local
 openapi.json
+*.tsbuildinfo
 
 # Editor directories and files
 .vscode/*

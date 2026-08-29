@@ -42,10 +42,10 @@ repos:
     hooks:
       - id: biome-check
         name: biome check
-        entry: biome check --apply --config-path=frontend --files-ignore-unknown=true --no-errors-on-unmatched
+        entry: biome check --write --config-path=frontend/biome.json --files-ignore-unknown=true --no-errors-on-unmatched
         language: node
         additional_dependencies:
-          - "@biomejs/biome@1.6.1"
+          - "@biomejs/biome@2.5.11"
         types: [text]
         files: ^frontend/
         exclude: ^frontend/src/client/
