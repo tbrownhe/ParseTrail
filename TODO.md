@@ -499,24 +499,29 @@ with networking disabled and never pause for an implicit package-data download.
   transactions; `AccountService` now owns account queries, mutations, deletion
   constraints, and account-number assignment; `BudgetQueryService` now owns budget
   range queries and report calculations; `TransactionReviewService` now owns review
-  queries, atomic edits, and model-category compatibility retry. Artifact updates,
-  statement submission, and remaining main-window workflows still need boundaries.
+  queries, atomic edits, and model-category compatibility retry; `TransactionService`
+  now owns common account/balance/range queries and atomic manual entry. Artifact
+  updates, statement submission, and remaining main-window workflows still need
+  boundaries.
 - [~] Introduce repositories or explicit query services so GUI code does not manage
   SQLAlchemy sessions directly. Category and account management now delegate all
   persistence to headless services, and the budget view delegates its reporting
   query; verification now delegates all of its persistence as well. Main-window and
-  transaction-browser queries remain.
+  transaction-browser queries now delegate to `TransactionService`; main-window
+  queries remain.
 - [~] Split the largest GUI modules by workflow while preserving behavior; avoid a
   full rewrite. Category and account persistence and budget reporting moved out of
   their GUI modules without changing their interaction flows; transaction-review
   persistence moved out of its window and its module shrank by roughly 130 lines.
+  Transaction-browser persistence also moved out without changing its primary flows.
   The other large workflow modules remain.
 - [~] Replace broad exception catches with typed boundary errors and user-safe
   messages while retaining exception chains for local diagnostics. Category input,
   lookup, duplicate, and persistence failures and account validation, duplicate,
   assignment, in-use, and persistence failures are now typed at service boundaries;
   invalid budget reports and query failures are typed, as are invalid or stale review
-  edits and auto-categorization failures.
+  edits and auto-categorization failures. Manual-entry validation, missing accounts,
+  and transaction query/persistence failures are typed as well.
 
 Acceptance: core application tests run without Qt, each extracted service has one
 clear transaction owner, and module size trends downward without feature drift.

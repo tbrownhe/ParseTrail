@@ -14,6 +14,10 @@ Unreleased
   characterized headless reporting service
 - Move transaction-review filtering, atomic edits, and model-category compatibility
   retry behind a characterized headless service with typed failures
+- Move transaction range and latest-balance queries plus atomic manual entry behind
+  a characterized headless service
+- Report manual-entry duplicates accurately and make empty recurring-analysis results
+  and category columns safe in the transaction dialog
 
 1.3.1
 =====
