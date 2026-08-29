@@ -82,6 +82,20 @@ class _MemoryTokenStore:
         self.token = None
 
 
+class _BodyConsumingTransport(HttpTransport):
+    """Consume a request body synchronously without involving socket scheduling."""
+
+    def __init__(self) -> None:
+        self.requests: list[tuple[str, str]] = []
+        self.chunks: list[bytes] = []
+
+    def request(self, method: str, url: str, **kwargs):
+        self.requests.append((method, url))
+        for chunk in kwargs["data"]:
+            self.chunks.append(chunk)
+        raise AssertionError("cancelled multipart body completed without raising")
+
+
 def _api(base_url: str, transport: HttpTransport) -> tuple[ApiClient, _FakeAuth]:
     auth = _FakeAuth(base_url)
     client = ApiClient(
@@ -282,20 +296,23 @@ def test_statement_upload_is_length_known_and_reports_true_progress() -> None:
 
 
 def test_statement_upload_can_cancel_before_sending_body() -> None:
-    handled = threading.Event()
+    transport = _BodyConsumingTransport()
+    client, _ = _api("https://example.invalid", transport)
+    updates: list[tuple[int, int]] = []
 
-    def handler(request: BaseHTTPRequestHandler, _method: str) -> None:
-        handled.set()
-        _reply(request, 200, b'{"message":"SUCCESS"}')
+    with pytest.raises(StatementSubmissionCancelled, match="cancelled"):
+        client.submit_statement(
+            b"encrypted-statement",
+            "encrypted-key",
+            {"institution": "Example Bank"},
+            cancelled=lambda: True,
+            progress=lambda sent, total: updates.append((sent, total)),
+        )
 
-    with _server(handler) as base_url:
-        client, _ = _api(base_url, HttpTransport(retries=0))
-        with pytest.raises(StatementSubmissionCancelled, match="cancelled"):
-            client.submit_statement(
-                b"encrypted-statement",
-                "encrypted-key",
-                {"institution": "Example Bank"},
-                cancelled=lambda: True,
-            )
-
-    assert handled.wait(timeout=1)
+    assert transport.requests == [
+        ("POST", "https://example.invalid/statements/submit-statement")
+    ]
+    assert transport.chunks == []
+    assert len(updates) == 1
+    assert updates[0][0] == 0
+    assert updates[0][1] > 0

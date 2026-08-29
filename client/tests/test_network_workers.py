@@ -12,37 +12,51 @@ from PySide6.QtCore import QThread, QTimer
 from PySide6.QtWidgets import QApplication
 
 
-def _run_with_event_loop(thread: QThread) -> int:
+def _assert_event_loop_runs_while_worker_is_blocked(
+    thread: QThread,
+    worker_started: threading.Event,
+    release_worker: threading.Event,
+) -> None:
     app = QApplication.instance() or QApplication([])
-    ticks = 0
+    main_thread = threading.get_ident()
+    callback_threads: list[int] = []
     timer = QTimer()
-    timer.setInterval(5)
+    timer.setSingleShot(True)
+    timer.setInterval(0)
 
-    def tick() -> None:
-        nonlocal ticks
-        ticks += 1
+    def record_event_loop_callback() -> None:
+        callback_threads.append(threading.get_ident())
 
-    timer.timeout.connect(tick)
-    timer.start()
+    timer.timeout.connect(record_event_loop_callback)
     thread.start()
-    deadline = time.monotonic() + 2
-    while thread.isRunning() and time.monotonic() < deadline:
-        app.processEvents()
-        time.sleep(0.001)
-    thread.wait(1000)
+    finished = False
+    try:
+        assert worker_started.wait(timeout=2), "worker did not reach the synchronization barrier"
+        assert thread.isRunning()
+        timer.start()
+        deadline = time.monotonic() + 2
+        while not callback_threads and time.monotonic() < deadline:
+            app.processEvents()
+        assert callback_threads == [main_thread]
+    finally:
+        release_worker.set()
+        finished = thread.wait(2000)
+        timer.stop()
     app.processEvents()
-    timer.stop()
+    assert finished
     assert not thread.isRunning()
-    return ticks
 
 
 def test_installer_download_runs_off_qt_thread(monkeypatch, tmp_path: Path) -> None:
     main_thread = threading.get_ident()
     worker_threads: list[int] = []
+    worker_started = threading.Event()
+    release_worker = threading.Event()
 
     def download(_installer, **_kwargs):
         worker_threads.append(threading.get_ident())
-        time.sleep(0.08)
+        worker_started.set()
+        assert release_worker.wait(timeout=2), "test did not release installer worker"
         return tmp_path / "installer.exe"
 
     monkeypatch.setattr(client, "download_client_installer", download)
@@ -55,17 +69,20 @@ def test_installer_download_runs_off_qt_thread(monkeypatch, tmp_path: Path) -> N
     )
     thread = client.InstallerDownloadThread(artifact)
 
-    assert _run_with_event_loop(thread) > 2
+    _assert_event_loop_runs_while_worker_is_blocked(thread, worker_started, release_worker)
     assert worker_threads and worker_threads[0] != main_thread
 
 
 def test_plugin_sync_runs_off_qt_thread(monkeypatch) -> None:
     main_thread = threading.get_ident()
     worker_threads: list[int] = []
+    worker_started = threading.Event()
+    release_worker = threading.Event()
 
     def sync(*_args, **_kwargs):
         worker_threads.append(threading.get_ident())
-        time.sleep(0.08)
+        worker_started.set()
+        assert release_worker.wait(timeout=2), "test did not release plugin worker"
         return object()
 
     monkeypatch.setattr(plugins, "sync_plugins", sync)
@@ -75,17 +92,20 @@ def test_plugin_sync_runs_off_qt_thread(monkeypatch) -> None:
         plugin_manager=SimpleNamespace(),
     )
 
-    assert _run_with_event_loop(thread) > 2
+    _assert_event_loop_runs_while_worker_is_blocked(thread, worker_started, release_worker)
     assert worker_threads and worker_threads[0] != main_thread
 
 
 def test_statement_encryption_and_upload_run_off_qt_thread(monkeypatch, tmp_path: Path) -> None:
     main_thread = threading.get_ident()
     worker_threads: list[int] = []
+    worker_started = threading.Event()
+    release_worker = threading.Event()
 
     def encrypt(_path):
         worker_threads.append(threading.get_ident())
-        time.sleep(0.04)
+        worker_started.set()
+        assert release_worker.wait(timeout=2), "test did not release statement worker"
         return b"encrypted", "key"
 
     class Response:
@@ -97,7 +117,6 @@ def test_statement_encryption_and_upload_run_off_qt_thread(monkeypatch, tmp_path
 
     def submit(*_args, **_kwargs):
         worker_threads.append(threading.get_ident())
-        time.sleep(0.04)
         return Response()
 
     monkeypatch.setattr(send, "encrypt_file", encrypt)
@@ -108,5 +127,5 @@ def test_statement_encryption_and_upload_run_off_qt_thread(monkeypatch, tmp_path
         credentials=None,
     )
 
-    assert _run_with_event_loop(thread) > 2
+    _assert_event_loop_runs_while_worker_is_blocked(thread, worker_started, release_worker)
     assert worker_threads and all(worker != main_thread for worker in worker_threads)
