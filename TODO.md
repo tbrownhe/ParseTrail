@@ -359,9 +359,9 @@ does not provide a reliable user-existence oracle.
   successful and never launch their staging file.
 - [x] Replace Windows `shell=True` launching; use platform-specific safe launch
   adapters for Windows, macOS, and Linux, and quit only after a confirmed launch.
-- [ ] Store long-lived desktop credentials in an OS credential store rather than
+- [x] Store long-lived desktop credentials in an OS credential store rather than
   beside their decrypting key in the user profile.
-- [ ] Add fake-server tests for timeouts, slow streams, disconnects, cancellation,
+- [x] Add fake-server tests for timeouts, slow streams, disconnects, cancellation,
   401 refresh/login paths, and error-body redaction.
 
 Acceptance: the interface remains responsive during network failure, cancellation

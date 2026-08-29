@@ -7,6 +7,11 @@
 - Enforce SQLite foreign keys and explicit delete behavior on every connection
 - Validate and migrate shadow database copies before atomic replacement
 - Require exact-Decimal parser output and client 1.3 compatibility for updated plugins
+- Bound and sanitize HTTP failures, retry only idempotent requests, and keep network
+  workflows off the Qt thread with cancellable authenticated staging
+- Store server access tokens in the OS credential store and retire the legacy
+  same-profile Fernet key
+- Launch installers through shell-free Windows, macOS, and Linux adapters
 
 1.2.2
 =====

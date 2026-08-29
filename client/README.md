@@ -105,6 +105,19 @@ and a network failure does not prevent local use. Disable **Check for Client and
 Plugin Updates After Startup** in Preferences for a completely network-silent
 launch; manual update checks and optional statement submission remain available.
 
+## Desktop login storage
+
+ParseTrail stores its API access token in the operating system credential store:
+Windows Credential Locker, macOS Keychain, or a supported Linux Secret Service or
+KWallet backend. The token is never serialized into `config.json`. On a Linux
+desktop without a secure keyring backend, the login remains in memory for the
+current run and ParseTrail asks again after restart rather than falling back to a
+plaintext or app-decryptable file.
+
+Client 1.3 migrates an existing file-encrypted token once, rewrites the config
+without it, and removes the obsolete `~/.parsetrail.key`. Clearing or invalidating
+the login also deletes the OS credential.
+
 ## Signed plugin releases
 
 Plugins are compiled into `.pyc` files and authenticated as one catalog. The

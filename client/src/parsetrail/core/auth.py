@@ -6,8 +6,14 @@ from datetime import datetime, timedelta, timezone
 import requests
 from loguru import logger
 
+from parsetrail.core.credentials import TokenStore, credential_store
 from parsetrail.core.network import HttpTransport, NetworkError, raise_for_response
-from parsetrail.core.settings import AppSettings, save_settings, settings
+from parsetrail.core.settings import (
+    AppSettings,
+    retire_legacy_credential_key,
+    save_settings,
+    settings,
+)
 
 # Keep this in sync with backend/app/core/config.py
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 2
@@ -47,11 +53,21 @@ class AuthManager:
         app_settings: AppSettings,
         *,
         transport: HttpTransport | None = None,
+        token_store: TokenStore = credential_store,
     ):
         self.settings = app_settings
         self.base_url = str(app_settings.server_url).rstrip("/")
         self.transport = transport or HttpTransport()
-        self._token: str = app_settings.access_token or ""
+        self.token_store = token_store
+        stored_token = token_store.get_token()
+        legacy_token = app_settings.access_token or ""
+        self._token: str = stored_token or legacy_token
+        if legacy_token:
+            if stored_token is None:
+                token_store.set_token(legacy_token)
+            app_settings.access_token = ""
+            save_settings(app_settings)
+        retire_legacy_credential_key()
 
         expires_ts = app_settings.token_expires_at
         if expires_ts:
@@ -107,8 +123,8 @@ class AuthManager:
         self._token = token
         self._token_expires_at = datetime.now(timezone.utc) + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
         self.settings.email = email
-        self.settings.access_token = token
         self.settings.token_expires_at = self._token_expires_at.timestamp()
+        self.token_store.set_token(token)
         save_settings(self.settings)
 
     def _login(self) -> bool:
@@ -137,6 +153,7 @@ class AuthManager:
         self._token_expires_at = None
         self.settings.access_token = ""
         self.settings.token_expires_at = 0.0
+        self.token_store.delete_token()
         save_settings(self.settings)
 
     def get_auth_headers(self) -> dict:

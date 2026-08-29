@@ -9,8 +9,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from types import SimpleNamespace
 
 import pytest
+from parsetrail.core import auth as auth_module
 from parsetrail.core.api import ApiClient, StatementSubmissionCancelled
-from parsetrail.core.auth import AuthError
+from parsetrail.core.auth import AuthError, AuthManager
 from parsetrail.core.network import (
     HttpTransport,
     NetworkTimeoutError,
@@ -64,6 +65,21 @@ class _FakeAuth:
 
     def clear_token(self) -> None:
         self.clear_count += 1
+
+
+class _MemoryTokenStore:
+    def __init__(self) -> None:
+        self.token: str | None = None
+
+    def get_token(self) -> str | None:
+        return self.token
+
+    def set_token(self, token: str) -> bool:
+        self.token = token
+        return True
+
+    def delete_token(self) -> None:
+        self.token = None
 
 
 def _api(base_url: str, transport: HttpTransport) -> tuple[ApiClient, _FakeAuth]:
@@ -173,6 +189,64 @@ def test_error_body_is_redacted_and_401_clears_saved_login() -> None:
             client.get("/auth", auth_required=True)
         assert auth.clear_count == 1
         assert secret not in str(auth_error.value)
+
+
+def test_login_uses_bounded_transport_and_persists_only_in_token_store(monkeypatch) -> None:
+    received: dict[str, bytes] = {}
+
+    def handler(request: BaseHTTPRequestHandler, _method: str) -> None:
+        length = int(request.headers["Content-Length"])
+        received["body"] = request.rfile.read(length)
+        _reply(request, 200, b'{"access_token":"server-token","token_type":"bearer"}')
+
+    with _server(handler) as base_url:
+        app_settings = SimpleNamespace(
+            server_url=base_url,
+            access_token="",
+            token_expires_at=0,
+            email="",
+        )
+        store = _MemoryTokenStore()
+        monkeypatch.setattr(auth_module, "save_settings", lambda _settings: None)
+        monkeypatch.setattr(auth_module, "retire_legacy_credential_key", lambda: None)
+        manager = AuthManager(
+            app_settings,
+            transport=HttpTransport(retries=0),
+            token_store=store,
+        )
+
+        manager.login("user@example.com", "password")
+
+    assert b"username=user%40example.com" in received["body"]
+    assert store.token == "server-token"
+    assert app_settings.access_token == ""
+    assert manager.get_auth_headers() == {"Authorization": "Bearer server-token"}
+
+
+def test_rejected_login_does_not_expose_server_body(monkeypatch) -> None:
+    secret = "account-specific private detail"
+
+    def handler(request: BaseHTTPRequestHandler, _method: str) -> None:
+        _reply(request, 401, secret.encode())
+
+    with _server(handler) as base_url:
+        app_settings = SimpleNamespace(
+            server_url=base_url,
+            access_token="",
+            token_expires_at=0,
+            email="",
+        )
+        monkeypatch.setattr(auth_module, "retire_legacy_credential_key", lambda: None)
+        manager = AuthManager(
+            app_settings,
+            transport=HttpTransport(retries=0),
+            token_store=_MemoryTokenStore(),
+        )
+
+        with pytest.raises(AuthError) as error:
+            manager.login("user@example.com", "wrong-password")
+
+    assert secret not in str(error.value)
 
 
 def test_statement_upload_is_length_known_and_reports_true_progress() -> None:
