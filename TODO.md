@@ -295,15 +295,14 @@ an unrecorded mutable image, workstation file, or database assumption.
   routing; malformed output; validation warnings; and hard-fail behavior.
 - [~] `[USER]` Run the authorized statement collection against source and built
   plugins entirely in memory, review redacted diffs, and bless expected outputs.
-  The six revised Citi and five Chase Sapphire statements now route uniquely and
-  reconcile; seven LendingClub/Happen Bank statements still need parser coverage
-  before final output review.
+  All 18 supplied statements now route uniquely and reconcile in the headless
+  source-plugin batch; final output review in the desktop UI remains.
 - [x] Adapt the Citi `202511` layout family to its 2026 accessible-PDF rendering,
   including obscured rows, continuation-page rows, single-date payments, and
   multiline fees, without weakening older Citi routing signatures.
 - [x] Add and validate a Chase Sapphire credit-card parser against all five
   authorized statements.
-- [ ] Update or version the LendingClub LevelUp Savings parser for the seven
+- [x] Update or version the LendingClub LevelUp Savings parser for the seven
   authorized statements and the Happen Bank rename/layout transition.
 - [x] Correct and version the Synchrony/Amazon plugin whose declared name currently
   produces a `.py.pyc` artifact; migrate or remove the malformed filename.
