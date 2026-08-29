@@ -204,7 +204,7 @@ request leaves either one consistent encrypted-file/row pair or neither.
   accepts multiple statement IDs when they resolve to that one archive.
 - [x] Add failure-injection tests at source retention, parse, flush/commit, archive move,
   and cleanup boundaries.
-- [ ] `[USER]` Import overlapping and multi-account fixture statements into a copy
+- [x] `[USER]` Import overlapping and multi-account fixture statements into a copy
   of an existing SQLite database, cancel once, and force one archive failure.
 
 Acceptance: after every injected failure, the original or staged statement is
@@ -448,6 +448,8 @@ clear transaction owner, and module size trends downward without feature drift.
   institutions, statement submission, backups, and what the server can observe.
 - [ ] Turn parser failures into actionable messages that identify format/plugin
   compatibility without exposing statement content.
+- [ ] Report a recovered committed archive as recovery in the import summary,
+  rather than counting the hash match as an ordinary duplicate.
 - [ ] Add visible backup/restore and database-location guidance, including a test
   restore action.
 - [ ] `[USER]` Walk through first run, account login, plugin install, one-off import,
