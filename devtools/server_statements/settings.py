@@ -32,6 +32,7 @@ class Settings(BaseSettings):
 
     # Local resources
     STATEMENTS_DIR: str = ""
+    PLUGINS_DIR: str = ""
 
     # Remote resources
     SSH_KEY_PATH: str = ""
@@ -62,6 +63,8 @@ class Settings(BaseSettings):
     def _enforce_settings(self) -> Self:
         self._check_environment(self.ENVIRONMENT)
         self._check_remote_creds(self.ENVIRONMENT, self.REMOTE_HOST, self.REMOTE_USER)
+        if not self.PLUGINS_DIR:
+            raise ValueError("PLUGINS_DIR is required for statement parser development")
         return self
 
 

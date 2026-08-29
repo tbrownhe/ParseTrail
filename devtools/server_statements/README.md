@@ -38,6 +38,7 @@ Configure at least:
 ENVIRONMENT=local
 
 MASTER_KEY=base64_32_byte_key
+PLUGINS_DIR=C:\path\to\parsetrail-resources\plugins
 
 POSTGRES_SERVER=...
 POSTGRES_PORT=5432

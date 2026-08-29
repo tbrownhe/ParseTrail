@@ -16,6 +16,7 @@ from aes import decrypt_statement
 from db import get_sessionmaker
 from loguru import logger
 from orm import StatementUploads
+from settings import settings
 
 CLIENT_SRC = Path(__file__).resolve().parents[2] / "client" / "src"
 if not CLIENT_SRC.exists():
@@ -23,7 +24,7 @@ if not CLIENT_SRC.exists():
 sys.path.insert(0, str(CLIENT_SRC))
 
 try:
-    from parsetrail.build_plugins import main as build_plugins  # noqa: E402
+    from parsetrail.build_plugins import compile_plugins  # noqa: E402
     from parsetrail.core.parse import ParseInput, parse_any  # noqa: E402
     from parsetrail.core.plugin_manager import PluginManager  # noqa: E402
 except Exception as e:  # pragma: no cover - optional dependency
@@ -58,8 +59,9 @@ def run(
     *,
     accept_warnings: bool = False,
 ) -> int:
-    build_plugins()
-    plugin_manager = PluginManager(allow_unsigned=True)
+    plugin_dir = Path(settings.PLUGINS_DIR).expanduser().resolve()
+    compile_plugins(plugin_dir)
+    plugin_manager = PluginManager(plugin_dir=plugin_dir, allow_unsigned=True)
     plugin_manager.load_plugins()
 
     failures: list[tuple[int, str]] = []

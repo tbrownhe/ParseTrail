@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from settings import settings
 
 # Make the client modules importable
 CLIENT_SRC = Path(__file__).resolve().parents[2] / "client" / "src"
@@ -33,7 +34,7 @@ if not CLIENT_SRC.exists():
 sys.path.insert(0, str(CLIENT_SRC))
 
 try:
-    from parsetrail.build_plugins import main as build_plugins
+    from parsetrail.build_plugins import compile_plugins
     from parsetrail.core.parse import ParseInput
     from parsetrail.core.plugin_manager import PluginManager
     from parsetrail.gui.plugins import ParseTestDialog
@@ -174,7 +175,8 @@ class StatementTool(QMainWindow):
         container.setLayout(layout)
         self.setCentralWidget(container)
 
-        self.plugin_manager = PluginManager(allow_unsigned=True)
+        plugin_dir = Path(settings.PLUGINS_DIR).expanduser().resolve()
+        self.plugin_manager = PluginManager(plugin_dir=plugin_dir, allow_unsigned=True)
         self.session_maker = get_sessionmaker()
 
         self.table.clicked.connect(self.show_metadata_dialog)
@@ -267,7 +269,7 @@ class StatementTool(QMainWindow):
             return "Parsing unavailable: client modules not loaded"
 
         # Recompile plugins for each call, since dev may have updated them.
-        build_plugins()
+        compile_plugins(self.plugin_manager.plugin_dir)
         self.plugin_manager.load_plugins()
 
         parse_input = ParseInput.from_decrypted(plaintext, enc_name, metadata)
