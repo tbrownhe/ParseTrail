@@ -366,9 +366,11 @@ never installs partial data, and no command shell interprets downloaded filename
   platforms with a 4xx response instead of a `KeyError`/500.
 - [ ] Build plugins in a clean pinned interpreter, record source and Python bytecode
   compatibility in the signed manifest, and test minimum-client rejection.
-- [ ] Replace mutable/broad container inputs with pinned supported bases, run the
+- [~] Replace mutable/broad container inputs with pinned supported bases, run the
   backend as a non-root user, and use frozen installs (`uv sync --frozen`,
-  `npm ci`) in images.
+  `npm ci`) in images. Base manifests and installs are pinned/frozen; the
+  production bind-mount ownership migration required for a non-root backend
+  remains.
 - [~] Complete the equivalent macOS frozen-runtime smoke test and add a release
   dry-run that creates signed manifests without publishing them. The Windows
   frozen-runtime gate is implemented and has passed an end-to-end build.

@@ -50,7 +50,7 @@ at rest with the rest of the server backup set, and do not copy it into Git.
 Set the two generated cutover values together in a staging deployment:
 
 ```dotenv
-POSTGRES_IMAGE=postgres:17
+POSTGRES_IMAGE=postgres:17.11-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
 POSTGRES_VOLUME_NAME=parsetrail_app-db-data-pg17
 ```
 

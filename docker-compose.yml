@@ -4,7 +4,7 @@ services:
     # Keep the old image/volume defaults until the documented dump/restore has
     # completed. Cutover changes both variables together; a newer server must
     # never be pointed at the PostgreSQL 12 data directory.
-    image: ${POSTGRES_IMAGE:-postgres:12}
+    image: ${POSTGRES_IMAGE:-postgres:12.22@sha256:2f2a8c2a7d10862e7fba2602e304523554f9df8244c632dafe2628ccb398fb5c}
     restart: always
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]
@@ -24,7 +24,7 @@ services:
 
 
   prestart:
-    image: '${DOCKER_IMAGE_BACKEND?Variable not set}:${TAG-latest}'
+    image: '${BACKEND_IMAGE_REF:-${DOCKER_IMAGE_BACKEND?Variable not set}:local}'
     build:
       context: ./backend
     networks:
@@ -62,7 +62,7 @@ services:
 
 
   backend:
-    image: '${DOCKER_IMAGE_BACKEND?Variable not set}:${TAG-latest}'
+    image: '${BACKEND_IMAGE_REF:-${DOCKER_IMAGE_BACKEND?Variable not set}:local}'
     restart: always
     build:
       context: ./backend
@@ -107,7 +107,13 @@ services:
       - STATEMENTS_FILE_OWNER=${STATEMENTS_FILE_OWNER}
       - STATEMENTS_FILE_GROUP=${STATEMENTS_FILE_GROUP}
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8000/api/v1/utils/health-check/" ]
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import urllib.request;
+          urllib.request.urlopen('http://localhost:8000/api/v1/utils/health-check/', timeout=2)
       interval: 10s
       timeout: 5s
       retries: 5
@@ -160,7 +166,7 @@ services:
 
 
   frontend:
-    image: '${DOCKER_IMAGE_FRONTEND?Variable not set}:${TAG-latest}'
+    image: '${FRONTEND_IMAGE_REF:-${DOCKER_IMAGE_FRONTEND?Variable not set}:local}'
     restart: always
     networks:
       - traefik-public
@@ -191,11 +197,11 @@ services:
 
   website:
     # Static site for Marketing, FAQ and latest client downloads
-    image: nginx:latest
+    image: '${WEBSITE_IMAGE_REF:-parsetrail-website:local}'
     restart: always
-    volumes:
-      # In production, freeze static website via Dockerfile.web and remove the bind mount
-      - ./website:/usr/share/nginx/html
+    build:
+      context: .
+      dockerfile: website/Dockerfile
     environment:
       # Base URLs used by website JS; written into env.js at container start.
       - BACKEND_HOST=${BACKEND_HOST?Variable not set}
