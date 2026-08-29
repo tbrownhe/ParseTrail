@@ -144,6 +144,21 @@ class BaseRouter(Generic[T]):
         return result
 
 
+def extract_pdf_features(reader: PDFReader) -> DocumentFeatures:
+    """Extract the exact in-memory PDF features consumed by routing."""
+    text = reader.extract_text_simple()
+    header = "\n".join(
+        " ".join(line.split()) for page in (reader.pages_simple or []) for line in page.splitlines()[:40]
+    )
+    return DocumentFeatures(
+        suffix=".pdf",
+        body_text=text,
+        header_text=header,
+        pdf_metadata=normalize_pdf_metadata(reader.PDF.metadata),
+        page_count=len(reader.PDF.pages),
+    )
+
+
 class PDFRouter(BaseRouter[PDFReader]):
     """_summary_
 
@@ -167,17 +182,7 @@ class PDFRouter(BaseRouter[PDFReader]):
             Statement: Statement contents in the dataclass
         """
         with PDFReader(self.parse_input.data, self.fpath) as reader:
-            text = reader.extract_text_simple()
-            header = "\n".join(
-                " ".join(line.split()) for page in (reader.pages_simple or []) for line in page.splitlines()[:40]
-            )
-            features = DocumentFeatures(
-                suffix=".pdf",
-                body_text=text,
-                header_text=header,
-                pdf_metadata=normalize_pdf_metadata(reader.PDF.metadata),
-                page_count=len(reader.PDF.pages),
-            )
+            features = extract_pdf_features(reader)
             plugin = self.select_parser(features)
             return self.extract_statement(plugin, reader)
 

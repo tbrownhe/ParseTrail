@@ -25,12 +25,8 @@ sys.path.insert(0, str(CLIENT_SRC))
 
 try:
     from parsetrail.build_plugins import compile_plugins  # noqa: E402
-    from parsetrail.core.parse import ParseInput, parse_any  # noqa: E402
-    from parsetrail.core.parser_classification import (  # noqa: E402
-        DocumentFeatures,
-        classification_trace,
-        normalize_pdf_metadata,
-    )
+    from parsetrail.core.parse import ParseInput, extract_pdf_features, parse_any  # noqa: E402
+    from parsetrail.core.parser_classification import classification_trace  # noqa: E402
     from parsetrail.core.plugin_manager import PluginManager  # noqa: E402
     from parsetrail.core.utils import PDFReader  # noqa: E402
 except Exception as e:  # pragma: no cover - optional dependency
@@ -60,17 +56,7 @@ def _routing_diagnostic(plaintext: bytes, row: StatementUploads, metadata: dict,
     if parse_input.suffix != ".pdf":
         return f"routing trace unavailable for unsupported suffix {parse_input.suffix}"
     with PDFReader(parse_input.data, parse_input.path_hint) as reader:
-        body = reader.extract_text_simple()
-        header = "\n".join(
-            " ".join(line.split()) for page in (reader.pages_simple or []) for line in page.splitlines()[:40]
-        )
-        features = DocumentFeatures(
-            suffix=parse_input.suffix,
-            body_text=body,
-            header_text=header,
-            pdf_metadata=normalize_pdf_metadata(reader.PDF.metadata),
-            page_count=len(reader.PDF.pages),
-        )
+        features = extract_pdf_features(reader)
     trace = classification_trace(features, plugin_manager.metadata)
 
     def candidates(values: tuple[str, ...]) -> str:
