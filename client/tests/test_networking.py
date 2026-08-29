@@ -309,9 +309,7 @@ def test_statement_upload_can_cancel_before_sending_body() -> None:
             progress=lambda sent, total: updates.append((sent, total)),
         )
 
-    assert transport.requests == [
-        ("POST", "https://example.invalid/statements/submit-statement")
-    ]
+    assert transport.requests == [("POST", "https://example.invalid/statements/submit-statement")]
     assert transport.chunks == []
     assert len(updates) == 1
     assert updates[0][0] == 0
