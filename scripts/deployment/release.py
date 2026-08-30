@@ -81,6 +81,11 @@ def iso_now() -> str:
     return utc_now().isoformat().replace("+00:00", "Z")
 
 
+def console_text(value: str) -> str:
+    encoding = sys.stdout.encoding or "utf-8"
+    return value.encode(encoding, errors="backslashreplace").decode(encoding)
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -119,11 +124,13 @@ def run(
         env=env,
         check=False,
         text=True,
+        encoding="utf-8",
+        errors="backslashreplace",
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT,
     )
     if completed.stdout:
-        print(completed.stdout, end="" if completed.stdout.endswith("\n") else "\n")
+        print(console_text(completed.stdout), end="" if completed.stdout.endswith("\n") else "\n")
     if completed.returncode:
         raise ReleaseError(f"Command failed with exit code {completed.returncode}: {command[0]}")
     return completed.stdout
@@ -136,12 +143,14 @@ def run_logged(command: list[str], log_path: Path, *, env: dict[str, str]) -> No
             command,
             env=env,
             text=True,
+            encoding="utf-8",
+            errors="backslashreplace",
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
         )
         assert process.stdout is not None
         for line in process.stdout:
-            sys.stdout.write(line)
+            sys.stdout.write(console_text(line))
             log.write(line)
         return_code = process.wait()
     if return_code:
