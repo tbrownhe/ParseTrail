@@ -9,6 +9,11 @@ the new database. It creates a restricted backup outside the repository,
 restores it into a new volume, verifies every public table row count, and leaves
 the original container and volume untouched.
 
+The helper mounts the target volume root directly at PostgreSQL's configured
+`PGDATA` directory (`/var/lib/postgresql/data/pgdata`). This must remain identical
+to the database-volume target in `docker-compose.yml`; otherwise a verified
+restore can be accidentally hidden one directory below the runtime mount.
+
 ## Prerequisites
 
 - Record the current database container and volume names with `docker inspect`.

@@ -165,7 +165,7 @@ docker run --detach --name "$target_container" \
     --env POSTGRES_DB="$source_database" \
     --env POSTGRES_PASSWORD="$source_password" \
     --env PGDATA=/var/lib/postgresql/data/pgdata \
-    --volume "$target_volume:/var/lib/postgresql/data" \
+    --volume "$target_volume:/var/lib/postgresql/data/pgdata" \
     "$target_image" >/dev/null
 target_created=true
 
