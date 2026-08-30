@@ -254,7 +254,17 @@ def inspect_service(args: argparse.Namespace, values: dict[str, str], service: s
     if not container or "\n" in container:
         raise RecoveryError(f"Expected exactly one staging {service} container")
     try:
-        inspections = json.loads(run(["docker", "inspect", "--type", "container", container]))
+        completed = subprocess.run(
+            ["docker", "inspect", "--type", "container", container],
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="backslashreplace",
+        )
+        if completed.returncode:
+            raise RecoveryError(f"Could not inspect the staging {service} container")
+        inspections = json.loads(completed.stdout)
         return inspections[0]
     except (IndexError, TypeError, json.JSONDecodeError) as exc:
         raise RecoveryError(f"Docker returned an invalid {service} inspection") from exc

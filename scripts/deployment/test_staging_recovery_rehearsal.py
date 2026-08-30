@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import stat
 import subprocess
 import tarfile
@@ -14,6 +15,7 @@ from staging_recovery_rehearsal import (
     MISSING_REVISION,
     RecoveryError,
     expect_incompatible_migration,
+    inspect_service,
     rehearsal,
     restore_resource_archive,
     validate_inputs,
@@ -21,6 +23,19 @@ from staging_recovery_rehearsal import (
 
 
 class StagingRecoveryRehearsalTests(unittest.TestCase):
+    def test_service_inspection_captures_environment_without_logging_it(self) -> None:
+        inspection = [{"Config": {"Env": ["SECRET_KEY=must-not-be-logged"]}}]
+        completed = subprocess.CompletedProcess([], 0, stdout=json.dumps(inspection))
+        with (
+            patch("staging_recovery_rehearsal.BOUNDARY_OVERRIDES", ()),
+            patch("staging_recovery_rehearsal.compose_command", return_value=["docker", "compose"]),
+            patch("staging_recovery_rehearsal.run", return_value="container-id"),
+            patch("staging_recovery_rehearsal.subprocess.run", return_value=completed),
+            patch("builtins.print") as output,
+        ):
+            self.assertEqual(inspect_service(SimpleNamespace(), {}, "backend"), inspection[0])
+        output.assert_not_called()
+
     def test_resource_recovery_preserves_verified_archive_modes(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
