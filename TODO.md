@@ -546,8 +546,11 @@ clear transaction owner, and module size trends downward without feature drift.
   plugin output, and failed safety checks while keeping extracted values out of messages.
 - [x] Report a recovered committed archive as recovery in the import summary,
   rather than counting the hash match as an ordinary duplicate.
-- [ ] Add visible backup/restore and database-location guidance, including a test
-  restore action.
+- [x] Add visible backup/restore and database-location guidance, including a test
+  restore action. SQLite's online backup API creates consistent copies; test restore
+  uses a disposable database, and real restore selects a new path without overwriting
+  the active database. The UI states that database backups are local, plaintext, and
+  exclude statement archives.
 - [ ] `[USER]` Walk through first run, account login, plugin install, one-off import,
   folder import, overlap handling, statement contribution, and restore on Windows.
 - [ ] `[USER]` Repeat the fresh-user walkthrough on the owner's MacBook. Reserve

@@ -55,6 +55,7 @@ from parsetrail.gui.accounts import (
 from parsetrail.gui.budget_view import BudgetTab
 from parsetrail.gui.category import CategoryManagerDialog
 from parsetrail.gui.dashboard_widgets import MatplotlibCanvas, PandasModel
+from parsetrail.gui.database_tools import DatabaseToolsController
 from parsetrail.gui.importing import StatementImportController, choose_source_file_action
 from parsetrail.gui.plugins import (
     ParseTestDialog,
@@ -104,6 +105,7 @@ class ParseTrail(QMainWindow):
 
         # Non modal window handles
         self.transaction_review_window = None
+        self.database_tools = DatabaseToolsController(self)
 
         # MENU BAR #######################
         menubar = self.menuBar()
@@ -112,6 +114,12 @@ class ParseTrail(QMainWindow):
         file_menu = menubar.addMenu("File")
         file_menu.addAction("Preferences", self.preferences)
         file_menu.addAction("Open Database", self.open_db)
+        file_menu.addAction("Database Location and Privacy", self.database_tools.show_location)
+        file_menu.addSeparator()
+        file_menu.addAction("Back Up Database", self.database_tools.create_backup)
+        file_menu.addAction("Test Database Backup", self.database_tools.test_restore)
+        file_menu.addAction("Restore Database", self.database_tools.restore)
+        file_menu.addSeparator()
         file_menu.addAction("Export Account Configuration", self.export_init_accounts)
 
         # Plugins Menu

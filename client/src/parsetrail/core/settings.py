@@ -1,5 +1,7 @@
 import json
 import os
+import shutil
+import uuid
 from datetime import datetime
 from pathlib import Path
 from platform import architecture, system
@@ -239,14 +241,16 @@ class AppSettings(BaseSettings):
 
 
 def backup_config(current: AppSettings) -> None:
-    """Moves and renames existing config.json into a backup folder"""
+    """Copy the existing configuration into its local backup history."""
     if not current.config_path.exists():
         return
 
-    now = datetime.strftime(datetime.now(), r"%Y%m%d%H%M%S")
-    backup_path = current.config_path.parent / "backup" / f"{current.config_path.stem}_{now}.json"
+    now = datetime.strftime(datetime.now(), r"%Y%m%d%H%M%S%f")
+    backup_path = (
+        current.config_path.parent / "backup" / f"{current.config_path.stem}_{now}_{uuid.uuid4().hex[:8]}.json"
+    )
     backup_path.parent.mkdir(parents=True, exist_ok=True)
-    current.config_path.rename(backup_path)
+    shutil.copy2(current.config_path, backup_path)
     logger.info(f"Backup created: {backup_path}")
 
 
@@ -256,13 +260,21 @@ def save_settings(current: AppSettings) -> None:
     Args:
         settings (AppSettings): The settings object to save.
     """
+    partial = current.config_path.with_name(f".{current.config_path.name}.{uuid.uuid4().hex}.partial")
     try:
+        serialized = json.dumps(current.prepare_for_save(), indent=4)
+        current.config_path.parent.mkdir(parents=True, exist_ok=True)
         backup_config(current)
-        with open(current.config_path, "w") as f:
-            json.dump(current.prepare_for_save(), f, indent=4)
+        partial.write_text(serialized, encoding="utf-8")
+        os.replace(partial, current.config_path)
     except (OSError, TypeError, ValueError) as exc:
         logger.exception("Failed to save settings")
         raise SettingsSaveError("Application settings could not be saved.") from exc
+    finally:
+        try:
+            partial.unlink(missing_ok=True)
+        except OSError:
+            pass
     logger.info("Settings saved successfully.")
 
 

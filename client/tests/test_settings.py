@@ -33,3 +33,25 @@ def test_save_settings_preserves_io_error_as_cause(monkeypatch, tmp_path) -> Non
 
     assert exc_info.value.__cause__ is original
     assert "disk unavailable" not in str(exc_info.value)
+
+
+def test_failed_atomic_replace_preserves_previous_settings(monkeypatch, tmp_path) -> None:
+    current = AppSettings(email="new@example.test")
+    current._config_path = tmp_path / "config.json"
+    current.config_path.write_text('{"email": "old@example.test"}', encoding="utf-8")
+    original = OSError("disk unavailable")
+
+    monkeypatch.setattr(
+        settings_module.os,
+        "replace",
+        lambda _source, _destination: (_ for _ in ()).throw(original),
+    )
+
+    with pytest.raises(SettingsSaveError):
+        save_settings(current)
+
+    assert json.loads(current.config_path.read_text(encoding="utf-8"))["email"] == "old@example.test"
+    backups = list((tmp_path / "backup").glob("config_*.json"))
+    assert len(backups) == 1
+    assert json.loads(backups[0].read_text(encoding="utf-8"))["email"] == "old@example.test"
+    assert not list(tmp_path.glob("*.partial"))
