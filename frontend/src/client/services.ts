@@ -5,6 +5,8 @@ import {
   deleteUserMe as apiDeleteUserMe,
   healthCheck as apiHealthCheck,
   loginAccessToken as apiLoginAccessToken,
+  loginBrowserSession as apiLoginBrowserSession,
+  logoutBrowserSession as apiLogoutBrowserSession,
   readUserById as apiReadUserById,
   readUserMe as apiReadUserMe,
   readUsers as apiReadUsers,
@@ -21,6 +23,7 @@ import {
 } from "./generated/sdk.gen"
 import type {
   BodyLoginLoginAccessToken,
+  BodyLoginLoginBrowserSession,
   NewPassword,
   UpdatePassword,
   UserCreate,
@@ -37,6 +40,16 @@ export class LoginService {
     formData: BodyLoginLoginAccessToken
   }) {
     return apiLoginAccessToken({ body: data.formData, ...requestOptions })
+  }
+
+  public static loginBrowserSession(data: {
+    formData: BodyLoginLoginBrowserSession
+  }) {
+    return apiLoginBrowserSession({ body: data.formData, ...requestOptions })
+  }
+
+  public static logoutBrowserSession() {
+    return apiLogoutBrowserSession(requestOptions)
   }
 
   public static testToken() {

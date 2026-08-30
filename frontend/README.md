@@ -102,7 +102,7 @@ lives one directory above it and is not removed by regeneration.
 If you want to use a remote API, you can set the environment variable `VITE_API_URL` to the URL of the remote API. For example, you can set it in the `frontend/.env` file:
 
 ```env
-VITE_API_URL=https://api.my-domain.example.com
+VITE_API_URL=https://api.my-domain.example.com/api/v1
 ```
 
 Then, when you run the frontend, it will use that URL as the base URL for the API.

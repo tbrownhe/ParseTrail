@@ -13,10 +13,15 @@ import {
   Text,
   useBoolean,
 } from "@chakra-ui/react"
-import { createLazyFileRoute, Link as RouterLink } from "@tanstack/react-router"
+import {
+  createLazyFileRoute,
+  Link as RouterLink,
+  useNavigate,
+} from "@tanstack/react-router"
+import { useEffect } from "react"
 import { type SubmitHandler, useForm } from "react-hook-form"
 
-import type { Body_login_login_access_token as AccessToken } from "../client"
+import type { BodyLoginLoginBrowserSession as LoginCredentials } from "../client"
 import useAuth from "../hooks/useAuth"
 import { emailPattern } from "../utils"
 
@@ -26,12 +31,13 @@ export const Route = createLazyFileRoute("/login")({
 
 function Login() {
   const [show, setShow] = useBoolean()
-  const { loginMutation, error, resetError } = useAuth()
+  const navigate = useNavigate()
+  const { loginMutation, error, resetError, user } = useAuth()
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<AccessToken>({
+  } = useForm<LoginCredentials>({
     mode: "onBlur",
     criteriaMode: "all",
     defaultValues: {
@@ -40,7 +46,13 @@ function Login() {
     },
   })
 
-  const onSubmit: SubmitHandler<AccessToken> = async (data) => {
+  useEffect(() => {
+    if (user) {
+      navigate({ to: "/", replace: true })
+    }
+  }, [navigate, user])
+
+  const onSubmit: SubmitHandler<LoginCredentials> = async (data) => {
     if (isSubmitting) return
 
     resetError()

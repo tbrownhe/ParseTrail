@@ -3,8 +3,8 @@ import { useNavigate } from "@tanstack/react-router"
 import { useState } from "react"
 
 import {
-  type Body_login_login_access_token as AccessToken,
-  type ApiError,
+  ApiError,
+  type BodyLoginLoginBrowserSession as LoginCredentials,
   LoginService,
   type UserPublic,
   type UserRegister,
@@ -12,19 +12,20 @@ import {
 } from "../client"
 import useCustomToast from "./useCustomToast"
 
-const isLoggedIn = () => {
-  return localStorage.getItem("access_token") !== null
-}
-
 const useAuth = () => {
   const [error, setError] = useState<string | null>(null)
   const navigate = useNavigate()
   const showToast = useCustomToast()
   const queryClient = useQueryClient()
-  const { data: user, isLoading } = useQuery<UserPublic | null, Error>({
+  const {
+    data: user,
+    error: authError,
+    isLoading,
+    refetch: refetchUser,
+  } = useQuery<UserPublic, ApiError>({
     queryKey: ["currentUser"],
     queryFn: UsersService.readUserMe,
-    enabled: isLoggedIn(),
+    retry: false,
   })
 
   const signUpMutation = useMutation({
@@ -49,16 +50,16 @@ const useAuth = () => {
     },
   })
 
-  const login = async (data: AccessToken) => {
-    const response = await LoginService.loginAccessToken({
+  const login = async (data: LoginCredentials) => {
+    return LoginService.loginBrowserSession({
       formData: data,
     })
-    localStorage.setItem("access_token", response.access_token)
   }
 
   const loginMutation = useMutation({
     mutationFn: login,
-    onSuccess: () => {
+    onSuccess: (authenticatedUser) => {
+      queryClient.setQueryData(["currentUser"], authenticatedUser)
       navigate({ to: "/" })
     },
     onError: (err: ApiError) => {
@@ -72,10 +73,19 @@ const useAuth = () => {
     },
   })
 
-  const logout = () => {
-    localStorage.removeItem("access_token")
+  const logout = async () => {
+    try {
+      await LoginService.logoutBrowserSession()
+    } catch {
+      showToast(
+        "Could not log out.",
+        "The server could not clear your browser session. Please try again.",
+        "error",
+      )
+      return
+    }
     queryClient.clear()
-    navigate({ to: "/login" })
+    await navigate({ to: "/login" })
   }
 
   return {
@@ -84,10 +94,12 @@ const useAuth = () => {
     logout,
     user,
     isLoading,
+    authError,
+    isUnauthorized: authError instanceof ApiError && authError.status === 401,
+    refetchUser,
     error,
     resetError: () => setError(null),
   }
 }
 
-export { isLoggedIn }
 export default useAuth

@@ -1,5 +1,5 @@
 import { Button, Container, Heading, Spinner, Text } from "@chakra-ui/react"
-import { useMutation } from "@tanstack/react-query"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { createLazyFileRoute, useNavigate } from "@tanstack/react-router"
 import { useEffect, useMemo } from "react"
 
@@ -13,6 +13,7 @@ export const Route = createLazyFileRoute("/verify-email")({
 
 function VerifyEmail() {
   const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const showToast = useCustomToast()
   const token = useMemo(
     () => new URLSearchParams(window.location.search).get("token"),
@@ -26,8 +27,14 @@ function VerifyEmail() {
       }
       await LoginService.verifyEmail({ requestBody: { token } })
     },
-    onSuccess: () => {
-      localStorage.removeItem("access_token")
+    onSuccess: async () => {
+      try {
+        await LoginService.logoutBrowserSession()
+      } catch {
+        // Verification revokes the old token server-side even if clearing the
+        // already-invalid cookie is interrupted.
+      }
+      queryClient.removeQueries({ queryKey: ["currentUser"] })
       showToast(
         "Email verified",
         "Your email has been verified. You can now log in.",

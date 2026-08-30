@@ -29,14 +29,21 @@ if (result.status !== 0) {
 }
 
 const document = JSON.parse(result.stdout)
-for (const path of Object.values(document.paths ?? {})) {
+const apiPrefix = "/api/v1"
+const clientPaths = {}
+for (const [routePath, path] of Object.entries(document.paths ?? {})) {
+  if (!routePath.startsWith(`${apiPrefix}/`)) {
+    throw new Error(`OpenAPI route is outside ${apiPrefix}: ${routePath}`)
+  }
   for (const operation of Object.values(path)) {
     const tag = operation?.tags?.[0]
     if (tag && operation.operationId?.startsWith(`${tag}-`)) {
       operation.operationId = operation.operationId.slice(tag.length + 1)
     }
   }
+  clientPaths[routePath.slice(apiPrefix.length)] = path
 }
+document.paths = clientPaths
 
 await writeFile(outputPath, `${JSON.stringify(document, null, 2)}\n`, "utf8")
 console.log(`Generated ${outputPath}`)

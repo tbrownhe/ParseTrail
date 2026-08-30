@@ -35,6 +35,36 @@ export type BodyLoginLoginAccessToken = {
 };
 
 /**
+ * Body_login-login_browser_session
+ */
+export type BodyLoginLoginBrowserSession = {
+    /**
+     * Grant Type
+     */
+    grant_type?: string | null;
+    /**
+     * Username
+     */
+    username: string;
+    /**
+     * Password
+     */
+    password: string;
+    /**
+     * Scope
+     */
+    scope?: string;
+    /**
+     * Client Id
+     */
+    client_id?: string | null;
+    /**
+     * Client Secret
+     */
+    client_secret?: string | null;
+};
+
+/**
  * Body_statements-upload_statement
  */
 export type BodyStatementsUploadStatement = {
@@ -284,7 +314,7 @@ export type LoginAccessTokenData = {
     body: BodyLoginLoginAccessToken;
     path?: never;
     query?: never;
-    url: '/api/v1/login/access-token';
+    url: '/login/access-token';
 };
 
 export type LoginAccessTokenErrors = {
@@ -305,11 +335,52 @@ export type LoginAccessTokenResponses = {
 
 export type LoginAccessTokenResponse = LoginAccessTokenResponses[keyof LoginAccessTokenResponses];
 
+export type LoginBrowserSessionData = {
+    body: BodyLoginLoginBrowserSession;
+    path?: never;
+    query?: never;
+    url: '/login/browser-session';
+};
+
+export type LoginBrowserSessionErrors = {
+    /**
+     * Validation Error
+     */
+    422: HttpValidationError;
+};
+
+export type LoginBrowserSessionError = LoginBrowserSessionErrors[keyof LoginBrowserSessionErrors];
+
+export type LoginBrowserSessionResponses = {
+    /**
+     * Successful Response
+     */
+    200: UserPublic;
+};
+
+export type LoginBrowserSessionResponse = LoginBrowserSessionResponses[keyof LoginBrowserSessionResponses];
+
+export type LogoutBrowserSessionData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/login/logout';
+};
+
+export type LogoutBrowserSessionResponses = {
+    /**
+     * Successful Response
+     */
+    200: Message;
+};
+
+export type LogoutBrowserSessionResponse = LogoutBrowserSessionResponses[keyof LogoutBrowserSessionResponses];
+
 export type TestTokenData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/v1/login/test-token';
+    url: '/login/test-token';
 };
 
 export type TestTokenResponses = {
@@ -330,7 +401,7 @@ export type RecoverPasswordData = {
         email: string;
     };
     query?: never;
-    url: '/api/v1/password-recovery/{email}';
+    url: '/password-recovery/{email}';
 };
 
 export type RecoverPasswordErrors = {
@@ -355,7 +426,7 @@ export type ResetPasswordData = {
     body: NewPassword;
     path?: never;
     query?: never;
-    url: '/api/v1/reset-password/';
+    url: '/reset-password/';
 };
 
 export type ResetPasswordErrors = {
@@ -385,7 +456,7 @@ export type RecoverPasswordHtmlContentData = {
         email: string;
     };
     query?: never;
-    url: '/api/v1/password-recovery-html-content/{email}';
+    url: '/password-recovery-html-content/{email}';
 };
 
 export type RecoverPasswordHtmlContentErrors = {
@@ -410,7 +481,7 @@ export type VerifyEmailData = {
     body: VerificationToken;
     path?: never;
     query?: never;
-    url: '/api/v1/verify-email/';
+    url: '/verify-email/';
 };
 
 export type VerifyEmailErrors = {
@@ -444,7 +515,7 @@ export type ReadUsersData = {
          */
         limit?: number;
     };
-    url: '/api/v1/users/';
+    url: '/users/';
 };
 
 export type ReadUsersErrors = {
@@ -469,7 +540,7 @@ export type CreateUserData = {
     body: UserCreate;
     path?: never;
     query?: never;
-    url: '/api/v1/users/';
+    url: '/users/';
 };
 
 export type CreateUserErrors = {
@@ -494,7 +565,7 @@ export type DeleteUserMeData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/v1/users/me';
+    url: '/users/me';
 };
 
 export type DeleteUserMeResponses = {
@@ -510,7 +581,7 @@ export type ReadUserMeData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/v1/users/me';
+    url: '/users/me';
 };
 
 export type ReadUserMeResponses = {
@@ -526,7 +597,7 @@ export type UpdateUserMeData = {
     body: UserUpdateMe;
     path?: never;
     query?: never;
-    url: '/api/v1/users/me';
+    url: '/users/me';
 };
 
 export type UpdateUserMeErrors = {
@@ -551,7 +622,7 @@ export type UpdatePasswordMeData = {
     body: UpdatePassword;
     path?: never;
     query?: never;
-    url: '/api/v1/users/me/password';
+    url: '/users/me/password';
 };
 
 export type UpdatePasswordMeErrors = {
@@ -576,7 +647,7 @@ export type RegisterUserData = {
     body: UserRegister;
     path?: never;
     query?: never;
-    url: '/api/v1/users/signup';
+    url: '/users/signup';
 };
 
 export type RegisterUserErrors = {
@@ -606,7 +677,7 @@ export type DeleteUserData = {
         user_id: string;
     };
     query?: never;
-    url: '/api/v1/users/{user_id}';
+    url: '/users/{user_id}';
 };
 
 export type DeleteUserErrors = {
@@ -636,7 +707,7 @@ export type ReadUserByIdData = {
         user_id: string;
     };
     query?: never;
-    url: '/api/v1/users/{user_id}';
+    url: '/users/{user_id}';
 };
 
 export type ReadUserByIdErrors = {
@@ -666,7 +737,7 @@ export type UpdateUserData = {
         user_id: string;
     };
     query?: never;
-    url: '/api/v1/users/{user_id}';
+    url: '/users/{user_id}';
 };
 
 export type UpdateUserErrors = {
@@ -696,7 +767,7 @@ export type TestEmailData = {
          */
         email_to: string;
     };
-    url: '/api/v1/utils/test-email/';
+    url: '/utils/test-email/';
 };
 
 export type TestEmailErrors = {
@@ -721,7 +792,7 @@ export type HealthCheckData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/v1/utils/health-check/';
+    url: '/utils/health-check/';
 };
 
 export type HealthCheckResponses = {
@@ -739,7 +810,7 @@ export type GetPublicKeyData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/v1/keys/public-key';
+    url: '/keys/public-key';
 };
 
 export type GetPublicKeyResponses = {
@@ -753,7 +824,7 @@ export type GetPublicKeyHashData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/v1/keys/public-key-hash';
+    url: '/keys/public-key-hash';
 };
 
 export type GetPublicKeyHashResponses = {
@@ -773,7 +844,7 @@ export type GetPluginsData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/v1/plugins/';
+    url: '/plugins/';
 };
 
 export type GetPluginsResponses = {
@@ -787,7 +858,7 @@ export type DownloadPluginManifestData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/v1/plugins/manifest';
+    url: '/plugins/manifest';
 };
 
 export type DownloadPluginManifestResponses = {
@@ -801,7 +872,7 @@ export type DownloadPluginManifestSignatureData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/v1/plugins/manifest-signature';
+    url: '/plugins/manifest-signature';
 };
 
 export type DownloadPluginManifestSignatureResponses = {
@@ -820,7 +891,7 @@ export type DownloadPluginData = {
         plugin_file: string;
     };
     query?: never;
-    url: '/api/v1/plugins/{plugin_file}';
+    url: '/plugins/{plugin_file}';
 };
 
 export type DownloadPluginErrors = {
@@ -843,7 +914,7 @@ export type GetClientsData = {
     body?: never;
     path?: never;
     query?: never;
-    url: '/api/v1/clients/';
+    url: '/clients/';
 };
 
 export type GetClientsResponses = {
@@ -862,7 +933,7 @@ export type DownloadClientManifestData = {
         platform: string;
     };
     query?: never;
-    url: '/api/v1/clients/{platform}/manifest';
+    url: '/clients/{platform}/manifest';
 };
 
 export type DownloadClientManifestErrors = {
@@ -890,7 +961,7 @@ export type DownloadClientManifestSignatureData = {
         platform: string;
     };
     query?: never;
-    url: '/api/v1/clients/{platform}/manifest-signature';
+    url: '/clients/{platform}/manifest-signature';
 };
 
 export type DownloadClientManifestSignatureErrors = {
@@ -922,7 +993,7 @@ export type DownloadClientData = {
         version: string;
     };
     query?: never;
-    url: '/api/v1/clients/{platform}/{version}';
+    url: '/clients/{platform}/{version}';
 };
 
 export type DownloadClientErrors = {
@@ -945,7 +1016,7 @@ export type UploadStatementData = {
     body: BodyStatementsUploadStatement;
     path?: never;
     query?: never;
-    url: '/api/v1/statements/submit-statement';
+    url: '/statements/submit-statement';
 };
 
 export type UploadStatementErrors = {

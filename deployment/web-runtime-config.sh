@@ -39,6 +39,11 @@ validate_url BACKEND_HOST "${BACKEND_HOST:-}"
 validate_url FRONTEND_HOST "${FRONTEND_HOST:-}"
 validate_url GITHUB_URL "${GITHUB_URL:-}"
 
+case "${BACKEND_HOST%/}" in
+    */api/v1) ;;
+    *) fail "BACKEND_HOST must end with /api/v1" ;;
+esac
+
 temporary_path="$(mktemp "${output_path}.tmp.XXXXXX")"
 printf '%s\n' \
     'window.__PARSETRAIL_CONFIG__ = Object.freeze({' \

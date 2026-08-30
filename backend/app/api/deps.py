@@ -2,18 +2,22 @@ from collections.abc import Generator
 from typing import Annotated
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jwt.exceptions import InvalidTokenError
 from pydantic import ValidationError
 from sqlmodel import Session
 
 from app.core import security
+from app.core.browser_session import BROWSER_SESSION_COOKIE, protect_cookie_authenticated_request
 from app.core.config import settings
 from app.core.db import engine
 from app.models import TokenPayload, User
 
-reusable_oauth2 = OAuth2PasswordBearer(tokenUrl=f"{settings.API_V1_STR}/login/access-token")
+reusable_oauth2 = OAuth2PasswordBearer(
+    tokenUrl=f"{settings.API_V1_STR}/login/access-token",
+    auto_error=False,
+)
 
 
 def _credentials_exception() -> HTTPException:
@@ -30,10 +34,17 @@ def get_db() -> Generator[Session, None, None]:
 
 
 SessionDep = Annotated[Session, Depends(get_db)]
-TokenDep = Annotated[str, Depends(reusable_oauth2)]
+TokenDep = Annotated[str | None, Depends(reusable_oauth2)]
 
 
-def get_current_user(session: SessionDep, token: TokenDep) -> User:
+def get_current_user(request: Request, session: SessionDep, bearer_token: TokenDep) -> User:
+    token = bearer_token
+    if token is None:
+        token = request.cookies.get(BROWSER_SESSION_COOKIE)
+        if token is not None:
+            protect_cookie_authenticated_request(request)
+    if token is None:
+        raise _credentials_exception()
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[security.ALGORITHM])
         token_data = TokenPayload(**payload)

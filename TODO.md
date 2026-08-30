@@ -587,8 +587,13 @@ every action that moves or retains a statement is explained before it occurs.
   Every page and the authenticated layout now use TanStack lazy route modules while
   guards and search validation remain eager. The monolithic 714 kB entry became a
   106 kB entry plus route/shared chunks; no chunk exceeds the 500 kB warning limit.
-- [ ] Review localStorage bearer-token exposure and choose an HttpOnly-cookie or
-  documented hardened-token strategy appropriate to the deployed origins.
+- [x] Review localStorage bearer-token exposure and choose an HttpOnly-cookie or
+  documented hardened-token strategy appropriate to the deployed origins. The
+  dashboard now uses a host-only HttpOnly `SameSite=Strict` session cookie and
+  includes credentials explicitly; cookie-authorized mutations and browser login/
+  logout require the exact configured dashboard origin. Desktop/API clients retain
+  bearer auth with OS credential storage, and production/staging cookies use the
+  `__Host-` prefix plus `Secure`. Browser tests assert no token reaches Web Storage.
 
 Acceptance: untrusted server metadata renders only as text, the dashboard contains
 no unused template CRUD surface, and build/check commands leave Git clean.

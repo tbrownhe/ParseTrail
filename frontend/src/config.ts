@@ -24,6 +24,14 @@ function validateApiBaseUrl(value: unknown): string {
     )
   }
 
+  if (parsed.pathname === "/") {
+    // Preserve compatibility with the original local Vite setting.
+    parsed.pathname = "/api/v1"
+  }
+  if (parsed.pathname.replace(/\/$/, "") !== "/api/v1") {
+    throw new Error("ParseTrail API URL must end with /api/v1")
+  }
+
   return parsed.href.replace(/\/$/, "")
 }
 
