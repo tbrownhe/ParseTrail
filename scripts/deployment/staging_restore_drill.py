@@ -80,11 +80,12 @@ def require_staging_database(container: str) -> dict[str, Any]:
     return inspection
 
 
-def require_staging_backend_stopped() -> None:
-    running = run(
+def require_staging_backend() -> tuple[str, str]:
+    containers = run(
         [
             "docker",
             "ps",
+            "--all",
             "--quiet",
             "--filter",
             f"label=com.docker.compose.project={STAGING_PROJECT}",
@@ -92,8 +93,56 @@ def require_staging_backend_stopped() -> None:
             "label=com.docker.compose.service=backend",
         ]
     )
-    if running:
-        raise DrillError("Stop the staging backend before creating restore-drill backups")
+    container_ids = containers.splitlines()
+    if len(container_ids) != 1:
+        raise DrillError(f"Expected exactly one {STAGING_PROJECT} backend container")
+    container = container_ids[0]
+    inspection = inspect_container(container)
+    try:
+        labels = inspection["Config"]["Labels"]
+        image = inspection["Config"]["Image"]
+        running = inspection["State"]["Running"]
+        health = inspection["State"]["Health"]["Status"]
+    except (KeyError, TypeError) as exc:
+        raise DrillError("The backend container inspection is incomplete") from exc
+    if labels.get("com.docker.compose.project") != STAGING_PROJECT:
+        raise DrillError(f"The backend must belong to the {STAGING_PROJECT} Compose project")
+    if labels.get("com.docker.compose.service") != "backend":
+        raise DrillError("The source container must be the Compose backend service")
+    if "@sha256:" not in image:
+        raise DrillError("The staging backend image must be pinned by digest")
+    if running is not True or health != "healthy":
+        raise DrillError("The staging backend must be running and healthy before the drill")
+    return container, image
+
+
+def stop_staging_backend(container: str, image: str) -> None:
+    run(["docker", "stop", "--time", "30", container])
+    inspection = inspect_container(container)
+    if inspection.get("Config", {}).get("Image") != image:
+        raise DrillError("The staging backend image changed while stopping it")
+    if inspection.get("State", {}).get("Running") is not False:
+        raise DrillError("The staging backend did not stop")
+
+
+def restart_staging_backend(
+    container: str,
+    image: str,
+    timeout_seconds: int = 120,
+) -> None:
+    run(["docker", "start", container])
+    deadline = time.monotonic() + timeout_seconds
+    last_health = "unknown"
+    while time.monotonic() < deadline:
+        inspection = inspect_container(container)
+        if inspection.get("Config", {}).get("Image") != image:
+            raise DrillError("The staging backend image changed during the drill")
+        state = inspection.get("State", {})
+        last_health = state.get("Health", {}).get("Status", "missing")
+        if state.get("Running") is True and last_health == "healthy":
+            return
+        time.sleep(1)
+    raise DrillError(f"The staging backend did not become healthy; last health was {last_health}")
 
 
 def container_setting(container: str, name: str) -> str:
@@ -312,6 +361,14 @@ def file_inventory(root: Path) -> list[dict[str, Any]]:
     return inventory
 
 
+def apply_inventory_modes(root: Path, inventory: list[dict[str, Any]]) -> None:
+    # Python's safe tar filter intentionally normalizes permission bits. Restore
+    # only the modes captured from our trusted source tree after extraction.
+    entries = sorted(inventory, key=lambda item: item["type"] == "directory")
+    for item in entries:
+        (root / item["path"]).chmod(item["mode"])
+
+
 def restore_resources(source: Path, output_root: Path) -> tuple[str, int]:
     source_inventory = file_inventory(source)
     archive = output_root / "resources.tar.gz"
@@ -322,7 +379,9 @@ def restore_resources(source: Path, output_root: Path) -> tuple[str, int]:
     restored_root.mkdir(mode=0o700)
     with tarfile.open(archive, "r:gz") as bundle:
         bundle.extractall(restored_root, filter="data")
-    if file_inventory(restored_root / "resources") != source_inventory:
+    restored_resources = restored_root / "resources"
+    apply_inventory_modes(restored_resources, source_inventory)
+    if file_inventory(restored_resources) != source_inventory:
         raise DrillError("The restored resource tree does not match its source inventory")
     return sha256_file(archive), sum(item["type"] == "file" for item in source_inventory)
 
@@ -395,8 +454,8 @@ def atomic_json(path: Path, payload: dict[str, Any]) -> None:
 
 
 def validate_inputs(args: argparse.Namespace) -> None:
-    if args.confirm_writers_stopped != "YES":
-        raise DrillError("Pass --confirm-writers-stopped YES after stopping the staging backend")
+    if args.confirm_staging_downtime != "YES":
+        raise DrillError("Pass --confirm-staging-downtime YES to permit managed backend downtime")
     for value in (
         args.database_container,
         args.target_database_container,
@@ -425,9 +484,7 @@ def validate_inputs(args: argparse.Namespace) -> None:
             raise DrillError("Every target Docker name must contain restore-drill")
 
 
-def drill(args: argparse.Namespace) -> dict[str, Any]:
-    validate_inputs(args)
-    require_staging_backend_stopped()
+def restore_boundaries(args: argparse.Namespace) -> dict[str, Any]:
     inspection = require_staging_database(args.database_container)
     image = inspection["Config"]["Image"]
     user = container_setting(args.database_container, "POSTGRES_USER")
@@ -489,7 +546,20 @@ def drill(args: argparse.Namespace) -> dict[str, Any]:
         "submission_keys_restore_id": f"staging-keys-restore-{timestamp}",
         "submission_keys_target_volume": args.target_keys_volume,
     }
-    atomic_json(output / "restore-evidence.json", evidence)
+    return evidence
+
+
+def drill(args: argparse.Namespace) -> dict[str, Any]:
+    validate_inputs(args)
+    backend_container, backend_image = require_staging_backend()
+    try:
+        stop_staging_backend(backend_container, backend_image)
+        evidence = restore_boundaries(args)
+    finally:
+        restart_staging_backend(backend_container, backend_image)
+    evidence["backend_image"] = backend_image
+    evidence["backend_restart_verified"] = True
+    atomic_json(args.output.expanduser().resolve() / "restore-evidence.json", evidence)
     return evidence
 
 
@@ -502,7 +572,7 @@ def parser() -> argparse.ArgumentParser:
     result.add_argument("--target-keys-volume", required=True)
     result.add_argument("--resources", type=Path, required=True)
     result.add_argument("--output", type=Path, required=True)
-    result.add_argument("--confirm-writers-stopped", required=True, metavar="YES")
+    result.add_argument("--confirm-staging-downtime", required=True, metavar="YES")
     return result
 
 

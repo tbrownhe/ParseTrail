@@ -11,7 +11,9 @@ from unittest.mock import patch
 from staging_restore_drill import (
     STAGING_PROJECT,
     DrillError,
+    drill,
     file_inventory,
+    require_staging_backend,
     require_staging_database,
     restore_resources,
     validate_inputs,
@@ -50,7 +52,7 @@ class StagingRestoreDrillTests(unittest.TestCase):
             resources.mkdir()
             drill_root.mkdir()
             valid = SimpleNamespace(
-                confirm_writers_stopped="YES",
+                confirm_staging_downtime="YES",
                 database_container="parsetrail-staging-db-1",
                 target_database_container="parsetrail-staging-restore-drill-db",
                 target_database_volume="parsetrail-staging-restore-drill-db-data",
@@ -65,10 +67,10 @@ class StagingRestoreDrillTests(unittest.TestCase):
             ):
                 validate_inputs(valid)
 
-                valid.confirm_writers_stopped = "NO"
-                with self.assertRaisesRegex(DrillError, "confirm-writers"):
+                valid.confirm_staging_downtime = "NO"
+                with self.assertRaisesRegex(DrillError, "confirm-staging-downtime"):
                     validate_inputs(valid)
-                valid.confirm_writers_stopped = "YES"
+                valid.confirm_staging_downtime = "YES"
                 valid.resources = root / "production-resources"
                 with self.assertRaisesRegex(DrillError, "resource source"):
                     validate_inputs(valid)
@@ -83,6 +85,9 @@ class StagingRestoreDrillTests(unittest.TestCase):
             (source / "nested").mkdir()
             (source / "nested" / "artifact.bin").write_bytes(b"signed artifact")
             (source / "empty").mkdir()
+            (source / "nested").chmod(0o755)
+            (source / "nested" / "artifact.bin").chmod(0o664)
+            (source / "empty").chmod(0o700)
 
             digest, count = restore_resources(source, output)
 
@@ -91,6 +96,47 @@ class StagingRestoreDrillTests(unittest.TestCase):
             self.assertEqual(file_inventory(source), file_inventory(output / "restored-files" / "resources"))
             with tarfile.open(output / "resources.tar.gz", "r:gz") as archive:
                 self.assertIn("resources/nested/artifact.bin", archive.getnames())
+
+    def test_backend_guard_requires_one_healthy_digest_pinned_container(self) -> None:
+        inspection = {
+            "Config": {
+                "Image": f"ghcr.io/example/backend@sha256:{'b' * 64}",
+                "Labels": {
+                    "com.docker.compose.project": STAGING_PROJECT,
+                    "com.docker.compose.service": "backend",
+                },
+            },
+            "State": {"Running": True, "Health": {"Status": "healthy"}},
+        }
+        with (
+            patch("staging_restore_drill.run", return_value="backend-id"),
+            patch("staging_restore_drill.inspect_container", return_value=inspection),
+        ):
+            self.assertEqual(require_staging_backend(), ("backend-id", inspection["Config"]["Image"]))
+
+        inspection["Config"]["Image"] = "backend:local"
+        with (
+            patch("staging_restore_drill.run", return_value="backend-id"),
+            patch("staging_restore_drill.inspect_container", return_value=inspection),
+            self.assertRaisesRegex(DrillError, "pinned by digest"),
+        ):
+            require_staging_backend()
+
+    def test_drill_restarts_exact_backend_even_when_restore_fails(self) -> None:
+        args = SimpleNamespace(output=Path("unused"))
+        image = f"ghcr.io/example/backend@sha256:{'c' * 64}"
+        failure = DrillError("restore failed")
+        with (
+            patch("staging_restore_drill.validate_inputs"),
+            patch("staging_restore_drill.require_staging_backend", return_value=("backend-id", image)),
+            patch("staging_restore_drill.stop_staging_backend") as stop,
+            patch("staging_restore_drill.restore_boundaries", side_effect=failure),
+            patch("staging_restore_drill.restart_staging_backend") as restart,
+            self.assertRaisesRegex(DrillError, "restore failed"),
+        ):
+            drill(args)
+        stop.assert_called_once_with("backend-id", image)
+        restart.assert_called_once_with("backend-id", image)
 
 
 if __name__ == "__main__":
