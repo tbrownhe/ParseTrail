@@ -5,6 +5,9 @@ Runs through statement_uploads rows with plugin_status='ready', decrypts each,
 and attempts to parse via the in-memory parse pipeline. Summarizes failures.
 """
 
+# Environment selection must execute before settings-dependent imports.
+# ruff: noqa: E402
+
 import argparse
 
 # Make the client modules importable
@@ -12,11 +15,15 @@ import sys
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 
+from environment_cli import preselect_environment_file
+
+preselect_environment_file(sys.argv[1:])
+
 from aes import decrypt_statement
 from db import get_sessionmaker
 from loguru import logger
 from orm import StatementUploads
-from settings import require_runtime_settings, settings
+from settings import require_runtime_settings, settings, target_summary
 
 CLIENT_SRC = Path(__file__).resolve().parents[2] / "client" / "src"
 if not CLIENT_SRC.exists():
@@ -110,6 +117,7 @@ def run(
     diagnose_routing: bool = False,
 ) -> int:
     require_runtime_settings()
+    logger.warning("Statement devtool target: {}", target_summary())
     plugin_dir = Path(settings.PLUGINS_DIR).expanduser().resolve()
     compile_plugins(plugin_dir)
     plugin_manager = PluginManager(plugin_dir=plugin_dir, allow_unsigned=True)
@@ -144,6 +152,11 @@ def run(
 
 def main():
     parser = argparse.ArgumentParser(description="Batch test parsing for ready statements.")
+    parser.add_argument(
+        "--env-file",
+        type=Path,
+        help="Explicit local, staging, or production dotenv selected before imports.",
+    )
     parser.add_argument("--ids", nargs="*", type=int, help="Optional specific statement IDs to run.")
     parser.add_argument("--limit", type=int, help="Optional limit on number of statements.")
     parser.add_argument(

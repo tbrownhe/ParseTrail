@@ -128,7 +128,8 @@ services:
       - traefik.http.services.${STACK_NAME?Variable not set}-backend.loadbalancer.server.port=8000
 
       # Prevent abuse
-      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.middlewares=rate-limit
+      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.middlewares=rate-limit,${STACK_NAME?Variable not set}-network-allow
+      - traefik.http.middlewares.${STACK_NAME?Variable not set}-network-allow.ipallowlist.sourcerange=${TRAEFIK_ALLOWED_IP_RANGES?Variable not set}
 
       # HTTP redirect + HTTPS Certificates
       # Backend endpoints are at `api.DOMAIN/api/v1/etc`
@@ -160,8 +161,8 @@ services:
       - traefik.http.routers.${STACK_NAME?Variable not set}-openapi-https.priority=110
 
       #- traefik.http.routers.swagger-uim.service=backend
-      - traefik.http.routers.${STACK_NAME?Variable not set}-swagger-https.middlewares=swagger-auth
-      - traefik.http.routers.${STACK_NAME?Variable not set}-openapi-https.middlewares=swagger-auth
+      - traefik.http.routers.${STACK_NAME?Variable not set}-swagger-https.middlewares=${STACK_NAME?Variable not set}-swagger-auth,${STACK_NAME?Variable not set}-network-allow
+      - traefik.http.routers.${STACK_NAME?Variable not set}-openapi-https.middlewares=${STACK_NAME?Variable not set}-swagger-auth,${STACK_NAME?Variable not set}-network-allow
       - traefik.http.middlewares.${STACK_NAME?Variable not set}-swagger-auth.basicauth.users=${SWAGGER_HASH}
 
 
@@ -194,6 +195,7 @@ services:
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.entrypoints=https
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.tls=true
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.tls.certresolver=le
+      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.middlewares=${STACK_NAME?Variable not set}-network-allow
 
 
   website:
@@ -229,6 +231,7 @@ services:
       - traefik.http.routers.${STACK_NAME?Variable not set}-web-www-https.entrypoints=https
       - traefik.http.routers.${STACK_NAME?Variable not set}-web-www-https.tls=true
       - traefik.http.routers.${STACK_NAME?Variable not set}-web-www-https.tls.certresolver=le
+      - traefik.http.routers.${STACK_NAME?Variable not set}-web-www-https.middlewares=rate-limit,${STACK_NAME?Variable not set}-network-allow
       # domain
       - traefik.http.routers.${STACK_NAME?Variable not set}-web-http.rule=Host(`${DOMAIN}`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-web-http.entrypoints=http
@@ -239,16 +242,16 @@ services:
       - traefik.http.routers.${STACK_NAME?Variable not set}-web-https.tls.certresolver=le
 
       # Prevent abuse
-      - traefik.http.routers.${STACK_NAME?Variable not set}-web-https.middlewares=rate-limit
+      - traefik.http.routers.${STACK_NAME?Variable not set}-web-https.middlewares=rate-limit,${STACK_NAME?Variable not set}-network-allow
 
 
 volumes:
   app-db-data:
     external: true
-    name: ${POSTGRES_VOLUME_NAME:-parsetrail_app-db-data}
+    name: ${POSTGRES_VOLUME_NAME?Variable not set}
   app-keys-data:
     external: true
-    name: parsetrail_app-keys-data
+    name: ${SUBMISSION_KEYS_VOLUME_NAME?Variable not set}
 
 networks:
   traefik-public:

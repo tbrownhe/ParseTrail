@@ -43,6 +43,7 @@ from parsetrail.core.dashboard import DashboardQueryService, DashboardServiceErr
 from parsetrail.core.initialize import initialize_db
 from parsetrail.core.parser_routing import ParseError, ParseWarningsRejectedError, present_parse_error
 from parsetrail.core.plugins import PluginManager, PluginUpdateThread
+from parsetrail.core.profile import ProfileError, is_staging_profile, profile_display_name, require_profile_owned_path
 from parsetrail.core.review import TransactionReviewError, TransactionReviewService
 from parsetrail.core.settings import save_settings, settings
 from parsetrail.core.statements import ArchivePendingError
@@ -90,7 +91,8 @@ class ParseTrail(QMainWindow):
         sys.excepthook = self.exception_hook
 
         # Initialize the GUI window
-        self.setWindowTitle("ParseTrail")
+        staging = is_staging_profile()
+        self.setWindowTitle("ParseTrail [STAGING]" if staging else "ParseTrail")
         self.resize(1000, 800)
 
         # Maximize to primary screen
@@ -103,6 +105,11 @@ class ParseTrail(QMainWindow):
             int(0.8 * geometry.height()),
         )
         self.showMaximized()
+        if staging:
+            marker = QLabel(profile_display_name())
+            marker.setStyleSheet("background: #b42318; color: white; font-weight: bold; padding: 4px 12px;")
+            marker.setToolTip("Isolated staging profile; production data and credentials are not in use.")
+            self.statusBar().addPermanentWidget(marker)
 
         # Non modal window handles
         self.transaction_review_window = None
@@ -903,6 +910,11 @@ class ParseTrail(QMainWindow):
         if save_path == "":
             return
         model_path = Path(save_path).resolve()
+        try:
+            model_path = require_profile_owned_path(model_path, label="trained model")
+        except ProfileError as exc:
+            QMessageBox.warning(self, "Staging Path Blocked", str(exc))
+            return
 
         # Retrieve verified transactions
         try:
@@ -939,7 +951,8 @@ class ParseTrail(QMainWindow):
 
     def update_main_gui(self):
         """Update all tables, checklists, and charts in the main GUI window"""
-        self.setWindowTitle(f"ParseTrail v{__version__} - {settings.db_path}")
+        marker = " [STAGING]" if is_staging_profile() else ""
+        self.setWindowTitle(f"ParseTrail{marker} v{__version__} - {settings.db_path}")
         try:
             self.update_balances_table()
         except Exception:

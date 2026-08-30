@@ -10,6 +10,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 
 from parsetrail.core.database_backup import DatabaseBackupError, DatabaseBackupService, DatabaseInspection
+from parsetrail.core.profile import ProfileError, require_profile_owned_path
 from parsetrail.core.settings import SettingsSaveError, save_settings, settings
 
 
@@ -45,6 +46,11 @@ class DatabaseToolsController:
         destination_path = Path(destination)
         if destination_path.suffix.lower() not in {".db", ".dbb"}:
             destination_path = destination_path.with_suffix(".dbb")
+        try:
+            destination_path = require_profile_owned_path(destination_path, label="database backup")
+        except ProfileError as exc:
+            QMessageBox.warning(self.parent, "Staging Path Blocked", str(exc))
+            return
         try:
             inspection = DatabaseBackupService(settings.db_path).create_backup(destination_path)
         except DatabaseBackupError:
@@ -112,6 +118,11 @@ class DatabaseToolsController:
         destination_path = Path(destination)
         if destination_path.suffix.lower() != ".db":
             destination_path = destination_path.with_suffix(".db")
+        try:
+            destination_path = require_profile_owned_path(destination_path, label="restored database")
+        except ProfileError as exc:
+            QMessageBox.warning(self.parent, "Staging Path Blocked", str(exc))
+            return
 
         reply = QMessageBox.question(
             self.parent,

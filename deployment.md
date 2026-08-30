@@ -9,6 +9,10 @@ release-signing keys, SSH access, or a production `.env`.
 Traefik remains in the separate infrastructure repository. This repository owns
 the database and the backend, dashboard, and website containers behind it.
 
+The isolated LAN/VPN staging target is defined entirely by configuration and the
+same Compose file. Its bootstrap, comparison arguments, desktop profile, and
+acceptance sequence are in [docs/staging.md](docs/staging.md).
+
 Production uses `docker-compose.yml` alone. Local ports and Adminer live in the
 explicit `docker-compose.dev.yml`; the repository deliberately has no
 auto-discovered `docker-compose.override.yml`.
@@ -46,11 +50,16 @@ DOCKER_IMAGE_FRONTEND=registry.example.com/parsetrail/frontend
 DOCKER_IMAGE_WEBSITE=registry.example.com/parsetrail/website
 POSTGRES_IMAGE=postgres:17.11-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e77087d1dd22020ede611c096a272e0
 POSTGRES_VOLUME_NAME=parsetrail_app-db-data-pg17
+SUBMISSION_KEYS_VOLUME_NAME=parsetrail_app-keys-data
+TRAEFIK_ALLOWED_IP_RANGES=0.0.0.0/0,::/0
 ```
 
 Keep the PostgreSQL 12 image and volume values until the separate
 [PostgreSQL 17 dump/restore runbook](docs/postgresql-17-upgrade.md) is complete.
 Changing the image without changing to the restored volume is forbidden.
+The submission-key volume is also explicit so a staging Compose project cannot
+silently mount the production default. Production permits public application
+traffic; staging sets only the actual LAN/VPN CIDRs.
 
 Use three external, access-controlled locations on the server:
 
@@ -101,7 +110,10 @@ dashboard, and website are digest-pinned. For the first staging transition only:
    ```
 
 Do not bootstrap production until this transition and an application rollback
-have succeeded in staging.
+have succeeded in staging. Every staging release command also supplies
+`--production-env` and `--production-state-dir`; deploy/rollback additionally
+supplies `--production-smoke-config`. The tool refuses shared storage, secrets,
+targets, artifact inventories, or smoke credentials.
 
 ## 3. Record recent restore evidence
 

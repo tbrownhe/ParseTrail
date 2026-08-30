@@ -289,25 +289,33 @@ temporary exception, and the Postgres restore drill preserves expected row count
 - [x] Make development Compose overrides explicitly opt-in. Do not keep a tracked
   `docker-compose.override.yml` that production can auto-load and use to expose
   local ports, remove Traefik labels, or redirect the default network.
-- [ ] Treat staging as a configuration-only deployment target using the same
+- [x] Treat staging as a configuration-only deployment target using the same
   Compose definition, images, migrations, and signed artifacts as production;
-  do not introduce staging-only application behavior.
-- [ ] Parameterize the external submission-key volume and validate that staging
+  do not introduce staging-only application behavior. Preflight now compares the
+  exact staging and production signed-artifact inventories before adoption or
+  deployment.
+- [x] Parameterize the external submission-key volume and validate that staging
   uses a distinct `STACK_NAME`, PostgreSQL volume, submission-key volume, secrets,
   bind-mount directories, release state, and smoke credentials. Refuse a staging
-  deployment whose protected storage resolves to a production target.
+  deployment whose protected storage resolves to a production target. The release
+  tool requires the production environment/state/smoke references and rejects each
+  reused boundary independently.
 - [x] Move the dashboard API origin from build-time `VITE_API_URL` to validated
   container-startup configuration so the exact frontend image digest can be
   promoted from staging to production. Dashboard and website images now share an
   atomic, fail-closed `runtime-config.js` generator and serve it with `no-store`;
   public URLs are no longer compiled into either image.
-- [ ] Add an isolated desktop staging profile and process-local launcher for the
+- [x] Add an isolated desktop staging profile and process-local launcher for the
   installed client. Separate AppData, SQLite/import paths, OS credential-store
   entry, cached submission public key, plugin store, logs, and reports; show a
-  persistent `STAGING` marker and never modify the production profile.
-- [ ] Let the server-statement devtool select an explicit environment file,
+  persistent `STAGING` marker and never modify the production profile. Managed
+  staging output paths are constrained to `ParseTrail-Staging`, and `--staging`
+  is consumed before settings, logging, database, or keyring imports.
+- [x] Let the server-statement devtool select an explicit environment file,
   recognize staging, display its target prominently, and retain the memory-only
-  plaintext invariant.
+  plaintext invariant. Both GUI and batch paths select `--env-file` before
+  settings-dependent imports; SSH-vs-local key, database, and ciphertext access is
+  now explicit rather than inferred from the environment label.
 - [ ] Provision a LAN/VPN-only `parsetrail-staging` Compose project behind the
   existing Traefik instance with private staging hostnames and trusted HTTPS.
   Capture all outbound staging mail locally or restrict it to an explicit test

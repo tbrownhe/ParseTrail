@@ -218,6 +218,33 @@ The normal application:
 Existing unsigned `.pyc` files are left in place but ignored. Cancellation or
 any failed artifact preserves the previously verified release.
 
+## Isolated staging profile
+
+An installed client can target the LAN/VPN staging service without changing its
+normal profile. Profile selection happens before settings, logging, database, or
+keyring modules are imported.
+
+Windows:
+
+```powershell
+& 'C:\Program Files\ParseTrail\ParseTrail.exe' --staging https://api.staging.parsetrail.com/api/v1
+```
+
+macOS:
+
+```bash
+/Applications/ParseTrail.app/Contents/MacOS/ParseTrail \
+  --staging https://api.staging.parsetrail.com/api/v1
+```
+
+Staging uses a separate `ParseTrail-Staging` application-data directory, database
+and managed archive, reports, logs, plugin catalog, submission-key cache,
+downloads, config history, and OS credential service. All configurable staging
+paths are constrained to that profile root. The window title and red status bar
+remain marked `STAGING`; closing it and launching normally returns to the normal
+profile. The complete server/client rehearsal is in
+[docs/staging.md](../docs/staging.md).
+
 ## Build and release the desktop installer
 
 Before building, update `src/parsetrail/version.py`, commit it, and create the

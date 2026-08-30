@@ -1,0 +1,8 @@
+{
+  "api_base_url": "https://api.staging.parsetrail.com/api/v1",
+  "dashboard_url": "https://dashboard.staging.parsetrail.com/",
+  "website_url": "https://staging.parsetrail.com/",
+  "username": "deployment-smoke-staging@example.com",
+  "password": "replace-with-a-staging-only-account-password",
+  "timeout_seconds": 15
+}

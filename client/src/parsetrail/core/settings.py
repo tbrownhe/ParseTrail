@@ -8,9 +8,16 @@ from platform import architecture, system
 
 from cryptography.fernet import Fernet
 from loguru import logger
-from pydantic import AnyHttpUrl, Field
+from pydantic import AnyHttpUrl, Field, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from parsetrail.core.profile import (
+    STAGING_PROFILE,
+    active_profile,
+    application_data_dir,
+    require_profile_owned_path,
+    staging_server_url,
+)
 from parsetrail.version import __version__
 
 
@@ -59,18 +66,14 @@ def get_download_dir() -> Path:
 
 
 # Constants for platform-dependent paths
-APPDATA_DIR = (
-    Path.home() / "AppData/Roaming/ParseTrail"  # Windows
-    if system() == "Windows"
-    else (
-        Path.home() / "Library/Application Support/ParseTrail"  # macOS
-        if system() == "Darwin"
-        else Path.home() / ".config/ParseTrail"  # Linux
-    )
-)
+ACTIVE_PROFILE = active_profile()
+APPDATA_DIR = application_data_dir(ACTIVE_PROFILE)
+STAGING_DATA_DIR = APPDATA_DIR / "data"
 
 APPDATA_DIR.mkdir(parents=True, exist_ok=True)
-LEGACY_CREDENTIAL_KEY = Path.home() / ".parsetrail.key"
+LEGACY_CREDENTIAL_KEY = (
+    APPDATA_DIR / ".legacy-credential.key" if ACTIVE_PROFILE == STAGING_PROFILE else Path.home() / ".parsetrail.key"
+)
 
 
 def _decrypt_legacy_token(encrypted_token: str) -> str | None:
@@ -110,7 +113,7 @@ class AppSettings(BaseSettings):
     """
 
     # Ignore any extra fields in the JSON
-    model_config = SettingsConfigDict(extra="ignore")
+    model_config = SettingsConfigDict(extra="ignore", validate_assignment=True)
 
     # Internal settings hidden from dialogs and config.py
     _platform: str = get_platform()
@@ -118,7 +121,7 @@ class AppSettings(BaseSettings):
     _config_path: Path = APPDATA_DIR / "config.json"
     _accounts_json: Path = APPDATA_DIR / "accounts.json"
     _server_public_key: Path = APPDATA_DIR / "server_public_key.pem"
-    _download_dir: Path = get_download_dir()
+    _download_dir: Path = APPDATA_DIR / "downloads" if ACTIVE_PROFILE == STAGING_PROFILE else get_download_dir()
 
     @property
     def platform(self) -> str:
@@ -154,7 +157,7 @@ class AppSettings(BaseSettings):
     config_version: str = Field("1.1.0", description="NO EDIT")
     onboarding_version: int = Field(0, description="NO EDIT", ge=0)
     server_url: AnyHttpUrl = Field(
-        "https://api.parsetrail.com/api/v1",
+        staging_server_url() if ACTIVE_PROFILE == STAGING_PROFILE else "https://api.parsetrail.com/api/v1",
         description="NO EDIT",
     )
     access_token: str = Field(
@@ -171,7 +174,9 @@ class AppSettings(BaseSettings):
 
     # Basic settings
     db_path: Path = Field(
-        Path.home() / "Documents/ParseTrail/parsetrail.db",
+        STAGING_DATA_DIR / "parsetrail.db"
+        if ACTIVE_PROFILE == STAGING_PROFILE
+        else Path.home() / "Documents/ParseTrail/parsetrail.db",
         description="Database Path",
         json_schema_extra={"file_type": "Database Files (*.db)"},
     )
@@ -190,9 +195,29 @@ class AppSettings(BaseSettings):
 
     # Reports
     report_dir: Path = Field(
-        Path.home() / "Documents" / "ParseTrail" / "Reports",
+        STAGING_DATA_DIR / "Reports"
+        if ACTIVE_PROFILE == STAGING_PROFILE
+        else Path.home() / "Documents" / "ParseTrail" / "Reports",
         description="Reports Export Directory",
     )
+
+    @field_validator("server_url")
+    @classmethod
+    def _enforce_staging_server(cls, value: AnyHttpUrl) -> AnyHttpUrl:
+        if ACTIVE_PROFILE != STAGING_PROFILE:
+            return value
+        expected_server = staging_server_url()
+        if str(value).rstrip("/") != expected_server:
+            raise ValueError("Staging server_url must match the process staging target")
+        return value
+
+    @field_validator("db_path", "model_dir", "model_path", "plugin_dir", "log_file", "report_dir")
+    @classmethod
+    def _enforce_staging_path(cls, value: Path, info: ValidationInfo) -> Path:
+        if ACTIVE_PROFILE != STAGING_PROFILE:
+            return value
+        require_profile_owned_path(Path(value), label=info.field_name)
+        return value
 
     @property
     def import_dir(self) -> Path:

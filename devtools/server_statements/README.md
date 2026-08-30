@@ -6,7 +6,8 @@ client's `ParseTestDialog`. It is not part of production client builds.
 
 ## How it works
 
-- Loads configuration from the repository-level `.env` (see below).
+- Selects configuration with an explicit `--env-file` for staging/production;
+  local development may fall back to the repository `.env`.
 - Optionally starts an SSH local forward to Postgres when
   `SSH_TUNNEL_ENABLE=true`.
 - Queries `statement_uploads` and displays recent rows in a filterable table.
@@ -14,8 +15,9 @@ client's `ParseTestDialog`. It is not part of production client builds.
   AES-GCM, recompiles plugins, constructs `ParseInput(data=plaintext)`, and opens
   `ParseTestDialog`.
 - The batch tester uses the same in-memory `ParseInput` path.
-- If `ENVIRONMENT=local`, the master key is read from the remote environment over
-  SSH. Otherwise it is read from the local `MASTER_KEY` setting.
+- When `SSH_TUNNEL_ENABLE=true`, database settings and the master key are read
+  from `REMOTE_ENV_PATH` and ciphertext is read over SSH. Otherwise the explicit
+  local PostgreSQL settings, `MASTER_KEY`, and `STATEMENTS_DIR` are used.
 
 Neither parse path creates a plaintext statement file. The encrypted download and
 the decrypted byte blob remain in process memory. Normal OS behavior such as swap,
@@ -31,16 +33,16 @@ hibernation, and crash dumps is outside that application-level guarantee.
 
 ## Configuration
 
-`settings.py` uses the top-level `.env` when it exists. Set
-`PARSETRAIL_ENV_FILE` to select another environment file (for example, a staging
-profile); an explicit empty value disables dotenv loading for import and test
-isolation. Runtime operations still reject incomplete configuration. Configure
-at least:
+`settings.py` uses the top-level `.env` for local compatibility. Pass
+`--env-file` for every staging or production operation; the tool selects it before
+importing database or crypto settings and displays the environment, host/container,
+database, and file path prominently. `PARSETRAIL_ENV_FILE` remains available for
+automation, and an explicit empty value disables dotenv loading for import/test
+isolation. Runtime operations reject incomplete configuration. Configure at least:
 
 ```dotenv
-ENVIRONMENT=local
+ENVIRONMENT=staging
 
-MASTER_KEY=base64_32_byte_key
 PLUGINS_DIR=C:\path\to\parsetrail-resources\plugins
 
 POSTGRES_SERVER=...
@@ -66,7 +68,7 @@ REMOTE_ENV_PATH=/srv/parsetrail/.env
 From the repository root using the locked client environment:
 
 ```bash
-uv run --project client --frozen --python 3.13.15 python devtools/server_statements/statement_tool.py
+uv run --project client --frozen --python 3.13.15 python devtools/server_statements/statement_tool.py --env-file C:\secure\parsetrail-staging-devtool.env
 ```
 
 Refresh the table, filter or select a statement, and choose **Decrypt & Parse**.
@@ -75,7 +77,7 @@ Plugin code is recompiled for every parse so local edits are picked up.
 For a headless regression pass over rows marked `plugin_status='ready'`:
 
 ```bash
-uv run --project client --frozen --python 3.13.15 python devtools/server_statements/batch_plugin_tester.py
+uv run --project client --frozen --python 3.13.15 python devtools/server_statements/batch_plugin_tester.py --env-file C:\secure\parsetrail-staging-devtool.env
 ```
 
 Use `--status pending` to diagnose submitted statements that do not yet have a
@@ -93,6 +95,7 @@ Qt; the database and optional SSH tunnel are initialized only when a run starts.
 ## Safety notes
 
 - Use the same virtual environment as the desktop client.
+- Verify the red target banner before decrypting a row or changing its status.
 - Do not add a temporary-file compatibility fallback. Parsers receive a filename,
   suffix, and byte blob through `ParseInput`.
 - Avoid logging decrypted bytes, extracted text, keys, or unredacted parser output.
