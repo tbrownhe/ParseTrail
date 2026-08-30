@@ -2,9 +2,9 @@
 
 Create a synthetic SQLite database for ParseTrail demos/screenshots without real data.
 
-Usage:
+Usage from the repository root with the locked client environment:
 ```bash
-python -m devtools.synthetic.generate_db --output synthetic.db --years 3 --seed 42
+uv run --project client --frozen --python 3.13.15 python -m devtools.synthetic.generate_db --output synthetic.db --years 3 --seed 42
 ```
 
 What it does:

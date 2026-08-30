@@ -1,139 +1,123 @@
-# ParseTrail - Personal Finance Tracker
+# ParseTrail
 
-## Overview
+ParseTrail is a local-first personal-finance desktop application for Windows and
+macOS. It parses PDF, CSV, and XLSX statements into a local SQLite database,
+supports overlapping exports and multi-account statements, categorizes
+transactions with a local model, and provides account, budget, recurring-charge,
+and reporting workflows.
 
-ParseTrail is a privacy-first desktop app for personal finance. It ingests bank and card statements (PDF, XLSX, CSV) into a local SQLite database, categorizes spending with a tunable ML model, flags recurring charges, and surfaces balance history, net worth, and category trends in one place. Everything runs on your machine.
+The public service at [parsetrail.com](https://parsetrail.com/) distributes the
+desktop installers and signed parser catalog. An account is needed for plugin
+downloads and for the optional statement-contribution workflow. Normal statement
+imports and financial analysis do not require the server.
 
-If you just want to use the app, download the ready-made client from [parsetrail.com](https://parsetrail.com/). Builders and contributors can use this repo to run or extend the codebase.
+## The three data boundaries
 
-## What it does
+ParseTrail is easiest to understand as three systems with deliberately different
+data:
 
-- **Own your data**: Statements, models, and results stay on disk; the app can run fully offline.
-- **Fast ingestion**: Plugins parse statements from many institutions; new parsers can be added easily.
-- **Smart categorization**: Local NLP model auto-tags transactions; retrain it to match your own taxonomy.
-- **Recurring + anomalies**: Identify subscriptions, regular bills, and outliers that need attention.
-- **Insights**: Balance, net worth, and category visualizations to track progress over time.
-- **Exports and reports**: Generate summaries for budgeting, taxes, or audit trails.
+```text
+ordinary statement ──> desktop parser ──> local SQLite database
+        │                                      + local statement archive
+        │
+        └─ only after explicit confirmation ─> encrypted contribution ─> API
 
-## Technical Details
-
-ParseTrail is built using:
-- [PySide6](https://doc.qt.io/qtforpython-6/) for the graphical user interface (GUI)
-- [pdfplumber](https://pypi.org/project/pdfplumber/) for PDF mining
-- [SQLAlchemy](https://www.sqlalchemy.org/) for database operations
-- [alembic](https://alembic.sqlalchemy.org/en/latest/) for database migrations
-- [pandas](https://pandas.pydata.org/) for table operations
-- [matplotlib](https://matplotlib.org/) and [seaborn](https://seaborn.pydata.org/) for dashboards and visualizations
-- [scikit-learn](https://scikit-learn.org/) to categorize transactions based on description
-
-### Plugin Architecture
-
-ParseTrail uses a comprehensive set of parsing plugins that are designed to read and validate information stored in official bank statements from various institutions.
-
-The plugin architecture allows for easy extension by adding new parsers for different bank statement formats. Each parser implements an `IParser` interface, ensuring consistent behavior across all parsing operations.
-
-#### Example IParser Implementation
-
-```python
-from parsetrail.core.interfaces import IParser
-from parsetrail.core.validation import Account, Statement, Transaction
-
-
-class Parser(IParser):
-    # Plugin metadata required by IParser
-    PLUGIN_NAME = "pdf_fidelity401k"
-    VERSION = "0.1.0"
-    MIN_CLIENT_VERSION = "1.3.0"
-    SUFFIX = ".pdf"
-    COMPANY = "Fidelity"
-    STATEMENT_TYPE = "Retirement Savings Monthly Statement"
-    SEARCH_STRING = "Fidelity Brokerage Services&&Retirement Savings Statement"
-    INSTRUCTIONS = (
-        "Login to https://www.fidelity.com and navigate to your 401(k) account."
-        " Click 'Statements', then select 'Monthly' for 'Time Period'."
-        " Select the month and year you want, then click 'Get Statement'."
-        " Click 'Download or Print This Statement', then save as PDF."
-    )
-
-    # Parsing constants
-    HEADER_DATE = r"%m/%d/%Y"
-
-    def parse(self, reader: PDFReader) -> Statement:
-        ...
-
-    def extract_statement(self) -> Statement:
-        ...
-
-    def get_statement_dates(self) -> None:
-        ...
-
-    def extract_accounts(self) -> list[Account]:
-        ...
-
-    def extract_account(self) -> Account:
-        ...
-
-    def extract_account_number(self) -> str:
-        ...
-
-    def get_statement_balances(self) -> tuple[float, float]:
-        ...
-
-    def get_transaction_lines(self, i_start: int, i_end: int) -> list[str]:
-        ...
-
-    def parse_transaction_lines(self, transaction_lines: list[str]) -> list[Transaction]:
-        ...
+public website/dashboard ─> account, artifact, and submission API ─> PostgreSQL
+                                                              └──> ciphertext files
 ```
-See [pdf_fidelity401k_201810](client/src/parsetrail/plugins/pdf_fidelity401k_201810.py) for the full module.
 
-Plugin routing is deterministic. It first filters by suffix, then optional PDF
-document-metadata and per-page header rules, and finally `SEARCH_STRING` against
-normalized body text. Exactly one plugin must remain. `&&` binds more tightly
-than `||`, parentheses override precedence, and quoted phrases match literally.
-For template generations that share a body marker, add an optional rule such as:
+1. **Local finance data.** Transactions, balances, account identifiers,
+   categories, models, imported source statements, and database backups remain on
+   the user's device. ParseTrail does not encrypt the SQLite database, managed
+   statement archive, backups, or application logs. Use device encryption and an
+   appropriate backup system.
+2. **Explicit statement contributions.** A statement is uploaded only after the
+   user selects **Statements > Send for Plugin Development**, completes the
+   metadata form, and confirms. The client encrypts the selected bytes in memory.
+   The server decrypts them in memory and immediately re-encrypts them for storage;
+   no plaintext compatibility file is created. The original filename,
+   institution, frequency, comments, account association, IP address, user agent,
+   and timing remain visible to the service as plaintext metadata.
+3. **Public account and artifact service.** The FastAPI/PostgreSQL service stores
+   dashboard accounts, password hashes, session/version state, artifact-download
+   audit data, contribution metadata, and encrypted contribution files. It does
+   not receive the desktop SQLite database or ordinary imports.
+
+The detailed inventory and the limits of the encryption design are in
+[Privacy and data flow](docs/privacy-and-data-flow.md). The security assumptions
+and response priorities are in the [threat model](docs/threat-model.md).
+
+## Artifact trust
+
+Parser plugins and desktop installers are described by immutable manifests whose
+exact bytes are signed with an offline Ed25519 key. Distributed clients contain
+only public keys. Before activation, the client verifies the manifest signature,
+release sequence, compatibility metadata, filenames, sizes, and SHA-256 digests.
+The public server is therefore an artifact host, not a signing authority.
+
+The entire plugin catalog is installed as one authenticated release. Python
+bytecode is neither encryption nor obfuscation; signatures detect modification
+but do not prevent inspection or decompilation.
+
+## Parser architecture
+
+Source parsers live in `client/src/parsetrail/plugins` and implement the stable
+`IParser` interface. Routing is deterministic: suffix, optional PDF metadata,
+optional page-header markers, then a normalized body-text expression. Parsing
+fails safely if zero or multiple plugins remain.
+
+Routing expressions support `&&`, `||`, parentheses, and quoted literals. A
+plugin can add a classification rule when statement generations share the same
+body marker:
 
 ```python
 ROUTING_RULE = {
     "pdf_metadata_keys": ["Creator", "Producer"],
-    "pdf_metadata": {"Creator": "statement engine"},
+    "pdf_metadata": {"Creator": '"statement engine"'},
     "header": '"Sale Post Description Amount"',
 }
 ```
 
-Routing expressions are validated when plugins are built and loaded. Raw text
-and PDF metadata remain in memory and are never included in parser diagnostics.
+Extracted statement text and PDF metadata values stay in memory and are excluded
+from routing diagnostics.
 
-## Development and Deployment
+## Repository map
 
-### Local Development
+- `client/` — PySide6 desktop application, SQLite schema, parsers, artifact release tooling
+- `backend/` — FastAPI account, artifact, and encrypted-contribution service
+- `frontend/` — React dashboard for account and administrative workflows
+- `website/` — static public site and download/plugin listings
+- `devtools/` — local-only parser and acceptance tools; not distributed
+- `scripts/deployment/` — immutable server build, deploy, smoke, and rollback tooling
+- `docs/` — privacy, security, migration, rollback, and operator runbooks
 
-To set up a local development environment, see the [client README](client/README.md).
+## Start here
 
-Server builds, preflight, migration, deployment, public smoke checks, release
-records, and rollback are documented in the [deployment runbook](deployment.md).
+- [Contributor setup and local development](development.md)
+- [Desktop architecture, tests, and releases](client/README.md)
+- [Backend operations and tests](backend/README.md)
+- [Server deployment runbook](deployment.md)
+- [Security policy](SECURITY.md)
 
-Server operators should follow the guarded
-[PostgreSQL 12 to 17 dump/restore runbook](docs/postgresql-17-upgrade.md) before
-changing either the database image or volume.
-
+Official desktop releases support Windows x64 and macOS. Linux source execution
+is experimental: there is no tested Linux installer yet.
 
 ## Contributing
 
-We welcome contributions from the community! If you have developed a new parser for a bank statement that is not currently supported, please submit a [pull request](https://github.com/tbrownhe/parsetrail/pulls).
+Bug reports, parser fixtures, and pull requests are welcome. Do not commit real
+statements, client databases, credentials, signing keys, decrypted server
+submissions, or generated Playwright authentication state. Parser pull requests
+should include synthetic or sanitized tests whenever possible.
 
-Our development team can also develop plugins for statement files submitted via our secure zero-trust encryption protocol. Statement files will be stored encrypted on our production-grade server built using the FullStack FastAPI template.
+To request a parser for a real statement without publishing it, use the explicit
+encrypted contribution workflow in the desktop app. The project is maintained as
+a public personal project; response times and institution coverage are not a
+commercial service commitment.
 
-## License
+## License and origins
 
-ParseTrail is released under the MIT License. See `LICENSE` for more details.
-
-## Acknowledgments
-
-This project was partially based on the FullStack FastAPI template, a robust backend framework that powers various financial applications. For more information about the FullStack FastAPI template and its capabilities, visit [Full Stack FastAPI Template](https://github.com/fastapi/full-stack-fastapi-template).
-
-The [ParseTrail Website](https://parsetrail.com/) was built using a template available from [HTML5 UP](https://html5up.net/).
-
----
-
-We hope you find ParseTrail to be an invaluable tool for managing your personal finances. If you encounter any issues or have suggestions for new features, please don't hesitate to reach out to our support team or submit an [issue](https://github.com/tbrownhe/parsetrail/issues).
+ParseTrail is released under the MIT License. The server/dashboard began from
+the [Full Stack FastAPI Template](https://github.com/fastapi/full-stack-fastapi-template),
+and the public site's visual design began from an
+[HTML5 UP](https://html5up.net/) template. The application architecture and both
+templates have since been substantially modified.

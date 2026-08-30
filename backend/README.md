@@ -1,261 +1,140 @@
-# FastAPI Project - Backend
+# ParseTrail backend
 
-## Requirements
+The backend is a FastAPI/PostgreSQL service for public accounts, signed artifact
+distribution, and encrypted statement contributions. It does not receive the
+desktop SQLite database or ordinary statement imports.
 
-* [Docker](https://www.docker.com/).
-* [uv](https://docs.astral.sh/uv/) for Python package and environment management.
+Start with the repository [development guide](../development.md). Production and
+staging operations use the guarded [deployment runbook](../deployment.md).
 
-## Docker Compose
+## Locked development environment
 
-Start the local development environment with Docker Compose following the guide in [../development.md](../development.md).
-
-Run schema migration explicitly before starting a fresh or upgraded stack:
-
-```console
-$ docker compose run --rm prestart bash scripts/migrate.sh
-```
-
-`prestart.sh` validates connectivity, provisions statement-submission keys, and
-initializes required data, but deliberately does not run Alembic.
-
-## General Workflow
-
-By default, the dependencies are managed with [uv](https://docs.astral.sh/uv/), go there and install it.
-
-From `./backend/` you can install all the dependencies with:
-
-```console
-$ uv sync
-```
-
-Then you can activate the virtual environment with:
-
-```console
-$ source .venv/bin/activate
-```
-
-Make sure your editor is using the correct Python virtual environment, with the interpreter at `backend/.venv/bin/python`.
-
-Modify or add SQLModel models for data and SQL tables in `./backend/app/models.py`, API endpoints in `./backend/app/api/`, CRUD (Create, Read, Update, Delete) utils in `./backend/app/crud.py`.
-
-## VS Code
-
-There are already configurations in place to run the backend through the VS Code debugger, so that you can use breakpoints, pause and explore variables, etc.
-
-The setup is also already configured so you can run the tests through the VS Code Python tests tab.
-
-## Docker Compose Development Overrides
-
-During development, you can change Docker Compose settings that will only affect the local development environment in the file `docker-compose.dev.yml`.
-
-The file is deliberately not named `docker-compose.override.yml`, because Docker
-Compose would load that name automatically in production. Include the development
-file explicitly in every local command.
-
-For example, the directory with the backend code is synchronized in the Docker container, copying the code you change live to the directory inside the container. That allows you to test your changes right away, without having to build the Docker image again. It should only be done during development, for production, you should build the Docker image with a recent version of the backend code. But during development, it allows you to iterate very fast.
-
-There is also a command override that runs `fastapi run --reload` instead of the default `fastapi run`. It starts a single server process (instead of multiple, as would be for production) and reloads the process whenever the code changes. Have in mind that if you have a syntax error and save the Python file, it will break and exit, and the container will stop. After that, you can restart the container by fixing the error and running again:
-
-```console
-$ docker compose -f docker-compose.yml -f docker-compose.dev.yml watch
-```
-
-There is also a commented out `command` override, you can uncomment it and comment the default one. It makes the backend container run a process that does "nothing", but keeps the container alive. That allows you to get inside your running container and execute commands inside, for example a Python interpreter to test installed dependencies, or start the development server that reloads when it detects changes.
-
-To get inside the container with a `bash` session you can start the stack with:
-
-```console
-$ docker compose -f docker-compose.yml -f docker-compose.dev.yml watch
-```
-
-and then in another terminal, `exec` inside the running container:
-
-```console
-$ docker compose -f docker-compose.yml -f docker-compose.dev.yml exec backend bash
-```
-
-You should see an output like:
-
-```console
-root@7f2607af31c3:/app#
-```
-
-that means that you are in a `bash` session inside your container, as a `root` user, under the `/app` directory, this directory has another directory called "app" inside, that's where your code lives inside the container: `/app/app`.
-
-There you can use the `fastapi run --reload` command to run the debug live reloading server.
-
-```console
-$ fastapi run --reload app/main.py
-```
-
-...it will look like:
-
-```console
-root@7f2607af31c3:/app# fastapi run --reload app/main.py
-```
-
-and then hit enter. That runs the live reloading server that auto reloads when it detects code changes.
-
-Nevertheless, if it doesn't detect a change but a syntax error, it will just stop with an error. But as the container is still alive and you are in a Bash session, you can quickly restart it after fixing the error, running the same command ("up arrow" and "Enter").
-
-...this previous detail is what makes it useful to have the container alive doing nothing and then, in a Bash session, make it run the live reload server.
-
-## Backend tests
-
-Backend tests are hard-wired to a dedicated local database name and port. They
-ignore the repository `.env` and refuse production-like database names or remote
-database hosts.
-
-Start the disposable Postgres service from the repository root:
-
-```console
-$ docker compose -p parsetrail-tests -f docker-compose.test.yml up -d --wait
-```
-
-Then install the locked development environment and run the suite:
-
-```console
-$ cd backend
-$ uv sync --extra dev --frozen
-$ uv run --frozen bash scripts/tests-start.sh
-```
-
-When finished, remove the test container and its non-external volume:
-
-```console
-$ docker compose -p parsetrail-tests -f docker-compose.test.yml down -v
-```
-
-The tests run with Pytest. Modify and add tests under `./backend/app/tests/`.
-
-Backend static checks run in GitHub Actions. The isolated PostgreSQL 17 suite has
-also been verified locally.
-
-Arguments are forwarded to Pytest. For example, to stop on the first failure:
+From `backend`:
 
 ```bash
-uv run --frozen bash scripts/tests-start.sh -x
+uv python install 3.13.15
+uv sync --extra dev --frozen --python 3.13.15
 ```
+
+Use `uv run --frozen --python 3.13.15 ...` for backend commands. Activation is
+optional; uv selects `backend/.venv` directly.
+
+For a direct host run, configure the root `.env`, point PostgreSQL at a disposable
+or local database, provision the submission keyring once, and start FastAPI:
+
+```bash
+uv run --frozen --python 3.13.15 python -m app.core.submission_keys provision
+uv run --frozen --python 3.13.15 fastapi dev app/main.py
+```
+
+Container startup does not migrate the database implicitly. Run migrations as a
+separate reviewed operation before starting an upgraded stack:
+
+```bash
+docker compose run --rm prestart bash scripts/migrate.sh
+```
+
+## Tests and static checks
+
+Backend tests use the PostgreSQL 17 service in `docker-compose.test.yml`, ignore
+the repository `.env`, and refuse remote hosts or production-looking database
+names. From the repository root:
+
+```bash
+docker compose -p parsetrail-tests -f docker-compose.test.yml up -d --wait
+cd backend
+uv sync --extra dev --frozen --python 3.13.15
+uv run --frozen --python 3.13.15 python app/tests_pre_start.py
+uv run --frozen --python 3.13.15 python -m app.tests.migrate_test_db
+uv run --frozen --python 3.13.15 pytest -q
+uv run --frozen --python 3.13.15 ruff check app
+uv run --frozen --python 3.13.15 ruff format --check app
+uv run --frozen --python 3.13.15 mypy app
+cd ..
+docker compose -p parsetrail-tests -f docker-compose.test.yml down -v
+```
+
+## Alembic migrations
+
+Alembic is the only schema-creation and schema-upgrade mechanism. Do not restore
+`SQLModel.metadata.create_all`, delete migration history, stamp an unknown
+database, or generate revisions against production.
+
+After changing a model:
+
+1. Start an isolated local PostgreSQL database at the current Alembic head.
+2. Generate the candidate from `backend`:
+
+   ```bash
+   uv run --frozen --python 3.13.15 alembic revision --autogenerate -m "describe change"
+   ```
+
+3. Review every generated operation, constraints, indexes, data conversions, and
+   downgrade behavior. Autogenerate is a draft, not a correctness proof.
+4. Exercise upgrade on a copied populated database and test rollback or documented
+   restore behavior.
+5. Commit the revision with its model and tests.
+
+Production migration is a separately logged phase in `deployment.md`. A newer
+PostgreSQL server must never be pointed at the PostgreSQL 12 data directory; use
+the [dump/restore runbook](../docs/postgresql-17-upgrade.md).
+
+## Statement-submission keyring
+
+The Compose `prestart` service is the single provisioning owner for the RSA
+submission keyring. Importing the app never generates or rotates keys. Rotate
+explicitly:
+
+```bash
+docker compose run --rm prestart python -m app.core.submission_keys rotate
+docker compose run --rm prestart python -m app.core.submission_keys show-active
+```
+
+The active pointer changes atomically. Retained private generations allow workers
+to decrypt uploads encrypted just before rotation. Do not delete generations
+until clients have refreshed the public key and the in-flight/retry interval has
+passed.
+
+The contribution pipeline decrypts only in process memory and writes only new
+AES-GCM ciphertext. This protects copied storage without its master key; it does
+not protect against a live backend that can read ciphertext and keys. See
+[Privacy and data flow](../docs/privacy-and-data-flow.md).
 
 ## Encrypted statement reconciliation
 
-Statement uploads are limited per user (pending queue and rolling 24-hour
-volume), with the final quota check serialized in the same transaction as the
-database row. To compare encrypted storage with registered rows without opening
-any statement contents, run:
+Compare registered rows with encrypted files without decrypting contents:
 
-```console
-$ uv run --frozen python scripts/reconcile_statements.py
+```bash
+uv run --frozen --python 3.13.15 python scripts/reconcile_statements.py
 ```
 
-The command is read-only by default and exits nonzero when it finds drift. To
-move encrypted orphan files into an explicit recovery directory, review the dry
-run first, then add both `--quarantine-orphans /recovery/path` and `--apply`.
-Rows whose encrypted files are missing are only reported; they are never deleted
-automatically.
+The default is read-only and exits nonzero on drift. After reviewing that output,
+encrypted orphans can be moved with both
+`--quarantine-orphans /recovery/path` and `--apply`. Missing-file rows are only
+reported and are never deleted automatically.
 
-## Statement-submission key lifecycle
+## Signed artifacts
 
-The Compose `prestart` service is the single provisioning owner for the RSA
-submission keyring. It validates an existing active generation, migrates the
-matching legacy `keys/private_key.pem` and `keys/public_key.pem` pair on first
-run, or provisions the initial generation atomically. Importing the FastAPI app
-never generates or rotates keys.
+The backend is an untrusted host for plugin and installer releases. It never has
+the Ed25519 private signing key. Immutable releases contain exact signed manifest
+bytes and artifacts; an atomic `current-release.json` selects the active release.
+The client authenticates the signature, release sequence, compatibility, names,
+sizes, and SHA-256 digest before activation.
 
-Rotation is explicit:
+Signing, verification, and release commands are in
+[client/README.md](../client/README.md). Rollback is in
+[docs/artifact-rollback.md](../docs/artifact-rollback.md).
 
-```console
-$ docker compose run --rm prestart python -m app.core.submission_keys rotate
-```
+## Browser authentication
 
-The active pointer changes atomically. Prior private generations remain in the
-backend-only key volume, allowing every worker to decrypt an upload encrypted
-immediately before rotation. Inspect the selected generation with
-`python -m app.core.submission_keys show-active`. Do not manually delete retained
-generations until every client has refreshed the public key and the maximum
-in-flight/retry interval has passed.
+The dashboard uses a host-only HttpOnly `SameSite=Strict` cookie. Production and
+staging use the `__Host-` prefix and `Secure`; local HTTP uses an unprefixed
+development cookie. Cookie-authenticated mutations and browser login/logout
+require the exact `FRONTEND_HOST` origin. Desktop/API consumers retain bearer
+tokens. See [web authentication](../docs/web-authentication.md).
 
-For a non-Compose local backend, run the `provision` command once before starting
-Uvicorn. Submission envelope encryption protects copied statement storage and
-backups when the key volume/master key are kept separately; it does not protect
-against a live backend compromise that can read both ciphertext and keys.
+## Email templates
 
-## Signed plugin artifacts
-
-The backend is an untrusted file host for plugin releases; it never has the
-Ed25519 private release key. A deployment is stored as:
-
-```text
-data/plugins/
-  current-release.json
-  releases/
-    <release-sequence>/
-      plugin-manifest.json
-      plugin-manifest.sig
-      *.pyc
-```
-
-Release files are uploaded completely before `current-release.json` is
-atomically replaced. `/api/v1/plugins/manifest` and
-`/api/v1/plugins/manifest-signature` serve the exact signed bytes. The public
-website's `/api/v1/plugins/` list is derived from the active manifest, while the
-desktop client authenticates the exact manifest itself and then verifies every
-downloaded plugin digest.
-
-A flat signed manifest is accepted temporarily for migration, but new
-deployments use immutable release directories. See `client/README.md` for
-offline key generation, signing, verification, deployment, and key rotation.
-
-### Test Coverage
-
-When the tests are run, a file `htmlcov/index.html` is generated, you can open it in your browser to see the coverage of the tests.
-
-## Migrations
-
-As during local development your app directory is mounted as a volume inside the container, you can also run the migrations with `alembic` commands inside the container and the migration code will be in your app directory (instead of being only inside the container). So you can add it to your git repository.
-
-Make sure you create a "revision" of your models and that you "upgrade" your database with that revision every time you change them. As this is what will update the tables in your database. Otherwise, your application will have errors.
-
-* Start an interactive session in the backend container:
-
-```console
-$ docker compose exec backend bash
-```
-
-* Alembic is already configured to import your SQLModel models from `./backend/app/models.py`.
-
-* After changing a model (for example, adding a column), inside the container, create a revision, e.g.:
-
-```console
-$ alembic revision --autogenerate -m "Add column last_name to User model"
-```
-
-* Commit to the git repository the files generated in the alembic directory.
-
-* After creating the revision, run the migration in the database (this is what will actually change the database):
-
-```console
-$ alembic upgrade head
-```
-
-If you don't want to use migrations at all, uncomment the lines in the file at `./backend/app/core/db.py` that end in:
-
-```python
-SQLModel.metadata.create_all(engine)
-```
-
-and comment the line in the file `scripts/prestart.sh` that contains:
-
-```console
-$ alembic upgrade head
-```
-
-If you don't want to start with the default models and want to remove them / modify them, from the beginning, without having any previous revision, you can remove the revision files (`.py` Python files) under `./backend/app/alembic/versions/`. And then create a first migration as described above.
-
-## Email Templates
-
-The email templates are in `./backend/app/email-templates/`. Here, there are two directories: `build` and `src`. The `src` directory contains the source files that are used to build the final email templates. The `build` directory contains the final email templates that are used by the application.
-
-Before continuing, ensure you have the [MJML extension](https://marketplace.visualstudio.com/items?itemName=attilabuti.vscode-mjml) installed in your VS Code.
-
-Once you have the MJML extension installed, you can create a new email template in the `src` directory. After creating the new email template and with the `.mjml` file open in your editor, open the command palette with `Ctrl+Shift+P` and search for `MJML: Export to HTML`. This will convert the `.mjml` file to a `.html` file and now you can save it in the build directory.
+Editable MJML is under `app/email-templates/src`; generated HTML is under
+`app/email-templates/build`. Regenerate and review the HTML whenever an MJML
+source changes, then test against a non-production SMTP target.

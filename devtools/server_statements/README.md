@@ -63,10 +63,10 @@ REMOTE_ENV_PATH=/srv/parsetrail/.env
 
 ## Running
 
-From the repository root with the client development environment active:
+From the repository root using the locked client environment:
 
 ```bash
-python devtools/server_statements/statement_tool.py
+uv run --project client --frozen --python 3.13.15 python devtools/server_statements/statement_tool.py
 ```
 
 Refresh the table, filter or select a statement, and choose **Decrypt & Parse**.
@@ -75,7 +75,7 @@ Plugin code is recompiled for every parse so local edits are picked up.
 For a headless regression pass over rows marked `plugin_status='ready'`:
 
 ```bash
-python devtools/server_statements/batch_plugin_tester.py
+uv run --project client --frozen --python 3.13.15 python devtools/server_statements/batch_plugin_tester.py
 ```
 
 Use `--status pending` to diagnose submitted statements that do not yet have a

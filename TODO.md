@@ -600,20 +600,26 @@ no unused template CRUD surface, and build/check commands leave Git clean.
 
 ### P2.4 Align documentation with the deployed system
 
-- [ ] Rewrite the root architecture and privacy documentation around three clear
+- [x] Rewrite the root architecture and privacy documentation around three clear
   boundaries: local finance database, encrypted statement contribution, and public
   account/artifact service.
-- [ ] Document exactly which metadata the server stores in plaintext, the limits of
+- [x] Document exactly which metadata the server stores in plaintext, the limits of
   server-side encryption, artifact signature verification, and local plaintext
   statement archives.
-- [ ] Correct stale repository names, ports, commands, encodings, screenshots, and
+- [x] Correct stale repository names, ports, commands, encodings, screenshots, and
   devtool temp-file language.
-- [ ] Add Windows and macOS contributor setup from a clean checkout, with Linux
+- [x] Add Windows and macOS contributor setup from a clean checkout, with Linux
   marked experimental until it has a tested package.
-- [ ] Add a concise threat model and release/incident runbook.
+- [x] Add a concise threat model and release/incident runbook. The accompanying
+  audit also corrected environment examples that failed typed settings, aligned
+  the Node baseline, and replaced the web-account deletion overclaim with the
+  endpoint's actual local-data and retention boundaries.
 
 Acceptance: every command in the setup docs is exercised from a clean checkout and
-the privacy claims match observable code and deployment behavior.
+the privacy claims match observable code and deployment behavior. Locked Windows
+commands, devtool entry points, both example Compose configurations, all component
+checks, and internal links passed locally; the documented Intel macOS build path
+was exercised by the 1.3.1 release and the hosted macOS CI gate.
 
 ## P3 - deliberate future work
 
