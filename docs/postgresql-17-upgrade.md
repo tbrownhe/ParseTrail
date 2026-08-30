@@ -62,7 +62,10 @@ POSTGRES_VOLUME_NAME=parsetrail_app-db-data-pg17
 Start the database first, run `backend/scripts/migrate.sh` explicitly through the
 one-shot Compose service, then run the normal `prestart` service. Migration must
 reach Alembic head and prestart must complete key/initial-data validation before
-backend workers start. Verify:
+backend workers start. A staging restore must then run the one-time identity and
+submission sanitizer documented in [staging.md](staging.md); row-count parity is
+evidence that the restore succeeded, not permission to expose copied production
+password hashes. Verify:
 
 - expected row counts and the Alembic head;
 - account registration, email verification, login, and password reset;

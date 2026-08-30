@@ -129,3 +129,25 @@ def test_clear_token_removes_os_credential(monkeypatch) -> None:
 
     assert token_store.delete_calls == 1
     assert manager._token == ""
+    assert app_settings.email == "user@example.com"
+
+
+def test_explicit_sign_out_forgets_prefilled_email(monkeypatch) -> None:
+    token_store = _TokenStore("stored-token")
+    app_settings = SimpleNamespace(
+        server_url="https://api.example.test",
+        access_token="",
+        token_expires_at=0,
+        email="user@example.com",
+    )
+    saves = []
+    monkeypatch.setattr(auth, "save_settings", saves.append)
+    monkeypatch.setattr(auth, "retire_legacy_credential_key", lambda: None)
+    manager = AuthManager(app_settings, token_store=token_store)
+
+    manager.clear_token(clear_email=True)
+
+    assert token_store.delete_calls == 1
+    assert manager._token == ""
+    assert app_settings.email == ""
+    assert saves == [app_settings]

@@ -3,16 +3,19 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import mimetypes
 import os
+import socket
 import stat
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
-from dataclasses import dataclass
+from contextlib import contextmanager
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
@@ -31,6 +34,7 @@ class SmokeConfig:
     username: str
     password: str
     timeout_seconds: float = 15.0
+    host_overrides: dict[str, str] = field(default_factory=dict)
 
     @classmethod
     def from_file(cls, path: Path) -> SmokeConfig:
@@ -47,6 +51,7 @@ class SmokeConfig:
             "username",
             "password",
             "timeout_seconds",
+            "host_overrides",
         }:
             raise SmokeFailure("Smoke configuration contains unknown fields")
         try:
@@ -58,11 +63,37 @@ class SmokeConfig:
             parsed = urllib.parse.urlparse(value)
             if parsed.scheme not in {"http", "https"} or not parsed.netloc:
                 raise SmokeFailure(f"{name} must be an absolute HTTP(S) URL")
+        validate_host_overrides(config, config.host_overrides)
         if not config.username or not config.password:
             raise SmokeFailure("Smoke credentials must not be empty")
         if not 1 <= config.timeout_seconds <= 60:
             raise SmokeFailure("timeout_seconds must be between 1 and 60")
         return config
+
+
+def validate_host_overrides(config: SmokeConfig, overrides: dict[str, str]) -> None:
+    if not isinstance(overrides, dict) or not all(
+        isinstance(host, str) and isinstance(address, str) for host, address in overrides.items()
+    ):
+        raise SmokeFailure("host_overrides must map hostnames to IP address strings")
+    configured_hosts = {
+        urllib.parse.urlparse(value).hostname
+        for value in (config.api_base_url, config.dashboard_url, config.website_url)
+    }
+    for host, address in overrides.items():
+        if host.lower() != host or host not in configured_hosts:
+            raise SmokeFailure("host_overrides may contain only configured lowercase URL hostnames")
+        try:
+            ipaddress.ip_address(address)
+        except ValueError as exc:
+            raise SmokeFailure(f"host_overrides contains an invalid IP address for {host}") from exc
+
+
+def parse_host_override(value: str) -> tuple[str, str]:
+    host, separator, address = value.partition("=")
+    if not separator or not host or not address:
+        raise SmokeFailure("--host-override must use HOST=IP")
+    return host, address
 
 
 def _bounded_read(response: Any, limit: int = MAX_RESPONSE_BYTES) -> bytes:
@@ -129,8 +160,32 @@ def _multipart(fields: dict[str, str], file_bytes: bytes) -> tuple[str, bytes]:
     return f"multipart/form-data; boundary={boundary}", b"".join(chunks)
 
 
+@contextmanager
+def _resolved_hosts(overrides: dict[str, str]):
+    """Resolve configured hosts to explicit IPs without weakening TLS checks."""
+    if not overrides:
+        yield
+        return
+    original = socket.getaddrinfo
+
+    def resolve(host, port, *args, **kwargs):
+        target = overrides.get(host.lower(), host) if isinstance(host, str) else host
+        return original(target, port, *args, **kwargs)
+
+    socket.getaddrinfo = resolve
+    try:
+        yield
+    finally:
+        socket.getaddrinfo = original
+
+
 def run_public_smoke(config: SmokeConfig) -> list[dict[str, Any]]:
     """Run bounded public checks, returning non-secret evidence for a release record."""
+    with _resolved_hosts(config.host_overrides):
+        return _run_public_smoke(config)
+
+
+def _run_public_smoke(config: SmokeConfig) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
 
     def check(name: str, operation: Any) -> Any:
@@ -262,8 +317,22 @@ def main() -> int:
 
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config", type=Path)
+    parser.add_argument(
+        "--host-override",
+        action="append",
+        default=[],
+        metavar="HOST=IP",
+        help="Process-local DNS override; may be repeated",
+    )
     args = parser.parse_args()
-    results = run_public_smoke(SmokeConfig.from_file(args.config))
+    config = SmokeConfig.from_file(args.config)
+    overrides = dict(config.host_overrides)
+    for value in args.host_override:
+        host, address = parse_host_override(value)
+        overrides[host] = address
+    validate_host_overrides(config, overrides)
+    config = replace(config, host_overrides=overrides)
+    results = run_public_smoke(config)
     print(json.dumps({"status": "passed", "checks": results}, indent=2))
     return 0
 

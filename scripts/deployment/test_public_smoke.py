@@ -5,7 +5,7 @@ import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-from public_smoke import SmokeConfig, run_public_smoke
+from public_smoke import SmokeConfig, SmokeFailure, parse_host_override, run_public_smoke, validate_host_overrides
 
 
 class _SmokeHandler(BaseHTTPRequestHandler):
@@ -85,7 +85,7 @@ class PublicSmokeTests(unittest.TestCase):
         self.thread.join(timeout=5)
 
     def test_complete_public_smoke_contract(self) -> None:
-        root = f"http://127.0.0.1:{self.server.server_port}"
+        root = f"http://smoke.invalid:{self.server.server_port}"
         config = SmokeConfig(
             api_base_url=f"{root}/api/v1",
             dashboard_url=f"{root}/dashboard",
@@ -93,6 +93,7 @@ class PublicSmokeTests(unittest.TestCase):
             username="smoke@example.com",
             password="smoke-password",
             timeout_seconds=5,
+            host_overrides={"smoke.invalid": "127.0.0.1"},
         )
 
         results = run_public_smoke(config)
@@ -102,6 +103,23 @@ class PublicSmokeTests(unittest.TestCase):
         self.assertIn("/api/v1/plugins/test.pyc", _SmokeHandler.visited)
         self.assertIn("/api/v1/clients/win64/latest", _SmokeHandler.visited)
         self.assertIn("/api/v1/statements/submit-statement", _SmokeHandler.visited)
+
+    def test_host_override_validation_is_fail_closed(self) -> None:
+        config = SmokeConfig(
+            api_base_url="https://api.staging.example.com/api/v1",
+            dashboard_url="https://dashboard.staging.example.com",
+            website_url="https://staging.example.com",
+            username="smoke@example.com",
+            password="smoke-password",
+        )
+
+        validate_host_overrides(config, {"api.staging.example.com": "192.0.2.10"})
+        with self.assertRaisesRegex(SmokeFailure, "configured lowercase"):
+            validate_host_overrides(config, {"api.production.example.com": "192.0.2.10"})
+        with self.assertRaisesRegex(SmokeFailure, "invalid IP"):
+            validate_host_overrides(config, {"api.staging.example.com": "silicide"})
+        with self.assertRaisesRegex(SmokeFailure, "HOST=IP"):
+            parse_host_override("missing-address")
 
 
 if __name__ == "__main__":

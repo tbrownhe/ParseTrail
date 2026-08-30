@@ -262,6 +262,10 @@ recoverable, committed data agrees with the import state, and a retry is safe.
   17.11 starts healthy through the authoritative Compose mount. Restore evidence
   was preserved before the 14 copied `statement_uploads` rows were explicitly
   removed from staging; production and both earlier volumes remain untouched.
+  Owner testing then exposed that a distinct staging `SECRET_KEY` does not disable
+  copied production password hashes. A guarded post-restore sanitizer now preserves
+  audit UUIDs while anonymizing and disabling copied users, revoking their token
+  generations, invalidating their hashes, and removing copied submissions.
 - [ ] `[USER]` Verify account/login, plugin download, statement submission, admin
   retrieval, email, and backup/restore against the upgraded staging stack before
   the production PostgreSQL 17 cutover.
@@ -331,9 +335,15 @@ temporary exception, and the Postgres restore drill preserves expected row count
   isolated, migrated to `3b7a1f4c2d91`, healthy at exact `fedd236` image digests,
   and adopted after all seven authenticated proxy smoke checks passed. Confirm
   captured email and exercise the isolated desktop/devtool flows during the live
-  owner rehearsal before checking this item off.
+  owner rehearsal before checking this item off. The source client now exposes an
+  explicit OS-keyring-backed sign-out action. Dashboard HTML is revalidated while
+  fingerprinted assets remain immutable, preventing stale app-shell failures after
+  image replacement.
 - [ ] `[USER]` Rehearse one successful staging deployment, one application rollback,
   and one migration/restore rollback before enabling any deployment runner.
+- [ ] `[USER]` Reserve `silicide`'s LAN address in DHCP, then put that address in
+  the staging smoke configuration and owner test-machine hosts entries. A changed
+  address fails the smoke gate safely but makes staging unavailable until updated.
 
 Acceptance: a production release either passes its public smoke checks with a
 traceable record or restores the documented prior state, and no deploy depends on

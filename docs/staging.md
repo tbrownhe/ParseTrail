@@ -68,20 +68,36 @@ never reuse it for production. Copy `.env.example.staging` outside Git to
 Use new random values for `SECRET_KEY`, `MASTER_KEY`, PostgreSQL/bootstrap
 passwords, Swagger auth, and smoke credentials.
 
-The production dump contains statement rows encrypted with the production master
-key. Staging intentionally does not receive that key or the production ciphertext
-and therefore must not expose those rows as retrievable submissions. After the
-restore/count evidence is preserved and before staging application traffic, make
-one explicit choice:
+The production dump contains password hashes, identifying account fields, active
+sessions, and statement rows encrypted with the production master key. A distinct
+staging `SECRET_KEY` invalidates production tokens, but it does **not** make a
+copied production password hash safe: the same password can still create a new
+staging token.
 
-1. remove the copied `statement_uploads` rows from the staging database and begin
-   with an empty staging contribution store (recommended for the current small
-   installation); or
-2. build a separately reviewed decrypt/re-encrypt migration.
+After preserving the restore/count evidence and applying migrations, use the
+staging `prestart` service to create one dedicated active staging superuser. Keep
+all application routes unavailable, then run the guarded sanitizer exactly once:
 
-Do not copy production ciphertext while using an unrelated staging master key and
-leave the resulting broken rows in the UI. The live rehearsal pauses for owner
-confirmation before applying option 1.
+```bash
+python3 scripts/deployment/sanitize_staging.py \
+  --container parsetrail-staging-db-1 \
+  --keep-email deployment-smoke@staging.parsetrail.com \
+  --evidence /srv/parsetrail-staging/release-state/restore-sanitization-YYYYMMDDTHHMMSSZ.json \
+  --confirm-sanitize-staging-users YES
+```
+
+The command requires the running Compose container to be the `db` service in the
+`parsetrail-staging` project and the preserved account to be an active staging
+superuser. It retains copied user UUIDs for download-audit foreign keys, but
+replaces all other emails, names, and password hashes; removes privileges;
+disables the accounts; revokes access, recovery, and verification tokens; and
+deletes every copied `statement_uploads` row. It refuses a repeat or late scrub
+if any other staging-domain account already exists and writes restricted evidence
+outside Git. Only start the staging backend after its postconditions pass.
+
+Staging intentionally does not receive the production master key or production
+ciphertext. If a future test requires copied submissions, design and separately
+review a decrypt/re-encrypt migration instead of weakening this sanitizer.
 
 ## 3. Signed artifacts and captured mail
 
@@ -130,12 +146,15 @@ ssh -L 8025:127.0.0.1:8025 tbrownhe@silicide
 Then open `http://127.0.0.1:8025`, confirm the inbox is empty and labeled
 `ParseTrail Staging`, and leave the tunnel open during mail tests. The deployment
 guard also requires staging's non-empty `SMTP_HOST=mailpit` to differ from
-production.
+production. This loopback URL is the captured-mail inbox, not the ParseTrail
+dashboard.
 
 Copy `deployment/staging-smoke-config.example.json` outside Git, create a dedicated
 active staging account, and set the file mode to 600. Keep the production smoke
 file available as a read-only comparison; the staging username, password, and URLs
-must all differ.
+must all differ. Replace the example `host_overrides` documentation address with
+`silicide`'s reserved LAN address. These overrides change socket resolution only:
+requests retain the staging HTTPS hostname and normal certificate verification.
 
 ## 4. First immutable baseline and deployment
 
@@ -203,6 +222,12 @@ status marker remain visible for the life of the process.
 Closing staging and launching normally returns to the production profile; no
 machine-wide environment setting or config edit is made.
 
+The client does not authenticate merely because an email is visible in settings;
+the bearer credential in the profile-specific OS keyring controls the session.
+Use **File > Sign Out of Server** to remove that credential and the prefilled
+identity. The next plugin download or statement contribution prompts for a fresh
+staging login.
+
 ## 6. Statement-development target
 
 Copy `devtools/server_statements/.env.example.staging` outside Git and run:
@@ -221,6 +246,13 @@ Using the isolated desktop and captured mailbox, verify account/login, plugin an
 client download, a new statement submission, admin retrieval/decryption, email
 verification/reset, and a complete staging backup/restore into a third disposable
 target.
+
+Create a disposable manual account at
+`https://dashboard.staging.parsetrail.com/signup` with a unique address such as
+`manual-YYYYMMDD@staging.parsetrail.com`. Read its verification message in
+Mailpit at `http://127.0.0.1:8025`, follow the staging verification link, and then
+exercise dashboard and desktop login. Delete the disposable account when the
+rehearsal is complete.
 
 Then record:
 

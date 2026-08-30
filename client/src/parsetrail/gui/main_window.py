@@ -34,6 +34,7 @@ from PySide6.QtWidgets import (
 
 from parsetrail.core import learn, plot
 from parsetrail.core.artifacts import ArtifactService, ArtifactServiceError
+from parsetrail.core.auth import auth_manager
 from parsetrail.core.build_metadata import build_provenance_label
 from parsetrail.core.client import (
     ClientUpdateThread,
@@ -129,6 +130,8 @@ class ParseTrail(QMainWindow):
         file_menu.addAction("Restore Database", self.database_tools.restore)
         file_menu.addSeparator()
         file_menu.addAction("Export Account Configuration", self.export_init_accounts)
+        file_menu.addSeparator()
+        file_menu.addAction("Sign Out of Server", self.sign_out_of_server)
 
         # Plugins Menu
         plugins_menu = menubar.addMenu("Plugins")
@@ -553,6 +556,14 @@ class ParseTrail(QMainWindow):
             logger.error(message)
 
     # MENUBAR FUNCTIONS
+    def sign_out_of_server(self):
+        auth_manager.clear_token(clear_email=True)
+        QMessageBox.information(
+            self,
+            "Signed Out",
+            "The saved server credential was removed. You will be asked to sign in again when needed.",
+        )
+
     def about(self):
         msg_box = QMessageBox()
         msg_box.setIcon(QMessageBox.Information)
