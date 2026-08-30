@@ -14,8 +14,6 @@ services:
       timeout: 10s
     volumes:
       - app-db-data:/var/lib/postgresql/data/pgdata
-    env_file:
-      - .env
     environment:
       - PGDATA=/var/lib/postgresql/data/pgdata
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD?Variable not set}
@@ -35,13 +33,12 @@ services:
         condition: service_healthy
         restart: true
     command: bash scripts/prestart.sh
-    env_file:
-      - .env
     volumes:
       # The single prestart owner provisions/validates submission keys before
       # any backend worker starts. Old generations remain for rotation overlap.
       - app-keys-data:/app/keys
     environment:
+      - PROJECT_NAME=${PROJECT_NAME?Variable not set}
       - DOMAIN=${DOMAIN}
       - FRONTEND_HOST=${FRONTEND_HOST?Variable not set}
       - ENVIRONMENT=${ENVIRONMENT}
@@ -53,6 +50,10 @@ services:
       - SMTP_USER=${SMTP_USER}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
       - EMAILS_FROM_EMAIL=${EMAILS_FROM_EMAIL}
+      - EMAILS_FROM_NAME=${EMAILS_FROM_NAME}
+      - SMTP_TLS=${SMTP_TLS}
+      - SMTP_SSL=${SMTP_SSL}
+      - SMTP_PORT=${SMTP_PORT}
       - POSTGRES_SERVER=db
       - POSTGRES_PORT=${POSTGRES_PORT}
       - POSTGRES_DB=${POSTGRES_DB}
@@ -69,14 +70,13 @@ services:
     networks:
       - traefik-public
       - default
+      - mail
     depends_on:
       db:
         condition: service_healthy
         restart: true
       prestart:
         condition: service_completed_successfully
-    env_file:
-      - .env
     volumes:
       # Docker-managed keys (chmod 600) visible to backend only
       - app-keys-data:/app/keys
@@ -86,6 +86,7 @@ services:
       - ${PLUGINS_DIR?Variable not set}:/app/data/plugins
       - ${STATEMENTS_DIR?Variable not set}:/app/secure/statements
     environment:
+      - PROJECT_NAME=${PROJECT_NAME?Variable not set}
       - MASTER_KEY=${MASTER_KEY}
       - DOMAIN=${DOMAIN}
       - FRONTEND_HOST=${FRONTEND_HOST?Variable not set}
@@ -98,6 +99,10 @@ services:
       - SMTP_USER=${SMTP_USER}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
       - EMAILS_FROM_EMAIL=${EMAILS_FROM_EMAIL}
+      - EMAILS_FROM_NAME=${EMAILS_FROM_NAME}
+      - SMTP_TLS=${SMTP_TLS}
+      - SMTP_SSL=${SMTP_SSL}
+      - SMTP_PORT=${SMTP_PORT}
       - POSTGRES_SERVER=db
       - POSTGRES_PORT=${POSTGRES_PORT}
       - POSTGRES_DB=${POSTGRES_DB}
@@ -200,7 +205,7 @@ services:
 
   website:
     # Static site for Marketing, FAQ and latest client downloads
-    image: '${WEBSITE_IMAGE_REF:-parsetrail-website:local}'
+    image: '${WEBSITE_IMAGE_REF:-${DOCKER_IMAGE_WEBSITE?Variable not set}:local}'
     restart: always
     build:
       context: .
@@ -259,3 +264,7 @@ networks:
     external: true
   default:
     driver: bridge
+  # A per-project, no-egress path to an optional mail capture service. Production
+  # does not attach a mail service; staging Mailpit joins this network externally.
+  mail:
+    internal: true

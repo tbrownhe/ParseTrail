@@ -1,0 +1,74 @@
+services:
+  mailpit:
+    image: axllent/mailpit:v1.31.0@sha256:c96991d9bef73594c246d89ca81411d4e916f03e76a7d2d72fa2ab5dd3c9ce24
+    restart: unless-stopped
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
+    environment:
+      MP_DATABASE: /data/mailpit.db
+      MP_DISABLE_VERSION_CHECK: "true"
+      MP_LABEL: ParseTrail Staging
+      MP_MAX_MESSAGES: "500"
+      MP_MAX_AGE: 14d
+      MP_MAX_MESSAGE_SIZE: "10"
+      MP_BLOCK_REMOTE_CSS_AND_FONTS: "true"
+      MP_SMTP_ALLOWED_RECIPIENTS: '@staging\.parsetrail\.test$'
+      MP_SMTP_DISABLE_RDNS: "true"
+    volumes:
+      - mailpit-data:/data
+    networks:
+      staging-mail:
+        aliases:
+          - mailpit
+
+  mailpit-ui:
+    image: nginx:1.28.0-alpine@sha256:30f1c0d78e0ad60901648be663a710bdadf19e4c10ac6782c235200619158284
+    restart: unless-stopped
+    user: "101:101"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    entrypoint:
+      - nginx
+      - -c
+      - /etc/nginx/parsetrail/nginx.conf
+      - -g
+      - daemon off;
+    depends_on:
+      mailpit:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--output-document=/dev/null", "http://127.0.0.1:8080/readyz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=16m
+    volumes:
+      - ./staging-mail-nginx.conf:/etc/nginx/parsetrail/nginx.conf:ro
+    ports:
+      - "${MAILPIT_UI_BIND_ADDRESS:?Set MAILPIT_UI_BIND_ADDRESS}:${MAILPIT_UI_PORT:-8025}:8080"
+    networks:
+      - staging-mail
+      - mailpit-ui
+
+volumes:
+  mailpit-data:
+    name: ${MAILPIT_VOLUME_NAME:?Set MAILPIT_VOLUME_NAME}
+
+networks:
+  staging-mail:
+    external: true
+    name: ${STAGING_MAIL_NETWORK_NAME:-parsetrail-staging_mail}
+  # Only the constrained reverse proxy joins this bridge. Mailpit itself remains
+  # on the internal network and therefore has no normal outbound route.
+  mailpit-ui:
+    driver: bridge

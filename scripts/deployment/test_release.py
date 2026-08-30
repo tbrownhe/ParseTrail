@@ -52,6 +52,7 @@ def _target_values(environment: str, suffix: str) -> dict[str, str]:
         "BACKEND_HOST": f"https://api.{suffix}.example.com/api/v1",
         "FRONTEND_HOST": f"https://dashboard.{suffix}.example.com",
         "SMTP_HOST": f"smtp-{suffix}.internal",
+        "TRAEFIK_ALLOWED_IP_RANGES": "192.168.1.0/24,100.64.0.0/10",
     }
 
 
@@ -60,6 +61,20 @@ def _dotenv(values: dict[str, str]) -> str:
 
 
 class ReleaseValidationTests(unittest.TestCase):
+    def test_staging_mail_is_pinned_and_network_isolated(self) -> None:
+        application = Path("docker-compose.yml").read_text(encoding="utf-8")
+        mail = Path("deployment/staging-mail.compose.yml").read_text(encoding="utf-8")
+
+        self.assertNotIn("env_file:", application)
+        self.assertIn("mail:\n    internal: true", application)
+        self.assertIn("      - mail\n", application)
+        self.assertRegex(mail, r"image: axllent/mailpit:v[0-9.]+@sha256:[0-9a-f]{64}")
+        self.assertRegex(mail, r"image: nginx:[0-9.]+-alpine@sha256:[0-9a-f]{64}")
+        self.assertIn("external: true", mail)
+        self.assertIn("MP_SMTP_ALLOWED_RECIPIENTS", mail)
+        self.assertNotIn(":1025:1025", mail)
+        self.assertIn("MAILPIT_UI_BIND_ADDRESS", mail)
+
     def test_release_requires_immutable_image_digests(self) -> None:
         validate_release(_release())
         invalid = _release()
@@ -183,6 +198,20 @@ class ReleaseValidationTests(unittest.TestCase):
                 production_values=production,
                 production_state_dir=Path("/srv/production/state"),
             )
+
+    def test_staging_rejects_public_traefik_source_ranges(self) -> None:
+        production = _target_values("production", "production")
+        for source_range in ("0.0.0.0/0", "::/0", "8.8.8.0/24", "not-a-network"):
+            with self.subTest(source_range=source_range):
+                staging = _target_values("staging", "staging")
+                staging["TRAEFIK_ALLOWED_IP_RANGES"] = source_range
+                with self.assertRaisesRegex(ReleaseError, "TRAEFIK_ALLOWED_IP_RANGES"):
+                    validate_deployment_boundary(
+                        staging,
+                        state_dir=Path("/srv/staging/state"),
+                        production_values=production,
+                        production_state_dir=Path("/srv/production/state"),
+                    )
 
     def test_staging_smoke_credentials_and_urls_are_distinct(self) -> None:
         staging_values = _target_values("staging", "staging")

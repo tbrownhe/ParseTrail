@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import getpass
 import hashlib
+import ipaddress
 import json
 import os
 import re
@@ -51,6 +52,7 @@ REQUIRED_TARGET_FIELDS = (
     "DOMAIN",
     "BACKEND_HOST",
     "FRONTEND_HOST",
+    "TRAEFIK_ALLOWED_IP_RANGES",
 )
 STAGING_UNIQUE_FIELDS = (
     "STACK_NAME",
@@ -219,6 +221,17 @@ def validate_deployment_boundary(
         raise ReleaseError("Staging SMTP_HOST must name a LAN-only mail capture service")
     if staging_smtp == production_smtp:
         raise ReleaseError("Staging SMTP_HOST must not reuse the production SMTP target")
+
+    source_ranges = deploy_values["TRAEFIK_ALLOWED_IP_RANGES"].split(",")
+    tailscale_range = ipaddress.ip_network("100.64.0.0/10")
+    for source_range in source_ranges:
+        try:
+            network = ipaddress.ip_network(source_range.strip(), strict=False)
+        except ValueError as exc:
+            raise ReleaseError("Staging TRAEFIK_ALLOWED_IP_RANGES contains an invalid network") from exc
+        is_tailscale = network.version == 4 and network.subnet_of(tailscale_range)
+        if not (network.is_private or network.is_loopback or network.is_link_local or is_tailscale):
+            raise ReleaseError("Staging TRAEFIK_ALLOWED_IP_RANGES must contain only LAN/VPN networks")
 
 
 def deployment_context(

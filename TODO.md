@@ -318,8 +318,10 @@ temporary exception, and the Postgres restore drill preserves expected row count
   now explicit rather than inferred from the environment label.
 - [ ] Provision a LAN/VPN-only `parsetrail-staging` Compose project behind the
   existing Traefik instance with private staging hostnames and trusted HTTPS.
-  Capture all outbound staging mail locally or restrict it to an explicit test
-  recipient allowlist.
+  The pinned, separate Mailpit definition now has no SMTP host port or relay, a
+  loopback-only UI through a constrained proxy, no Mailpit egress route, and an
+  explicit reserved-recipient allowlist; start it and confirm captured messages
+  during the live rehearsal.
 - [ ] `[USER]` Rehearse one successful staging deployment, one application rollback,
   and one migration/restore rollback before enabling any deployment runner.
 
