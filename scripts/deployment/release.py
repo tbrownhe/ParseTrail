@@ -14,6 +14,7 @@ import socket
 import subprocess
 import sys
 import tempfile
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -27,6 +28,7 @@ SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 DEFAULT_COMPOSE_FILE = Path("docker-compose.yml")
 DEFAULT_BUILD_COMPOSE_FILE = Path("docker-compose.build.yml")
 SERVICES = ("backend", "frontend", "website")
+REGISTRY_PUSH_ATTEMPTS = 3
 IMAGE_ENV = {
     "backend": "BACKEND_IMAGE_REF",
     "frontend": "FRONTEND_IMAGE_REF",
@@ -155,6 +157,29 @@ def run_logged(command: list[str], log_path: Path, *, env: dict[str, str]) -> No
         return_code = process.wait()
     if return_code:
         raise ReleaseError(f"Migration failed with exit code {return_code}")
+
+
+def push_services(
+    base: list[str],
+    *,
+    env: dict[str, str],
+    cwd: Path,
+    dry_run: bool,
+) -> None:
+    for service in SERVICES:
+        for attempt in range(1, REGISTRY_PUSH_ATTEMPTS + 1):
+            try:
+                run(base + ["push", service], env=env, cwd=cwd, dry_run=dry_run)
+                break
+            except ReleaseError:
+                if attempt == REGISTRY_PUSH_ATTEMPTS:
+                    raise
+                delay_seconds = 2 ** (attempt - 1)
+                print(
+                    f"Registry push failed for {service}; retrying in {delay_seconds} second(s)",
+                    flush=True,
+                )
+                time.sleep(delay_seconds)
 
 
 def read_dotenv(path: Path) -> dict[str, str]:
@@ -585,7 +610,7 @@ def command_build(args: argparse.Namespace) -> None:
     ]
     run(base + ["build", *SERVICES], env=environment, cwd=repo_root, dry_run=args.dry_run)
     if args.push:
-        run(base + ["push", *SERVICES], env=environment, cwd=repo_root, dry_run=args.dry_run)
+        push_services(base, env=environment, cwd=repo_root, dry_run=args.dry_run)
         if not args.dry_run:
             build_release["images"] = {service: resolve_repo_digest(tagged[service]) for service in SERVICES}
             build_release["deployable"] = True

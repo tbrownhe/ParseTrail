@@ -63,6 +63,55 @@ def _dotenv(values: dict[str, str]) -> str:
 
 
 class ReleaseValidationTests(unittest.TestCase):
+    @patch("release.time.sleep")
+    @patch("release.run")
+    def test_registry_pushes_are_sequential_and_retry_transient_failures(
+        self,
+        run_mock: unittest.mock.Mock,
+        sleep_mock: unittest.mock.Mock,
+    ) -> None:
+        run_mock.side_effect = [ReleaseError("transient"), "", "", ""]
+        environment = {"RELEASE_TEST": "1"}
+        repository = Path("repository")
+
+        release.push_services(
+            ["docker", "compose"],
+            env=environment,
+            cwd=repository,
+            dry_run=False,
+        )
+
+        self.assertEqual(
+            run_mock.call_args_list,
+            [
+                call(
+                    ["docker", "compose", "push", "backend"],
+                    env=environment,
+                    cwd=repository,
+                    dry_run=False,
+                ),
+                call(
+                    ["docker", "compose", "push", "backend"],
+                    env=environment,
+                    cwd=repository,
+                    dry_run=False,
+                ),
+                call(
+                    ["docker", "compose", "push", "frontend"],
+                    env=environment,
+                    cwd=repository,
+                    dry_run=False,
+                ),
+                call(
+                    ["docker", "compose", "push", "website"],
+                    env=environment,
+                    cwd=repository,
+                    dry_run=False,
+                ),
+            ],
+        )
+        sleep_mock.assert_called_once_with(1)
+
     def test_command_output_escapes_undecodable_bytes(self) -> None:
         output = release.run([sys.executable, "-c", "import sys; sys.stdout.buffer.write(bytes([0x8f]))"])
 
