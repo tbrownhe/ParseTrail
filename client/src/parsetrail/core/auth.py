@@ -147,12 +147,14 @@ class AuthManager:
             return False
         return True
 
-    def clear_token(self) -> None:
-        """Clear token from memory and settings."""
+    def clear_token(self, *, clear_email: bool = False) -> None:
+        """Clear the token and optionally forget the sign-in identity."""
         self._token = ""
         self._token_expires_at = None
         self.settings.access_token = ""
         self.settings.token_expires_at = 0.0
+        if clear_email:
+            self.settings.email = ""
         self.token_store.delete_token()
         save_settings(self.settings)
 

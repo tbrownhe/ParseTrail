@@ -4,5 +4,10 @@
   "website_url": "https://staging.parsetrail.com/",
   "username": "deployment-smoke@staging.parsetrail.com",
   "password": "replace-with-a-staging-only-account-password",
-  "timeout_seconds": 15
+  "timeout_seconds": 15,
+  "host_overrides": {
+    "api.staging.parsetrail.com": "192.0.2.10",
+    "dashboard.staging.parsetrail.com": "192.0.2.10",
+    "staging.parsetrail.com": "192.0.2.10"
+  }
 }

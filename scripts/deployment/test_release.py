@@ -420,6 +420,16 @@ class ReleaseValidationTests(unittest.TestCase):
         self.assertIn(f"$target_volume:{mount_target}", upgrade)
         self.assertNotIn('$target_volume:/var/lib/postgresql/data"', upgrade)
 
+    def test_frontend_revalidates_app_shell_and_immutably_caches_hashed_assets(self) -> None:
+        nginx = Path("frontend/nginx.conf").read_text(encoding="utf-8")
+
+        self.assertIn("location = /index.html", nginx)
+        self.assertIn('Cache-Control "no-cache"', nginx)
+        self.assertIn("location /assets/", nginx)
+        self.assertIn('Cache-Control "public, max-age=31536000, immutable"', nginx)
+        self.assertIn("location = /runtime-config.js", nginx)
+        self.assertIn('Cache-Control "no-store"', nginx)
+
 
 if __name__ == "__main__":
     unittest.main()
