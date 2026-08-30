@@ -152,6 +152,7 @@ class AppSettings(BaseSettings):
 
     # Internal settings written to config.json but not editable in PreferencesDialog
     config_version: str = Field("1.1.0", description="NO EDIT")
+    onboarding_version: int = Field(0, description="NO EDIT", ge=0)
     server_url: AnyHttpUrl = Field(
         "https://api.parsetrail.com/api/v1",
         description="NO EDIT",

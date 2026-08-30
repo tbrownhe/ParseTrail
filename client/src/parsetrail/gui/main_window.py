@@ -57,6 +57,7 @@ from parsetrail.gui.category import CategoryManagerDialog
 from parsetrail.gui.dashboard_widgets import MatplotlibCanvas, PandasModel
 from parsetrail.gui.database_tools import DatabaseToolsController
 from parsetrail.gui.importing import StatementImportController, choose_source_file_action
+from parsetrail.gui.onboarding import show_first_run_guide
 from parsetrail.gui.plugins import (
     ParseTestDialog,
     PluginManagerDialog,
@@ -164,6 +165,10 @@ class ParseTrail(QMainWindow):
         # Help Menu
         help_menu = menubar.addMenu("Help")
         help_menu.addAction("About", self.about)
+        help_menu.addAction(
+            "Getting Started",
+            lambda: show_first_run_guide(self.plugin_manager.metadata, self, force=True),
+        )
         help_menu.addAction(
             "Check for Updates",
             lambda: self.check_for_client_updates_async(manual=True),
@@ -470,6 +475,8 @@ class ParseTrail(QMainWindow):
 
         # Update all tables, checklists, and graphs
         self.update_main_gui()
+
+        show_first_run_guide(self.plugin_manager.metadata, self)
 
         # A documented, optional background check runs only after the event loop
         # starts, so networking can never delay construction or first paint.

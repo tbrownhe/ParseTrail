@@ -538,8 +538,10 @@ clear transaction owner, and module size trends downward without feature drift.
   copy, archive, and leave-in-place behavior with a safe default. One-off imports
   default to retaining the selected original and creating a managed archive copy;
   files already placed in the managed import folder retain its move-to-archive contract.
-- [ ] Add a first-run path explaining local storage, plugin installation, supported
-  institutions, statement submission, backups, and what the server can observe.
+- [x] Add a first-run path explaining local storage, plugin installation, supported
+  institutions, statement submission, backups, and what the server can observe. The
+  local, repeatable guide lists installed support and accurately distinguishes ordinary
+  local imports from explicit encrypted contributions and their plaintext metadata.
 - [x] Turn parser failures into actionable messages that identify format/plugin
   compatibility without exposing statement content. Normal imports now distinguish
   unsupported formats, missing or ambiguous matches, changed layouts, incompatible
