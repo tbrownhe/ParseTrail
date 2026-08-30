@@ -12,7 +12,7 @@ Its state is deliberately disposable and cannot address production-owned storage
 | PostgreSQL volume | production PG volume | restored, uniquely named PG17 volume |
 | submission keys | production external volume | new staging external volume |
 | resources | `/srv/parsetrail/...` | `/srv/parsetrail-staging/...` |
-| release records | `/srv/parsetrail/release-state` | `/srv/parsetrail-staging/release-state` |
+| release records | `/srv/parsetrail-production/release-state` | `/srv/parsetrail-staging/release-state` |
 | secrets/accounts | production credentials | staging-only app, DB, master, and smoke secrets |
 | desktop | normal platform profile/keyring | `ParseTrail-Staging` profile/keyring |
 
@@ -146,7 +146,7 @@ STAGING_ARGS=(
   --deploy-env /srv/parsetrail-staging/.env
   --production-env /srv/parsetrail/.env
   --state-dir /srv/parsetrail-staging/release-state
-  --production-state-dir /srv/parsetrail/release-state
+  --production-state-dir /srv/parsetrail-production/release-state
 )
 ```
 
@@ -172,7 +172,7 @@ python3 scripts/deployment/release.py migrate DEPLOYMENT_ID "${STAGING_ARGS[@]}"
 python3 scripts/deployment/release.py deploy DEPLOYMENT_ID \
   "${STAGING_ARGS[@]}" \
   --smoke-config /srv/parsetrail-staging/secrets/smoke.json \
-  --production-smoke-config /srv/parsetrail/secrets/smoke.json
+  --production-smoke-config /srv/parsetrail-production/secrets/smoke.json
 ```
 
 The same release descriptor and image digests are later promoted to production;

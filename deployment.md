@@ -63,11 +63,12 @@ The submission-key volume is also explicit so a staging Compose project cannot
 silently mount the production default. Production permits public application
 traffic; staging sets only the actual LAN/VPN CIDRs.
 
-Use three external, access-controlled locations on the server:
+Keep runtime records and credentials outside the `/srv/parsetrail` Git checkout.
+Use three access-controlled locations under a dedicated production runtime root:
 
-- `/srv/parsetrail/release-state` for preflight, migration, and final records;
-- `/srv/parsetrail/release-input` for release and backup-evidence JSON;
-- `/srv/parsetrail/secrets/smoke.json` for a dedicated active smoke account.
+- `/srv/parsetrail-production/release-state` for preflight, migration, and final records;
+- `/srv/parsetrail-production/release-input` for release and backup-evidence JSON;
+- `/srv/parsetrail-production/secrets/smoke.json` for a dedicated active smoke account.
 
 Copy [the smoke example](deployment/smoke-config.example.json), fill in the public
 URLs and dedicated account, and set its mode to `600`. The credentials are used
@@ -134,7 +135,7 @@ dashboard, and website are digest-pinned. For the first staging transition only:
    ```bash
    python3 scripts/deployment/release.py adopt \
      --deploy-env /srv/parsetrail/.env \
-     --state-dir /srv/parsetrail/release-state \
+     --state-dir /srv/parsetrail-production/release-state \
      --source-commit FULL_40_CHARACTER_COMMIT
    ```
 
@@ -155,7 +156,7 @@ python3 scripts/deployment/release.py backup-evidence \
   --database-restore-id staging-db-restore-20260828 \
   --files-restore-id staging-files-restore-20260828 \
   --submission-keys-restore-id staging-keys-restore-20260828 \
-  --output /srv/parsetrail/release-input/backup-evidence.json
+  --output /srv/parsetrail-production/release-input/backup-evidence.json
 ```
 
 The tool hashes the dump immediately. Preflight re-hashes it and rejects evidence
@@ -169,9 +170,9 @@ Check out the exact clean commit named in the release descriptor, then run:
 ```bash
 python3 scripts/deployment/release.py preflight \
   --deploy-env /srv/parsetrail/.env \
-  --state-dir /srv/parsetrail/release-state \
-  --release /srv/parsetrail/release-input/release.json \
-  --backup-evidence /srv/parsetrail/release-input/backup-evidence.json
+  --state-dir /srv/parsetrail-production/release-state \
+  --release /srv/parsetrail-production/release-input/release.json \
+  --backup-evidence /srv/parsetrail-production/release-input/backup-evidence.json
 ```
 
 Preflight validates the commit and all image digests, renders Compose, requires a
@@ -186,7 +187,7 @@ Enter the maintenance window and run:
 ```bash
 python3 scripts/deployment/release.py migrate DEPLOYMENT_ID \
   --deploy-env /srv/parsetrail/.env \
-  --state-dir /srv/parsetrail/release-state
+  --state-dir /srv/parsetrail-production/release-state
 ```
 
 Migration output is streamed to the operator and saved under
@@ -199,8 +200,8 @@ replaced.
 ```bash
 python3 scripts/deployment/release.py deploy DEPLOYMENT_ID \
   --deploy-env /srv/parsetrail/.env \
-  --state-dir /srv/parsetrail/release-state \
-  --smoke-config /srv/parsetrail/secrets/smoke.json \
+  --state-dir /srv/parsetrail-production/release-state \
+  --smoke-config /srv/parsetrail-production/secrets/smoke.json \
   --timeout 180
 ```
 
@@ -230,8 +231,8 @@ deployment record:
 ```bash
 python3 scripts/deployment/release.py rollback DEPLOYMENT_ID \
   --deploy-env /srv/parsetrail/.env \
-  --state-dir /srv/parsetrail/release-state \
-  --smoke-config /srv/parsetrail/secrets/smoke.json
+  --state-dir /srv/parsetrail-production/release-state \
+  --smoke-config /srv/parsetrail-production/secrets/smoke.json
 ```
 
 This is an application-image rollback only. If the released migration was not

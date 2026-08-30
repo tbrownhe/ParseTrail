@@ -136,6 +136,20 @@ class ReleaseValidationTests(unittest.TestCase):
         self.assertNotIn(":1025:1025", mail)
         self.assertIn("MAILPIT_UI_BIND_ADDRESS", mail)
 
+    def test_production_release_state_stays_outside_git_checkout(self) -> None:
+        deployment = Path("deployment.md").read_text(encoding="utf-8")
+        staging = Path("docs/staging.md").read_text(encoding="utf-8")
+
+        for unsafe_path in (
+            "/srv/parsetrail/release-state",
+            "/srv/parsetrail/release-input",
+            "/srv/parsetrail/secrets",
+        ):
+            self.assertNotIn(unsafe_path, deployment + staging)
+        self.assertIn("/srv/parsetrail-production/release-state", deployment)
+        self.assertIn("/srv/parsetrail-production/release-input", deployment)
+        self.assertIn("/srv/parsetrail-production/secrets/smoke.json", deployment)
+
     def test_release_requires_immutable_image_digests(self) -> None:
         validate_release(_release())
         invalid = _release()
