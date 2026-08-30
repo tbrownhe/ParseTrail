@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 import tempfile
 import unittest
 from datetime import UTC, datetime
@@ -8,6 +9,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import call, patch
 
+import release
 from public_smoke import SmokeFailure
 from release import (
     ReleaseError,
@@ -61,6 +63,11 @@ def _dotenv(values: dict[str, str]) -> str:
 
 
 class ReleaseValidationTests(unittest.TestCase):
+    def test_command_output_escapes_undecodable_bytes(self) -> None:
+        output = release.run([sys.executable, "-c", "import sys; sys.stdout.buffer.write(bytes([0x8f]))"])
+
+        self.assertEqual(output, "\\x8f")
+
     def test_staging_mail_is_pinned_and_network_isolated(self) -> None:
         application = Path("docker-compose.yml").read_text(encoding="utf-8")
         mail = Path("deployment/staging-mail.compose.yml").read_text(encoding="utf-8")
