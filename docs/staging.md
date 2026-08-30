@@ -279,6 +279,39 @@ remain available for inspection; no source is removed. Use the three restore IDs
 in its mode-600 `restore-evidence.json` when creating the normal release-tool
 backup evidence. Never invent those attestations.
 
+After accepting that restore evidence, rehearse recovery from an incompatible
+Alembic state. Choose a new failure volume, container, and output directory:
+
+```bash
+python3 scripts/deployment/staging_recovery_rehearsal.py \
+  --deploy-env /srv/parsetrail-staging/.env \
+  --production-env /srv/parsetrail/.env \
+  --state-dir /srv/parsetrail-staging/release-state \
+  --production-state-dir /srv/parsetrail-production/release-state \
+  --compose-file /srv/parsetrail/docker-compose.yml \
+  --smoke-config /srv/parsetrail-staging/secrets/smoke.json \
+  --production-smoke-config /srv/parsetrail-production/secrets/smoke.json \
+  --restore-evidence /srv/parsetrail-staging/restore-drill/YYYYMMDDTHHMMSSZ/restore-evidence.json \
+  --failure-database-container parsetrail-staging-recovery-rehearsal-db-YYYYMMDD \
+  --failure-database-volume parsetrail_app-db-data-staging-recovery-rehearsal-YYYYMMDD \
+  --output /srv/parsetrail-staging/recovery-rehearsal/YYYYMMDDTHHMMSSZ \
+  --confirm-staging-recovery YES
+```
+
+The helper first verifies the current release and all active mounts. It restores
+the accepted dump into the new failure volume, installs a deliberately unknown
+Alembic revision there, and requires the real migration command to reject it for
+that exact reason. It then activates the recorded immutable application release
+against the independently restored database and submission-key volumes plus a
+fresh safe extraction of the digest-verified resource archive. Table counts,
+mount identities, artifact inventories, and all public smoke checks must pass.
+
+Whether the rehearsal passes or raises, a `finally` path reactivates the untouched
+normal staging boundaries, verifies every mount, and reruns the smoke suite. If
+that return fails, keep staging isolated and investigate. The deliberately broken
+volume and mode-600 logs remain available for inspection; production targets and
+the normal staging volumes are never mounted by the simulated failure.
+
 Create a disposable manual account at
 `https://dashboard.staging.parsetrail.com/signup` with a unique address such as
 `manual-YYYYMMDD@staging.parsetrail.com`. Read its verification message in
