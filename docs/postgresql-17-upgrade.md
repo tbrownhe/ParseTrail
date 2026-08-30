@@ -76,7 +76,7 @@ password hashes. Verify:
 Do not reuse the production target volume for a staging rehearsal. Use a unique
 volume and delete it only after the rehearsal is accepted.
 The full isolated target and its production-comparison guards are documented in
-[staging.md](staging.md).
+[staging.md](staging.md), including the guarded whole-boundary restore-drill tool.
 
 ## Production cutover and rollback
 

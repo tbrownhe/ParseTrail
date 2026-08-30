@@ -247,6 +247,38 @@ client download, a new statement submission, admin retrieval/decryption, email
 verification/reset, and a complete staging backup/restore into a third disposable
 target.
 
+For the restore drill, choose entirely new target names and a new output directory,
+then run:
+
+```bash
+python3 scripts/deployment/staging_restore_drill.py \
+  --database-container parsetrail-staging-db-1 \
+  --target-database-container parsetrail-staging-restore-drill-db-YYYYMMDD \
+  --target-database-volume parsetrail_app-db-data-staging-restore-drill-YYYYMMDD \
+  --source-keys-volume parsetrail_app-keys-data-staging \
+  --target-keys-volume parsetrail_app-keys-data-staging-restore-drill-YYYYMMDD \
+  --resources /srv/parsetrail-staging/resources \
+  --output /srv/parsetrail-staging/restore-drill/YYYYMMDDTHHMMSSZ \
+  --confirm-staging-downtime YES
+
+python3 scripts/deployment/public_smoke.py \
+  /srv/parsetrail-staging/secrets/smoke.json
+```
+
+The helper accepts only the label-verified staging database, exact staging
+resource path, a non-production staging key volume, and new targets containing
+`restore-drill`. It finds the one healthy, digest-pinned staging backend, stops
+that exact container, and restarts the same container in a `finally` block before
+waiting for it to become healthy. It never invokes Compose, so an environment
+fallback cannot rebuild or replace the backend. While writers are stopped it
+creates a restricted PostgreSQL custom dump, restores it into a new PostgreSQL 17
+volume, compares every public-table count, round-trips the resource tree through
+a restricted archive, copies the submission keys directly between Docker
+volumes, and compares cryptographic inventories. The restored volumes and files
+remain available for inspection; no source is removed. Use the three restore IDs
+in its mode-600 `restore-evidence.json` when creating the normal release-tool
+backup evidence. Never invent those attestations.
+
 Create a disposable manual account at
 `https://dashboard.staging.parsetrail.com/signup` with a unique address such as
 `manual-YYYYMMDD@staging.parsetrail.com`. Read its verification message in
