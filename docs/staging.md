@@ -305,6 +305,8 @@ that exact reason. It then activates the recorded immutable application release
 against the independently restored database and submission-key volumes plus a
 fresh safe extraction of the digest-verified resource archive. Table counts,
 mount identities, artifact inventories, and all public smoke checks must pass.
+Container inspections are captured for validation and never emitted because their
+environment sections contain staging secrets.
 
 Whether the rehearsal passes or raises, a `finally` path reactivates the untouched
 normal staging boundaries, verifies every mount, and reruns the smoke suite. If
