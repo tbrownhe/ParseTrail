@@ -99,6 +99,30 @@ Staging intentionally does not receive the production master key or production
 ciphertext. If a future test requires copied submissions, design and separately
 review a decrypt/re-encrypt migration instead of weakening this sanitizer.
 
+To abandon all disposable staging submissions and rotate their exposed or retired
+server-side encryption key, run the guarded reset from a clean checkout:
+
+```bash
+python3 scripts/deployment/reset_staging_submissions.py \
+  --deploy-env /srv/parsetrail-staging/.env \
+  --production-env /srv/parsetrail/.env \
+  --state-dir /srv/parsetrail-staging/release-state \
+  --production-state-dir /srv/parsetrail-production/release-state \
+  --compose-file /srv/parsetrail/docker-compose.yml \
+  --smoke-config /srv/parsetrail-staging/secrets/smoke.json \
+  --production-smoke-config /srv/parsetrail-production/secrets/smoke.json \
+  --evidence /srv/parsetrail-staging/release-state/incident-response/reset-YYYYMMDDTHHMMSSZ.json \
+  --confirm-abandon-staging-submissions YES
+```
+
+This operation is intentionally destructive. It accepts only the exact staging
+statement directory and verified staging containers, stops the backend writer,
+deletes every `statement_uploads` row and flat ciphertext file, atomically replaces
+`MASTER_KEY` with a new 32-byte key, and reactivates the recorded digest-pinned
+release. It records only counts and identifiers, verifies all active mounts, and
+requires the complete public smoke suite to pass. It never addresses production
+or local parser fixtures and does not retain the retired key in its evidence.
+
 ## 3. Signed artifacts and captured mail
 
 The resource directories are distinct, but their public artifact bytes must match
