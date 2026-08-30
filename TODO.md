@@ -266,7 +266,7 @@ recoverable, committed data agrees with the import state, and a retry is safe.
   copied production password hashes. A guarded post-restore sanitizer now preserves
   audit UUIDs while anonymizing and disabling copied users, revoking their token
   generations, invalidating their hashes, and removing copied submissions.
-- [x] `[USER]` Verify account/login, plugin download, statement submission, admin
+- [~] `[USER]` Verify account/login, plugin download, statement submission, admin
   retrieval, email, and backup/restore against the upgraded staging stack before
   the production PostgreSQL 17 cutover. The isolated owner profile completed
   signup, captured-email verification, explicit sign-out/login, plugin download,
@@ -276,7 +276,8 @@ recoverable, committed data agrees with the import state, and a retry is safe.
   `staging-pg17-restore-20260830T204123Z`, file restore
   `staging-files-restore-20260830T204123Z`, and key restore
   `staging-keys-restore-20260830T204123Z`. It then restored the exact staging
-  backend container to healthy service.
+  backend container to healthy service. The password-recovery flow remains to be
+  exercised through captured staging email.
 
 Acceptance: supported runtime versions are documented, lock files reproduce on CI,
 dependency audits have no known critical/high production finding without a written
