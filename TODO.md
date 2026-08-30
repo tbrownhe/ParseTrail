@@ -579,8 +579,10 @@ every action that moves or retains a statement is explained before it occurs.
   checked-in localhost/GitHub values from the static website deployment flow. Both
   web surfaces consume the same validated `runtime-config.js` contract generated
   from `BACKEND_HOST`, `FRONTEND_HOST`, and `GITHUB_URL` at container startup.
-- [ ] Exclude generated API/route files appropriately from formatting checks and
-  make the normal lint command non-mutating.
+- [x] Exclude generated API/route files appropriately from formatting checks and
+  make the normal lint command non-mutating. `npm run lint` and the frontend
+  pre-commit hook now check only; `npm run lint:fix` is the explicit rewrite path,
+  and CI fails if normal checks dirty generated or handwritten sources.
 - [ ] Split or lazy-load heavy dashboard routes to address the oversized bundle.
 - [ ] Review localStorage bearer-token exposure and choose an HttpOnly-cookie or
   documented hardened-token strategy appropriate to the deployed origins.
