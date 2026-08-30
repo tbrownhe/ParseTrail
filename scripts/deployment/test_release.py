@@ -336,6 +336,15 @@ class ReleaseValidationTests(unittest.TestCase):
         self.assertNotIn("alembic upgrade", prestart)
         self.assertIn("alembic upgrade head", migrate)
 
+    def test_postgres_upgrade_volume_root_matches_compose_pgdata_mount(self) -> None:
+        compose = Path("docker-compose.yml").read_text(encoding="utf-8")
+        upgrade = Path("scripts/postgres/upgrade-12-to-17.sh").read_text(encoding="utf-8")
+
+        mount_target = "/var/lib/postgresql/data/pgdata"
+        self.assertIn(f"app-db-data:{mount_target}", compose)
+        self.assertIn(f"$target_volume:{mount_target}", upgrade)
+        self.assertNotIn('$target_volume:/var/lib/postgresql/data"', upgrade)
+
 
 if __name__ == "__main__":
     unittest.main()

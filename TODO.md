@@ -254,7 +254,14 @@ recoverable, committed data agrees with the import state, and a retry is safe.
   every public-table count before allowing application traffic to the restore.
   The production rehearsal created a checksum-verified dump, retained the
   PostgreSQL 12 source unchanged, and matched every table in the isolated
-  `parsetrail_app-db-data-pg17-staging-20260829T1927Z` volume.
+  `parsetrail_app-db-data-pg17-staging-20260829T1927Z` volume. Live startup then
+  exposed a mount-depth mismatch in the helper: its verified cluster was nested
+  below Compose's `PGDATA` mount. The helper and regression contract were fixed,
+  and the retained checksum-verified dump was restored again with exact count
+  parity into `parsetrail_app-db-data-pg17-staging-20260830T065841Z`. PostgreSQL
+  17.11 starts healthy through the authoritative Compose mount. Restore evidence
+  was preserved before the 14 copied `statement_uploads` rows were explicitly
+  removed from staging; production and both earlier volumes remain untouched.
 - [ ] `[USER]` Verify account/login, plugin download, statement submission, admin
   retrieval, email, and backup/restore against the upgraded staging stack before
   the production PostgreSQL 17 cutover.
