@@ -9,7 +9,7 @@ from PySide6.QtWidgets import QDialog, QMessageBox, QProgressDialog
 from parsetrail.core.diagnostics import Diagnostic
 from parsetrail.core.parser_routing import ParseWarningsRejectedError
 from parsetrail.core.settings import settings
-from parsetrail.core.statements import StatementImportService
+from parsetrail.core.statements import SourceFileAction, StatementImportService
 from parsetrail.gui.accounts import AssignAccountNumber
 
 
@@ -59,9 +59,9 @@ class StatementImportController(StatementImportService):
     def _retry_locked_move(self, fpath: Path, _dpath: Path, _error: PermissionError) -> bool:
         dialog = QMessageBox(self.parent)
         dialog.setIcon(QMessageBox.Warning)
-        dialog.setWindowTitle("Unable to Move File")
+        dialog.setWindowTitle("Unable to Archive File")
         dialog.setText(
-            f"The file {fpath.name} could not be moved. "
+            f"The file {fpath.name} could not be copied or moved into the archive. "
             "It might be open in another program. Please close it and try again.",
         )
         dialog.setStandardButtons(QMessageBox.Ok | QMessageBox.Cancel)
@@ -77,7 +77,7 @@ class StatementImportController(StatementImportService):
             QMessageBox.information(self.parent, "No Files", "No files found in the import directory.")
             return
 
-        success, duplicate, fail = 0, 0, 0
+        success, duplicate, recovered, fail = 0, 0, 0, 0
         progress = QProgressDialog("Processing statements...", "Cancel", 0, len(fpaths), self.parent)
         progress.setWindowTitle("Import Progress")
         progress.setWindowModality(Qt.WindowModal)
@@ -95,6 +95,8 @@ class StatementImportController(StatementImportService):
                     success += 1
                 elif result == "duplicate":
                     duplicate += 1
+                elif result == "recovered":
+                    recovered += 1
             except ParseWarningsRejectedError as exc:
                 progress.close()
                 QMessageBox.information(self.parent, "Import Canceled", str(exc))
@@ -118,14 +120,52 @@ class StatementImportController(StatementImportService):
 
         progress.close()
         total = len(fpaths)
-        remain = total - success - duplicate - fail
+        remain = total - success - duplicate - recovered - fail
         QMessageBox.information(
             self.parent,
             "Import Summary",
             (
                 f"Successfully imported: {success} of {total} files\n"
                 f"Duplicates: {duplicate}\n"
+                f"Recovered archives: {recovered}\n"
                 f"Failures: {fail}\n"
                 f"Remaining: {remain}"
             ),
         )
+
+
+def choose_source_file_action(parent, source: Path) -> SourceFileAction | None:
+    """Explain one-off file ownership and return the user's explicit choice."""
+    dialog = QMessageBox(parent)
+    dialog.setIcon(QMessageBox.Question)
+    dialog.setWindowTitle("Keep or Move the Original Statement?")
+    dialog.setText("Choose what ParseTrail should do after the statement data is committed.")
+    dialog.setInformativeText(
+        "Copy to Archive keeps the selected original and saves a managed copy (recommended).\n\n"
+        "Move to Archive places the selected original in ParseTrail's SUCCESS folder.\n\n"
+        "Leave in Place stores only the parsed data; ParseTrail will not keep a managed statement copy."
+    )
+    copy_button = dialog.addButton("Copy to Archive", QMessageBox.AcceptRole)
+    move_button = dialog.addButton("Move to Archive", QMessageBox.ActionRole)
+    leave_button = dialog.addButton("Leave in Place", QMessageBox.ActionRole)
+    dialog.addButton(QMessageBox.Cancel)
+    dialog.setDefaultButton(copy_button)
+
+    if source.parent == settings.import_dir:
+        copy_button.setEnabled(False)
+        leave_button.setEnabled(False)
+        dialog.setInformativeText(
+            "This file is already in ParseTrail's managed import folder, so it will be moved to the SUCCESS archive "
+            "after a successful import. Choose Cancel if you want to move it elsewhere first."
+        )
+        dialog.setDefaultButton(move_button)
+
+    dialog.exec()
+    clicked = dialog.clickedButton()
+    if clicked is copy_button:
+        return SourceFileAction.COPY
+    if clicked is move_button:
+        return SourceFileAction.ARCHIVE
+    if clicked is leave_button:
+        return SourceFileAction.LEAVE_IN_PLACE
+    return None

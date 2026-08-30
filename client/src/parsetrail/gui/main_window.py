@@ -53,7 +53,7 @@ from parsetrail.gui.accounts import (
 from parsetrail.gui.budget_view import BudgetTab
 from parsetrail.gui.category import CategoryManagerDialog
 from parsetrail.gui.dashboard_widgets import MatplotlibCanvas, PandasModel
-from parsetrail.gui.importing import StatementImportController
+from parsetrail.gui.importing import StatementImportController, choose_source_file_action
 from parsetrail.gui.plugins import (
     ParseTestDialog,
     PluginManagerDialog,
@@ -640,7 +640,7 @@ class ParseTrail(QMainWindow):
         fpath, _ = QFileDialog.getOpenFileName(
             None,
             "Select a File",
-            str(settings.import_dir),
+            str(settings.download_dir),
             file_filter,
             options=options,
         )
@@ -658,9 +658,23 @@ class ParseTrail(QMainWindow):
             msg_box.exec()
             return
 
+        source_action = choose_source_file_action(self, fpath)
+        if source_action is None:
+            return
+
         # Import statement
         processor = StatementImportController(self.Session, self.plugin_manager, parent=self)
-        processor.import_one(fpath)
+        outcome = processor.import_one(fpath, source_action=source_action)
+        if outcome == "success":
+            QMessageBox.information(self, "Import Complete", "The statement was imported successfully.")
+        elif outcome == "recovered":
+            QMessageBox.information(
+                self,
+                "Archive Recovered",
+                "The statement data was already committed; its managed archive has now been recovered.",
+            )
+        else:
+            QMessageBox.information(self, "Duplicate Statement", "This statement was already imported.")
 
         # Categorize new transactions and update all GUI elements
         self._categorize_with_missing_category_prompt(

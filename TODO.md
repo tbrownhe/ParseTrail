@@ -534,13 +534,15 @@ clear transaction owner, and module size trends downward without feature drift.
 
 ### P2.2 Clarify desktop workflows
 
-- [ ] Make one-off import semantics explicit before moving an original file; offer
-  copy, archive, and leave-in-place behavior with a safe default.
+- [x] Make one-off import semantics explicit before moving an original file; offer
+  copy, archive, and leave-in-place behavior with a safe default. One-off imports
+  default to retaining the selected original and creating a managed archive copy;
+  files already placed in the managed import folder retain its move-to-archive contract.
 - [ ] Add a first-run path explaining local storage, plugin installation, supported
   institutions, statement submission, backups, and what the server can observe.
 - [ ] Turn parser failures into actionable messages that identify format/plugin
   compatibility without exposing statement content.
-- [ ] Report a recovered committed archive as recovery in the import summary,
+- [x] Report a recovered committed archive as recovery in the import summary,
   rather than counting the hash match as an ordinary duplicate.
 - [ ] Add visible backup/restore and database-location guidance, including a test
   restore action.

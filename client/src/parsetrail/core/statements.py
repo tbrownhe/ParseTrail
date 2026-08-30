@@ -1,7 +1,9 @@
 import os
 import shutil
 from collections.abc import Callable, Mapping, Sequence
+from enum import StrEnum
 from pathlib import Path
+from typing import Literal
 
 from loguru import logger
 from sqlalchemy import select
@@ -31,7 +33,18 @@ class AccountAssignmentRequiredError(RuntimeError):
 
 
 class SourceArchiveError(RuntimeError):
-    """The source statement could not be moved to its requested destination."""
+    """The source statement could not be copied or moved to its archive."""
+
+
+class SourceFileAction(StrEnum):
+    """What to do with a selected statement after its data is committed."""
+
+    COPY = "copy"
+    ARCHIVE = "archive"
+    LEAVE_IN_PLACE = "leave_in_place"
+
+
+ImportOutcome = Literal["success", "duplicate", "recovered"]
 
 
 WarningDecision = Callable[[Sequence[Diagnostic]], bool]
@@ -83,7 +96,12 @@ class StatementImportService:
                 pending.append((source, destination))
         return pending
 
-    def import_one(self, fpath: Path) -> str:
+    def import_one(
+        self,
+        fpath: Path,
+        *,
+        source_action: SourceFileAction = SourceFileAction.ARCHIVE,
+    ) -> ImportOutcome:
         """
         Process a single statement file and import its data.
 
@@ -91,16 +109,16 @@ class StatementImportService:
             fpath (Path): Path to the statement file.
 
         Returns:
-            str: "success" if successfully imported, "duplicate" if already imported.
+            The import outcome, distinguishing recovered archives from duplicates.
         """
         try:
+            source_action = SourceFileAction(source_action)
             content_hashes = self._content_hashes(fpath)
 
             # Check both the current digest and legacy MD5 rows during migration.
             filename = self.file_already_imported(content_hashes)
             if filename:
-                self.handle_duplicate(fpath, filename)
-                return "duplicate"
+                return self.handle_duplicate(fpath, filename, source_action=source_action)
 
             # Parse the statement and validate its structure
             parse_result = parse_any(self.plugin_manager, fpath)
@@ -117,19 +135,19 @@ class StatementImportService:
 
             # Check for duplicates by filename
             if self.statement_already_imported(statement.dpath.name):
-                self.handle_duplicate(fpath, statement.dpath.name)
-                return "duplicate"
+                return self.handle_duplicate(fpath, statement.dpath.name, source_action=source_action)
 
             # Commit before moving the only source file. If archiving fails, the
             # committed hash lets the next import recover it deterministically.
             with self.Session() as session:
                 self.complete_data_transaction(session, statement)
             try:
-                self.move_file_safely(statement.fpath, statement.dpath)
+                self._apply_source_action(statement.fpath, statement.dpath, source_action)
             except Exception as exc:
+                action = "archived" if source_action == SourceFileAction.ARCHIVE else "copied to the archive"
                 raise ArchivePendingError(
-                    "The statement data was committed, but its source file could not be archived. "
-                    "The source remains recoverable; leave it in the import folder and retry the import."
+                    f"The statement data was committed, but its source file could not be {action}. "
+                    "The source remains recoverable; keep it in place and retry the import."
                 ) from exc
 
             logger.success(f"Imported {fpath}")
@@ -137,6 +155,14 @@ class StatementImportService:
         except Exception as e:
             logger.error(f"Failed to import {fpath.name}: {e}")
             raise
+
+    def _apply_source_action(self, fpath: Path, dpath: Path, source_action: SourceFileAction) -> None:
+        if source_action == SourceFileAction.ARCHIVE:
+            self.move_file_safely(fpath, dpath)
+        elif source_action == SourceFileAction.COPY:
+            self.copy_file_safely(fpath, dpath)
+        elif source_action != SourceFileAction.LEAVE_IN_PLACE:
+            raise ValueError(f"Unsupported source file action: {source_action}")
 
     def _statement_from_result(self, result: ParseResult) -> Statement:
         if not result.warnings:
@@ -202,7 +228,13 @@ class StatementImportService:
         self.move_file_safely(fpath, dpath)
         logger.error(f"Failed to process {fpath.name}: {error}")
 
-    def handle_duplicate(self, fpath: Path, filename: str):
+    def handle_duplicate(
+        self,
+        fpath: Path,
+        filename: str,
+        *,
+        source_action: SourceFileAction = SourceFileAction.ARCHIVE,
+    ) -> Literal["duplicate", "recovered"]:
         """
         Handle duplicate statement imports by moving the file to the duplicate directory.
 
@@ -210,16 +242,35 @@ class StatementImportService:
             fpath (Path): Path to the failed statement file.
             filename (str): Database filename of duplicate statement.
         """
-        if (settings.success_dir / filename).exists():
-            # Move to duplicate dir
-            dpath = settings.duplicate_dir / filename
-            action = "Duplicate statement moved"
-        else:
+        archive_path = settings.success_dir / filename
+        if not archive_path.exists() and source_action != SourceFileAction.LEAVE_IN_PLACE:
             # Recover a prior database commit whose archive move did not finish.
-            dpath = settings.success_dir / filename
-            action = "Recovered committed statement archive"
-        self.move_file_safely(fpath, dpath)
-        logger.info("{} to {}", action, dpath)
+            self._apply_source_action(fpath, archive_path, source_action)
+            logger.info("Recovered committed statement archive at {}", archive_path)
+            return "recovered"
+
+        if source_action == SourceFileAction.ARCHIVE:
+            duplicate_path = settings.duplicate_dir / filename
+            self.move_file_safely(fpath, duplicate_path)
+            logger.info("Duplicate statement moved to {}", duplicate_path)
+        else:
+            logger.info("Duplicate statement retained at {}", fpath)
+        return "duplicate"
+
+    def copy_file_safely(self, fpath: Path, dpath: Path) -> None:
+        """Copy a source into the managed archive while retaining the original."""
+        dpath.parent.mkdir(parents=True, exist_ok=True)
+
+        while True:
+            try:
+                shutil.copy2(fpath, dpath)
+                return
+            except PermissionError as exc:
+                if self.move_retry_decision is not None and self.move_retry_decision(fpath, dpath, exc):
+                    continue
+                raise SourceArchiveError(f"The file {fpath.name} could not be copied to the archive.") from exc
+            except (OSError, shutil.Error) as exc:
+                raise SourceArchiveError(f"The file {fpath.name} could not be copied to the archive.") from exc
 
     def move_file_safely(self, fpath: Path, dpath: Path):
         """Move a file, delegating only the locked-file retry decision.
@@ -243,8 +294,8 @@ class StatementImportService:
                 if self.move_retry_decision is not None and self.move_retry_decision(fpath, dpath, e):
                     continue
                 raise SourceArchiveError(f"The file {fpath.name} could not be moved.") from e
-            except Exception as e:
-                raise SourceArchiveError(f"An unexpected error occurred while moving {fpath.name}.") from e
+            except (OSError, shutil.Error) as e:
+                raise SourceArchiveError(f"The file {fpath.name} could not be moved to the archive.") from e
 
     def attach_account_info(self, statement: Statement) -> Statement:
         """
