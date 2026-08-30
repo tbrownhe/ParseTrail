@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 
 from parsetrail.core.settings import (
     AppSettings,
+    SettingsSaveError,
     restore_defaults,
     save_settings,
     settings,
@@ -110,7 +111,7 @@ class PreferencesDialog(QDialog):
         """Open a file dialog to select a file path."""
         try:
             default_path = str(Path(line_edit.text()).resolve())
-        except Exception:
+        except (OSError, RuntimeError):
             default_path = ""
         fpath, _ = QFileDialog.getOpenFileName(
             self,
@@ -126,7 +127,7 @@ class PreferencesDialog(QDialog):
         """Open a file dialog to select a path."""
         try:
             default_path = str(Path(line_edit.text()).resolve())
-        except Exception:
+        except (OSError, RuntimeError):
             default_path = ""
         selected_path = QFileDialog.getExistingDirectory(self, "Select Directory", default_path)
         if selected_path:
@@ -148,18 +149,10 @@ class PreferencesDialog(QDialog):
         # Get the values from the dialog
         updated_settings = {}
         for field_name, widget in self.fields.items():
-            try:
-                if isinstance(widget, QCheckBox):
-                    updated_settings[field_name] = widget.isChecked()
-                elif isinstance(widget, QLineEdit):
-                    updated_settings[field_name] = widget.text()
-            except Exception as e:
-                QMessageBox.critical(
-                    self,
-                    "Invalid Input",
-                    f"Error processing field '{field_name}': {e}",
-                )
-                return
+            if isinstance(widget, QCheckBox):
+                updated_settings[field_name] = widget.isChecked()
+            elif isinstance(widget, QLineEdit):
+                updated_settings[field_name] = widget.text()
 
         try:
             # Validate new settings against type model
@@ -183,12 +176,19 @@ class PreferencesDialog(QDialog):
                 "Validation Error",
                 f"The following errors occurred while saving preferences:\n{error_message}",
             )
-        except Exception as e:
-            logger.error(f"Failed to save preferences: {e}")
+        except SettingsSaveError:
+            logger.exception("Failed to save preferences")
             QMessageBox.critical(
                 self,
                 "Save Failed",
-                f"Failed to save preferences: {e}",
+                "Preferences could not be saved. See the application log for details.",
+            )
+        except Exception:
+            logger.exception("Unexpected failure while saving preferences")
+            QMessageBox.critical(
+                self,
+                "Save Failed",
+                "An unexpected error prevented saving preferences. See the application log for details.",
             )
 
     def reset_preferences(self):

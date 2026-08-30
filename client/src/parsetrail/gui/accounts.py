@@ -123,8 +123,9 @@ class AppreciationDialog(QDialog):
             self.result_edit.setText(f"{annual_rate:.2f}")
         except ValueError as e:
             QMessageBox.warning(self, "Input Error", str(e))
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"An unexpected error occurred: {e}")
+        except Exception:
+            logger.exception("Unexpected appreciation calculation failure")
+            QMessageBox.critical(self, "Error", "The calculation failed. See the application log for details.")
 
 
 class BalanceCheckDialog(QDialog):

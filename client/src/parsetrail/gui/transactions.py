@@ -483,5 +483,6 @@ class RecurringTransactionsDialog(QDialog):
                 # Save the dataframe to CSV
                 self.clustered.to_csv(file_path, index=False)
                 QMessageBox.information(self, "Success", f"Clustered transactions saved to {file_path}.")
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to save file: {e}")
+            except Exception:
+                logger.exception("Failed to save clustered transactions to CSV")
+                QMessageBox.critical(self, "Error", "Failed to save the file. See the application log for details.")

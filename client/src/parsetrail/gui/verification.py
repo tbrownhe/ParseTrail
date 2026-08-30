@@ -589,6 +589,10 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
             num_clusters = len({c for c in cluster_map.values() if c != -1})
             num_rows = len(cluster_map)
             self.status_label.setText(f"Found {num_clusters} recurring clusters affecting {num_rows} transactions.")
-        except Exception as exc:
+        except Exception:
             logger.exception("Clustering recurring transactions failed")
-            QtWidgets.QMessageBox.critical(self, "Error", f"Clustering failed:\n{exc}")
+            QtWidgets.QMessageBox.critical(
+                self,
+                "Error",
+                "Clustering failed. See the application log for details.",
+            )

@@ -12,6 +12,10 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from parsetrail.version import __version__
 
 
+class SettingsSaveError(RuntimeError):
+    """Raised when validated application settings cannot be persisted."""
+
+
 def get_platform() -> str:
     """Define platform naming conventions.
     win32, win64, macos32, macos64, linux32, linux64
@@ -246,7 +250,7 @@ def backup_config(current: AppSettings) -> None:
     logger.info(f"Backup created: {backup_path}")
 
 
-def save_settings(current: AppSettings):
+def save_settings(current: AppSettings) -> None:
     """
     Save the current settings to a JSON file.
     Args:
@@ -256,9 +260,10 @@ def save_settings(current: AppSettings):
         backup_config(current)
         with open(current.config_path, "w") as f:
             json.dump(current.prepare_for_save(), f, indent=4)
-        logger.info("Settings saved successfully.")
-    except Exception as e:
-        logger.error(f"Failed to save settings: {e}")
+    except (OSError, TypeError, ValueError) as exc:
+        logger.exception("Failed to save settings")
+        raise SettingsSaveError("Application settings could not be saved.") from exc
+    logger.info("Settings saved successfully.")
 
 
 def load_settings() -> AppSettings:

@@ -26,6 +26,7 @@ from parsetrail.core.crypto import encrypt_file
 from parsetrail.core.settings import settings
 from parsetrail.core.submission import (
     PreparedStatementSubmission,
+    StatementSubmissionError,
     StatementSubmissionService,
     StatementSubmissionValidationError,
 )
@@ -72,8 +73,11 @@ class StatementSubmissionThread(QThread):
             )
         except StatementSubmissionCancelled:
             self.submission_cancelled.emit()
-        except Exception as exc:
+        except StatementSubmissionError as exc:
             self.submission_failed.emit(str(exc))
+        except Exception:
+            logger.exception("Unexpected failure in statement submission worker")
+            self.submission_failed.emit("The encrypted statement could not be submitted. See the application log.")
         else:
             self.submitted.emit()
 

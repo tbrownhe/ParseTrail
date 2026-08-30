@@ -518,14 +518,16 @@ with networking disabled and never pause for an implicit package-data download.
   Dashboard canvas/table models and review table/filter models now live in focused
   modules, reducing `main_window.py` to about 1,080 lines and `verification.py` to
   about 590 while keeping their public model imports compatible.
-- [~] Replace broad exception catches with typed boundary errors and user-safe
+- [x] Replace broad exception catches with typed boundary errors and user-safe
   messages while retaining exception chains for local diagnostics. Category input,
   lookup, duplicate, and persistence failures and account validation, duplicate,
   assignment, in-use, and persistence failures are now typed at service boundaries;
   invalid budget reports and query failures are typed, as are invalid or stale review
   edits and auto-categorization failures. Manual-entry validation, missing accounts,
   and transaction query/persistence failures are typed, as are dashboard data and
-  persistence failures and artifact query/write failures.
+  persistence failures and artifact query/write failures. Normal GUI workflow
+  boundaries now log chained diagnostics and display bounded messages; intentional
+  broad containment remains in batch import, rendering, and parser developer tools.
 
 Acceptance: core application tests run without Qt, each extracted service has one
 clear transaction owner, and module size trends downward without feature drift.

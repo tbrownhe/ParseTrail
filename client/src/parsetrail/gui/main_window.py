@@ -890,31 +890,34 @@ class ParseTrail(QMainWindow):
         self.setWindowTitle(f"ParseTrail v{__version__} - {settings.db_path}")
         try:
             self.update_balances_table()
-        except Exception as e:
+        except Exception:
+            logger.exception("Failed to update balances table")
             QMessageBox.critical(
                 self,
                 "Critical",
-                f"Failed to update balances table: {e}",
+                "Failed to update balances table. See the application log for details.",
             )
 
         try:
             self.update_accounts_checklist()
             self.update_balance_history_chart()
-        except Exception as e:
+        except Exception:
+            logger.exception("Failed to update balance history chart")
             QMessageBox.critical(
                 self,
                 "Critical",
-                f"Failed to update balance history chart: {e}",
+                "Failed to update balance history chart. See the application log for details.",
             )
 
         try:
             self.update_category_checklist()
             self.update_category_spending_chart()
-        except Exception as e:
+        except Exception:
+            logger.exception("Failed to update category spending chart")
             QMessageBox.critical(
                 self,
                 "Critical",
-                f"Failed to update category spending chart: {e}",
+                "Failed to update category spending chart. See the application log for details.",
             )
 
     def update_balances_table(self):
