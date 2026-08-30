@@ -323,12 +323,15 @@ temporary exception, and the Postgres restore drill preserves expected row count
   plaintext invariant. Both GUI and batch paths select `--env-file` before
   settings-dependent imports; SSH-vs-local key, database, and ciphertext access is
   now explicit rather than inferred from the environment label.
-- [ ] Provision a LAN/VPN-only `parsetrail-staging` Compose project behind the
+- [~] Provision a LAN/VPN-only `parsetrail-staging` Compose project behind the
   existing Traefik instance with private staging hostnames and trusted HTTPS.
   The pinned, separate Mailpit definition now has no SMTP host port or relay, a
   loopback-only UI through a constrained proxy, no Mailpit egress route, and an
-  explicit reserved-recipient allowlist; start it and confirm captured messages
-  during the live rehearsal.
+  explicit staging-domain recipient allowlist. The live PostgreSQL 17 stack is
+  isolated, migrated to `3b7a1f4c2d91`, healthy at exact `fedd236` image digests,
+  and adopted after all seven authenticated proxy smoke checks passed. Confirm
+  captured email and exercise the isolated desktop/devtool flows during the live
+  owner rehearsal before checking this item off.
 - [ ] `[USER]` Rehearse one successful staging deployment, one application rollback,
   and one migration/restore rollback before enabling any deployment runner.
 
