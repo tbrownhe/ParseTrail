@@ -120,6 +120,8 @@ class ReleaseValidationTests(unittest.TestCase):
     def test_staging_mail_is_pinned_and_network_isolated(self) -> None:
         application = Path("docker-compose.yml").read_text(encoding="utf-8")
         mail = Path("deployment/staging-mail.compose.yml").read_text(encoding="utf-8")
+        staging_environment = Path(".env.example.staging").read_text(encoding="utf-8")
+        smoke_config = Path("deployment/staging-smoke-config.example.json").read_text(encoding="utf-8")
 
         self.assertNotIn("env_file:", application)
         self.assertIn("mail:\n    internal: true", application)
@@ -127,7 +129,10 @@ class ReleaseValidationTests(unittest.TestCase):
         self.assertRegex(mail, r"image: axllent/mailpit:v[0-9.]+@sha256:[0-9a-f]{64}")
         self.assertRegex(mail, r"image: nginx:[0-9.]+-alpine@sha256:[0-9a-f]{64}")
         self.assertIn("external: true", mail)
-        self.assertIn("MP_SMTP_ALLOWED_RECIPIENTS", mail)
+        self.assertIn(r"MP_SMTP_ALLOWED_RECIPIENTS: '@staging\.parsetrail\.com$'", mail)
+        self.assertIn("FIRST_SUPERUSER=staging-operator@staging.parsetrail.com", staging_environment)
+        self.assertIn('"username": "deployment-smoke@staging.parsetrail.com"', smoke_config)
+        self.assertNotIn("parsetrail" + ".test", staging_environment + smoke_config + mail)
         self.assertNotIn(":1025:1025", mail)
         self.assertIn("MAILPIT_UI_BIND_ADDRESS", mail)
 

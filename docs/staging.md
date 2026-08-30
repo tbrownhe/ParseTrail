@@ -97,8 +97,9 @@ relay/forward configuration, and receives application mail only on the main
 staging project's internal `mail` network. Mailpit itself has no normal outbound
 route. A pinned, non-root Nginx reverse proxy joins both networks and publishes
 only the Mailpit UI on server loopback; it is not a forward proxy. Mailpit accepts
-only recipients ending in `@staging.parsetrail.test`; use that reserved domain
-for every staging account.
+only recipients ending in `@staging.parsetrail.com`; use that owned staging
+subdomain for every staging account. Do not use a reserved suffix such as `.test`:
+the application's email validator rejects special-use domains.
 
 After the main Compose project has created its networks, copy
 `deployment/staging-mail.env.example` to
