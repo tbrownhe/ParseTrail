@@ -26,47 +26,53 @@ import { Route as LayoutAdminImport } from './routes/_layout/admin'
 const VerifyEmailRoute = VerifyEmailImport.update({
   path: '/verify-email',
   getParentRoute: () => rootRoute,
-} as any)
+} as any).lazy(() => import('./routes/verify-email.lazy').then((d) => d.Route))
 
 const SignupRoute = SignupImport.update({
   path: '/signup',
   getParentRoute: () => rootRoute,
-} as any)
+} as any).lazy(() => import('./routes/signup.lazy').then((d) => d.Route))
 
 const ResetPasswordRoute = ResetPasswordImport.update({
   path: '/reset-password',
   getParentRoute: () => rootRoute,
-} as any)
+} as any).lazy(() =>
+  import('./routes/reset-password.lazy').then((d) => d.Route),
+)
 
 const RecoverPasswordRoute = RecoverPasswordImport.update({
   path: '/recover-password',
   getParentRoute: () => rootRoute,
-} as any)
+} as any).lazy(() =>
+  import('./routes/recover-password.lazy').then((d) => d.Route),
+)
 
 const LoginRoute = LoginImport.update({
   path: '/login',
   getParentRoute: () => rootRoute,
-} as any)
+} as any).lazy(() => import('./routes/login.lazy').then((d) => d.Route))
 
 const LayoutRoute = LayoutImport.update({
   id: '/_layout',
   getParentRoute: () => rootRoute,
-} as any)
+} as any).lazy(() => import('./routes/_layout.lazy').then((d) => d.Route))
 
 const LayoutIndexRoute = LayoutIndexImport.update({
   path: '/',
   getParentRoute: () => LayoutRoute,
-} as any)
+} as any).lazy(() => import('./routes/_layout/index.lazy').then((d) => d.Route))
 
 const LayoutSettingsRoute = LayoutSettingsImport.update({
   path: '/settings',
   getParentRoute: () => LayoutRoute,
-} as any)
+} as any).lazy(() =>
+  import('./routes/_layout/settings.lazy').then((d) => d.Route),
+)
 
 const LayoutAdminRoute = LayoutAdminImport.update({
   path: '/admin',
   getParentRoute: () => LayoutRoute,
-} as any)
+} as any).lazy(() => import('./routes/_layout/admin.lazy').then((d) => d.Route))
 
 // Populate the FileRoutesByPath interface
 

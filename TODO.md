@@ -583,7 +583,10 @@ every action that moves or retains a statement is explained before it occurs.
   make the normal lint command non-mutating. `npm run lint` and the frontend
   pre-commit hook now check only; `npm run lint:fix` is the explicit rewrite path,
   and CI fails if normal checks dirty generated or handwritten sources.
-- [ ] Split or lazy-load heavy dashboard routes to address the oversized bundle.
+- [x] Split or lazy-load heavy dashboard routes to address the oversized bundle.
+  Every page and the authenticated layout now use TanStack lazy route modules while
+  guards and search validation remain eager. The monolithic 714 kB entry became a
+  106 kB entry plus route/shared chunks; no chunk exceeds the 500 kB warning limit.
 - [ ] Review localStorage bearer-token exposure and choose an HttpOnly-cookie or
   documented hardened-token strategy appropriate to the deployed origins.
 
