@@ -347,12 +347,17 @@ temporary exception, and the Postgres restore drill preserves expected row count
   rehearsal. The source client now exposes an explicit OS-keyring-backed sign-out
   action. Dashboard HTML is revalidated while fingerprinted assets remain
   immutable, preventing stale app-shell failures after image replacement.
-- [~] `[USER]` Rehearse one successful staging deployment, one application rollback,
+- [x] `[USER]` Rehearse one successful staging deployment, one application rollback,
   and one migration/restore rollback before enabling any deployment runner. The
   digest-pinned `580b4cc` deployment (`20260830T204303Z-580b4cc2aad7`) passed its
   full smoke gate, and explicit rollback record
   `rollback-20260830T204722Z-fedd236fb82a` restored the prior images with all seven
-  checks passing. The incompatible-migration recovery rehearsal remains.
+  checks passing. The full-boundary recovery rehearsal then required the real
+  migration command to reject `restore_drill_missing_revision`, activated release
+  `fedd236` against the independently restored PostgreSQL, resource, and key
+  targets, matched database table counts, and passed all seven checks. Its final
+  path restored the untouched normal staging mounts and passed all seven checks
+  again; evidence is in `recovery-rehearsal/20260830Towner-acceptance`.
 - [x] `[USER]` Reserve `silicide`'s LAN address in DHCP, then put that address in
   the staging smoke configuration and owner test-machine hosts entries. A changed
   address fails the smoke gate safely but makes staging unavailable until updated.
@@ -363,6 +368,13 @@ temporary exception, and the Postgres restore drill preserves expected row count
   2026-08-30 confirmed that the rotated `.env` bootstrap password is not the live
   production account password (HTTP 401); do not treat bootstrap credentials as an
   operational login or cut over production until its independent smoke passes.
+- [ ] `[USER]` Decide whether to discard and resubmit the staging statement
+  ciphertext or preserve it through a separately designed in-memory re-encryption,
+  then rotate the staging `MASTER_KEY`. A recovery-helper logging defect exposed
+  staging container environment values in the 2026-08-30 operator transcript.
+  The staging JWT, PostgreSQL, and smoke-account credentials were immediately
+  rotated and passed smoke; production secrets were not exposed. The master key
+  was intentionally retained because replacing it alone would strand ciphertext.
 
 Acceptance: a production release either passes its public smoke checks with a
 traceable record or restores the documented prior state, and no deploy depends on
