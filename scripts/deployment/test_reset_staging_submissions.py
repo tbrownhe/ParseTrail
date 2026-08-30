@@ -9,6 +9,7 @@ from unittest.mock import call, patch
 from reset_staging_submissions import (
     ResetError,
     delete_database_rows,
+    invalidate_backup_evidence,
     remove_statement_files,
     replace_dotenv_value,
     reset,
@@ -18,6 +19,16 @@ from reset_staging_submissions import (
 
 
 class ResetStagingSubmissionsTests(unittest.TestCase):
+    def test_backup_evidence_invalidation_is_exact_and_idempotent(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            expected = Path(temporary).resolve() / "backup-evidence.json"
+            expected.write_text("{}", encoding="utf-8")
+            with patch("reset_staging_submissions.STAGING_BACKUP_EVIDENCE", expected):
+                self.assertTrue(invalidate_backup_evidence(expected))
+                self.assertFalse(invalidate_backup_evidence(expected))
+                with self.assertRaisesRegex(ResetError, "may address only"):
+                    invalidate_backup_evidence(expected.with_name("other.json"))
+
     def test_dotenv_replacement_requires_exactly_one_existing_key(self) -> None:
         source = "ENVIRONMENT=staging\nMASTER_KEY=old\nOTHER=value\n"
         self.assertEqual(

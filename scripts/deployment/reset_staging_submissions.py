@@ -31,6 +31,7 @@ from staging_restore_drill import DrillError, psql
 
 STAGING_ROOT = Path("/srv/parsetrail-staging").resolve()
 STAGING_STATEMENTS = (STAGING_ROOT / "resources/statements").resolve()
+STAGING_BACKUP_EVIDENCE = (STAGING_ROOT / "release-input/backup-evidence.json").resolve()
 
 
 class ResetError(RuntimeError):
@@ -105,6 +106,15 @@ def remove_statement_files(root: Path, inventory: list[dict[str, Any]]) -> None:
         path.unlink()
     if statement_inventory(root):
         raise ResetError("Staging statement files remain after reset")
+
+
+def invalidate_backup_evidence(path: Path = STAGING_BACKUP_EVIDENCE) -> bool:
+    resolved = path.expanduser().resolve()
+    if resolved != STAGING_BACKUP_EVIDENCE:
+        raise ResetError(f"Backup-evidence invalidation may address only {STAGING_BACKUP_EVIDENCE}")
+    existed = resolved.exists()
+    resolved.unlink(missing_ok=True)
+    return existed
 
 
 def database_container(args: argparse.Namespace, values: dict[str, str]) -> str:
@@ -185,6 +195,7 @@ def reset(args: argparse.Namespace) -> dict[str, Any]:
         activate(args, deploy_values, current_release)
         verify_running_boundaries(args, deploy_values, current_release)
         smoke = run_public_smoke(smoke_config)
+        backup_evidence_invalidated = invalidate_backup_evidence()
         result = {
             "schema_version": 1,
             "reset_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
@@ -194,6 +205,7 @@ def reset(args: argparse.Namespace) -> dict[str, Any]:
             "deleted_statement_files": len(inventory),
             "deleted_statement_bytes": sum(item["size"] for item in inventory),
             "master_key_rotated": True,
+            "backup_evidence_invalidated": backup_evidence_invalidated,
             "smoke": smoke,
         }
     except BaseException as exc:

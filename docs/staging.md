@@ -121,7 +121,9 @@ deletes every `statement_uploads` row and flat ciphertext file, atomically repla
 `MASTER_KEY` with a new 32-byte key, and reactivates the recorded digest-pinned
 release. It records only counts and identifiers, verifies all active mounts, and
 requires the complete public smoke suite to pass. It never addresses production
-or local parser fixtures and does not retain the retired key in its evidence.
+or local parser fixtures and does not retain the retired key in its evidence. The
+reset also deletes the active staging `backup-evidence.json`; complete a new
+whole-boundary restore drill before the next deployment gate.
 
 ## 3. Signed artifacts and captured mail
 
