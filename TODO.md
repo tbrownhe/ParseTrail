@@ -249,16 +249,19 @@ recoverable, committed data agrees with the import state, and a retry is safe.
   login, fresh plugin-store download, multi-statement submission, encrypted
   devtool retrieval, and parser execution. The stale bootstrap password was
   rotated after confirming it no longer represented the current account password.
-- [~] Restore a fresh production PostgreSQL 12 dump into a uniquely named,
+- [x] Restore a fresh production PostgreSQL 12 dump into a uniquely named,
   isolated PostgreSQL 17 staging volume; preserve the source volume and compare
   every public-table count before allowing application traffic to the restore.
   The production rehearsal created a checksum-verified dump, retained the
   PostgreSQL 12 source unchanged, and matched every table in the isolated
   `parsetrail_app-db-data-pg17-staging-20260829T1927Z` volume. Live startup then
   exposed a mount-depth mismatch in the helper: its verified cluster was nested
-  below Compose's `PGDATA` mount. The helper and regression contract are fixed;
-  create and verify a replacement target from the retained logical dump before
-  staging application traffic.
+  below Compose's `PGDATA` mount. The helper and regression contract were fixed,
+  and the retained checksum-verified dump was restored again with exact count
+  parity into `parsetrail_app-db-data-pg17-staging-20260830T065841Z`. PostgreSQL
+  17.11 starts healthy through the authoritative Compose mount. Restore evidence
+  was preserved before the 14 copied `statement_uploads` rows were explicitly
+  removed from staging; production and both earlier volumes remain untouched.
 - [ ] `[USER]` Verify account/login, plugin download, statement submission, admin
   retrieval, email, and backup/restore against the upgraded staging stack before
   the production PostgreSQL 17 cutover.
