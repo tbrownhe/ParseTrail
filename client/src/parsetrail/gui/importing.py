@@ -7,7 +7,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QMessageBox, QProgressDialog
 
 from parsetrail.core.diagnostics import Diagnostic
-from parsetrail.core.parser_routing import ParseWarningsRejectedError
+from parsetrail.core.parser_routing import ParseError, ParseWarningsRejectedError, present_parse_error
 from parsetrail.core.settings import settings
 from parsetrail.core.statements import SourceFileAction, StatementImportService
 from parsetrail.gui.accounts import AssignAccountNumber
@@ -78,6 +78,7 @@ class StatementImportController(StatementImportService):
             return
 
         success, duplicate, recovered, fail = 0, 0, 0, 0
+        failure_details: list[str] = []
         progress = QProgressDialog("Processing statements...", "Cancel", 0, len(fpaths), self.parent)
         progress.setWindowTitle("Import Progress")
         progress.setWindowModality(Qt.WindowModal)
@@ -101,6 +102,11 @@ class StatementImportController(StatementImportService):
                 progress.close()
                 QMessageBox.information(self.parent, "Import Canceled", str(exc))
                 break
+            except ParseError as exc:
+                fail += 1
+                presentation = present_parse_error(exc)
+                failure_details.append(f"{fpath.name}: {presentation.title}\n{presentation.message}")
+                self.handle_failure(fpath, exc)
             except RuntimeError as exc:
                 progress.close()
                 dialog = QMessageBox(self.parent)
@@ -121,17 +127,22 @@ class StatementImportController(StatementImportService):
         progress.close()
         total = len(fpaths)
         remain = total - success - duplicate - recovered - fail
-        QMessageBox.information(
-            self.parent,
-            "Import Summary",
-            (
-                f"Successfully imported: {success} of {total} files\n"
-                f"Duplicates: {duplicate}\n"
-                f"Recovered archives: {recovered}\n"
-                f"Failures: {fail}\n"
-                f"Remaining: {remain}"
-            ),
+        summary = QMessageBox(self.parent)
+        summary.setIcon(QMessageBox.Information if not failure_details else QMessageBox.Warning)
+        summary.setWindowTitle("Import Summary")
+        summary.setText(
+            f"Successfully imported: {success} of {total} files\n"
+            f"Duplicates: {duplicate}\n"
+            f"Recovered archives: {recovered}\n"
+            f"Failures: {fail}\n"
+            f"Remaining: {remain}"
         )
+        if failure_details:
+            summary.setInformativeText(
+                "Failed source files were moved to the FAIL folder. Expand details for next steps."
+            )
+            summary.setDetailedText("\n\n".join(failure_details))
+        summary.exec()
 
 
 def choose_source_file_action(parent, source: Path) -> SourceFileAction | None:

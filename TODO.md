@@ -540,8 +540,10 @@ clear transaction owner, and module size trends downward without feature drift.
   files already placed in the managed import folder retain its move-to-archive contract.
 - [ ] Add a first-run path explaining local storage, plugin installation, supported
   institutions, statement submission, backups, and what the server can observe.
-- [ ] Turn parser failures into actionable messages that identify format/plugin
-  compatibility without exposing statement content.
+- [x] Turn parser failures into actionable messages that identify format/plugin
+  compatibility without exposing statement content. Normal imports now distinguish
+  unsupported formats, missing or ambiguous matches, changed layouts, incompatible
+  plugin output, and failed safety checks while keeping extracted values out of messages.
 - [x] Report a recovered committed archive as recovery in the import summary,
   rather than counting the hash match as an ordinary duplicate.
 - [ ] Add visible backup/restore and database-location guidance, including a test

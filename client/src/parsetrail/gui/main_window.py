@@ -41,9 +41,11 @@ from parsetrail.core.client import (
 )
 from parsetrail.core.dashboard import DashboardQueryService, DashboardServiceError
 from parsetrail.core.initialize import initialize_db
+from parsetrail.core.parser_routing import ParseError, ParseWarningsRejectedError, present_parse_error
 from parsetrail.core.plugins import PluginManager, PluginUpdateThread
 from parsetrail.core.review import TransactionReviewError, TransactionReviewService
 from parsetrail.core.settings import save_settings, settings
+from parsetrail.core.statements import ArchivePendingError
 from parsetrail.core.utils import open_file_in_os
 from parsetrail.gui.accounts import (
     AppreciationDialog,
@@ -664,7 +666,28 @@ class ParseTrail(QMainWindow):
 
         # Import statement
         processor = StatementImportController(self.Session, self.plugin_manager, parent=self)
-        outcome = processor.import_one(fpath, source_action=source_action)
+        try:
+            outcome = processor.import_one(fpath, source_action=source_action)
+        except ParseWarningsRejectedError:
+            QMessageBox.information(self, "Import Canceled", "The statement was not imported.")
+            return
+        except ParseError as exc:
+            logger.warning("Statement parse failed with {}", exc.code)
+            presentation = present_parse_error(exc)
+            QMessageBox.critical(self, presentation.title, presentation.message)
+            return
+        except ArchivePendingError as exc:
+            logger.exception("Statement archive action failed after import commit")
+            QMessageBox.warning(self, "Archive Recovery Needed", str(exc))
+            return
+        except Exception:
+            logger.exception("Unexpected one-off statement import failure")
+            QMessageBox.critical(
+                self,
+                "Statement Not Imported",
+                "The statement could not be imported. Its source remains in place; see the application log for details.",
+            )
+            return
         if outcome == "success":
             QMessageBox.information(self, "Import Complete", "The statement was imported successfully.")
         elif outcome == "recovered":
