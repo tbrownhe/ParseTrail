@@ -1,9 +1,10 @@
+import { apiBaseUrl } from "../config"
 import { ApiError } from "./core/ApiError"
 import { client } from "./generated/client.gen"
 
 client.setConfig({
   auth: () => localStorage.getItem("access_token") ?? "",
-  baseUrl: import.meta.env.VITE_API_URL,
+  baseUrl: apiBaseUrl,
   responseStyle: "data",
   throwOnError: true,
 })

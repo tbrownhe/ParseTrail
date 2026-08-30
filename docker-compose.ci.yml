@@ -18,6 +18,11 @@ x-backend-environment: &backend-environment
   MASTER_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
   SENTRY_DSN: ""
 
+x-web-environment: &web-environment
+  BACKEND_HOST: http://localhost:8000/api/v1
+  FRONTEND_HOST: http://localhost:8080
+  GITHUB_URL: https://github.com/tbrownhe/ParseTrail
+
 services:
   db:
     image: postgres:17
@@ -74,10 +79,9 @@ services:
 
   frontend:
     build:
-      context: ./frontend
-      args:
-        VITE_API_URL: http://localhost:8000
-        NODE_ENV: production
+      context: .
+      dockerfile: frontend/Dockerfile
+    environment: *web-environment
     ports:
       - "127.0.0.1:8080:80"
 
@@ -85,6 +89,7 @@ services:
     build:
       context: .
       dockerfile: website/Dockerfile
+    environment: *web-environment
     ports:
       - "127.0.0.1:8081:80"
 

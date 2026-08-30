@@ -4,6 +4,8 @@ FROM nginx:1.28.0-alpine@sha256:30f1c0d78e0ad60901648be663a710bdadf19e4c10ac6782
 
 # Copy website files to the appropriate directory
 COPY ./website /usr/share/nginx/html
+COPY ./website/nginx.conf /etc/nginx/conf.d/default.conf
+COPY ./deployment/web-runtime-config.sh /docker-entrypoint.d/40-parsetrail-runtime-config.sh
 
-# Optional: Set permissions on the files
-RUN chmod -R 755 /usr/share/nginx/html
+RUN chmod -R 755 /usr/share/nginx/html \
+    && chmod 0555 /docker-entrypoint.d/40-parsetrail-runtime-config.sh

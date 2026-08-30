@@ -168,15 +168,16 @@ services:
   frontend:
     image: '${FRONTEND_IMAGE_REF:-${DOCKER_IMAGE_FRONTEND?Variable not set}:local}'
     restart: always
+    environment:
+      - BACKEND_HOST=${BACKEND_HOST?Variable not set}
+      - FRONTEND_HOST=${FRONTEND_HOST?Variable not set}
+      - GITHUB_URL=${GITHUB_URL?Variable not set}
     networks:
       - traefik-public
       - default
     build:
-      context: ./frontend
-      args:
-        # Points the frontend to the backend running at api.${DOMAIN}
-        - VITE_API_URL=https://api.${DOMAIN}
-        - NODE_ENV=production
+      context: .
+      dockerfile: frontend/Dockerfile
     labels:
       - traefik.enable=true
       - traefik.docker.network=traefik-public
@@ -203,18 +204,10 @@ services:
       context: .
       dockerfile: website/Dockerfile
     environment:
-      # Base URLs used by website JS; written into env.js at container start.
+      # Validated public URLs used to generate runtime-config.js at startup.
       - BACKEND_HOST=${BACKEND_HOST?Variable not set}
       - FRONTEND_HOST=${FRONTEND_HOST?Variable not set}
       - GITHUB_URL=${GITHUB_URL?Variable not set}
-    command: >
-      /bin/sh -c "
-      {
-        echo \"window.__BACKEND_HOST__='${BACKEND_HOST}'\";
-        echo \"window.__FRONTEND_HOST__='${FRONTEND_HOST}'\";
-        echo \"window.__GITHUB_URL__='${GITHUB_URL}'\";
-      } >/usr/share/nginx/html/env.js
-      && exec nginx -g 'daemon off;'"
     networks:
       - traefik-public
       - default

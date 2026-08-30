@@ -107,7 +107,7 @@ jobs:
       - name: Check formatting and lint
         run: npm run lint:check
         working-directory: frontend
-      - name: Test public website metadata rendering
+      - name: Test public website JavaScript
         run: npm run test:website
         working-directory: frontend
       - name: Build production bundle

@@ -15,7 +15,8 @@
     <noscript>
         <link rel="stylesheet" href="assets/css/noscript.css" />
     </noscript>
-    <script src="env.js"></script>
+    <script src="runtime-config.js"></script>
+    <script src="assets/js/config.js"></script>
 </head>
 
 <body class="is-preload">
@@ -126,19 +127,6 @@
     <script src="assets/js/breakpoints.min.js"></script>
     <script src="assets/js/util.js"></script>
 	<script src="assets/js/main.js"></script>
-	<script>
-		(function () {
-			var gh = window.__GITHUB_URL__ || "https://github.com/tbrownhe/parsetrail";
-			var frontend = window.__FRONTEND_HOST__ || "https://dashboard.parsetrail.com";
-			document.querySelectorAll(".nav-github").forEach(function (el) {
-				if (gh) el.href = gh;
-			});
-			document.querySelectorAll(".nav-login").forEach(function (el) {
-				if (frontend) el.href = frontend;
-			});
-		})();
-	</script>
-
 </body>
 
 </html>

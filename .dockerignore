@@ -1,3 +1,10 @@
 **
+!deployment/
+!deployment/web-runtime-config.sh
+!frontend/
+!frontend/**
+frontend/.env
+frontend/dist/
+frontend/node_modules/
 !website/
 !website/**

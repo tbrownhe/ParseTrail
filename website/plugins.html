@@ -26,12 +26,12 @@
 			})
 			.catch(error => console.error("Failed to fetch version:", error));
     </script>
-    <script src="env.js"></script>
+    <script src="runtime-config.js"></script>
+    <script src="assets/js/config.js"></script>
     <script src="assets/js/plugins.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", async () => {
-            const fallbackApiBase = "http://localhost:8000/api/v1";
-            const apiBase = (window.__BACKEND_HOST__ || fallbackApiBase).replace(/\/$/, "");
+            const apiBase = window.ParseTrailConfig.apiBaseUrl;
             const pluginsUrl = `${apiBase}/plugins/`;
 
             try {
@@ -121,17 +121,6 @@
     <script src="assets/js/breakpoints.min.js"></script>
     <script src="assets/js/util.js"></script>
     <script src="assets/js/main.js"></script>
-    <script>
-        (function () {
-            var gh = window.__GITHUB_URL__ || "https://github.com/tbrownhe/parsetrail";
-            var frontend = window.__FRONTEND_HOST__ || "https://dashboard.parsetrail.com";
-            var ghLink = document.querySelector(".nav-github");
-            if (ghLink && gh) ghLink.href = gh;
-            var loginLink = document.querySelector(".nav-login");
-            if (loginLink && frontend) loginLink.href = frontend;
-        })();
-    </script>
-
 </body>
 
 </html>

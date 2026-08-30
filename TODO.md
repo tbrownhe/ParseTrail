@@ -296,9 +296,11 @@ temporary exception, and the Postgres restore drill preserves expected row count
   uses a distinct `STACK_NAME`, PostgreSQL volume, submission-key volume, secrets,
   bind-mount directories, release state, and smoke credentials. Refuse a staging
   deployment whose protected storage resolves to a production target.
-- [ ] Move the dashboard API origin from build-time `VITE_API_URL` to validated
+- [x] Move the dashboard API origin from build-time `VITE_API_URL` to validated
   container-startup configuration so the exact frontend image digest can be
-  promoted from staging to production.
+  promoted from staging to production. Dashboard and website images now share an
+  atomic, fail-closed `runtime-config.js` generator and serve it with `no-store`;
+  public URLs are no longer compiled into either image.
 - [ ] Add an isolated desktop staging profile and process-local launcher for the
   installed client. Separate AppData, SQLite/import paths, OS credential-store
   entry, cached submission public key, plugin store, logs, and reports; show a
@@ -573,8 +575,10 @@ every action that moves or retains a statement is explained before it occurs.
   persistence helpers, generated client, React route, and PostgreSQL table are gone;
   the remaining home route is a small ParseTrail account/download/plugin landing
   page, and the FastAPI/Vite branding and inert search control have been removed.
-- [ ] Choose one canonical public/runtime API configuration path; remove the stale
-  checked-in localhost/GitHub values from the static website deployment flow.
+- [x] Choose one canonical public/runtime API configuration path; remove the stale
+  checked-in localhost/GitHub values from the static website deployment flow. Both
+  web surfaces consume the same validated `runtime-config.js` contract generated
+  from `BACKEND_HOST`, `FRONTEND_HOST`, and `GITHUB_URL` at container startup.
 - [ ] Exclude generated API/route files appropriately from formatting checks and
   make the normal lint command non-mutating.
 - [ ] Split or lazy-load heavy dashboard routes to address the oversized bundle.
