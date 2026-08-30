@@ -54,8 +54,22 @@ test("Log in with valid email and password ", async ({ page }) => {
   await page.waitForURL("/")
 
   await expect(
-    page.getByText("Welcome back, nice to see you again!"),
+    page.getByRole("heading", { name: "ParseTrail Account" }),
   ).toBeVisible()
+
+  const browserStorage = await page.evaluate(() => ({
+    local: Object.keys(localStorage),
+    session: Object.keys(sessionStorage),
+  }))
+  expect(browserStorage.local).not.toContain("access_token")
+  expect(browserStorage.session).not.toContain("access_token")
+
+  const sessionCookie = (await page.context().cookies()).find((cookie) =>
+    cookie.name.endsWith("parsetrail_session"),
+  )
+  expect(sessionCookie).toBeDefined()
+  expect(sessionCookie?.httpOnly).toBe(true)
+  expect(sessionCookie?.sameSite).toBe("Strict")
 })
 
 test("Log in with invalid email", async ({ page }) => {
@@ -88,7 +102,7 @@ test("Successful log out", async ({ page }) => {
   await page.waitForURL("/")
 
   await expect(
-    page.getByText("Welcome back, nice to see you again!"),
+    page.getByRole("heading", { name: "ParseTrail Account" }),
   ).toBeVisible()
 
   await page.getByTestId("user-menu").click()
@@ -105,7 +119,7 @@ test("Logged-out user cannot access protected routes", async ({ page }) => {
   await page.waitForURL("/")
 
   await expect(
-    page.getByText("Welcome back, nice to see you again!"),
+    page.getByRole("heading", { name: "ParseTrail Account" }),
   ).toBeVisible()
 
   await page.getByTestId("user-menu").click()

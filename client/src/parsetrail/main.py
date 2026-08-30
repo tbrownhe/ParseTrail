@@ -45,6 +45,14 @@ def run_runtime_smoke_test() -> int:
 
 # Client entry point
 def main() -> int:
+    from parsetrail.core.profile import ProfileError, configure_runtime_profile
+
+    try:
+        sys.argv[:] = configure_runtime_profile(sys.argv)
+    except ProfileError as exc:
+        print(f"ParseTrail could not start: {exc}", file=sys.stderr)
+        return 2
+
     if RUNTIME_SMOKE_TEST_ARGUMENT in sys.argv:
         return run_runtime_smoke_test()
 

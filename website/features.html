@@ -9,7 +9,8 @@
 	<noscript>
 		<link rel="stylesheet" href="assets/css/noscript.css" />
 	</noscript>
-	<script src="env.js"></script>
+	<script src="runtime-config.js"></script>
+	<script src="assets/js/config.js"></script>
 	<style>
 		.wrapper { padding: 4em 2em; }
 		section.feature { display: flex; align-items: center; margin-bottom: 4em; }
@@ -98,17 +99,6 @@
 	<script src="assets/js/breakpoints.min.js"></script>
 	<script src="assets/js/util.js"></script>
 	<script src="assets/js/main.js"></script>
-	<script>
-		(function () {
-			var gh = window.__GITHUB_URL__ || "https://github.com/tbrownhe/parsetrail";
-			var frontend = window.__FRONTEND_HOST__ || "https://dashboard.parsetrail.com";
-			var ghLink = document.querySelector(".nav-github");
-			if (ghLink && gh) ghLink.href = gh;
-			var loginLink = document.querySelector(".nav-login");
-			if (loginLink && frontend) loginLink.href = frontend;
-		})();
-	</script>
-
 </body>
 
 </html>

@@ -3,7 +3,7 @@ from datetime import timedelta
 from time import monotonic, sleep
 from typing import Annotated, Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import select
@@ -11,6 +11,11 @@ from sqlmodel import select
 from app import crud
 from app.api.deps import CurrentUser, SessionDep, get_current_active_superuser
 from app.core import security
+from app.core.browser_session import (
+    clear_browser_session_cookie,
+    require_frontend_origin,
+    set_browser_session_cookie,
+)
 from app.core.config import settings
 from app.core.security import get_password_hash
 from app.models import Message, NewPassword, Token, User, UserPublic, VerificationToken
@@ -26,11 +31,7 @@ router = APIRouter()
 PASSWORD_RECOVERY_MIN_RESPONSE_SECONDS = 0.25
 
 
-@router.post("/login/access-token")
-def login_access_token(session: SessionDep, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]) -> Token:
-    """
-    OAuth2 compatible token login, get an access token for future requests
-    """
+def _authenticate_user(session: SessionDep, form_data: OAuth2PasswordRequestForm) -> User:
     user = crud.authenticate(session=session, email=form_data.username, password=form_data.password)
     if not user or not user.is_active:
         raise HTTPException(
@@ -38,14 +39,46 @@ def login_access_token(session: SessionDep, form_data: Annotated[OAuth2PasswordR
             detail="Incorrect email or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    return Token(
-        access_token=security.create_access_token(
-            user.id,
-            expires_delta=access_token_expires,
-            session_version=user.session_version,
-        )
+    return user
+
+
+def _create_user_access_token(user: User) -> str:
+    return security.create_access_token(
+        user.id,
+        expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
+        session_version=user.session_version,
     )
+
+
+@router.post("/login/access-token")
+def login_access_token(session: SessionDep, form_data: Annotated[OAuth2PasswordRequestForm, Depends()]) -> Token:
+    """
+    OAuth2 compatible token login, get an access token for future requests
+    """
+    user = _authenticate_user(session, form_data)
+    return Token(access_token=_create_user_access_token(user))
+
+
+@router.post("/login/browser-session", response_model=UserPublic)
+def login_browser_session(
+    request: Request,
+    response: Response,
+    session: SessionDep,
+    form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
+) -> User:
+    """Authenticate the dashboard without exposing its JWT to JavaScript."""
+    require_frontend_origin(request)
+    user = _authenticate_user(session, form_data)
+    set_browser_session_cookie(response, _create_user_access_token(user))
+    return user
+
+
+@router.post("/login/logout", response_model=Message)
+def logout_browser_session(request: Request, response: Response) -> Message:
+    """Clear the dashboard cookie even if its token is already invalid."""
+    require_frontend_origin(request)
+    clear_browser_session_cookie(response)
+    return Message(message="Logged out successfully")
 
 
 @router.post("/login/test-token", response_model=UserPublic)

@@ -19,7 +19,7 @@ from parsetrail.core.orm import (
 )
 from parsetrail.core.parser_routing import ParseResult
 from parsetrail.core.settings import settings
-from parsetrail.core.statements import ArchivePendingError, StatementProcessor
+from parsetrail.core.statements import ArchivePendingError, SourceFileAction, StatementProcessor
 from parsetrail.core.validation import Account, Statement, Transaction
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -166,6 +166,47 @@ def test_database_commit_happens_before_source_archive(
     assert events == ["database-committed", "source-archived"]
 
 
+def test_copy_action_commits_then_archives_a_copy_and_retains_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    processor, source, events = _prepare_import(tmp_path, monkeypatch)
+
+    def copy(source_path: Path, destination: Path) -> None:
+        events.append("archive-copied")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(source_path.read_bytes())
+
+    monkeypatch.setattr(processor, "copy_file_safely", copy)
+
+    assert processor.import_one(source, source_action=SourceFileAction.COPY) == "success"
+    assert events == ["database-committed", "archive-copied"]
+    assert source.read_bytes() == b"statement"
+    assert next(settings.success_dir.iterdir()).read_bytes() == b"statement"
+
+
+def test_leave_in_place_action_commits_without_touching_source(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    processor, source, events = _prepare_import(tmp_path, monkeypatch)
+    monkeypatch.setattr(
+        processor,
+        "move_file_safely",
+        lambda *_args: pytest.fail("leave-in-place must not move the source"),
+    )
+    monkeypatch.setattr(
+        processor,
+        "copy_file_safely",
+        lambda *_args: pytest.fail("leave-in-place must not copy the source"),
+    )
+
+    assert processor.import_one(source, source_action=SourceFileAction.LEAVE_IN_PLACE) == "success"
+    assert events == ["database-committed"]
+    assert source.read_bytes() == b"statement"
+    assert not settings.success_dir.exists()
+
+
 def test_archive_failure_after_commit_leaves_source_for_deterministic_retry(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -230,11 +271,57 @@ def test_duplicate_retry_recovers_missing_success_archive(
     source.parent.mkdir(parents=True)
     source.write_bytes(b"statement")
 
-    processor.handle_duplicate(source, "Checking_20260701_20260731.pdf")
+    outcome = processor.handle_duplicate(source, "Checking_20260701_20260731.pdf")
 
     recovered = settings.success_dir / "Checking_20260701_20260731.pdf"
+    assert outcome == "recovered"
     assert recovered.read_bytes() == b"statement"
     assert not source.exists()
+
+
+def test_duplicate_copy_recovers_archive_without_removing_original(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "db_path", tmp_path / "parsetrail.db")
+    processor = _processor()
+    source = tmp_path / "Downloads" / "retry.pdf"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"statement")
+
+    outcome = processor.handle_duplicate(
+        source,
+        "Checking_20260701_20260731.pdf",
+        source_action=SourceFileAction.COPY,
+    )
+
+    assert outcome == "recovered"
+    assert source.read_bytes() == b"statement"
+    assert (settings.success_dir / "Checking_20260701_20260731.pdf").read_bytes() == b"statement"
+
+
+def test_duplicate_copy_retains_original_when_archive_exists(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(settings, "db_path", tmp_path / "parsetrail.db")
+    processor = _processor()
+    archive = settings.success_dir / "Checking_20260701_20260731.pdf"
+    archive.parent.mkdir(parents=True)
+    archive.write_bytes(b"statement")
+    source = tmp_path / "Downloads" / "duplicate.pdf"
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"statement")
+
+    outcome = processor.handle_duplicate(
+        source,
+        archive.name,
+        source_action=SourceFileAction.COPY,
+    )
+
+    assert outcome == "duplicate"
+    assert source.read_bytes() == b"statement"
+    assert not settings.duplicate_dir.exists()
 
 
 def test_startup_scan_reports_committed_file_awaiting_archive(

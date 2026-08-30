@@ -8,7 +8,9 @@ import keyring
 from keyring.backend import KeyringBackend
 from loguru import logger
 
-SERVICE_NAME = "ParseTrail"
+from parsetrail.core.profile import credential_service_name
+
+SERVICE_NAME = credential_service_name()
 ACCESS_TOKEN_ACCOUNT = "api-access-token"
 _SECURE_BACKEND_MODULES = (
     "keyring.backends.Windows",

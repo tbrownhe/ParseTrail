@@ -9,10 +9,8 @@ services:
   frontend:
     image: ${FRONTEND_IMAGE_REF?Set FRONTEND_IMAGE_REF}
     build:
-      context: ./frontend
-      args:
-        VITE_API_URL: ${VITE_API_URL?Set VITE_API_URL}
-        NODE_ENV: production
+      context: .
+      dockerfile: frontend/Dockerfile
 
   website:
     image: ${WEBSITE_IMAGE_REF?Set WEBSITE_IMAGE_REF}

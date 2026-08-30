@@ -8,8 +8,10 @@ from fastapi.testclient import TestClient
 from sqlmodel import Session
 
 from app import crud
+from app.core.browser_session import BROWSER_SESSION_COOKIE
 from app.core.config import settings
 from app.core.security import verify_password
+from app.main import app
 from app.models import UserCreate
 from app.tests.utils.user import user_authentication_headers
 from app.tests.utils.utils import random_email, random_lower_string
@@ -31,6 +33,99 @@ def test_get_access_token(client: TestClient) -> None:
     tokens = response.json()
     assert response.status_code == 200
     assert tokens["access_token"]
+    assert BROWSER_SESSION_COOKIE not in response.cookies
+
+
+def test_browser_session_uses_httponly_cookie_and_enforces_origin() -> None:
+    login_data = {
+        "username": settings.FIRST_SUPERUSER,
+        "password": settings.FIRST_SUPERUSER_PASSWORD,
+    }
+    with TestClient(app) as browser:
+        missing_origin = browser.post(
+            f"{settings.API_V1_STR}/login/browser-session",
+            data=login_data,
+        )
+        assert missing_origin.status_code == 403
+        assert BROWSER_SESSION_COOKIE not in browser.cookies
+
+        wrong_origin = browser.post(
+            f"{settings.API_V1_STR}/login/browser-session",
+            data=login_data,
+            headers={"Origin": "https://attacker.example"},
+        )
+        assert wrong_origin.status_code == 403
+        assert BROWSER_SESSION_COOKIE not in browser.cookies
+
+        login = browser.post(
+            f"{settings.API_V1_STR}/login/browser-session",
+            data=login_data,
+            headers={"Origin": settings.FRONTEND_HOST},
+        )
+        assert login.status_code == 200
+        assert login.json()["email"] == settings.FIRST_SUPERUSER
+        assert "access_token" not in login.json()
+        set_cookie = login.headers["set-cookie"]
+        assert f"{BROWSER_SESSION_COOKIE}=" in set_cookie
+        assert "HttpOnly" in set_cookie
+        assert "SameSite=strict" in set_cookie
+        assert "Path=/" in set_cookie
+
+        current_user = browser.get(f"{settings.API_V1_STR}/users/me")
+        assert current_user.status_code == 200
+        assert current_user.json()["email"] == settings.FIRST_SUPERUSER
+
+        csrf_attempt = browser.post(f"{settings.API_V1_STR}/login/test-token")
+        assert csrf_attempt.status_code == 403
+        assert csrf_attempt.json() == {"detail": "Cross-site request rejected"}
+
+        permitted_mutation = browser.post(
+            f"{settings.API_V1_STR}/login/test-token",
+            headers={"Origin": settings.FRONTEND_HOST},
+        )
+        assert permitted_mutation.status_code == 200
+
+        rejected_logout = browser.post(
+            f"{settings.API_V1_STR}/login/logout",
+            headers={"Origin": "https://attacker.example"},
+        )
+        assert rejected_logout.status_code == 403
+        assert BROWSER_SESSION_COOKIE in browser.cookies
+
+        logout = browser.post(
+            f"{settings.API_V1_STR}/login/logout",
+            headers={"Origin": settings.FRONTEND_HOST},
+        )
+        assert logout.status_code == 200
+        assert logout.json() == {"message": "Logged out successfully"}
+        assert BROWSER_SESSION_COOKIE not in browser.cookies
+        assert browser.get(f"{settings.API_V1_STR}/users/me").status_code == 401
+
+
+def test_bearer_auth_remains_origin_independent(
+    client: TestClient,
+    superuser_token_headers: dict[str, str],
+) -> None:
+    response = client.post(
+        f"{settings.API_V1_STR}/login/test-token",
+        headers=superuser_token_headers,
+    )
+    assert response.status_code == 200
+
+
+def test_dashboard_origin_can_preflight_authenticated_patch(client: TestClient) -> None:
+    response = client.options(
+        f"{settings.API_V1_STR}/users/me",
+        headers={
+            "Origin": settings.FRONTEND_HOST,
+            "Access-Control-Request-Method": "PATCH",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == settings.FRONTEND_HOST
+    assert response.headers["access-control-allow-credentials"] == "true"
+    assert "PATCH" in response.headers["access-control-allow-methods"]
 
 
 @pytest.mark.parametrize(

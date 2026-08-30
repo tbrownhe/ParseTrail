@@ -76,7 +76,8 @@ class Settings(BaseSettings):
         return self
 
 
-settings = Settings(_env_file=_settings_env_file())  # type: ignore
+SELECTED_ENV_FILE = _settings_env_file()
+settings = Settings(_env_file=SELECTED_ENV_FILE)  # type: ignore
 
 
 def require_runtime_settings(current: Settings | None = None) -> Settings:
@@ -84,4 +85,39 @@ def require_runtime_settings(current: Settings | None = None) -> Settings:
     current = current or settings
     if not current.PLUGINS_DIR:
         raise ValueError("PLUGINS_DIR is required for statement parser development")
+    if current.ENVIRONMENT in {"staging", "production"} and os.getenv("PARSETRAIL_ENV_FILE") is None:
+        raise ValueError("Staging and production devtool operations require an explicit --env-file")
+    if current.SSH_TUNNEL_ENABLE:
+        required_remote = {
+            "REMOTE_HOST": current.REMOTE_HOST,
+            "REMOTE_USER": current.REMOTE_USER,
+            "REMOTE_ENV_PATH": current.REMOTE_ENV_PATH,
+            "REMOTE_STATEMENTS_DIR": current.REMOTE_STATEMENTS_DIR,
+            "DB_CONTAINER_NAME": current.DB_CONTAINER_NAME,
+        }
+        missing = [name for name, value in required_remote.items() if not str(value).strip()]
+        if missing:
+            raise ValueError(f"SSH devtool target is missing: {', '.join(missing)}")
+    else:
+        required_local = {
+            "MASTER_KEY": current.MASTER_KEY,
+            "STATEMENTS_DIR": current.STATEMENTS_DIR,
+            "POSTGRES_SERVER": current.POSTGRES_SERVER,
+            "POSTGRES_USER": current.POSTGRES_USER,
+            "POSTGRES_PASSWORD": current.POSTGRES_PASSWORD,
+            "POSTGRES_DB": current.POSTGRES_DB,
+        }
+        missing = [name for name, value in required_local.items() if not str(value).strip()]
+        if missing:
+            raise ValueError(f"Local devtool target is missing: {', '.join(missing)}")
     return current
+
+
+def target_summary(current: Settings | None = None) -> str:
+    current = current or settings
+    env_file = SELECTED_ENV_FILE or "environment variables only"
+    if current.SSH_TUNNEL_ENABLE:
+        location = f"ssh://{current.REMOTE_USER}@{current.REMOTE_HOST}/{current.DB_CONTAINER_NAME}"
+    else:
+        location = f"postgresql://{current.POSTGRES_SERVER}:{current.POSTGRES_PORT}/{current.POSTGRES_DB}"
+    return f"{current.ENVIRONMENT.upper()} | {location} | config={env_file}"

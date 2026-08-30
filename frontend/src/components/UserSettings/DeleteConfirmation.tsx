@@ -36,7 +36,7 @@ const DeleteConfirmation = ({ isOpen, onClose }: DeleteProps) => {
     onSuccess: () => {
       showToast(
         "Success",
-        "Your account has been successfully deleted.",
+        "Your ParseTrail web account has been deleted.",
         "success",
       )
       logout()
@@ -68,9 +68,12 @@ const DeleteConfirmation = ({ isOpen, onClose }: DeleteProps) => {
             <AlertDialogHeader>Confirmation Required</AlertDialogHeader>
 
             <AlertDialogBody>
-              All your account data will be{" "}
-              <strong>permanently deleted.</strong> If you are sure, please
-              click <strong>"Confirm"</strong> to proceed. This action cannot be
+              Your ParseTrail web account and profile will be{" "}
+              <strong>permanently deleted.</strong> This does not delete the
+              financial database or statement archive on your devices. Prior
+              download/submission audit records and encrypted contributed
+              statements may be retained without your account ID. If you are
+              sure, click <strong>"Confirm"</strong>. This action cannot be
               undone.
             </AlertDialogBody>
 

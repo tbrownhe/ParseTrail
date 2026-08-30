@@ -1,6 +1,7 @@
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 from pathlib import Path
 
+from loguru import logger
 from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -20,10 +21,17 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QVBoxLayout,
 )
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 
-from parsetrail.core import query
-from parsetrail.core.orm import AccountNumbers, Accounts
+from parsetrail.core.accounts import (
+    AccountInUseError,
+    AccountNotFoundError,
+    AccountService,
+    AccountServiceError,
+    DuplicateAccountError,
+    DuplicateAccountNumberError,
+    InvalidAccountError,
+)
 from parsetrail.core.utils import open_file_in_os
 
 
@@ -115,8 +123,9 @@ class AppreciationDialog(QDialog):
             self.result_edit.setText(f"{annual_rate:.2f}")
         except ValueError as e:
             QMessageBox.warning(self, "Input Error", str(e))
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"An unexpected error occurred: {e}")
+        except Exception:
+            logger.exception("Unexpected appreciation calculation failure")
+            QMessageBox.critical(self, "Error", "The calculation failed. See the application log for details.")
 
 
 class BalanceCheckDialog(QDialog):
@@ -158,14 +167,25 @@ class BalanceCheckDialog(QDialog):
 
 def update_accounts_table(
     dialog: QDialog,
-    session: Session,
+    account_service: AccountService,
     accounts_table: QTableWidget,
 ):
     accounts_table.setSortingEnabled(True)
     accounts_table.setSelectionBehavior(QAbstractItemView.SelectRows)
     accounts_table.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-    data, columns = query.accounts_details(session)
+    accounts = account_service.list_accounts()
+    columns = ["AccountName", "Company", "Description", "AccountType", "AppreciationRate"]
+    data = [
+        (
+            account.name,
+            account.company,
+            account.description,
+            account.account_type,
+            account.appreciation_rate,
+        )
+        for account in accounts
+    ]
     accounts_table.setRowCount(len(data))
     accounts_table.setColumnCount(len(columns))
     accounts_table.setHorizontalHeaderLabels(columns)
@@ -203,7 +223,9 @@ class EditAccountsDialog(QDialog):
         self.setContentsMargins(10, 10, 10, 10)
 
         self.Session = Session
+        self.account_service = AccountService(Session)
         self.selected_account = None
+        self.last_added_account_name = None
 
         # Main layout
         layout = QVBoxLayout(self)
@@ -216,8 +238,7 @@ class EditAccountsDialog(QDialog):
         # Display Accounts table
         self.accounts_table = QTableWidget(self)
         layout.addWidget(self.accounts_table)
-        with self.Session() as session:
-            update_accounts_table(self, session, self.accounts_table)
+        update_accounts_table(self, self.account_service, self.accounts_table)
         self.accounts_table.cellClicked.connect(self.populate_fields)
 
         # Descriptive text
@@ -240,9 +261,7 @@ class EditAccountsDialog(QDialog):
             self.description_edit.setText(description)
         self.account_type_combo = QComboBox(self)
 
-        with self.Session() as session:
-            account_types = query.account_types(session)
-        self.account_type_combo.addItems([""] + account_types)
+        self.account_type_combo.addItems([""] + self.account_service.account_types())
 
         self.appreciation_edit = QLineEdit(self)
         self.appreciation_edit.setPlaceholderText("Enter annual appreciation rate (%) for TangibleAssets only")
@@ -316,26 +335,26 @@ class EditAccountsDialog(QDialog):
         if not self.validate_fields():
             return
 
-        account_type = self.account_type_combo.currentText()
-        with self.Session() as session:
-            account_type_id = query.account_type_id(session, account_type)
-
-        appreciation_rate = self.get_appreciation_rate()
-
-        row = {
-            "AccountTypeID": account_type_id,
-            "Company": self.company_edit.text(),
-            "Description": self.description_edit.text(),
-            "AccountName": self.account_name_edit.text(),
-            "AppreciationRate": appreciation_rate or Decimal(0),
-        }
-
         try:
-            with self.Session() as session:
-                query.insert_rows_batched(session, Accounts, [row])
+            account = self.account_service.add(
+                name=self.account_name_edit.text(),
+                account_type=self.account_type_combo.currentText(),
+                company=self.company_edit.text(),
+                description=self.description_edit.text(),
+                appreciation_rate=self.get_appreciation_rate(),
+            )
+            self.last_added_account_name = account.name
             QMessageBox.information(self, "Success", "Account added successfully.")
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to add account:\n{str(e)}")
+        except DuplicateAccountError as exc:
+            QMessageBox.warning(self, "Duplicate Account", str(exc))
+            return
+        except InvalidAccountError as exc:
+            QMessageBox.warning(self, "Invalid Input", str(exc))
+            return
+        except AccountServiceError:
+            logger.exception("Failed to add account")
+            QMessageBox.critical(self, "Error", "Failed to add account. See log for details.")
+            return
         self.refresh_table()
 
     def edit_account(self):
@@ -354,23 +373,22 @@ class EditAccountsDialog(QDialog):
         if not self.validate_fields():
             return
 
-        account_type = self.account_type_combo.currentText()
-        appreciation_rate = self.get_appreciation_rate()
-
         try:
-            with self.Session() as session:
-                account_type_id = query.account_type_id(session, account_type)
-                query.update_account_details(
-                    session,
-                    account_name=self.selected_account,
-                    account_type_id=account_type_id,
-                    company=self.company_edit.text(),
-                    desc=self.description_edit.text(),
-                    appreciation=appreciation_rate or Decimal(0),
-                )
+            self.account_service.update(
+                self.selected_account,
+                account_type=self.account_type_combo.currentText(),
+                company=self.company_edit.text(),
+                description=self.description_edit.text(),
+                appreciation_rate=self.get_appreciation_rate(),
+            )
             QMessageBox.information(self, "Success", "Account updated successfully.")
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to update account:\n{str(e)}")
+        except (InvalidAccountError, AccountNotFoundError) as exc:
+            QMessageBox.warning(self, "Account Error", str(exc))
+            return
+        except AccountServiceError:
+            logger.exception("Failed to update account")
+            QMessageBox.critical(self, "Error", "Failed to update account. See log for details.")
+            return
         self.refresh_table()
 
     def delete_account(self):
@@ -387,12 +405,18 @@ class EditAccountsDialog(QDialog):
             return
 
         try:
-            with self.Session() as session:
-                session.query(Accounts).filter_by(AccountName=self.selected_account).delete()
-                session.commit()
+            self.account_service.delete(self.selected_account)
             QMessageBox.information(self, "Success", "Account deleted successfully.")
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to delete account:\n{str(e)}")
+        except AccountInUseError as exc:
+            QMessageBox.warning(self, "Account In Use", str(exc))
+            return
+        except AccountNotFoundError as exc:
+            QMessageBox.warning(self, "Account Not Found", str(exc))
+            return
+        except AccountServiceError:
+            logger.exception("Failed to delete account")
+            QMessageBox.critical(self, "Error", "Failed to delete account. See log for details.")
+            return
         self.refresh_table()
 
     def validate_fields(self) -> bool:
@@ -411,28 +435,19 @@ class EditAccountsDialog(QDialog):
             return False
         return True
 
-    def get_appreciation_rate(self) -> Decimal | None:
+    def get_appreciation_rate(self) -> Decimal | str:
         """
         Get the appreciation rate value.
         """
         if self.appreciation_edit.isEnabled():
-            try:
-                return Decimal(self.appreciation_edit.text())
-            except (InvalidOperation, ValueError):
-                QMessageBox.warning(
-                    self,
-                    "Invalid Input",
-                    "Please enter a valid number for appreciation rate.",
-                )
-                return None
+            return self.appreciation_edit.text()
         return Decimal(0)
 
     def refresh_table(self):
         """
         Refresh the accounts table.
         """
-        with self.Session() as session:
-            update_accounts_table(self, session, self.accounts_table)
+        update_accounts_table(self, self.account_service, self.accounts_table)
         self.clear_fields()
 
     def clear_fields(self):
@@ -467,6 +482,7 @@ class AssignAccountNumber(QDialog):
         self.setContentsMargins(10, 10, 10, 10)
 
         self.Session = Session
+        self.account_service = AccountService(Session)
         self.fpath = fpath
         self.account_num = account_num
         self.account_name = None
@@ -501,8 +517,7 @@ class AssignAccountNumber(QDialog):
         self.accounts_table.cellClicked.connect(self.handle_cell_click)
         layout.addWidget(self.accounts_table)
 
-        with self.Session() as session:
-            update_accounts_table(self, session, self.accounts_table)
+        update_accounts_table(self, self.account_service, self.accounts_table)
 
         # Add New Account button
         new_account_button = QPushButton("Create New Account")
@@ -524,21 +539,23 @@ class AssignAccountNumber(QDialog):
         open_file_in_os(self.fpath)
 
     def handle_cell_click(self, row, column):
-        # Capture the AccountID of the clicked row
-        account_id_item = self.accounts_table.item(row, 0)  # Assuming AccountID is in the first column
-        if account_id_item:
-            self.account_name = account_id_item.text()
+        account_name_item = self.accounts_table.item(row, 0)
+        if account_name_item:
+            self.account_name = account_name_item.text()
 
     def new_account(self):
         dialog = EditAccountsDialog(self.Session, self.company, self.statement_type)
         dialog.exec()
 
-        with self.Session() as session:
-            update_accounts_table(self, session, self.accounts_table)
-
-        # Auto-select the newly created account (assuming it's added to the last row)
-        self.accounts_table.selectRow(self.accounts_table.rowCount() - 1)
-        self.account_name = self.accounts_table.item(self.accounts_table.rowCount() - 1, 0).text()
+        update_accounts_table(self, self.account_service, self.accounts_table)
+        if dialog.last_added_account_name is None:
+            return
+        for row in range(self.accounts_table.rowCount()):
+            item = self.accounts_table.item(row, 0)
+            if item is not None and item.text() == dialog.last_added_account_name:
+                self.accounts_table.selectRow(row)
+                self.account_name = item.text()
+                return
 
     def submit(self):
         """
@@ -553,14 +570,18 @@ class AssignAccountNumber(QDialog):
             )
         else:
             # Create the AccountNumber -> AccountID association in the db
-            with self.Session() as session:
-                self.account_id = query.account_id_of_account_name(session, self.account_name)
-                row = {
-                    "AccountID": self.account_id,
-                    "AccountNumber": self.account_num,
-                }
-                query.insert_rows_batched(session, AccountNumbers, [row])
-
+            try:
+                self.account_id = self.account_service.assign_number(self.account_name, self.account_num)
+            except DuplicateAccountNumberError as exc:
+                QMessageBox.warning(self, "Account Number Already Assigned", str(exc))
+                return
+            except AccountNotFoundError as exc:
+                QMessageBox.warning(self, "Account Not Found", str(exc))
+                return
+            except AccountServiceError:
+                logger.exception("Failed to assign account number")
+                QMessageBox.critical(self, "Error", "Failed to assign account number. See log for details.")
+                return
             self.accept()
 
     def get_account_id(self):

@@ -1,14 +1,12 @@
 // biome-ignore-all lint/complexity/noStaticOnlyClass: preserves the previous generated client API while callers migrate
 import {
-  createItem as apiCreateItem,
   createUser as apiCreateUser,
-  deleteItem as apiDeleteItem,
   deleteUser as apiDeleteUser,
   deleteUserMe as apiDeleteUserMe,
   healthCheck as apiHealthCheck,
   loginAccessToken as apiLoginAccessToken,
-  readItem as apiReadItem,
-  readItems as apiReadItems,
+  loginBrowserSession as apiLoginBrowserSession,
+  logoutBrowserSession as apiLogoutBrowserSession,
   readUserById as apiReadUserById,
   readUserMe as apiReadUserMe,
   readUsers as apiReadUsers,
@@ -18,7 +16,6 @@ import {
   resetPassword as apiResetPassword,
   testEmail as apiTestEmail,
   testToken as apiTestToken,
-  updateItem as apiUpdateItem,
   updatePasswordMe as apiUpdatePasswordMe,
   updateUser as apiUpdateUser,
   updateUserMe as apiUpdateUserMe,
@@ -26,8 +23,7 @@ import {
 } from "./generated/sdk.gen"
 import type {
   BodyLoginLoginAccessToken,
-  ItemCreate,
-  ItemUpdate,
+  BodyLoginLoginBrowserSession,
   NewPassword,
   UpdatePassword,
   UserCreate,
@@ -44,6 +40,16 @@ export class LoginService {
     formData: BodyLoginLoginAccessToken
   }) {
     return apiLoginAccessToken({ body: data.formData, ...requestOptions })
+  }
+
+  public static loginBrowserSession(data: {
+    formData: BodyLoginLoginBrowserSession
+  }) {
+    return apiLoginBrowserSession({ body: data.formData, ...requestOptions })
+  }
+
+  public static logoutBrowserSession() {
+    return apiLogoutBrowserSession(requestOptions)
   }
 
   public static testToken() {
@@ -135,31 +141,5 @@ export class UtilsService {
 
   public static healthCheck() {
     return apiHealthCheck(requestOptions)
-  }
-}
-
-export class ItemsService {
-  public static readItems(data: { limit?: number; skip?: number } = {}) {
-    return apiReadItems({ query: data, ...requestOptions })
-  }
-
-  public static createItem(data: { requestBody: ItemCreate }) {
-    return apiCreateItem({ body: data.requestBody, ...requestOptions })
-  }
-
-  public static readItem(data: { id: string }) {
-    return apiReadItem({ path: { id: data.id }, ...requestOptions })
-  }
-
-  public static updateItem(data: { id: string; requestBody: ItemUpdate }) {
-    return apiUpdateItem({
-      body: data.requestBody,
-      path: { id: data.id },
-      ...requestOptions,
-    })
-  }
-
-  public static deleteItem(data: { id: string }) {
-    return apiDeleteItem({ path: { id: data.id }, ...requestOptions })
   }
 }

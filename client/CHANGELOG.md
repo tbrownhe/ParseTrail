@@ -1,3 +1,38 @@
+Unreleased
+==========
+- Prompt immediately when saved credentials are rejected during a plugin update
+  and resume the same signed catalog operation after successful authentication
+- Separate statement import persistence, deduplication, and archive state from Qt
+  prompts and progress behind a characterized headless application service
+- Move category queries and atomic add, update, rename, and merge operations behind
+  a characterized headless service with typed failures
+- Move account queries, mutations, deletion constraints, and account-number
+  assignment behind a characterized headless service with typed failures
+- Do not silently store a zero appreciation rate after invalid input or select an
+  unrelated account when the create-account dialog adds nothing
+- Move budget range queries, grouping, sign handling, and proration behind a
+  characterized headless reporting service
+- Move transaction-review filtering, atomic edits, and model-category compatibility
+  retry behind a characterized headless service with typed failures
+- Move transaction range and latest-balance queries plus atomic manual entry behind
+  a characterized headless service
+- Report manual-entry duplicates accurately and make empty recurring-analysis results
+  and category columns safe in the transaction dialog
+- Move dashboard balances, checklists, chart inputs, discrepancy inputs, and verified
+  training queries behind a headless service with deterministic account ordering
+- Reuse the characterized model-category compatibility workflow after statement
+  imports instead of maintaining a second GUI-owned database implementation
+- Remove SQLAlchemy session management from all GUI modules by moving account-config
+  export and spreadsheet-report generation behind a headless artifact service
+- Atomically replace account-config exports and keep external file/plot launching at
+  the GUI boundary
+- Move statement-submission validation, memory-only encryption, cancellation, upload,
+  response cleanup, and server confirmation behind a headless service
+- Exclude local statement paths from submission metadata and require an existing,
+  readable file before starting a worker
+- Split reusable dashboard canvas/table models and transaction-review table/filter
+  models out of the two largest GUI workflow modules
+
 1.3.1
 =====
 - Make macOS release regression tests deterministic with explicit Qt worker

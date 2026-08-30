@@ -54,9 +54,10 @@ POSTGRES_IMAGE=postgres:17.11-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e
 POSTGRES_VOLUME_NAME=parsetrail_app-db-data-pg17
 ```
 
-Start the database first, then run the backend `prestart` service once. It must
-complete Alembic migrations and initial-data validation before backend workers
-start. Verify:
+Start the database first, run `backend/scripts/migrate.sh` explicitly through the
+one-shot Compose service, then run the normal `prestart` service. Migration must
+reach Alembic head and prestart must complete key/initial-data validation before
+backend workers start. Verify:
 
 - expected row counts and the Alembic head;
 - account registration, email verification, login, and password reset;
@@ -66,6 +67,8 @@ start. Verify:
 
 Do not reuse the production target volume for a staging rehearsal. Use a unique
 volume and delete it only after the rehearsal is accepted.
+The full isolated target and its production-comparison guards are documented in
+[staging.md](staging.md).
 
 ## Production cutover and rollback
 

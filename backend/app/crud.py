@@ -5,7 +5,7 @@ from sqlalchemy import or_
 from sqlmodel import Session, col, select
 
 from app.core.security import get_password_hash, verify_and_update_password
-from app.models import Item, ItemCreate, User, UserCreate, UserUpdate
+from app.models import User, UserCreate, UserUpdate
 
 # Make an unknown email perform the same expensive password-hash work as a known
 # email. The value is process-local and deliberately cannot authenticate a user.
@@ -77,11 +77,3 @@ def authenticate(*, session: Session, email: str, password: str) -> User | None:
         session.commit()
         session.refresh(db_user)
     return db_user
-
-
-def create_item(*, session: Session, item_in: ItemCreate, owner_id: uuid.UUID) -> Item:
-    db_item = Item.model_validate(item_in, update={"owner_id": owner_id})
-    session.add(db_item)
-    session.commit()
-    session.refresh(db_item)
-    return db_item

@@ -1,0 +1,140 @@
+import { ViewIcon, ViewOffIcon } from "@chakra-ui/icons"
+import {
+  Button,
+  Container,
+  FormControl,
+  FormErrorMessage,
+  Heading,
+  Icon,
+  Input,
+  InputGroup,
+  InputRightElement,
+  Link,
+  Text,
+  useBoolean,
+} from "@chakra-ui/react"
+import {
+  createLazyFileRoute,
+  Link as RouterLink,
+  useNavigate,
+} from "@tanstack/react-router"
+import { useEffect } from "react"
+import { type SubmitHandler, useForm } from "react-hook-form"
+
+import type { BodyLoginLoginBrowserSession as LoginCredentials } from "../client"
+import useAuth from "../hooks/useAuth"
+import { emailPattern } from "../utils"
+
+export const Route = createLazyFileRoute("/login")({
+  component: Login,
+})
+
+function Login() {
+  const [show, setShow] = useBoolean()
+  const navigate = useNavigate()
+  const { loginMutation, error, resetError, user } = useAuth()
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<LoginCredentials>({
+    mode: "onBlur",
+    criteriaMode: "all",
+    defaultValues: {
+      username: "",
+      password: "",
+    },
+  })
+
+  useEffect(() => {
+    if (user) {
+      navigate({ to: "/", replace: true })
+    }
+  }, [navigate, user])
+
+  const onSubmit: SubmitHandler<LoginCredentials> = async (data) => {
+    if (isSubmitting) return
+
+    resetError()
+
+    try {
+      await loginMutation.mutateAsync(data)
+    } catch {
+      // error is handled by useAuth hook
+    }
+  }
+
+  return (
+    <>
+      <Container
+        as="form"
+        onSubmit={handleSubmit(onSubmit)}
+        h="100vh"
+        maxW="sm"
+        alignItems="stretch"
+        justifyContent="center"
+        gap={4}
+        centerContent
+      >
+        <Heading mb={4}>ParseTrail</Heading>
+        <Text color="gray.600" textAlign="center">
+          New accounts must verify via the email link before you can log in.
+        </Text>
+        <FormControl id="username" isInvalid={!!errors.username || !!error}>
+          <Input
+            id="username"
+            {...register("username", {
+              required: "Username is required",
+              pattern: emailPattern,
+            })}
+            placeholder="Email"
+            type="email"
+            required
+          />
+          {errors.username && (
+            <FormErrorMessage>{errors.username.message}</FormErrorMessage>
+          )}
+        </FormControl>
+        <FormControl id="password" isInvalid={!!error}>
+          <InputGroup>
+            <Input
+              {...register("password", {
+                required: "Password is required",
+              })}
+              type={show ? "text" : "password"}
+              placeholder="Password"
+              required
+            />
+            <InputRightElement
+              color="ui.dim"
+              _hover={{
+                cursor: "pointer",
+              }}
+            >
+              <Icon
+                as={show ? ViewOffIcon : ViewIcon}
+                onClick={setShow.toggle}
+                aria-label={show ? "Hide password" : "Show password"}
+              >
+                {show ? <ViewOffIcon /> : <ViewIcon />}
+              </Icon>
+            </InputRightElement>
+          </InputGroup>
+          {error && <FormErrorMessage>{error}</FormErrorMessage>}
+        </FormControl>
+        <Link as={RouterLink} to="/recover-password" color="blue.500">
+          Forgot password?
+        </Link>
+        <Button variant="primary" type="submit" isLoading={isSubmitting}>
+          Log In
+        </Button>
+        <Text>
+          Don't have an account?{" "}
+          <Link as={RouterLink} to="/signup" color="blue.500">
+            Sign up
+          </Link>
+        </Text>
+      </Container>
+    </>
+  )
+}

@@ -2,9 +2,15 @@ import pytest
 from parsetrail.core.diagnostics import Diagnostic, DiagnosticSeverity
 from parsetrail.core.parser_routing import (
     AmbiguousParserMatchError,
+    InvalidPluginSearchError,
     NoParserMatchError,
     ParseResult,
+    ParserExecutionError,
+    ParserOutputError,
     ParseWarningsRejectedError,
+    StatementValidationError,
+    UnsupportedStatementFormatError,
+    present_parse_error,
     require_unique_candidate,
 )
 
@@ -42,3 +48,41 @@ def test_parse_result_requires_explicit_warning_acceptance() -> None:
     with pytest.raises(ParseWarningsRejectedError):
         result.require_statement()
     assert result.require_statement(accept_warnings=True) is statement
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_title", "expected_guidance"),
+    [
+        (UnsupportedStatementFormatError(".docx"), "Unsupported Statement File", "PDF, CSV, or XLSX"),
+        (NoParserMatchError(".pdf"), "No Compatible Plugin", "Send for Plugin Development"),
+        (
+            AmbiguousParserMatchError(["bank_pdf", "bank_legacy_pdf"], ".pdf"),
+            "Ambiguous Plugin Match",
+            "Troubleshoot Parsing",
+        ),
+        (InvalidPluginSearchError("catalog"), "Invalid Plugin Classification", "reinstall"),
+        (ParserExecutionError("bank_pdf", "ValueError"), "Statement Format Changed", "plugin updates"),
+        (ParserOutputError("bank_pdf"), "Incompatible Plugin Output", "client and plugin updates"),
+    ],
+)
+def test_parse_error_presentations_are_specific_and_actionable(error, expected_title, expected_guidance) -> None:
+    presentation = present_parse_error(error)
+
+    assert presentation.title == expected_title
+    assert expected_guidance in presentation.message
+
+
+def test_validation_failure_presentation_excludes_diagnostic_statement_values() -> None:
+    diagnostic = Diagnostic(
+        code="fixture.private",
+        message="Confidential account 1234 has a secret transaction description.",
+        severity=DiagnosticSeverity.ERROR,
+        plugin_name="bank_pdf",
+    )
+
+    presentation = present_parse_error(StatementValidationError("bank_pdf", [diagnostic]))
+
+    assert presentation.title == "Statement Safety Check Failed"
+    assert "bank_pdf" in presentation.message
+    assert "1234" not in presentation.message
+    assert "secret" not in presentation.message

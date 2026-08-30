@@ -9,6 +9,7 @@ from pydantic import (
     HttpUrl,
     PostgresDsn,
     computed_field,
+    field_validator,
     model_validator,
 )
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -36,6 +37,19 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 2
     FRONTEND_HOST: str = "http://localhost:5173"
     ENVIRONMENT: Literal["local", "staging", "production"] = "local"
+
+    @field_validator("FRONTEND_HOST")
+    @classmethod
+    def _validate_frontend_host(cls, value: str) -> str:
+        try:
+            parsed = HttpUrl(value)
+        except ValueError as exc:
+            raise ValueError("FRONTEND_HOST must be an HTTP(S) origin") from exc
+        if parsed.username or parsed.password or parsed.query or parsed.fragment:
+            raise ValueError("FRONTEND_HOST must not contain credentials, a query, or a fragment")
+        if parsed.path not in (None, "/"):
+            raise ValueError("FRONTEND_HOST must not contain a path")
+        return str(parsed).rstrip("/")
 
     BACKEND_CORS_ORIGINS: Annotated[list[AnyUrl] | str, BeforeValidator(parse_cors)] = []
 
@@ -113,6 +127,9 @@ class Settings(BaseSettings):
         self._check_default_secret("SECRET_KEY", self.SECRET_KEY)
         self._check_default_secret("POSTGRES_PASSWORD", self.POSTGRES_PASSWORD)
         self._check_default_secret("FIRST_SUPERUSER_PASSWORD", self.FIRST_SUPERUSER_PASSWORD)
+
+        if self.ENVIRONMENT != "local" and not self.FRONTEND_HOST.startswith("https://"):
+            raise ValueError("FRONTEND_HOST must use HTTPS outside the local environment")
 
         return self
 

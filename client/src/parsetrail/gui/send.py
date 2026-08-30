@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 from threading import Event
 
@@ -25,6 +24,12 @@ from parsetrail.core.api import (
 from parsetrail.core.auth import AuthError
 from parsetrail.core.crypto import encrypt_file
 from parsetrail.core.settings import settings
+from parsetrail.core.submission import (
+    PreparedStatementSubmission,
+    StatementSubmissionError,
+    StatementSubmissionService,
+    StatementSubmissionValidationError,
+)
 
 
 class StatementSubmissionThread(QThread):
@@ -38,15 +43,17 @@ class StatementSubmissionThread(QThread):
 
     def __init__(
         self,
-        fpath: Path,
-        metadata: dict[str, object],
+        submission: PreparedStatementSubmission | Path,
+        metadata: dict[str, object] | None = None,
         *,
         credentials: tuple[str, str] | None,
         parent=None,
     ) -> None:
         super().__init__(parent)
-        self.fpath = fpath
-        self.metadata = metadata
+        if isinstance(submission, PreparedStatementSubmission):
+            self.submission = submission
+        else:
+            self.submission = PreparedStatementSubmission(Path(submission), dict(metadata or {}))
         self.credentials = credentials
         self._cancel_event = Event()
 
@@ -55,37 +62,22 @@ class StatementSubmissionThread(QThread):
 
     def run(self) -> None:
         try:
-            if self.credentials is not None:
-                email, password = self.credentials
-                self.credentials = None
-                self.stage_changed.emit("Signing in...")
-                api_client.auth.login(email, password)
-            if self._cancel_event.is_set():
-                raise StatementSubmissionCancelled("Statement submission cancelled")
-
-            self.stage_changed.emit("Encrypting statement in memory...")
-            encrypted_file, encrypted_key = encrypt_file(self.fpath)
-            if self._cancel_event.is_set():
-                raise StatementSubmissionCancelled("Statement submission cancelled")
-
-            self.stage_changed.emit("Uploading encrypted statement...")
-            response = api_client.submit_statement(
-                encrypted_file,
-                encrypted_key,
-                self.metadata,
+            credentials = self.credentials
+            self.credentials = None
+            StatementSubmissionService(client=api_client, encryptor=encrypt_file).submit(
+                self.submission,
+                credentials=credentials,
                 cancelled=self._cancel_event.is_set,
                 progress=self.progress_changed.emit,
+                stage_changed=self.stage_changed.emit,
             )
-            try:
-                message = response.json().get("message")
-            finally:
-                response.close()
-            if message != "SUCCESS":
-                raise RuntimeError("The server did not confirm statement storage.")
         except StatementSubmissionCancelled:
             self.submission_cancelled.emit()
-        except Exception as exc:
+        except StatementSubmissionError as exc:
             self.submission_failed.emit(str(exc))
+        except Exception:
+            logger.exception("Unexpected failure in statement submission worker")
+            self.submission_failed.emit("The encrypted statement could not be submitted. See the application log.")
         else:
             self.submitted.emit()
 
@@ -180,36 +172,16 @@ class StatementSubmissionDialog(QDialog):
         self.send_statement()
 
     def validate(self) -> bool:
-        file_path = self.file_path_input.text().strip()
-        institution = self.institution_input.text().strip()
-        frequency = self.frequency_input.currentText()
-        comments = self.comments_input.toPlainText().strip()
-
-        # Validate inputs
-        if not file_path:
-            QMessageBox.warning(self, "Input Error", "Please select a file.")
+        try:
+            self.submission = StatementSubmissionService().prepare(
+                Path(self.file_path_input.text().strip()),
+                institution=self.institution_input.text(),
+                frequency=self.frequency_input.currentText(),
+                comments=self.comments_input.toPlainText(),
+            )
+        except StatementSubmissionValidationError as exc:
+            QMessageBox.warning(self, "Input Error", str(exc))
             return False
-
-        if os.path.getsize(file_path) > 26214400:
-            QMessageBox.warning(self, "Input Error", "Attachments cannot exceed 25MB")
-            return False
-
-        if not institution:
-            QMessageBox.warning(self, "Input Error", "Institution name is required.")
-            return False
-
-        if len(comments) > 256:
-            QMessageBox.warning(self, "Input Error", "Comments must be 256 characters or less.")
-            return False
-
-        # Store validated result
-        self.metadata = {
-            "file_path": file_path,
-            "file_name": os.path.basename(file_path),
-            "institution": institution,
-            "frequency": frequency,
-            "comments": comments,
-        }
 
         return True
 
@@ -231,11 +203,10 @@ class StatementSubmissionDialog(QDialog):
 
     def send_statement(self):
         """Encrypts and sends validated data to the server API."""
-        fpath = self.metadata.get("file_path")
-        if not fpath:
-            raise ValueError("No file_path found in metadata")
-
-        fpath = Path(fpath).resolve()
+        submission = getattr(self, "submission", None)
+        if submission is None:
+            raise ValueError("No validated statement submission is available")
+        fpath = submission.source
 
         try:
             credentials = api_client.auth.credentials_if_needed()
@@ -252,10 +223,8 @@ class StatementSubmissionDialog(QDialog):
         progress.setAutoClose(False)
         progress.setAutoReset(False)
 
-        metadata = {k: v for k, v in self.metadata.items() if k != "file_path"}
         thread = StatementSubmissionThread(
-            fpath,
-            metadata,
+            submission,
             credentials=credentials,
             parent=progress,
         )

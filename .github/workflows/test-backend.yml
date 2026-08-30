@@ -105,7 +105,12 @@ jobs:
         run: npm ci
         working-directory: frontend
       - name: Check formatting and lint
-        run: npm run lint:check
+        run: npm run lint
+        working-directory: frontend
+      - name: Verify checks leave generated files unchanged
+        run: git diff --exit-code
+      - name: Test public website JavaScript
+        run: npm run test:website
         working-directory: frontend
       - name: Build production bundle
         run: npm run build

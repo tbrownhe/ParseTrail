@@ -16,7 +16,7 @@ const UserMenu = () => {
   const { logout } = useAuth()
 
   const handleLogout = async () => {
-    logout()
+    await logout()
   }
 
   return (

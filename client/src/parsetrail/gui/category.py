@@ -1,14 +1,17 @@
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation
-
 from loguru import logger
 from PySide6 import QtCore, QtGui, QtWidgets
-from sqlalchemy import func
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import sessionmaker
 
-from parsetrail.core.orm import Categories, Transactions
+from parsetrail.core.categories import (
+    CATEGORY_TYPES,
+    CategoryNotFoundError,
+    CategoryService,
+    CategoryServiceError,
+    DuplicateCategoryError,
+    InvalidCategoryError,
+)
 
 
 class TypeComboDelegate(QtWidgets.QStyledItemDelegate):
@@ -180,7 +183,7 @@ class CategoryManagerDialog(QtWidgets.QDialog):
     COL_COUNT = 5
 
     HEADERS = ["ID", "Name", "Type", "Budget/Mo", "Active", "Transactions"]
-    TYPE_CHOICES = ["Expense", "Income", "Transfer"]
+    TYPE_CHOICES = list(CATEGORY_TYPES)
 
     def __init__(self, Session: sessionmaker, parent: QtWidgets.QWidget | None = None):
         super().__init__(parent)
@@ -188,7 +191,7 @@ class CategoryManagerDialog(QtWidgets.QDialog):
         self.setModal(True)
         self.resize(600, 800)
 
-        self.Session = Session
+        self.category_service = CategoryService(Session)
 
         self._creating_model = False  # guard to suppress itemChanged during setup
 
@@ -265,59 +268,47 @@ class CategoryManagerDialog(QtWidgets.QDialog):
         self._creating_model = True
         self.model.setRowCount(0)
 
-        with self.Session() as session:
-            try:
-                counts = dict(
-                    session.query(
-                        Transactions.CategoryID,
-                        func.count(Transactions.TransactionID),
-                    )
-                    .group_by(Transactions.CategoryID)
-                    .all()
-                )
-
-                query = session.query(Categories)
-                if not self.chk_show_inactive.isChecked():
-                    query = query.filter(Categories.Active == 1)
-                categories = query.order_by(Categories.Name.asc()).all()
-
-                query = session.query(Categories)
-                if not self.chk_show_inactive.isChecked():
-                    query = query.filter(Categories.Active == 1)
-                categories = query.order_by(Categories.Name.asc()).all()
-            finally:
-                pass
+        try:
+            categories = self.category_service.list_categories(include_inactive=self.chk_show_inactive.isChecked())
+        except CategoryServiceError:
+            self._creating_model = False
+            logger.exception("Failed to load categories")
+            QtWidgets.QMessageBox.critical(
+                self,
+                "Error",
+                "Failed to load categories. See log for details.",
+            )
+            return
 
         for cat in categories:
             row = self.model.rowCount()
             self.model.insertRow(row)
 
             # ID (read-only)
-            item_id = QtGui.QStandardItem(str(cat.CategoryID))
+            item_id = QtGui.QStandardItem(str(cat.category_id))
             item_id.setEditable(False)
 
             # Name (read-only; renames go through wizard)
-            item_name = QtGui.QStandardItem(cat.Name or "")
+            item_name = QtGui.QStandardItem(cat.name or "")
             item_name.setEditable(False)
 
             # Type (editable)
-            item_type = QtGui.QStandardItem(cat.Type or "")
+            item_type = QtGui.QStandardItem(cat.category_type or "")
             item_type.setEditable(True)
 
             # Budget (editable numeric)
-            budget_text = "" if cat.Budget is None else f"{cat.Budget:.2f}"
+            budget_text = "" if cat.budget is None else f"{cat.budget:.2f}"
             item_budget = QtGui.QStandardItem(budget_text)
             item_budget.setEditable(True)
 
             # Active (checkable)
             item_active = QtGui.QStandardItem()
             item_active.setCheckable(True)
-            item_active.setCheckState(QtCore.Qt.Checked if cat.Active else QtCore.Qt.Unchecked)
+            item_active.setCheckState(QtCore.Qt.Checked if cat.active else QtCore.Qt.Unchecked)
             item_active.setEditable(False)  # toggled via checkbox, not text edit
 
             # Show transaction count
-            tx_count = counts.get(cat.CategoryID, 0)
-            item_count = QtGui.QStandardItem(str(tx_count))
+            item_count = QtGui.QStandardItem(str(cat.transaction_count))
             item_count.setEditable(False)
 
             self.model.setItem(row, self.COL_ID, item_id)
@@ -350,63 +341,34 @@ class CategoryManagerDialog(QtWidgets.QDialog):
         except ValueError:
             return
 
-        with self.Session() as session:
-            try:
-                category = session.query(Categories).get(cat_id)
-                if category is None:
-                    return
-
-                if col == self.COL_TYPE:
-                    new_type = item.text().strip()
-                    if new_type not in self.TYPE_CHOICES:
-                        QtWidgets.QMessageBox.warning(
-                            self,
-                            "Invalid Type",
-                            f"Type must be one of: {', '.join(self.TYPE_CHOICES)}.",
-                        )
-                        self.load_categories()
-                        return
-                    category.Type = new_type
-                    session.commit()
-                    self.status_label.setText(f"Updated Type for '{category.Name}'.")
-                elif col == self.COL_BUDGET:
-                    raw_value = item.text().strip()
-                    if raw_value == "":
-                        category.Budget = None
-                        session.commit()
-                        self.status_label.setText(f"Cleared budget for '{category.Name}'.")
-                        return
-                    try:
-                        budget_value = Decimal(raw_value)
-                    except (InvalidOperation, ValueError):
-                        QtWidgets.QMessageBox.warning(
-                            self,
-                            "Invalid Budget",
-                            "Please enter a valid number for the budget (e.g. 1250.00).",
-                        )
-                        self.load_categories()
-                        return
-                    category.Budget = budget_value
-                    session.commit()
-                    self.status_label.setText(f"Updated budget for '{category.Name}' to {budget_value:.2f}.")
-                elif col == self.COL_ACTIVE:
-                    # Checkable item
-                    is_active = item.checkState() == QtCore.Qt.Checked
-                    category.Active = 1 if is_active else 0
-                    session.commit()
-                    self.status_label.setText(
-                        f"{'Activated' if is_active else 'Deactivated'} category '{category.Name}'."
-                    )
-            except Exception:
-                session.rollback()
-                logger.exception("Failed to update category inline")
-                QtWidgets.QMessageBox.critical(
-                    self,
-                    "Error",
-                    "Failed to update category. See log for details.",
-                )
-                # Reload to restore consistency
-                self.load_categories()
+        try:
+            if col == self.COL_TYPE:
+                category = self.category_service.set_type(cat_id, item.text())
+                self.status_label.setText(f"Updated Type for '{category.name}'.")
+            elif col == self.COL_BUDGET:
+                category = self.category_service.set_budget(cat_id, item.text())
+                if category.budget is None:
+                    self.status_label.setText(f"Cleared budget for '{category.name}'.")
+                else:
+                    self.status_label.setText(f"Updated budget for '{category.name}' to {category.budget:.2f}.")
+            elif col == self.COL_ACTIVE:
+                is_active = item.checkState() == QtCore.Qt.Checked
+                category = self.category_service.set_active(cat_id, is_active)
+                self.status_label.setText(f"{'Activated' if is_active else 'Deactivated'} category '{category.name}'.")
+        except InvalidCategoryError as exc:
+            title = "Invalid Type" if col == self.COL_TYPE else "Invalid Budget"
+            QtWidgets.QMessageBox.warning(self, title, str(exc))
+            self.load_categories()
+        except CategoryNotFoundError:
+            self.load_categories()
+        except CategoryServiceError:
+            logger.exception("Failed to update category inline")
+            QtWidgets.QMessageBox.critical(
+                self,
+                "Error",
+                "Failed to update category. See log for details.",
+            )
+            self.load_categories()
 
     def add_category(self) -> None:
         """
@@ -436,42 +398,27 @@ class CategoryManagerDialog(QtWidgets.QDialog):
             return
         type_text = type_text.strip() or self.TYPE_CHOICES[0]
 
-        with self.Session() as session:
-            try:
-                new_cat = Categories(Name=name, Type=type_text, Active=1)
-                session.add(new_cat)
-                session.commit()
-                self.status_label.setText(f"Added category '{name}'.")
-                self.load_categories()
-            except IntegrityError:
-                session.rollback()
-                QtWidgets.QMessageBox.warning(
-                    self,
-                    "Duplicate Category",
-                    f"A category named '{name}' already exists.",
-                )
-            except Exception:
-                session.rollback()
-                logger.exception("Failed to add category")
-                QtWidgets.QMessageBox.critical(
-                    self,
-                    "Error",
-                    "Failed to add category. See log for details.",
-                )
+        try:
+            category = self.category_service.add(name, type_text)
+            self.status_label.setText(f"Added category '{category.name}'.")
+            self.load_categories()
+        except DuplicateCategoryError as exc:
+            QtWidgets.QMessageBox.warning(self, "Duplicate Category", str(exc))
+        except InvalidCategoryError as exc:
+            QtWidgets.QMessageBox.warning(self, "Invalid Category", str(exc))
+        except CategoryServiceError:
+            logger.exception("Failed to add category")
+            QtWidgets.QMessageBox.critical(
+                self,
+                "Error",
+                "Failed to add category. See log for details.",
+            )
 
     def _get_all_categories(self, include_inactive: bool = True) -> list[tuple[int, str]]:
         """
         Helper to fetch all categories as (id, name) tuples.
         """
-        with self.Session() as session:
-            try:
-                query = session.query(Categories)
-                if not include_inactive:
-                    query = query.filter(Categories.Active == 1)
-                cats = query.order_by(Categories.Name.asc()).all()
-                return [(c.CategoryID, c.Name) for c in cats]
-            finally:
-                session.close()
+        return self.category_service.category_pairs(include_inactive=include_inactive)
 
     def rename_category(self) -> None:
         """
@@ -501,103 +448,79 @@ class CategoryManagerDialog(QtWidgets.QDialog):
 
         src_id, new_name, unverify = dlg.get_values()
 
-        # Confirm impact
-        with self.Session() as session:
-            try:
-                src_cat = session.query(Categories).get(src_id)
-                if src_cat is None:
-                    QtWidgets.QMessageBox.warning(
-                        self,
-                        "Category Not Found",
-                        "The selected category no longer exists.",
-                    )
-                    return
+        try:
+            impact = self.category_service.describe(src_id)
+        except CategoryNotFoundError:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Category Not Found",
+                "The selected category no longer exists.",
+            )
+            return
+        except CategoryServiceError:
+            logger.exception("Failed to inspect category before rename")
+            QtWidgets.QMessageBox.critical(
+                self,
+                "Error",
+                "Failed to inspect the category. See log for details.",
+            )
+            return
 
-                count_total = session.query(Transactions).filter(Transactions.CategoryID == src_cat.CategoryID).count()
-                count_verified = (
-                    session.query(Transactions)
-                    .filter(
-                        Transactions.CategoryID == src_cat.CategoryID,
-                        Transactions.Verified == 1,
-                    )
-                    .count()
-                )
+        if impact.transaction_count == 0:
+            text = (
+                f"Category '{impact.name}' has no transactions. "
+                f"A new category '{new_name}' will be created and '{impact.name}' "
+                f"will be archived."
+            )
+        else:
+            text = (
+                f"Category '{impact.name}' is used by {impact.transaction_count} transactions "
+                f"({impact.verified_transaction_count} verified).\n\n"
+                f"Rename/migrate to '{new_name}'?\n\n"
+                f"This will:\n"
+                f"  - Create '{new_name}' as a new active category\n"
+                f"  - Move all transactions from '{impact.name}' to '{new_name}'\n"
+                f"  - Archive '{impact.name}' (mark inactive)\n"
+                f"  - Clear ConfidenceScore on affected transactions\n"
+                f"  - Make any models trained on '{impact.name}' stale (recommend retraining model)\n"
+            )
+            if unverify:
+                text += "  - Unverify affected transactions (Verified=0)\n"
 
-                if count_total == 0:
-                    text = (
-                        f"Category '{src_cat.Name}' has no transactions. "
-                        f"A new category '{new_name}' will be created and '{src_cat.Name}' "
-                        f"will be archived."
-                    )
-                else:
-                    text = (
-                        f"Category '{src_cat.Name}' is used by {count_total} transactions "
-                        f"({count_verified} verified).\n\n"
-                        f"Rename/migrate to '{new_name}'?\n\n"
-                        f"This will:\n"
-                        f"  - Create '{new_name}' as a new active category\n"
-                        f"  - Move all transactions from '{src_cat.Name}' to '{new_name}'\n"
-                        f"  - Archive '{src_cat.Name}' (mark inactive)\n"
-                        f"  - Clear ConfidenceScore on affected transactions\n"
-                        f"  - Make any models trained on '{src_cat.Name}' stale (recommend retraining model)\n"
-                    )
-                    if unverify:
-                        text += "  - Unverify affected transactions (Verified=0)\n"
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            "Confirm Rename / Migrate",
+            text,
+            QtWidgets.QMessageBox.Ok | QtWidgets.QMessageBox.Cancel,
+            QtWidgets.QMessageBox.Cancel,
+        )
+        if reply != QtWidgets.QMessageBox.Ok:
+            return
 
-                reply = QtWidgets.QMessageBox.question(
-                    self,
-                    "Confirm Rename / Migrate",
-                    text,
-                    QtWidgets.QMessageBox.Ok | QtWidgets.QMessageBox.Cancel,
-                    QtWidgets.QMessageBox.Cancel,
-                )
-                if reply != QtWidgets.QMessageBox.Ok:
-                    return
-
-                new_cat = Categories(
-                    Name=new_name,
-                    Type=src_cat.Type,
-                    Active=1,
-                )
-                session.add(new_cat)
-                session.flush()  # obtain new_cat.CategoryID
-
-                # Move transactions A -> B
-                update_values = {
-                    Transactions.CategoryID: new_cat.CategoryID,
-                    Transactions.ConfidenceScore: None,
-                }
-                if unverify:
-                    update_values[Transactions.Verified] = 0
-
-                session.query(Transactions).filter(Transactions.CategoryID == src_cat.CategoryID).update(
-                    update_values, synchronize_session=False
-                )
-
-                # Archive A
-                src_cat.Active = 0
-
-                session.commit()
-                self.status_label.setText(
-                    f"Renamed/migrated '{src_cat.Name}' to '{new_name}'. Affected transactions: {count_total}."
-                )
-                self.load_categories()
-
-            except IntegrityError:
-                session.rollback()
-                QtWidgets.QMessageBox.warning(
-                    self,
-                    "Duplicate Category",
-                    f"A category named '{new_name}' already exists.",
-                )
-            except Exception:
-                session.rollback()
-                logger.exception("Failed to rename/migrate category")
-                QtWidgets.QMessageBox.critical(
-                    self,
-                    "Error",
-                    "Failed to rename/migrate category. See log for details.",
-                )
+        try:
+            change = self.category_service.rename(src_id, new_name, unverify=unverify)
+            self.status_label.setText(
+                f"Renamed/migrated '{change.source_name}' to '{change.target_name}'. "
+                f"Affected transactions: {change.affected_transactions}."
+            )
+            self.load_categories()
+        except DuplicateCategoryError as exc:
+            QtWidgets.QMessageBox.warning(self, "Duplicate Category", str(exc))
+        except CategoryNotFoundError:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Category Not Found",
+                "The selected category no longer exists.",
+            )
+        except InvalidCategoryError as exc:
+            QtWidgets.QMessageBox.warning(self, "Invalid Category", str(exc))
+        except CategoryServiceError:
+            logger.exception("Failed to rename/migrate category")
+            QtWidgets.QMessageBox.critical(
+                self,
+                "Error",
+                "Failed to rename/migrate category. See log for details.",
+            )
 
     def merge_categories(self) -> None:
         """
@@ -625,86 +548,67 @@ class CategoryManagerDialog(QtWidgets.QDialog):
 
         src_id, tgt_id, unverify = dlg.get_values()
 
-        with self.Session() as session:
-            try:
-                src_cat = session.query(Categories).get(src_id)
-                tgt_cat = session.query(Categories).get(tgt_id)
-                if src_cat is None or tgt_cat is None:
-                    QtWidgets.QMessageBox.warning(
-                        self,
-                        "Category Not Found",
-                        "The selected categories no longer exist.",
-                    )
-                    return
+        try:
+            source = self.category_service.describe(src_id)
+            target = self.category_service.describe(tgt_id)
+        except CategoryNotFoundError:
+            QtWidgets.QMessageBox.warning(
+                self,
+                "Category Not Found",
+                "The selected categories no longer exist.",
+            )
+            return
+        except CategoryServiceError:
+            logger.exception("Failed to inspect categories before merge")
+            QtWidgets.QMessageBox.critical(
+                self,
+                "Error",
+                "Failed to inspect the categories. See log for details.",
+            )
+            return
 
-                count_total = session.query(Transactions).filter(Transactions.CategoryID == src_cat.CategoryID).count()
-                count_verified = (
-                    session.query(Transactions)
-                    .filter(
-                        Transactions.CategoryID == src_cat.CategoryID,
-                        Transactions.Verified == 1,
-                    )
-                    .count()
-                )
+        if source.transaction_count == 0:
+            text = (
+                f"Category '{source.name}' has no transactions. "
+                f"It will simply be archived and '{target.name}' will be kept."
+            )
+        else:
+            text = (
+                f"Category '{source.name}' is used by {source.transaction_count} transactions "
+                f"({source.verified_transaction_count} verified).\n\n"
+                f"Merge into '{target.name}'?\n\n"
+                f"This will:\n"
+                f"  - Move all transactions from '{source.name}' to '{target.name}'\n"
+                f"  - Archive '{source.name}' (mark inactive)\n"
+                f"  - Clear ConfidenceScore on affected transactions\n"
+                f"  - Make any models trained on '{source.name}' stale (recommend retraining model)\n"
+            )
+            if unverify:
+                text += "  - Unverify affected transactions (Verified=0)\n"
 
-                if count_total == 0:
-                    text = (
-                        f"Category '{src_cat.Name}' has no transactions. "
-                        f"It will simply be archived and '{tgt_cat.Name}' will be kept."
-                    )
-                else:
-                    text = (
-                        f"Category '{src_cat.Name}' is used by {count_total} transactions "
-                        f"({count_verified} verified).\n\n"
-                        f"Merge into '{tgt_cat.Name}'?\n\n"
-                        f"This will:\n"
-                        f"  - Move all transactions from '{src_cat.Name}' to '{tgt_cat.Name}'\n"
-                        f"  - Archive '{src_cat.Name}' (mark inactive)\n"
-                        f"  - Clear ConfidenceScore on affected transactions\n"
-                        f"  - Make any models trained on '{src_cat.Name}' stale (recommend retraining model)\n"
-                    )
-                    if unverify:
-                        text += "  - Unverify affected transactions (Verified=0)\n"
+        reply = QtWidgets.QMessageBox.question(
+            self,
+            "Confirm Merge",
+            text,
+            QtWidgets.QMessageBox.Ok | QtWidgets.QMessageBox.Cancel,
+            QtWidgets.QMessageBox.Cancel,
+        )
+        if reply != QtWidgets.QMessageBox.Ok:
+            return
 
-                reply = QtWidgets.QMessageBox.question(
-                    self,
-                    "Confirm Merge",
-                    text,
-                    QtWidgets.QMessageBox.Ok | QtWidgets.QMessageBox.Cancel,
-                    QtWidgets.QMessageBox.Cancel,
-                )
-                if reply != QtWidgets.QMessageBox.Ok:
-                    return
-
-                # Move transactions A -> B
-                update_values = {
-                    Transactions.CategoryID: tgt_cat.CategoryID,
-                    Transactions.ConfidenceScore: None,
-                }
-                if unverify:
-                    update_values[Transactions.Verified] = 0
-
-                session.query(Transactions).filter(Transactions.CategoryID == src_cat.CategoryID).update(
-                    update_values, synchronize_session=False
-                )
-
-                # Archive A
-                src_cat.Active = 0
-
-                # Ensure B is active
-                tgt_cat.Active = 1
-
-                session.commit()
-                self.status_label.setText(
-                    f"Merged '{src_cat.Name}' into '{tgt_cat.Name}'. Affected transactions: {count_total}."
-                )
-                self.load_categories()
-
-            except Exception:
-                session.rollback()
-                logger.exception("Failed to merge categories")
-                QtWidgets.QMessageBox.critical(
-                    self,
-                    "Error",
-                    "Failed to merge categories. See log for details.",
-                )
+        try:
+            change = self.category_service.merge(src_id, tgt_id, unverify=unverify)
+            self.status_label.setText(
+                f"Merged '{change.source_name}' into '{change.target_name}'. "
+                f"Affected transactions: {change.affected_transactions}."
+            )
+            self.load_categories()
+        except (CategoryNotFoundError, InvalidCategoryError) as exc:
+            QtWidgets.QMessageBox.warning(self, "Category Error", str(exc))
+        except CategoryServiceError:
+            logger.exception("Failed to merge categories")
+            QtWidgets.QMessageBox.critical(
+                self,
+                "Error",
+                "Failed to merge categories. See log for details.",
+            )

@@ -98,6 +98,82 @@ class UnsupportedStatementFormatError(ParseError):
 
 
 @dataclass(frozen=True, slots=True)
+class ParseErrorPresentation:
+    """Privacy-safe, actionable text for a normal import workflow."""
+
+    title: str
+    message: str
+
+
+def present_parse_error(error: ParseError) -> ParseErrorPresentation:
+    """Describe a parse failure without including extracted statement values."""
+    suffix = error.suffix.removeprefix(".").upper() if hasattr(error, "suffix") and error.suffix else "statement"
+    update_step = "Check for plugin updates and try again."
+
+    if isinstance(error, UnsupportedStatementFormatError):
+        return ParseErrorPresentation(
+            "Unsupported Statement File",
+            f"ParseTrail cannot import {suffix} files. Select a PDF, CSV, or XLSX statement.",
+        )
+    if isinstance(error, NoParserMatchError):
+        return ParseErrorPresentation(
+            "No Compatible Plugin",
+            (
+                f"No installed plugin recognizes this {suffix} statement. {update_step} "
+                "If the plugins are current, use Statements > Send for Plugin Development."
+            ),
+        )
+    if isinstance(error, AmbiguousParserMatchError):
+        candidates = ", ".join(error.candidates)
+        return ParseErrorPresentation(
+            "Ambiguous Plugin Match",
+            (
+                f"More than one installed plugin matched this {suffix} statement ({candidates}). "
+                "Import stopped to avoid using the wrong parser. Check for plugin updates; if the conflict remains, "
+                "use Plugins > Troubleshoot Parsing."
+            ),
+        )
+    if isinstance(error, InvalidPluginSearchError):
+        return ParseErrorPresentation(
+            "Invalid Plugin Classification",
+            (
+                "The installed plugin catalog contains an invalid statement-classification rule. "
+                "Check for plugin updates. If it remains, reinstall the plugin package."
+            ),
+        )
+    if isinstance(error, ParserExecutionError):
+        return ParseErrorPresentation(
+            "Statement Format Changed",
+            (
+                f"Plugin {error.plugin_name} recognized this statement but could not parse its layout "
+                f"({error.cause_type}). The institution may have changed the format. {update_step} "
+                "If the plugin is current, use Plugins > Troubleshoot Parsing or submit the statement for an update."
+            ),
+        )
+    if isinstance(error, ParserOutputError):
+        return ParseErrorPresentation(
+            "Incompatible Plugin Output",
+            (
+                f"Plugin {error.plugin_name} returned data this client cannot use. "
+                "Check for both client and plugin updates before trying again."
+            ),
+        )
+    if isinstance(error, StatementValidationError):
+        return ParseErrorPresentation(
+            "Statement Safety Check Failed",
+            (
+                f"Plugin {error.plugin_name} parsed the statement, but its result failed import safety checks. "
+                "No financial data was imported. Check for plugin updates; if current, use Plugins > "
+                "Troubleshoot Parsing."
+            ),
+        )
+    return ParseErrorPresentation(
+        "Statement Not Imported",
+        "ParseTrail could not safely parse this statement. Check for plugin updates and try again.",
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class ParseResult:
     statement: Statement
     plugin_name: str

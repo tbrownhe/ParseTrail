@@ -1,150 +1,89 @@
-# FastAPI Project - Frontend
+# ParseTrail dashboard
 
-The frontend is built with [Vite](https://vitejs.dev/), [React](https://reactjs.org/), [TypeScript](https://www.typescriptlang.org/), [TanStack Query](https://tanstack.com/query), [TanStack Router](https://tanstack.com/router) and [Chakra UI](https://chakra-ui.com/).
+The dashboard is a React/TypeScript account and administration surface built with
+Vite, TanStack Query/Router, and Chakra UI. Financial transactions and the desktop
+SQLite database are not synchronized to it.
 
-## Frontend development
+## Development
 
-Before you begin, ensure that you have either the Node Version Manager (nvm) or Fast Node Manager (fnm) installed on your system.
-
-* To install fnm follow the [official fnm guide](https://github.com/Schniz/fnm#installation). If you prefer nvm, you can install it using the [official nvm guide](https://github.com/nvm-sh/nvm#installing-and-updating).
-
-* After installing either nvm or fnm, proceed to the `frontend` directory:
+Use the Node release recorded in `.nvmrc` (Node 22.22.0):
 
 ```bash
 cd frontend
-```
-* If the Node.js version specified in the `.nvmrc` file isn't installed on your system, you can install it using the appropriate command:
-
-```bash
-# If using fnm
-fnm install
-
-# If using nvm
 nvm install
-```
-
-* Once the installation is complete, switch to the installed version:
-
-```bash
-# If using fnm
-fnm use
-
-# If using nvm
 nvm use
-```
-
-* Within the `frontend` directory, install the necessary NPM packages:
-
-```bash
-npm install
-```
-
-* And start the live server with the following `npm` script:
-
-```bash
+npm ci
+cp .env.example .env
 npm run dev
 ```
 
-* Then open your browser at http://localhost:5173/.
+The Vite server is <http://localhost:5173>. `frontend/.env.example` supplies the
+local API base `http://localhost:8000/api/v1`. Production-like containers ignore
+Vite build-time configuration and generate a validated `runtime-config.js` from
+`BACKEND_HOST`, `FRONTEND_HOST`, and `GITHUB_URL` at startup.
 
-Notice that this live server is not running inside Docker, it's for local development, and that is the recommended workflow. Once you are happy with your frontend, you can build the frontend Docker image and start it, to test it in a production-like environment. But building the image at every change will not be as productive as running the local development server with live reload.
+Common checks leave handwritten and generated source unchanged:
 
-Check the file `package.json` to see other available options.
+```bash
+npm run lint
+npm run test:website
+npm run build
+```
 
-### Removing the frontend
+Use `npm run lint:fix` only when you intend to apply formatting fixes.
 
-If you are developing an API-only app and want to remove the frontend, you can do it easily:
+## Generated API client
 
-* Remove the `./frontend` directory.
-
-* In the `docker-compose.yml` file, remove the whole service / section `frontend`.
-
-* In the `docker-compose.dev.yml` file, remove the whole service / section `frontend`.
-
-Done, you have a frontend-less (api-only) app. 🤓
-
----
-
-If you want, you can also remove the `FRONTEND` environment variables from:
-
-* `.env`
-* `./scripts/*.sh`
-
-But it would be only to clean them up, leaving them won't really have any effect either way.
-
-## Generate Client
-
-### Automatically
-
-Install `uv` and Node 22.18 or newer, then run this from the repository root:
+After a backend schema change, run this from the repository root:
 
 ```bash
 ./scripts/generate-client.sh
 ```
 
-The script exports OpenAPI from the locked backend environment, normalizes operation
-IDs, and regenerates only `frontend/src/client/generated`. Commit the generated
-changes with the backend schema change.
-
-### Manually
-
-The equivalent cross-platform command from `frontend` is:
+The cross-platform equivalent from `frontend` is:
 
 ```bash
 npm run generate-client
 ```
 
-Do not edit `src/client/generated` by hand. Compatibility code for the dashboard
-lives one directory above it and is not removed by regeneration.
+The generator exports OpenAPI from the locked backend and rewrites only
+`src/client/generated`. Do not edit that directory by hand. Dashboard-specific
+compatibility code belongs in `src/client` above it, and generated changes are
+committed with the API change.
 
-## Using a Remote API
+## Browser authentication
 
-If you want to use a remote API, you can set the environment variable `VITE_API_URL` to the URL of the remote API. For example, you can set it in the `frontend/.env` file:
+The dashboard obtains a host-only HttpOnly session cookie from the browser-session
+login endpoint. It never writes a bearer token to Local Storage or Session
+Storage. Requests include credentials explicitly; unsafe cookie-authenticated
+requests must carry the exact configured dashboard origin. Desktop and other API
+clients continue to use bearer tokens. Details are in
+[docs/web-authentication.md](../docs/web-authentication.md).
 
-```env
-VITE_API_URL=https://api.my-domain.example.com
-```
+## End-to-end tests
 
-Then, when you run the frontend, it will use that URL as the base URL for the API.
-
-## Code Structure
-
-The frontend code is structured as follows:
-
-* `frontend/src` - The main frontend code.
-* `frontend/src/assets` - Static assets.
-* `frontend/src/client` - The generated OpenAPI client.
-* `frontend/src/components` -  The different components of the frontend.
-* `frontend/src/hooks` - Custom hooks.
-* `frontend/src/routes` - The different routes of the frontend which include the pages.
-* `theme.tsx` - The Chakra UI custom theme.
-
-## End-to-End Testing with Playwright
-
-The frontend includes initial end-to-end tests using Playwright. To run the tests, you need to have the Docker Compose stack running. Start the stack with the following command:
+Playwright must run against the disposable CI stack, not a developer or production
+database. From the repository root:
 
 ```bash
-docker compose up -d --wait backend
-```
-
-Then, you can run the tests with the following command:
-
-```bash
+docker compose -f docker-compose.ci.yml up -d --build --wait
+cd frontend
+npm ci
+npx playwright install chromium
 npx playwright test
+cd ..
+docker compose -f docker-compose.ci.yml down -v --remove-orphans
 ```
 
-You can also run your tests in UI mode to see the browser and interact with it running:
+Tests write authentication state under `frontend/playwright/.auth`; the directory
+is ignored and must never be committed. `npx playwright test --ui` is available
+for an interactive local run against the same disposable stack.
 
-```bash
-npx playwright test --ui
-```
+## Source map
 
-To stop and remove the Docker Compose stack and clean the data created in tests, use the following command:
-
-```bash
-docker compose down -v
-```
-
-To update the tests, navigate to the tests directory and modify the existing test files or add new ones as needed.
-
-For more information on writing and running Playwright tests, refer to the official [Playwright documentation](https://playwright.dev/docs/intro).
+- `src/client/generated` - generated OpenAPI transport and schemas
+- `src/client` - stable compatibility facade
+- `src/components` - shared account/admin UI
+- `src/hooks` - authentication and query hooks
+- `src/routes` - eagerly guarded, lazily rendered routes
+- `src/theme.tsx` - Chakra theme

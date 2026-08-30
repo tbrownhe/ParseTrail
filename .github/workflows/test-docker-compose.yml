@@ -27,6 +27,13 @@ jobs:
         run: curl --fail --show-error http://localhost:8080/
       - name: Test website
         run: curl --fail --show-error http://localhost:8081/
+      - name: Test shared runtime configuration
+        run: |
+          expected='window.__PARSETRAIL_CONFIG__ = Object.freeze({'
+          test "$(curl --fail --silent http://localhost:8080/runtime-config.js | head -n 1)" = "$expected"
+          test "$(curl --fail --silent http://localhost:8081/runtime-config.js | head -n 1)" = "$expected"
+          curl --fail --silent http://localhost:8080/runtime-config.js | grep --fixed-strings 'apiBaseUrl: "http://localhost:8000/api/v1"'
+          curl --fail --silent --head http://localhost:8080/runtime-config.js | grep --ignore-case '^Cache-Control: no-store'
       - name: Show container logs after failure
         if: ${{ failure() }}
         run: docker compose -f docker-compose.ci.yml logs --no-color

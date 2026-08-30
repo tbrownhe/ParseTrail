@@ -11,7 +11,9 @@
       "!**/src/client/generated",
       "!**/src/routeTree.gen.ts",
       "!**/playwright.config.ts",
+      "!**/playwright",
       "!**/playwright-report",
+      "!**/test-results",
       "!**/public/assets",
       "!**/openapi.json"
     ]

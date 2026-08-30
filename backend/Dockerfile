@@ -1,5 +1,9 @@
 FROM python:3.13.15-slim-bookworm@sha256:c45a22ea000adfd9cda29364bbe7edd23001ce5cc2ad15857cfbf7766943b9ca
 
+LABEL org.opencontainers.image.source="https://github.com/tbrownhe/ParseTrail" \
+      org.opencontainers.image.description="ParseTrail API and statement submission service" \
+      org.opencontainers.image.licenses="MIT"
+
 WORKDIR /app/
 
 # Install uv

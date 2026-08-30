@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import getpass
 import hashlib
+import ipaddress
 import json
 import os
 import re
@@ -36,6 +37,36 @@ REPOSITORY_ENV = {
     "frontend": "DOCKER_IMAGE_FRONTEND",
     "website": "DOCKER_IMAGE_WEBSITE",
 }
+DEPLOYMENT_ENVIRONMENTS = frozenset(("staging", "production"))
+REQUIRED_TARGET_FIELDS = (
+    "STACK_NAME",
+    "POSTGRES_VOLUME_NAME",
+    "SUBMISSION_KEYS_VOLUME_NAME",
+    "CLIENTS_DIR",
+    "PLUGINS_DIR",
+    "STATEMENTS_DIR",
+    "SECRET_KEY",
+    "MASTER_KEY",
+    "POSTGRES_PASSWORD",
+    "FIRST_SUPERUSER_PASSWORD",
+    "DOMAIN",
+    "BACKEND_HOST",
+    "FRONTEND_HOST",
+    "TRAEFIK_ALLOWED_IP_RANGES",
+)
+STAGING_UNIQUE_FIELDS = (
+    "STACK_NAME",
+    "POSTGRES_VOLUME_NAME",
+    "SUBMISSION_KEYS_VOLUME_NAME",
+    "SECRET_KEY",
+    "MASTER_KEY",
+    "POSTGRES_PASSWORD",
+    "FIRST_SUPERUSER_PASSWORD",
+    "DOMAIN",
+    "BACKEND_HOST",
+    "FRONTEND_HOST",
+)
+STAGING_UNIQUE_PATH_FIELDS = ("CLIENTS_DIR", "PLUGINS_DIR", "STATEMENTS_DIR")
 
 
 class ReleaseError(RuntimeError):
@@ -140,6 +171,128 @@ def read_dotenv(path: Path) -> dict[str, str]:
             value = value[1:-1]
         values[key] = value
     return values
+
+
+def _required_target_values(values: dict[str, str], *, label: str) -> None:
+    environment = values.get("ENVIRONMENT", "").strip()
+    if environment not in DEPLOYMENT_ENVIRONMENTS:
+        raise ReleaseError(f"{label} ENVIRONMENT must be staging or production")
+    missing = [name for name in REQUIRED_TARGET_FIELDS if not values.get(name, "").strip()]
+    if missing:
+        raise ReleaseError(f"{label} environment is missing required deployment fields: {', '.join(missing)}")
+
+
+def _resolved_config_path(value: str) -> Path:
+    return Path(value).expanduser().resolve()
+
+
+def validate_deployment_boundary(
+    deploy_values: dict[str, str],
+    *,
+    state_dir: Path,
+    production_values: dict[str, str] | None = None,
+    production_state_dir: Path | None = None,
+) -> None:
+    """Fail closed when staging could address production-owned state."""
+    _required_target_values(deploy_values, label="Deployment")
+    if deploy_values["ENVIRONMENT"] == "production":
+        return
+
+    if production_values is None or production_state_dir is None:
+        raise ReleaseError("Staging commands require --production-env and --production-state-dir for isolation checks")
+    _required_target_values(production_values, label="Production reference")
+    if production_values["ENVIRONMENT"] != "production":
+        raise ReleaseError("--production-env must describe ENVIRONMENT=production")
+
+    reused = [name for name in STAGING_UNIQUE_FIELDS if deploy_values[name].strip() == production_values[name].strip()]
+    reused.extend(
+        name
+        for name in STAGING_UNIQUE_PATH_FIELDS
+        if _resolved_config_path(deploy_values[name]) == _resolved_config_path(production_values[name])
+    )
+    if state_dir.resolve() == production_state_dir.expanduser().resolve():
+        reused.append("release state directory")
+    if reused:
+        raise ReleaseError(f"Staging reuses production targets: {', '.join(reused)}")
+
+    staging_smtp = deploy_values.get("SMTP_HOST", "").strip()
+    production_smtp = production_values.get("SMTP_HOST", "").strip()
+    if not staging_smtp:
+        raise ReleaseError("Staging SMTP_HOST must name a LAN-only mail capture service")
+    if staging_smtp == production_smtp:
+        raise ReleaseError("Staging SMTP_HOST must not reuse the production SMTP target")
+
+    source_ranges = deploy_values["TRAEFIK_ALLOWED_IP_RANGES"].split(",")
+    tailscale_range = ipaddress.ip_network("100.64.0.0/10")
+    for source_range in source_ranges:
+        try:
+            network = ipaddress.ip_network(source_range.strip(), strict=False)
+        except ValueError as exc:
+            raise ReleaseError("Staging TRAEFIK_ALLOWED_IP_RANGES contains an invalid network") from exc
+        is_tailscale = network.version == 4 and network.subnet_of(tailscale_range)
+        if not (network.is_private or network.is_loopback or network.is_link_local or is_tailscale):
+            raise ReleaseError("Staging TRAEFIK_ALLOWED_IP_RANGES must contain only LAN/VPN networks")
+
+
+def deployment_context(
+    args: argparse.Namespace,
+    *,
+    state_dir: Path,
+) -> tuple[dict[str, str], dict[str, str] | None]:
+    deploy_values = read_dotenv(args.deploy_env)
+    production_env_path = getattr(args, "production_env", None)
+    production_state_dir = getattr(args, "production_state_dir", None)
+    production_values = read_dotenv(production_env_path) if production_env_path is not None else None
+    validate_deployment_boundary(
+        deploy_values,
+        state_dir=state_dir,
+        production_values=production_values,
+        production_state_dir=production_state_dir,
+    )
+    return deploy_values, production_values
+
+
+def validate_staging_artifacts(
+    deploy_values: dict[str, str],
+    production_values: dict[str, str] | None,
+) -> None:
+    if deploy_values["ENVIRONMENT"] != "staging":
+        return
+    assert production_values is not None
+    staging_inventory = artifact_inventory(deploy_values)
+    production_inventory = artifact_inventory(production_values)
+    if production_inventory["plugins"] is None or not production_inventory["clients"]:
+        raise ReleaseError("Production signed artifact inventory is incomplete")
+    if staging_inventory != production_inventory:
+        raise ReleaseError("Staging signed artifact inventory does not match production")
+
+
+def validate_staging_smoke_credentials(
+    deploy_values: dict[str, str],
+    staging_config: SmokeConfig,
+    production_config_path: Path | None,
+) -> None:
+    if deploy_values["ENVIRONMENT"] != "staging":
+        return
+    if production_config_path is None:
+        raise ReleaseError("Staging smoke requires --production-smoke-config for credential isolation")
+    production_config = SmokeConfig.from_file(production_config_path)
+    if staging_config.username == production_config.username:
+        raise ReleaseError("Staging smoke username must differ from production")
+    if staging_config.password == production_config.password:
+        raise ReleaseError("Staging smoke password must differ from production")
+    staging_urls = {
+        staging_config.api_base_url.rstrip("/"),
+        staging_config.dashboard_url.rstrip("/"),
+        staging_config.website_url.rstrip("/"),
+    }
+    production_urls = {
+        production_config.api_base_url.rstrip("/"),
+        production_config.dashboard_url.rstrip("/"),
+        production_config.website_url.rstrip("/"),
+    }
+    if staging_urls & production_urls:
+        raise ReleaseError("Staging smoke URLs must not address production")
 
 
 def load_json(path: Path) -> dict[str, Any]:
@@ -437,8 +590,9 @@ def command_build(args: argparse.Namespace) -> None:
 
 def command_adopt(args: argparse.Namespace) -> None:
     repo_root = repository_root()
-    deploy_values = read_dotenv(args.deploy_env)
     state_dir = state_directory(args.state_dir, repo_root)
+    deploy_values, production_values = deployment_context(args, state_dir=state_dir)
+    validate_staging_artifacts(deploy_values, production_values)
     current_path = state_dir / "current-release.json"
     if current_path.exists():
         raise ReleaseError("A current immutable release has already been adopted")
@@ -489,8 +643,9 @@ def command_preflight(args: argparse.Namespace) -> None:
     release = validate_release(load_json(args.release))
     if current_commit(require_clean=True) != release["source_commit"]:
         raise ReleaseError("Checked-out commit does not match the release descriptor")
-    deploy_values = read_dotenv(args.deploy_env)
     state_dir = state_directory(args.state_dir, repo_root)
+    deploy_values, production_values = deployment_context(args, state_dir=state_dir)
+    validate_staging_artifacts(deploy_values, production_values)
     current_path = state_dir / "current-release.json"
     if not current_path.is_file():
         raise ReleaseError("Adopt the current immutable deployment before the first gated release")
@@ -538,7 +693,7 @@ def load_pending(args: argparse.Namespace) -> tuple[Path, dict[str, Any], dict[s
     pending = load_json(path)
     if pending.get("deployment_id") != args.deployment_id:
         raise ReleaseError("Pending deployment identifier mismatch")
-    deploy_values = read_dotenv(args.deploy_env)
+    deploy_values, _production_values = deployment_context(args, state_dir=state_dir)
     return path, pending, deploy_values, state_dir
 
 
@@ -609,6 +764,11 @@ def command_deploy(args: argparse.Namespace) -> None:
     release = validate_release(pending["release"])
     rollback_target = validate_release(pending["rollback_target"])
     smoke_config = SmokeConfig.from_file(args.smoke_config)
+    validate_staging_smoke_credentials(
+        deploy_values,
+        smoke_config,
+        getattr(args, "production_smoke_config", None),
+    )
     record: dict[str, Any] = {
         "schema_version": SCHEMA_VERSION,
         "deployment_id": args.deployment_id,
@@ -668,8 +828,14 @@ def command_rollback(args: argparse.Namespace) -> None:
         raise ReleaseError("Only a successful deployment record can provide a rollback target")
     target = validate_release(source_record["rollback_target"])
     current = validate_release(load_json(state_dir / "current-release.json"))
-    deploy_values = read_dotenv(args.deploy_env)
+    deploy_values, production_values = deployment_context(args, state_dir=state_dir)
+    validate_staging_artifacts(deploy_values, production_values)
     smoke_config = SmokeConfig.from_file(args.smoke_config)
+    validate_staging_smoke_credentials(
+        deploy_values,
+        smoke_config,
+        getattr(args, "production_smoke_config", None),
+    )
     identifier = f"rollback-{utc_now().strftime('%Y%m%dT%H%M%SZ')}-{target['source_commit'][:12]}"
     activate(args, deploy_values, target)
     smoke = run_public_smoke(smoke_config)
@@ -695,11 +861,21 @@ def command_rollback(args: argparse.Namespace) -> None:
 def add_runtime_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--deploy-env", type=Path, required=True)
     parser.add_argument("--compose-file", type=Path, default=DEFAULT_COMPOSE_FILE)
+    parser.add_argument(
+        "--production-env",
+        type=Path,
+        help="Required for staging; production environment used only for isolation comparison",
+    )
 
 
 def add_state_arguments(parser: argparse.ArgumentParser) -> None:
     add_runtime_arguments(parser)
     parser.add_argument("--state-dir", type=Path, required=True)
+    parser.add_argument(
+        "--production-state-dir",
+        type=Path,
+        help="Required for staging; production release-state path used only for isolation comparison",
+    )
 
 
 def parser() -> argparse.ArgumentParser:
@@ -744,6 +920,11 @@ def parser() -> argparse.ArgumentParser:
     add_state_arguments(deploy)
     deploy.add_argument("deployment_id")
     deploy.add_argument("--smoke-config", type=Path, required=True)
+    deploy.add_argument(
+        "--production-smoke-config",
+        type=Path,
+        help="Required for staging; production smoke config used only for isolation comparison",
+    )
     deploy.add_argument("--timeout", type=int, default=180)
     deploy.set_defaults(handler=command_deploy)
 
@@ -751,6 +932,11 @@ def parser() -> argparse.ArgumentParser:
     add_state_arguments(rollback)
     rollback.add_argument("deployment_id")
     rollback.add_argument("--smoke-config", type=Path, required=True)
+    rollback.add_argument(
+        "--production-smoke-config",
+        type=Path,
+        help="Required for staging; production smoke config used only for isolation comparison",
+    )
     rollback.add_argument("--timeout", type=int, default=180)
     rollback.set_defaults(handler=command_rollback)
     return root

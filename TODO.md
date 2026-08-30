@@ -289,27 +289,39 @@ temporary exception, and the Postgres restore drill preserves expected row count
 - [x] Make development Compose overrides explicitly opt-in. Do not keep a tracked
   `docker-compose.override.yml` that production can auto-load and use to expose
   local ports, remove Traefik labels, or redirect the default network.
-- [ ] Treat staging as a configuration-only deployment target using the same
+- [x] Treat staging as a configuration-only deployment target using the same
   Compose definition, images, migrations, and signed artifacts as production;
-  do not introduce staging-only application behavior.
-- [ ] Parameterize the external submission-key volume and validate that staging
+  do not introduce staging-only application behavior. Preflight now compares the
+  exact staging and production signed-artifact inventories before adoption or
+  deployment.
+- [x] Parameterize the external submission-key volume and validate that staging
   uses a distinct `STACK_NAME`, PostgreSQL volume, submission-key volume, secrets,
   bind-mount directories, release state, and smoke credentials. Refuse a staging
-  deployment whose protected storage resolves to a production target.
-- [ ] Move the dashboard API origin from build-time `VITE_API_URL` to validated
+  deployment whose protected storage resolves to a production target. The release
+  tool requires the production environment/state/smoke references and rejects each
+  reused boundary independently.
+- [x] Move the dashboard API origin from build-time `VITE_API_URL` to validated
   container-startup configuration so the exact frontend image digest can be
-  promoted from staging to production.
-- [ ] Add an isolated desktop staging profile and process-local launcher for the
+  promoted from staging to production. Dashboard and website images now share an
+  atomic, fail-closed `runtime-config.js` generator and serve it with `no-store`;
+  public URLs are no longer compiled into either image.
+- [x] Add an isolated desktop staging profile and process-local launcher for the
   installed client. Separate AppData, SQLite/import paths, OS credential-store
   entry, cached submission public key, plugin store, logs, and reports; show a
-  persistent `STAGING` marker and never modify the production profile.
-- [ ] Let the server-statement devtool select an explicit environment file,
+  persistent `STAGING` marker and never modify the production profile. Managed
+  staging output paths are constrained to `ParseTrail-Staging`, and `--staging`
+  is consumed before settings, logging, database, or keyring imports.
+- [x] Let the server-statement devtool select an explicit environment file,
   recognize staging, display its target prominently, and retain the memory-only
-  plaintext invariant.
+  plaintext invariant. Both GUI and batch paths select `--env-file` before
+  settings-dependent imports; SSH-vs-local key, database, and ciphertext access is
+  now explicit rather than inferred from the environment label.
 - [ ] Provision a LAN/VPN-only `parsetrail-staging` Compose project behind the
   existing Traefik instance with private staging hostnames and trusted HTTPS.
-  Capture all outbound staging mail locally or restrict it to an explicit test
-  recipient allowlist.
+  The pinned, separate Mailpit definition now has no SMTP host port or relay, a
+  loopback-only UI through a constrained proxy, no Mailpit egress route, and an
+  explicit reserved-recipient allowlist; start it and confirm captured messages
+  during the live rehearsal.
 - [ ] `[USER]` Rehearse one successful staging deployment, one application rollback,
   and one migration/restore rollback before enabling any deployment runner.
 
@@ -371,8 +383,9 @@ batch runner can execute with no Qt application or display server.
   The precise schema is deliberately non-downgradable; recovery restores the
   validated automatic backup. A redacted migration and populated-GUI rehearsal
   passed on a temporary copy of the 18,668-row production client database.
-- [ ] `[USER]` Review rounding, duplicate, and overlapping-statement results in the
-  GUI before accepting the data migration.
+- [x] `[USER]` Review rounding, duplicate, and overlapping-statement results in the
+  GUI before accepting the data migration. A migrated copy of the populated live
+  database passed review with no visible correctness concerns.
 
 Acceptance: schema constraints are enforced, exact-money round trips pass property
 tests, and every existing copied database either migrates successfully or stops
@@ -414,10 +427,11 @@ does not provide a reliable user-existence oracle.
   beside their decrypting key in the user profile.
 - [x] Add fake-server tests for timeouts, slow streams, disconnects, cancellation,
   401 refresh/login paths, and error-body redaction.
-- [ ] When an artifact update rejects stored credentials, prompt for replacement
+- [x] When an artifact update rejects stored credentials, prompt for replacement
   credentials immediately and resume the original update after successful login.
-  Do not return silently to the main UI and require the user to request the same
-  update a second time.
+  Plugin synchronization now reports authentication separately from artifact
+  failures, preserves the selected signed release, and permits exactly one
+  UI-thread credential retry before failing safely.
 
 Acceptance: the interface remains responsive during network failure, cancellation
 never installs partial data, and no command shell interprets downloaded filenames.
@@ -440,13 +454,26 @@ never installs partial data, and no command shell interprets downloaded filename
   `npm ci`) in images. Base manifests and installs are pinned/frozen; the
   production bind-mount ownership migration required for a non-root backend
   remains.
-- [~] Complete the equivalent macOS frozen-runtime smoke test and add a release
-  dry-run that creates signed manifests without publishing them. Both builders
-  now contain the real frozen-runtime and signed dry-run gates; Windows has passed
-  end to end, while the macOS gate still needs one run on a supported Mac.
+- [x] Complete the equivalent macOS frozen-runtime smoke test and add a release
+  dry-run that creates signed manifests without publishing them. Windows 1.3.0
+  and Intel macOS 1.3.1 passed their full native build, test, frozen-runtime,
+  signing, immutable publication, public-download, install, credential-store, and
+  plugin-update gates.
 - [x] Record the uv, Python, PyInstaller, NSIS/create-dmg, compiler, and operating
   system versions used for each platform artifact; generate checksums and a small
   machine-readable release inventory.
+- [ ] Pin or enforce a tested minimum uv release in the client-release bootstrap,
+  explicitly provision the `.python-version` interpreter, and fail before syncing
+  dependencies when uv cannot resolve that exact interpreter for the host.
+- [ ] Preflight and document the Intel macOS source-build toolchain for packages
+  without x86_64 wheels (`openssl@3`, Rust, and pkg-config). Build cryptography
+  against static OpenSSL so distributed clients do not require Homebrew at runtime.
+- [ ] Make macOS artifact architecture explicit in manifests, API responses, and
+  filenames; choose universal2 or separate x86_64/arm64 releases before claiming
+  native Apple Silicon support.
+- [ ] Allow a successfully built, signed, and verified dry-run artifact to be
+  published without rebuilding it, while preserving immutable-version and explicit
+  activation checks.
 - [x] Document artifact rollback for client, plugin, and model releases; keep API
   and database rollback in the production deployment runbook from P0.7.
 
@@ -470,33 +497,74 @@ with networking disabled and never pause for an implicit package-data download.
 
 ### P2.1 Introduce application boundaries incrementally
 
-- [ ] Add characterization tests around the current import, category, account,
-  verification, plugin-sync, and budget behavior before moving code.
-- [ ] Define small application services for parse/import, transaction querying,
-  categories, accounts, artifact updates, and statement submission. Keep Qt widgets
-  as adapters rather than owners of database/network transactions.
-- [ ] Introduce repositories or explicit query services so GUI code does not manage
-  SQLAlchemy sessions directly.
-- [ ] Split the largest GUI modules by workflow while preserving behavior; avoid a
-  full rewrite.
-- [ ] Replace broad exception catches with typed boundary errors and user-safe
-  messages while retaining exception chains for local diagnostics.
+- [x] Add characterization tests around the current import, category, account,
+  verification, plugin-sync, and budget behavior before moving code. Import
+  persistence/recovery, plugin synchronization, category CRUD/migration, and account
+  CRUD/number assignment are covered, as are budget range, grouping, sign, proration,
+  and inactive-category semantics. Verification coverage locks down filtering,
+  archived-category state, atomic edits, missing references, and model-category retry.
+- [x] Define small application services for parse/import, transaction querying,
+  categories, accounts, artifact updates, and statement submission. The headless
+  `StatementImportService` now owns import persistence, deduplication, and archive
+  state while `StatementImportController` owns Qt decisions and progress;
+  `CategoryService` now owns category queries, validation, and atomic rename/merge
+  transactions; `AccountService` now owns account queries, mutations, deletion
+  constraints, and account-number assignment; `BudgetQueryService` now owns budget
+  range queries and report calculations; `TransactionReviewService` now owns review
+  queries, atomic edits, and model-category compatibility retry; `TransactionService`
+  now owns common account/balance/range queries and atomic manual entry. Artifact
+  updates have an `ArtifactService`; `DashboardQueryService` owns balances,
+  checklists, chart inputs, discrepancy inputs, and verified training data for the
+  main window; `StatementSubmissionService` owns validation, memory-only encryption,
+  cancellation checkpoints, upload, response cleanup, and server confirmation.
+- [x] Introduce repositories or explicit query services so GUI code does not manage
+  SQLAlchemy sessions directly. Category, account, budget, verification, transaction,
+  dashboard, and artifact workflows now delegate every query and mutation to
+  headless services; a source audit confirms no GUI module opens a session or issues
+  an ORM query.
+- [x] Split the largest GUI modules by workflow while preserving behavior; avoid a
+  full rewrite. Category and account persistence and budget reporting moved out of
+  their GUI modules without changing their interaction flows; transaction-review
+  persistence moved out of its window and its module shrank by roughly 130 lines.
+  Transaction-browser persistence also moved out without changing its primary flows.
+  Dashboard canvas/table models and review table/filter models now live in focused
+  modules, reducing `main_window.py` to about 1,080 lines and `verification.py` to
+  about 590 while keeping their public model imports compatible.
+- [x] Replace broad exception catches with typed boundary errors and user-safe
+  messages while retaining exception chains for local diagnostics. Category input,
+  lookup, duplicate, and persistence failures and account validation, duplicate,
+  assignment, in-use, and persistence failures are now typed at service boundaries;
+  invalid budget reports and query failures are typed, as are invalid or stale review
+  edits and auto-categorization failures. Manual-entry validation, missing accounts,
+  and transaction query/persistence failures are typed, as are dashboard data and
+  persistence failures and artifact query/write failures. Normal GUI workflow
+  boundaries now log chained diagnostics and display bounded messages; intentional
+  broad containment remains in batch import, rendering, and parser developer tools.
 
 Acceptance: core application tests run without Qt, each extracted service has one
 clear transaction owner, and module size trends downward without feature drift.
 
 ### P2.2 Clarify desktop workflows
 
-- [ ] Make one-off import semantics explicit before moving an original file; offer
-  copy, archive, and leave-in-place behavior with a safe default.
-- [ ] Add a first-run path explaining local storage, plugin installation, supported
-  institutions, statement submission, backups, and what the server can observe.
-- [ ] Turn parser failures into actionable messages that identify format/plugin
-  compatibility without exposing statement content.
-- [ ] Report a recovered committed archive as recovery in the import summary,
+- [x] Make one-off import semantics explicit before moving an original file; offer
+  copy, archive, and leave-in-place behavior with a safe default. One-off imports
+  default to retaining the selected original and creating a managed archive copy;
+  files already placed in the managed import folder retain its move-to-archive contract.
+- [x] Add a first-run path explaining local storage, plugin installation, supported
+  institutions, statement submission, backups, and what the server can observe. The
+  local, repeatable guide lists installed support and accurately distinguishes ordinary
+  local imports from explicit encrypted contributions and their plaintext metadata.
+- [x] Turn parser failures into actionable messages that identify format/plugin
+  compatibility without exposing statement content. Normal imports now distinguish
+  unsupported formats, missing or ambiguous matches, changed layouts, incompatible
+  plugin output, and failed safety checks while keeping extracted values out of messages.
+- [x] Report a recovered committed archive as recovery in the import summary,
   rather than counting the hash match as an ordinary duplicate.
-- [ ] Add visible backup/restore and database-location guidance, including a test
-  restore action.
+- [x] Add visible backup/restore and database-location guidance, including a test
+  restore action. SQLite's online backup API creates consistent copies; test restore
+  uses a disposable database, and real restore selects a new path without overwriting
+  the active database. The UI states that database backups are local, plaintext, and
+  exclude statement archives.
 - [ ] `[USER]` Walk through first run, account login, plugin install, one-off import,
   folder import, overlap handling, statement contribution, and restore on Windows.
 - [ ] `[USER]` Repeat the fresh-user walkthrough on the owner's MacBook. Reserve
@@ -509,36 +577,59 @@ every action that moves or retains a statement is explained before it occurs.
 
 - [x] Replace plugin table `innerHTML` construction on the public website with safe
   DOM text insertion.
-- [ ] Add a malicious plugin-metadata regression fixture for the public website.
-- [ ] Remove or deliberately repurpose the template Items API/UI, sample branding,
-  placeholder search, and unused dashboard routes.
-- [ ] Choose one canonical public/runtime API configuration path; remove the stale
-  checked-in localhost/GitHub values from the static website deployment flow.
-- [ ] Exclude generated API/route files appropriately from formatting checks and
-  make the normal lint command non-mutating.
-- [ ] Split or lazy-load heavy dashboard routes to address the oversized bundle.
-- [ ] Review localStorage bearer-token exposure and choose an HttpOnly-cookie or
-  documented hardened-token strategy appropriate to the deployed origins.
+- [x] Add a malicious plugin-metadata regression fixture for the public website.
+  The public renderer is shared with a dependency-free Node regression that verifies
+  hostile tags and event handlers remain inert cell text; frontend CI runs the fixture.
+- [x] Remove or deliberately repurpose the template Items API/UI, sample branding,
+  placeholder search, and unused dashboard routes. The Items router, schemas,
+  persistence helpers, generated client, React route, and PostgreSQL table are gone;
+  the remaining home route is a small ParseTrail account/download/plugin landing
+  page, and the FastAPI/Vite branding and inert search control have been removed.
+- [x] Choose one canonical public/runtime API configuration path; remove the stale
+  checked-in localhost/GitHub values from the static website deployment flow. Both
+  web surfaces consume the same validated `runtime-config.js` contract generated
+  from `BACKEND_HOST`, `FRONTEND_HOST`, and `GITHUB_URL` at container startup.
+- [x] Exclude generated API/route files appropriately from formatting checks and
+  make the normal lint command non-mutating. `npm run lint` and the frontend
+  pre-commit hook now check only; `npm run lint:fix` is the explicit rewrite path,
+  and CI fails if normal checks dirty generated or handwritten sources.
+- [x] Split or lazy-load heavy dashboard routes to address the oversized bundle.
+  Every page and the authenticated layout now use TanStack lazy route modules while
+  guards and search validation remain eager. The monolithic 714 kB entry became a
+  106 kB entry plus route/shared chunks; no chunk exceeds the 500 kB warning limit.
+- [x] Review localStorage bearer-token exposure and choose an HttpOnly-cookie or
+  documented hardened-token strategy appropriate to the deployed origins. The
+  dashboard now uses a host-only HttpOnly `SameSite=Strict` session cookie and
+  includes credentials explicitly; cookie-authorized mutations and browser login/
+  logout require the exact configured dashboard origin. Desktop/API clients retain
+  bearer auth with OS credential storage, and production/staging cookies use the
+  `__Host-` prefix plus `Secure`. Browser tests assert no token reaches Web Storage.
 
 Acceptance: untrusted server metadata renders only as text, the dashboard contains
 no unused template CRUD surface, and build/check commands leave Git clean.
 
 ### P2.4 Align documentation with the deployed system
 
-- [ ] Rewrite the root architecture and privacy documentation around three clear
+- [x] Rewrite the root architecture and privacy documentation around three clear
   boundaries: local finance database, encrypted statement contribution, and public
   account/artifact service.
-- [ ] Document exactly which metadata the server stores in plaintext, the limits of
+- [x] Document exactly which metadata the server stores in plaintext, the limits of
   server-side encryption, artifact signature verification, and local plaintext
   statement archives.
-- [ ] Correct stale repository names, ports, commands, encodings, screenshots, and
+- [x] Correct stale repository names, ports, commands, encodings, screenshots, and
   devtool temp-file language.
-- [ ] Add Windows and macOS contributor setup from a clean checkout, with Linux
+- [x] Add Windows and macOS contributor setup from a clean checkout, with Linux
   marked experimental until it has a tested package.
-- [ ] Add a concise threat model and release/incident runbook.
+- [x] Add a concise threat model and release/incident runbook. The accompanying
+  audit also corrected environment examples that failed typed settings, aligned
+  the Node baseline, and replaced the web-account deletion overclaim with the
+  endpoint's actual local-data and retention boundaries.
 
 Acceptance: every command in the setup docs is exercised from a clean checkout and
-the privacy claims match observable code and deployment behavior.
+the privacy claims match observable code and deployment behavior. Locked Windows
+commands, devtool entry points, both example Compose configurations, all component
+checks, and internal links passed locally; the documented Intel macOS build path
+was exercised by the 1.3.1 release and the hosted macOS CI gate.
 
 ## P3 - deliberate future work
 

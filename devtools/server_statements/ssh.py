@@ -1,4 +1,6 @@
 import base64
+import re
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -18,7 +20,9 @@ def _ssh_cmd(base: list[str]) -> list[str]:
 def fetch_remote_env(var_name: str) -> str:
     if not settings.REMOTE_HOST or not settings.REMOTE_USER:
         raise ValueError("REMOTE_HOST and REMOTE_USER are required to fetch MASTER_KEY remotely")
-    remote_cmd = f"grep '^{var_name}=' {settings.REMOTE_ENV_PATH}"
+    if not re.fullmatch(r"[A-Z][A-Z0-9_]*", var_name):
+        raise ValueError("Remote environment variable name is invalid")
+    remote_cmd = f"grep '^{var_name}=' -- {shlex.quote(settings.REMOTE_ENV_PATH)}"
     cmd = _ssh_cmd(
         [
             f"{settings.REMOTE_USER}@{settings.REMOTE_HOST}",
@@ -34,9 +38,9 @@ def fetch_remote_env(var_name: str) -> str:
 
 def fetch_encrypted_file(file_name: str) -> bytes:
     """Read the encrypted file either locally or via SSH."""
-    if settings.ENVIRONMENT == "local":
+    if settings.SSH_TUNNEL_ENABLE:
         remote_path = f"{settings.REMOTE_STATEMENTS_DIR.rstrip('/')}/{file_name}"
-        remote_cmd = f"cat {remote_path}"
+        remote_cmd = f"cat -- {shlex.quote(remote_path)}"
         cmd = _ssh_cmd(
             [
                 f"{settings.REMOTE_USER}@{settings.REMOTE_HOST}",
@@ -45,10 +49,8 @@ def fetch_encrypted_file(file_name: str) -> bytes:
         )
         result = subprocess.run(cmd, capture_output=True, check=True)
         return result.stdout
-    else:
-        local_path = Path(settings.REMOTE_STATEMENTS_DIR) / file_name
-        if local_path.exists():
-            return local_path.read_bytes()
+    local_path = Path(settings.STATEMENTS_DIR) / file_name
+    return local_path.read_bytes()
 
 
 def load_master_key() -> bytes:
@@ -57,7 +59,9 @@ def load_master_key() -> bytes:
     if _MASTER_KEY_CACHE is not None:
         return _MASTER_KEY_CACHE
 
-    key_str = fetch_remote_env("MASTER_KEY")
+    key_str = fetch_remote_env("MASTER_KEY") if settings.SSH_TUNNEL_ENABLE else settings.MASTER_KEY
+    if not key_str:
+        raise ValueError("MASTER_KEY is required")
     try:
         key = base64.b64decode(key_str)
     except Exception as e:

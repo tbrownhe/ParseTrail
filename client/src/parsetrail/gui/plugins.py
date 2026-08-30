@@ -63,10 +63,18 @@ def start_plugin_sync(
     plugin_manager: PluginManager,
     *,
     on_complete=None,
+    client=api_client,
+    thread_factory=None,
 ) -> PluginSyncThread | None:
-    """Prompt on Qt, then authenticate and install the catalog in a worker."""
+    """Prompt on Qt, then authenticate and install the catalog in a worker.
+
+    A token can look valid locally and still be rejected by the server. In that
+    case the worker clears it and asks this UI coordinator to prompt once for
+    replacement credentials. A successful login resumes the same signed catalog
+    update without requiring another user-initiated update check.
+    """
     try:
-        credentials = api_client.auth.credentials_if_needed()
+        credentials = client.auth.credentials_if_needed()
     except AuthError:
         QMessageBox.information(parent, "Plugin Update Canceled", "Sign-in was canceled.")
         return None
@@ -80,15 +88,9 @@ def start_plugin_sync(
     progress.setAutoClose(False)
     progress.setAutoReset(False)
 
-    thread = PluginSyncThread(
-        local_plugins,
-        remote_release,
-        plugin_manager=plugin_manager,
-        credentials=credentials,
-        parent=progress,
-    )
-    progress._plugin_sync_thread = thread
-    progress.canceled.connect(thread.cancel)
+    sync_thread_factory = thread_factory or PluginSyncThread
+    authentication_retry_used = False
+    operation_finished = False
 
     def update_progress(completed: int, count: int, label: str) -> None:
         progress.setRange(0, count)
@@ -96,6 +98,10 @@ def start_plugin_sync(
         progress.setValue(completed)
 
     def complete(_installed) -> None:
+        nonlocal operation_finished
+        if operation_finished:
+            return
+        operation_finished = True
         progress.setValue(progress.maximum())
         progress.close()
         plugin_manager.load_plugins()
@@ -103,19 +109,64 @@ def start_plugin_sync(
             on_complete()
 
     def failed(message: str) -> None:
+        nonlocal operation_finished
+        if operation_finished:
+            return
+        operation_finished = True
         progress.close()
         QMessageBox.critical(parent, "Plugin Update Failed", message)
 
     def cancelled() -> None:
+        nonlocal operation_finished
+        if operation_finished:
+            return
+        operation_finished = True
         progress.close()
         QMessageBox.information(parent, "Plugin Update Canceled", "No partial plugin release was activated.")
 
-    thread.progress_changed.connect(update_progress)
-    thread.sync_completed.connect(complete)
-    thread.sync_failed.connect(failed)
-    thread.sync_cancelled.connect(cancelled)
-    thread.finished.connect(thread.deleteLater)
-    thread.start()
+    def authentication_required(message: str) -> None:
+        nonlocal authentication_retry_used
+        if operation_finished:
+            return
+        if progress.wasCanceled():
+            cancelled()
+            return
+        if authentication_retry_used:
+            failed(f"Plugin update could not authenticate after signing in:\n{message}")
+            return
+
+        authentication_retry_used = True
+        progress.setLabelText("Saved credentials were rejected. Sign in to resume the plugin update...")
+        try:
+            replacement_credentials = client.auth.credentials_if_needed()
+        except AuthError:
+            cancelled()
+            return
+
+        progress.setValue(0)
+        launch(replacement_credentials)
+
+    def launch(attempt_credentials):
+        thread = sync_thread_factory(
+            local_plugins,
+            remote_release,
+            plugin_manager=plugin_manager,
+            credentials=attempt_credentials,
+            client=client,
+            parent=progress,
+        )
+        progress._plugin_sync_thread = thread
+        progress.canceled.connect(thread.cancel)
+        thread.progress_changed.connect(update_progress)
+        thread.sync_completed.connect(complete)
+        thread.authentication_required.connect(authentication_required)
+        thread.sync_failed.connect(failed)
+        thread.sync_cancelled.connect(cancelled)
+        thread.finished.connect(thread.deleteLater)
+        thread.start()
+        return thread
+
+    thread = launch(credentials)
     progress.show()
     return thread
 

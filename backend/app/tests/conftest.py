@@ -12,7 +12,7 @@ from app.core.config import settings  # noqa: E402
 from app.core.db import engine, init_db  # noqa: E402
 from app.core.security import get_password_hash  # noqa: E402
 from app.main import app  # noqa: E402
-from app.models import Item, User  # noqa: E402
+from app.models import User  # noqa: E402
 from app.tests.utils.user import authentication_token_from_email  # noqa: E402
 from app.tests.utils.utils import get_superuser_token_headers  # noqa: E402
 
@@ -29,14 +29,9 @@ def db() -> Generator[Session, None, None]:
         superuser.session_version += 1
         session.add(superuser)
         session.commit()
-        existing_item_ids = set(session.exec(select(Item.id)).all())
         existing_user_ids = set(session.exec(select(User.id)).all())
         yield session
         session.rollback()
-        for item in session.exec(select(Item)).all():
-            if item.id not in existing_item_ids:
-                session.delete(item)
-        session.commit()
         for user in session.exec(select(User)).all():
             if user.id not in existing_user_ids:
                 session.delete(user)

@@ -14,8 +14,6 @@ services:
       timeout: 10s
     volumes:
       - app-db-data:/var/lib/postgresql/data/pgdata
-    env_file:
-      - .env
     environment:
       - PGDATA=/var/lib/postgresql/data/pgdata
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD?Variable not set}
@@ -35,13 +33,12 @@ services:
         condition: service_healthy
         restart: true
     command: bash scripts/prestart.sh
-    env_file:
-      - .env
     volumes:
       # The single prestart owner provisions/validates submission keys before
       # any backend worker starts. Old generations remain for rotation overlap.
       - app-keys-data:/app/keys
     environment:
+      - PROJECT_NAME=${PROJECT_NAME?Variable not set}
       - DOMAIN=${DOMAIN}
       - FRONTEND_HOST=${FRONTEND_HOST?Variable not set}
       - ENVIRONMENT=${ENVIRONMENT}
@@ -53,6 +50,10 @@ services:
       - SMTP_USER=${SMTP_USER}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
       - EMAILS_FROM_EMAIL=${EMAILS_FROM_EMAIL}
+      - EMAILS_FROM_NAME=${EMAILS_FROM_NAME}
+      - SMTP_TLS=${SMTP_TLS}
+      - SMTP_SSL=${SMTP_SSL}
+      - SMTP_PORT=${SMTP_PORT}
       - POSTGRES_SERVER=db
       - POSTGRES_PORT=${POSTGRES_PORT}
       - POSTGRES_DB=${POSTGRES_DB}
@@ -69,14 +70,13 @@ services:
     networks:
       - traefik-public
       - default
+      - mail
     depends_on:
       db:
         condition: service_healthy
         restart: true
       prestart:
         condition: service_completed_successfully
-    env_file:
-      - .env
     volumes:
       # Docker-managed keys (chmod 600) visible to backend only
       - app-keys-data:/app/keys
@@ -86,6 +86,7 @@ services:
       - ${PLUGINS_DIR?Variable not set}:/app/data/plugins
       - ${STATEMENTS_DIR?Variable not set}:/app/secure/statements
     environment:
+      - PROJECT_NAME=${PROJECT_NAME?Variable not set}
       - MASTER_KEY=${MASTER_KEY}
       - DOMAIN=${DOMAIN}
       - FRONTEND_HOST=${FRONTEND_HOST?Variable not set}
@@ -98,6 +99,10 @@ services:
       - SMTP_USER=${SMTP_USER}
       - SMTP_PASSWORD=${SMTP_PASSWORD}
       - EMAILS_FROM_EMAIL=${EMAILS_FROM_EMAIL}
+      - EMAILS_FROM_NAME=${EMAILS_FROM_NAME}
+      - SMTP_TLS=${SMTP_TLS}
+      - SMTP_SSL=${SMTP_SSL}
+      - SMTP_PORT=${SMTP_PORT}
       - POSTGRES_SERVER=db
       - POSTGRES_PORT=${POSTGRES_PORT}
       - POSTGRES_DB=${POSTGRES_DB}
@@ -128,7 +133,8 @@ services:
       - traefik.http.services.${STACK_NAME?Variable not set}-backend.loadbalancer.server.port=8000
 
       # Prevent abuse
-      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.middlewares=rate-limit
+      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.middlewares=rate-limit,${STACK_NAME?Variable not set}-network-allow
+      - traefik.http.middlewares.${STACK_NAME?Variable not set}-network-allow.ipallowlist.sourcerange=${TRAEFIK_ALLOWED_IP_RANGES?Variable not set}
 
       # HTTP redirect + HTTPS Certificates
       # Backend endpoints are at `api.DOMAIN/api/v1/etc`
@@ -160,23 +166,24 @@ services:
       - traefik.http.routers.${STACK_NAME?Variable not set}-openapi-https.priority=110
 
       #- traefik.http.routers.swagger-uim.service=backend
-      - traefik.http.routers.${STACK_NAME?Variable not set}-swagger-https.middlewares=swagger-auth
-      - traefik.http.routers.${STACK_NAME?Variable not set}-openapi-https.middlewares=swagger-auth
+      - traefik.http.routers.${STACK_NAME?Variable not set}-swagger-https.middlewares=${STACK_NAME?Variable not set}-swagger-auth,${STACK_NAME?Variable not set}-network-allow
+      - traefik.http.routers.${STACK_NAME?Variable not set}-openapi-https.middlewares=${STACK_NAME?Variable not set}-swagger-auth,${STACK_NAME?Variable not set}-network-allow
       - traefik.http.middlewares.${STACK_NAME?Variable not set}-swagger-auth.basicauth.users=${SWAGGER_HASH}
 
 
   frontend:
     image: '${FRONTEND_IMAGE_REF:-${DOCKER_IMAGE_FRONTEND?Variable not set}:local}'
     restart: always
+    environment:
+      - BACKEND_HOST=${BACKEND_HOST?Variable not set}
+      - FRONTEND_HOST=${FRONTEND_HOST?Variable not set}
+      - GITHUB_URL=${GITHUB_URL?Variable not set}
     networks:
       - traefik-public
       - default
     build:
-      context: ./frontend
-      args:
-        # Points the frontend to the backend running at api.${DOMAIN}
-        - VITE_API_URL=https://api.${DOMAIN}
-        - NODE_ENV=production
+      context: .
+      dockerfile: frontend/Dockerfile
     labels:
       - traefik.enable=true
       - traefik.docker.network=traefik-public
@@ -193,28 +200,21 @@ services:
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.entrypoints=https
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.tls=true
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.tls.certresolver=le
+      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.middlewares=${STACK_NAME?Variable not set}-network-allow
 
 
   website:
     # Static site for Marketing, FAQ and latest client downloads
-    image: '${WEBSITE_IMAGE_REF:-parsetrail-website:local}'
+    image: '${WEBSITE_IMAGE_REF:-${DOCKER_IMAGE_WEBSITE?Variable not set}:local}'
     restart: always
     build:
       context: .
       dockerfile: website/Dockerfile
     environment:
-      # Base URLs used by website JS; written into env.js at container start.
+      # Validated public URLs used to generate runtime-config.js at startup.
       - BACKEND_HOST=${BACKEND_HOST?Variable not set}
       - FRONTEND_HOST=${FRONTEND_HOST?Variable not set}
       - GITHUB_URL=${GITHUB_URL?Variable not set}
-    command: >
-      /bin/sh -c "
-      {
-        echo \"window.__BACKEND_HOST__='${BACKEND_HOST}'\";
-        echo \"window.__FRONTEND_HOST__='${FRONTEND_HOST}'\";
-        echo \"window.__GITHUB_URL__='${GITHUB_URL}'\";
-      } >/usr/share/nginx/html/env.js
-      && exec nginx -g 'daemon off;'"
     networks:
       - traefik-public
       - default
@@ -236,6 +236,7 @@ services:
       - traefik.http.routers.${STACK_NAME?Variable not set}-web-www-https.entrypoints=https
       - traefik.http.routers.${STACK_NAME?Variable not set}-web-www-https.tls=true
       - traefik.http.routers.${STACK_NAME?Variable not set}-web-www-https.tls.certresolver=le
+      - traefik.http.routers.${STACK_NAME?Variable not set}-web-www-https.middlewares=rate-limit,${STACK_NAME?Variable not set}-network-allow
       # domain
       - traefik.http.routers.${STACK_NAME?Variable not set}-web-http.rule=Host(`${DOMAIN}`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-web-http.entrypoints=http
@@ -246,16 +247,16 @@ services:
       - traefik.http.routers.${STACK_NAME?Variable not set}-web-https.tls.certresolver=le
 
       # Prevent abuse
-      - traefik.http.routers.${STACK_NAME?Variable not set}-web-https.middlewares=rate-limit
+      - traefik.http.routers.${STACK_NAME?Variable not set}-web-https.middlewares=rate-limit,${STACK_NAME?Variable not set}-network-allow
 
 
 volumes:
   app-db-data:
     external: true
-    name: ${POSTGRES_VOLUME_NAME:-parsetrail_app-db-data}
+    name: ${POSTGRES_VOLUME_NAME?Variable not set}
   app-keys-data:
     external: true
-    name: parsetrail_app-keys-data
+    name: ${SUBMISSION_KEYS_VOLUME_NAME?Variable not set}
 
 networks:
   traefik-public:
@@ -263,3 +264,7 @@ networks:
     external: true
   default:
     driver: bridge
+  # A per-project, no-egress path to an optional mail capture service. Production
+  # does not attach a mail service; staging Mailpit joins this network externally.
+  mail:
+    internal: true

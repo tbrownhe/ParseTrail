@@ -1,7 +1,15 @@
+# Environment selection must execute before settings-dependent imports.
+# ruff: noqa: E402
+
+import argparse
 import json
 import subprocess
 import sys
 from pathlib import Path
+
+from environment_cli import preselect_environment_file
+
+preselect_environment_file(sys.argv[1:])
 
 from aes import decrypt_statement
 from db import get_sessionmaker
@@ -25,7 +33,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from settings import require_runtime_settings, settings
+from settings import require_runtime_settings, settings, target_summary
 
 # Make the client modules importable
 CLIENT_SRC = Path(__file__).resolve().parents[2] / "client" / "src"
@@ -120,7 +128,8 @@ class StatementTool(QMainWindow):
     def __init__(self):
         require_runtime_settings()
         super().__init__()
-        self.setWindowTitle("Statement Browser (dev)")
+        target = target_summary()
+        self.setWindowTitle(f"Statement Browser (dev) [{settings.ENVIRONMENT.upper()}]")
         self.resize(1100, 700)
 
         self.model = StatementTableModel([])
@@ -160,6 +169,10 @@ class StatementTool(QMainWindow):
         mark_ready_btn.clicked.connect(lambda: self.update_status("ready"))
 
         toolbar = QHBoxLayout()
+        target_label = QLabel(target)
+        target_label.setStyleSheet("background: #b42318; color: white; font-weight: bold; padding: 4px 8px;")
+        target_label.setToolTip("Database/ciphertext target. Verify before decrypting or changing status.")
+        toolbar.addWidget(target_label)
         toolbar.addWidget(filter_label)
         toolbar.addWidget(self.filter_input)
         toolbar.addWidget(refresh_btn)
@@ -306,6 +319,14 @@ class StatementTool(QMainWindow):
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Browse and parse encrypted statement submissions.")
+    parser.add_argument(
+        "--env-file",
+        type=Path,
+        help="Explicit local, staging, or production dotenv selected before imports.",
+    )
+    parser.parse_args()
+    sys.argv[:] = [sys.argv[0]]
     app = QApplication(sys.argv)
     icon = Path(__file__).resolve().parent / "icon.ico"
     app.setWindowIcon(QIcon(str(icon)))

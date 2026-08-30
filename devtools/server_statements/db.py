@@ -17,7 +17,7 @@ _REMOTE_DB_ENV: dict | None = None
 
 
 def _load_remote_db_env() -> dict:
-    """Fetch DB connection settings from the remote .env (cached)."""
+    """Load DB settings locally or fetch the remote container settings."""
     global _REMOTE_DB_ENV
     if _REMOTE_DB_ENV is not None:
         return _REMOTE_DB_ENV
@@ -29,7 +29,10 @@ def _load_remote_db_env() -> dict:
         "POSTGRES_PASSWORD",
         "POSTGRES_DB",
     ]
-    values = {k: fetch_remote_env(k) for k in keys}
+    if settings.SSH_TUNNEL_ENABLE:
+        values = {k: fetch_remote_env(k) for k in keys}
+    else:
+        values = {k: getattr(settings, k) for k in keys}
     # Cast numeric fields
     values["POSTGRES_PORT"] = int(values["POSTGRES_PORT"])
     _REMOTE_DB_ENV = values

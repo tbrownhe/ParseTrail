@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape, urlSearchParamsBodySerializer } from './client';
 import { client } from './client.gen';
-import type { CreateItemData, CreateItemErrors, CreateItemResponses, CreateUserData, CreateUserErrors, CreateUserResponses, DeleteItemData, DeleteItemErrors, DeleteItemResponses, DeleteUserData, DeleteUserErrors, DeleteUserMeData, DeleteUserMeResponses, DeleteUserResponses, DownloadClientData, DownloadClientErrors, DownloadClientManifestData, DownloadClientManifestErrors, DownloadClientManifestResponses, DownloadClientManifestSignatureData, DownloadClientManifestSignatureErrors, DownloadClientManifestSignatureResponses, DownloadClientResponses, DownloadPluginData, DownloadPluginErrors, DownloadPluginManifestData, DownloadPluginManifestResponses, DownloadPluginManifestSignatureData, DownloadPluginManifestSignatureResponses, DownloadPluginResponses, GetClientsData, GetClientsResponses, GetPluginsData, GetPluginsResponses, GetPublicKeyData, GetPublicKeyHashData, GetPublicKeyHashResponses, GetPublicKeyResponses, HealthCheckData, HealthCheckResponses, LoginAccessTokenData, LoginAccessTokenErrors, LoginAccessTokenResponses, ReadItemData, ReadItemErrors, ReadItemResponses, ReadItemsData, ReadItemsErrors, ReadItemsResponses, ReadUserByIdData, ReadUserByIdErrors, ReadUserByIdResponses, ReadUserMeData, ReadUserMeResponses, ReadUsersData, ReadUsersErrors, ReadUsersResponses, RecoverPasswordData, RecoverPasswordErrors, RecoverPasswordHtmlContentData, RecoverPasswordHtmlContentErrors, RecoverPasswordHtmlContentResponses, RecoverPasswordResponses, RegisterUserData, RegisterUserErrors, RegisterUserResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, TestEmailData, TestEmailErrors, TestEmailResponses, TestTokenData, TestTokenResponses, UpdateItemData, UpdateItemErrors, UpdateItemResponses, UpdatePasswordMeData, UpdatePasswordMeErrors, UpdatePasswordMeResponses, UpdateUserData, UpdateUserErrors, UpdateUserMeData, UpdateUserMeErrors, UpdateUserMeResponses, UpdateUserResponses, UploadStatementData, UploadStatementErrors, UploadStatementResponses, VerifyEmailData, VerifyEmailErrors, VerifyEmailResponses } from './types.gen';
+import type { CreateUserData, CreateUserErrors, CreateUserResponses, DeleteUserData, DeleteUserErrors, DeleteUserMeData, DeleteUserMeResponses, DeleteUserResponses, DownloadClientData, DownloadClientErrors, DownloadClientManifestData, DownloadClientManifestErrors, DownloadClientManifestResponses, DownloadClientManifestSignatureData, DownloadClientManifestSignatureErrors, DownloadClientManifestSignatureResponses, DownloadClientResponses, DownloadPluginData, DownloadPluginErrors, DownloadPluginManifestData, DownloadPluginManifestResponses, DownloadPluginManifestSignatureData, DownloadPluginManifestSignatureResponses, DownloadPluginResponses, GetClientsData, GetClientsResponses, GetPluginsData, GetPluginsResponses, GetPublicKeyData, GetPublicKeyHashData, GetPublicKeyHashResponses, GetPublicKeyResponses, HealthCheckData, HealthCheckResponses, LoginAccessTokenData, LoginAccessTokenErrors, LoginAccessTokenResponses, LoginBrowserSessionData, LoginBrowserSessionErrors, LoginBrowserSessionResponses, LogoutBrowserSessionData, LogoutBrowserSessionResponses, ReadUserByIdData, ReadUserByIdErrors, ReadUserByIdResponses, ReadUserMeData, ReadUserMeResponses, ReadUsersData, ReadUsersErrors, ReadUsersResponses, RecoverPasswordData, RecoverPasswordErrors, RecoverPasswordHtmlContentData, RecoverPasswordHtmlContentErrors, RecoverPasswordHtmlContentResponses, RecoverPasswordResponses, RegisterUserData, RegisterUserErrors, RegisterUserResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, TestEmailData, TestEmailErrors, TestEmailResponses, TestTokenData, TestTokenResponses, UpdatePasswordMeData, UpdatePasswordMeErrors, UpdatePasswordMeResponses, UpdateUserData, UpdateUserErrors, UpdateUserMeData, UpdateUserMeErrors, UpdateUserMeResponses, UpdateUserResponses, UploadStatementData, UploadStatementErrors, UploadStatementResponses, VerifyEmailData, VerifyEmailErrors, VerifyEmailResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -26,12 +26,39 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
 export const loginAccessToken = <ThrowOnError extends boolean = false>(options: Options<LoginAccessTokenData, ThrowOnError>): RequestResult<LoginAccessTokenResponses, LoginAccessTokenErrors, ThrowOnError, 'data'> => (options.client ?? client).post<LoginAccessTokenResponses, LoginAccessTokenErrors, ThrowOnError, 'data'>({
     ...urlSearchParamsBodySerializer,
     responseStyle: 'data',
-    url: '/api/v1/login/access-token',
+    url: '/login/access-token',
     ...options,
     headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         ...options.headers
     }
+});
+
+/**
+ * Login Browser Session
+ *
+ * Authenticate the dashboard without exposing its JWT to JavaScript.
+ */
+export const loginBrowserSession = <ThrowOnError extends boolean = false>(options: Options<LoginBrowserSessionData, ThrowOnError>): RequestResult<LoginBrowserSessionResponses, LoginBrowserSessionErrors, ThrowOnError, 'data'> => (options.client ?? client).post<LoginBrowserSessionResponses, LoginBrowserSessionErrors, ThrowOnError, 'data'>({
+    ...urlSearchParamsBodySerializer,
+    responseStyle: 'data',
+    url: '/login/browser-session',
+    ...options,
+    headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        ...options.headers
+    }
+});
+
+/**
+ * Logout Browser Session
+ *
+ * Clear the dashboard cookie even if its token is already invalid.
+ */
+export const logoutBrowserSession = <ThrowOnError extends boolean = false>(options?: Options<LogoutBrowserSessionData, ThrowOnError>): RequestResult<LogoutBrowserSessionResponses, unknown, ThrowOnError, 'data'> => (options?.client ?? client).post<LogoutBrowserSessionResponses, unknown, ThrowOnError, 'data'>({
+    responseStyle: 'data',
+    url: '/login/logout',
+    ...options
 });
 
 /**
@@ -42,7 +69,7 @@ export const loginAccessToken = <ThrowOnError extends boolean = false>(options: 
 export const testToken = <ThrowOnError extends boolean = false>(options?: Options<TestTokenData, ThrowOnError>): RequestResult<TestTokenResponses, unknown, ThrowOnError, 'data'> => (options?.client ?? client).post<TestTokenResponses, unknown, ThrowOnError, 'data'>({
     responseStyle: 'data',
     security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/login/test-token',
+    url: '/login/test-token',
     ...options
 });
 
@@ -53,7 +80,7 @@ export const testToken = <ThrowOnError extends boolean = false>(options?: Option
  */
 export const recoverPassword = <ThrowOnError extends boolean = false>(options: Options<RecoverPasswordData, ThrowOnError>): RequestResult<RecoverPasswordResponses, RecoverPasswordErrors, ThrowOnError, 'data'> => (options.client ?? client).post<RecoverPasswordResponses, RecoverPasswordErrors, ThrowOnError, 'data'>({
     responseStyle: 'data',
-    url: '/api/v1/password-recovery/{email}',
+    url: '/password-recovery/{email}',
     ...options
 });
 
@@ -64,7 +91,7 @@ export const recoverPassword = <ThrowOnError extends boolean = false>(options: O
  */
 export const resetPassword = <ThrowOnError extends boolean = false>(options: Options<ResetPasswordData, ThrowOnError>): RequestResult<ResetPasswordResponses, ResetPasswordErrors, ThrowOnError, 'data'> => (options.client ?? client).post<ResetPasswordResponses, ResetPasswordErrors, ThrowOnError, 'data'>({
     responseStyle: 'data',
-    url: '/api/v1/reset-password/',
+    url: '/reset-password/',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -80,7 +107,7 @@ export const resetPassword = <ThrowOnError extends boolean = false>(options: Opt
 export const recoverPasswordHtmlContent = <ThrowOnError extends boolean = false>(options: Options<RecoverPasswordHtmlContentData, ThrowOnError>): RequestResult<RecoverPasswordHtmlContentResponses, RecoverPasswordHtmlContentErrors, ThrowOnError, 'data'> => (options.client ?? client).post<RecoverPasswordHtmlContentResponses, RecoverPasswordHtmlContentErrors, ThrowOnError, 'data'>({
     responseStyle: 'data',
     security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/password-recovery-html-content/{email}',
+    url: '/password-recovery-html-content/{email}',
     ...options
 });
 
@@ -91,7 +118,7 @@ export const recoverPasswordHtmlContent = <ThrowOnError extends boolean = false>
  */
 export const verifyEmail = <ThrowOnError extends boolean = false>(options: Options<VerifyEmailData, ThrowOnError>): RequestResult<VerifyEmailResponses, VerifyEmailErrors, ThrowOnError, 'data'> => (options.client ?? client).post<VerifyEmailResponses, VerifyEmailErrors, ThrowOnError, 'data'>({
     responseStyle: 'data',
-    url: '/api/v1/verify-email/',
+    url: '/verify-email/',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -107,7 +134,7 @@ export const verifyEmail = <ThrowOnError extends boolean = false>(options: Optio
 export const readUsers = <ThrowOnError extends boolean = false>(options?: Options<ReadUsersData, ThrowOnError>): RequestResult<ReadUsersResponses, ReadUsersErrors, ThrowOnError, 'data'> => (options?.client ?? client).get<ReadUsersResponses, ReadUsersErrors, ThrowOnError, 'data'>({
     responseStyle: 'data',
     security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/users/',
+    url: '/users/',
     ...options
 });
 
@@ -119,7 +146,7 @@ export const readUsers = <ThrowOnError extends boolean = false>(options?: Option
 export const createUser = <ThrowOnError extends boolean = false>(options: Options<CreateUserData, ThrowOnError>): RequestResult<CreateUserResponses, CreateUserErrors, ThrowOnError, 'data'> => (options.client ?? client).post<CreateUserResponses, CreateUserErrors, ThrowOnError, 'data'>({
     responseStyle: 'data',
     security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/users/',
+    url: '/users/',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -135,7 +162,7 @@ export const createUser = <ThrowOnError extends boolean = false>(options: Option
 export const deleteUserMe = <ThrowOnError extends boolean = false>(options?: Options<DeleteUserMeData, ThrowOnError>): RequestResult<DeleteUserMeResponses, unknown, ThrowOnError, 'data'> => (options?.client ?? client).delete<DeleteUserMeResponses, unknown, ThrowOnError, 'data'>({
     responseStyle: 'data',
     security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/users/me',
+    url: '/users/me',
     ...options
 });
 
@@ -147,7 +174,7 @@ export const deleteUserMe = <ThrowOnError extends boolean = false>(options?: Opt
 export const readUserMe = <ThrowOnError extends boolean = false>(options?: Options<ReadUserMeData, ThrowOnError>): RequestResult<ReadUserMeResponses, unknown, ThrowOnError, 'data'> => (options?.client ?? client).get<ReadUserMeResponses, unknown, ThrowOnError, 'data'>({
     responseStyle: 'data',
     security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/users/me',
+    url: '/users/me',
     ...options
 });
 
@@ -159,7 +186,7 @@ export const readUserMe = <ThrowOnError extends boolean = false>(options?: Optio
 export const updateUserMe = <ThrowOnError extends boolean = false>(options: Options<UpdateUserMeData, ThrowOnError>): RequestResult<UpdateUserMeResponses, UpdateUserMeErrors, ThrowOnError, 'data'> => (options.client ?? client).patch<UpdateUserMeResponses, UpdateUserMeErrors, ThrowOnError, 'data'>({
     responseStyle: 'data',
     security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/users/me',
+    url: '/users/me',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -175,7 +202,7 @@ export const updateUserMe = <ThrowOnError extends boolean = false>(options: Opti
 export const updatePasswordMe = <ThrowOnError extends boolean = false>(options: Options<UpdatePasswordMeData, ThrowOnError>): RequestResult<UpdatePasswordMeResponses, UpdatePasswordMeErrors, ThrowOnError, 'data'> => (options.client ?? client).patch<UpdatePasswordMeResponses, UpdatePasswordMeErrors, ThrowOnError, 'data'>({
     responseStyle: 'data',
     security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/users/me/password',
+    url: '/users/me/password',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -190,7 +217,7 @@ export const updatePasswordMe = <ThrowOnError extends boolean = false>(options: 
  */
 export const registerUser = <ThrowOnError extends boolean = false>(options: Options<RegisterUserData, ThrowOnError>): RequestResult<RegisterUserResponses, RegisterUserErrors, ThrowOnError, 'data'> => (options.client ?? client).post<RegisterUserResponses, RegisterUserErrors, ThrowOnError, 'data'>({
     responseStyle: 'data',
-    url: '/api/v1/users/signup',
+    url: '/users/signup',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -206,7 +233,7 @@ export const registerUser = <ThrowOnError extends boolean = false>(options: Opti
 export const deleteUser = <ThrowOnError extends boolean = false>(options: Options<DeleteUserData, ThrowOnError>): RequestResult<DeleteUserResponses, DeleteUserErrors, ThrowOnError, 'data'> => (options.client ?? client).delete<DeleteUserResponses, DeleteUserErrors, ThrowOnError, 'data'>({
     responseStyle: 'data',
     security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/users/{user_id}',
+    url: '/users/{user_id}',
     ...options
 });
 
@@ -218,7 +245,7 @@ export const deleteUser = <ThrowOnError extends boolean = false>(options: Option
 export const readUserById = <ThrowOnError extends boolean = false>(options: Options<ReadUserByIdData, ThrowOnError>): RequestResult<ReadUserByIdResponses, ReadUserByIdErrors, ThrowOnError, 'data'> => (options.client ?? client).get<ReadUserByIdResponses, ReadUserByIdErrors, ThrowOnError, 'data'>({
     responseStyle: 'data',
     security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/users/{user_id}',
+    url: '/users/{user_id}',
     ...options
 });
 
@@ -230,7 +257,7 @@ export const readUserById = <ThrowOnError extends boolean = false>(options: Opti
 export const updateUser = <ThrowOnError extends boolean = false>(options: Options<UpdateUserData, ThrowOnError>): RequestResult<UpdateUserResponses, UpdateUserErrors, ThrowOnError, 'data'> => (options.client ?? client).patch<UpdateUserResponses, UpdateUserErrors, ThrowOnError, 'data'>({
     responseStyle: 'data',
     security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/users/{user_id}',
+    url: '/users/{user_id}',
     ...options,
     headers: {
         'Content-Type': 'application/json',
@@ -246,7 +273,7 @@ export const updateUser = <ThrowOnError extends boolean = false>(options: Option
 export const testEmail = <ThrowOnError extends boolean = false>(options: Options<TestEmailData, ThrowOnError>): RequestResult<TestEmailResponses, TestEmailErrors, ThrowOnError, 'data'> => (options.client ?? client).post<TestEmailResponses, TestEmailErrors, ThrowOnError, 'data'>({
     responseStyle: 'data',
     security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/utils/test-email/',
+    url: '/utils/test-email/',
     ...options
 });
 
@@ -255,76 +282,8 @@ export const testEmail = <ThrowOnError extends boolean = false>(options: Options
  */
 export const healthCheck = <ThrowOnError extends boolean = false>(options?: Options<HealthCheckData, ThrowOnError>): RequestResult<HealthCheckResponses, unknown, ThrowOnError, 'data'> => (options?.client ?? client).get<HealthCheckResponses, unknown, ThrowOnError, 'data'>({
     responseStyle: 'data',
-    url: '/api/v1/utils/health-check/',
+    url: '/utils/health-check/',
     ...options
-});
-
-/**
- * Read Items
- *
- * Retrieve items.
- */
-export const readItems = <ThrowOnError extends boolean = false>(options?: Options<ReadItemsData, ThrowOnError>): RequestResult<ReadItemsResponses, ReadItemsErrors, ThrowOnError, 'data'> => (options?.client ?? client).get<ReadItemsResponses, ReadItemsErrors, ThrowOnError, 'data'>({
-    responseStyle: 'data',
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/items/',
-    ...options
-});
-
-/**
- * Create Item
- *
- * Create new item.
- */
-export const createItem = <ThrowOnError extends boolean = false>(options: Options<CreateItemData, ThrowOnError>): RequestResult<CreateItemResponses, CreateItemErrors, ThrowOnError, 'data'> => (options.client ?? client).post<CreateItemResponses, CreateItemErrors, ThrowOnError, 'data'>({
-    responseStyle: 'data',
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/items/',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Delete Item
- *
- * Delete an item.
- */
-export const deleteItem = <ThrowOnError extends boolean = false>(options: Options<DeleteItemData, ThrowOnError>): RequestResult<DeleteItemResponses, DeleteItemErrors, ThrowOnError, 'data'> => (options.client ?? client).delete<DeleteItemResponses, DeleteItemErrors, ThrowOnError, 'data'>({
-    responseStyle: 'data',
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/items/{id}',
-    ...options
-});
-
-/**
- * Read Item
- *
- * Get item by ID.
- */
-export const readItem = <ThrowOnError extends boolean = false>(options: Options<ReadItemData, ThrowOnError>): RequestResult<ReadItemResponses, ReadItemErrors, ThrowOnError, 'data'> => (options.client ?? client).get<ReadItemResponses, ReadItemErrors, ThrowOnError, 'data'>({
-    responseStyle: 'data',
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/items/{id}',
-    ...options
-});
-
-/**
- * Update Item
- *
- * Update an item.
- */
-export const updateItem = <ThrowOnError extends boolean = false>(options: Options<UpdateItemData, ThrowOnError>): RequestResult<UpdateItemResponses, UpdateItemErrors, ThrowOnError, 'data'> => (options.client ?? client).put<UpdateItemResponses, UpdateItemErrors, ThrowOnError, 'data'>({
-    responseStyle: 'data',
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/items/{id}',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
 });
 
 /**
@@ -334,7 +293,7 @@ export const updateItem = <ThrowOnError extends boolean = false>(options: Option
  */
 export const getPublicKey = <ThrowOnError extends boolean = false>(options?: Options<GetPublicKeyData, ThrowOnError>): RequestResult<GetPublicKeyResponses, unknown, ThrowOnError, 'data'> => (options?.client ?? client).get<GetPublicKeyResponses, unknown, ThrowOnError, 'data'>({
     responseStyle: 'data',
-    url: '/api/v1/keys/public-key',
+    url: '/keys/public-key',
     ...options
 });
 
@@ -343,7 +302,7 @@ export const getPublicKey = <ThrowOnError extends boolean = false>(options?: Opt
  */
 export const getPublicKeyHash = <ThrowOnError extends boolean = false>(options?: Options<GetPublicKeyHashData, ThrowOnError>): RequestResult<GetPublicKeyHashResponses, unknown, ThrowOnError, 'data'> => (options?.client ?? client).get<GetPublicKeyHashResponses, unknown, ThrowOnError, 'data'>({
     responseStyle: 'data',
-    url: '/api/v1/keys/public-key-hash',
+    url: '/keys/public-key-hash',
     ...options
 });
 
@@ -357,7 +316,7 @@ export const getPublicKeyHash = <ThrowOnError extends boolean = false>(options?:
  */
 export const getPlugins = <ThrowOnError extends boolean = false>(options?: Options<GetPluginsData, ThrowOnError>): RequestResult<GetPluginsResponses, unknown, ThrowOnError, 'data'> => (options?.client ?? client).get<GetPluginsResponses, unknown, ThrowOnError, 'data'>({
     responseStyle: 'data',
-    url: '/api/v1/plugins/',
+    url: '/plugins/',
     ...options
 });
 
@@ -366,7 +325,7 @@ export const getPlugins = <ThrowOnError extends boolean = false>(options?: Optio
  */
 export const downloadPluginManifest = <ThrowOnError extends boolean = false>(options?: Options<DownloadPluginManifestData, ThrowOnError>): RequestResult<DownloadPluginManifestResponses, unknown, ThrowOnError, 'data'> => (options?.client ?? client).get<DownloadPluginManifestResponses, unknown, ThrowOnError, 'data'>({
     responseStyle: 'data',
-    url: '/api/v1/plugins/manifest',
+    url: '/plugins/manifest',
     ...options
 });
 
@@ -375,7 +334,7 @@ export const downloadPluginManifest = <ThrowOnError extends boolean = false>(opt
  */
 export const downloadPluginManifestSignature = <ThrowOnError extends boolean = false>(options?: Options<DownloadPluginManifestSignatureData, ThrowOnError>): RequestResult<DownloadPluginManifestSignatureResponses, unknown, ThrowOnError, 'data'> => (options?.client ?? client).get<DownloadPluginManifestSignatureResponses, unknown, ThrowOnError, 'data'>({
     responseStyle: 'data',
-    url: '/api/v1/plugins/manifest-signature',
+    url: '/plugins/manifest-signature',
     ...options
 });
 
@@ -388,7 +347,7 @@ export const downloadPluginManifestSignature = <ThrowOnError extends boolean = f
 export const downloadPlugin = <ThrowOnError extends boolean = false>(options: Options<DownloadPluginData, ThrowOnError>): RequestResult<DownloadPluginResponses, DownloadPluginErrors, ThrowOnError, 'data'> => (options.client ?? client).get<DownloadPluginResponses, DownloadPluginErrors, ThrowOnError, 'data'>({
     responseStyle: 'data',
     security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/plugins/{plugin_file}',
+    url: '/plugins/{plugin_file}',
     ...options
 });
 
@@ -399,7 +358,7 @@ export const downloadPlugin = <ThrowOnError extends boolean = false>(options: Op
  */
 export const getClients = <ThrowOnError extends boolean = false>(options?: Options<GetClientsData, ThrowOnError>): RequestResult<GetClientsResponses, unknown, ThrowOnError, 'data'> => (options?.client ?? client).get<GetClientsResponses, unknown, ThrowOnError, 'data'>({
     responseStyle: 'data',
-    url: '/api/v1/clients/',
+    url: '/clients/',
     ...options
 });
 
@@ -408,7 +367,7 @@ export const getClients = <ThrowOnError extends boolean = false>(options?: Optio
  */
 export const downloadClientManifest = <ThrowOnError extends boolean = false>(options: Options<DownloadClientManifestData, ThrowOnError>): RequestResult<DownloadClientManifestResponses, DownloadClientManifestErrors, ThrowOnError, 'data'> => (options.client ?? client).get<DownloadClientManifestResponses, DownloadClientManifestErrors, ThrowOnError, 'data'>({
     responseStyle: 'data',
-    url: '/api/v1/clients/{platform}/manifest',
+    url: '/clients/{platform}/manifest',
     ...options
 });
 
@@ -417,7 +376,7 @@ export const downloadClientManifest = <ThrowOnError extends boolean = false>(opt
  */
 export const downloadClientManifestSignature = <ThrowOnError extends boolean = false>(options: Options<DownloadClientManifestSignatureData, ThrowOnError>): RequestResult<DownloadClientManifestSignatureResponses, DownloadClientManifestSignatureErrors, ThrowOnError, 'data'> => (options.client ?? client).get<DownloadClientManifestSignatureResponses, DownloadClientManifestSignatureErrors, ThrowOnError, 'data'>({
     responseStyle: 'data',
-    url: '/api/v1/clients/{platform}/manifest-signature',
+    url: '/clients/{platform}/manifest-signature',
     ...options
 });
 
@@ -428,7 +387,7 @@ export const downloadClientManifestSignature = <ThrowOnError extends boolean = f
  */
 export const downloadClient = <ThrowOnError extends boolean = false>(options: Options<DownloadClientData, ThrowOnError>): RequestResult<DownloadClientResponses, DownloadClientErrors, ThrowOnError, 'data'> => (options.client ?? client).get<DownloadClientResponses, DownloadClientErrors, ThrowOnError, 'data'>({
     responseStyle: 'data',
-    url: '/api/v1/clients/{platform}/{version}',
+    url: '/clients/{platform}/{version}',
     ...options
 });
 
@@ -446,7 +405,7 @@ export const uploadStatement = <ThrowOnError extends boolean = false>(options: O
     ...formDataBodySerializer,
     responseStyle: 'data',
     security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/statements/submit-statement',
+    url: '/statements/submit-statement',
     ...options,
     headers: {
         'Content-Type': null,

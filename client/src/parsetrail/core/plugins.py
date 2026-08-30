@@ -9,6 +9,7 @@ from loguru import logger
 from PySide6.QtCore import QThread, Signal
 
 from parsetrail.core.api import ApiClient, api_client
+from parsetrail.core.auth import AuthError
 from parsetrail.core.plugin_manager import (
     PluginManager,
     _get_min_client_version,
@@ -161,6 +162,7 @@ class PluginSyncThread(QThread):
 
     progress_changed = Signal(int, int, str)
     sync_completed = Signal(object)
+    authentication_required = Signal(str)
     sync_failed = Signal(str)
     sync_cancelled = Signal()
 
@@ -201,6 +203,8 @@ class PluginSyncThread(QThread):
             )
         except PluginDownloadCancelled:
             self.sync_cancelled.emit()
+        except AuthError as exc:
+            self.authentication_required.emit(str(exc))
         except Exception as exc:
             self.sync_failed.emit(str(exc))
         else:

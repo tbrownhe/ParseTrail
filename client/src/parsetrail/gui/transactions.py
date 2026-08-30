@@ -3,6 +3,7 @@ from datetime import timedelta
 from decimal import Decimal
 
 import pandas as pd
+from loguru import logger
 from PySide6.QtCore import QAbstractTableModel, QDate, Qt
 from PySide6.QtWidgets import (
     QApplication,
@@ -27,10 +28,14 @@ from PySide6.QtWidgets import (
 )
 from sqlalchemy.orm import sessionmaker
 
-from parsetrail.core import cluster, query
+from parsetrail.core import cluster
 from parsetrail.core.money import parse_money, require_minor_units
-from parsetrail.core.orm import Transactions
-from parsetrail.core.validation import Transaction, ValidationError
+from parsetrail.core.transactions import (
+    ManualTransactionResult,
+    TransactionService,
+    TransactionServiceError,
+)
+from parsetrail.core.validation import Transaction
 
 
 class InsertTransactionDialog(QDialog):
@@ -38,7 +43,7 @@ class InsertTransactionDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle("Insert Transaction")
         self.setGeometry(100, 100, 400, 200)
-        self.Session = Session
+        self.transaction_service = TransactionService(Session)
         self.account_name = account_name
         self.close_account = close_account
 
@@ -102,8 +107,7 @@ class InsertTransactionDialog(QDialog):
         Load account names and IDs from the database and populate the dropdown.
         """
         try:
-            with self.Session() as session:
-                data = query.accounts_with_ids(session)
+            data = self.transaction_service.accounts()
 
             selected_index = -1
             for index, (account_id, account_name) in enumerate(data):
@@ -115,16 +119,20 @@ class InsertTransactionDialog(QDialog):
             if selected_index != -1:
                 self.account_dropdown.setCurrentIndex(selected_index)
 
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to load accounts:\n{str(e)}")
+        except TransactionServiceError:
+            logger.exception("Failed to load accounts for manual transaction")
+            QMessageBox.critical(self, "Error", "Failed to load accounts. See log for details.")
 
     def update_balance(self):
         QApplication.processEvents()
         account_id = self.account_dropdown.currentData()
         if account_id:
-            # Query the database for the most recent balance for this account
-            with self.Session() as session:
-                result = query.latest_balance(session, account_id)
+            try:
+                result = self.transaction_service.latest_balance(account_id)
+            except TransactionServiceError:
+                logger.exception("Failed to load latest balance for manual transaction")
+                QMessageBox.critical(self, "Error", "Failed to load the latest balance. See log for details.")
+                return
             if result:
                 # Set latest balance fields
                 latest_date, latest_balance = result
@@ -147,7 +155,7 @@ class InsertTransactionDialog(QDialog):
             self.latest_balance_value.setText("0.00")
             self.latest_date_value.setText("N/A")
 
-    def validate_input(self) -> tuple[int, list[Transaction]]:
+    def validate_input(self) -> tuple[int, list[Transaction]] | None:
         # Get inputs
         account_id = self.account_dropdown.currentData()
         q_date = self.date_selector.date()
@@ -189,41 +197,30 @@ class InsertTransactionDialog(QDialog):
 
         return account_id, transactions
 
-    def insert_transaction(self):
-        account_id, transactions = self.validate_input()
-
-        # Hash transaction
-        transactions = Transaction.hash_transactions(account_id, transactions)
-
-        # Validate transactions before insertion
-        errors = Transaction.validate_complete(transactions)
-        if errors:
-            raise ValidationError("\n".join(errors))
-
-            # Convert to list of dict for db insertion
-        rows = Transaction.to_db_rows(account_id, transactions)
-
-        # Insert transaction into the database
-        with self.Session() as session:
-            query.insert_rows_carefully(
-                session,
-                Transactions,
-                rows,
-                skip_duplicates=True,
-            )
-            session.commit()
+    def insert_transaction(self) -> ManualTransactionResult | None:
+        validated = self.validate_input()
+        if validated is None:
+            return None
+        account_id, transactions = validated
+        return self.transaction_service.insert_manual(account_id, transactions)
 
     def submit(self):
         """
         Validate inputs and insert the transaction into the database.
         """
         try:
-            self.insert_transaction()
-
-            QMessageBox.information(self, "Success", "Transaction has been added successfully.")
+            result = self.insert_transaction()
+            if result is None:
+                return
+            if result.inserted:
+                message = "Transaction has been added successfully."
+            else:
+                message = "This transaction already exists; no duplicate was added."
+            QMessageBox.information(self, "Success", message)
             self.accept()
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"Failed to insert transaction:\n{str(e)}")
+        except TransactionServiceError as exc:
+            logger.exception("Failed to insert manual transaction")
+            QMessageBox.critical(self, "Error", str(exc))
 
 
 class TransactionTableModel(QAbstractTableModel):
@@ -286,7 +283,7 @@ class RecurringTransactionsDialog(QDialog):
         geometry = screen.availableGeometry()
         self.resize(int(0.6 * geometry.width()), int(0.8 * geometry.height()))
 
-        self.Session = Session
+        self.transaction_service = TransactionService(Session)
         self.clustered = None
         self.columns = [
             "AccountName",
@@ -407,12 +404,28 @@ class RecurringTransactionsDialog(QDialog):
         start_date = self.start_date.date().toPyDate()
         end_date = self.end_date.date().toPyDate()
 
-        with self.Session() as session:
-            data, columns = query.transactions_in_range(session, start_date, end_date)
-        transactions = pd.DataFrame(data, columns=columns)
+        try:
+            rows = self.transaction_service.in_range(start_date, end_date)
+        except TransactionServiceError:
+            logger.exception("Failed to load recurring-transaction input")
+            QMessageBox.critical(self, "Error", "Failed to load transactions. See log for details.")
+            return
+        transactions = pd.DataFrame(
+            [
+                {
+                    "AccountName": row.account_name,
+                    "Date": row.date,
+                    "Amount": row.amount,
+                    "Category": row.category,
+                    "Description": row.description,
+                }
+                for row in rows
+            ],
+            columns=["AccountName", "Date", "Amount", "Category", "Description"],
+        )
 
         if transactions.empty:
-            self.table.setRowCount(0)
+            self.model.update_data(pd.DataFrame([], columns=self.columns))
             return
 
         # Preprocess and cluster
@@ -470,5 +483,6 @@ class RecurringTransactionsDialog(QDialog):
                 # Save the dataframe to CSV
                 self.clustered.to_csv(file_path, index=False)
                 QMessageBox.information(self, "Success", f"Clustered transactions saved to {file_path}.")
-            except Exception as e:
-                QMessageBox.critical(self, "Error", f"Failed to save file: {e}")
+            except Exception:
+                logger.exception("Failed to save clustered transactions to CSV")
+                QMessageBox.critical(self, "Error", "Failed to save the file. See the application log for details.")

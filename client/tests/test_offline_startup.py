@@ -117,7 +117,10 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 from sqlalchemy import text
 from parsetrail.core import initialize
 from parsetrail.core.settings import settings
-from parsetrail.gui.main_window import ParseTrail
+from parsetrail.gui import main_window
+
+main_window.show_first_run_guide = lambda *args, **kwargs: None
+ParseTrail = main_window.ParseTrail
 
 db_path = Path.home() / "Documents" / "ParseTrail" / "offline-startup.db"
 initialize._prompt_for_db_path = lambda default_path, parent=None: str(db_path)

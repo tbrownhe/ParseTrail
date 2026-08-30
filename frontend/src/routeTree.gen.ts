@@ -19,7 +19,6 @@ import { Route as LoginImport } from './routes/login'
 import { Route as LayoutImport } from './routes/_layout'
 import { Route as LayoutIndexImport } from './routes/_layout/index'
 import { Route as LayoutSettingsImport } from './routes/_layout/settings'
-import { Route as LayoutItemsImport } from './routes/_layout/items'
 import { Route as LayoutAdminImport } from './routes/_layout/admin'
 
 // Create/Update Routes
@@ -27,52 +26,53 @@ import { Route as LayoutAdminImport } from './routes/_layout/admin'
 const VerifyEmailRoute = VerifyEmailImport.update({
   path: '/verify-email',
   getParentRoute: () => rootRoute,
-} as any)
+} as any).lazy(() => import('./routes/verify-email.lazy').then((d) => d.Route))
 
 const SignupRoute = SignupImport.update({
   path: '/signup',
   getParentRoute: () => rootRoute,
-} as any)
+} as any).lazy(() => import('./routes/signup.lazy').then((d) => d.Route))
 
 const ResetPasswordRoute = ResetPasswordImport.update({
   path: '/reset-password',
   getParentRoute: () => rootRoute,
-} as any)
+} as any).lazy(() =>
+  import('./routes/reset-password.lazy').then((d) => d.Route),
+)
 
 const RecoverPasswordRoute = RecoverPasswordImport.update({
   path: '/recover-password',
   getParentRoute: () => rootRoute,
-} as any)
+} as any).lazy(() =>
+  import('./routes/recover-password.lazy').then((d) => d.Route),
+)
 
 const LoginRoute = LoginImport.update({
   path: '/login',
   getParentRoute: () => rootRoute,
-} as any)
+} as any).lazy(() => import('./routes/login.lazy').then((d) => d.Route))
 
 const LayoutRoute = LayoutImport.update({
   id: '/_layout',
   getParentRoute: () => rootRoute,
-} as any)
+} as any).lazy(() => import('./routes/_layout.lazy').then((d) => d.Route))
 
 const LayoutIndexRoute = LayoutIndexImport.update({
   path: '/',
   getParentRoute: () => LayoutRoute,
-} as any)
+} as any).lazy(() => import('./routes/_layout/index.lazy').then((d) => d.Route))
 
 const LayoutSettingsRoute = LayoutSettingsImport.update({
   path: '/settings',
   getParentRoute: () => LayoutRoute,
-} as any)
-
-const LayoutItemsRoute = LayoutItemsImport.update({
-  path: '/items',
-  getParentRoute: () => LayoutRoute,
-} as any)
+} as any).lazy(() =>
+  import('./routes/_layout/settings.lazy').then((d) => d.Route),
+)
 
 const LayoutAdminRoute = LayoutAdminImport.update({
   path: '/admin',
   getParentRoute: () => LayoutRoute,
-} as any)
+} as any).lazy(() => import('./routes/_layout/admin.lazy').then((d) => d.Route))
 
 // Populate the FileRoutesByPath interface
 
@@ -106,10 +106,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutAdminImport
       parentRoute: typeof LayoutImport
     }
-    '/_layout/items': {
-      preLoaderRoute: typeof LayoutItemsImport
-      parentRoute: typeof LayoutImport
-    }
     '/_layout/settings': {
       preLoaderRoute: typeof LayoutSettingsImport
       parentRoute: typeof LayoutImport
@@ -126,7 +122,6 @@ declare module '@tanstack/react-router' {
 export const routeTree = rootRoute.addChildren([
   LayoutRoute.addChildren([
     LayoutAdminRoute,
-    LayoutItemsRoute,
     LayoutSettingsRoute,
     LayoutIndexRoute,
   ]),
