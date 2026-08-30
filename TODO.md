@@ -565,7 +565,9 @@ every action that moves or retains a statement is explained before it occurs.
 
 - [x] Replace plugin table `innerHTML` construction on the public website with safe
   DOM text insertion.
-- [ ] Add a malicious plugin-metadata regression fixture for the public website.
+- [x] Add a malicious plugin-metadata regression fixture for the public website.
+  The public renderer is shared with a dependency-free Node regression that verifies
+  hostile tags and event handlers remain inert cell text; frontend CI runs the fixture.
 - [ ] Remove or deliberately repurpose the template Items API/UI, sample branding,
   placeholder search, and unused dashboard routes.
 - [ ] Choose one canonical public/runtime API configuration path; remove the stale

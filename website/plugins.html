@@ -27,6 +27,7 @@
 			.catch(error => console.error("Failed to fetch version:", error));
     </script>
     <script src="env.js"></script>
+    <script src="assets/js/plugins.js"></script>
     <script>
         document.addEventListener("DOMContentLoaded", async () => {
             const fallbackApiBase = "http://localhost:8000/api/v1";
@@ -41,20 +42,8 @@
                 }
                 const plugins = await response.json();
 
-                // Generate table rows
                 const tableBody = document.getElementById("plugin-table-body");
-                plugins.forEach(plugin => {
-                    const row = document.createElement("tr");
-
-                    [plugin.COMPANY, plugin.STATEMENT_TYPE, plugin.PLUGIN_NAME]
-                        .forEach(value => {
-                            const cell = document.createElement("td");
-                            cell.textContent = value == null ? "" : String(value);
-                            row.appendChild(cell);
-                        });
-
-                    tableBody.appendChild(row);
-                });
+                window.ParseTrailPluginTable.renderPluginRows(document, tableBody, plugins);
             } catch (error) {
                 console.error("Error fetching plugins:", error);
                 const message = document.createElement("p");

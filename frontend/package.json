@@ -11,6 +11,7 @@
     "build": "tsc --noEmit && vite build",
     "lint": "biome check --write --config-path=./biome.json --no-errors-on-unmatched --files-ignore-unknown=true ./",
     "lint:check": "biome check --config-path=./biome.json --no-errors-on-unmatched --files-ignore-unknown=true ./",
+    "test:website": "node --test ../website/tests/*.test.cjs",
     "preview": "vite preview",
     "generate-openapi": "node ./generate-openapi.mjs",
     "generate-client": "npm run generate-openapi && openapi-ts --file ./openapi-ts.config.ts"
