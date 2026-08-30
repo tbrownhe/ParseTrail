@@ -266,9 +266,17 @@ recoverable, committed data agrees with the import state, and a retry is safe.
   copied production password hashes. A guarded post-restore sanitizer now preserves
   audit UUIDs while anonymizing and disabling copied users, revoking their token
   generations, invalidating their hashes, and removing copied submissions.
-- [ ] `[USER]` Verify account/login, plugin download, statement submission, admin
+- [x] `[USER]` Verify account/login, plugin download, statement submission, admin
   retrieval, email, and backup/restore against the upgraded staging stack before
-  the production PostgreSQL 17 cutover.
+  the production PostgreSQL 17 cutover. The isolated owner profile completed
+  signup, captured-email verification, explicit sign-out/login, plugin download,
+  statement submission, and memory-only admin retrieval/parser execution. The
+  independent restore drill matched PostgreSQL table counts, resource contents
+  and modes, and submission-key hashes in three new targets: database restore
+  `staging-pg17-restore-20260830T204123Z`, file restore
+  `staging-files-restore-20260830T204123Z`, and key restore
+  `staging-keys-restore-20260830T204123Z`. It then restored the exact staging
+  backend container to healthy service.
 
 Acceptance: supported runtime versions are documented, lock files reproduce on CI,
 dependency audits have no known critical/high production finding without a written
@@ -327,23 +335,33 @@ temporary exception, and the Postgres restore drill preserves expected row count
   plaintext invariant. Both GUI and batch paths select `--env-file` before
   settings-dependent imports; SSH-vs-local key, database, and ciphertext access is
   now explicit rather than inferred from the environment label.
-- [~] Provision a LAN/VPN-only `parsetrail-staging` Compose project behind the
+- [x] Provision a LAN/VPN-only `parsetrail-staging` Compose project behind the
   existing Traefik instance with private staging hostnames and trusted HTTPS.
   The pinned, separate Mailpit definition now has no SMTP host port or relay, a
   loopback-only UI through a constrained proxy, no Mailpit egress route, and an
   explicit staging-domain recipient allowlist. The live PostgreSQL 17 stack is
   isolated, migrated to `3b7a1f4c2d91`, healthy at exact `fedd236` image digests,
   and adopted after all seven authenticated proxy smoke checks passed. Confirm
-  captured email and exercise the isolated desktop/devtool flows during the live
-  owner rehearsal before checking this item off. The source client now exposes an
-  explicit OS-keyring-backed sign-out action. Dashboard HTML is revalidated while
-  fingerprinted assets remain immutable, preventing stale app-shell failures after
-  image replacement.
-- [ ] `[USER]` Rehearse one successful staging deployment, one application rollback,
-  and one migration/restore rollback before enabling any deployment runner.
-- [ ] `[USER]` Reserve `silicide`'s LAN address in DHCP, then put that address in
+  captured email and isolated desktop/devtool flows passed during the live owner
+  rehearsal. The source client now exposes an explicit OS-keyring-backed sign-out
+  action. Dashboard HTML is revalidated while fingerprinted assets remain
+  immutable, preventing stale app-shell failures after image replacement.
+- [~] `[USER]` Rehearse one successful staging deployment, one application rollback,
+  and one migration/restore rollback before enabling any deployment runner. The
+  digest-pinned `580b4cc` deployment (`20260830T204303Z-580b4cc2aad7`) passed its
+  full smoke gate, and explicit rollback record
+  `rollback-20260830T204722Z-fedd236fb82a` restored the prior images with all seven
+  checks passing. The incompatible-migration recovery rehearsal remains.
+- [x] `[USER]` Reserve `silicide`'s LAN address in DHCP, then put that address in
   the staging smoke configuration and owner test-machine hosts entries. A changed
   address fails the smoke gate safely but makes staging unavailable until updated.
+  `192.168.1.89` is reserved and the active staging smoke config resolves all three
+  HTTPS staging names to it; all seven checks pass without command-line overrides.
+- [ ] `[USER]` Create and verify a dedicated production deployment-smoke account,
+  then replace `/srv/parsetrail-production/secrets/smoke.json`. A direct check on
+  2026-08-30 confirmed that the rotated `.env` bootstrap password is not the live
+  production account password (HTTP 401); do not treat bootstrap credentials as an
+  operational login or cut over production until its independent smoke passes.
 
 Acceptance: a production release either passes its public smoke checks with a
 traceable record or restores the documented prior state, and no deploy depends on
