@@ -20,9 +20,8 @@ import { useEffect } from "react"
 import { z } from "zod"
 
 import { type UserPublic, UsersService } from "../../client"
-import AddUser from "../../components/Admin/AddUser"
-import ActionsMenu from "../../components/Common/ActionsMenu"
-import Navbar from "../../components/Common/Navbar"
+import AdminToolbar from "../../components/Admin/AdminToolbar"
+import UserActionsMenu from "../../components/Admin/UserActionsMenu"
 
 const usersSearchSchema = z.object({
   page: z.number().catch(1),
@@ -125,10 +124,9 @@ function UsersTable() {
                     </Flex>
                   </Td>
                   <Td>
-                    <ActionsMenu
-                      type="User"
-                      value={user}
-                      disabled={currentUser?.id === user.id ? true : false}
+                    <UserActionsMenu
+                      user={user}
+                      disabled={currentUser?.id === user.id}
                     />
                   </Td>
                 </Tr>
@@ -163,7 +161,7 @@ function Admin() {
         Users Management
       </Heading>
 
-      <Navbar type={"User"} addModalAs={AddUser} />
+      <AdminToolbar />
       <UsersTable />
     </Container>
   )

@@ -2,7 +2,7 @@
 
 import { type Client, type ClientMeta, formDataBodySerializer, type Options as Options2, type RequestResult, type TDataShape, urlSearchParamsBodySerializer } from './client';
 import { client } from './client.gen';
-import type { CreateItemData, CreateItemErrors, CreateItemResponses, CreateUserData, CreateUserErrors, CreateUserResponses, DeleteItemData, DeleteItemErrors, DeleteItemResponses, DeleteUserData, DeleteUserErrors, DeleteUserMeData, DeleteUserMeResponses, DeleteUserResponses, DownloadClientData, DownloadClientErrors, DownloadClientManifestData, DownloadClientManifestErrors, DownloadClientManifestResponses, DownloadClientManifestSignatureData, DownloadClientManifestSignatureErrors, DownloadClientManifestSignatureResponses, DownloadClientResponses, DownloadPluginData, DownloadPluginErrors, DownloadPluginManifestData, DownloadPluginManifestResponses, DownloadPluginManifestSignatureData, DownloadPluginManifestSignatureResponses, DownloadPluginResponses, GetClientsData, GetClientsResponses, GetPluginsData, GetPluginsResponses, GetPublicKeyData, GetPublicKeyHashData, GetPublicKeyHashResponses, GetPublicKeyResponses, HealthCheckData, HealthCheckResponses, LoginAccessTokenData, LoginAccessTokenErrors, LoginAccessTokenResponses, ReadItemData, ReadItemErrors, ReadItemResponses, ReadItemsData, ReadItemsErrors, ReadItemsResponses, ReadUserByIdData, ReadUserByIdErrors, ReadUserByIdResponses, ReadUserMeData, ReadUserMeResponses, ReadUsersData, ReadUsersErrors, ReadUsersResponses, RecoverPasswordData, RecoverPasswordErrors, RecoverPasswordHtmlContentData, RecoverPasswordHtmlContentErrors, RecoverPasswordHtmlContentResponses, RecoverPasswordResponses, RegisterUserData, RegisterUserErrors, RegisterUserResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, TestEmailData, TestEmailErrors, TestEmailResponses, TestTokenData, TestTokenResponses, UpdateItemData, UpdateItemErrors, UpdateItemResponses, UpdatePasswordMeData, UpdatePasswordMeErrors, UpdatePasswordMeResponses, UpdateUserData, UpdateUserErrors, UpdateUserMeData, UpdateUserMeErrors, UpdateUserMeResponses, UpdateUserResponses, UploadStatementData, UploadStatementErrors, UploadStatementResponses, VerifyEmailData, VerifyEmailErrors, VerifyEmailResponses } from './types.gen';
+import type { CreateUserData, CreateUserErrors, CreateUserResponses, DeleteUserData, DeleteUserErrors, DeleteUserMeData, DeleteUserMeResponses, DeleteUserResponses, DownloadClientData, DownloadClientErrors, DownloadClientManifestData, DownloadClientManifestErrors, DownloadClientManifestResponses, DownloadClientManifestSignatureData, DownloadClientManifestSignatureErrors, DownloadClientManifestSignatureResponses, DownloadClientResponses, DownloadPluginData, DownloadPluginErrors, DownloadPluginManifestData, DownloadPluginManifestResponses, DownloadPluginManifestSignatureData, DownloadPluginManifestSignatureResponses, DownloadPluginResponses, GetClientsData, GetClientsResponses, GetPluginsData, GetPluginsResponses, GetPublicKeyData, GetPublicKeyHashData, GetPublicKeyHashResponses, GetPublicKeyResponses, HealthCheckData, HealthCheckResponses, LoginAccessTokenData, LoginAccessTokenErrors, LoginAccessTokenResponses, ReadUserByIdData, ReadUserByIdErrors, ReadUserByIdResponses, ReadUserMeData, ReadUserMeResponses, ReadUsersData, ReadUsersErrors, ReadUsersResponses, RecoverPasswordData, RecoverPasswordErrors, RecoverPasswordHtmlContentData, RecoverPasswordHtmlContentErrors, RecoverPasswordHtmlContentResponses, RecoverPasswordResponses, RegisterUserData, RegisterUserErrors, RegisterUserResponses, ResetPasswordData, ResetPasswordErrors, ResetPasswordResponses, TestEmailData, TestEmailErrors, TestEmailResponses, TestTokenData, TestTokenResponses, UpdatePasswordMeData, UpdatePasswordMeErrors, UpdatePasswordMeResponses, UpdateUserData, UpdateUserErrors, UpdateUserMeData, UpdateUserMeErrors, UpdateUserMeResponses, UpdateUserResponses, UploadStatementData, UploadStatementErrors, UploadStatementResponses, VerifyEmailData, VerifyEmailErrors, VerifyEmailResponses } from './types.gen';
 
 export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends boolean = boolean, TResponse = unknown> = Options2<TData, ThrowOnError, TResponse> & {
     /**
@@ -257,74 +257,6 @@ export const healthCheck = <ThrowOnError extends boolean = false>(options?: Opti
     responseStyle: 'data',
     url: '/api/v1/utils/health-check/',
     ...options
-});
-
-/**
- * Read Items
- *
- * Retrieve items.
- */
-export const readItems = <ThrowOnError extends boolean = false>(options?: Options<ReadItemsData, ThrowOnError>): RequestResult<ReadItemsResponses, ReadItemsErrors, ThrowOnError, 'data'> => (options?.client ?? client).get<ReadItemsResponses, ReadItemsErrors, ThrowOnError, 'data'>({
-    responseStyle: 'data',
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/items/',
-    ...options
-});
-
-/**
- * Create Item
- *
- * Create new item.
- */
-export const createItem = <ThrowOnError extends boolean = false>(options: Options<CreateItemData, ThrowOnError>): RequestResult<CreateItemResponses, CreateItemErrors, ThrowOnError, 'data'> => (options.client ?? client).post<CreateItemResponses, CreateItemErrors, ThrowOnError, 'data'>({
-    responseStyle: 'data',
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/items/',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
-});
-
-/**
- * Delete Item
- *
- * Delete an item.
- */
-export const deleteItem = <ThrowOnError extends boolean = false>(options: Options<DeleteItemData, ThrowOnError>): RequestResult<DeleteItemResponses, DeleteItemErrors, ThrowOnError, 'data'> => (options.client ?? client).delete<DeleteItemResponses, DeleteItemErrors, ThrowOnError, 'data'>({
-    responseStyle: 'data',
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/items/{id}',
-    ...options
-});
-
-/**
- * Read Item
- *
- * Get item by ID.
- */
-export const readItem = <ThrowOnError extends boolean = false>(options: Options<ReadItemData, ThrowOnError>): RequestResult<ReadItemResponses, ReadItemErrors, ThrowOnError, 'data'> => (options.client ?? client).get<ReadItemResponses, ReadItemErrors, ThrowOnError, 'data'>({
-    responseStyle: 'data',
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/items/{id}',
-    ...options
-});
-
-/**
- * Update Item
- *
- * Update an item.
- */
-export const updateItem = <ThrowOnError extends boolean = false>(options: Options<UpdateItemData, ThrowOnError>): RequestResult<UpdateItemResponses, UpdateItemErrors, ThrowOnError, 'data'> => (options.client ?? client).put<UpdateItemResponses, UpdateItemErrors, ThrowOnError, 'data'>({
-    responseStyle: 'data',
-    security: [{ scheme: 'bearer', type: 'http' }],
-    url: '/api/v1/items/{id}',
-    ...options,
-    headers: {
-        'Content-Type': 'application/json',
-        ...options.headers
-    }
 });
 
 /**
