@@ -4,6 +4,7 @@ import json
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from unittest.mock import patch
 
 from public_smoke import SmokeConfig, SmokeFailure, parse_host_override, run_public_smoke, validate_host_overrides
 
@@ -11,6 +12,7 @@ from public_smoke import SmokeConfig, SmokeFailure, parse_host_override, run_pub
 class _SmokeHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
     visited: list[str] = []
+    website_failures_remaining = 0
 
     def log_message(self, _format: str, *_args: object) -> None:
         return
@@ -29,7 +31,11 @@ class _SmokeHandler(BaseHTTPRequestHandler):
         elif self.path == "/dashboard":
             self._reply(200, b'<html><div id="root"></div></html>', "text/html")
         elif self.path == "/website":
-            self._reply(200, b"<html>ParseTrail</html>", "text/html")
+            if self.website_failures_remaining:
+                type(self).website_failures_remaining -= 1
+                self._reply(404, b"route not ready", "text/plain")
+            else:
+                self._reply(200, b"<html>ParseTrail</html>", "text/html")
         elif self.path == "/api/v1/plugins/manifest":
             self._reply(200, json.dumps({"artifacts": [{"filename": "test.pyc"}]}).encode())
         elif self.path == "/api/v1/plugins/manifest-signature":
@@ -75,6 +81,7 @@ class _SmokeHandler(BaseHTTPRequestHandler):
 class PublicSmokeTests(unittest.TestCase):
     def setUp(self) -> None:
         _SmokeHandler.visited = []
+        _SmokeHandler.website_failures_remaining = 0
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), _SmokeHandler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -103,6 +110,28 @@ class PublicSmokeTests(unittest.TestCase):
         self.assertIn("/api/v1/plugins/test.pyc", _SmokeHandler.visited)
         self.assertIn("/api/v1/clients/win64/latest", _SmokeHandler.visited)
         self.assertIn("/api/v1/statements/submit-statement", _SmokeHandler.visited)
+
+    def test_transient_route_readiness_retries_before_authenticated_checks(self) -> None:
+        root = f"http://smoke.invalid:{self.server.server_port}"
+        config = SmokeConfig(
+            api_base_url=f"{root}/api/v1",
+            dashboard_url=f"{root}/dashboard",
+            website_url=f"{root}/website",
+            username="smoke@example.com",
+            password="smoke-password",
+            timeout_seconds=5,
+            host_overrides={"smoke.invalid": "127.0.0.1"},
+        )
+        _SmokeHandler.website_failures_remaining = 2
+
+        with patch("public_smoke.time.sleep") as sleep:
+            results = run_public_smoke(config)
+
+        self.assertEqual(len(results), 7)
+        self.assertEqual(_SmokeHandler.visited.count("/website"), 3)
+        self.assertEqual(_SmokeHandler.visited.count("/api/v1/login/access-token"), 1)
+        self.assertEqual(_SmokeHandler.visited.count("/api/v1/plugins/test.pyc"), 1)
+        self.assertEqual(sleep.call_count, 2)
 
     def test_host_override_validation_is_fail_closed(self) -> None:
         config = SmokeConfig(

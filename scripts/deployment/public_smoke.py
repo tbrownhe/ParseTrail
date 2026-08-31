@@ -20,6 +20,8 @@ from pathlib import Path
 from typing import Any
 
 MAX_RESPONSE_BYTES = 1024 * 1024
+PUBLIC_READINESS_ATTEMPTS = 5
+PUBLIC_READINESS_RETRY_SECONDS = 1.0
 
 
 class SmokeFailure(RuntimeError):
@@ -185,20 +187,21 @@ def run_public_smoke(config: SmokeConfig) -> list[dict[str, Any]]:
         return _run_public_smoke(config)
 
 
-def _run_public_smoke(config: SmokeConfig) -> list[dict[str, Any]]:
-    results: list[dict[str, Any]] = []
+def _check(results: list[dict[str, Any]], name: str, operation: Any) -> Any:
+    started = time.monotonic()
+    value = operation()
+    results.append(
+        {
+            "name": name,
+            "status": "passed",
+            "duration_ms": round((time.monotonic() - started) * 1000),
+        }
+    )
+    return value
 
-    def check(name: str, operation: Any) -> Any:
-        started = time.monotonic()
-        value = operation()
-        results.append(
-            {
-                "name": name,
-                "status": "passed",
-                "duration_ms": round((time.monotonic() - started) * 1000),
-            }
-        )
-        return value
+
+def _run_public_readiness(config: SmokeConfig) -> list[dict[str, Any]]:
+    results: list[dict[str, Any]] = []
 
     timeout = config.timeout_seconds
     api = config.api_base_url.rstrip("/")
@@ -208,15 +211,37 @@ def _run_public_smoke(config: SmokeConfig) -> list[dict[str, Any]]:
         if body.strip() != b"true":
             raise SmokeFailure("Health endpoint did not return true")
 
-    check("backend-health", health)
+    _check(results, "backend-health", health)
 
     def page(url: str, marker: bytes) -> None:
         _, _, body = _request(url, timeout=timeout)
         if marker.lower() not in body.lower():
             raise SmokeFailure(f"Expected page marker missing from {url}")
 
-    check("dashboard", lambda: page(config.dashboard_url, b'<div id="root">'))
-    check("website", lambda: page(config.website_url, b"ParseTrail"))
+    _check(results, "dashboard", lambda: page(config.dashboard_url, b'<div id="root">'))
+    _check(results, "website", lambda: page(config.website_url, b"ParseTrail"))
+    return results
+
+
+def _wait_for_public_readiness(config: SmokeConfig) -> list[dict[str, Any]]:
+    for attempt in range(1, PUBLIC_READINESS_ATTEMPTS + 1):
+        try:
+            return _run_public_readiness(config)
+        except SmokeFailure:
+            if attempt == PUBLIC_READINESS_ATTEMPTS:
+                raise
+            print(
+                f"Public routes are not ready; retrying readiness check {attempt + 1}/{PUBLIC_READINESS_ATTEMPTS}",
+                flush=True,
+            )
+            time.sleep(PUBLIC_READINESS_RETRY_SECONDS)
+    raise AssertionError("unreachable")
+
+
+def _run_public_smoke(config: SmokeConfig) -> list[dict[str, Any]]:
+    results = _wait_for_public_readiness(config)
+    timeout = config.timeout_seconds
+    api = config.api_base_url.rstrip("/")
 
     def login() -> str:
         form = urllib.parse.urlencode({"username": config.username, "password": config.password}).encode()
@@ -235,7 +260,7 @@ def _run_public_smoke(config: SmokeConfig) -> list[dict[str, Any]]:
             raise SmokeFailure("Login returned an invalid access token")
         return token
 
-    token = check("login", login)
+    token = _check(results, "login", login)
     auth = {"Authorization": f"Bearer {token}"}
 
     def plugins() -> None:
@@ -256,7 +281,7 @@ def _run_public_smoke(config: SmokeConfig) -> list[dict[str, Any]]:
             read_limit=1,
         )
 
-    check("signed-plugin-catalog-and-range-download", plugins)
+    _check(results, "signed-plugin-catalog-and-range-download", plugins)
 
     def clients() -> None:
         _, _, listing_bytes = _request(_join(api, "clients/"), timeout=timeout)
@@ -277,7 +302,7 @@ def _run_public_smoke(config: SmokeConfig) -> list[dict[str, Any]]:
             read_limit=1,
         )
 
-    check("signed-client-catalog-and-range-download", clients)
+    _check(results, "signed-client-catalog-and-range-download", clients)
 
     def rejected_submission() -> None:
         metadata = json.dumps(
@@ -308,7 +333,7 @@ def _run_public_smoke(config: SmokeConfig) -> list[dict[str, Any]]:
         if detail != "Invalid encrypted key":
             raise SmokeFailure("Statement route returned an unexpected rejection")
 
-    check("authenticated-statement-rejection-no-write", rejected_submission)
+    _check(results, "authenticated-statement-rejection-no-write", rejected_submission)
     return results
 
 

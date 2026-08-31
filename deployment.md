@@ -32,6 +32,10 @@ auto-discovered `docker-compose.override.yml`.
   immutable release.
 - Service health is bounded by a timeout. Public smoke failure automatically
   reactivates the previous image digests and smokes them again.
+- The side-effect-free backend, dashboard, and website readiness checks tolerate
+  a short bounded proxy-discovery delay after container replacement. Login,
+  artifact downloads, signatures, and statement rejection still run exactly once
+  and fail immediately rather than being hidden by broad smoke retries.
 - Final JSON records under the release-state directory are append-only from the
   tool's perspective. The mutable `current-release.json` is only a pointer to the
   active rollback baseline.
