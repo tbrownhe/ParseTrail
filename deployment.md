@@ -74,6 +74,14 @@ Copy [the smoke example](deployment/smoke-config.example.json), fill in the publ
 URLs and dedicated account, and set its mode to `600`. The credentials are used
 in memory and are never written to release records.
 
+If the deployment host cannot reach its own public address because the router does
+not support NAT hairpinning, add `host_overrides` for the API, dashboard, and
+website hostnames with the value `127.0.0.1`. The smoke runner preserves the URL
+hostnames for TLS verification and HTTP routing while resolving their connections
+to the local Traefik entrypoint. Do not replace the public URLs with loopback URLs,
+disable certificate verification, or use this override as a substitute for a
+separate off-host reachability check.
+
 ## 1. Build and publish away from production
 
 The three server images live as public packages in GitHub Container Registry.

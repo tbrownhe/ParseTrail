@@ -363,11 +363,13 @@ temporary exception, and the Postgres restore drill preserves expected row count
   address fails the smoke gate safely but makes staging unavailable until updated.
   `192.168.1.89` is reserved and the active staging smoke config resolves all three
   HTTPS staging names to it; all seven checks pass without command-line overrides.
-- [ ] `[USER]` Create and verify a dedicated production deployment-smoke account,
-  then replace `/srv/parsetrail-production/secrets/smoke.json`. A direct check on
-  2026-08-30 confirmed that the rotated `.env` bootstrap password is not the live
-  production account password (HTTP 401); do not treat bootstrap credentials as an
-  operational login or cut over production until its independent smoke passes.
+- [x] `[USER]` Create and verify a dedicated production deployment-smoke account,
+  then replace `/srv/parsetrail-production/secrets/smoke.json`. The dedicated,
+  verified non-superuser account and its independently stored credential passed all
+  seven production checks on 2026-08-31. Because `silicide` cannot hairpin through
+  its public WAN address, the protected smoke configuration resolves the three
+  production hostnames to `127.0.0.1`; requests still traverse Traefik with their
+  real HTTPS hostnames, certificates, routers, and middleware.
 - [x] `[USER]` Decide whether to discard and resubmit the staging statement
   ciphertext or preserve it through a separately designed in-memory re-encryption,
   then rotate the staging `MASTER_KEY`. A recovery-helper logging defect exposed
