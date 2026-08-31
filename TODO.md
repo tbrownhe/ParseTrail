@@ -235,10 +235,16 @@ recoverable, committed data agrees with the import state, and a retry is safe.
   71 client tests pass on Windows, Qt-heavy imports pass headlessly, and the
   PyInstaller executable passes its frozen-runtime smoke test. Hosted macOS
   execution remains part of the non-deploying CI gate.
-- [~] Upgrade PostgreSQL 12 using a dump/restore into a new volume. The guarded
-  helper has completed a synthetic 12-to-17 rehearsal with whole-schema table
-  count comparison; staging and production still use PostgreSQL 12. Do not point
-  a newer server at the old data directory.
+- [x] Upgrade PostgreSQL 12 using a dump/restore into a new volume. The guarded
+  helper completed synthetic and staging rehearsals before the production
+  maintenance window. Production then restored a fresh writer-free PostgreSQL 12
+  dump into `parsetrail_app-db-data-pg17`, matched every public-table count, and
+  activated pinned PostgreSQL 17.11 without ever mounting the old data directory.
+  Alembic advanced from `39e1c1c2a803` to `3b7a1f4c2d91`; every retained table
+  still matched after migration except for exactly two client-download and two
+  plugin-download audit rows created by the two successful post-cutover smoke
+  runs. The untouched `parsetrail_app-db-data` PostgreSQL 12 volume and restricted
+  cutover evidence remain retained for rollback.
 - [x] `[USER]` After review and merge, take a verified production backup and
   deploy the current application release while explicitly retaining both the
   PostgreSQL 12 image and existing PostgreSQL 12 volume. Confirm the new Alembic
@@ -382,6 +388,21 @@ temporary exception, and the Postgres restore drill preserves expected row count
   passed all seven checks. Obsolete restore/recovery volumes, retired-key backups,
   bulky archives, and stale backup evidence were removed after preserving
   nonsecret acceptance records under `release-state/acceptance/20260830`.
+- [ ] `[INFRA]` Replace the legacy encrypted-USB backup job before considering
+  PostgreSQL 12 rollback retention complete. It currently does not back up the
+  external `/srv/resources` tree or submission-key volume and can misreport
+  pipeline failures. The replacement must cover PostgreSQL 17, resources,
+  submission keys, environment/release state, avoid passphrases in process
+  arguments, cleanly close the encrypted device on every exit, and pass a full
+  off-host restore drill. Keep the PostgreSQL 12 volume and 2026-08-31 cutover
+  evidence until that drill succeeds.
+- [ ] `[INFRA]` Prepare Cloudflare proxying before enabling it for the apex,
+  `www`, dashboard, and API records: use Full (strict) TLS, trust forwarded
+  headers only from published Cloudflare ranges, preserve real-client rate
+  limiting, restrict the origin firewall to Cloudflare plus LAN/VPN, define
+  explicit cache bypasses for API/auth/runtime configuration, test upload limits,
+  and keep staging and non-HTTP records private or DNS-only. First fix the DDNS
+  script, which currently forces `proxied: true` on the next address change.
 
 Acceptance: a production release either passes its public smoke checks with a
 traceable record or restores the documented prior state, and no deploy depends on
@@ -723,15 +744,3 @@ release signatures remain the required update-channel trust boundary.
 - [ ] Add Windows Authenticode signing and RFC 3161 timestamping for the frozen
   executable and installer.
 - [ ] Add macOS Developer ID signing, hardened runtime, and notarization.
-
-## Sibling infrastructure follow-up
-
-These findings are outside this repository and should be changed in the `infra`
-repository only as a separate, reviewed task.
-
-- [ ] Add pipeline failure propagation to the USB backup script so a failed
-  `pg_dump` cannot be mistaken for a successful encrypted backup.
-- [ ] Add traps that unmount and close the encrypted device on every exit path.
-- [ ] Stop placing the GPG passphrase in process arguments.
-- [ ] `[USER]` Perform and document a full Postgres/file restore drill from the USB
-  backup before relying on it for the database major-version migration.

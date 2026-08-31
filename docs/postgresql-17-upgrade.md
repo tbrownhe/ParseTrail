@@ -96,3 +96,23 @@ new logical dump, and make an explicit data-reconciliation plan.
 
 Retain the PostgreSQL 12 volume and the pre-cutover dump until at least one full
 backup cycle and restore drill have succeeded on PostgreSQL 17.
+
+## Production acceptance record
+
+The production cutover completed on 2026-08-31 using pinned PostgreSQL 17.11 and
+volume `parsetrail_app-db-data-pg17`. The writer-free custom dump was restored and
+every public-table count matched before activation. The resource archive restored
+78 files with an identical cryptographic inventory, and the independent
+`parsetrail_app-keys-data-restore-drill-20260831T0652Z` volume matched all five
+submission-key files.
+
+Deployment `20260831T065535Z-fedd236fb82a` migrated Alembic from
+`39e1c1c2a803` to `3b7a1f4c2d91`, passed all seven authenticated public checks,
+and wrote its append-only record under the production release-state directory.
+An independent repeat smoke and off-host API/dashboard/website checks also passed.
+The only post-restore row-count changes were two client-download and two
+plugin-download audit rows produced by those two smoke runs. The original
+`parsetrail_app-db-data` PostgreSQL 12 volume and restricted evidence under
+`/srv/backups/parsetrail/production-cutover/20260831T0652Z` remain retained until
+the hardened encrypted-backup job completes a PostgreSQL 17 full-boundary restore
+drill.
