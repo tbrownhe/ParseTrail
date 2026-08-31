@@ -368,13 +368,18 @@ temporary exception, and the Postgres restore drill preserves expected row count
   2026-08-30 confirmed that the rotated `.env` bootstrap password is not the live
   production account password (HTTP 401); do not treat bootstrap credentials as an
   operational login or cut over production until its independent smoke passes.
-- [ ] `[USER]` Decide whether to discard and resubmit the staging statement
+- [x] `[USER]` Decide whether to discard and resubmit the staging statement
   ciphertext or preserve it through a separately designed in-memory re-encryption,
   then rotate the staging `MASTER_KEY`. A recovery-helper logging defect exposed
   staging container environment values in the 2026-08-30 operator transcript.
   The staging JWT, PostgreSQL, and smoke-account credentials were immediately
   rotated and passed smoke; production secrets were not exposed. The master key
-  was intentionally retained because replacing it alone would strand ciphertext.
+  was initially retained because replacing it alone would strand ciphertext. The
+  owner authorized abandonment; the guarded reset found and deleted zero rows and
+  zero files, rotated the master key, restored the recorded immutable release, and
+  passed all seven checks. Obsolete restore/recovery volumes, retired-key backups,
+  bulky archives, and stale backup evidence were removed after preserving
+  nonsecret acceptance records under `release-state/acceptance/20260830`.
 
 Acceptance: a production release either passes its public smoke checks with a
 traceable record or restores the documented prior state, and no deploy depends on
