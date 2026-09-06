@@ -60,14 +60,20 @@ def _require_tool(name: str) -> str:
     return path
 
 
-def _require_intel_mac() -> None:
+def _require_intel_mac() -> str:
     if platform.system() != "Darwin" or platform.machine() != "x86_64":
         raise MacReleaseError("This packaging gate requires an Intel macOS host; Apple Silicon is deferred.")
+    version = platform.mac_ver()[0]
+    if not re.fullmatch(r"\d+\.\d+(?:\.\d+)?", version):
+        raise MacReleaseError("Could not determine the running macOS version.")
+    if int(version.split(".")[0]) < 13:
+        raise MacReleaseError("The current client requires macOS 13 or newer for its prebuilt Qt runtime.")
+    return version
 
 
 def preflight() -> tuple[dict[str, str], dict[str, object]]:
     """Inspect native build inputs without installing any tools or Python packages."""
-    _require_intel_mac()
+    macos_version = _require_intel_mac()
     tools = {
         name: _require_tool(name)
         for name in ("brew", "rustc", "cargo", "pkg-config", "clang", "xcrun", "lipo", "otool", "create-dmg")
@@ -117,6 +123,7 @@ def preflight() -> tuple[dict[str, str], dict[str, object]]:
     inputs: dict[str, object] = {
         "target_platform": "macos",
         "architecture": "x86_64",
+        "macos_version": macos_version,
         "openssl_formula": "openssl@3",
         "openssl_version": openssl_version,
         "openssl_static": True,

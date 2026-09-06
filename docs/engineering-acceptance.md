@@ -93,11 +93,47 @@ and frozen-process timeout/failure. The native dependency smoke exercised the
 installed Windows Python libraries with network connections denied.
 
 The audit parser uses synthetic `otool` output in these tests. This evidence does
-not claim a real Mac `.app` was audited or installed. The owner must run the
-[Intel Mac release gates](../client/README.md#intel-mac-release-gates); their
-toolchain, packaged Mach-O, frozen-smoke, and installed-app results remain open
-in TODO. Source-build inputs, dependency-audit results, and the bounded smoke
+not claim a real Mac `.app` was audited or installed. The remaining
+[Intel Mac release gates](../client/README.md#intel-mac-release-gates) cover the
+packaged Mach-O, frozen smoke, and installed app. Source-build inputs,
+dependency-audit results, and the bounded smoke
 result are preserved under `native_build` in each new Mac release inventory.
+
+On **2026-09-06**, the owner ran the tool-only preflight from
+`fix/intel-macos-packaging` successfully on a **2020 Intel MacBook Air**. It reported:
+
+| Input | Accepted preflight observation |
+| --- | --- |
+| Target | `macos`, `x86_64` |
+| Running macOS (separately reported) | **15.7.9**, build **24G830** |
+| OpenSSL | Homebrew `openssl@3`, OpenSSL **3.6.3** (9 Jun 2026), static inputs enabled |
+| Rust / Cargo | **1.98.0**; Cargo Homebrew build `797e8a9bc` (2026-08-05) |
+| clang | Apple clang **12.0.5**, `clang-1205.0.22.9` |
+| macOS SDK | **11.3** |
+| pkg-config | **3.0.6**, resolving OpenSSL **3.6.3** |
+| create-dmg | **1.2.3** |
+
+The verified Intel static archive SHA-256 values were
+`libcrypto.a`: `71f4297ec46ebb05962f1d58d616d80812d26103dd249c7b9a457b928ff62987`
+and `libssl.a`:
+`aa542ff72245c61b2e16d3e369caed549cf4e0f6d139dfdb5e90267759bb852a`.
+
+This accepts the original tool-presence/static-input preflight, not a native
+dependency build or frozen artifact. That report did not include the running
+macOS version; SDK 11.3 cannot establish it. The owner separately confirmed
+**macOS 15.7.9 (24G830)**, meeting the client's macOS 13 minimum. The follow-up
+preflight records the running OS and rejects older or unknown hosts; **80 focused
+release tests passed on Windows**, with the native Mac Bash test skipped, and
+Ruff check/format passed.
+The owner is open to updating the Apple tools after checking OS compatibility;
+no update has been reported yet. Keep tool updates compatible with Sequoia on
+this machine: Apple's [Tahoe compatibility list](https://support.apple.com/en-us/122867)
+includes the M1 2020 Air, not the Intel 2020 Air. An Apple Silicon replacement is
+not an active project prerequisite. As checked on 2026-09-06, Apple's
+[Xcode matrix](https://developer.apple.com/xcode/system-requirements) lists Xcode
+26.3 for macOS 15.6 or newer and 26.4.1 for macOS 26.2 or newer; do not assume
+the latest tools support this host. Inspect the active developer directory and
+Software Update's compatible offerings before selecting an update.
 
 ## Staging migration and recovery: August 2026
 

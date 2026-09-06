@@ -26,6 +26,7 @@ def toolchain(tmp_path, monkeypatch):
     state = SimpleNamespace(prefix=prefix, calls=[], missing=None, rust="1.83.0", arch="x86_64")
     monkeypatch.setattr(native.platform, "system", lambda: "Darwin")
     monkeypatch.setattr(native.platform, "machine", lambda: "x86_64")
+    monkeypatch.setattr(native.platform, "mac_ver", lambda: ("13.7.8", ("", "", ""), "x86_64"))
     monkeypatch.setattr(native.shutil, "which", lambda name: None if name == state.missing else name)
 
     def run(command, *, env=None, timeout=30):
@@ -43,6 +44,8 @@ def toolchain(tmp_path, monkeypatch):
             return "3.5.0"
         if name == "lipo":
             return state.arch
+        if name == "xcrun":
+            return "11.3"
         return f"{name} test version"
 
     monkeypatch.setattr(native, "_run", run)
@@ -59,9 +62,19 @@ def test_preflight_records_inputs_and_overrides_dynamic_and_cross_target_openssl
     assert env["X86_64_APPLE_DARWIN_OPENSSL_LIB_DIR"] == str(toolchain.prefix / "lib")
     assert env["CARGO_BUILD_TARGET"] == "x86_64-apple-darwin"
     assert inputs["openssl_static"] is True
+    assert inputs["macos_version"] == "13.7.8"
+    assert inputs["macos_sdk"] == "11.3"  # An older SDK does not imply an unsupported running OS.
     assert set(inputs["openssl_archives_sha256"]) == {"libssl.a", "libcrypto.a"}
     assert str(toolchain.prefix) not in json.dumps(inputs)
     assert os.environ["OPENSSL_STATIC"] == "0"  # Only build subprocesses inherit the overrides.
+
+
+@pytest.mark.parametrize("version", ["11.7.10", "12.7.6", "", "unknown"])
+def test_unsupported_or_unknown_running_os_fails_before_native_tools(toolchain, monkeypatch, version):
+    monkeypatch.setattr(native.platform, "mac_ver", lambda: (version, ("", "", ""), "x86_64"))
+    with pytest.raises(native.MacReleaseError, match="macOS"):
+        native.preflight()
+    assert toolchain.calls == []
 
 
 @pytest.mark.parametrize(

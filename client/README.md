@@ -421,10 +421,25 @@ or project environment:
 uv run --no-env-file --script scripts/macos_release.py preflight
 ```
 
-Success prints the Intel target, OpenSSL version/static archive hashes, Rust,
-Cargo, clang, macOS SDK, pkg-config, and create-dmg versions. The command installs
-no tools or project packages. It requires stable Rust >= 1.83.0, Intel OpenSSL 3
-static archives and headers, and working Apple `lipo`/`otool` commands.
+Success prints the Intel target and running macOS version, OpenSSL version/static
+archive hashes, Rust, Cargo, clang, macOS SDK, pkg-config, and create-dmg versions.
+The command installs no tools or project packages. It requires stable
+Rust >= 1.83.0, Intel OpenSSL 3
+static archives and headers, and available Apple `lipo`/`otool` commands. The
+running OS must be macOS 13 or newer for the prebuilt Qt runtime.
+
+The SDK version and the running OS version describe different things. An older
+selected SDK is not by itself evidence that the installed client is unsupported:
+ParseTrail packages prebuilt Qt libraries. Qt's documented Xcode/SDK build matrix
+applies when compiling Qt; see [Qt for macOS](https://doc.qt.io/qt-6/macos.html).
+The native dependency build, library audit, and frozen smoke still need to pass.
+For an Apple toolchain update, first inspect `sw_vers -productVersion` and
+`xcode-select --print-path`; the latter may reveal that an older installed Xcode
+is still selected. Use Apple's
+[command line tools installation guide](https://developer.apple.com/documentation/xcode/installing-the-command-line-tools/)
+and [Xcode compatibility table](https://developer.apple.com/xcode/system-requirements)
+to choose a stable version supported by the running OS. A tools-only update does
+not change ParseTrail's minimum supported macOS version.
 
 Source builds receive `OPENSSL_STATIC=1` and explicit OpenSSL directories from
 `brew --prefix openssl@3`, including the target-qualified Rust build variables.
