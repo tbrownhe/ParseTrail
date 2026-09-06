@@ -441,6 +441,16 @@ and [Xcode compatibility table](https://developer.apple.com/xcode/system-require
 to choose a stable version supported by the running OS. A tools-only update does
 not change ParseTrail's minimum supported macOS version.
 
+If Software Update offers nothing while the selected tools are old, use Apple's
+[More Downloads](https://developer.apple.com/download/more/) with an Apple Account
+to obtain a compatible **Command Line Tools for Xcode** installer. For the
+accepted Intel Mac running Sequoia 15.7.9, the selected update candidate is
+**Command Line Tools for Xcode 26.3**. Open its DMG and run the included package,
+then rerun the preflight from `client/` to record the compiler and SDK actually
+selected. When `xcode-select --print-path` already reports
+`/Library/Developer/CommandLineTools`, no developer-directory switch is needed.
+Do not delete that directory merely because Software Update offers no update.
+
 Source builds receive `OPENSSL_STATIC=1` and explicit OpenSSL directories from
 `brew --prefix openssl@3`, including the target-qualified Rust build variables.
 The final builder reinstalls cryptography with uv's cache disabled so an older

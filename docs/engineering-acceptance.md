@@ -135,6 +135,14 @@ not an active project prerequisite. As checked on 2026-09-06, Apple's
 the latest tools support this host. Inspect the active developer directory and
 Software Update's compatible offerings before selecting an update.
 
+The owner subsequently confirmed that `xcode-select --print-path` returns
+`/Library/Developer/CommandLineTools` and `softwareupdate --list` reports no new
+software. The old SDK therefore comes from the selected standalone tools, rather
+than an older Xcode application selected in their place. The next update path is
+Apple's manual **Command Line Tools for Xcode 26.3** installer, followed by a new
+preflight report. This records a prepared update path; installation and its
+resulting compiler/SDK versions remain unconfirmed.
+
 ## Staging migration and recovery: August 2026
 
 The PostgreSQL 12-to-17 rehearsal preserved the source volume and matched every
