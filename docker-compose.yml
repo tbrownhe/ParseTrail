@@ -111,6 +111,9 @@ services:
       - SENTRY_DSN=${SENTRY_DSN}
       - STATEMENTS_FILE_OWNER=${STATEMENTS_FILE_OWNER}
       - STATEMENTS_FILE_GROUP=${STATEMENTS_FILE_GROUP}
+      # Uvicorn only accepts X-Forwarded-* metadata from the shared Traefik
+      # network. Never use '*' here.
+      - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS?Variable not set}
     healthcheck:
       test:
         - CMD
@@ -133,8 +136,10 @@ services:
       - traefik.http.services.${STACK_NAME?Variable not set}-backend.loadbalancer.server.port=8000
 
       # Prevent abuse
-      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.middlewares=rate-limit,${STACK_NAME?Variable not set}-network-allow
+      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.middlewares=${TRAEFIK_RATE_LIMIT_MIDDLEWARE?Variable not set},${STACK_NAME?Variable not set}-api-no-store,${STACK_NAME?Variable not set}-network-allow
       - traefik.http.middlewares.${STACK_NAME?Variable not set}-network-allow.ipallowlist.sourcerange=${TRAEFIK_ALLOWED_IP_RANGES?Variable not set}
+      - traefik.http.middlewares.${STACK_NAME?Variable not set}-api-no-store.headers.customresponseheaders.Cache-Control=no-store
+      - traefik.http.middlewares.${STACK_NAME?Variable not set}-api-no-store.headers.customresponseheaders.CDN-Cache-Control=no-store
 
       # HTTP redirect + HTTPS Certificates
       # Backend endpoints are at `api.DOMAIN/api/v1/etc`
@@ -144,7 +149,7 @@ services:
       - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.rule=Host(`api.${DOMAIN}`) && PathPrefix(`/api`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.entrypoints=https
       - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.tls=true
-      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.tls.certresolver=le
+      - traefik.http.routers.${STACK_NAME?Variable not set}-backend-https.tls.certresolver=${TRAEFIK_CERT_RESOLVER?Variable not set}
 
       # Secure Swagger UI (`/docs`) with BasicAuth Middleware
       - traefik.http.routers.${STACK_NAME?Variable not set}-swagger-http.rule=Host(`api.${DOMAIN}`) && PathPrefix(`/docs`)
@@ -153,7 +158,7 @@ services:
       - traefik.http.routers.${STACK_NAME?Variable not set}-swagger-https.rule=Host(`api.${DOMAIN}`) && PathPrefix(`/docs`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-swagger-https.entrypoints=https
       - traefik.http.routers.${STACK_NAME?Variable not set}-swagger-https.tls=true
-      - traefik.http.routers.${STACK_NAME?Variable not set}-swagger-https.tls.certresolver=le
+      - traefik.http.routers.${STACK_NAME?Variable not set}-swagger-https.tls.certresolver=${TRAEFIK_CERT_RESOLVER?Variable not set}
 
       # Secure `/openapi.json` (Swagger API Definition)
       - traefik.http.routers.${STACK_NAME?Variable not set}-openapi-http.rule=Host(`api.${DOMAIN}`) && PathPrefix(`/api/v1/openapi.json`)
@@ -162,12 +167,12 @@ services:
       - traefik.http.routers.${STACK_NAME?Variable not set}-openapi-https.rule=Host(`api.${DOMAIN}`) && PathPrefix(`/api/v1/openapi.json`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-openapi-https.entrypoints=https
       - traefik.http.routers.${STACK_NAME?Variable not set}-openapi-https.tls=true
-      - traefik.http.routers.${STACK_NAME?Variable not set}-openapi-https.tls.certresolver=le
+      - traefik.http.routers.${STACK_NAME?Variable not set}-openapi-https.tls.certresolver=${TRAEFIK_CERT_RESOLVER?Variable not set}
       - traefik.http.routers.${STACK_NAME?Variable not set}-openapi-https.priority=110
 
       #- traefik.http.routers.swagger-uim.service=backend
-      - traefik.http.routers.${STACK_NAME?Variable not set}-swagger-https.middlewares=${STACK_NAME?Variable not set}-swagger-auth,${STACK_NAME?Variable not set}-network-allow
-      - traefik.http.routers.${STACK_NAME?Variable not set}-openapi-https.middlewares=${STACK_NAME?Variable not set}-swagger-auth,${STACK_NAME?Variable not set}-network-allow
+      - traefik.http.routers.${STACK_NAME?Variable not set}-swagger-https.middlewares=${STACK_NAME?Variable not set}-swagger-auth,${TRAEFIK_RATE_LIMIT_MIDDLEWARE?Variable not set},${STACK_NAME?Variable not set}-api-no-store,${STACK_NAME?Variable not set}-network-allow
+      - traefik.http.routers.${STACK_NAME?Variable not set}-openapi-https.middlewares=${STACK_NAME?Variable not set}-swagger-auth,${TRAEFIK_RATE_LIMIT_MIDDLEWARE?Variable not set},${STACK_NAME?Variable not set}-api-no-store,${STACK_NAME?Variable not set}-network-allow
       - traefik.http.middlewares.${STACK_NAME?Variable not set}-swagger-auth.basicauth.users=${SWAGGER_HASH}
 
 
@@ -199,8 +204,8 @@ services:
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.rule=Host(`dashboard.${DOMAIN}`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.entrypoints=https
       - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.tls=true
-      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.tls.certresolver=le
-      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.middlewares=${STACK_NAME?Variable not set}-network-allow
+      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.tls.certresolver=${TRAEFIK_CERT_RESOLVER?Variable not set}
+      - traefik.http.routers.${STACK_NAME?Variable not set}-frontend-https.middlewares=${TRAEFIK_RATE_LIMIT_MIDDLEWARE?Variable not set},${STACK_NAME?Variable not set}-network-allow
 
 
   website:
@@ -235,8 +240,8 @@ services:
       - traefik.http.routers.${STACK_NAME?Variable not set}-web-www-https.rule=Host(`www.${DOMAIN}`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-web-www-https.entrypoints=https
       - traefik.http.routers.${STACK_NAME?Variable not set}-web-www-https.tls=true
-      - traefik.http.routers.${STACK_NAME?Variable not set}-web-www-https.tls.certresolver=le
-      - traefik.http.routers.${STACK_NAME?Variable not set}-web-www-https.middlewares=rate-limit,${STACK_NAME?Variable not set}-network-allow
+      - traefik.http.routers.${STACK_NAME?Variable not set}-web-www-https.tls.certresolver=${TRAEFIK_CERT_RESOLVER?Variable not set}
+      - traefik.http.routers.${STACK_NAME?Variable not set}-web-www-https.middlewares=${TRAEFIK_RATE_LIMIT_MIDDLEWARE?Variable not set},${STACK_NAME?Variable not set}-network-allow
       # domain
       - traefik.http.routers.${STACK_NAME?Variable not set}-web-http.rule=Host(`${DOMAIN}`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-web-http.entrypoints=http
@@ -244,10 +249,10 @@ services:
       - traefik.http.routers.${STACK_NAME?Variable not set}-web-https.rule=Host(`${DOMAIN}`)
       - traefik.http.routers.${STACK_NAME?Variable not set}-web-https.entrypoints=https
       - traefik.http.routers.${STACK_NAME?Variable not set}-web-https.tls=true
-      - traefik.http.routers.${STACK_NAME?Variable not set}-web-https.tls.certresolver=le
+      - traefik.http.routers.${STACK_NAME?Variable not set}-web-https.tls.certresolver=${TRAEFIK_CERT_RESOLVER?Variable not set}
 
       # Prevent abuse
-      - traefik.http.routers.${STACK_NAME?Variable not set}-web-https.middlewares=rate-limit,${STACK_NAME?Variable not set}-network-allow
+      - traefik.http.routers.${STACK_NAME?Variable not set}-web-https.middlewares=${TRAEFIK_RATE_LIMIT_MIDDLEWARE?Variable not set},${STACK_NAME?Variable not set}-network-allow
 
 
 volumes:

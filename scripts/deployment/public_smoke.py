@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any
 
 MAX_RESPONSE_BYTES = 1024 * 1024
+MAX_REQUEST_BODY_BYTES = 38 * 1024 * 1024
 
 
 class SmokeFailure(RuntimeError):
@@ -204,9 +205,13 @@ def _run_public_smoke(config: SmokeConfig) -> list[dict[str, Any]]:
     api = config.api_base_url.rstrip("/")
 
     def health() -> None:
-        _, _, body = _request(_join(api, "utils/health-check/"), timeout=timeout)
+        _, headers, body = _request(_join(api, "utils/health-check/"), timeout=timeout)
         if body.strip() != b"true":
             raise SmokeFailure("Health endpoint did not return true")
+        if "no-store" not in headers.get("cache-control", "").lower():
+            raise SmokeFailure("API response did not disable browser caching")
+        if "no-store" not in headers.get("cdn-cache-control", "").lower():
+            raise SmokeFailure("API response did not disable CDN caching")
 
     check("backend-health", health)
 
@@ -309,6 +314,18 @@ def _run_public_smoke(config: SmokeConfig) -> list[dict[str, Any]]:
             raise SmokeFailure("Statement route returned an unexpected rejection")
 
     check("authenticated-statement-rejection-no-write", rejected_submission)
+
+    def rejected_oversize_request() -> None:
+        _request(
+            _join(api, "statements/submit-statement"),
+            timeout=timeout,
+            method="POST",
+            headers={**auth, "Content-Length": str(MAX_REQUEST_BODY_BYTES + 1)},
+            data=b"",
+            expected={413},
+        )
+
+    check("oversize-request-rejection-no-body", rejected_oversize_request)
     return results
 
 
