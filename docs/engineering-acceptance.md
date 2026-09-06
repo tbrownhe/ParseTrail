@@ -81,6 +81,24 @@ CPython interpreter, and the native 64-bit Intel target pass validation. This
 completes R1 bootstrap acceptance on both active platforms; native packaging and
 installed-app checks remain separate gates.
 
+## Intel Mac packaging implementation follow-up
+
+R2's implementation passed **326 client tests on Windows**, with the one native
+Mac Bash integration test skipped. Client-wide Ruff check/format and the Mac
+builder's Bash syntax check passed. Synthetic tests cover missing toolchain
+inputs, old Rust, wrong archive architecture, static-build environment overrides,
+cached-wheel avoidance, release-launcher failure propagation, unresolved/external
+library references, dynamic OpenSSL rejection, inventory evidence validation,
+and frozen-process timeout/failure. The native dependency smoke exercised the
+installed Windows Python libraries with network connections denied.
+
+The audit parser uses synthetic `otool` output in these tests. This evidence does
+not claim a real Mac `.app` was audited or installed. The owner must run the
+[Intel Mac release gates](../client/README.md#intel-mac-release-gates); their
+toolchain, packaged Mach-O, frozen-smoke, and installed-app results remain open
+in TODO. Source-build inputs, dependency-audit results, and the bounded smoke
+result are preserved under `native_build` in each new Mac release inventory.
+
 ## Staging migration and recovery: August 2026
 
 The PostgreSQL 12-to-17 rehearsal preserved the source volume and matched every

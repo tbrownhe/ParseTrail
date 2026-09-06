@@ -1,5 +1,9 @@
 Unreleased
 ==========
+- Preflight Intel Mac source-build tools, enforce static OpenSSL inputs, audit
+  bundled native dependencies, and record native release evidence
+- Bound the Mac frozen smoke to 30 seconds and exercise synthetic crypto, SQLite,
+  PDF/XLSX, Qt, and scientific/model operations in the shared runtime smoke
 - Bootstrap releases without client dependencies, enforce uv >= 0.12.5, and
   provision/inspect exact native CPython before syncing the locked environment
 - Prompt immediately when saved credentials are rejected during a plugin update

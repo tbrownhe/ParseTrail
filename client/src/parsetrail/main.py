@@ -27,7 +27,9 @@ def handle_signal(_signal, _frame):
 
 
 def run_runtime_smoke_test() -> int:
-    """Import modules required during frozen application bootstrap."""
+    """Exercise bootstrap and native libraries using synthetic in-memory inputs."""
+    from parsetrail.core.runtime_smoke import check_native_operations
+
     for module_name in (
         "_socket",
         "socket",
@@ -40,6 +42,7 @@ def run_runtime_smoke_test() -> int:
 
         if not credential_store.available:
             raise RuntimeError("No native OS credential backend is bundled")
+    check_native_operations()
     return 0
 
 

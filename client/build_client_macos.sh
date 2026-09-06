@@ -68,40 +68,43 @@ DMG_PATH="${DIST_DIR}/parsetrail_${VERSION}_macos_setup.dmg"
 
 METADATA_DIR=$(mktemp -d -t parsetrail-release.XXXXXX)
 BUILD_METADATA="${METADATA_DIR}/build-metadata.json"
+BUILD_INPUTS="${METADATA_DIR}/macos-build-inputs.json"
+NATIVE_REPORT="${METADATA_DIR}/macos-native-report.json"
 cleanup() {
-    rm -f -- "$BUILD_METADATA"
+    rm -f -- "$BUILD_METADATA" "$BUILD_INPUTS" "$NATIVE_REPORT"
     rmdir -- "$METADATA_DIR" 2>/dev/null || true
 }
 trap cleanup EXIT
 
+echo "Checking the Intel toolchain and synchronizing locked dependencies..."
+"$RELEASE_PYTHON" -I -S scripts/macos_release.py sync --fresh-cryptography --output "$BUILD_INPUTS" \
+    || error_exit "Intel toolchain preflight or locked dependency sync failed."
+
 echo "Validating clean client-v${VERSION} release source..."
-uv run --no-env-file --frozen --python "$RELEASE_PYTHON" --no-python-downloads python -m scripts.release_source client \
+uv run --no-env-file --no-sync --python "$RELEASE_PYTHON" --no-python-downloads python -m scripts.release_source client \
     --version "$VERSION" \
     --platform macos \
     --metadata-output "$BUILD_METADATA" \
     || error_exit "Release source validation failed."
-SOURCE_COMMIT=$(uv run --no-env-file --frozen --python "$RELEASE_PYTHON" --no-python-downloads python -c \
+SOURCE_COMMIT=$(uv run --no-env-file --no-sync --python "$RELEASE_PYTHON" --no-python-downloads python -c \
     'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["source_commit"])' \
     "$BUILD_METADATA")
 SOURCE_TAG="client-v${VERSION}"
 
-echo "Synchronizing the locked client environment with Python $PYTHON_VERSION..."
-uv sync --extra dev --frozen --python "$RELEASE_PYTHON" --no-python-downloads \
-    || error_exit "Failed to synchronize the locked client environment."
-ACTUAL_PYTHON_VERSION=$(uv run --no-env-file --frozen --python "$RELEASE_PYTHON" --no-python-downloads python -c \
+ACTUAL_PYTHON_VERSION=$(uv run --no-env-file --no-sync --python "$RELEASE_PYTHON" --no-python-downloads python -c \
     'import platform; print(platform.python_version())')
 [[ "$ACTUAL_PYTHON_VERSION" == "$PYTHON_VERSION" ]] \
     || error_exit "Expected Python $PYTHON_VERSION but uv selected $ACTUAL_PYTHON_VERSION."
 
 echo "Running client regression tests..."
-uv run --no-env-file --extra dev --frozen --python "$RELEASE_PYTHON" --no-python-downloads pytest -q \
+uv run --no-env-file --no-sync --python "$RELEASE_PYTHON" --no-python-downloads pytest -q \
     || error_exit "Client tests failed."
 echo "Checking bundled plugin release trust keys..."
-uv run --no-env-file --frozen --python "$RELEASE_PYTHON" --no-python-downloads python -m scripts.plugin_release check-trust-store \
+uv run --no-env-file --no-sync --python "$RELEASE_PYTHON" --no-python-downloads python -m scripts.plugin_release check-trust-store \
     || error_exit "Plugin trust-store check failed."
 
 echo "Building the executable with PyInstaller..."
-uv run --no-env-file --frozen --python "$RELEASE_PYTHON" --no-python-downloads pyinstaller \
+uv run --no-env-file --no-sync --python "$RELEASE_PYTHON" --no-python-downloads pyinstaller \
     -n "$APP_NAME" \
     --clean \
     --noconfirm \
@@ -121,10 +124,10 @@ uv run --no-env-file --frozen --python "$RELEASE_PYTHON" --no-python-downloads p
     "$MODULE_PATH" \
     || error_exit "Failed to build the executable."
 
-echo "Smoke-testing the frozen executable..."
-SMOKE_EXECUTABLE="${APP_PATH}/Contents/MacOS/${APP_NAME}"
-[[ -x "$SMOKE_EXECUTABLE" ]] || error_exit "Frozen executable not found: $SMOKE_EXECUTABLE"
-"$SMOKE_EXECUTABLE" --runtime-smoke-test || error_exit "Frozen runtime smoke test failed."
+echo "Auditing bundled libraries and smoke-testing the frozen executable (30-second limit)..."
+"$RELEASE_PYTHON" -I -S scripts/macos_release.py audit \
+    --app "$APP_PATH" --build-inputs "$BUILD_INPUTS" --output "$NATIVE_REPORT" \
+    || error_exit "Native library audit or frozen runtime smoke test failed."
 
 echo "Creating DMG installer..."
 mkdir -p "$DIST_DIR"
@@ -142,18 +145,18 @@ create-dmg \
     "$APP_PATH"
 
 echo "Signing and independently verifying the macOS release..."
-uv run --no-env-file --frozen --python "$RELEASE_PYTHON" --no-python-downloads python -m scripts.client_release sign \
+uv run --no-env-file --no-sync --python "$RELEASE_PYTHON" --no-python-downloads python -m scripts.client_release sign \
     --private-key "$SIGNING_KEY" \
     --installer "$DMG_PATH" \
     --platform macos \
     --version "$VERSION" \
     || error_exit "Client release signing failed."
-uv run --no-env-file --frozen --python "$RELEASE_PYTHON" --no-python-downloads python -m scripts.client_release verify \
+uv run --no-env-file --no-sync --python "$RELEASE_PYTHON" --no-python-downloads python -m scripts.client_release verify \
     --release-dir "$DIST_DIR" \
     || error_exit "Client release verification failed."
 
 echo "Recording checksums and release-tool versions..."
-uv run --no-env-file --frozen --python "$RELEASE_PYTHON" --no-python-downloads python -m scripts.release_inventory \
+uv run --no-env-file --no-sync --python "$RELEASE_PYTHON" --no-python-downloads python -m scripts.release_inventory \
     --release-dir "$DIST_DIR" \
     --source-commit "$SOURCE_COMMIT" \
     --source-tag "$SOURCE_TAG" \
@@ -162,6 +165,7 @@ uv run --no-env-file --frozen --python "$RELEASE_PYTHON" --no-python-downloads p
     --version "$VERSION" \
     --packager create-dmg \
     --packager-executable "$CREATE_DMG" \
+    --native-report "$NATIVE_REPORT" \
     || error_exit "Release inventory generation failed."
 
 if ! $PUBLISH; then
@@ -170,7 +174,7 @@ if ! $PUBLISH; then
 fi
 
 REMOTE_PLATFORM_DIR="${REMOTE_CLIENTS_DIR%/}/macos"
-uv run --no-env-file --frozen --python "$RELEASE_PYTHON" --no-python-downloads python -m scripts.immutable_publish \
+uv run --no-env-file --no-sync --python "$RELEASE_PYTHON" --no-python-downloads python -m scripts.immutable_publish \
     --release-dir "$DIST_DIR" \
     --manifest client-manifest.json \
     --signature client-manifest.sig \

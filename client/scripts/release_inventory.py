@@ -107,6 +107,7 @@ def create_inventory(
     version: str | None,
     packager: str,
     packager_executable: Path | None = None,
+    native_report: Path | None = None,
 ) -> dict[str, object]:
     release_dir = release_dir.expanduser().resolve()
     if not release_dir.is_dir():
@@ -158,6 +159,25 @@ def create_inventory(
         "tools": tools,
         "files": _artifact_records(release_dir, manifest),
     }
+    if native_report is not None:
+        if release_kind != "client" or target_platform != "macos":
+            raise ValueError("Native Mac evidence requires a macos client release")
+        evidence = json.loads(native_report.read_text(encoding="utf-8"))
+        if (
+            not isinstance(evidence, dict)
+            or evidence.get("schema_version") != 1
+            or not all(
+                isinstance(evidence.get(name), dict) for name in ("build_inputs", "library_audit", "frozen_smoke")
+            )
+            or evidence.get("build_inputs", {}).get("target_platform") != target_platform
+            or evidence.get("build_inputs", {}).get("architecture") != "x86_64"
+            or evidence.get("build_inputs", {}).get("openssl_static") is not True
+            or evidence.get("library_audit", {}).get("architecture") != "x86_64"
+            or not evidence.get("library_audit", {}).get("cryptography_extensions")
+            or evidence.get("frozen_smoke", {}).get("passed") is not True
+        ):
+            raise ValueError("Native Mac evidence is incomplete or disagrees with the release target")
+        inventory["native_build"] = evidence
     output = release_dir / INVENTORY_FILENAME
     temporary = output.with_suffix(".json.part")
     temporary.write_text(json.dumps(inventory, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -175,6 +195,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--version")
     parser.add_argument("--packager", choices=tuple(PACKAGER_COMMANDS), default="none")
     parser.add_argument("--packager-executable", type=Path)
+    parser.add_argument("--native-report", type=Path)
     return parser
 
 
@@ -190,6 +211,7 @@ def main() -> int:
             version=args.version,
             packager=args.packager,
             packager_executable=args.packager_executable,
+            native_report=args.native_report,
         )
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

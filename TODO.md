@@ -15,10 +15,11 @@ any implementation**. Native acceptance still requires the prepared owner checks
 
 ## P1.5 — Client release reliability
 
-- [ ] **R2 — Intel macOS packaging:** preflight `openssl@3`, Rust, and pkg-config
-  for source builds; enforce static OpenSSL where needed, record build inputs,
-  audit packaged libraries for workstation dependencies, and bound the frozen
-  smoke-test runtime.
+- [~] **R2 — Intel macOS packaging:** native toolchain preflight, static OpenSSL
+  build inputs, inventory evidence, packaged-library audit, and bounded expanded
+  frozen smoke are implemented. `[USER]` Run the tool-only preflight on the Intel
+  Mac, then accept the next native build/audit and installed runtime without
+  build-tool paths using the [Mac release gates](client/README.md#intel-mac-release-gates).
 - [ ] **R3a — Architecture contract:** make the Windows x64/Intel macOS target
   explicit in signed metadata, filenames, API responses, and download selection.
   Reject mismatched/unsupported targets. Coordinate the contract and existing

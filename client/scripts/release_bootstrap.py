@@ -159,22 +159,35 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "check":
             print(runtime.interpreter if args.print_python else json.dumps(asdict(runtime), sort_keys=True))
             return 0
-        # This is the first project-package operation in the public entry point.
-        _run(
-            [
-                runtime.uv,
-                "sync",
-                "--extra",
-                "dev",
-                "--frozen",
-                "--python",
-                runtime.interpreter,
-                "--no-python-downloads",
-            ],
-            cwd=CLIENT_ROOT,
-            phase="Locked release dependency sync",
-            timeout=1800,
-        )
+        # Mac source builds need their native toolchain before the first package operation.
+        if runtime.target == "macos" and args.command == "client":
+            try:
+                native = subprocess.run(
+                    [runtime.interpreter, "-I", "-S", str(CLIENT_ROOT / "scripts/macos_release.py"), "sync"],
+                    cwd=CLIENT_ROOT,
+                    check=False,
+                    timeout=1860,
+                )
+            except subprocess.TimeoutExpired as exc:
+                raise BootstrapError("Intel macOS preflight/dependency sync timed out.") from exc
+            if native.returncode:
+                raise BootstrapError("Intel macOS preflight/dependency sync failed; see the preceding diagnostic.")
+        else:
+            _run(
+                [
+                    runtime.uv,
+                    "sync",
+                    "--extra",
+                    "dev",
+                    "--frozen",
+                    "--python",
+                    runtime.interpreter,
+                    "--no-python-downloads",
+                ],
+                cwd=CLIENT_ROOT,
+                phase="Locked release dependency sync",
+                timeout=1800,
+            )
         forwarded = ["--config", str(args.config.expanduser().resolve()), args.command]
         if args.command == "client":
             forwarded.extend(["--platform", args.platform])
