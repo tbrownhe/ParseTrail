@@ -71,7 +71,15 @@ The real Windows bootstrap passed against both the existing managed interpreter
 and a new temporary uv installation directory. Both inspections identified
 standard 64-bit CPython 3.13.15 on Windows x64 with uv 0.12.5. No client packages,
 installer, signing operation, or public artifact activation were needed for
-these checks. Intel native provisioning remains pending in TODO.
+these checks.
+
+The owner pulled `fix/client-release-bootstrap` on the Intel Mac and ran
+`uv run --no-env-file --script scripts/release_bootstrap.py check --platform macos`.
+It returned the success report with `interpreter`, `python_version`, `target`,
+`uv`, and `uv_version`. That report is emitted only after uv, the exact pinned
+CPython interpreter, and the native 64-bit Intel target pass validation. This
+completes R1 bootstrap acceptance on both active platforms; native packaging and
+installed-app checks remain separate gates.
 
 ## Staging migration and recovery: August 2026
 

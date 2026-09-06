@@ -15,10 +15,6 @@ any implementation**. Native acceptance still requires the prepared owner checks
 
 ## P1.5 — Client release reliability
 
-- [~] **R1 — Bootstrap:** enforce the tested minimum uv version, explicitly
-  provision the exact `.python-version` interpreter, and validate its version and
-  host architecture before dependency sync. Missing/old uv, unavailable Python,
-  and mismatched architecture must fail before installing or signing.
 - [ ] **R2 — Intel macOS packaging:** preflight `openssl@3`, Rust, and pkg-config
   for source builds; enforce static OpenSSL where needed, record build inputs,
   audit packaged libraries for workstation dependencies, and bound the frozen
