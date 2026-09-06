@@ -54,6 +54,7 @@ REQUIRED_TARGET_FIELDS = (
     "DOMAIN",
     "BACKEND_HOST",
     "FRONTEND_HOST",
+    "SWAGGER_HASH",
     "TRAEFIK_ALLOWED_IP_RANGES",
     "TRAEFIK_RATE_LIMIT_MIDDLEWARE",
     "TRAEFIK_CERT_RESOLVER",
@@ -70,6 +71,7 @@ STAGING_UNIQUE_FIELDS = (
     "DOMAIN",
     "BACKEND_HOST",
     "FRONTEND_HOST",
+    "SWAGGER_HASH",
 )
 STAGING_UNIQUE_PATH_FIELDS = ("CLIENTS_DIR", "PLUGINS_DIR", "STATEMENTS_DIR")
 
@@ -222,6 +224,9 @@ def _required_target_values(values: dict[str, str], *, label: str) -> None:
         raise ReleaseError(f"{label} TRAEFIK_RATE_LIMIT_MIDDLEWARE must be {expected_rate_limit} for {environment}")
     if values["TRAEFIK_CERT_RESOLVER"].strip() != "le-cloudflare":
         raise ReleaseError(f"{label} TRAEFIK_CERT_RESOLVER must be le-cloudflare")
+    swagger_user, separator, swagger_digest = values["SWAGGER_HASH"].strip().partition(":")
+    if not separator or not swagger_user or not swagger_digest:
+        raise ReleaseError(f"{label} SWAGGER_HASH must contain a username and password hash")
     proxy_networks = values["FORWARDED_ALLOW_IPS"].split(",")
     for proxy_network in proxy_networks:
         try:
