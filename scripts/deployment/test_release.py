@@ -53,6 +53,7 @@ def _target_values(environment: str, suffix: str) -> dict[str, str]:
         "DOMAIN": f"{suffix}.example.com",
         "BACKEND_HOST": f"https://api.{suffix}.example.com/api/v1",
         "FRONTEND_HOST": f"https://dashboard.{suffix}.example.com",
+        "SWAGGER_HASH": f"admin:$2y$05$valid-test-hash-{suffix}",
         "SMTP_HOST": f"smtp-{suffix}.internal",
         "TRAEFIK_ALLOWED_IP_RANGES": "192.168.1.0/24,100.64.0.0/10",
         "TRAEFIK_RATE_LIMIT_MIDDLEWARE": ("cloudflare-rate-limit" if environment == "production" else "rate-limit"),
@@ -326,6 +327,14 @@ class ReleaseValidationTests(unittest.TestCase):
                 state_dir=Path("/srv/production/state"),
             )
 
+        production = _target_values("production", "production")
+        production["SWAGGER_HASH"] = "$2y$05$hash-without-user"
+        with self.assertRaisesRegex(ReleaseError, "SWAGGER_HASH"):
+            validate_deployment_boundary(
+                production,
+                state_dir=Path("/srv/production/state"),
+            )
+
     def test_compose_applies_cache_and_rate_policy_to_every_https_router(self) -> None:
         application = Path("docker-compose.yml").read_text(encoding="utf-8")
 
@@ -336,6 +345,10 @@ class ReleaseValidationTests(unittest.TestCase):
         )
         self.assertEqual(application.count("${TRAEFIK_RATE_LIMIT_MIDDLEWARE?Variable not set}"), 6)
         self.assertEqual(application.count("${TRAEFIK_CERT_RESOLVER?Variable not set}"), 6)
+        self.assertEqual(application.count("-backend-network-allow"), 4)
+        self.assertEqual(application.count("-frontend-network-allow"), 2)
+        self.assertEqual(application.count("-web-network-allow"), 3)
+        self.assertNotIn("${STACK_NAME?Variable not set}-network-allow", application)
 
     def test_staging_smoke_credentials_and_urls_are_distinct(self) -> None:
         staging_values = _target_values("staging", "staging")

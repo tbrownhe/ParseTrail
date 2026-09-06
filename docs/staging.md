@@ -68,6 +68,11 @@ never reuse it for production. Copy `.env.example.staging` outside Git to
 Use new random values for `SECRET_KEY`, `MASTER_KEY`, PostgreSQL/bootstrap
 passwords, Swagger auth, and smoke credentials.
 
+`SWAGGER_HASH` must contain the complete `username:hash` output from `htpasswd`,
+not the hash alone. Escape dollar signs as `$$` for Compose interpolation (or
+store the complete value in the dotenv file using Compose's single-quoted
+literal syntax). The deployment preflight rejects a missing username.
+
 The production dump contains password hashes, identifying account fields, active
 sessions, and statement rows encrypted with the production master key. A distinct
 staging `SECRET_KEY` invalidates production tokens, but it does **not** make a
