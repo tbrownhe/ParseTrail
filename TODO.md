@@ -235,10 +235,13 @@ recoverable, committed data agrees with the import state, and a retry is safe.
   71 client tests pass on Windows, Qt-heavy imports pass headlessly, and the
   PyInstaller executable passes its frozen-runtime smoke test. Hosted macOS
   execution remains part of the non-deploying CI gate.
-- [~] Upgrade PostgreSQL 12 using a dump/restore into a new volume. The guarded
-  helper has completed a synthetic 12-to-17 rehearsal with whole-schema table
-  count comparison; staging and production still use PostgreSQL 12. Do not point
-  a newer server at the old data directory.
+- [x] Upgrade PostgreSQL 12 using a dump/restore into a new volume. Synthetic and
+  populated staging rehearsals matched whole-schema table counts before production
+  moved to PostgreSQL 17.11 on the dedicated `parsetrail_app-db-data-pg17` volume;
+  the old data directory was never opened by the newer server. A fresh release
+  dump on 2026-09-06 was checksum-verified and restored into a disposable,
+  network-isolated PostgreSQL 17 container with all seven user tables and table-data
+  sections present.
 - [x] `[USER]` After review and merge, take a verified production backup and
   deploy the current application release while explicitly retaining both the
   PostgreSQL 12 image and existing PostgreSQL 12 volume. Confirm the new Alembic
@@ -266,7 +269,7 @@ recoverable, committed data agrees with the import state, and a retry is safe.
   copied production password hashes. A guarded post-restore sanitizer now preserves
   audit UUIDs while anonymizing and disabling copied users, revoking their token
   generations, invalidating their hashes, and removing copied submissions.
-- [~] `[USER]` Verify account/login, plugin download, statement submission, admin
+- [x] `[USER]` Verify account/login, plugin download, statement submission, admin
   retrieval, email, and backup/restore against the upgraded staging stack before
   the production PostgreSQL 17 cutover. The isolated owner profile completed
   signup, captured-email verification, explicit sign-out/login, plugin download,
@@ -276,8 +279,8 @@ recoverable, committed data agrees with the import state, and a retry is safe.
   `staging-pg17-restore-20260830T204123Z`, file restore
   `staging-files-restore-20260830T204123Z`, and key restore
   `staging-keys-restore-20260830T204123Z`. It then restored the exact staging
-  backend container to healthy service. The password-recovery flow remains to be
-  exercised through captured staging email.
+  backend container to healthy service. Password recovery was then completed with
+  the reset message captured in Mailpit and the new credential accepted by staging.
 
 Acceptance: supported runtime versions are documented, lock files reproduce on CI,
 dependency audits have no known critical/high production finding without a written
@@ -300,6 +303,24 @@ temporary exception, and the Postgres restore drill preserves expected row count
 - [x] Deploy with health waiting and bounded timeouts, then smoke-test health,
   login, plugin manifest/download, client listing/download, statement submission,
   dashboard, and website routes through the public proxy.
+- [x] Put every public production HTTP hostname behind Cloudflare in Full (strict)
+  mode, bypass cache for API/dashboard/runtime configuration, trust forwarded
+  headers only from reviewed Cloudflare networks, and use the real visitor header
+  for edge-aware rate limiting. API responses are explicitly `no-store`; public
+  health, authenticated artifact, and bounded statement-upload checks pass through
+  Cloudflare.
+- [x] Prove the zone-scoped Cloudflare DNS-01 resolver with a disposable non-public
+  hostname, migrate all eight production/staging ParseTrail certificates into its
+  private ACME store, and remove the proof plus five obsolete DuckDNS certificates.
+  Turing's active certificate remains isolated in the HTTP-01 store. Public staging
+  apex/wildcard A records were deleted after LAN HTTPS and DNS-01 renewal were
+  verified.
+- [~] `[USER]` Activate the merged Docker-aware origin firewall and its repair/range
+  timers, verify production through Cloudflare and staging from the owner LAN, then
+  confirm from an external network that a direct connection to the historical
+  origin address fails. The exact rollback removes only the component-owned chains.
+- [ ] `[USER]` Bind the unused host Postfix listener to loopback only, run
+  `postfix check`, reload it, and verify only `127.0.0.1:25` and `[::1]:25` listen.
 - [x] Automatically reactivate the previous immutable image tags when service
   health or post-deploy smoke checks fail; never claim success merely because
   `docker compose up -d` returned zero.
@@ -363,11 +384,11 @@ temporary exception, and the Postgres restore drill preserves expected row count
   address fails the smoke gate safely but makes staging unavailable until updated.
   `192.168.1.89` is reserved and the active staging smoke config resolves all three
   HTTPS staging names to it; all seven checks pass without command-line overrides.
-- [ ] `[USER]` Create and verify a dedicated production deployment-smoke account,
-  then replace `/srv/parsetrail-production/secrets/smoke.json`. A direct check on
-  2026-08-30 confirmed that the rotated `.env` bootstrap password is not the live
-  production account password (HTTP 401); do not treat bootstrap credentials as an
-  operational login or cut over production until its independent smoke passes.
+- [x] `[USER]` Create and verify a dedicated production deployment-smoke account,
+  then replace `/srv/parsetrail-production/secrets/smoke.json`. The mode-0600
+  credential was confirmed independently through the frontend. The guarded
+  `0ec65f2` production release and the post-certificate-cutover rerun both passed
+  all eight public checks without using bootstrap credentials.
 - [x] `[USER]` Decide whether to discard and resubmit the staging statement
   ciphertext or preserve it through a separately designed in-memory re-encryption,
   then rotate the staging `MASTER_KEY`. A recovery-helper logging defect exposed
@@ -727,9 +748,13 @@ release signatures remain the required update-channel trust boundary.
 These findings are outside this repository and should be changed in the `infra`
 repository only as a separate, reviewed task.
 
-- [ ] Add pipeline failure propagation to the USB backup script so a failed
+- [x] Add pipeline failure propagation to the USB backup script so a failed
   `pg_dump` cannot be mistaken for a successful encrypted backup.
-- [ ] Add traps that unmount and close the encrypted device on every exit path.
-- [ ] Stop placing the GPG passphrase in process arguments.
-- [ ] `[USER]` Perform and document a full Postgres/file restore drill from the USB
-  backup before relying on it for the database major-version migration.
+- [x] Add traps that unmount and close the encrypted device on every exit path.
+- [x] Stop placing the GPG passphrase in process arguments.
+- [x] `[USER]` Perform and document a full Postgres/file restore drill from the USB
+  backup before relying on it for the database major-version migration. The
+  2026-09-05 scheduled encrypted backup completed, and its automatic restore drill
+  verified checksums, memory-backed decryption, file/mode boundaries, all five
+  submission-key files, and a network-isolated PostgreSQL 17 restore containing all
+  seven user tables without changing live state.
