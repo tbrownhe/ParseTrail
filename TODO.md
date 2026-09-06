@@ -13,6 +13,11 @@ enough to implement, test, and commit independently.
 - Breaking API, schema, plugin, and client changes are permitted. Prefer a clear
   migration or compatibility error over silently accepting incompatible data.
 
+The [September client review and proposed chunks](docs/client-development-review.md)
+prioritizes the remaining P1.5/P1.6 work for Windows x64 and macOS x86_64/arm64,
+then lists bounded client correctness, workflow, and cleanup proposals with
+acceptance checks. It does not close native release or GUI acceptance items.
+
 ## Non-negotiable invariants
 
 - A decrypted submitted statement exists only in process memory. It is never
