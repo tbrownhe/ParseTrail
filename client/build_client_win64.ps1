@@ -1,12 +1,7 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$ClientsDir,
-    [string]$SigningKey,
-    [switch]$Publish,
-    [string]$RemoteUser,
-    [string]$RemoteHost,
-    [string]$RemoteClientsDir,
-    [switch]$DeployOnly
+    [string]$SigningKey
 )
 
 $ErrorActionPreference = "Stop"
@@ -21,16 +16,10 @@ if (-not (Test-Path -LiteralPath $ClientsDir -PathType Container)) {
 }
 $distDir = (Resolve-Path -LiteralPath $ClientsDir).Path
 $privateKey = $SigningKey
-$remoteDir = $RemoteClientsDir
-if (-not $DeployOnly) {
-    if (-not $privateKey -or -not (Test-Path -LiteralPath $privateKey -PathType Leaf)) {
-        throw "SigningKey must name the encrypted release key for build/sign operations"
-    }
-    $privateKey = (Resolve-Path -LiteralPath $privateKey).Path
+if (-not $privateKey -or -not (Test-Path -LiteralPath $privateKey -PathType Leaf)) {
+    throw "SigningKey must name the encrypted release key for build/sign operations"
 }
-if ($DeployOnly) {
-    $Publish = $true
-}
+$privateKey = (Resolve-Path -LiteralPath $privateKey).Path
 
 # --- Define dirs for build stages --------------------------------------------
 $prebuildDir = Join-Path $PSScriptRoot "prebuild"
@@ -75,20 +64,13 @@ if ($LASTEXITCODE -ne 0) {
 }
 $releaseSource = $sourceJson | ConvertFrom-Json
 $installerPath = Join-Path $clientDir "parsetrail_${version}_windows-x86_64_setup.exe"
-$manifestPath = Join-Path $clientDir "client-manifest.json"
-$signaturePath = Join-Path $clientDir "client-manifest.sig"
-if ($DeployOnly -and -not (Test-Path -LiteralPath $installerPath -PathType Leaf)) {
-    Write-Error "Installer for client version $version was not found: $installerPath"
-    exit 1
-}
-if (-not $DeployOnly -and (Test-Path -LiteralPath $installerPath)) {
+if (Test-Path -LiteralPath $installerPath) {
     Write-Error "Versioned installer already exists: $installerPath. Bump the client version before rebuilding."
     exit 1
 }
 
 
 # --- Locate the external Windows installer compiler --------------------------
-if (-not $DeployOnly) {
 $makensisCommand = Get-Command "makensis.exe" -ErrorAction SilentlyContinue
 $makensisCandidates = @(
     if ($makensisCommand) { $makensisCommand.Source }
@@ -215,30 +197,17 @@ try {
     Write-Error "ERROR: Build or packaging failed. $($_.Exception.Message)"
     throw
 }
-}
 
 Remove-Item -LiteralPath $buildMetadataPath -Force -ErrorAction SilentlyContinue
 
-# Sign new installers offline; deployment-only mode must independently verify
-# the existing release using only the bundled public trust store.
-if ($DeployOnly) {
-    Write-Host "Synchronizing the locked environment for release verification..."
-    uv sync --frozen --python $releasePython --no-python-downloads
-    if ($LASTEXITCODE -ne 0) {
-        throw "uv sync failed with exit code $LASTEXITCODE"
-    }
-}
-
-if (-not $DeployOnly) {
-    Write-Host "Signing the Windows client release..."
-    uv run --no-env-file --frozen --python $releasePython --no-python-downloads python -m scripts.client_release sign `
-        --private-key $privateKey `
-        --installer $installerPath `
-        --platform windows-x86_64 `
-        --version $version
-    if ($LASTEXITCODE -ne 0) {
-        throw "Client release signing failed with exit code $LASTEXITCODE"
-    }
+Write-Host "Signing the Windows client release..."
+uv run --no-env-file --frozen --python $releasePython --no-python-downloads python -m scripts.client_release sign `
+    --private-key $privateKey `
+    --installer $installerPath `
+    --platform windows-x86_64 `
+    --version $version
+if ($LASTEXITCODE -ne 0) {
+    throw "Client release signing failed with exit code $LASTEXITCODE"
 }
 
 Write-Host "Verifying the signed Windows client release..."
@@ -248,73 +217,18 @@ if ($LASTEXITCODE -ne 0) {
     throw "Client release verification failed with exit code $LASTEXITCODE"
 }
 
-if (-not $DeployOnly) {
-    Write-Host "Recording checksums and release-tool versions..."
-    uv run --no-env-file --frozen --python $releasePython --no-python-downloads python -m scripts.release_inventory `
-        --release-dir $clientDir `
-        --source-commit $releaseSource.source_commit `
-        --source-tag $releaseSource.source_tag `
-        --kind client `
-        --platform windows-x86_64 `
-        --version $version `
-        --packager nsis `
-        --packager-executable $makensis
-    if ($LASTEXITCODE -ne 0) {
-        throw "Release inventory generation failed with exit code $LASTEXITCODE"
-    }
+Write-Host "Recording checksums and release-tool versions..."
+uv run --no-env-file --frozen --python $releasePython --no-python-downloads python -m scripts.release_inventory `
+    --release-dir $clientDir `
+    --source-commit $releaseSource.source_commit `
+    --source-tag $releaseSource.source_tag `
+    --kind client `
+    --platform windows-x86_64 `
+    --version $version `
+    --packager nsis `
+    --packager-executable $makensis
+if ($LASTEXITCODE -ne 0) {
+    throw "Release inventory generation failed with exit code $LASTEXITCODE"
 }
-$inventoryPath = Join-Path $clientDir "release-inventory.json"
-if (-not (Test-Path -LiteralPath $inventoryPath -PathType Leaf)) {
-    throw "Release inventory was not found: $inventoryPath"
-}
-$inventory = Get-Content -LiteralPath $inventoryPath -Raw | ConvertFrom-Json
-if ($inventory.source_commit -ne $releaseSource.source_commit -or $inventory.source_tag -ne $releaseSource.source_tag) {
-    throw "Release inventory does not match the checked-out source"
-}
-
-# Publication requires the explicit -Publish switch. The unified release command
-# obtains an additional typed confirmation before setting it.
-if (-not $Publish) {
-    Write-Host "Installer built successfully; deployment skipped."
-    exit 0
-}
-
-# Deploy client installers
-try {
-    Write-Host "Starting deployment..."
-
-    if (-not $remoteUser -or -not $remoteHost -or -not $remoteDir) {
-        throw "REMOTE_USER, REMOTE_HOST, and REMOTE_CLIENTS_DIR are required for deployment"
-    }
-
-    if (-not (Test-Path $clientDir)) {
-        Write-Warning "Local directory not found: $clientDir"
-        exit 1
-    }
-
-    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-    $releaseSequence = [Int64]$manifest.release_sequence
-    if ($releaseSequence -le 0) {
-        throw "Signed client manifest has an invalid release sequence"
-    }
-    if ($manifest.artifacts.Count -ne 1 -or $manifest.artifacts[0].filename -ne (Split-Path $installerPath -Leaf)) {
-        throw "Signed client manifest does not describe the expected Windows installer"
-    }
-
-    $remotePlatformDir = "$($remoteDir.TrimEnd('/'))/windows-x86_64"
-    uv run --no-env-file --frozen --python $releasePython --no-python-downloads python -m scripts.immutable_publish `
-        --release-dir $clientDir `
-        --manifest client-manifest.json `
-        --signature client-manifest.sig `
-        --inventory release-inventory.json `
-        --remote "${RemoteUser}@${RemoteHost}" `
-        --remote-root $remotePlatformDir
-    if ($LASTEXITCODE -ne 0) {
-        throw "Immutable Windows client publication failed with exit code $LASTEXITCODE"
-    }
-} catch {
-    Write-Error "ERROR: Deployment failed. $($_.Exception.Message)"
-    throw
-}
-
+Write-Host "Signed Windows dry run completed; preserve this output and use publish-existing after review."
 exit 0

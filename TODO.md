@@ -22,11 +22,6 @@ any implementation**. Native acceptance still requires the prepared owner checks
   implemented with explicit Windows x64 / `macos-15-intel` CI selection. Obtain
   the hosted test results and `[USER]` accept both resulting native builds;
   source/header tests alone do not establish frozen-app acceptance.
-- [ ] **R4 — Publish verified output:** add a shared publish-existing operation
-  for client and plugin releases using public-key verification, preserved
-  bytes/inventory/source/target, immutable sequence checks, explicit activation,
-  interrupted-activation reconciliation, and public smoke. Publication must not
-  rebuild, re-sign, or require the private signing key.
 - [ ] `[USER]` Rehearse the resulting release flow on Windows x64 and Intel
   macOS: fresh bootstrap, native build/frozen smoke, signed dry run, preserved
   artifact publication, install/upgrade, credential store, and plugin update.

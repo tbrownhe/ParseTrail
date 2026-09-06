@@ -1,5 +1,8 @@
 Unreleased
 ==========
+- Publish preserved installer/plugin releases with public keys, recorded inventory
+  hashes, source/target checks, explicit activation, concurrent-pointer protection,
+  and public smoke; use `publish-existing` after the signed dry run
 - Check frozen executable architecture before launch, force Intel Mac packaging,
   and select explicit Windows x64/Intel Mac CI with native interpreter assertions
 - Prepare client 1.4.0 with version-2 signed installer metadata and explicit

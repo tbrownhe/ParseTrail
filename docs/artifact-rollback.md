@@ -36,8 +36,11 @@ the affected target, atomically replace its
 {"release_sequence": <KNOWN_GOOD_SEQUENCE>, "schema_version": 1}
 ```
 
-Write and verify a temporary file in the same directory, then rename it over the
-pointer so readers can never observe a partial document. Do not copy files into
+Write and verify a temporary file in the same directory, then take the channel's
+`.publish.lock` with `flock`, recheck the active pointer, and rename the temporary
+file over it while holding the lock. This coordinates with
+[publish-existing](artifact-publication.md) and prevents a concurrent publication
+from overwriting the rollback. Do not copy files into
 the old release or reuse its sequence. Run the public manifest, signature,
 installer range-download, listing, and website smoke checks from the production
 deployment runbook. Restore the prior pointer if any check fails.

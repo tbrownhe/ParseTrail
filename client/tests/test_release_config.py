@@ -56,3 +56,34 @@ def test_rejects_missing_release_directory(tmp_path: Path) -> None:
 
     with pytest.raises(ReleaseConfigError, match="clients_dir"):
         load_config(config_path)
+
+
+def test_publication_does_not_resolve_private_key_or_builder_paths(tmp_path, monkeypatch):
+    from scripts import release
+
+    config_path = tmp_path / "release.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "clients_dir": "disconnected",
+                "plugins_dir": "disconnected",
+                "signing_key": "disconnected",
+                "public_api_base_url": "https://staging.example.invalid/api/v1",
+                "remote": {
+                    "user": "operator",
+                    "host": "staging.example.invalid",
+                    "clients_dir": "/clients",
+                    "plugins_dir": "/plugins",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("Public verification must not access private/build paths")
+
+    monkeypatch.setattr(release, "_existing_path", forbidden)
+    config = load_config(config_path, publication_only=True)
+    assert isinstance(config, release.PublicationConfig)

@@ -307,11 +307,10 @@ catalog, removes stale compiled output, prompts for the offline-key passphrase,
 signs, independently verifies, and writes `release-inventory.json`. It does not
 connect to or change the public server.
 
-Add `--publish` only after inspecting the dry-run output. Publication requires a
-second typed confirmation, uploads all files into a new immutable release
-directory, compares their remote sizes and SHA-256 hashes, and atomically changes
-`current-release.json` last. It then compares the public manifest and signature
-with the local bytes and smokes the public listing or installer range endpoint.
+Preserve the dry-run directory and the printed inventory SHA-256. Use the shared
+[publish-existing workflow](../docs/artifact-publication.md) to review those exact
+bytes with public keys and explicitly activate them. Publication does not repeat
+the build or signing step and does not require the signing drive.
 
 For key rotation, first release a client that contains both old and new public
 keys. Only start signing catalogs with the new key after that client is
@@ -397,14 +396,18 @@ and independently verifies the signed installer manifest. Install NSIS normally;
 `makensis.exe` may be on `PATH` or in its standard installation directory. No
 `MAKENSIS_PATH` setting is used.
 
-The common `--publish` path currently invokes the builder again and refuses an
-existing versioned installer. Preserve a successful dry run; do not delete or
-rebuild it to work around that guard. A shared publish-existing operation is
-tracked in TODO; Windows already has a lower-level `-DeployOnly` path.
-An interrupted upload cannot replace the active release. If SSH drops during
-activation, the publisher reads the authoritative pointer and distinguishes a
-completed activation from a failed one. The same publisher is used for both
-installer platforms and plugins.
+Builders now stop after a signed dry run. Preserve the directory and printed
+inventory SHA-256, then use [publish-existing](../docs/artifact-publication.md)
+for either installer target or plugins. The old `--publish` / `-Publish` and
+Windows `-DeployOnly` switches are retired. The new command verifies saved
+output without rebuilding, re-signing, or requiring the private key; its default
+is a local review, and `--activate` adds an explicit typed confirmation.
+
+An interrupted upload cannot replace the active release. Activation compares the
+original pointer under a channel lock, so a competing publisher cannot overwrite
+a newer activation. If SSH drops during activation, the publisher reads the
+authoritative pointer; an unreadable outcome or a public smoke failure is
+reported separately. See the publication runbook for recovery and prerequisites.
 
 macOS:
 

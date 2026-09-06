@@ -62,7 +62,7 @@ class RemoteTransport(Protocol):
 
     def sha256(self, remote_path: str) -> str: ...
 
-    def replace(self, source_path: str, destination_path: str) -> None: ...
+    def activate(self, source_path: str, destination_path: str, expected_pointer: bytes | None) -> None: ...
 
     def read(self, remote_path: str, maximum_bytes: int) -> bytes | None: ...
 
@@ -121,8 +121,18 @@ class SshTransport:
             raise PublishError("Remote hash response was invalid")
         return digest
 
-    def replace(self, source_path: str, destination_path: str) -> None:
-        self._ssh(f"mv -- {shlex.quote(source_path)} {shlex.quote(destination_path)}")
+    def activate(self, source_path: str, destination_path: str, expected_pointer: bytes | None) -> None:
+        # Hold a channel lock across compare-and-replace, including concurrent
+        # publishers whose uploads completed after our initial pointer read.
+        destination = shlex.quote(destination_path)
+        condition = f"test ! -e {destination}"
+        if expected_pointer is not None:
+            condition = (
+                f'test "$(sha256sum -- {destination} | cut -d " " -f 1)" = {shlex.quote(_sha256(expected_pointer))}'
+            )
+        command = f"{condition} && mv -- {shlex.quote(source_path)} {destination}"
+        lock = str(PurePosixPath(destination_path).parent / ".publish.lock")
+        self._ssh(f"flock -n {shlex.quote(lock)} sh -c {shlex.quote(command)}")
 
     def read(self, remote_path: str, maximum_bytes: int) -> bytes | None:
         if not self.exists(remote_path):
@@ -149,6 +159,8 @@ def _load_release(
         manifest = json.loads(manifest_bytes)
     except (OSError, json.JSONDecodeError) as exc:
         raise PublishError("Signed release metadata could not be read") from exc
+    if not isinstance(manifest, dict):
+        raise PublishError("Release manifest must be an object")
     if len(signature_bytes) != 64:
         raise PublishError("Detached release signature must be exactly 64 bytes")
     sequence = manifest.get("release_sequence")
@@ -171,12 +183,14 @@ def _load_release(
             raise PublishError(f"Manifest digest is invalid for {filename}")
         path = release_dir / filename
         try:
-            data = path.read_bytes()
+            size = path.stat().st_size
+            with path.open("rb") as stream:
+                digest = hashlib.file_digest(stream, "sha256").hexdigest()
         except OSError as exc:
             raise PublishError(f"Manifest artifact is missing: {filename}") from exc
-        if len(data) != expected_size or _sha256(data) != expected_sha:
+        if size != expected_size or digest != expected_sha:
             raise PublishError(f"Local artifact does not match its signed manifest: {filename}")
-        local_artifacts.append(LocalArtifact(path, filename, len(data), expected_sha))
+        local_artifacts.append(LocalArtifact(path, filename, size, expected_sha))
 
     local_artifacts.extend(
         [
@@ -242,6 +256,34 @@ def _verify_remote(transport: RemoteTransport, artifact: LocalArtifact, remote_p
         raise PublishError(f"Remote hash mismatch for {artifact.filename}")
 
 
+def _pointer_sequence(pointer: bytes | None) -> int:
+    if pointer is None:
+        return 0
+    try:
+        payload = json.loads(pointer)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise PublishError("Active release pointer is invalid") from exc
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {"schema_version", "release_sequence"}
+        or type(payload["schema_version"]) is not int
+        or payload["schema_version"] != 1
+        or type(payload["release_sequence"]) is not int
+        or payload["release_sequence"] <= 0
+    ):
+        raise PublishError("Active release pointer is invalid")
+    return payload["release_sequence"]
+
+
+def _read_activation(transport: RemoteTransport, pointer: str, sequence: int) -> bytes | None:
+    try:
+        return transport.read(pointer, MAX_POINTER_BYTES)
+    except PublishError as exc:
+        raise PublishError(
+            f"Release {sequence} activation outcome is unknown; read current-release.json before any retry or rollback"
+        ) from exc
+
+
 def publish_release(
     *,
     release_dir: Path,
@@ -264,6 +306,10 @@ def publish_release(
     remote_release = _remote_join(releases_root, str(sequence))
     if transport.exists(remote_release):
         raise PublishError(f"Remote release sequence {sequence} already exists")
+    pointer_final = _remote_join(remote_root, "current-release.json")
+    original_pointer = transport.read(pointer_final, MAX_POINTER_BYTES)
+    if sequence <= _pointer_sequence(original_pointer):
+        raise PublishError("Release sequence must exceed the active remote sequence")
     transport.create_release(releases_root, remote_release)
 
     for artifact in artifacts:
@@ -279,7 +325,6 @@ def publish_release(
         ).encode()
         + b"\n"
     )
-    pointer_final = _remote_join(remote_root, "current-release.json")
     pointer_partial = _remote_join(remote_root, f".current-release.{uuid.uuid4().hex}.part")
     with tempfile.NamedTemporaryFile(prefix="parsetrail-release-", suffix=".json", delete=False) as stream:
         stream.write(pointer_bytes)
@@ -294,13 +339,13 @@ def publish_release(
         transport.upload(pointer_local, pointer_partial)
         _verify_remote(transport, pointer_artifact, pointer_partial)
         try:
-            transport.replace(pointer_partial, pointer_final)
+            transport.activate(pointer_partial, pointer_final, original_pointer)
         except PublishError as exc:
             # The SSH connection can drop after a successful atomic mv. Resolve
             # that uncertain outcome by reading the authoritative pointer.
-            if transport.read(pointer_final, MAX_POINTER_BYTES) != pointer_bytes:
+            if _read_activation(transport, pointer_final, sequence) != pointer_bytes:
                 raise PublishError(f"Release {sequence} activation did not complete") from exc
-        if transport.read(pointer_final, MAX_POINTER_BYTES) != pointer_bytes:
+        if _read_activation(transport, pointer_final, sequence) != pointer_bytes:
             raise PublishError(f"Release {sequence} activation could not be verified")
     finally:
         pointer_local.unlink(missing_ok=True)

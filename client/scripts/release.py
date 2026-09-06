@@ -12,13 +12,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from urllib.parse import urlsplit
 
-from parsetrail.build_plugins import compile_plugins
-from parsetrail.version import __version__
-
-from scripts.immutable_publish import SshTransport, publish_release
-from scripts.plugin_release import DEFAULT_TRUST_STORE, sign_release, verify_release
-from scripts.release_inventory import create_inventory
-from scripts.release_smoke import smoke_release
+from scripts.publish_existing import DEFAULT_TRUST_STORE, publish_existing
 from scripts.release_source import REPOSITORY_ROOT, validate_release_source
 
 
@@ -43,6 +37,12 @@ class ReleaseConfig:
     remote: RemoteConfig | None
 
 
+@dataclass(frozen=True)
+class PublicationConfig:
+    public_api_base_url: str
+    remote: RemoteConfig
+
+
 def _existing_path(value: object, *, name: str, directory: bool) -> Path:
     if not isinstance(value, str) or not value:
         raise ReleaseConfigError(f"{name} must be a non-empty path")
@@ -54,21 +54,17 @@ def _existing_path(value: object, *, name: str, directory: bool) -> Path:
     return path
 
 
-def load_config(path: Path) -> ReleaseConfig:
+def load_config(path: Path, *, publication_only: bool = False) -> ReleaseConfig | PublicationConfig:
     try:
         payload = json.loads(path.expanduser().read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ReleaseConfigError(f"Could not read release config: {path}") from exc
-    if not isinstance(payload, dict) or set(payload) != {
-        "schema_version",
-        "clients_dir",
-        "plugins_dir",
-        "signing_key",
-        "public_api_base_url",
-        "remote",
-    }:
+    public_fields = {"schema_version", "public_api_base_url", "remote"}
+    build_fields = {"clients_dir", "plugins_dir", "signing_key"}
+    allowed = [public_fields, public_fields | build_fields] if publication_only else [public_fields | build_fields]
+    if not isinstance(payload, dict) or set(payload) not in allowed:
         raise ReleaseConfigError("Release config has unknown or missing fields")
-    if payload["schema_version"] != 1:
+    if type(payload["schema_version"]) is not int or payload["schema_version"] != 1:
         raise ReleaseConfigError("Unsupported release config schema")
 
     remote_payload = payload["remote"]
@@ -99,6 +95,10 @@ def load_config(path: Path) -> ReleaseConfig:
     ):
         raise ReleaseConfigError("public_api_base_url must be an HTTPS URL without credentials, query, or fragment")
 
+    if publication_only:
+        if remote is None:
+            raise ReleaseConfigError("Remote configuration is required to review a publication")
+        return PublicationConfig(public_api_base_url=public_api_base_url.rstrip("/"), remote=remote)
     return ReleaseConfig(
         clients_dir=_existing_path(payload["clients_dir"], name="clients_dir", directory=True),
         plugins_dir=_existing_path(payload["plugins_dir"], name="plugins_dir", directory=True),
@@ -108,20 +108,13 @@ def load_config(path: Path) -> ReleaseConfig:
     )
 
 
-def _confirm_publish(kind: str) -> None:
-    expected = f"publish {kind}"
-    answer = input(f"Type {expected!r} to activate this public release: ")
-    if answer != expected:
-        raise ReleaseConfigError("Publication was not approved")
-
-
 def _run(command: list[str]) -> None:
     completed = subprocess.run(command, cwd=Path(__file__).resolve().parents[1], check=False)
     if completed.returncode:
         raise RuntimeError(f"Release command failed with exit code {completed.returncode}: {command[0]}")
 
 
-def _client_command(config: ReleaseConfig, platform_name: str, *, publish: bool) -> list[str]:
+def _client_command(config: ReleaseConfig, platform_name: str) -> list[str]:
     if platform_name not in {"windows-x86_64", "macos-x86_64"}:
         raise ReleaseConfigError("Client releases require an explicit supported installer target")
     client_root = Path(__file__).resolve().parents[1]
@@ -151,24 +144,15 @@ def _client_command(config: ReleaseConfig, platform_name: str, *, publish: bool)
             "--signing-key",
             str(config.signing_key),
         ]
-    if publish:
-        if config.remote is None:
-            raise ReleaseConfigError("Remote configuration is required for publication")
-        command.extend(
-            [
-                "-Publish" if platform_name == "windows-x86_64" else "--publish",
-                "-RemoteUser" if platform_name == "windows-x86_64" else "--remote-user",
-                config.remote.user,
-                "-RemoteHost" if platform_name == "windows-x86_64" else "--remote-host",
-                config.remote.host,
-                "-RemoteClientsDir" if platform_name == "windows-x86_64" else "--remote-clients-dir",
-                config.remote.clients_dir,
-            ]
-        )
     return command
 
 
-def release_plugins(config: ReleaseConfig, source_tag: str, *, publish: bool) -> None:
+def release_plugins(config: ReleaseConfig, source_tag: str) -> None:
+    from parsetrail.build_plugins import compile_plugins
+
+    from scripts.plugin_release import sign_release, verify_release
+    from scripts.release_inventory import create_inventory, inventory_digest
+
     source = validate_release_source(repository=REPOSITORY_ROOT, expected_tag=source_tag)
     _run([sys.executable, "-m", "pytest", "-q"])
     compile_plugins(config.plugins_dir)
@@ -191,25 +175,8 @@ def release_plugins(config: ReleaseConfig, source_tag: str, *, publish: bool) ->
         packager="none",
     )
     print(f"Signed and verified plugin release {manifest.release_sequence} from {source.source_commit[:12]}.")
-    if not publish:
-        print("Dry run complete; public artifact directories were not changed.")
-        return
-    if config.remote is None:
-        raise ReleaseConfigError("Remote configuration is required for publication")
-    _confirm_publish("plugins")
-    publish_release(
-        release_dir=config.plugins_dir,
-        manifest_name="plugin-manifest.json",
-        signature_name="plugin-manifest.sig",
-        inventory_name="release-inventory.json",
-        remote_root=config.remote.plugins_dir,
-        transport=SshTransport(f"{config.remote.user}@{config.remote.host}"),
-    )
-    smoke_release(
-        release_dir=config.plugins_dir,
-        release_kind="plugins",
-        api_base_url=config.public_api_base_url,
-    )
+    print(f"Inventory SHA-256: {inventory_digest(config.plugins_dir)}")
+    print("Dry run complete; preserve this output and use publish-existing after review.")
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -219,32 +186,49 @@ def _parser() -> argparse.ArgumentParser:
 
     client = subparsers.add_parser("client")
     client.add_argument("--platform", choices=("macos-x86_64", "windows-x86_64"), required=True)
-    client.add_argument("--publish", action="store_true")
 
     plugins = subparsers.add_parser("plugins")
     plugins.add_argument("--tag", required=True)
-    plugins.add_argument("--publish", action="store_true")
+    existing = subparsers.add_parser("publish-existing", help="verify saved output; optionally confirm activation")
+    existing.add_argument("--kind", choices=("client", "plugins"), required=True)
+    existing.add_argument("--release-dir", type=Path, required=True)
+    existing.add_argument("--tag", required=True)
+    existing.add_argument("--platform", choices=("macos-x86_64", "windows-x86_64"))
+    existing.add_argument("--inventory-sha256", required=True)
+    existing.add_argument("--trust-store", type=Path, default=DEFAULT_TRUST_STORE)
+    existing.add_argument("--activate", action="store_true")
     return parser
 
 
-def main() -> int:
-    args = _parser().parse_args()
+def main(argv: list[str] | None = None) -> int:
+    args = _parser().parse_args(argv)
     try:
-        config = load_config(args.config)
-        if args.command == "client":
-            if args.publish:
-                _confirm_publish(f"client {__version__} {args.platform}")
-            _run(_client_command(config, args.platform, publish=args.publish))
-            if args.publish:
-                smoke_release(
-                    release_dir=config.clients_dir / args.platform,
-                    release_kind="client",
-                    api_base_url=config.public_api_base_url,
-                    platform=args.platform,
-                )
+        if args.command == "publish-existing":
+            config = load_config(args.config, publication_only=True)
+            remote_root = config.remote.plugins_dir
+            if args.kind == "client":
+                if args.platform is None:
+                    raise ReleaseConfigError("Client publication requires --platform")
+                remote_root = f"{config.remote.clients_dir.rstrip('/')}/{args.platform}"
+            publish_existing(
+                release_dir=args.release_dir,
+                kind=args.kind,
+                tag=args.tag,
+                target=args.platform,
+                inventory_sha256=args.inventory_sha256,
+                remote_spec=f"{config.remote.user}@{config.remote.host}",
+                remote_root=remote_root,
+                api_base_url=config.public_api_base_url,
+                trust_store=args.trust_store,
+                activate=args.activate,
+            )
         else:
-            release_plugins(config, args.tag, publish=args.publish)
-    except (OSError, ValueError, RuntimeError, ReleaseConfigError) as exc:
+            config = load_config(args.config)
+            if args.command == "client":
+                _run(_client_command(config, args.platform))
+            else:
+                release_plugins(config, args.tag)
+    except (OSError, ValueError, RuntimeError, EOFError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
     return 0

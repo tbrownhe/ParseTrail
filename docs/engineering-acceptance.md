@@ -13,6 +13,7 @@ Current unfinished work belongs in [TODO](../TODO.md).
 | P0.1 test isolation and CI boundaries | [Development contracts/checks](../development.md), [backend tests](../backend/README.md#tests-and-static-checks), [deployment CI boundary](../deployment.md#ci-boundary). |
 | P0.2/P0.4 memory-only contributions, limits, reconciliation, key ownership | [Privacy inventory](privacy-and-data-flow.md), [backend guide](../backend/README.md), [server-statement devtool](../devtools/server_statements/README.md). |
 | P0.3 artifact trust and completed P1.5 release gates | [Desktop release guide](../client/README.md#signed-plugin-releases), [artifact rollback](artifact-rollback.md), [release/incident response](release-and-incident-response.md). |
+| R4 preserved release publication | [Public-key-only publication](artifact-publication.md), [artifact rollback](artifact-rollback.md). |
 | P0.5/P1.2 import recovery and exact financial schema | [Client data/import guide](../client/README.md#local-database-and-exact-financial-values), [import acceptance sandbox](../devtools/import_acceptance/README.md). |
 | P0.6 runtime/dependency baseline and PostgreSQL cutover | [Contributor setup](../development.md), [client requirements](../client/README.md#requirements), [PostgreSQL runbook](postgresql-17-upgrade.md). |
 | P0.7 deployment, staging isolation, rollback, proxy and backup boundaries | [Deployment](../deployment.md), [staging](staging.md), [release/incident response](release-and-incident-response.md). |
@@ -186,6 +187,39 @@ PyInstaller explicitly targets x86_64. Hosted source CI selects Windows x64 and
 and checks the resulting client environment target. The Intel runner label was
 verified against GitHub's published runner matrix. The new hosted run and final
 native frozen builds remain pending; this record does not mark R3b complete.
+
+The owner then ran the requested Intel bootstrap, `macos_release.py sync
+--fresh-cryptography`, and the offscreen full client suite. The clean cryptography
+**49.0.0** source build completed in **2m 22s** and the editable client reported
+**1.4.0**. The suite passed **371 tests with 2 Windows-specific skips in 128.87s**.
+This accepts the locked Intel dependency build and source-test gate on the
+updated macOS 15.7.9 machine. The transcript did not record a Git commit; the final
+tagged native build must retain its inventory/source commit. Static build inputs
+and successful source tests do not replace the final bundle library audit,
+frozen smoke, installed Keychain, and offline walkthrough.
+
+## Preserved artifact publication follow-up
+
+R4 adds the shared [publish-existing operation](artifact-publication.md) for
+Windows x64, Intel Mac, and plugins. Native builders now stop after signing and
+recording a dry run. Publication uses public keys and the recorded inventory
+digest, validates saved source/target identity, confirms the displayed release,
+and uploads a verified temporary copy without changing the saved output. The
+old build/publication switches are retired.
+
+The implementation passed **441 full client tests on Windows**, with three
+platform-specific skips: the native Mac Bash builder and two Linux/POSIX `flock`
+integration cases. Client-wide Ruff check/format and both native builder syntax
+checks passed. Real temporary Ed25519 signatures cover both installer targets
+and plugin catalogs; fake transport checks preserved bytes, changed/missing
+evidence, source/target mismatch, declined publication, reused sequences,
+concurrent activation, post-move SSH interruption, unknown outcomes, and public
+smoke failure. The compare/move shell condition also ran in Windows Git Bash;
+the native Linux locking primitive still needs staging acceptance.
+
+No release signing key, financial fixture, SSH destination, or public artifact
+directory was accessed. These local checks complete R4's implementation gate;
+the staged publication and resulting native walkthroughs remain in TODO.
 
 ## Staging migration and recovery: August 2026
 

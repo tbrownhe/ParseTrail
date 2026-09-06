@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shlex
+import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
-from scripts.immutable_publish import PublishError, publish_release
+from scripts.immutable_publish import PublishError, SshTransport, publish_release
 
 
 class FakeTransport:
@@ -40,7 +43,9 @@ class FakeTransport:
             return "0" * 64
         return hashlib.sha256(self.files[remote_path]).hexdigest()
 
-    def replace(self, source_path: str, destination_path: str) -> None:
+    def activate(self, source_path: str, destination_path: str, expected_pointer: bytes | None) -> None:
+        if self.files.get(destination_path) != expected_pointer:
+            raise PublishError("active pointer changed")
         if self.activation_mode == "interrupt-before":
             raise PublishError("injected activation interruption")
         self.files[destination_path] = self.files.pop(source_path)
@@ -175,3 +180,131 @@ def test_publishes_and_verifies_release_inventory(tmp_path: Path) -> None:
     _publish(release_dir, transport, inventory_name="release-inventory.json")
 
     assert transport.files["/catalog/releases/2/release-inventory.json"] == inventory
+
+
+@pytest.mark.parametrize(
+    "pointer",
+    [
+        b'{"schema_version":1,"release_sequence":2}',
+        b'{"schema_version":1,"release_sequence":9}',
+        b"{}",
+        b"[]",
+        b"not json",
+        b'{"schema_version":true,"release_sequence":1}',
+        b'{"schema_version":1,"release_sequence":true}',
+        b'{"schema_version":1,"release_sequence":0}',
+    ],
+)
+def test_invalid_or_newer_active_pointer_prevents_upload(tmp_path, pointer):
+    transport = FakeTransport(pointer=pointer)
+    with pytest.raises(PublishError, match="pointer is invalid|must exceed"):
+        _publish(_release(tmp_path), transport)
+    assert transport.upload_count == 0
+    assert "/catalog/releases/2" not in transport.directories
+    assert transport.files["/catalog/current-release.json"] == pointer
+
+
+def test_first_release_can_create_initial_pointer(tmp_path):
+    transport = FakeTransport()
+    transport.files.clear()
+    assert _publish(_release(tmp_path), transport) == 2
+
+
+def test_concurrent_publication_cannot_be_overwritten(tmp_path, monkeypatch):
+    transport = FakeTransport()
+    original_activate = transport.activate
+    newer = b'{"schema_version":1,"release_sequence":3}'
+
+    def concurrent(source, destination, expected):
+        transport.files[destination] = newer
+        original_activate(source, destination, expected)
+
+    monkeypatch.setattr(transport, "activate", concurrent)
+    with pytest.raises(PublishError, match="activation did not complete"):
+        _publish(_release(tmp_path), transport)
+    assert transport.files["/catalog/current-release.json"] == newer
+
+
+def test_unreadable_pointer_after_connection_drop_reports_unknown_outcome(tmp_path, monkeypatch):
+    transport = FakeTransport()
+    transport.activation_mode = "interrupt-after"
+    original_read = transport.read
+
+    def read(path, limit):
+        if transport.upload_count:
+            raise PublishError("SSH unavailable")
+        return original_read(path, limit)
+
+    monkeypatch.setattr(transport, "read", read)
+    with pytest.raises(PublishError, match="activation outcome is unknown"):
+        _publish(_release(tmp_path), transport)
+    assert json.loads(transport.files["/catalog/current-release.json"])["release_sequence"] == 2
+
+
+@pytest.mark.skipif(not shutil.which("flock") or not shutil.which("sh"), reason="POSIX flock/sh activation integration")
+@pytest.mark.parametrize("original", [None, b'{"schema_version":1,"release_sequence":1}\n'])
+def test_ssh_activation_command_compares_pointer_under_real_lock(tmp_path, monkeypatch, original):
+    import fcntl
+
+    transport = SshTransport("operator@unused.invalid")
+    pointer = tmp_path / "current-release.json"
+    partial = tmp_path / "next.json"
+    if original is not None:
+        pointer.write_bytes(original)
+    partial.write_bytes(b"new pointer")
+
+    def local_ssh(command):
+        result = subprocess.run(["sh", "-c", command], capture_output=True, check=False)
+        if result.returncode:
+            raise PublishError("activation failed")
+        return result.stdout
+
+    monkeypatch.setattr(transport, "_ssh", local_ssh)
+    transport.activate(str(partial), str(pointer), original)
+    assert pointer.read_bytes() == b"new pointer"
+    partial.write_bytes(b"stale writer")
+    with pytest.raises(PublishError, match="activation failed"):
+        transport.activate(str(partial), str(pointer), original)
+    assert pointer.read_bytes() == b"new pointer"
+    assert partial.read_bytes() == b"stale writer"
+    with (tmp_path / ".publish.lock").open("wb") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with pytest.raises(PublishError, match="activation failed"):
+            transport.activate(str(partial), str(pointer), b"new pointer")
+    assert pointer.read_bytes() == b"new pointer"
+
+
+def test_activation_shell_condition_handles_missing_matching_and_changed_pointer(tmp_path, monkeypatch):
+    bash = shutil.which("bash")
+    windows_bash = Path("C:/Program Files/Git/bin/bash.exe")
+    if windows_bash.is_file():
+        bash = str(windows_bash)
+    if bash is None:
+        pytest.skip("Bash is needed to execute the activation shell condition")
+    transport = SshTransport("operator@unused.invalid")
+    pointer = tmp_path / "pointer with spaces.json"
+    partial = tmp_path / "candidate.json"
+
+    def local_shell(command):
+        parts = shlex.split(command)
+        assert parts[:2] == ["flock", "-n"]
+        assert parts[3:5] == ["sh", "-c"]
+        # Exercise the actual compare/move shell code on both native builders;
+        # lock contention itself is covered by the POSIX integration above.
+        result = subprocess.run([bash, "-c", parts[5]], capture_output=True, check=False)
+        if result.returncode:
+            raise PublishError("activation failed")
+        return result.stdout
+
+    monkeypatch.setattr(transport, "_ssh", local_shell)
+    partial.write_bytes(b"first")
+    transport.activate(partial.as_posix(), pointer.as_posix(), None)
+    assert pointer.read_bytes() == b"first"
+    partial.write_bytes(b"second")
+    transport.activate(partial.as_posix(), pointer.as_posix(), b"first")
+    assert pointer.read_bytes() == b"second"
+    partial.write_bytes(b"stale")
+    for expected in (None, b"first"):
+        with pytest.raises(PublishError, match="activation failed"):
+            transport.activate(partial.as_posix(), pointer.as_posix(), expected)
+        assert pointer.read_bytes() == b"second"

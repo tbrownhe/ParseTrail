@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "public_api_base_url": "https://api.staging.parsetrail.com/api/v1",
+  "remote": {
+    "user": "release-operator",
+    "host": "staging.parsetrail.com",
+    "clients_dir": "/srv/parsetrail/data/clients",
+    "plugins_dir": "/srv/parsetrail/data/plugins"
+  }
+}

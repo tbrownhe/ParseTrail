@@ -25,6 +25,11 @@ PACKAGER_COMMANDS = {
 SHA256_HEX = frozenset("0123456789abcdef")
 
 
+def inventory_digest(release_dir: Path) -> str:
+    """Record this digest with the dry-run evidence for publication review."""
+    return _sha256_file(release_dir / INVENTORY_FILENAME)
+
+
 def _sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -225,6 +230,7 @@ def main() -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
     print(f"Recorded {len(inventory['files'])} release files in {args.release_dir / INVENTORY_FILENAME}")
+    print(f"Inventory SHA-256: {inventory_digest(args.release_dir)}")
     return 0
 
 

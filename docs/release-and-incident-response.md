@@ -28,11 +28,13 @@ own current verification and restore evidence.
 5. **Build once.** Run the unified local release command. It synchronizes the
    locked Python, runs tests, builds, smoke-tests the frozen executable when
    applicable, signs the exact manifest with the offline key, independently
-   verifies it, and records tool versions/checksums. Inspect the dry run before
-   adding `--publish`.
-6. **Publish atomically.** Upload immutable release files before changing
-   `current-release.json`. Verify public manifest/signature bytes and range-download
-   the selected artifact. The offline private key never goes to the server or CI.
+   verifies it, and records tool versions/checksums. Preserve the dry run and
+   printed inventory SHA-256 for review.
+6. **Publish atomically.** Use [publish-existing](artifact-publication.md) with the
+   saved directory and recorded inventory digest; review locally before adding
+   `--activate` and typing the displayed confirmation. It uploads verified bytes,
+   compares the active pointer under a lock, and checks the public manifest,
+   signature, and listing/range response. The private key is not needed.
 7. **Deploy server images through the gate.** Use commit-tagged digest-pinned
    images, recent restore evidence, explicit Alembic migration, bounded health
    waits, public smoke tests, and a recorded rollback target. Do not use the

@@ -76,6 +76,17 @@ def validate_client_release(
     )
 
 
+def resolve_release_tag(*, expected_tag: str, repository: Path = REPOSITORY_ROOT) -> ReleaseSource:
+    """Resolve preserved output's tag without requiring the build checkout at HEAD."""
+    repository = repository.resolve()
+    reference = f"refs/tags/{expected_tag}"
+    _git(repository, "check-ref-format", reference)
+    commit = _git(repository, "rev-parse", "--verify", f"{reference}^{{commit}}")
+    if not COMMIT_PATTERN.fullmatch(commit):
+        raise ReleaseSourceError("Git did not return a full source commit for the release tag")
+    return ReleaseSource(source_commit=commit, source_tag=expected_tag)
+
+
 def write_build_metadata(
     output: Path,
     *,

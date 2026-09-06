@@ -180,7 +180,7 @@ def test_successful_launcher_pins_sync_and_preserves_interactive_release(tmp_pat
 
     monkeypatch.setattr(launcher.subprocess, "run", run)
     config = tmp_path / "release config.json"
-    assert launcher.main(["--config", str(config), "client", "--platform", "windows-x86_64", "--publish"]) == 7
+    assert launcher.main(["--config", str(config), "client", "--platform", "windows-x86_64"]) == 7
     assert len(calls) == 2
     assert calls[0][0][1] == "sync"
     for command, _kwargs in calls:
@@ -189,7 +189,7 @@ def test_successful_launcher_pins_sync_and_preserves_interactive_release(tmp_pat
     command, kwargs = calls[1]
     assert "--no-sync" in command
     assert "--no-env-file" in command
-    assert command[-6:] == ["--config", str(config), "client", "--platform", "windows-x86_64", "--publish"]
+    assert command[-5:] == ["--config", str(config), "client", "--platform", "windows-x86_64"]
     assert "capture_output" not in kwargs
     assert "stdin" not in kwargs
 
@@ -199,6 +199,48 @@ def test_bootstrap_help_needs_no_site_packages():
         [sys.executable, "-S", str(Path(launcher.__file__)), "--help"], capture_output=True, text=True, check=False
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_publish_existing_does_not_provision_sync_or_require_target_host(tmp_path, monkeypatch):
+    def forbidden(*_args, **_kwargs):
+        pytest.fail("Publication must not bootstrap or sync a build environment")
+
+    monkeypatch.setattr(launcher, "bootstrap", forbidden)
+    monkeypatch.setattr(launcher, "_run", forbidden)
+    monkeypatch.setattr(launcher.shutil, "which", lambda _name: "uv")
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append((command, kwargs))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(launcher.subprocess, "run", run)
+    assert (
+        launcher.main(
+            [
+                "--config",
+                str(tmp_path / "publish.json"),
+                "publish-existing",
+                "--kind",
+                "client",
+                "--platform",
+                "macos-x86_64",
+                "--release-dir",
+                str(tmp_path),
+                "--tag",
+                "client-v1.4.0",
+                "--inventory-sha256",
+                "a" * 64,
+                "--activate",
+            ]
+        )
+        == 0
+    )
+    assert len(calls) == 1
+    command, kwargs = calls[0]
+    assert command[:6] == ["uv", "run", "--no-env-file", "--no-sync", "--no-python-downloads", "python"]
+    assert command[-1] == "--activate"
+    assert "capture_output" not in kwargs
 
 
 def test_uv_script_ignores_broken_project_dependencies(tmp_path):

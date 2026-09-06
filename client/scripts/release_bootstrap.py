@@ -142,10 +142,18 @@ def _parser() -> argparse.ArgumentParser:
     check.add_argument("--print-python", action="store_true", help="print only the verified interpreter path")
     client = commands.add_parser("client", help="bootstrap, then run the guarded client release")
     client.add_argument("--platform", choices=tuple(TARGET_SYSTEMS), required=True)
-    client.add_argument("--publish", action="store_true")
     plugins = commands.add_parser("plugins", help="bootstrap, then run the guarded plugin release")
     plugins.add_argument("--tag", required=True)
-    plugins.add_argument("--publish", action="store_true")
+    existing = commands.add_parser(
+        "publish-existing", help="verify/publish saved output using the installed environment"
+    )
+    existing.add_argument("--kind", choices=("client", "plugins"), required=True)
+    existing.add_argument("--release-dir", type=Path, required=True)
+    existing.add_argument("--tag", required=True)
+    existing.add_argument("--platform", choices=tuple(TARGET_SYSTEMS))
+    existing.add_argument("--inventory-sha256", required=True)
+    existing.add_argument("--trust-store", type=Path)
+    existing.add_argument("--activate", action="store_true")
     return parser
 
 
@@ -153,8 +161,48 @@ def main(argv: list[str] | None = None) -> int:
     parser = _parser()
     args = parser.parse_args(argv)
     if args.command != "check" and args.config is None:
-        parser.error("--config is required for client/plugins releases")
+        parser.error("--config is required for build/publication commands")
     try:
+        if args.command == "publish-existing":
+            uv = shutil.which("uv")
+            if uv is None:
+                raise BootstrapError("uv was not found on PATH")
+            forwarded = [
+                "--config",
+                str(args.config.expanduser().resolve()),
+                "publish-existing",
+                "--kind",
+                args.kind,
+                "--release-dir",
+                str(args.release_dir.expanduser().resolve()),
+                "--tag",
+                args.tag,
+                "--inventory-sha256",
+                args.inventory_sha256,
+            ]
+            if args.platform:
+                forwarded.extend(["--platform", args.platform])
+            if args.trust_store:
+                forwarded.extend(["--trust-store", str(args.trust_store.expanduser().resolve())])
+            if args.activate:
+                forwarded.append("--activate")
+            # Use the already installed verifier. Publication neither provisions
+            # Python nor syncs/builds packages, and its target can differ from the host.
+            return subprocess.run(
+                [
+                    uv,
+                    "run",
+                    "--no-env-file",
+                    "--no-sync",
+                    "--no-python-downloads",
+                    "python",
+                    "-m",
+                    "scripts.release",
+                    *forwarded,
+                ],
+                cwd=CLIENT_ROOT,
+                check=False,
+            ).returncode
         runtime = bootstrap(getattr(args, "platform", None))
         if args.command == "check":
             print(runtime.interpreter if args.print_python else json.dumps(asdict(runtime), sort_keys=True))
@@ -193,8 +241,6 @@ def main(argv: list[str] | None = None) -> int:
             forwarded.extend(["--platform", args.platform])
         else:
             forwarded.extend(["--tag", args.tag])
-        if args.publish:
-            forwarded.append("--publish")
         # Inherit the terminal: signing and activation prompts must stay interactive.
         completed = subprocess.run(
             [

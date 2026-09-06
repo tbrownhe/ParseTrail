@@ -12,28 +12,16 @@ require_cmd() {
 
 CLIENTS_DIR=""
 SIGNING_KEY=""
-PUBLISH=false
-REMOTE_USER=""
-REMOTE_HOST=""
-REMOTE_CLIENTS_DIR=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --clients-dir) CLIENTS_DIR="${2:-}"; shift 2 ;;
         --signing-key) SIGNING_KEY="${2:-}"; shift 2 ;;
-        --publish) PUBLISH=true; shift ;;
-        --remote-user) REMOTE_USER="${2:-}"; shift 2 ;;
-        --remote-host) REMOTE_HOST="${2:-}"; shift 2 ;;
-        --remote-clients-dir) REMOTE_CLIENTS_DIR="${2:-}"; shift 2 ;;
         *) error_exit "Unknown argument: $1" ;;
     esac
 done
 
 [[ -d "$CLIENTS_DIR" ]] || error_exit "clients directory does not exist: $CLIENTS_DIR"
 [[ -f "$SIGNING_KEY" ]] || error_exit "signing key does not exist: $SIGNING_KEY"
-if $PUBLISH; then
-    [[ -n "$REMOTE_USER" && -n "$REMOTE_HOST" && -n "$REMOTE_CLIENTS_DIR" ]] \
-        || error_exit "remote user, host, and clients directory are required with --publish"
-fi
 
 require_cmd create-dmg
 require_cmd uv
@@ -174,19 +162,4 @@ uv run --no-env-file --no-sync --python "$RELEASE_PYTHON" --no-python-downloads 
     --native-report "$NATIVE_REPORT" \
     || error_exit "Release inventory generation failed."
 
-if ! $PUBLISH; then
-    echo "Signed macOS dry run completed; publication skipped."
-    exit 0
-fi
-
-REMOTE_PLATFORM_DIR="${REMOTE_CLIENTS_DIR%/}/macos-x86_64"
-uv run --no-env-file --no-sync --python "$RELEASE_PYTHON" --no-python-downloads python -m scripts.immutable_publish \
-    --release-dir "$DIST_DIR" \
-    --manifest client-manifest.json \
-    --signature client-manifest.sig \
-    --inventory release-inventory.json \
-    --remote "${REMOTE_USER}@${REMOTE_HOST}" \
-    --remote-root "$REMOTE_PLATFORM_DIR" \
-    || error_exit "Immutable macOS client publication failed."
-
-echo "macOS release completed successfully."
+echo "Signed macOS dry run completed; preserve this output and use publish-existing after review."

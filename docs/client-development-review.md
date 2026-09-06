@@ -15,6 +15,12 @@ plugin store, and database backup workflows provide a useful foundation. Finish
 release and offline acceptance before taking on larger product changes. These
 are proposals, not completed implementation or native acceptance claims.
 
+The findings below describe the original baseline. Implemented follow-ups and
+their limits are recorded in [engineering acceptance](engineering-acceptance.md);
+current release behavior is maintained in the [client guide](../client/README.md)
+and [publication runbook](artifact-publication.md). TODO contains only unfinished
+work, including the remaining native gates.
+
 ## Verified baseline
 
 - Read the root README/TODO, client README/changelog, contributor guide, privacy
