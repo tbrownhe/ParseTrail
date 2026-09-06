@@ -11,6 +11,7 @@ from public_smoke import SmokeConfig, SmokeFailure, parse_host_override, run_pub
 
 class _SmokeHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
+    health_failures_remaining = 0
     max_request_body_bytes = 1024
     oversize_body_length = 0
     visited: list[str] = []
@@ -31,7 +32,11 @@ class _SmokeHandler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:  # noqa: N802
         self.visited.append(self.path)
         if self.path == "/api/v1/utils/health-check/":
-            self._reply(200, b"true")
+            if type(self).health_failures_remaining:
+                type(self).health_failures_remaining -= 1
+                self._reply(404, b'{"detail":"router converging"}')
+            else:
+                self._reply(200, b"true")
         elif self.path == "/dashboard":
             self._reply(200, b'<html><div id="root"></div></html>', "text/html")
         elif self.path == "/website":
@@ -86,6 +91,7 @@ class _SmokeHandler(BaseHTTPRequestHandler):
 class PublicSmokeTests(unittest.TestCase):
     def setUp(self) -> None:
         _SmokeHandler.visited = []
+        _SmokeHandler.health_failures_remaining = 0
         _SmokeHandler.oversize_body_length = 0
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), _SmokeHandler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
@@ -108,7 +114,11 @@ class PublicSmokeTests(unittest.TestCase):
             host_overrides={"smoke.invalid": "127.0.0.1"},
         )
 
-        with patch("public_smoke.MAX_REQUEST_BODY_BYTES", _SmokeHandler.max_request_body_bytes):
+        _SmokeHandler.health_failures_remaining = 2
+        with (
+            patch("public_smoke.MAX_REQUEST_BODY_BYTES", _SmokeHandler.max_request_body_bytes),
+            patch("public_smoke.PROXY_RETRY_INTERVAL_SECONDS", 0.001),
+        ):
             results = run_public_smoke(config)
 
         self.assertEqual(len(results), 8)
@@ -116,6 +126,7 @@ class PublicSmokeTests(unittest.TestCase):
         self.assertIn("/api/v1/plugins/test.pyc", _SmokeHandler.visited)
         self.assertIn("/api/v1/clients/win64/latest", _SmokeHandler.visited)
         self.assertIn("/api/v1/statements/submit-statement", _SmokeHandler.visited)
+        self.assertEqual(_SmokeHandler.health_failures_remaining, 0)
         self.assertEqual(_SmokeHandler.oversize_body_length, _SmokeHandler.max_request_body_bytes + 1)
 
     def test_host_override_validation_is_fail_closed(self) -> None:

@@ -23,11 +23,18 @@ from typing import Any
 MAX_RESPONSE_BYTES = 1024 * 1024
 MAX_REQUEST_BODY_BYTES = 38 * 1024 * 1024
 OVERSIZE_REQUEST_TIMEOUT_SECONDS = 120.0
+PROXY_CONVERGENCE_TIMEOUT_SECONDS = 30.0
+PROXY_RETRY_INTERVAL_SECONDS = 1.0
+TRANSIENT_PROXY_STATUSES = {404, 502, 503, 504}
 UPLOAD_CHUNK_BYTES = 64 * 1024
 
 
 class SmokeFailure(RuntimeError):
     """A public smoke check did not meet its explicit contract."""
+
+
+class SmokeTransportFailure(SmokeFailure):
+    """A public smoke request failed before receiving an HTTP response."""
 
 
 @dataclass(frozen=True)
@@ -128,7 +135,7 @@ def _request(
         body = exc.read(min(read_limit, 4096))
         response_headers = {key.lower(): value for key, value in exc.headers.items()}
     except (OSError, urllib.error.URLError) as exc:
-        raise SmokeFailure(f"Request failed for {url}: {type(exc).__name__}") from exc
+        raise SmokeTransportFailure(f"Request failed for {url}: {type(exc).__name__}") from exc
     if status not in expected:
         raise SmokeFailure(f"Unexpected HTTP {status} from {url}; expected {sorted(expected)}")
     return status, response_headers, body
@@ -264,7 +271,30 @@ def _run_public_smoke(config: SmokeConfig) -> list[dict[str, Any]]:
     api = config.api_base_url.rstrip("/")
 
     def health() -> None:
-        _, headers, body = _request(_join(api, "utils/health-check/"), timeout=timeout)
+        url = _join(api, "utils/health-check/")
+        deadline = time.monotonic() + PROXY_CONVERGENCE_TIMEOUT_SECONDS
+        last_result = "no response"
+        while True:
+            try:
+                status, headers, body = _request(
+                    url,
+                    timeout=timeout,
+                    expected={200, *TRANSIENT_PROXY_STATUSES},
+                )
+            except SmokeTransportFailure as exc:
+                last_result = str(exc)
+            else:
+                if status == 200:
+                    break
+                last_result = f"HTTP {status}"
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise SmokeFailure(
+                    f"Public health route did not converge within "
+                    f"{PROXY_CONVERGENCE_TIMEOUT_SECONDS:g} seconds; last result: {last_result}"
+                )
+            time.sleep(min(PROXY_RETRY_INTERVAL_SECONDS, remaining))
+
         if body.strip() != b"true":
             raise SmokeFailure("Health endpoint did not return true")
         if "no-store" not in headers.get("cache-control", "").lower():
