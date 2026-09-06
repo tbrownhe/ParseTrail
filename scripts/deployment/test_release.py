@@ -451,6 +451,7 @@ class ReleaseValidationTests(unittest.TestCase):
             self.assertEqual(json.loads((state / "current-release.json").read_text()), previous)
             record = json.loads((state / "records" / f"{identifier}.json").read_text())
             self.assertEqual(record["status"], "failed-rolling-back")
+            self.assertEqual(record["failure_detail"], "injected")
             self.assertEqual(record["rollback_status"], "succeeded")
 
     def test_normal_prestart_cannot_run_alembic(self) -> None:

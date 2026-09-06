@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import http.client
 import ipaddress
 import json
 import mimetypes
@@ -21,6 +22,8 @@ from typing import Any
 
 MAX_RESPONSE_BYTES = 1024 * 1024
 MAX_REQUEST_BODY_BYTES = 38 * 1024 * 1024
+OVERSIZE_REQUEST_TIMEOUT_SECONDS = 120.0
+UPLOAD_CHUNK_BYTES = 64 * 1024
 
 
 class SmokeFailure(RuntimeError):
@@ -129,6 +132,62 @@ def _request(
     if status not in expected:
         raise SmokeFailure(f"Unexpected HTTP {status} from {url}; expected {sorted(expected)}")
     return status, response_headers, body
+
+
+def _stream_zero_request(
+    url: str,
+    *,
+    size: int,
+    timeout: float,
+    headers: dict[str, str],
+    expected: set[int],
+) -> None:
+    """Send a synthetic body while remaining able to observe an early response."""
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme == "https":
+        connection_type = http.client.HTTPSConnection
+        default_port = 443
+    elif parsed.scheme == "http":
+        connection_type = http.client.HTTPConnection
+        default_port = 80
+    else:  # The configuration validator should make this unreachable.
+        raise SmokeFailure(f"Unsupported request scheme for {url}")
+    if parsed.hostname is None:
+        raise SmokeFailure(f"Request URL has no hostname: {url}")
+
+    connection = connection_type(parsed.hostname, parsed.port or default_port, timeout=timeout)
+    target = urllib.parse.urlunsplit(("", "", parsed.path or "/", parsed.query, ""))
+    response: http.client.HTTPResponse | None = None
+    try:
+        connection.putrequest("POST", target)
+        for name, value in headers.items():
+            connection.putheader(name, value)
+        connection.putheader("Content-Length", str(size))
+        connection.endheaders()
+
+        chunk = bytes(min(size, UPLOAD_CHUNK_BYTES))
+        remaining = size
+        while remaining:
+            amount = min(remaining, len(chunk))
+            try:
+                connection.send(memoryview(chunk)[:amount])
+            except OSError:
+                # A server may close its receive side after sending an early 413.
+                response = connection.getresponse()
+                break
+            remaining -= amount
+
+        if response is None:
+            response = connection.getresponse()
+        status = response.status
+        _bounded_read(response)
+    except (OSError, http.client.HTTPException) as exc:
+        raise SmokeFailure(f"Request failed for {url}: {type(exc).__name__}") from exc
+    finally:
+        connection.close()
+
+    if status not in expected:
+        raise SmokeFailure(f"Unexpected HTTP {status} from {url}; expected {sorted(expected)}")
 
 
 def _join(base: str, suffix: str) -> str:
@@ -316,16 +375,15 @@ def _run_public_smoke(config: SmokeConfig) -> list[dict[str, Any]]:
     check("authenticated-statement-rejection-no-write", rejected_submission)
 
     def rejected_oversize_request() -> None:
-        _request(
+        _stream_zero_request(
             _join(api, "statements/submit-statement"),
-            timeout=timeout,
-            method="POST",
-            headers={**auth, "Content-Length": str(MAX_REQUEST_BODY_BYTES + 1)},
-            data=b"",
+            size=MAX_REQUEST_BODY_BYTES + 1,
+            timeout=max(timeout, OVERSIZE_REQUEST_TIMEOUT_SECONDS),
+            headers={**auth, "Content-Type": "application/octet-stream"},
             expected={413},
         )
 
-    check("oversize-request-rejection-no-body", rejected_oversize_request)
+    check("oversize-request-rejection-no-write", rejected_oversize_request)
     return results
 
 

@@ -4,12 +4,15 @@ import json
 import threading
 import unittest
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from unittest.mock import patch
 
 from public_smoke import SmokeConfig, SmokeFailure, parse_host_override, run_public_smoke, validate_host_overrides
 
 
 class _SmokeHandler(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
+    max_request_body_bytes = 1024
+    oversize_body_length = 0
     visited: list[str] = []
 
     def log_message(self, _format: str, *_args: object) -> None:
@@ -56,7 +59,9 @@ class _SmokeHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         self.visited.append(self.path)
         content_length = int(self.headers.get("Content-Length", "0"))
-        if content_length > 38 * 1024 * 1024:
+        if content_length > self.max_request_body_bytes:
+            body = self.rfile.read(content_length)
+            type(self).oversize_body_length = len(body)
             self._reply(413, b'{"detail":"Request body too large"}')
             return
         body = self.rfile.read(content_length)
@@ -81,6 +86,7 @@ class _SmokeHandler(BaseHTTPRequestHandler):
 class PublicSmokeTests(unittest.TestCase):
     def setUp(self) -> None:
         _SmokeHandler.visited = []
+        _SmokeHandler.oversize_body_length = 0
         self.server = ThreadingHTTPServer(("127.0.0.1", 0), _SmokeHandler)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()
@@ -102,13 +108,15 @@ class PublicSmokeTests(unittest.TestCase):
             host_overrides={"smoke.invalid": "127.0.0.1"},
         )
 
-        results = run_public_smoke(config)
+        with patch("public_smoke.MAX_REQUEST_BODY_BYTES", _SmokeHandler.max_request_body_bytes):
+            results = run_public_smoke(config)
 
         self.assertEqual(len(results), 8)
         self.assertTrue(all(result["status"] == "passed" for result in results))
         self.assertIn("/api/v1/plugins/test.pyc", _SmokeHandler.visited)
         self.assertIn("/api/v1/clients/win64/latest", _SmokeHandler.visited)
         self.assertIn("/api/v1/statements/submit-statement", _SmokeHandler.visited)
+        self.assertEqual(_SmokeHandler.oversize_body_length, _SmokeHandler.max_request_body_bytes + 1)
 
     def test_host_override_validation_is_fail_closed(self) -> None:
         config = SmokeConfig(
