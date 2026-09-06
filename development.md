@@ -49,6 +49,11 @@ component guides and dated verification into the
 Server P0 acceptance is complete. Client development should touch the server only
 when it exposes an interface requirement; unrelated infrastructure stays separate.
 
+The current implementation approval covers P1.5, P1.6, and P2.2 in TODO.
+Later correctness/cleanup proposals remain pending. Client feature proposals
+(F1-F4) require further discussion before implementation; do not treat release
+or offline acceptance as permission to add those features.
+
 ## Prerequisites
 
 - Git

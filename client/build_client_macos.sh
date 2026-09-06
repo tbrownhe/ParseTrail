@@ -48,6 +48,10 @@ PYTHON_VERSION_FILE="${SCRIPT_DIR}/.python-version"
 PYTHON_VERSION=$(tr -d '[:space:]' < "$PYTHON_VERSION_FILE")
 [[ -n "$PYTHON_VERSION" ]] || error_exit "Python version file is empty: $PYTHON_VERSION_FILE"
 
+# Inline metadata keeps bootstrap independent of the client dependency graph.
+RELEASE_PYTHON=$(uv run --no-env-file --script scripts/release_bootstrap.py check --platform macos --print-python) \
+    || error_exit "Release bootstrap failed; client dependencies and signing were not started."
+
 VERSION=$(sed -nE "s/^__version__[[:space:]]*=[[:space:]]*['\"]([^'\"]+)['\"]/\1/p" \
     src/parsetrail/version.py)
 [[ -n "$VERSION" ]] || error_exit "Failed to determine client version"
@@ -71,33 +75,33 @@ cleanup() {
 trap cleanup EXIT
 
 echo "Validating clean client-v${VERSION} release source..."
-uv run --frozen --python "$PYTHON_VERSION" python -m scripts.release_source client \
+uv run --no-env-file --frozen --python "$RELEASE_PYTHON" --no-python-downloads python -m scripts.release_source client \
     --version "$VERSION" \
     --platform macos \
     --metadata-output "$BUILD_METADATA" \
     || error_exit "Release source validation failed."
-SOURCE_COMMIT=$(uv run --frozen --python "$PYTHON_VERSION" python -c \
+SOURCE_COMMIT=$(uv run --no-env-file --frozen --python "$RELEASE_PYTHON" --no-python-downloads python -c \
     'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["source_commit"])' \
     "$BUILD_METADATA")
 SOURCE_TAG="client-v${VERSION}"
 
 echo "Synchronizing the locked client environment with Python $PYTHON_VERSION..."
-uv sync --extra dev --frozen --python "$PYTHON_VERSION" \
+uv sync --extra dev --frozen --python "$RELEASE_PYTHON" --no-python-downloads \
     || error_exit "Failed to synchronize the locked client environment."
-ACTUAL_PYTHON_VERSION=$(uv run --frozen --python "$PYTHON_VERSION" python -c \
+ACTUAL_PYTHON_VERSION=$(uv run --no-env-file --frozen --python "$RELEASE_PYTHON" --no-python-downloads python -c \
     'import platform; print(platform.python_version())')
 [[ "$ACTUAL_PYTHON_VERSION" == "$PYTHON_VERSION" ]] \
     || error_exit "Expected Python $PYTHON_VERSION but uv selected $ACTUAL_PYTHON_VERSION."
 
 echo "Running client regression tests..."
-uv run --extra dev --frozen --python "$PYTHON_VERSION" pytest -q \
+uv run --no-env-file --extra dev --frozen --python "$RELEASE_PYTHON" --no-python-downloads pytest -q \
     || error_exit "Client tests failed."
 echo "Checking bundled plugin release trust keys..."
-uv run --frozen --python "$PYTHON_VERSION" python -m scripts.plugin_release check-trust-store \
+uv run --no-env-file --frozen --python "$RELEASE_PYTHON" --no-python-downloads python -m scripts.plugin_release check-trust-store \
     || error_exit "Plugin trust-store check failed."
 
 echo "Building the executable with PyInstaller..."
-uv run --frozen --python "$PYTHON_VERSION" pyinstaller \
+uv run --no-env-file --frozen --python "$RELEASE_PYTHON" --no-python-downloads pyinstaller \
     -n "$APP_NAME" \
     --clean \
     --noconfirm \
@@ -138,18 +142,18 @@ create-dmg \
     "$APP_PATH"
 
 echo "Signing and independently verifying the macOS release..."
-uv run --frozen --python "$PYTHON_VERSION" python -m scripts.client_release sign \
+uv run --no-env-file --frozen --python "$RELEASE_PYTHON" --no-python-downloads python -m scripts.client_release sign \
     --private-key "$SIGNING_KEY" \
     --installer "$DMG_PATH" \
     --platform macos \
     --version "$VERSION" \
     || error_exit "Client release signing failed."
-uv run --frozen --python "$PYTHON_VERSION" python -m scripts.client_release verify \
+uv run --no-env-file --frozen --python "$RELEASE_PYTHON" --no-python-downloads python -m scripts.client_release verify \
     --release-dir "$DIST_DIR" \
     || error_exit "Client release verification failed."
 
 echo "Recording checksums and release-tool versions..."
-uv run --frozen --python "$PYTHON_VERSION" python -m scripts.release_inventory \
+uv run --no-env-file --frozen --python "$RELEASE_PYTHON" --no-python-downloads python -m scripts.release_inventory \
     --release-dir "$DIST_DIR" \
     --source-commit "$SOURCE_COMMIT" \
     --source-tag "$SOURCE_TAG" \
@@ -166,7 +170,7 @@ if ! $PUBLISH; then
 fi
 
 REMOTE_PLATFORM_DIR="${REMOTE_CLIENTS_DIR%/}/macos"
-uv run --frozen --python "$PYTHON_VERSION" python -m scripts.immutable_publish \
+uv run --no-env-file --frozen --python "$RELEASE_PYTHON" --no-python-downloads python -m scripts.immutable_publish \
     --release-dir "$DIST_DIR" \
     --manifest client-manifest.json \
     --signature client-manifest.sig \

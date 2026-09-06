@@ -1,5 +1,7 @@
 Unreleased
 ==========
+- Bootstrap releases without client dependencies, enforce uv >= 0.12.5, and
+  provision/inspect exact native CPython before syncing the locked environment
 - Prompt immediately when saved credentials are rejected during a plugin update
   and resume the same signed catalog operation after successful authentication
 - Separate statement import persistence, deduplication, and archive state from Qt

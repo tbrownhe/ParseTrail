@@ -59,6 +59,20 @@ performance guarantees. Locks, tests, and fresh release checks are authoritative
   Ruff check/format for source, scripts, migrations, and tests. Its limits and
   new findings are in [the client review](client-development-review.md).
 
+## Release bootstrap follow-up
+
+The R1 implementation passed **283 client tests on Windows**, client-wide Ruff
+check/format, and PowerShell/Bash syntax checks. The tests include package-free
+startup, uv's inline minimum-version enforcement, Windows builder failure
+propagation, and rejection before project sync for invalid uv, Python pins,
+hosts, and interpreter properties.
+
+The real Windows bootstrap passed against both the existing managed interpreter
+and a new temporary uv installation directory. Both inspections identified
+standard 64-bit CPython 3.13.15 on Windows x64 with uv 0.12.5. No client packages,
+installer, signing operation, or public artifact activation were needed for
+these checks. Intel native provisioning remains pending in TODO.
+
 ## Staging migration and recovery: August 2026
 
 The PostgreSQL 12-to-17 rehearsal preserved the source volume and matched every

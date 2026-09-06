@@ -9,9 +9,13 @@ Work Windows x64 and Intel macOS first. Apple Silicon is deferred until test
 hardware is available. The [client review](docs/client-development-review.md)
 contains findings and detailed acceptance criteria for the chunk IDs below.
 
+The owner has approved P1.5, P1.6, and P2.2. Later correctness/cleanup proposals
+remain pending, and **Client feature proposals require further discussion before
+any implementation**. Native acceptance still requires the prepared owner checks.
+
 ## P1.5 — Client release reliability
 
-- [ ] **R1 — Bootstrap:** enforce the tested minimum uv version, explicitly
+- [~] **R1 — Bootstrap:** enforce the tested minimum uv version, explicitly
   provision the exact `.python-version` interpreter, and validate its version and
   host architecture before dependency sync. Missing/old uv, unavailable Python,
   and mismatched architecture must fail before installing or signing.

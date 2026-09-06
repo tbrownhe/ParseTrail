@@ -10,6 +10,11 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+Set-Location -LiteralPath $PSScriptRoot
+
+if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+    throw "uv was not found on PATH. Install uv >= 0.12.5 before releasing."
+}
 
 if (-not (Test-Path -LiteralPath $ClientsDir -PathType Container)) {
     throw "ClientsDir does not exist or is not a directory: $ClientsDir"
@@ -45,6 +50,14 @@ if (-not $pythonVersion) {
     exit 1
 }
 
+# Script metadata runs this with no client packages. Provision and inspect the
+# exact managed interpreter before the first project-aware uv invocation.
+$releasePython = uv run --no-env-file --script scripts/release_bootstrap.py check --platform win64 --print-python
+if ($LASTEXITCODE -ne 0) {
+    throw "Release bootstrap failed; client dependencies and signing were not started."
+}
+$releasePython = $releasePython.Trim()
+
 $versionFile = Join-Path $srcDir "parsetrail\version.py"
 $versionContents = Get-Content -LiteralPath $versionFile -Raw
 if ($versionContents -notmatch '(?m)^__version__\s*=\s*"([^"]+)"') {
@@ -53,7 +66,7 @@ if ($versionContents -notmatch '(?m)^__version__\s*=\s*"([^"]+)"') {
 }
 $version = $Matches[1]
 $buildMetadataPath = Join-Path ([System.IO.Path]::GetTempPath()) "parsetrail-build-$([guid]::NewGuid().ToString('N')).json"
-$sourceJson = uv run --frozen --python $pythonVersion python -m scripts.release_source client `
+$sourceJson = uv run --no-env-file --frozen --python $releasePython --no-python-downloads python -m scripts.release_source client `
     --version $version `
     --platform win64 `
     --metadata-output $buildMetadataPath
@@ -99,12 +112,12 @@ if (-not (Test-Path $nsisScript)) {
 
 try {
     Write-Host "Synchronizing the locked client environment with Python $pythonVersion..."
-    uv sync --extra dev --frozen --python $pythonVersion
+    uv sync --extra dev --frozen --python $releasePython --no-python-downloads
     if ($LASTEXITCODE -ne 0) {
         throw "uv sync failed with exit code $LASTEXITCODE"
     }
 
-    $actualPythonVersion = uv run --frozen --python $pythonVersion python -c "import platform; print(platform.python_version())"
+    $actualPythonVersion = uv run --no-env-file --frozen --python $releasePython --no-python-downloads python -c "import platform; print(platform.python_version())"
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to determine the synchronized Python version (exit code $LASTEXITCODE)"
     }
@@ -114,13 +127,13 @@ try {
     Write-Host "Release interpreter: Python $actualPythonVersion"
 
     Write-Host "Running client regression tests..."
-    uv run --extra dev --frozen --python $pythonVersion pytest -q
+    uv run --no-env-file --extra dev --frozen --python $releasePython --no-python-downloads pytest -q
     if ($LASTEXITCODE -ne 0) {
         throw "Client tests failed with exit code $LASTEXITCODE"
     }
 
     Write-Host "Checking bundled plugin release trust keys..."
-    uv run --frozen --python $pythonVersion python -m scripts.plugin_release check-trust-store
+    uv run --no-env-file --frozen --python $releasePython --no-python-downloads python -m scripts.plugin_release check-trust-store
     if ($LASTEXITCODE -ne 0) {
         throw "Plugin trust-store check failed with exit code $LASTEXITCODE"
     }
@@ -128,7 +141,7 @@ try {
     # --- Build the executable -------------------------------------------------
     Write-Host "Running PyInstaller..."
 
-    uv run --frozen --python $pythonVersion pyinstaller `
+    uv run --no-env-file --frozen --python $releasePython --no-python-downloads pyinstaller `
         --clean `
         --noconfirm `
         --noconsole `
@@ -206,7 +219,7 @@ Remove-Item -LiteralPath $buildMetadataPath -Force -ErrorAction SilentlyContinue
 # the existing release using only the bundled public trust store.
 if ($DeployOnly) {
     Write-Host "Synchronizing the locked environment for release verification..."
-    uv sync --frozen --python $pythonVersion
+    uv sync --frozen --python $releasePython --no-python-downloads
     if ($LASTEXITCODE -ne 0) {
         throw "uv sync failed with exit code $LASTEXITCODE"
     }
@@ -214,7 +227,7 @@ if ($DeployOnly) {
 
 if (-not $DeployOnly) {
     Write-Host "Signing the Windows client release..."
-    uv run --frozen --python $pythonVersion python -m scripts.client_release sign `
+    uv run --no-env-file --frozen --python $releasePython --no-python-downloads python -m scripts.client_release sign `
         --private-key $privateKey `
         --installer $installerPath `
         --platform win64 `
@@ -225,7 +238,7 @@ if (-not $DeployOnly) {
 }
 
 Write-Host "Verifying the signed Windows client release..."
-uv run --frozen --python $pythonVersion python -m scripts.client_release verify `
+uv run --no-env-file --frozen --python $releasePython --no-python-downloads python -m scripts.client_release verify `
     --release-dir $clientDir
 if ($LASTEXITCODE -ne 0) {
     throw "Client release verification failed with exit code $LASTEXITCODE"
@@ -233,7 +246,7 @@ if ($LASTEXITCODE -ne 0) {
 
 if (-not $DeployOnly) {
     Write-Host "Recording checksums and release-tool versions..."
-    uv run --frozen --python $pythonVersion python -m scripts.release_inventory `
+    uv run --no-env-file --frozen --python $releasePython --no-python-downloads python -m scripts.release_inventory `
         --release-dir $clientDir `
         --source-commit $releaseSource.source_commit `
         --source-tag $releaseSource.source_tag `
@@ -285,7 +298,7 @@ try {
     }
 
     $remotePlatformDir = "$($remoteDir.TrimEnd('/'))/win64"
-    uv run --frozen --python $pythonVersion python -m scripts.immutable_publish `
+    uv run --no-env-file --frozen --python $releasePython --no-python-downloads python -m scripts.immutable_publish `
         --release-dir $clientDir `
         --manifest client-manifest.json `
         --signature client-manifest.sig `

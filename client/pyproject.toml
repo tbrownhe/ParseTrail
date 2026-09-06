@@ -49,6 +49,7 @@ include = ["src/parsetrail/assets/**"]
 testpaths = ["tests"]
 
 [tool.uv]
+required-version = ">=0.12.5"
 required-environments = [
   "sys_platform == 'win32' and platform_machine == 'AMD64'",
   "sys_platform == 'darwin' and platform_machine == 'arm64'",

@@ -252,6 +252,27 @@ from the server, repository, and distributed client.
 
 ### Configure a local release builder
 
+The release entry point is a standalone uv script with no project dependencies.
+Its [inline script metadata](https://docs.astral.sh/uv/guides/scripts/)
+requires stable uv >= 0.12.5. Before any project sync, it validates the native
+Windows x64/Intel macOS host, explicitly provisions the exact `.python-version`
+CPython with uv, and inspects the executable's version, implementation, OS,
+architecture, bitness, and standard (non-free-threaded) ABI. All later build
+commands use that verified interpreter path with automatic downloads disabled.
+The native builders invoke the same bootstrap when run directly.
+
+Check just the bootstrap, without client package installation, release config,
+signing keys, or publication:
+
+```powershell
+uv run --no-env-file --script scripts/release_bootstrap.py check --platform win64
+```
+
+On Intel macOS, substitute `--platform macos`. This can download the pinned
+interpreter; it does not build an installer or load the repository `.env`.
+Use the script entry point below rather than wrapping the release module in a
+project-aware `uv run`, which could install dependencies before preflight.
+
 Copy `release-config.example.json` to the ignored
 `release-config.json` and enter explicit local artifact directories, the
 external signing-key path, and optional SSH deployment values. Build scripts do
@@ -273,7 +294,7 @@ Plugin tags are explicit operator-chosen identifiers, such as
 From `client/`, the same command works on Windows and macOS:
 
 ```powershell
-uv run --frozen python -m scripts.release `
+uv run --no-env-file --script scripts/release_bootstrap.py `
     --config release-config.json plugins `
     --tag plugins-2026.08.29.1
 ```
@@ -348,7 +369,7 @@ versions and file checksums in `release-inventory.json`.
 Windows:
 
 ```powershell
-uv run --frozen python -m scripts.release `
+uv run --no-env-file --script scripts/release_bootstrap.py `
     --config release-config.json client --platform win64
 ```
 
@@ -371,7 +392,7 @@ installer platforms and plugins.
 macOS:
 
 ```bash
-uv run --frozen python -m scripts.release \
+uv run --no-env-file --script scripts/release_bootstrap.py \
     --config release-config.json client --platform macos
 ```
 
