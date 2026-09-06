@@ -125,8 +125,8 @@ macOS version; SDK 11.3 cannot establish it. The owner separately confirmed
 preflight records the running OS and rejects older or unknown hosts; **80 focused
 release tests passed on Windows**, with the native Mac Bash test skipped, and
 Ruff check/format passed.
-The owner is open to updating the Apple tools after checking OS compatibility;
-no update has been reported yet. Keep tool updates compatible with Sequoia on
+The owner agreed to update the Apple tools after checking OS compatibility.
+Keep tool updates compatible with Sequoia on
 this machine: Apple's [Tahoe compatibility list](https://support.apple.com/en-us/122867)
 includes the M1 2020 Air, not the Intel 2020 Air. An Apple Silicon replacement is
 not an active project prerequisite. As checked on 2026-09-06, Apple's
@@ -138,10 +138,14 @@ Software Update's compatible offerings before selecting an update.
 The owner subsequently confirmed that `xcode-select --print-path` returns
 `/Library/Developer/CommandLineTools` and `softwareupdate --list` reports no new
 software. The old SDK therefore comes from the selected standalone tools, rather
-than an older Xcode application selected in their place. The next update path is
-Apple's manual **Command Line Tools for Xcode 26.3** installer, followed by a new
-preflight report. This records a prepared update path; installation and its
-resulting compiler/SDK versions remain unconfirmed.
+than an older Xcode application selected in their place. After following the
+manual **Command Line Tools for Xcode 26.3** update path, the owner reran preflight
+successfully. It now reports **Apple clang 17.0.0 (`clang-1700.6.4.2`)**, **macOS
+SDK 26.2**, and **running macOS 15.7.9**. The Intel target, OpenSSL 3.6.3 static
+archive hashes above, Rust/Cargo 1.98.0, pkg-config 3.0.6, and create-dmg 1.2.3
+remain the same. This accepts the tools update and the complete preflight on
+the owner's Intel Mac; the native build/audit, frozen smoke, and installed-app
+walkthrough remain open.
 
 ## Staging migration and recovery: August 2026
 
