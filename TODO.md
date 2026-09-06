@@ -315,12 +315,18 @@ temporary exception, and the Postgres restore drill preserves expected row count
   Turing's active certificate remains isolated in the HTTP-01 store. Public staging
   apex/wildcard A records were deleted after LAN HTTPS and DNS-01 renewal were
   verified.
-- [~] `[USER]` Activate the merged Docker-aware origin firewall and its repair/range
+- [x] `[USER]` Activate the merged Docker-aware origin firewall and its repair/range
   timers, verify production through Cloudflare and staging from the owner LAN, then
   confirm from an external network that a direct connection to the historical
-  origin address fails. The exact rollback removes only the component-owned chains.
-- [ ] `[USER]` Bind the unused host Postfix listener to loopback only, run
-  `postfix check`, reload it, and verify only `127.0.0.1:25` and `[::1]:25` listen.
+  origin address fails. The policy and repeated five-minute repair cycles succeeded
+  on `eno2`; production passed all eight public checks and staging remained healthy
+  over the LAN. A macOS client on a phone hotspot timed out after seven seconds when
+  pinned directly to the origin, while the normal Cloudflare route returned healthy.
+  The exact rollback removes only the component-owned chains.
+- [x] `[USER]` Bind the unused host Postfix listener to loopback only, run
+  `postfix check`, restart it, and verify only `127.0.0.1:25` and `[::1]:25` listen.
+  The restart also refreshed Postfix's chrooted resolver copy after the pre-restart
+  check reported it stale; the files now match and the instance is healthy.
 - [x] Automatically reactivate the previous immutable image tags when service
   health or post-deploy smoke checks fail; never claim success merely because
   `docker compose up -d` returned zero.
