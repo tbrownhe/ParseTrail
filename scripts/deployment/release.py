@@ -843,6 +843,9 @@ def command_deploy(args: argparse.Namespace) -> None:
     except Exception as deployment_error:
         record["status"] = "failed-rolling-back"
         record["failure"] = type(deployment_error).__name__
+        if isinstance(deployment_error, SmokeFailure):
+            record["failure_detail"] = str(deployment_error)
+            print(f"Deployment smoke failure: {deployment_error}", file=sys.stderr)
         try:
             activate(args, deploy_values, rollback_target)
             record["rollback_smoke"] = run_public_smoke(smoke_config)
@@ -851,6 +854,9 @@ def command_deploy(args: argparse.Namespace) -> None:
         except Exception as rollback_error:
             record["rollback_status"] = "failed"
             record["rollback_failure"] = type(rollback_error).__name__
+            if isinstance(rollback_error, SmokeFailure):
+                record["rollback_failure_detail"] = str(rollback_error)
+                print(f"Rollback smoke failure: {rollback_error}", file=sys.stderr)
             atomic_json(final_record_path(state_dir, args.deployment_id), record, exclusive=True)
             pending["phase"] = "rollback-failed"
             atomic_json(path, pending)

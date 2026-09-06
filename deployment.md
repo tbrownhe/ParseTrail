@@ -224,8 +224,8 @@ public proxy:
 - client listing, signed manifest/signature, and a one-byte range download;
 - authenticated statement submission with a deliberately invalid envelope,
   which must be rejected before any statement file is created;
-- API browser/CDN `no-store` headers and a header-only oversized statement probe,
-  which must return 413 without sending or creating a file.
+- API browser/CDN `no-store` headers and an in-memory synthetic request one byte
+  over the statement limit, which must return 413 without creating a file.
 
 On success, the final record contains timestamp, operator/host, Git commit,
 schema revisions, exact image digests, signed artifact versions/hashes, backup
