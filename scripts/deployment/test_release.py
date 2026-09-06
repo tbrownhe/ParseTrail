@@ -55,6 +55,9 @@ def _target_values(environment: str, suffix: str) -> dict[str, str]:
         "FRONTEND_HOST": f"https://dashboard.{suffix}.example.com",
         "SMTP_HOST": f"smtp-{suffix}.internal",
         "TRAEFIK_ALLOWED_IP_RANGES": "192.168.1.0/24,100.64.0.0/10",
+        "TRAEFIK_RATE_LIMIT_MIDDLEWARE": ("cloudflare-rate-limit" if environment == "production" else "rate-limit"),
+        "TRAEFIK_CERT_RESOLVER": "le-cloudflare",
+        "FORWARDED_ALLOW_IPS": "172.18.0.0/16",
     }
 
 
@@ -287,6 +290,52 @@ class ReleaseValidationTests(unittest.TestCase):
                         production_values=production,
                         production_state_dir=Path("/srv/production/state"),
                     )
+
+    def test_deployment_enforces_environment_specific_proxy_policy(self) -> None:
+        production = _target_values("production", "production")
+        production["TRAEFIK_RATE_LIMIT_MIDDLEWARE"] = "rate-limit"
+        with self.assertRaisesRegex(ReleaseError, "TRAEFIK_RATE_LIMIT_MIDDLEWARE"):
+            validate_deployment_boundary(
+                production,
+                state_dir=Path("/srv/production/state"),
+            )
+
+        production = _target_values("production", "production")
+        production["FORWARDED_ALLOW_IPS"] = "*"
+        with self.assertRaisesRegex(ReleaseError, "FORWARDED_ALLOW_IPS"):
+            validate_deployment_boundary(
+                production,
+                state_dir=Path("/srv/production/state"),
+            )
+
+        staging = _target_values("staging", "staging")
+        staging["TRAEFIK_RATE_LIMIT_MIDDLEWARE"] = "cloudflare-rate-limit"
+        with self.assertRaisesRegex(ReleaseError, "TRAEFIK_RATE_LIMIT_MIDDLEWARE"):
+            validate_deployment_boundary(
+                staging,
+                state_dir=Path("/srv/staging/state"),
+                production_values=_target_values("production", "production"),
+                production_state_dir=Path("/srv/production/state"),
+            )
+
+        production = _target_values("production", "production")
+        production["TRAEFIK_CERT_RESOLVER"] = "le"
+        with self.assertRaisesRegex(ReleaseError, "TRAEFIK_CERT_RESOLVER"):
+            validate_deployment_boundary(
+                production,
+                state_dir=Path("/srv/production/state"),
+            )
+
+    def test_compose_applies_cache_and_rate_policy_to_every_https_router(self) -> None:
+        application = Path("docker-compose.yml").read_text(encoding="utf-8")
+
+        self.assertIn("api-no-store.headers.customresponseheaders.Cache-Control=no-store", application)
+        self.assertIn(
+            "api-no-store.headers.customresponseheaders.CDN-Cache-Control=no-store",
+            application,
+        )
+        self.assertEqual(application.count("${TRAEFIK_RATE_LIMIT_MIDDLEWARE?Variable not set}"), 6)
+        self.assertEqual(application.count("${TRAEFIK_CERT_RESOLVER?Variable not set}"), 6)
 
     def test_staging_smoke_credentials_and_urls_are_distinct(self) -> None:
         staging_values = _target_values("staging", "staging")

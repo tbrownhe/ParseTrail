@@ -19,6 +19,9 @@ class _SmokeHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
+        if self.path.startswith("/api/"):
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("CDN-Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(body)
 
@@ -53,6 +56,9 @@ class _SmokeHandler(BaseHTTPRequestHandler):
     def do_POST(self) -> None:  # noqa: N802
         self.visited.append(self.path)
         content_length = int(self.headers.get("Content-Length", "0"))
+        if content_length > 38 * 1024 * 1024:
+            self._reply(413, b'{"detail":"Request body too large"}')
+            return
         body = self.rfile.read(content_length)
         if self.path == "/api/v1/login/access-token":
             if b"username=smoke%40example.com" not in body or b"password=smoke-password" not in body:
@@ -98,7 +104,7 @@ class PublicSmokeTests(unittest.TestCase):
 
         results = run_public_smoke(config)
 
-        self.assertEqual(len(results), 7)
+        self.assertEqual(len(results), 8)
         self.assertTrue(all(result["status"] == "passed" for result in results))
         self.assertIn("/api/v1/plugins/test.pyc", _SmokeHandler.visited)
         self.assertIn("/api/v1/clients/win64/latest", _SmokeHandler.visited)

@@ -54,6 +54,9 @@ POSTGRES_IMAGE=postgres:17.11-bookworm@sha256:051f7b7b3abdd564d5d1bd1e8c4b9c1b6e
 POSTGRES_VOLUME_NAME=parsetrail_app-db-data-pg17
 SUBMISSION_KEYS_VOLUME_NAME=parsetrail_app-keys-data
 TRAEFIK_ALLOWED_IP_RANGES=0.0.0.0/0,::/0
+TRAEFIK_RATE_LIMIT_MIDDLEWARE=cloudflare-rate-limit
+TRAEFIK_CERT_RESOLVER=le-cloudflare
+FORWARDED_ALLOW_IPS=172.18.0.0/16
 ```
 
 Keep the PostgreSQL 12 image and volume values until the separate
@@ -62,6 +65,13 @@ Changing the image without changing to the restored volume is forbidden.
 The submission-key volume is also explicit so a staging Compose project cannot
 silently mount the production default. Production permits public application
 traffic; staging sets only the actual LAN/VPN CIDRs.
+
+The shared infrastructure repository restricts the origin to Cloudflare and the
+owner LAN. Production rate limiting uses Cloudflare's `CF-Connecting-IP`; the
+backend accepts `X-Forwarded-*` metadata only from the persistent
+`traefik-public` network. `FORWARDED_ALLOW_IPS` must be that exact private Docker
+CIDR, never `*`. ParseTrail certificates use the infrastructure's Cloudflare
+DNS-01 resolver so staging needs no public address record.
 
 Keep runtime records and credentials outside the `/srv/parsetrail` Git checkout.
 Use three access-controlled locations under a dedicated production runtime root:
@@ -213,7 +223,9 @@ public proxy:
 - signed plugin manifest/signature plus a one-byte authenticated range download;
 - client listing, signed manifest/signature, and a one-byte range download;
 - authenticated statement submission with a deliberately invalid envelope,
-  which must be rejected before any statement file is created.
+  which must be rejected before any statement file is created;
+- API browser/CDN `no-store` headers and a header-only oversized statement probe,
+  which must return 413 without sending or creating a file.
 
 On success, the final record contains timestamp, operator/host, Git commit,
 schema revisions, exact image digests, signed artifact versions/hashes, backup

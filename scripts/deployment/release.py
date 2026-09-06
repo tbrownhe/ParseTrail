@@ -55,6 +55,9 @@ REQUIRED_TARGET_FIELDS = (
     "BACKEND_HOST",
     "FRONTEND_HOST",
     "TRAEFIK_ALLOWED_IP_RANGES",
+    "TRAEFIK_RATE_LIMIT_MIDDLEWARE",
+    "TRAEFIK_CERT_RESOLVER",
+    "FORWARDED_ALLOW_IPS",
 )
 STAGING_UNIQUE_FIELDS = (
     "STACK_NAME",
@@ -214,6 +217,19 @@ def _required_target_values(values: dict[str, str], *, label: str) -> None:
     missing = [name for name in REQUIRED_TARGET_FIELDS if not values.get(name, "").strip()]
     if missing:
         raise ReleaseError(f"{label} environment is missing required deployment fields: {', '.join(missing)}")
+    expected_rate_limit = "cloudflare-rate-limit" if environment == "production" else "rate-limit"
+    if values["TRAEFIK_RATE_LIMIT_MIDDLEWARE"].strip() != expected_rate_limit:
+        raise ReleaseError(f"{label} TRAEFIK_RATE_LIMIT_MIDDLEWARE must be {expected_rate_limit} for {environment}")
+    if values["TRAEFIK_CERT_RESOLVER"].strip() != "le-cloudflare":
+        raise ReleaseError(f"{label} TRAEFIK_CERT_RESOLVER must be le-cloudflare")
+    proxy_networks = values["FORWARDED_ALLOW_IPS"].split(",")
+    for proxy_network in proxy_networks:
+        try:
+            network = ipaddress.ip_network(proxy_network.strip(), strict=False)
+        except ValueError as exc:
+            raise ReleaseError(f"{label} FORWARDED_ALLOW_IPS contains an invalid network") from exc
+        if not network.is_private:
+            raise ReleaseError(f"{label} FORWARDED_ALLOW_IPS must contain only private proxy networks")
 
 
 def _resolved_config_path(value: str) -> Path:

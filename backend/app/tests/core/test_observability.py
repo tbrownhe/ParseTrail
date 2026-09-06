@@ -20,6 +20,7 @@ def test_error_event_scrubs_request_payload_and_log_breadcrumbs() -> None:
                 "Authorization": "Bearer secret",
                 "Cookie": "session=secret",
                 "Content-Type": "multipart/form-data",
+                "CF-Connecting-IP": "192.0.2.1",
                 "X-Forwarded-For": "192.0.2.1",
             },
         },

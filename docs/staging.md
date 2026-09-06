@@ -30,18 +30,18 @@ router even though normal navigation uses the apex):
 - `api.staging.parsetrail.com`
 - `www.staging.parsetrail.com`
 
-They need valid public DNS records so the existing Traefik HTTP-01 resolver can
-obtain trusted certificates. One record for `staging` and one wildcard record for
-`*.staging` are sufficient publicly. On the owner's LAN, split DNS or four
-hosts-file entries resolve them directly to `silicide`'s LAN address. A VPN DNS
-override can do the same for remote testing.
+They do not have public A or AAAA records. Traefik's zone-scoped Cloudflare
+DNS-01 resolver obtains trusted certificates without publishing the staging
+origin. Four owner-machine hosts-file entries resolve the names directly to
+`silicide`'s reserved LAN address. A private VPN DNS override can do the same for
+remote testing.
 
 The shared Compose definition attaches a target-specific IP allow-list middleware
 to every HTTPS application router. Staging's `TRAEFIK_ALLOWED_IP_RANGES` must list
-only the actual LAN/VPN ranges; public requests are denied even when public DNS or
-a CDN can reach Traefik. Production explicitly allows public addresses. Confirm
-the effective client address in Traefik before relying on this control, especially
-when adding another proxy hop.
+only the actual LAN/VPN ranges. Production traffic first passes the shared
+Cloudflare/LAN origin allowlist; staging then applies its narrower target-specific
+allowlist. Confirm the effective client address in Traefik before relying on this
+control, especially when adding another proxy hop.
 
 Do not start application traffic until all three names return the expected valid
 certificate from an allowed client and return 403 from a non-allowed source.

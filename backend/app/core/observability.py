@@ -12,7 +12,12 @@ def scrub_error_event(event: dict[str, Any], _hint: dict[str, Any]) -> dict[str,
         headers = request.get("headers")
         if isinstance(headers, dict):
             for name in list(headers):
-                if name.lower() in {"authorization", "cookie", "x-forwarded-for"}:
+                if name.lower() in {
+                    "authorization",
+                    "cf-connecting-ip",
+                    "cookie",
+                    "x-forwarded-for",
+                }:
                     headers.pop(name, None)
 
     # Logging can include operator-authored context. Keep it local rather than
