@@ -49,7 +49,7 @@ PYTHON_VERSION=$(tr -d '[:space:]' < "$PYTHON_VERSION_FILE")
 [[ -n "$PYTHON_VERSION" ]] || error_exit "Python version file is empty: $PYTHON_VERSION_FILE"
 
 # Inline metadata keeps bootstrap independent of the client dependency graph.
-RELEASE_PYTHON=$(uv run --no-env-file --script scripts/release_bootstrap.py check --platform macos --print-python) \
+RELEASE_PYTHON=$(uv run --no-env-file --script scripts/release_bootstrap.py check --platform macos-x86_64 --print-python) \
     || error_exit "Release bootstrap failed; client dependencies and signing were not started."
 
 VERSION=$(sed -nE "s/^__version__[[:space:]]*=[[:space:]]*['\"]([^'\"]+)['\"]/\1/p" \
@@ -61,8 +61,8 @@ SRC_DIR="./src"
 MODULE_PATH="./src/parsetrail/main.py"
 BUILD_DIR="./build"
 APP_PATH="${BUILD_DIR}/${APP_NAME}.app"
-DIST_DIR="${CLIENTS_DIR}/macos"
-DMG_PATH="${DIST_DIR}/parsetrail_${VERSION}_macos_setup.dmg"
+DIST_DIR="${CLIENTS_DIR}/macos-x86_64"
+DMG_PATH="${DIST_DIR}/parsetrail_${VERSION}_macos-x86_64_setup.dmg"
 [[ ! -e "$DMG_PATH" ]] \
     || error_exit "Versioned installer already exists: $DMG_PATH. Bump the client version first."
 
@@ -83,7 +83,7 @@ echo "Checking the Intel toolchain and synchronizing locked dependencies..."
 echo "Validating clean client-v${VERSION} release source..."
 uv run --no-env-file --no-sync --python "$RELEASE_PYTHON" --no-python-downloads python -m scripts.release_source client \
     --version "$VERSION" \
-    --platform macos \
+    --platform macos-x86_64 \
     --metadata-output "$BUILD_METADATA" \
     || error_exit "Release source validation failed."
 SOURCE_COMMIT=$(uv run --no-env-file --no-sync --python "$RELEASE_PYTHON" --no-python-downloads python -c \
@@ -148,7 +148,7 @@ echo "Signing and independently verifying the macOS release..."
 uv run --no-env-file --no-sync --python "$RELEASE_PYTHON" --no-python-downloads python -m scripts.client_release sign \
     --private-key "$SIGNING_KEY" \
     --installer "$DMG_PATH" \
-    --platform macos \
+    --platform macos-x86_64 \
     --version "$VERSION" \
     || error_exit "Client release signing failed."
 uv run --no-env-file --no-sync --python "$RELEASE_PYTHON" --no-python-downloads python -m scripts.client_release verify \
@@ -161,7 +161,7 @@ uv run --no-env-file --no-sync --python "$RELEASE_PYTHON" --no-python-downloads 
     --source-commit "$SOURCE_COMMIT" \
     --source-tag "$SOURCE_TAG" \
     --kind client \
-    --platform macos \
+    --platform macos-x86_64 \
     --version "$VERSION" \
     --packager create-dmg \
     --packager-executable "$CREATE_DMG" \
@@ -173,7 +173,7 @@ if ! $PUBLISH; then
     exit 0
 fi
 
-REMOTE_PLATFORM_DIR="${REMOTE_CLIENTS_DIR%/}/macos"
+REMOTE_PLATFORM_DIR="${REMOTE_CLIENTS_DIR%/}/macos-x86_64"
 uv run --no-env-file --no-sync --python "$RELEASE_PYTHON" --no-python-downloads python -m scripts.immutable_publish \
     --release-dir "$DIST_DIR" \
     --manifest client-manifest.json \

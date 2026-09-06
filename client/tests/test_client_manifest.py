@@ -1,4 +1,5 @@
 import hashlib
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -48,13 +49,14 @@ def _artifact(
     payload: bytes = b"installer",
     *,
     version: str = "1.2.3",
-    platform: str = "win64",
+    platform: str = "windows-x86_64",
 ) -> ClientInstallerArtifact:
-    suffix = {"macos": ".dmg", "win64": ".exe"}[platform]
+    suffix = {"macos-x86_64": ".dmg", "windows-x86_64": ".exe"}[platform]
     return ClientInstallerArtifact(
         filename=f"parsetrail_{version}_{platform}_setup{suffix}",
         version=version,
         platform=platform,
+        architecture="x86_64",
         size=len(payload),
         sha256=hashlib.sha256(payload).hexdigest(),
     )
@@ -69,8 +71,8 @@ def test_verifies_signed_manifest_and_installer(tmp_path: Path) -> None:
 
     verify_installer_file(installer_path, artifact)
 
-    assert latest_installer(release, "win64") == artifact
-    assert latest_installer(release, "macos") is None
+    assert latest_installer(release, "windows-x86_64") == artifact
+    assert latest_installer(release, "macos-x86_64") is None
 
 
 def test_selects_latest_version_semantically() -> None:
@@ -81,7 +83,7 @@ def test_selects_latest_version_semantically() -> None:
         )
     )
 
-    assert latest_installer(release, "win64").version == "1.10.0"
+    assert latest_installer(release, "windows-x86_64").version == "1.10.0"
 
 
 @pytest.mark.parametrize("version", ["1.2", "01.2.3", "v1.2.3"])
@@ -117,9 +119,9 @@ def test_rejects_malformed_and_oversized_manifest() -> None:
 @pytest.mark.parametrize(
     ("filename", "platform", "version"),
     [
-        ("../parsetrail_1.2.3_win64_setup.exe", "win64", "1.2.3"),
-        ("parsetrail_1.2.3_win64_setup.exe", "macos", "1.2.3"),
-        ("parsetrail_1.2.3_win64_setup.exe", "win64", "1.2.4"),
+        ("../parsetrail_1.2.3_windows-x86_64_setup.exe", "windows-x86_64", "1.2.3"),
+        ("parsetrail_1.2.3_windows-x86_64_setup.exe", "macos-x86_64", "1.2.3"),
+        ("parsetrail_1.2.3_windows-x86_64_setup.exe", "windows-x86_64", "1.2.4"),
     ],
 )
 def test_rejects_filename_metadata_mismatch(
@@ -132,6 +134,7 @@ def test_rejects_filename_metadata_mismatch(
             filename=filename,
             version=version,
             platform=platform,
+            architecture="x86_64",
             size=1,
             sha256="0" * 64,
         )
@@ -144,3 +147,58 @@ def test_rejects_altered_installer(tmp_path: Path) -> None:
 
     with pytest.raises(ClientArtifactError, match="size mismatch|digest mismatch"):
         verify_installer_file(installer_path, artifact)
+
+
+def test_same_version_targets_coexist_and_select_only_their_own_installer():
+    artifacts = tuple(
+        sorted(
+            (_artifact(platform="windows-x86_64"), _artifact(platform="macos-x86_64")), key=lambda item: item.filename
+        )
+    )
+    release = _signed_client_release(artifacts)
+    assert release.manifest.schema_version == 2
+    for target in ("windows-x86_64", "macos-x86_64"):
+        artifact = latest_installer(release, target)
+        assert artifact.platform == target
+        assert artifact.architecture == "x86_64"
+        assert target in artifact.filename
+
+
+@pytest.mark.parametrize("change", ["legacy_schema", "legacy_target", "missing_architecture", "arm64", "arm_target"])
+def test_rejects_legacy_or_unsupported_signed_metadata_shape(change):
+    payload = json.loads(_signed_client_release((_artifact(),)).manifest_bytes)
+    artifact = payload["artifacts"][0]
+    if change == "legacy_schema":
+        payload["schema_version"] = 1
+    elif change == "legacy_target":
+        artifact["platform"] = "win64"
+        artifact["filename"] = "parsetrail_1.2.3_win64_setup.exe"
+    elif change == "missing_architecture":
+        del artifact["architecture"]
+    elif change == "arm64":
+        artifact["architecture"] = "arm64"
+    else:
+        artifact["platform"] = "macos-arm64"
+        artifact["filename"] = "parsetrail_1.2.3_macos-arm64_setup.dmg"
+    with pytest.raises(ValidationError):
+        ClientManifest.model_validate(payload)
+
+
+def test_changed_target_and_matching_filename_cannot_reuse_signature():
+    key = Ed25519PrivateKey.generate()
+    release = _signed_client_release((_artifact(),))
+    manifest = release.manifest.model_copy(
+        update={
+            "key_id": key_id_for_public_key(
+                key.public_key().public_bytes(
+                    encoding=serialization.Encoding.Raw, format=serialization.PublicFormat.Raw
+                )
+            )
+        }
+    )
+    original = serialize_client_manifest(manifest)
+    payload = json.loads(original)
+    payload["artifacts"][0].update(platform="macos-x86_64", filename="parsetrail_1.2.3_macos-x86_64_setup.dmg")
+    changed = serialize_client_manifest(ClientManifest.model_validate(payload))
+    with pytest.raises(ClientSignatureError, match="signature is invalid"):
+        verify_client_manifest(changed, key.sign(original), {manifest.key_id: key.public_key()})

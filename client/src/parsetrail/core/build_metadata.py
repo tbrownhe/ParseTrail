@@ -28,7 +28,7 @@ def read_build_metadata() -> BuildMetadata | None:
         return None
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-        if payload.get("schema_version") != 1:
+        if payload.get("schema_version") != 2 or payload.get("architecture") != "x86_64":
             raise ValueError
         client_version = validate_semver(payload["client_version"])
         source_commit = payload["source_commit"]
@@ -39,7 +39,7 @@ def read_build_metadata() -> BuildMetadata | None:
             raise ValueError
         if source_tag != f"client-v{client_version}":
             raise ValueError
-        if target_platform not in {"macos", "win64"}:
+        if target_platform not in {"macos-x86_64", "windows-x86_64"}:
             raise ValueError
         if not isinstance(built_at, str) or not built_at:
             raise ValueError

@@ -12,6 +12,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from parsetrail.core.client_targets import TARGET_SYSTEMS
 from parsetrail.core.versioning import validate_semver
 
 CLIENT_ROOT = Path(__file__).resolve().parents[1]
@@ -82,11 +83,14 @@ def write_build_metadata(
     version: str,
     target_platform: str,
 ) -> None:
+    if target_platform not in TARGET_SYSTEMS:
+        raise ReleaseSourceError("Build metadata requires an explicit supported installer target")
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "client_version": validate_semver(version),
         **asdict(source),
         "target_platform": target_platform,
+        "architecture": "x86_64",
         "built_at": datetime.now(timezone.utc).isoformat(),
         "python_version": platform.python_version(),
         "python_compiler": platform.python_compiler(),
@@ -103,7 +107,7 @@ def _parser() -> argparse.ArgumentParser:
 
     client = subparsers.add_parser("client")
     client.add_argument("--version", required=True)
-    client.add_argument("--platform", choices=("macos", "win64"), required=True)
+    client.add_argument("--platform", choices=("macos-x86_64", "windows-x86_64"), required=True)
     client.add_argument("--metadata-output", type=Path, required=True)
 
     plugins = subparsers.add_parser("plugins")

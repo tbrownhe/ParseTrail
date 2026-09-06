@@ -8,9 +8,10 @@ optional encrypted statement submission.
 Current development and native release acceptance target Windows x64 and Intel
 macOS (x86_64). The owner has an Intel Mac; Apple Silicon (arm64) development,
 packaging, and acceptance are deferred until test hardware is available. The
-lock's arm64 resolution does not establish native support. The current `macos`
-release selector identifies the Intel release; explicit architecture metadata
-is tracked in [TODO](../TODO.md).
+lock's arm64 resolution does not establish native support. Client 1.4 uses the
+explicit `windows-x86_64` and `macos-x86_64` release targets. Its version-2 signed
+installer contract requires a one-time manual upgrade from 1.3; see the
+[target contract and transition](../docs/client-release-contract.md).
 
 ## Requirements
 
@@ -266,10 +267,10 @@ Check just the bootstrap, without client package installation, release config,
 signing keys, or publication:
 
 ```powershell
-uv run --no-env-file --script scripts/release_bootstrap.py check --platform win64
+uv run --no-env-file --script scripts/release_bootstrap.py check --platform windows-x86_64
 ```
 
-On Intel macOS, substitute `--platform macos`. This can download the pinned
+On Intel macOS, substitute `--platform macos-x86_64`. This can download the pinned
 interpreter; it does not build an installer or load the repository `.env`.
 Use the script entry point below rather than wrapping the release module in a
 project-aware `uv run`, which could install dependencies before preflight.
@@ -284,7 +285,7 @@ Every release requires a clean worktree and an exact tag at `HEAD`. Client tags
 are derived from `src/parsetrail/version.py`, for example:
 
 ```powershell
-git tag client-v1.3.0
+git tag client-v1.4.0
 ```
 
 Plugin tags are explicit operator-chosen identifiers, such as
@@ -371,7 +372,7 @@ Windows:
 
 ```powershell
 uv run --no-env-file --script scripts/release_bootstrap.py `
-    --config release-config.json client --platform win64
+    --config release-config.json client --platform windows-x86_64
 ```
 
 This synchronizes the locked environment using the exact Python patch release in
@@ -394,7 +395,7 @@ macOS:
 
 ```bash
 uv run --no-env-file --script scripts/release_bootstrap.py \
-    --config release-config.json client --platform macos
+    --config release-config.json client --platform macos-x86_64
 ```
 
 This builds the `.app` and a drag-and-drop `.dmg`, signs its ParseTrail release

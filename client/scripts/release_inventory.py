@@ -13,6 +13,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from parsetrail.core.client_manifest import ClientManifest
 from parsetrail.core.versioning import validate_semver
 
 INVENTORY_FILENAME = "release-inventory.json"
@@ -121,6 +122,10 @@ def create_inventory(
 
     manifest_name = "client-manifest.json" if release_kind == "client" else "plugin-manifest.json"
     manifest = json.loads((release_dir / manifest_name).read_text(encoding="utf-8"))
+    if release_kind == "client":
+        catalog = ClientManifest.model_validate(manifest)
+        if any(artifact.platform != target_platform or artifact.version != version for artifact in catalog.artifacts):
+            raise ValueError("Signed client manifest does not match the inventory target/version")
     if release_kind == "plugins" and manifest.get("source_commit") != source_commit:
         raise ValueError("Signed plugin manifest does not match the source commit")
 
@@ -159,8 +164,11 @@ def create_inventory(
         "tools": tools,
         "files": _artifact_records(release_dir, manifest),
     }
+    if release_kind == "client":
+        inventory["architecture"] = "x86_64"
+        inventory["manifest_schema_version"] = catalog.schema_version
     if native_report is not None:
-        if release_kind != "client" or target_platform != "macos":
+        if release_kind != "client" or target_platform != "macos-x86_64":
             raise ValueError("Native Mac evidence requires a macos client release")
         evidence = json.loads(native_report.read_text(encoding="utf-8"))
         if (

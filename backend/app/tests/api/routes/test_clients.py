@@ -28,10 +28,23 @@ class _Engine:
         yield _Connection()
 
 
+@pytest.mark.parametrize("platform", ["win64", "macos"])
+@pytest.mark.parametrize("operation", ["manifest", "manifest-signature", "latest", "1.3.1"])
+def test_legacy_channels_explain_manual_upgrade(client, platform, operation):
+    response = client.get(f"{settings.API_V1_STR}/clients/{platform}/{operation}")
+    assert response.status_code == 410
+    assert "https://parsetrail.com/download.html" in response.json()["detail"]
+
+
+@pytest.mark.parametrize("platform", ["macos-arm64", "windows-arm64", "linux64"])
+def test_unsupported_target_is_not_available(client, platform):
+    assert client.get(f"{settings.API_V1_STR}/clients/{platform}/manifest").status_code == 404
+
+
 def _write_release(
     client_root: Path,
     *,
-    platform: str = "win64",
+    platform: str = "windows-x86_64",
     version: str = "1.2.3",
     release_sequence: int = 42,
 ) -> tuple[bytes, bytes]:
@@ -41,7 +54,7 @@ def _write_release(
     release_dir = client_root / platform / clients.CLIENT_RELEASES_DIR / str(release_sequence)
     release_dir.mkdir(parents=True)
     manifest: dict[str, Any] = {
-        "schema_version": 1,
+        "schema_version": 2,
         "release_sequence": release_sequence,
         "published_at": "2026-08-28T00:00:00+00:00",
         "key_id": "plugin-ed25519-00000000000000000000000000000000",
@@ -51,6 +64,7 @@ def _write_release(
                 "filename": filename,
                 "version": version,
                 "platform": platform,
+                "architecture": "x86_64",
                 "size": len(installer),
                 "sha256": "0" * 64,
             }
@@ -76,8 +90,8 @@ def test_serves_exact_active_manifest_and_signature(
     manifest_bytes, _ = _write_release(tmp_path)
     monkeypatch.setattr(clients, "CLIENTS_DIR", tmp_path)
 
-    manifest_response = client.get(f"{settings.API_V1_STR}/clients/win64/manifest")
-    signature_response = client.get(f"{settings.API_V1_STR}/clients/win64/manifest-signature")
+    manifest_response = client.get(f"{settings.API_V1_STR}/clients/windows-x86_64/manifest")
+    signature_response = client.get(f"{settings.API_V1_STR}/clients/windows-x86_64/manifest-signature")
 
     assert manifest_response.status_code == 200
     assert manifest_response.content == manifest_bytes
@@ -99,14 +113,48 @@ def test_catalog_is_derived_from_active_manifests(
     assert response.status_code == 200
     assert response.json() == [
         {
-            "file_name": "parsetrail_1.2.3_win64_setup.exe",
+            "file_name": "parsetrail_1.2.3_windows-x86_64_setup.exe",
             "version": "1.2.3",
-            "platform": "win64",
-            "file_path": "win64",
+            "platform": "windows-x86_64",
+            "architecture": "x86_64",
+            "manifest_schema_version": 2,
+            "file_path": "windows-x86_64",
             "size": 9,
             "sha256": "0" * 64,
         }
     ]
+
+
+def test_current_targets_coexist_at_one_version_and_have_separate_downloads(client, tmp_path, monkeypatch):
+    monkeypatch.setattr(clients, "CLIENTS_DIR", tmp_path)
+    monkeypatch.setattr(clients, "engine", _Engine())
+    for target in ("windows-x86_64", "macos-x86_64"):
+        manifest, installer = _write_release(tmp_path, platform=target)
+        assert client.get(f"{settings.API_V1_STR}/clients/{target}/manifest").content == manifest
+        assert client.get(f"{settings.API_V1_STR}/clients/{target}/1.2.3").content == installer
+    listing = client.get(f"{settings.API_V1_STR}/clients/").json()
+    assert {item["platform"] for item in listing} == {"windows-x86_64", "macos-x86_64"}
+    assert all(item["architecture"] == "x86_64" and item["manifest_schema_version"] == 2 for item in listing)
+
+
+@pytest.mark.parametrize("change", ["schema", "architecture", "missing_architecture", "valid_other_target"])
+def test_incompatible_target_metadata_cannot_be_listed_or_downloaded(client, tmp_path, monkeypatch, change):
+    manifest_bytes, _ = _write_release(tmp_path)
+    monkeypatch.setattr(clients, "CLIENTS_DIR", tmp_path)
+    manifest = json.loads(manifest_bytes)
+    artifact = manifest["artifacts"][0]
+    if change == "schema":
+        manifest["schema_version"] = 1
+    elif change == "architecture":
+        artifact["architecture"] = "arm64"
+    elif change == "missing_architecture":
+        del artifact["architecture"]
+    else:
+        artifact.update(platform="macos-x86_64", filename="parsetrail_1.2.3_macos-x86_64_setup.dmg")
+    path = tmp_path / "windows-x86_64/releases/42" / clients.CLIENT_MANIFEST
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    for route in ("", "windows-x86_64/manifest", "windows-x86_64/manifest-signature", "windows-x86_64/latest"):
+        assert client.get(f"{settings.API_V1_STR}/clients/{route}").status_code == 503
 
 
 @pytest.mark.parametrize(
@@ -124,12 +172,12 @@ def test_rejects_invalid_release_pointer(
     monkeypatch: pytest.MonkeyPatch,
     pointer: dict[str, Any],
 ) -> None:
-    platform_root = tmp_path / "win64"
+    platform_root = tmp_path / "windows-x86_64"
     platform_root.mkdir(parents=True)
     (platform_root / clients.CURRENT_RELEASE).write_text(json.dumps(pointer), encoding="utf-8")
     monkeypatch.setattr(clients, "CLIENTS_DIR", tmp_path)
 
-    response = client.get(f"{settings.API_V1_STR}/clients/win64/manifest")
+    response = client.get(f"{settings.API_V1_STR}/clients/windows-x86_64/manifest")
 
     assert response.status_code == 503
     assert response.json()["detail"] == "Client catalog unavailable"
@@ -141,13 +189,13 @@ def test_rejects_manifest_for_another_platform(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     manifest_bytes, _ = _write_release(tmp_path)
-    release_dir = tmp_path / "win64" / clients.CLIENT_RELEASES_DIR / "42"
+    release_dir = tmp_path / "windows-x86_64" / clients.CLIENT_RELEASES_DIR / "42"
     manifest = json.loads(manifest_bytes)
-    manifest["artifacts"][0]["platform"] = "macos"
+    manifest["artifacts"][0]["platform"] = "macos-x86_64"
     (release_dir / clients.CLIENT_MANIFEST).write_text(json.dumps(manifest), encoding="utf-8")
     monkeypatch.setattr(clients, "CLIENTS_DIR", tmp_path)
 
-    response = client.get(f"{settings.API_V1_STR}/clients/win64/manifest")
+    response = client.get(f"{settings.API_V1_STR}/clients/windows-x86_64/manifest")
 
     assert response.status_code == 503
 
@@ -160,7 +208,7 @@ def test_rejects_unlisted_installer_version(
     _write_release(tmp_path)
     monkeypatch.setattr(clients, "CLIENTS_DIR", tmp_path)
 
-    response = client.get(f"{settings.API_V1_STR}/clients/win64/9.9.9")
+    response = client.get(f"{settings.API_V1_STR}/clients/windows-x86_64/9.9.9")
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Client installer not found"
@@ -176,7 +224,7 @@ def test_rejects_invalid_semantic_version(
     _write_release(tmp_path)
     monkeypatch.setattr(clients, "CLIENTS_DIR", tmp_path)
 
-    response = client.get(f"{settings.API_V1_STR}/clients/win64/{version}")
+    response = client.get(f"{settings.API_V1_STR}/clients/windows-x86_64/{version}")
 
     assert response.status_code == 422
 
@@ -199,11 +247,11 @@ def test_downloads_only_the_active_manifest_installer(
     monkeypatch.setattr(clients, "CLIENTS_DIR", tmp_path)
     monkeypatch.setattr(clients, "engine", _Engine())
 
-    response = client.get(f"{settings.API_V1_STR}/clients/win64/{version}")
+    response = client.get(f"{settings.API_V1_STR}/clients/windows-x86_64/{version}")
 
     assert response.status_code == 200
     assert response.content == installer
-    assert response.headers["content-disposition"].endswith('filename="parsetrail_1.2.3_win64_setup.exe"')
+    assert response.headers["content-disposition"].endswith('filename="parsetrail_1.2.3_windows-x86_64_setup.exe"')
 
 
 def test_rejects_installer_with_wrong_size(
@@ -212,11 +260,13 @@ def test_rejects_installer_with_wrong_size(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _write_release(tmp_path)
-    installer_path = tmp_path / "win64" / clients.CLIENT_RELEASES_DIR / "42" / "parsetrail_1.2.3_win64_setup.exe"
+    installer_path = (
+        tmp_path / "windows-x86_64" / clients.CLIENT_RELEASES_DIR / "42" / "parsetrail_1.2.3_windows-x86_64_setup.exe"
+    )
     installer_path.write_bytes(b"short")
     monkeypatch.setattr(clients, "CLIENTS_DIR", tmp_path)
 
-    response = client.get(f"{settings.API_V1_STR}/clients/win64/1.2.3")
+    response = client.get(f"{settings.API_V1_STR}/clients/windows-x86_64/1.2.3")
 
     assert response.status_code == 404
     assert response.json()["detail"] == "Client installer not found"

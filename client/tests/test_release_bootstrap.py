@@ -59,7 +59,9 @@ def builder(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     return state
 
 
-@pytest.mark.parametrize("target,system,machine", [("win64", "Windows", "AMD64"), ("macos", "Darwin", "x86_64")])
+@pytest.mark.parametrize(
+    "target,system,machine", [("windows-x86_64", "Windows", "AMD64"), ("macos-x86_64", "Darwin", "x86_64")]
+)
 def test_provisions_and_inspects_exact_native_python_before_any_packages(builder, monkeypatch, target, system, machine):
     monkeypatch.setattr(launcher.platform, "system", lambda: system)
     monkeypatch.setattr(launcher.platform, "machine", lambda: machine)
@@ -73,7 +75,7 @@ def test_provisions_and_inspects_exact_native_python_before_any_packages(builder
     assert builder.calls[1][1:3] == ["python", "install"]
     assert "cpython-3.13.15" in builder.calls[1]
     assert "--no-bin" in builder.calls[1]
-    assert ("--no-registry" in builder.calls[1]) == (target == "win64")
+    assert ("--no-registry" in builder.calls[1]) == (target == "windows-x86_64")
     assert {"--no-project", "--managed-python", "--system", "--no-python-downloads"} <= set(builder.calls[2])
     assert builder.calls[3][1:4] == ["-I", "-S", "-c"]
     assert len(builder.calls) == 4
@@ -82,7 +84,7 @@ def test_provisions_and_inspects_exact_native_python_before_any_packages(builder
 def test_missing_uv_fails_without_provisioning(builder, monkeypatch):
     monkeypatch.setattr(launcher.shutil, "which", lambda _name: None)
     with pytest.raises(launcher.BootstrapError, match="not found"):
-        launcher.bootstrap("win64", client_root=builder.root)
+        launcher.bootstrap("windows-x86_64", client_root=builder.root)
     assert builder.calls == []
 
 
@@ -90,16 +92,16 @@ def test_missing_uv_fails_without_provisioning(builder, monkeypatch):
 def test_old_or_unrecognized_uv_fails_before_provisioning(builder, version):
     builder.uv = version
     with pytest.raises(launcher.BootstrapError, match="stable uv version"):
-        launcher.bootstrap("win64", client_root=builder.root)
+        launcher.bootstrap("windows-x86_64", client_root=builder.root)
     assert len(builder.calls) == 1
 
 
 @pytest.mark.parametrize(
     "target,system,machine",
     [
-        ("macos", "Windows", "AMD64"),
-        ("win64", "Windows", "ARM64"),
-        ("macos", "Darwin", "arm64"),
+        ("macos-x86_64", "Windows", "AMD64"),
+        ("windows-x86_64", "Windows", "ARM64"),
+        ("macos-x86_64", "Darwin", "arm64"),
         (None, "Linux", "x86_64"),
     ],
 )
@@ -115,21 +117,21 @@ def test_unsupported_host_fails_before_provisioning(builder, monkeypatch, target
 def test_invalid_pin_fails_before_provisioning(builder, version):
     (builder.root / ".python-version").write_text(version, encoding="utf-8")
     with pytest.raises(launcher.BootstrapError, match="exact stable"):
-        launcher.bootstrap("win64", client_root=builder.root)
+        launcher.bootstrap("windows-x86_64", client_root=builder.root)
     assert len(builder.calls) == 1
 
 
 def test_missing_pin_fails_before_provisioning(builder):
     (builder.root / ".python-version").unlink()
     with pytest.raises(launcher.BootstrapError, match="Could not read"):
-        launcher.bootstrap("win64", client_root=builder.root)
+        launcher.bootstrap("windows-x86_64", client_root=builder.root)
     assert len(builder.calls) == 1
 
 
 def test_unavailable_interpreter_stops_at_provisioning(builder):
     builder.failed_phase = "Provisioning"
     with pytest.raises(launcher.BootstrapError, match="injected"):
-        launcher.bootstrap("win64", client_root=builder.root)
+        launcher.bootstrap("windows-x86_64", client_root=builder.root)
     assert len(builder.calls) == 2
 
 
@@ -147,7 +149,7 @@ def test_unavailable_interpreter_stops_at_provisioning(builder):
 def test_wrong_interpreter_is_rejected_before_dependency_sync(builder, field, value):
     builder.probe[field] = value
     with pytest.raises(launcher.BootstrapError, match="inspection disagreed"):
-        launcher.bootstrap("win64", client_root=builder.root)
+        launcher.bootstrap("windows-x86_64", client_root=builder.root)
     assert len(builder.calls) == 4
 
 
@@ -161,13 +163,13 @@ def test_failed_bootstrap_never_dispatches_dependency_sync_or_release(monkeypatc
     monkeypatch.setattr(launcher, "_run", lambda *args, **kwargs: calls.append(args))
     monkeypatch.setattr(launcher.subprocess, "run", lambda *args, **kwargs: calls.append(args))
 
-    assert launcher.main(["--config", "release.json", "client", "--platform", "win64"]) == 1
+    assert launcher.main(["--config", "release.json", "client", "--platform", "windows-x86_64"]) == 1
     assert "cannot provision" in capsys.readouterr().err
     assert calls == []
 
 
 def test_successful_launcher_pins_sync_and_preserves_interactive_release(tmp_path, monkeypatch):
-    runtime = launcher.ReleaseRuntime("uv", "0.12.5", "3.13.15", str(tmp_path / "managed python.exe"), "win64")
+    runtime = launcher.ReleaseRuntime("uv", "0.12.5", "3.13.15", str(tmp_path / "managed python.exe"), "windows-x86_64")
     calls = []
     monkeypatch.setattr(launcher, "bootstrap", lambda _target: runtime)
     monkeypatch.setattr(launcher, "_run", lambda command, **kwargs: calls.append((command, kwargs)))
@@ -178,7 +180,7 @@ def test_successful_launcher_pins_sync_and_preserves_interactive_release(tmp_pat
 
     monkeypatch.setattr(launcher.subprocess, "run", run)
     config = tmp_path / "release config.json"
-    assert launcher.main(["--config", str(config), "client", "--platform", "win64", "--publish"]) == 7
+    assert launcher.main(["--config", str(config), "client", "--platform", "windows-x86_64", "--publish"]) == 7
     assert len(calls) == 2
     assert calls[0][0][1] == "sync"
     for command, _kwargs in calls:
@@ -187,7 +189,7 @@ def test_successful_launcher_pins_sync_and_preserves_interactive_release(tmp_pat
     command, kwargs = calls[1]
     assert "--no-sync" in command
     assert "--no-env-file" in command
-    assert command[-6:] == ["--config", str(config), "client", "--platform", "win64", "--publish"]
+    assert command[-6:] == ["--config", str(config), "client", "--platform", "windows-x86_64", "--publish"]
     assert "capture_output" not in kwargs
     assert "stdin" not in kwargs
 
@@ -283,4 +285,4 @@ def test_windows_builder_stops_before_project_sync_when_bootstrap_fails(tmp_path
     assert "Release bootstrap failed" in result.stderr
     calls = [line for line in result.stdout.splitlines() if line.startswith("UV_CALL:")]
     assert len(calls) == 1
-    assert "--script scripts/release_bootstrap.py check --platform win64" in calls[0]
+    assert "--script scripts/release_bootstrap.py check --platform windows-x86_64" in calls[0]

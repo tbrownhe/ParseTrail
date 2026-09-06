@@ -24,7 +24,7 @@ from pathlib import Path
 
 CLIENT_ROOT = Path(__file__).resolve().parents[1]
 MINIMUM_UV = (0, 12, 5)
-TARGET_SYSTEMS = {"win64": "Windows", "macos": "Darwin"}
+TARGET_SYSTEMS = {"windows-x86_64": "Windows", "macos-x86_64": "Darwin"}
 PYTHON_PROBE = """
 import json, platform, struct, sysconfig
 print(json.dumps({
@@ -94,7 +94,7 @@ def bootstrap(target: str | None = None, *, client_root: Path = CLIENT_ROOT) -> 
 
     request = f"cpython-{version}"
     install = [uv, "python", "install", "--no-config", "--no-bin", request]
-    if selected == "win64":
+    if selected == "windows-x86_64":
         install.append("--no-registry")
     _run(install, cwd=client_root, phase=f"Provisioning {request} for {selected}", timeout=300)
     interpreter = _run(
@@ -160,7 +160,7 @@ def main(argv: list[str] | None = None) -> int:
             print(runtime.interpreter if args.print_python else json.dumps(asdict(runtime), sort_keys=True))
             return 0
         # Mac source builds need their native toolchain before the first package operation.
-        if runtime.target == "macos" and args.command == "client":
+        if runtime.target == "macos-x86_64" and args.command == "client":
             try:
                 native = subprocess.run(
                     [runtime.interpreter, "-I", "-S", str(CLIENT_ROOT / "scripts/macos_release.py"), "sync"],

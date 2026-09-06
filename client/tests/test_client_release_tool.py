@@ -19,14 +19,14 @@ def _release_key(tmp_path: Path) -> tuple[Path, Path, bytes]:
 
 def test_signs_and_verifies_installer_release(tmp_path: Path) -> None:
     private_key, trust_store, passphrase = _release_key(tmp_path)
-    release_dir = tmp_path / "clients" / "win64"
+    release_dir = tmp_path / "clients" / "windows-x86_64"
     release_dir.mkdir(parents=True)
-    installer = release_dir / "parsetrail_1.2.3_win64_setup.exe"
+    installer = release_dir / "parsetrail_1.2.3_windows-x86_64_setup.exe"
     installer.write_bytes(b"installer bytes")
 
     manifest = sign_release(
         installer,
-        "win64",
+        "windows-x86_64",
         "1.2.3",
         private_key,
         trust_store,
@@ -42,13 +42,13 @@ def test_signs_and_verifies_installer_release(tmp_path: Path) -> None:
 
 def test_rejects_mismatched_filename_metadata(tmp_path: Path) -> None:
     private_key, trust_store, passphrase = _release_key(tmp_path)
-    installer = tmp_path / "parsetrail_1.2.3_win64_setup.exe"
+    installer = tmp_path / "parsetrail_1.2.3_windows-x86_64_setup.exe"
     installer.write_bytes(b"installer")
 
     with pytest.raises(ValueError, match="filename must be"):
         sign_release(
             installer,
-            "macos",
+            "macos-x86_64",
             "1.2.3",
             private_key,
             trust_store,
@@ -59,11 +59,11 @@ def test_rejects_mismatched_filename_metadata(tmp_path: Path) -> None:
 
 def test_rejects_release_sequence_reuse(tmp_path: Path) -> None:
     private_key, trust_store, passphrase = _release_key(tmp_path)
-    installer = tmp_path / "parsetrail_1.2.3_win64_setup.exe"
+    installer = tmp_path / "parsetrail_1.2.3_windows-x86_64_setup.exe"
     installer.write_bytes(b"installer")
     kwargs = {
         "installer_path": installer,
-        "platform": "win64",
+        "platform": "windows-x86_64",
         "version": "1.2.3",
         "private_key_path": private_key,
         "trust_store_path": trust_store,
@@ -78,11 +78,11 @@ def test_rejects_release_sequence_reuse(tmp_path: Path) -> None:
 
 def test_verification_rejects_tampered_installer(tmp_path: Path) -> None:
     private_key, trust_store, passphrase = _release_key(tmp_path)
-    installer = tmp_path / "parsetrail_1.2.3_win64_setup.exe"
+    installer = tmp_path / "parsetrail_1.2.3_windows-x86_64_setup.exe"
     installer.write_bytes(b"installer")
     sign_release(
         installer,
-        "win64",
+        "windows-x86_64",
         "1.2.3",
         private_key,
         trust_store,

@@ -36,7 +36,7 @@ if ($DeployOnly) {
 $prebuildDir = Join-Path $PSScriptRoot "prebuild"
 $buildDir    = Join-Path $PSScriptRoot "build"
 $srcDir      = Join-Path $PSScriptRoot "src"
-$clientDir   = Join-Path $distDir "win64"
+$clientDir   = Join-Path $distDir "windows-x86_64"
 $pythonVersionFile = Join-Path $PSScriptRoot ".python-version"
 
 if (-not (Test-Path -LiteralPath $pythonVersionFile)) {
@@ -52,7 +52,7 @@ if (-not $pythonVersion) {
 
 # Script metadata runs this with no client packages. Provision and inspect the
 # exact managed interpreter before the first project-aware uv invocation.
-$releasePython = uv run --no-env-file --script scripts/release_bootstrap.py check --platform win64 --print-python
+$releasePython = uv run --no-env-file --script scripts/release_bootstrap.py check --platform windows-x86_64 --print-python
 if ($LASTEXITCODE -ne 0) {
     throw "Release bootstrap failed; client dependencies and signing were not started."
 }
@@ -68,13 +68,13 @@ $version = $Matches[1]
 $buildMetadataPath = Join-Path ([System.IO.Path]::GetTempPath()) "parsetrail-build-$([guid]::NewGuid().ToString('N')).json"
 $sourceJson = uv run --no-env-file --frozen --python $releasePython --no-python-downloads python -m scripts.release_source client `
     --version $version `
-    --platform win64 `
+    --platform windows-x86_64 `
     --metadata-output $buildMetadataPath
 if ($LASTEXITCODE -ne 0) {
     throw "Release source validation failed with exit code $LASTEXITCODE"
 }
 $releaseSource = $sourceJson | ConvertFrom-Json
-$installerPath = Join-Path $clientDir "parsetrail_${version}_win64_setup.exe"
+$installerPath = Join-Path $clientDir "parsetrail_${version}_windows-x86_64_setup.exe"
 $manifestPath = Join-Path $clientDir "client-manifest.json"
 $signaturePath = Join-Path $clientDir "client-manifest.sig"
 if ($DeployOnly -and -not (Test-Path -LiteralPath $installerPath -PathType Leaf)) {
@@ -190,7 +190,7 @@ try {
     }
     Write-Host "Frozen runtime smoke test passed."
 
-    # --- Create Install Package at dist\win64\parsetrail_version_win64_setup.exe
+    # --- Create the installer in the explicit Windows x64 release channel ------
     Write-Host "Creating installer with NSIS..."
 
     Write-Host "Found version: $version"
@@ -230,7 +230,7 @@ if (-not $DeployOnly) {
     uv run --no-env-file --frozen --python $releasePython --no-python-downloads python -m scripts.client_release sign `
         --private-key $privateKey `
         --installer $installerPath `
-        --platform win64 `
+        --platform windows-x86_64 `
         --version $version
     if ($LASTEXITCODE -ne 0) {
         throw "Client release signing failed with exit code $LASTEXITCODE"
@@ -251,7 +251,7 @@ if (-not $DeployOnly) {
         --source-commit $releaseSource.source_commit `
         --source-tag $releaseSource.source_tag `
         --kind client `
-        --platform win64 `
+        --platform windows-x86_64 `
         --version $version `
         --packager nsis `
         --packager-executable $makensis
@@ -297,7 +297,7 @@ try {
         throw "Signed client manifest does not describe the expected Windows installer"
     }
 
-    $remotePlatformDir = "$($remoteDir.TrimEnd('/'))/win64"
+    $remotePlatformDir = "$($remoteDir.TrimEnd('/'))/windows-x86_64"
     uv run --no-env-file --frozen --python $releasePython --no-python-downloads python -m scripts.immutable_publish `
         --release-dir $clientDir `
         --manifest client-manifest.json `

@@ -125,7 +125,7 @@ def test_final_sync_cannot_reuse_cryptography_built_with_old_link_settings(toolc
 
 @pytest.mark.parametrize("failed", [True, False])
 def test_mac_launcher_uses_native_preflight_sync_before_release_dispatch(monkeypatch, failed):
-    runtime = launcher.ReleaseRuntime("uv", "0.12.5", "3.13.15", sys.executable, "macos")
+    runtime = launcher.ReleaseRuntime("uv", "0.12.5", "3.13.15", sys.executable, "macos-x86_64")
     monkeypatch.setattr(launcher, "bootstrap", lambda _target: runtime)
     monkeypatch.setattr(launcher, "_run", lambda *args, **kwargs: pytest.fail("generic sync bypasses native preflight"))
     calls = []
@@ -135,7 +135,7 @@ def test_mac_launcher_uses_native_preflight_sync_before_release_dispatch(monkeyp
         return SimpleNamespace(returncode=3 if failed else 0)
 
     monkeypatch.setattr(launcher.subprocess, "run", run)
-    assert launcher.main(["--config", "release.json", "client", "--platform", "macos"]) == (1 if failed else 0)
+    assert launcher.main(["--config", "release.json", "client", "--platform", "macos-x86_64"]) == (1 if failed else 0)
     assert Path(calls[0][3]).name == "macos_release.py"
     assert calls[0][-1] == "sync"
     assert len(calls) == (1 if failed else 2)
@@ -326,5 +326,5 @@ def test_direct_mac_builder_stops_before_project_uv_when_toolchain_is_missing(tm
     assert result.returncode != 0
     assert "Missing brew" in result.stderr
     assert call_log.read_text().splitlines() == [
-        "run --no-env-file --script scripts/release_bootstrap.py check --platform macos --print-python"
+        "run --no-env-file --script scripts/release_bootstrap.py check --platform macos-x86_64 --print-python"
     ]

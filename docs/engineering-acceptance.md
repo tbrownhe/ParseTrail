@@ -147,6 +147,30 @@ remain the same. This accepts the tools update and the complete preflight on
 the owner's Intel Mac; the native build/audit, frozen smoke, and installed-app
 walkthrough remain open.
 
+## Client installer architecture contract follow-up
+
+R3a introduces the [version-2 installer target contract](client-release-contract.md)
+for the prepared client **1.4.0** source. Windows x64 and Intel Mac now have
+explicit signed targets and architecture, target-specific filenames/channels,
+and matching API/website selection. Legacy channels return manual-upgrade
+instructions after deployment. The transition and rollback runbooks preserve
+existing signed 1.3 artifacts and require coordinated staging acceptance.
+
+The implementation passed **352 client tests on Windows**, with the native Mac
+Bash test skipped, **31 isolated installer API tests**, and **8 website JavaScript
+tests**. The client and changed backend modules passed Ruff check/format; the
+API module passed mypy, and both native builders passed syntax parsing. After
+the source version became 1.4.0, **91 focused client/release tests** passed and
+`uv lock --offline --check` confirmed the existing lock remains valid.
+
+Coverage includes both active targets at one version, missing/mismatched
+architecture, unsupported/legacy targets, altered signed target/filename bytes,
+wrong-channel manifests, no network request on unsupported client processes,
+legacy HTTP 410 guidance, and explicit website labels without browser CPU
+guessing. These are source/interface results: no native installer, release tag,
+public activation, API deployment, or 1.3 profile upgrade was performed. R3b and
+the native release/offline walkthroughs remain open in TODO.
+
 ## Staging migration and recovery: August 2026
 
 The PostgreSQL 12-to-17 rehearsal preserved the source volume and matched every

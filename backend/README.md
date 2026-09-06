@@ -7,6 +7,14 @@ desktop SQLite database or ordinary statement imports.
 Start with the repository [development guide](../development.md). Production and
 staging operations use the guarded [deployment runbook](../deployment.md).
 
+## Client installer contract
+
+The client 1.4 installer API uses version-2 manifests and explicit
+`windows-x86_64` / `macos-x86_64` channels. Legacy `win64` / `macos` endpoints
+return HTTP 410 with manual-upgrade guidance after this API version is deployed.
+Coordinate candidate artifacts, the API, and the website using the
+[client target contract and transition](../docs/client-release-contract.md).
+
 ## Locked development environment
 
 From `backend`:

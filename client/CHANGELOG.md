@@ -1,5 +1,9 @@
 Unreleased
 ==========
+- Prepare client 1.4.0 with version-2 signed installer metadata and explicit
+  Windows x64/Intel Mac channels; existing 1.3 clients require a manual upgrade
+- Reject unsupported installer architectures and label available download targets
+  explicitly on the public site
 - Preflight Intel Mac source-build tools, enforce static OpenSSL inputs, audit
   bundled native dependencies, and record native release evidence
 - Bound the Mac frozen smoke to 30 seconds and exercise synthetic crypto, SQLite,

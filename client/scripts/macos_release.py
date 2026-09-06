@@ -121,7 +121,7 @@ def preflight() -> tuple[dict[str, str], dict[str, object]]:
             raise MacReleaseError(f"openssl@3 {name} has no Intel x86_64 slice.")
         archives[name] = hashlib.sha256(archive.read_bytes()).hexdigest()
     inputs: dict[str, object] = {
-        "target_platform": "macos",
+        "target_platform": "macos-x86_64",
         "architecture": "x86_64",
         "macos_version": macos_version,
         "openssl_formula": "openssl@3",

@@ -44,7 +44,7 @@ def test_accepts_clean_matching_client_tag_and_writes_metadata(tmp_path: Path) -
         output,
         source=source,
         version="1.2.3",
-        target_platform="win64",
+        target_platform="windows-x86_64",
     )
     metadata = json.loads(output.read_text(encoding="utf-8"))
 

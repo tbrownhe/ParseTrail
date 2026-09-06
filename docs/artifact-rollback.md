@@ -17,8 +17,8 @@ API-image and PostgreSQL rollback are separate operations documented in
    public key bundled in the corresponding source checkout:
 
    ```text
-   uv run --frozen python scripts/client_release.py verify --release-dir <client-release>
-   uv run --frozen python scripts/plugin_release.py verify --plugin-dir <plugin-release>
+   uv run --no-env-file --frozen python -m scripts.client_release verify --release-dir <client-release>
+   uv run --no-env-file --frozen python -m scripts.plugin_release verify --plugin-dir <plugin-release>
    ```
 
 4. Compare the inventory's source tag, commit, tool versions, sizes, and hashes
@@ -26,8 +26,10 @@ API-image and PostgreSQL rollback are separate operations documented in
 
 ## Client installer rollback
 
-Client releases are independent under `data/clients/win64` and
-`data/clients/macos`. For the affected platform, atomically replace its
+Client 1.4 releases are independent under `data/clients/windows-x86_64` and
+`data/clients/macos-x86_64`. Verify the version-2 manifest's explicit platform and
+`architecture` against that channel and the inventory before selecting it. For
+the affected target, atomically replace its
 `current-release.json` with a pointer containing exactly:
 
 ```json
@@ -42,6 +44,15 @@ deployment runbook. Restore the prior pointer if any check fails.
 
 This changes the installer offered to new downloads. It does not and should not
 silently downgrade an already installed desktop application.
+
+Legacy 1.3 artifacts remain unchanged in `data/clients/win64` and
+`data/clients/macos`. They cannot be placed behind a version-2 channel pointer or
+verified by the new version-2-only client tooling. Use the matching old tagged
+source/public trust store to verify them. Restoring service for old clients
+requires the previous API/website version and the preserved legacy pointers;
+changing only a new channel's pointer cannot restore the legacy update contract.
+See the [coordinated transition](client-release-contract.md) before any rollback
+across that boundary.
 
 ## Plugin rollback
 

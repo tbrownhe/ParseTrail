@@ -18,10 +18,6 @@ any implementation**. Native acceptance still requires the prepared owner checks
 - [~] **R2 — Intel macOS packaging:** `[USER]` Accept the next native build/audit
   and installed runtime without build-tool paths using the
   [Mac release gates](client/README.md#intel-mac-release-gates).
-- [ ] **R3a — Architecture contract:** make the Windows x64/Intel macOS target
-  explicit in signed metadata, filenames, API responses, and download selection.
-  Reject mismatched/unsupported targets. Coordinate the contract and existing
-  1.3-client transition; do not advertise or publish an arm64 artifact yet.
 - [ ] **R3b — Architecture gates:** assert the Windows x64/Intel Mac interpreter
   and frozen-binary architecture and select explicit CI coverage. Retain owner
   native gates where hosted coverage is unavailable; generic Mac CI alone must
@@ -34,6 +30,8 @@ any implementation**. Native acceptance still requires the prepared owner checks
 - [ ] `[USER]` Rehearse the resulting release flow on Windows x64 and Intel
   macOS: fresh bootstrap, native build/frozen smoke, signed dry run, preserved
   artifact publication, install/upgrade, credential store, and plugin update.
+  Include the [1.3-to-1.4 manual upgrade and API/website transition](docs/client-release-contract.md)
+  on staging before public activation.
 
 Acceptance: one clean tag produces traceable target-specific artifacts; a dry
 run does not change public directories, and publish-existing uses exactly the

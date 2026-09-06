@@ -122,8 +122,10 @@ def _run(command: list[str]) -> None:
 
 
 def _client_command(config: ReleaseConfig, platform_name: str, *, publish: bool) -> list[str]:
+    if platform_name not in {"windows-x86_64", "macos-x86_64"}:
+        raise ReleaseConfigError("Client releases require an explicit supported installer target")
     client_root = Path(__file__).resolve().parents[1]
-    if platform_name == "win64":
+    if platform_name == "windows-x86_64":
         shell = shutil.which("pwsh") or shutil.which("powershell.exe")
         if shell is None:
             raise ReleaseConfigError("PowerShell was not found for the Windows release")
@@ -154,12 +156,12 @@ def _client_command(config: ReleaseConfig, platform_name: str, *, publish: bool)
             raise ReleaseConfigError("Remote configuration is required for publication")
         command.extend(
             [
-                "-Publish" if platform_name == "win64" else "--publish",
-                "-RemoteUser" if platform_name == "win64" else "--remote-user",
+                "-Publish" if platform_name == "windows-x86_64" else "--publish",
+                "-RemoteUser" if platform_name == "windows-x86_64" else "--remote-user",
                 config.remote.user,
-                "-RemoteHost" if platform_name == "win64" else "--remote-host",
+                "-RemoteHost" if platform_name == "windows-x86_64" else "--remote-host",
                 config.remote.host,
-                "-RemoteClientsDir" if platform_name == "win64" else "--remote-clients-dir",
+                "-RemoteClientsDir" if platform_name == "windows-x86_64" else "--remote-clients-dir",
                 config.remote.clients_dir,
             ]
         )
@@ -216,7 +218,7 @@ def _parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     client = subparsers.add_parser("client")
-    client.add_argument("--platform", choices=("macos", "win64"), required=True)
+    client.add_argument("--platform", choices=("macos-x86_64", "windows-x86_64"), required=True)
     client.add_argument("--publish", action="store_true")
 
     plugins = subparsers.add_parser("plugins")

@@ -13,6 +13,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from packaging.version import Version
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from parsetrail.core.client_targets import INSTALLER_SUFFIXES
 from parsetrail.core.plugin_manifest import (
     ED25519_SIGNATURE_BYTES,
     KEY_ID_PATTERN,
@@ -27,10 +28,6 @@ CLIENT_RELEASES_DIRECTORY = "releases"
 
 MAX_CLIENT_MANIFEST_BYTES = 1024 * 1024
 MAX_INSTALLER_BYTES = 1024 * 1024 * 1024
-INSTALLER_SUFFIXES = {
-    "macos": ".dmg",
-    "win64": ".exe",
-}
 
 
 class ClientTrustError(RuntimeError):
@@ -75,7 +72,8 @@ class ClientInstallerArtifact(BaseModel):
     artifact_type: Literal["client_installer"] = "client_installer"
     filename: str
     version: str
-    platform: Literal["macos", "win64"]
+    platform: Literal["macos-x86_64", "windows-x86_64"]
+    architecture: Literal["x86_64"]
     size: int = Field(gt=0, le=MAX_INSTALLER_BYTES)
     sha256: str
 
@@ -104,7 +102,7 @@ class ClientManifest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: Literal[1] = 1
+    schema_version: Literal[2] = 2
     release_sequence: int = Field(gt=0)
     published_at: datetime
     key_id: str
