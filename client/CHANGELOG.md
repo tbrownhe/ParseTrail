@@ -1,5 +1,7 @@
 Unreleased
 ==========
+- Check frozen executable architecture before launch, force Intel Mac packaging,
+  and select explicit Windows x64/Intel Mac CI with native interpreter assertions
 - Prepare client 1.4.0 with version-2 signed installer metadata and explicit
   Windows x64/Intel Mac channels; existing 1.3 clients require a manual upgrade
 - Reject unsupported installer architectures and label available download targets

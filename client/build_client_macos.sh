@@ -109,6 +109,7 @@ uv run --no-env-file --no-sync --python "$RELEASE_PYTHON" --no-python-downloads 
     --clean \
     --noconfirm \
     --noconsole \
+    --target-arch x86_64 \
     --workpath "prebuild" \
     --distpath "$BUILD_DIR" \
     --paths "$SRC_DIR" \
@@ -123,6 +124,11 @@ uv run --no-env-file --no-sync --python "$RELEASE_PYTHON" --no-python-downloads 
     --icon "assets/parsetrail.icns" \
     "$MODULE_PATH" \
     || error_exit "Failed to build the executable."
+
+echo "Checking the frozen Intel executable architecture..."
+"$RELEASE_PYTHON" -I -S scripts/release_architecture.py \
+    --platform macos-x86_64 --binary "${APP_PATH}/Contents/MacOS/${APP_NAME}" \
+    || error_exit "Frozen Mac executable architecture check failed."
 
 echo "Auditing bundled libraries and smoke-testing the frozen executable (30-second limit)..."
 "$RELEASE_PYTHON" -I -S scripts/macos_release.py audit \

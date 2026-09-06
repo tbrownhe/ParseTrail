@@ -368,6 +368,21 @@ missing/mismatched tag, reused versioned installer, or empty public-key trust
 store. The source commit is embedded in the installed app and included with tool
 versions and file checksums in `release-inventory.json`.
 
+Before launching the frozen smoke, both builders inspect the executable header
+without running it. Windows requires a PE32+ AMD64 executable; Mac requires a
+thin x86_64 Mach-O executable, with PyInstaller's target explicitly set to
+`x86_64`. A wrong CPU/format, DLL, universal binary, or truncated header stops the
+build before installer packaging/signing. To inspect a candidate directly with
+the verified interpreter, use `scripts/release_architecture.py --platform
+<target> --binary <executable>`; this package-free command does not launch it.
+
+Hosted source tests select Windows x64 and `macos-15-intel` explicitly, provision
+the exact native interpreter before dependencies, and assert the final client
+environment's target. Intel CI also runs the native toolchain/static-input sync.
+The [GitHub runner matrix](https://docs.github.com/en/actions/how-tos/write-workflows/choose-where-workflows-run/choose-the-runner-for-a-job)
+identifies generic `macos-latest` as ARM, so it is not the Intel acceptance job.
+CI source tests do not replace native frozen builds or the owner walkthroughs.
+
 Windows:
 
 ```powershell

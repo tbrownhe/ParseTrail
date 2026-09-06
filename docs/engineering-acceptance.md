@@ -171,6 +171,22 @@ guessing. These are source/interface results: no native installer, release tag,
 public activation, API deployment, or 1.3 profile upgrade was performed. R3b and
 the native release/offline walkthroughs remain open in TODO.
 
+## Frozen executable architecture gates follow-up
+
+R3b's portable header checks and bootstrap/target/toolchain regressions passed
+**106 focused tests on Windows**, with the Mac Bash integration test skipped.
+The checks inspected the real Windows CPython executable as PE32+ AMD64 and
+rejected synthetic ARM, 32-bit, DLL, universal, cross-platform, and truncated
+candidates without executing them. Mac header fixtures are synthetic; no real
+Mac frozen binary was inspected here.
+
+Both builders now gate the frozen executable before smoke/packaging, and Mac
+PyInstaller explicitly targets x86_64. Hosted source CI selects Windows x64 and
+`macos-15-intel`, provisions/verifies exact native CPython before dependencies,
+and checks the resulting client environment target. The Intel runner label was
+verified against GitHub's published runner matrix. The new hosted run and final
+native frozen builds remain pending; this record does not mark R3b complete.
+
 ## Staging migration and recovery: August 2026
 
 The PostgreSQL 12-to-17 rehearsal preserved the source volume and matched every

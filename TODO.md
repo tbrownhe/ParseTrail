@@ -18,10 +18,10 @@ any implementation**. Native acceptance still requires the prepared owner checks
 - [~] **R2 — Intel macOS packaging:** `[USER]` Accept the next native build/audit
   and installed runtime without build-tool paths using the
   [Mac release gates](client/README.md#intel-mac-release-gates).
-- [ ] **R3b — Architecture gates:** assert the Windows x64/Intel Mac interpreter
-  and frozen-binary architecture and select explicit CI coverage. Retain owner
-  native gates where hosted coverage is unavailable; generic Mac CI alone must
-  not establish an Intel release claim.
+- [~] **R3b — Architecture gates:** interpreter and frozen-executable gates are
+  implemented with explicit Windows x64 / `macos-15-intel` CI selection. Obtain
+  the hosted test results and `[USER]` accept both resulting native builds;
+  source/header tests alone do not establish frozen-app acceptance.
 - [ ] **R4 — Publish verified output:** add a shared publish-existing operation
   for client and plugin releases using public-key verification, preserved
   bytes/inventory/source/target, immutable sequence checks, explicit activation,

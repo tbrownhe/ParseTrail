@@ -174,6 +174,10 @@ try {
     if (-not (Test-Path -LiteralPath $builtExecutable)) {
         throw "Frozen executable not found at $builtExecutable"
     }
+    & $releasePython -I -S scripts/release_architecture.py --platform windows-x86_64 --binary $builtExecutable
+    if ($LASTEXITCODE -ne 0) {
+        throw "Frozen Windows executable architecture check failed; packaging and signing were not started"
+    }
 
     $smokeProcess = Start-Process `
         -FilePath $builtExecutable `
