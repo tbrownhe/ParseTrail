@@ -2,11 +2,13 @@
 
 Review date: 2026-09-05. Source baseline: `1766ceb` on `main`.
 
-This review starts with the remaining P1.5/P1.6 desktop work. The target matrix
-is Windows x64, macOS x86_64, and macOS arm64. Server P0 acceptance remains
-closed. The installer contract is the one identified client requirement that
-needs coordinated API and download-page changes; it needs no infrastructure
-redesign.
+This review starts with the remaining P1.5/P1.6 desktop work. Following the owner's
+hardware clarification, the active targets are Windows x64 and Intel macOS
+(x86_64). Apple Silicon (arm64) development, packaging, and native acceptance are
+deferred until suitable hardware is available; they do not block Windows/Intel
+releases. Server P0 acceptance remains closed. The installer contract is the one
+identified client requirement that needs coordinated API and download-page
+changes; it needs no infrastructure redesign.
 
 The existing headless services, exact-money schema, import recovery, signed
 plugin store, and database backup workflows provide a useful foundation. Finish
@@ -100,12 +102,12 @@ acceptance open until the actual supported platform passes it.
 
 | Chunk | Concrete change and value | Acceptance |
 | --- | --- | --- |
-| R1 — Release bootstrap | Add a dependency-light bootstrap that checks uv >= the tested 0.12.5 baseline, validates the requested host target, explicitly provisions `.python-version`, and checks interpreter version/architecture before project sync. Route both native builders through it. | Fake command-runner cases for missing/old uv, unavailable interpreter, wrong architecture, and failed provisioning assert that dependency installation and signing never start. Exercise provisioning from a fresh Windows builder and each Mac architecture. |
-| R2 — Portable Mac packaging | Preflight the Intel OpenSSL/Rust/pkg-config toolchain before any dependency resolution. Enforce static OpenSSL build inputs where source builds are needed; record those inputs and inspect packaged native libraries. Give the frozen smoke a bounded timeout. | Missing tools fail early; the artifact's library audit finds no unresolved Homebrew/workstation dependency. On each native Mac, the installed app starts and exercises cryptography, Qt, SQLite, PDF/XLSX parsing, and scientific modules without the build toolchain. |
-| R3a — Architecture contract | Use separate native Mac packages. Add authenticated architecture metadata, explicit target identities such as `macos-x86_64` and `macos-arm64`, architecture-bearing filenames, and per-target artifact selection. Preserve Windows x64 as a supported target. Update API validation/listing, download links, inventories, and rollback documentation together. | At one version, both Mac artifacts coexist and each client selects only its compatible artifact. Reject unsupported/mismatched targets and altered signed metadata. Download-page tests always expose explicit Intel/Apple Silicon choices. |
-| R3b — Architecture build gates | Teach builders to assert the requested architecture against the interpreter and frozen executable; add explicit Windows x64, Mac x86_64, and Mac arm64 CI entries with an architecture assertion. | All three source suites pass and native binaries report the expected architecture. Choose runner labels verified available when implementing; retain a native owner build gate where hosted coverage is unavailable. Record translation-mode behavior separately from native support. |
+| R1 — Release bootstrap | Add a dependency-light bootstrap that checks uv >= the tested 0.12.5 baseline, validates the requested host target, explicitly provisions `.python-version`, and checks interpreter version/architecture before project sync. Route both native builders through it. | Fake command-runner cases for missing/old uv, unavailable interpreter, wrong architecture, and failed provisioning assert that dependency installation and signing never start. Exercise provisioning from fresh Windows x64 and Intel Mac builders. |
+| R2 — Portable Mac packaging | Preflight the Intel OpenSSL/Rust/pkg-config toolchain before any dependency resolution. Enforce static OpenSSL build inputs where source builds are needed; record those inputs and inspect packaged native libraries. Give the frozen smoke a bounded timeout. | Missing tools fail early; the artifact's library audit finds no unresolved Homebrew/workstation dependency. On the Intel Mac, the installed app starts and exercises cryptography, Qt, SQLite, PDF/XLSX parsing, and scientific modules without the build toolchain. |
+| R3a — Architecture contract | Make Windows x64 and Intel macOS explicit in authenticated metadata, target identities, filenames, and selection. Update API validation/listing, download links, inventories, and rollback documentation together. Keep separate native Mac packages as the future direction; arm64 implementation/publication is deferred. | Each current target selects only its compatible artifact. Reject unsupported/mismatched targets and altered signed metadata. Download-page tests label Intel clearly and advertise only available supported artifacts. |
+| R3b — Architecture build gates | Assert the requested Windows x64/Intel Mac architecture against the interpreter and frozen executable; select explicit CI coverage with an architecture assertion. | Both source suites pass and native binaries report the expected architecture. Choose runner labels verified available when implementing; retain an owner native gate where hosted coverage is unavailable. Apple Silicon build/CI acceptance is deferred. |
 | R4 — Publish verified output | Add an explicit publish-existing operation shared by both desktop targets and plugins. Accept an immutable local release directory, reverify its signature/artifacts/inventory/source/target, then confirm and use the existing immutable publisher. Publication should require only public trust keys, not the private signing key or a rebuild. | A fake-transport rehearsal preserves every byte/hash/sequence and never invokes build/sign. Changed bytes, wrong source/target, missing inventory, reused remote sequence, and declined activation cause no pointer change. Keep interrupted-activation reconciliation and public smoke checks. |
-| O1 — Offline session acceptance | Extend the offline harness to cover updates disabled beyond the timer delay, enabled checks failing after first paint, preserved local use, onboarding, signed cached plugins, a synthetic parse/import, and local model train/predict. Exercise the real entry point and frozen resources as well as source construction. | With updates disabled, no intercepted network attempt occurs. With updates enabled, only the documented background checks attempt networking; failure leaves the event loop and local operations usable. Repeat installed-app checks with networking disabled on Windows and both Mac architectures. |
+| O1 — Offline session acceptance | Extend the offline harness to cover updates disabled beyond the timer delay, enabled checks failing after first paint, preserved local use, onboarding, signed cached plugins, a synthetic parse/import, and local model train/predict. Exercise the real entry point and frozen resources as well as source construction. | With updates disabled, no intercepted network attempt occurs. With updates enabled, only the documented background checks attempt networking; failure leaves the event loop and local operations usable. Repeat installed-app checks with networking disabled on Windows x64 and Intel macOS. |
 
 R1 precedes build rehearsals; R3a precedes R3b. R4's common verification work and
 O1's source harness can be implemented independently, with their final native
@@ -118,13 +120,18 @@ clients. Their schema rejects unknown fields and target names. Document a
 one-time manual upgrade if the old endpoint is retired, or retain the old Intel
 channel during migration; do not silently relabel an existing signed manifest.
 
+Defer arm64 building, architecture-specific CI acceptance, publication, Keychain,
+offline/GUI walkthroughs, and Intel/arm64 co-publication tests until native test
+hardware is available. Dependency resolution or a generic hosted Mac test is not
+a substitute for that acceptance. The open tasks are in [TODO](../TODO.md).
+
 ## Further proposals, in recommended order
 
 | Chunk | User value and bounded scope | Acceptance |
 | --- | --- | --- |
 | C1 — Recurring-analysis correctness | Fix sign-independent relative dispersion and define zero-mean, mixed-sign, singleton, and empty-vocabulary behavior. Preserve input money values. | Positive/negative equivalent series give equivalent decisions; high-variance debits are rejected; mixed/zero cases are explicit; uninformative descriptions produce a useful no-result state. Rehearse the GUI on synthetic data, then an authorized local copy. |
 | F1 — Offline parser starter pack | Bundle a previously signed, compatible baseline parser catalog, or add a local signed-catalog import action. Prefer bundling if a first import with no prior network setup is the product promise. | A clean offline installation parses a synthetic supported statement. Verify before copying/activation, preserve a newer installed catalog, reject tampered/incompatible bundles, and keep downloaded catalog updates independent from app releases. Make no-model categorization guidance actionable. |
-| C2 — Responsive local analysis | Move recurring analysis and model training behind cancellable workers first. Then use a separate chunk for import workers with UI-thread account/warning decisions. These operations currently execute synchronously in GUI handlers despite the extracted services. | A GUI heartbeat continues during deliberately slow jobs; closing/canceling is safe; worker sessions stay in their owning thread; failed training preserves the previous model. Import cancellation preserves the existing commit/archive invariants and reports committed work accurately. |
+| C2a/C2b — Responsive local analysis and imports | Move recurring analysis and model training behind cancellable workers first (C2a). Then use a separate chunk for import workers with UI-thread account/warning decisions (C2b). These operations currently execute synchronously in GUI handlers despite the extracted services. | A GUI heartbeat continues during deliberately slow jobs; closing/canceling is safe; worker sessions stay in their owning thread; failed training preserves the previous model. Import cancellation preserves the existing commit/archive invariants and reports committed work accurately. |
 | F2 — Import history and reconciliation | Turn the transient import summary into a local history view showing per-account added/reused transactions, retained source/archive state, failures, and pending recovery. Reuse existing statement membership and recovery services. | Overlapping and multi-account synthetic imports have truthful counts; retries do not duplicate rows; archive failures can be located and recovered after restart. No history or statement contents leave the device. |
 | F3 — Categorization rules with preview | Add ordered local merchant/account rules before model suggestions, with a preview of affected transactions and explicit bulk application. Start with exact/contains matching and preserve manual verification. | Rule precedence is deterministic; preview is read-only; applying a batch is atomic; verified transactions remain unchanged unless explicitly selected. Test on synthetic merchants and review usefulness on a confidential local copy. |
 | F4 — Complete local backup set | Extend the existing database backup service with an optional database-plus-managed-archive bundle, manifest, and disposable restore rehearsal. Keep plain database backup available. | Consistent SQLite snapshot, archive checksums, missing-source reporting, bounded/path-safe extraction, and restore into a new profile all pass. Exclude credentials; keep local plaintext storage visible. Test restoring after original paths are unavailable. |
@@ -146,11 +153,12 @@ of the committed evidence.
 - **Windows x64:** install/upgrade/uninstall, first-run guide, Credential Locker
   login/sign-out, signed plugin installation, network-disabled restart and local
   use, one-off/folder/overlap import, explicit contribution, and test restore.
-- **Intel Mac and Apple Silicon Mac:** repeat the installed-app walkthrough on
-  each native architecture, including drag-to-Applications installation, Keychain,
-  no-build-toolchain startup, network-disabled startup/local use, and the updater's
-  architecture selection. Confirm available hardware before scheduling; success
-  on one architecture is not acceptance for the other.
+- **Owner's Intel Mac:** repeat the installed-app walkthrough, including
+  drag-to-Applications installation, Keychain, no-build-toolchain startup,
+  network-disabled startup/local use, and the updater's architecture selection.
+- **Apple Silicon:** deferred because the owner has access only to an Intel Mac
+  for development. Resume its native gates when suitable hardware becomes
+  available; Intel acceptance does not establish arm64 support.
 - **Existing P2.2 walkthroughs:** use the owner's Windows machine and MacBook for
   development acceptance. Keep Jacob's testing for official-release usability
   and product-gap feedback as already recorded in TODO.

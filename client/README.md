@@ -5,6 +5,13 @@ statements, stores financial data in a local SQLite database, and talks to the
 FastAPI backend for authenticated plugin distribution, application updates, and
 optional encrypted statement submission.
 
+Current development and native release acceptance target Windows x64 and Intel
+macOS (x86_64). The owner has an Intel Mac; Apple Silicon (arm64) development,
+packaging, and acceptance are deferred until test hardware is available. The
+lock's arm64 resolution does not establish native support. The current `macos`
+release selector identifies the Intel release; explicit architecture metadata
+is tracked in [TODO](../TODO.md).
+
 ## Requirements
 
 uv provisions the exact Python patch release declared in `.python-version` and
@@ -105,6 +112,87 @@ and a network failure does not prevent local use. Disable **Check for Client and
 Plugin Updates After Startup** in Preferences for a completely network-silent
 launch; manual update checks and optional statement submission remain available.
 
+An empty profile still needs a signed parser catalog before its first import,
+and automatic categorization needs a locally trained model. Installed plugins
+and models remain usable offline. A bundled starter catalog is a proposal in
+[the client review](../docs/client-development-review.md), not a current package
+feature.
+
+## Imports and recovery
+
+One-off imports offer copy-to-archive, move-to-archive, and leave-in-place choices
+before changing the original. The default retains the selected original and
+creates a managed archive copy. Files placed in the managed import folder keep
+the move-to-archive contract; managed failures and duplicates use `FAIL` and
+`DUPLICATE` respectively.
+
+`StatementImportService` commits statement rows, canonical transactions, and
+statement membership before applying the source-file action. A failure to archive
+after commit reports a recoverable pending archive. Keep the source in place and
+retry: the committed file digest and canonical archive name let the retry finish
+the archive without inserting the financial data again. Startup detects pending
+archives in the managed import folder and directs the user to Import All
+Statements. Recovery appears separately from duplicates in the import summary.
+
+One physical multi-account statement has one file identity and canonical archive
+but one `Statements` row per account. Overlapping statements reuse canonical
+transactions and retain their own membership/row counts. Duplicate handling is
+performed before inserting conflicting rows and is checked at flush time; a
+fingerprint matching different canonical fields fails explicitly.
+
+Tests inject failures around persistence and archive boundaries. The
+[import acceptance sandbox](../devtools/import_acceptance/README.md) rehearses
+overlap, multi-account import, cancellation, and failed-archive recovery on a
+disposable copy of an authorized client database.
+
+## First run and database backups
+
+Help > Getting Started reopens the first-run guide. It explains local storage,
+installed institution support, plugin installation, explicit contributions,
+backups, and server-visible metadata. Parser errors distinguish unsupported
+formats, missing/ambiguous matches, changed layouts, incompatible output, and
+failed safety checks without including extracted statement contents.
+
+File > Back Up Database uses SQLite's online backup API for a consistent copy.
+File > Test Database Backup restores into a disposable database and checks
+integrity and relationships. File > Restore Database writes to a new path and
+preserves the active database. File > Database Location and Privacy shows the
+database and managed statement locations. These backups are local plaintext and
+exclude statement archives; back up the managed folders separately.
+
+## Application service boundaries
+
+GUI modules delegate database queries and mutations to headless services. Preserve
+the characterization tests and explicit transaction owner when extending a flow:
+
+| Service | Responsibility |
+| --- | --- |
+| `StatementImportService` | Parse/import persistence, deduplication, statement membership, and archive recovery; `StatementImportController` supplies Qt decisions/progress. |
+| `CategoryService` | Category queries, atomic add/update/rename/merge, and archived-category behavior. |
+| `AccountService` | Account queries/mutations, deletion constraints, and account-number assignment. |
+| `BudgetQueryService` | Date ranges, grouping, signs, proration, and inactive-category semantics. |
+| `TransactionReviewService` | Review filters, atomic edits, stale/missing references, and model-category compatibility retry. |
+| `TransactionService` | Transaction ranges, latest balances, and atomic manual entry with truthful duplicate results. |
+| `DashboardQueryService` | Deterministically ordered balances/checklists, chart/discrepancy inputs, and verified training data. |
+| `ArtifactService` | Account-config exports and spreadsheet reports; account-config files are replaced atomically. |
+| `StatementSubmissionService` | File validation, memory-only encryption, cancellation, upload/response cleanup, and server confirmation. |
+
+`PluginManager` and the plugin/client manifest/store modules own artifact trust
+and compatibility. Reusable dashboard canvas/table models live in
+`gui/dashboard_widgets.py`; review table/filter models live in
+`gui/review_models.py`. Services expose typed failures, while GUI boundaries show
+bounded messages and retain chained diagnostics. These boundaries do not imply
+that every local calculation already runs in a background worker.
+
+Networking uses bounded connect/read timeouts, bounded retries for idempotent
+requests only, and centralized error translation. Submission encryption/uploads,
+plugin synchronization, and installer downloads run off the Qt thread. Plugin
+synchronization works with progress UI disabled. Rejected stored credentials
+permit exactly one UI-thread login retry while preserving the selected signed
+catalog. Cancellation never reports a partial installer as ready. Installer
+launch adapters avoid command-shell interpretation, and the app quits only after
+the launch call succeeds. There is no remote model-sync workflow.
+
 ## Desktop login storage
 
 ParseTrail stores its API access token in the operating system credential store:
@@ -157,6 +245,10 @@ Back up the encrypted private key separately and commit the public trust-store
 change. Never copy the private key to `parsetrail.com`, CI, this repository,
 `parsetrail-resources`, or a client package. Do not store its passphrase in
 `.env`, command arguments, or logs.
+
+The provisioned release key has separate password-manager recovery copies of
+the encrypted key and its passphrase. Recovery copies follow the same separation
+from the server, repository, and distributed client.
 
 ### Configure a local release builder
 
@@ -267,10 +359,14 @@ and independently verifies the signed installer manifest. Install NSIS normally;
 `makensis.exe` may be on `PATH` or in its standard installation directory. No
 `MAKENSIS_PATH` setting is used.
 
-To publish, repeat the command with `--publish`. An interrupted upload cannot
-replace the active release. If SSH drops during activation, the publisher reads
-the authoritative pointer and distinguishes a completed activation from a failed
-one. The same publisher is used for both installer platforms and plugins.
+The common `--publish` path currently invokes the builder again and refuses an
+existing versioned installer. Preserve a successful dry run; do not delete or
+rebuild it to work around that guard. A shared publish-existing operation is
+tracked in TODO; Windows already has a lower-level `-DeployOnly` path.
+An interrupted upload cannot replace the active release. If SSH drops during
+activation, the publisher reads the authoritative pointer and distinguishes a
+completed activation from a failed one. The same publisher is used for both
+installer platforms and plugins.
 
 macOS:
 
@@ -308,3 +404,10 @@ without shipping a new application:
   warnings.
 - Routing walks suffix, optional PDF metadata, normalized page-header markers,
   and body-text expressions, then refuses zero or multiple matches.
+- Expressions use parentheses, then `&&`, then `||` precedence, with quoted
+  literals supported. Strict syntax is validated at plugin build and load time;
+  CSV, XLSX, and PDF use the same routing contract.
+
+Native release and private-fixture acceptance history is preserved in the
+[engineering acceptance record](../docs/engineering-acceptance.md). Current
+unfinished release, offline, and workflow work lives in [TODO](../TODO.md).

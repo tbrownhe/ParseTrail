@@ -102,6 +102,18 @@ not protect against a live backend that can read ciphertext and keys. See
 
 ## Encrypted statement reconciliation
 
+Submission limits apply before decryption: the request-body middleware bounds
+multipart ingestion before spooling, and the endpoint separately limits encrypted
+statement bytes to 36 MiB. Per-user pending quotas and rate limits bound retained
+work. Metadata has a validated schema and per-field limits rather than truncated
+free-form JSON. The authoritative limits are in
+[`statement_submission.py`](app/core/statement_submission.py).
+
+Failed file finalization or row registration removes the temporary/final
+ciphertext, leaving one consistent file/row pair or neither. Responses do not
+return raw cryptographic, filesystem, or database errors. Diagnostics must not
+attach decrypted content, encryption keys, or submitted metadata automatically.
+
 Compare registered rows with encrypted files without decrypting contents:
 
 ```bash
@@ -125,6 +137,10 @@ Signing, verification, and release commands are in
 [client/README.md](../client/README.md). Rollback is in
 [docs/artifact-rollback.md](../docs/artifact-rollback.md).
 
+Installer listing/version selection comes from the active manifest and uses
+semantic versions; unsupported platform requests return a deliberate 4xx.
+There is no model-listing/download route or public model publication workflow.
+
 ## Browser authentication
 
 The dashboard uses a host-only HttpOnly `SameSite=Strict` cookie. Production and
@@ -132,6 +148,24 @@ staging use the `__Host-` prefix and `Secure`; local HTTP uses an unprefixed
 development cookie. Cookie-authenticated mutations and browser login/logout
 require the exact `FRONTEND_HOST` origin. Desktop/API consumers retain bearer
 tokens. See [web authentication](../docs/web-authentication.md).
+
+## Account-state guarantees
+
+Password recovery returns the same public message and minimum timing envelope
+for existing and nonexistent accounts. Recovery tokens are versioned and become
+invalid after use or replacement. Email changes remain pending until the new
+address is verified; existing credentials do not authorize the unverified address.
+Password/reset, verified-email, activation, and privilege changes revoke the
+appropriate token generations. Tests cover replay, concurrent resets, deleted
+users, and privilege transitions.
+
+New passwords use Argon2 through `pwdlib`; successful login upgrades supported
+legacy bcrypt hashes. User lookup and authorization return deliberate 4xx
+responses, including 404 for a missing admin-selected user.
+
+Historical server hardening and recovery acceptance is recorded in
+[engineering acceptance](../docs/engineering-acceptance.md). Operational commands
+remain in the linked runbooks; dated evidence does not replace a fresh release gate.
 
 ## Email templates
 

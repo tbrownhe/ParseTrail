@@ -2,8 +2,10 @@
 
 Docker Compose is the only supported server deployment path. The former Docker
 Swarm scripts and template deployment workflows have been removed. Deployment
-is manual on a trusted Linux host until the staging success/rollback/restore
-rehearsals are complete; no GitHub runner receives production credentials,
+remains manual on a trusted Linux host. The staging success/rollback/restore
+rehearsals and server P0 acceptance are recorded in
+[engineering acceptance](docs/engineering-acceptance.md); their completion does
+not enable a deployment runner. No GitHub runner receives production credentials,
 release-signing keys, SSH access, or a production `.env`.
 
 Traefik remains in the separate infrastructure repository. This repository owns
@@ -59,9 +61,11 @@ TRAEFIK_CERT_RESOLVER=le-cloudflare
 FORWARDED_ALLOW_IPS=172.18.0.0/16
 ```
 
-Keep the PostgreSQL 12 image and volume values until the separate
-[PostgreSQL 17 dump/restore runbook](docs/postgresql-17-upgrade.md) is complete.
-Changing the image without changing to the restored volume is forbidden.
+Production has completed the PostgreSQL 17 dump/restore cutover. The old image,
+volume, and pre-cutover dump remain recovery evidence subject to the retention
+and post-write rollback rules in the
+[PostgreSQL runbook](docs/postgresql-17-upgrade.md). Never point a newer server
+at the old data directory.
 The submission-key volume is also explicit so a staging Compose project cannot
 silently mount the production default. Production permits public application
 traffic; staging sets only the actual LAN/VPN CIDRs.
@@ -72,6 +76,16 @@ backend accepts `X-Forwarded-*` metadata only from the persistent
 `traefik-public` network. `FORWARDED_ALLOW_IPS` must be that exact private Docker
 CIDR, never `*`. ParseTrail certificates use the infrastructure's Cloudflare
 DNS-01 resolver so staging needs no public address record.
+
+Production public HTTP hostnames use Cloudflare Full (strict). API/dashboard
+runtime configuration bypasses edge caching, API responses are `no-store`, and
+forwarded client addresses are accepted only from the reviewed proxy boundaries.
+Origin firewall/range-repair timers, certificate stores, the loopback-only host
+Postfix listener, and encrypted USB backup tooling belong to the sibling `infra`
+repository. Its backup contract propagates pipeline failures, unmounts/closes the
+encrypted device on every exit, keeps passphrases out of process arguments, and
+verifies a restore. Historical external-origin and backup acceptance is in the
+engineering record; any infrastructure changes remain a separate task.
 
 Keep runtime records and credentials outside the `/srv/parsetrail` Git checkout.
 Use three access-controlled locations under a dedicated production runtime root:
@@ -256,6 +270,7 @@ to the migration plan.
 
 Hosted CI only lints, tests, builds the dashboard, and starts a disposable smoke
 stack. It has `contents: read` permission and no production or signing secrets.
-Do not reintroduce automatic production deployment until the required successful
-staging deployment, application rollback, and migration/restore rollback have all
-been observed and recorded.
+The required successful staging deployment, application rollback, and
+migration/restore rollback were observed and recorded. Enabling a deployment
+runner remains a separate explicitly authorized change; normal release preflight,
+fresh restore evidence, and smoke gates continue to apply.

@@ -4,6 +4,12 @@ ParseTrail uses a logical `pg_dump`/`pg_restore` migration into a new Docker
 volume. Never change the database image to PostgreSQL 17 while it still mounts
 the PostgreSQL 12 data directory.
 
+Production completed this cutover to PostgreSQL 17.11 on
+`parsetrail_app-db-data-pg17`. The dated rehearsal/cutover evidence is in
+[engineering acceptance](engineering-acceptance.md). The procedure below remains
+the recovery/rehearsal reference, not an unfinished instruction to upgrade the
+current production database again.
+
 The migration helper deliberately does not stop application traffic or activate
 the new database. It creates a restricted backup outside the repository,
 restores it into a new volume, verifies every public table row count, and leaves

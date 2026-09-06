@@ -5,6 +5,11 @@ This is the cross-component checklist. Detailed commands live in the
 [artifact rollback guide](artifact-rollback.md), and
 [PostgreSQL restore/upgrade runbook](postgresql-17-upgrade.md).
 
+Completed native-release, migration, rollback, incident-closure, and backup
+rehearsals are recorded in [engineering acceptance](engineering-acceptance.md).
+Use those records for history and lessons; each new release still requires its
+own current verification and restore evidence.
+
 ## Release checklist
 
 1. **Classify the release.** Decide whether it changes desktop code, the plugin

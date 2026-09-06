@@ -1,9 +1,53 @@
 # ParseTrail development guide
 
-This guide starts from a clean checkout. Windows x64 and macOS are the supported
-desktop development platforms. Linux source execution is useful for development,
+This guide starts from a clean checkout. Windows x64 and Intel macOS (x86_64) are
+the active desktop development platforms. The owner has an Intel Mac; native
+Apple Silicon (arm64) work is deferred until test hardware is available and does
+not block Windows/Intel releases. Linux source execution is useful for development,
 but its packaging, desktop integration, and credential-store behavior are still
 experimental.
+
+## Engineering contracts
+
+These constraints apply when changing any component:
+
+- Decrypted contributed statements exist only in process memory, including in
+  developer tools. Never write those bytes to temporary files, logs, reports, or
+  the workstation. Ordinary user-selected local statements and managed archives
+  have the separate storage policy in [Privacy and data flow](docs/privacy-and-data-flow.md).
+- Authenticate downloaded executable artifacts with the offline signing trust
+  store before activation. The public server and CI never receive the private
+  signing key. Models are local-only; any future remote model channel needs a
+  signed release contract first.
+- A failed import must not move the only source and then roll back its database
+  transaction. Preserve the [client import/recovery contract](client/README.md#imports-and-recovery).
+- Automated tests must not discover or connect to production through the root
+  `.env`. Backend teardown removes only records created by the test run; the
+  isolation suite checks that a pre-existing sentinel survives. Client tests use
+  a temporary profile and null keyring.
+- Preserve exact money values and typed dates. Do not introduce binary floating
+  point into financial storage or calculations; chart presentation is an explicit
+  conversion boundary.
+- Keep SQLAlchemy sessions and mutations in headless application services, with
+  explicit transaction ownership. GUI adapters own prompts, progress, and external
+  file/plot launching. Characterize existing behavior before moving boundaries.
+- Breaking API, schema, plugin, and client changes are permitted. Provide a clear
+  migration, restore path, or compatibility error instead of silently admitting
+  incompatible data.
+
+Existing financial fixtures referenced by the local `.env` are authorized for
+confidential local testing. Read only the explicit fixture inputs needed for that
+task; this authorization does not let automated suites load production database
+settings. Use copied client databases for mutating acceptance, and commit only
+synthetic fixtures or redacted evidence.
+
+Use focused branches, commit and push reviewable chunks, and prepare candidate
+artifacts/isolated profiles before requesting owner GUI or platform testing.
+Keep [TODO](TODO.md) limited to unfinished work; move lasting behavior into the
+component guides and dated verification into the
+[engineering acceptance record](docs/engineering-acceptance.md) when a task closes.
+Server P0 acceptance is complete. Client development should touch the server only
+when it exposes an interface requirement; unrelated infrastructure stays separate.
 
 ## Prerequisites
 
@@ -229,11 +273,12 @@ tagged clean commit and use the commands in [client/README.md](client/README.md)
   discovery path.
 - PowerShell 7 is recommended.
 
-### macOS
+### Intel macOS
 
-- Both Intel and Apple Silicon can run the source environment. Published
-  architecture claims remain limited by the architecture recorded in the
-  installer manifest.
+- The client lock includes Intel and arm64 dependency resolution, but this is
+  not native application or installer acceptance. Develop and rehearse releases
+  on the owner's Intel Mac. Apple Silicon builds, CI acceptance, and usability
+  testing are deferred until suitable hardware is available.
 - Install `create-dmg` and OpenSSL 3 with Homebrew. Intel dependency source builds
   may also require Rust and `pkg-config`:
 
