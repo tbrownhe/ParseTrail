@@ -221,6 +221,34 @@ No release signing key, financial fixture, SSH destination, or public artifact
 directory was accessed. These local checks complete R4's implementation gate;
 the staged publication and resulting native walkthroughs remain in TODO.
 
+## Offline entry-point and frozen-session follow-up
+
+O1's [diagnostic and owner procedure](client-offline-acceptance.md) cover fresh,
+cached, and failing-network sessions through the real entry point/event loop.
+The implementation passed **446 full client tests on Windows**, with the native
+Mac Bash builder and two POSIX `flock` cases skipped. Client-wide Ruff
+check/format and both native builder syntax checks passed.
+
+An **unsigned Windows x64 diagnostic freeze** built with PyInstaller **6.21.0**,
+CPython **3.13.15**, and the locked dependencies passed all three modes using its
+actual bundled resources. The executable passed PE32+ AMD64 inspection and had
+SHA-256 `a945140fb53bbd137f724696f29cef73f186614e46c2c1cd2b16fe51ea13f697`.
+Each report showed `frozen: true`, five onboarding pages, and **151 heartbeat
+ticks**. Fresh/cached runs attempted **zero** requests; the failure case attempted
+only the **two** documented background manifest GETs. Cached/failure runs both
+parsed/imported exact synthetic amounts, retained the copied source, detected
+duplicate import, predicted with an existing model, and trained/saved/reloaded
+a new local model.
+
+The source tests also supplied hostile profile/settings/credential environment
+overrides and verified that an existing canary file and surrounding profile were
+untouched. The diagnostic uses its own temporary profile and ephemeral signing
+key, never the release key or financial fixtures. Reports refuse to overwrite an
+existing file. This is a diagnostic build from the working branch, not a tagged
+release installer, installation/upgrade acceptance, or native credential test.
+Intel source diagnostic acceptance, both final tagged frozen builds, hosted CI,
+and the installed offline/P2.2 walkthroughs remain open.
+
 ## Staging migration and recovery: August 2026
 
 The PostgreSQL 12-to-17 rehearsal preserved the source volume and matched every

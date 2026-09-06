@@ -120,6 +120,14 @@ and models remain usable offline. A bundled starter catalog is a proposal in
 [the client review](../docs/client-development-review.md), not a current package
 feature.
 
+The [offline acceptance guide](../docs/client-offline-acceptance.md) documents the
+automated real-entry-point probes and the installed-app walkthrough. From
+`client/`, run `uv run --no-env-file --no-sync python src/parsetrail/main.py
+--offline-session-smoke-test fresh`, then repeat with `cached` and
+`network-failure`. Each diagnostic owns a temporary profile, denies real network
+access, drives onboarding, and reports its checks as JSON. Both native builders
+run all three modes against the frozen executable before packaging/signing.
+
 ## Imports and recovery
 
 One-off imports offer copy-to-archive, move-to-archive, and leave-in-place choices
@@ -495,6 +503,13 @@ overrides. It checks the native credential backend and executes synthetic
 cryptographic signing, SQLite, XLSX, PDF text/rendering, Qt image, scientific,
 and model fit/predict operations. Fixtures stay in memory and no financial files
 are opened. A timeout or any failed operation stops packaging.
+
+It then runs the three real-entry-point offline session probes, each with a
+**75-second deadline**, using the same system-only `PATH`. These additionally
+exercise the actual packaged icon/migrations/public keys, onboarding, cached
+signed parser import, local model operations, and delayed update failures with
+a live GUI heartbeat. The inventory preserves the offline mode results under
+`native_build.frozen_smoke.offline_session`.
 
 Owner acceptance remains necessary: run the preflight on the Intel Mac, then
 run the normal tagged dry build and retain its `release-inventory.json`. Install

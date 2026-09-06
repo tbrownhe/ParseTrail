@@ -16,7 +16,7 @@ os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"  # Enable HiDPI scaling
 # Platform-specific environment configurations
 system_name = system()
 if system_name == "Windows":
-    os.environ["QT_QPA_PLATFORM"] = "windows"
+    os.environ.setdefault("QT_QPA_PLATFORM", "windows")
 
 
 def handle_signal(_signal, _frame):
@@ -48,6 +48,19 @@ def run_runtime_smoke_test() -> int:
 
 # Client entry point
 def main() -> int:
+    if "--offline-session-smoke-test" in sys.argv:
+        import argparse
+        from pathlib import Path
+
+        from parsetrail.core.offline_smoke import MODES, run_offline_session_smoke
+
+        parser = argparse.ArgumentParser(description="Run a synthetic offline session in a temporary profile")
+        parser.add_argument("--offline-session-smoke-test", choices=MODES, required=True)
+        parser.add_argument("--offline-smoke-report", type=Path)
+        args = parser.parse_args(sys.argv[1:])
+        sys.argv[:] = sys.argv[:1]
+        return run_offline_session_smoke(args.offline_session_smoke_test, main, report_path=args.offline_smoke_report)
+
     from parsetrail.core.profile import ProfileError, configure_runtime_profile
 
     try:

@@ -1,5 +1,7 @@
 Unreleased
 ==========
+- Exercise real startup, onboarding, signed cached imports, and local models in
+  isolated offline release probes; run them against each frozen build before signing
 - Publish preserved installer/plugin releases with public keys, recorded inventory
   hashes, source/target checks, explicit activation, concurrent-pointer protection,
   and public smoke; use `publish-existing` after the signed dry run

@@ -271,7 +271,19 @@ def smoke_test(app: Path, *, timeout: int = 30) -> dict[str, object]:
     with tempfile.TemporaryDirectory(prefix="parsetrail-frozen-smoke-") as profile:
         env.update(HOME=profile, XDG_CONFIG_HOME=profile, XDG_DATA_HOME=profile, XDG_CACHE_HOME=profile)
         _run([str(executable), "--runtime-smoke-test"], env=env, timeout=timeout)
-    return {"passed": True, "timeout_seconds": timeout, "profile": "temporary", "path": "system-tools-only"}
+        for mode in ("fresh", "cached", "network-failure"):
+            _run([str(executable), "--offline-session-smoke-test", mode], env=env, timeout=75)
+    return {
+        "passed": True,
+        "timeout_seconds": timeout,
+        "profile": "temporary",
+        "path": "system-tools-only",
+        "offline_session": {
+            "passed": True,
+            "modes": ["fresh", "cached", "network-failure"],
+            "timeout_seconds_per_mode": 75,
+        },
+    }
 
 
 def _write_json(path: Path, document: dict[str, object]) -> None:

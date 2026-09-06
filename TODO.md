@@ -34,10 +34,9 @@ reviewed bytes. Intel clients start without Homebrew/build tools at runtime.
 
 ## P1.6 — Offline session acceptance
 
-- [~] **O1 — Offline harness:** exercise the real entry point and frozen
-  resources; run beyond the update timer with checks disabled and enabled with
-  network failures. Cover onboarding, signed cached plugins, synthetic
-  parse/import, and local model train/predict.
+- [~] **O1 — Offline harness:** `[USER]` accept the source diagnostic on Intel Mac
+  and its three modes in the final tagged frozen builds using the
+  [offline acceptance procedure](docs/client-offline-acceptance.md).
 - [ ] `[USER]` Run the installed-app network-disabled first-start/restart
   walkthrough on Windows x64 and Intel macOS, including responsive local use.
   Record empty-profile, installed-plugin, and trained-model behavior separately.

@@ -176,6 +176,29 @@ try {
     }
     Write-Host "Frozen runtime smoke test passed."
 
+    foreach ($offlineMode in @("fresh", "cached", "network-failure")) {
+        Write-Host "Smoke-testing frozen offline session: $offlineMode"
+        $offlineReportPath = Join-Path ([System.IO.Path]::GetTempPath()) "parsetrail-offline-$([guid]::NewGuid().ToString('N')).json"
+        $offlineProcess = Start-Process `
+            -FilePath $builtExecutable `
+            -ArgumentList "--offline-session-smoke-test $offlineMode --offline-smoke-report `"$offlineReportPath`"" `
+            -WorkingDirectory $PSScriptRoot `
+            -WindowStyle Hidden `
+            -PassThru
+        if (-not $offlineProcess.WaitForExit(75000)) {
+            Stop-Process -Id $offlineProcess.Id -Force -ErrorAction SilentlyContinue
+            throw "Frozen offline session '$offlineMode' timed out after 75 seconds"
+        }
+        if ($offlineProcess.ExitCode -ne 0) {
+            throw "Frozen offline session '$offlineMode' failed with exit code $($offlineProcess.ExitCode). Diagnostic: $offlineReportPath"
+        }
+        $offlineReport = Get-Content -LiteralPath $offlineReportPath -Raw | ConvertFrom-Json
+        if (-not $offlineReport.passed -or -not $offlineReport.frozen -or $offlineReport.mode -ne $offlineMode) {
+            throw "Frozen offline session '$offlineMode' report did not pass: $offlineReportPath"
+        }
+        Remove-Item -LiteralPath $offlineReportPath
+    }
+
     # --- Create the installer in the explicit Windows x64 release channel ------
     Write-Host "Creating installer with NSIS..."
 

@@ -254,6 +254,14 @@ def test_smoke_removes_toolchain_environment_and_uses_disposable_profile(bundle,
     assert not {"DYLD_LIBRARY_PATH", "OPENSSL_DIR", "PYTHONPATH"} & env.keys()
     assert not Path(env["HOME"]).exists()
     assert report["passed"] is True
+    assert [command[1:] for command, _env, _timeout in calls] == [
+        ["--runtime-smoke-test"],
+        ["--offline-session-smoke-test", "fresh"],
+        ["--offline-session-smoke-test", "cached"],
+        ["--offline-session-smoke-test", "network-failure"],
+    ]
+    assert [timeout for _command, _env, timeout in calls] == [30, 75, 75, 75]
+    assert report["offline_session"]["passed"] is True
 
 
 def test_process_timeout_and_nonzero_exit_cannot_pass_smoke(monkeypatch):
