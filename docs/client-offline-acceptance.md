@@ -119,3 +119,48 @@ account identifiers, credentials, or private paths.
 The remaining P2.2 native walkthrough also covers folder import, explicit
 statement contribution, database backup/test restore, and the 1.3-to-1.4 manual
 upgrade. Those steps are separate from the automated diagnostic.
+
+### Intel 1.4.0 candidate: installation and first offline launch
+
+Use the preserved signed DMG identified in the
+[acceptance record](engineering-acceptance.md#signed-intel-mac-candidate-september-19-2026).
+Keep its complete release directory and original inventory digest. A separate
+candidate installation under `~/Applications` permits native bundle testing
+alongside an existing app. The later 1.3-to-1.4 upgrade check remains pending.
+
+Create a new destination, open it in Finder, and open the preserved DMG:
+
+```bash
+mkdir -p "$HOME/Applications" &&
+mkdir "$HOME/Applications/ParseTrail-1.4.0-candidate" &&
+open "$HOME/Applications/ParseTrail-1.4.0-candidate"
+```
+
+Drag `ParseTrail.app` from the mounted DMG into that folder, then eject the DMG.
+The destination should contain `ParseTrail.app`, whose executable is used below.
+Record any macOS launch prompt encountered.
+
+The empty-profile gate requires that
+`~/Library/Application Support/ParseTrail-Staging` is new; use a separate macOS
+test account if that staging profile already contains data.
+
+Disable Wi-Fi and any other network connection, then run:
+
+```bash
+env -u QT_QPA_PLATFORM PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+  "$HOME/Applications/ParseTrail-1.4.0-candidate/ParseTrail.app/Contents/MacOS/ParseTrail" \
+  --staging https://api.staging.parsetrail.com/api/v1
+```
+
+This starts the installed GUI with its native Qt platform and system tools on
+`PATH`, using the isolated staging data and credential namespace. Confirm the
+`STAGING` marker, use the offered staging database location, and complete all
+five guide pages. After at least ten seconds, switch views and open Preferences.
+Quit normally, then run the same command while still offline. The database and
+guide completion should persist, with no login prompt or blocked window.
+
+Report installation/launch, the staging marker, completed onboarding, responsive
+local views, and restart behavior separately. Record any launch prompt or first
+error. Signed parser installation, Keychain persistence, local fixture import,
+trained-model use, and the broader P2.2 workflow follow the initial empty-profile
+check above.

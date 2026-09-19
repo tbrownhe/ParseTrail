@@ -15,16 +15,16 @@ any implementation**. Native acceptance still requires the prepared owner checks
 
 ## P1.5 — Client release reliability
 
-- [~] **R2 — Intel macOS packaging:** `[USER]` Accept the next native build/audit
-  and installed runtime without build-tool paths using the
+- [~] **R2 — Intel macOS packaging:** `[USER]` Accept the installed runtime
+  without build-tool paths using the preserved signed candidate and the
   [Mac release gates](client/README.md#intel-mac-release-gates).
-- [~] **R3b — Architecture gates:** interpreter and frozen-executable gates are
-  implemented with explicit Windows x64 / `macos-15-intel` CI selection. Obtain
-  the hosted test results and `[USER]` accept both resulting native builds;
+- [~] **R3b — Architecture gates:** obtain the hosted Windows x64 /
+  `macos-15-intel` test results and `[USER]` accept the tagged Windows native build;
   source/header tests alone do not establish frozen-app acceptance.
-- [ ] `[USER]` Rehearse the resulting release flow on Windows x64 and Intel
-  macOS: fresh bootstrap, native build/frozen smoke, signed dry run, preserved
-  artifact publication, install/upgrade, credential store, and plugin update.
+- [ ] `[USER]` Complete the Windows x64 tagged signed dry run, including fresh
+  bootstrap, native build, architecture check, and frozen smoke.
+- [ ] `[USER]` Rehearse preserved artifact publication, install/upgrade,
+  credential storage, and plugin update on Windows x64 and Intel macOS.
   Include the [1.3-to-1.4 manual upgrade and API/website transition](docs/client-release-contract.md)
   on staging before public activation.
 
@@ -35,7 +35,7 @@ reviewed bytes. Intel clients start without Homebrew/build tools at runtime.
 ## P1.6 — Offline session acceptance
 
 - [~] **O1 — Offline harness:** `[USER]` accept all three modes in the final
-  tagged Windows x64 and Intel Mac frozen builds using the
+  tagged Windows x64 frozen build using the
   [offline acceptance procedure](docs/client-offline-acceptance.md).
 - [ ] `[USER]` Run the installed-app network-disabled first-start/restart
   walkthrough on Windows x64 and Intel macOS, including responsive local use.

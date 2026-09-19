@@ -293,8 +293,45 @@ three session modes and the modal-failure/diagnostic regressions, on the
 previously recorded macOS 15.7.9 environment. The reply did not include elapsed
 time or a separate commit report; `fc273e5` identifies the fix supplied for that
 retry. The final native bundle audit/frozen probes and installed-app walkthrough
-remain separate acceptance gates. The [offline procedure](client-offline-acceptance.md)
+are separate acceptance gates; the Intel build result follows below. The
+[offline procedure](client-offline-acceptance.md)
 retains a single-case command for future investigation.
+
+### Signed Intel Mac candidate: September 19, 2026
+
+The owner completed the tagged Intel Mac dry build and reported:
+
+| Field | Recorded value |
+| --- | --- |
+| Client / target | `1.4.0` / `macos-x86_64` |
+| Requested source candidate | `client-v1.4.0` at `42a3dac970459327d8f3144f40195f4166a98cc9` |
+| Signed release sequence | `20260919222343` |
+| Signature verification | Passed; one installer artifact |
+| Inventory SHA-256 | `dff66e320cf2d97c3e8924707f1104de13f693926a7735808fd827c87776a655` |
+| Release files | Three: DMG, client manifest, and detached signature; inventory retained alongside them |
+
+The owner used the sibling `parsetrail-resources/clients/macos-x86_64` output
+directory configured on that machine.
+Retain that complete directory and the recorded inventory digest for later
+verification/publication. The candidate tag remains pinned to its build source;
+documentation-only acceptance commits do not change the built artifact.
+
+Completion of the unchanged guarded Mac builder means the locked dependency
+sync, full client tests, bundled public-key check, thin Intel executable check,
+native library audit, 30-second runtime smoke, and all three 75-second offline
+session probes passed before DMG creation and manifest signing. This accepts
+the Intel tagged build/audit and O1 frozen-session gates. The supplied transcript
+contains the final success lines rather than the complete inventory or test
+summary; no precise test count, Mach-O file count, or DMG hash is asserted here.
+
+The installer manifest is signed with ParseTrail's existing Ed25519 release key.
+Apple Developer ID signing/notarization remains deferred. No artifact publication
+was performed. Installed GUI first start/restart without networking or build-tool
+paths, Keychain persistence, and the P2.2 walkthrough remain open, along with the
+Windows tagged build and hosted CI results. Use the installed-app procedure in
+[offline acceptance](client-offline-acceptance.md) with this preserved DMG. The
+owner confirmed that the Intel Mac's staging profile was new before starting
+the installed-app first-launch check.
 
 ## Staging migration and recovery: August 2026
 
