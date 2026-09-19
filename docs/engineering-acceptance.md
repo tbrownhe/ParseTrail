@@ -246,15 +246,16 @@ untouched. The diagnostic uses its own temporary profile and ephemeral signing
 key, never the release key or financial fixtures. Reports refuse to overwrite an
 existing file. This is a diagnostic build from the working branch, not a tagged
 release installer, installation/upgrade acceptance, or native credential test.
-Intel source diagnostic acceptance, both final tagged frozen builds, hosted CI,
-and the installed offline/P2.2 walkthroughs remain open.
+Intel source diagnostic acceptance was subsequently completed below. Both final
+tagged frozen builds, hosted CI, and the installed offline/P2.2 walkthroughs
+remain open.
 
 ### Intel offline timeout follow-up: September 19, 2026
 
 The owner ran the source probes on `test/client-offline-session` and reported
 **3 timeouts and 2 passing guard tests in 228.00s**. Each real-entry-point mode
-hit the 75-second subprocess limit. This does not invalidate the earlier native
-dependency-build/suite result, but Intel offline acceptance remains incomplete.
+hit the 75-second subprocess limit. This did not invalidate the earlier native
+dependency-build/suite result; it exposed a separate offline-harness failure.
 
 The harness identified the new-database message by its window title.
 [Qt 6.11.2 ignores that title on macOS](https://github.com/qt/qtbase/blob/v6.11.2/src/widgets/dialogs/qmessagebox.cpp#L2509).
@@ -263,7 +264,7 @@ Additionally, the failure path stopped its timer and called `app.exit()` during
 a startup modal, allowing a later main event loop to wait indefinitely.
 The harness now checks the expected message's temporary database path, parent,
 icon, and buttons; failures unwind subsequent modals and prevent another main
-event loop from starting. Native confirmation of this diagnosis is pending.
+event loop from starting.
 
 Elapsed stage messages and a 60-second independent Python stack dump now survive
 a blocked GUI. Source pytest failures and Mac build errors expose the captured
@@ -285,10 +286,15 @@ completed the synthetic import/model checks. Successful windowed runs removed
 their temporary diagnostic logs. This remains a diagnostic freeze rather than
 a tagged installer or native installation test.
 
-The owner should retry the Intel fresh-profile case before the remaining modes;
-`pytest -q -x tests/test_offline_session.py` does this and stops on the first
-failure. The [offline procedure](client-offline-acceptance.md) also includes a
-single-case command for investigation.
+After the `fc273e5` fix was pushed, the owner reran
+`pytest -q -x tests/test_offline_session.py` on the Intel Mac and reported
+**10 passed**. This accepts the Intel source offline diagnostic, including all
+three session modes and the modal-failure/diagnostic regressions, on the
+previously recorded macOS 15.7.9 environment. The reply did not include elapsed
+time or a separate commit report; `fc273e5` identifies the fix supplied for that
+retry. The final native bundle audit/frozen probes and installed-app walkthrough
+remain separate acceptance gates. The [offline procedure](client-offline-acceptance.md)
+retains a single-case command for future investigation.
 
 ## Staging migration and recovery: August 2026
 
