@@ -42,12 +42,17 @@ class MacReleaseError(RuntimeError):
 def _run(command: list[str], *, env: dict[str, str] | None = None, timeout: int = 30) -> str:
     try:
         result = subprocess.run(command, check=False, capture_output=True, text=True, env=env, timeout=timeout)
-    except (OSError, subprocess.TimeoutExpired) as exc:
-        raise MacReleaseError(f"{Path(command[0]).name} could not complete: {type(exc).__name__}") from exc
-    if result.returncode:
+    except subprocess.TimeoutExpired as exc:
+        stderr = exc.stderr or b""
+        if isinstance(stderr, bytes):
+            stderr = stderr.decode("utf-8", errors="replace")
         raise MacReleaseError(
-            f"{Path(command[0]).name} failed (exit {result.returncode}). Check the native tool installation."
-        )
+            f"{Path(command[0]).name} could not complete: TimeoutExpired after {timeout}s.\n{stderr[-16000:]}"
+        ) from exc
+    except OSError as exc:
+        raise MacReleaseError(f"{Path(command[0]).name} could not start: {exc}") from exc
+    if result.returncode:
+        raise MacReleaseError(f"{Path(command[0]).name} failed (exit {result.returncode}).\n{result.stderr[-16000:]}")
     return result.stdout.strip()
 
 

@@ -34,8 +34,9 @@ reviewed bytes. Intel clients start without Homebrew/build tools at runtime.
 
 ## P1.6 — Offline session acceptance
 
-- [~] **O1 — Offline harness:** `[USER]` accept the source diagnostic on Intel Mac
-  and its three modes in the final tagged frozen builds using the
+- [~] **O1 — Offline harness:** resolve the Intel source probe timeouts using the
+  instrumented fresh-profile retry, then `[USER]` accept all three source modes
+  on Intel Mac and their final tagged frozen builds using the
   [offline acceptance procedure](docs/client-offline-acceptance.md).
 - [ ] `[USER]` Run the installed-app network-disabled first-start/restart
   walkthrough on Windows x64 and Intel macOS, including responsive local use.

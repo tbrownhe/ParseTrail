@@ -266,14 +266,18 @@ def test_smoke_removes_toolchain_environment_and_uses_disposable_profile(bundle,
 
 def test_process_timeout_and_nonzero_exit_cannot_pass_smoke(monkeypatch):
     def timeout(*_args, **_kwargs):
-        raise subprocess.TimeoutExpired("frozen", 30)
+        raise subprocess.TimeoutExpired("frozen", 30, stderr=b"startup stage\nstack location\n")
 
     monkeypatch.setattr(native.subprocess, "run", timeout)
-    with pytest.raises(native.MacReleaseError, match="TimeoutExpired"):
+    with pytest.raises(native.MacReleaseError, match="TimeoutExpired") as error:
         native._run(["frozen"], timeout=30)
-    monkeypatch.setattr(native.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=1))
-    with pytest.raises(native.MacReleaseError, match="exit 1"):
+    assert "startup stage\nstack location" in str(error.value)
+    monkeypatch.setattr(
+        native.subprocess, "run", lambda *args, **kwargs: SimpleNamespace(returncode=1, stderr="offline GUI failure")
+    )
+    with pytest.raises(native.MacReleaseError, match="exit 1") as error:
         native._run(["frozen"])
+    assert "offline GUI failure" in str(error.value)
 
 
 def test_native_smoke_exercises_real_libraries_without_network(monkeypatch):

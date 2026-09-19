@@ -249,6 +249,47 @@ release installer, installation/upgrade acceptance, or native credential test.
 Intel source diagnostic acceptance, both final tagged frozen builds, hosted CI,
 and the installed offline/P2.2 walkthroughs remain open.
 
+### Intel offline timeout follow-up: September 19, 2026
+
+The owner ran the source probes on `test/client-offline-session` and reported
+**3 timeouts and 2 passing guard tests in 228.00s**. Each real-entry-point mode
+hit the 75-second subprocess limit. This does not invalidate the earlier native
+dependency-build/suite result, but Intel offline acceptance remains incomplete.
+
+The harness identified the new-database message by its window title.
+[Qt 6.11.2 ignores that title on macOS](https://github.com/qt/qtbase/blob/v6.11.2/src/widgets/dialogs/qmessagebox.cpp#L2509).
+An untitled-message simulation reproduced the incorrect rejection on Windows.
+Additionally, the failure path stopped its timer and called `app.exit()` during
+a startup modal, allowing a later main event loop to wait indefinitely.
+The harness now checks the expected message's temporary database path, parent,
+icon, and buttons; failures unwind subsequent modals and prevent another main
+event loop from starting. Native confirmation of this diagnosis is pending.
+
+Elapsed stage messages and a 60-second independent Python stack dump now survive
+a blocked GUI. Source pytest failures and Mac build errors expose the captured
+diagnostics; windowed Windows probes retain a separate diagnostic log on failure.
+The 35-second GUI deadline and 75-second outer timeout are unchanged.
+
+The revised full Windows client suite passed **451 tests with 3 skips in
+103.59s** (native Mac Bash integration and two POSIX `flock` cases). Regressions
+cover untitled messages, unexpected messages/dialogs followed by another modal,
+stack capture without a Qt event loop, and preservation of existing log files.
+Client-wide Ruff check/format and the Windows builder syntax check passed.
+
+A rebuilt unsigned Windows diagnostic freeze also passed PE32+ AMD64 inspection
+and all three offline modes. Its executable SHA-256 was
+`358894fedb6d8b3a3c02ef0c3689f7094142e09a31244c64e440ca945d85e7a6`.
+Fresh/cached/network-failure reports had five onboarding pages, respectively
+153/152/153 heartbeat ticks, and 0/0/2 intercepted network requests; cached modes
+completed the synthetic import/model checks. Successful windowed runs removed
+their temporary diagnostic logs. This remains a diagnostic freeze rather than
+a tagged installer or native installation test.
+
+The owner should retry the Intel fresh-profile case before the remaining modes;
+`pytest -q -x tests/test_offline_session.py` does this and stops on the first
+failure. The [offline procedure](client-offline-acceptance.md) also includes a
+single-case command for investigation.
+
 ## Staging migration and recovery: August 2026
 
 The PostgreSQL 12-to-17 rehearsal preserved the source volume and matched every

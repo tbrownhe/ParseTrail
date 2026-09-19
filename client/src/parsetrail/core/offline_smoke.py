@@ -6,6 +6,7 @@ It cannot select an existing profile or accept external statements/plugins/model
 
 from __future__ import annotations
 
+import faulthandler
 import json
 import os
 import socket
@@ -13,6 +14,7 @@ import sys
 import tempfile
 import threading
 import time
+import traceback
 import urllib.request
 from collections.abc import Callable
 from contextlib import ExitStack
@@ -21,6 +23,48 @@ from unittest.mock import patch
 from urllib.parse import urlsplit
 
 MODES = ("fresh", "cached", "network-failure")
+GUI_TIMEOUT_SECONDS = 35
+STACK_DUMP_SECONDS = 60  # Leave time to capture diagnostics before the parent's 75-second limit.
+
+
+class _Diagnostics:
+    """Flushed progress and a stack dump independent of Qt's event loop."""
+
+    def __init__(self, report_path: Path | None):
+        self.path = report_path.with_name(report_path.name + ".log") if report_path else None
+        self.stream = None
+        self.started = time.monotonic()
+        self.stage = "starting diagnostic"
+
+    def __enter__(self):
+        self.stream = self.path.open("x", encoding="utf-8") if self.path else sys.stderr
+        if self.stream is None:
+            raise RuntimeError("A windowed diagnostic requires --offline-smoke-report")
+        try:
+            faulthandler.dump_traceback_later(STACK_DUMP_SECONDS, file=self.stream)
+        except Exception:
+            if self.path:
+                self.stream.close()
+            raise
+        self.mark(self.stage)
+        return self
+
+    def mark(self, stage: str) -> None:
+        self.stage = stage
+        message = f"Offline diagnostic +{time.monotonic() - self.started:.2f}s: {stage}"
+        print(message, file=self.stream, flush=True)
+        if self.path and sys.stderr is not None:
+            print(message, file=sys.stderr, flush=True)
+
+    def __exit__(self, exc_type, exc, tb):
+        faulthandler.cancel_dump_traceback_later()
+        if exc is not None:
+            self.mark(f"failed during {self.stage}: {exc_type.__name__}: {exc}")
+            traceback.print_exception(exc_type, exc, tb, file=self.stream)
+            self.stream.flush()
+        if self.path:
+            self.stream.close()
+
 
 PARSER_SOURCE = """
 from datetime import date
@@ -169,7 +213,10 @@ def _exercise_local_work(window) -> None:
     window.update_main_gui()
 
 
-def _session(mode: str, entrypoint: Callable[[], int], root: Path, patches: ExitStack) -> dict[str, object]:
+def _session(
+    mode: str, entrypoint: Callable[[], int], root: Path, patches: ExitStack, diagnostics: _Diagnostics
+) -> dict[str, object]:
+    diagnostics.mark("loading HTTP client")
     import requests
 
     state = {"ticks": 0, "paint": None, "ready": None, "pages": set(), "requests": [], "errors": [], "done": False}
@@ -199,6 +246,7 @@ def _session(mode: str, entrypoint: Callable[[], int], root: Path, patches: Exit
         patches.enter_context(patch.object(owner, name, deny))
     patches.enter_context(patch.object(requests.sessions.Session, "request", fail_request))
 
+    diagnostics.mark("loading Qt and application modules")
     from PySide6.QtCore import QEvent, QObject, QTimer
     from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QWizard
 
@@ -211,6 +259,7 @@ def _session(mode: str, entrypoint: Callable[[], int], root: Path, patches: Exit
     from parsetrail.gui import main_window
     from parsetrail.gui.onboarding import FirstRunGuide
 
+    diagnostics.mark("checking resources and preparing temporary profile")
     # No source-checkout resource override: this uses the actual source or frozen layout.
     for resource in ("assets/parsetrail_128px.ico", "alembic.ini", "migrations/env.py"):
         _require(resource_path(resource).is_file(), f"Missing application resource: {resource}")
@@ -221,6 +270,7 @@ def _session(mode: str, entrypoint: Callable[[], int], root: Path, patches: Exit
     save_settings(settings)
     initialize.initialize_dirs()
     if mode != "fresh":
+        diagnostics.mark("installing synthetic signed parser and training cached model")
         keys = _install_fixture(root)
         patches.enter_context(patch.object(main_window, "PluginManager", lambda: PluginManager(trusted_keys=keys)))
         learn.train_pipeline_save(_training_data(), settings.model_path)
@@ -228,7 +278,18 @@ def _session(mode: str, entrypoint: Callable[[], int], root: Path, patches: Exit
         patch.object(initialize, "_prompt_for_db_path", lambda default_path, parent=None: str(default_path))
     )
 
-    app = QApplication(sys.argv)
+    class DiagnosticApplication(QApplication):
+        def exec(self):
+            # A failure can occur in a constructor's modal dialog or processEvents(),
+            # before main() reaches app.exec(). Qt's exit() does not latch that failure
+            # for a future event loop, so explicitly refuse to start another one.
+            if state["errors"]:
+                return 1
+            diagnostics.mark("entering main event loop")
+            return super().exec()
+
+    diagnostics.mark("creating QApplication")
+    app = DiagnosticApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     started = time.monotonic()
     window_holder = []
@@ -236,36 +297,68 @@ def _session(mode: str, entrypoint: Callable[[], int], root: Path, patches: Exit
     class PaintProbe(QObject):
         def eventFilter(self, watched, event):
             if isinstance(watched, main_window.ParseTrail) and event.type() == QEvent.Paint:
-                state["paint"] = state["paint"] or time.monotonic()
+                if state["paint"] is None:
+                    state["paint"] = time.monotonic()
+                    diagnostics.mark("main window painted")
             return False
 
     probe = PaintProbe(app)
     app.installEventFilter(probe)
 
+    def abort_session():
+        # Unwind current AND subsequent startup dialogs until the constructor
+        # returns. Keep the timer alive: closing one modal can reveal another.
+        for widget in app.topLevelWidgets():
+            if isinstance(widget, QDialog) and widget.isVisible():
+                QDialog.done(widget, QDialog.Rejected)
+        app.exit(1)
+
     def tick():
         state["ticks"] += 1
+        if state["errors"]:
+            abort_session()
+            return
         try:
-            _require(time.monotonic() - started < 35, "Offline GUI session timed out")
+            _require(
+                time.monotonic() - started < GUI_TIMEOUT_SECONDS,
+                f"Offline GUI session timed out during {diagnostics.stage}; "
+                f"ticks={state['ticks']}, onboarding pages={sorted(state['pages'])}",
+            )
             for widget in app.topLevelWidgets():
                 if not widget.isVisible():
                     continue
                 if isinstance(widget, QMessageBox):
-                    _require(widget.windowTitle() == "New Database Created", "Unexpected startup message")
+                    # QMessageBox deliberately ignores window titles on macOS.
+                    # Authenticate this one expected prompt by its content,
+                    # parent, icon and buttons; never dismiss arbitrary errors.
+                    _require(
+                        isinstance(widget.parentWidget(), main_window.ParseTrail)
+                        and widget.icon() == QMessageBox.Information
+                        and widget.standardButtons() == QMessageBox.Ok
+                        and widget.text() == f"Initialized new database at <pre>{settings.db_path}</pre>",
+                        f"Unexpected startup message: {widget.text()}",
+                    )
+                    diagnostics.mark("accepting new-database message")
                     widget.accept()
+                    return  # Let the constructor resume before inspecting its next stage.
                 elif isinstance(widget, FirstRunGuide):
+                    if widget.currentId() not in state["pages"]:
+                        diagnostics.mark(f"advancing onboarding page {widget.currentId()}")
                     state["pages"].add(widget.currentId())
                     button = QWizard.FinishButton if widget.currentPage().isFinalPage() else QWizard.NextButton
                     widget.button(button).click()
+                    return
                 elif isinstance(widget, main_window.ParseTrail) and hasattr(widget, "Session"):
                     if not window_holder:
                         window_holder.append(widget)
                 elif isinstance(widget, QDialog):
-                    raise RuntimeError("Unexpected startup dialog")
+                    raise RuntimeError(f"Unexpected startup dialog: {type(widget).__name__} ({widget.windowTitle()})")
             if not window_holder or settings.onboarding_version != CURRENT_ONBOARDING_VERSION:
                 return
             window = window_holder[0]
             if state["ready"] is None:
                 state["ready"] = time.monotonic()
+                diagnostics.mark("onboarding complete; waiting for background checks")
             if time.monotonic() - state["ready"] < main_window.AUTOMATIC_UPDATE_DELAY_MS / 1000 + 1.5:
                 return
             if any(
@@ -295,6 +388,7 @@ def _session(mode: str, entrypoint: Callable[[], int], root: Path, patches: Exit
             else:
                 _require(not state["requests"], "Disabled update checks attempted networking")
             timer.stop()  # update_main_gui processes events; prevent a reentrant import.
+            diagnostics.mark("checking local prerequisites and synthetic work")
             if mode == "fresh":
                 _require(
                     not window.plugin_manager.plugins and not settings.model_path.exists(),
@@ -306,11 +400,12 @@ def _session(mode: str, entrypoint: Callable[[], int], root: Path, patches: Exit
             state["done"] = True
             timer.stop()
             window.close()
+            diagnostics.mark("offline session complete; exiting")
             app.exit(0)
         except Exception as exc:
             state["errors"].append(str(exc))
-            timer.stop()
-            app.exit(1)
+            diagnostics.mark(f"GUI failure: {exc}")
+            abort_session()
 
     timer = QTimer(app)
     timer.timeout.connect(tick)
@@ -319,11 +414,13 @@ def _session(mode: str, entrypoint: Callable[[], int], root: Path, patches: Exit
     entry_module = sys.modules[entrypoint.__module__]
     patches.enter_context(patch.object(entry_module, "QApplication", lambda _argv: app))
     try:
+        diagnostics.mark("running client entry point")
         entrypoint()
     except SystemExit as exc:
         _require(exc.code in (None, 0), f"Client entry point exited with {exc.code}: {state['errors']}")
     finally:
         timer.stop()
+        diagnostics.mark("closing diagnostic windows and workers")
         for window in window_holder:
             for name in ("client_update_thread", "plugin_update_thread"):
                 worker = getattr(window, name, None)
@@ -352,6 +449,7 @@ def _session(mode: str, entrypoint: Callable[[], int], root: Path, patches: Exit
 def run_offline_session_smoke(mode: str, entrypoint: Callable[[], int], *, report_path: Path | None = None) -> int:
     if mode not in MODES or "parsetrail.core.settings" in sys.modules:
         return 2
+    diagnostics = None
     try:
         if report_path is not None:
             report_path = report_path.expanduser().resolve()
@@ -359,7 +457,11 @@ def run_offline_session_smoke(mode: str, entrypoint: Callable[[], int], *, repor
                 not report_path.exists() and report_path.parent.is_dir(),
                 "Report requires a new file in an existing directory",
             )
-        with tempfile.TemporaryDirectory(prefix="parsetrail-offline-") as temporary, ExitStack() as patches:
+        with (
+            _Diagnostics(report_path) as diagnostics,
+            tempfile.TemporaryDirectory(prefix="parsetrail-offline-") as temporary,
+            ExitStack() as patches,
+        ):
             root = Path(temporary)
             keep = {"PATH", "SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT", "TEMP", "TMP", "TMPDIR", "LANG", "LC_ALL"}
             env = {
@@ -377,7 +479,7 @@ def run_offline_session_smoke(mode: str, entrypoint: Callable[[], int], *, repor
             )
             patches.enter_context(patch.dict(os.environ, env, clear=True))
             try:
-                report = _session(mode, entrypoint, root, patches)
+                report = _session(mode, entrypoint, root, patches, diagnostics)
             finally:
                 from loguru import logger
 
@@ -391,7 +493,9 @@ def run_offline_session_smoke(mode: str, entrypoint: Callable[[], int], *, repor
             with report_path.open("x", encoding="utf-8") as output:
                 output.write(json.dumps(report, sort_keys=True) + "\n")
         if sys.stdout is not None:
-            print(json.dumps(report, sort_keys=True))
+            print(json.dumps(report, sort_keys=True), flush=True)
+        if report["passed"] and diagnostics is not None and diagnostics.path is not None:
+            diagnostics.path.unlink()
     except OSError:
         return 1
     return 0 if report["passed"] else 1

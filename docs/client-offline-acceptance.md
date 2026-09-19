@@ -40,6 +40,9 @@ wizard and accepts the new-database information message. The database file
 chooser is supplied its temporary default path. Native file dialogs and OS
 credentials remain owner checks. Windows respects an explicitly selected Qt
 platform, allowing these probes to use the offscreen platform.
+The message check uses its temporary database path, parent, icon, and buttons;
+it cannot rely on a window title because
+[Qt ignores message-box titles on macOS](https://doc.qt.io/qt-6/qmessagebox.html#setWindowTitle).
 
 Resource checks use the actual source layout or PyInstaller `_MEIPASS` resources:
 icon decoding, bundled public keys, Alembic configuration, and schema migration
@@ -52,6 +55,28 @@ new file in an existing directory and refuses to overwrite one. Windows builds
 validate the report's mode, `passed`, and `frozen` fields. A failed Windows gate
 retains its report path in the build error. Mac inventories preserve the mode
 list and result under `native_build.frozen_smoke.offline_session`.
+
+Progress messages include elapsed startup time. At 60 seconds an independent
+watchdog dumps Python thread stacks, even if Qt is blocked; the outer limit
+remains 75 seconds. With `--offline-smoke-report`, progress and stacks go to a
+new `<report-path>.log` beside the report. The log is removed on success and
+retained on failure or an outer timeout; existing logs are never overwritten.
+Without a report path, diagnostics go to stderr. Source test failures and Mac
+build failures include captured diagnostics; Windows build failures name the
+retained log. A failure during a startup modal unwinds subsequent dialogs and
+prevents entry into another main event loop.
+
+To investigate a platform failure, first rerun only the empty-profile case from
+`client/` and retain the full failure text:
+
+```bash
+QT_QPA_PLATFORM=offscreen uv run --no-env-file --no-sync --no-python-downloads \
+  pytest -q -x 'tests/test_offline_session.py::test_real_entrypoint_offline_session_ignores_existing_profile[fresh]'
+```
+
+Run all modes again after resolving the first failure. A timeout alone does not
+identify a hardware, toolchain, or application defect; use the stage timings
+and stacks to locate the stalled operation.
 
 These probes inject failures before an HTTP connection and do not establish OS
 firewall behavior, native installation, actual Keychain/Credential Locker use,

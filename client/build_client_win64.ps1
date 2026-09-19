@@ -187,10 +187,10 @@ try {
             -PassThru
         if (-not $offlineProcess.WaitForExit(75000)) {
             Stop-Process -Id $offlineProcess.Id -Force -ErrorAction SilentlyContinue
-            throw "Frozen offline session '$offlineMode' timed out after 75 seconds"
+            throw "Frozen offline session '$offlineMode' timed out after 75 seconds. Progress / stack dump: $offlineReportPath.log"
         }
         if ($offlineProcess.ExitCode -ne 0) {
-            throw "Frozen offline session '$offlineMode' failed with exit code $($offlineProcess.ExitCode). Diagnostic: $offlineReportPath"
+            throw "Frozen offline session '$offlineMode' failed with exit code $($offlineProcess.ExitCode). Report: $offlineReportPath; progress / stack dump: $offlineReportPath.log"
         }
         $offlineReport = Get-Content -LiteralPath $offlineReportPath -Raw | ConvertFrom-Json
         if (-not $offlineReport.passed -or -not $offlineReport.frozen -or $offlineReport.mode -ne $offlineMode) {
