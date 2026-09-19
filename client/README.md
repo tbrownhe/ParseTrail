@@ -289,6 +289,41 @@ external signing-key path, and optional SSH deployment values. Build scripts do
 not read the repository `.env`. The config contains no passphrase; signing
 always prompts through the terminal.
 
+For an Intel Mac, use [release-config.macos.example.json](release-config.macos.example.json).
+It places build outputs under `~/parsetrail-release-artifacts` and has no remote
+publication destination. Its signing key is ParseTrail's encrypted Ed25519 PEM,
+used for parser catalogs and installer manifests. An Apple Developer certificate
+is not required for this build; Apple signing/notarization remains deferred.
+
+Restore the **existing encrypted PEM** from its separate backup. An encrypted
+removable drive remains the recommended key location; set `signing_key` to its
+mounted path if using one. For a local Mac copy matching the example, create
+the private directory:
+
+```bash
+mkdir -p "$HOME/.local/share/parsetrail-release-keys"
+chmod 700 "$HOME/.local/share/parsetrail-release-keys"
+```
+
+Copy the encrypted key there as `plugin-signing-key.pem`, then restrict it:
+
+```bash
+chmod 600 "$HOME/.local/share/parsetrail-release-keys/plugin-signing-key.pem"
+```
+
+Keep its passphrase in the separate password-manager entry; the build prompts
+locally. From `client/`, prepare output directories and a new local config:
+
+```bash
+mkdir -p "$HOME/parsetrail-release-artifacts/clients" "$HOME/parsetrail-release-artifacts/plugins"
+cp -n release-config.macos.example.json release-config.json
+```
+
+The copy preserves an existing config; update its paths explicitly if one is
+already present. The private key stays outside both the checkout and artifact
+directories. Restoring this key does not require generating a new key or
+changing the bundled public trust store.
+
 Every release requires a clean worktree and an exact tag at `HEAD`. Client tags
 are derived from `src/parsetrail/version.py`, for example:
 
