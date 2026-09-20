@@ -386,7 +386,7 @@ checks enabled, and no model files. This covers responsive empty-profile use
 with enabled checks; supported imports after failed checks remain separate.
 
 The `ParseTrail-Staging` profile was absent before that walkthrough and now
-contains acceptance state. Preserve it. Keychain, staging catalog installation,
+contains acceptance state. Preserve it. Keychain restart/sign-out,
 fixture imports, model use, contribution, and database backup/restore remain
 pending. Sanitized `PATH` does not establish operation on a machine where build
 tools are physically absent.
@@ -416,8 +416,18 @@ The public plugin catalog's signature and schema verified against the installed
 candidate's bundled keys, and all **22 artifacts** passed runtime compatibility
 checks: release **20260829091732**, manifest SHA-256
 `4a68f8035cc833f8bdc1e6f70578f84100d308a3eb3337c934eef92c7458a093`.
-This is catalog verification, not authenticated artifact installation or Keychain
-acceptance. The **404** for the 1.4 Intel installer manifest is a service
+**PASS — staging login and signed plugin installation:** the owner subsequently
+signed in with the staging account, downloaded the plugins, and confirmed they
+appeared in Plugin Manager. A read-only verification of the staging profile's
+active release checked its pointer, manifest signature, all **22 artifact sizes
+and SHA-256 digests**, and runtime compatibility against the installed app's
+public keys. Release sequence and manifest digest match the catalog above.
+The native `ParseTrail-Staging` Keychain item exists; the metadata-only lookup
+discarded its output and did not retrieve the token. The staging configuration
+contains no nonempty plaintext access token. This accepts initial credential
+storage; restoration across an app restart and sign-out deletion remain pending.
+
+The **404** for the 1.4 Intel installer manifest is a service
 prerequisite for the later coordinated transition; no server change was made.
 No replacement candidate, artifact activation, tag push, merge, or deployment
 was performed.
