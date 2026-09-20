@@ -57,10 +57,12 @@ First import from an empty offline profile is the separate F1 proposal.
 - [ ] `[USER]` Walk through first run, account login, signed plugin install,
   one-off import, folder import, overlap handling, explicit statement contribution,
   and database backup/test restore on Windows.
-- [ ] `[USER]` Finish the Intel MacBook walkthrough: Keychain restoration across
-  restart/sign-out, one-off/folder/overlap imports and source retention,
-  explicit synthetic contribution, and database backup/test restore. Fresh
-  offline first run, staging login, and signed plugin installation are accepted.
+- [ ] `[USER]` Finish the Intel MacBook walkthrough: one-off/folder/overlap imports
+  and source retention, plus fresh staging database backup creation and test
+  restore with schema/row parity. Testing an existing older backup passed; it
+  does not establish creation of a current staging backup. Fresh offline first
+  run, staging login, signed plugin installation, Keychain restart/sign-out, and
+  explicit synthetic contribution are accepted.
   Reserve Jacob's testing for official-release
   usability and product-gap feedback.
 

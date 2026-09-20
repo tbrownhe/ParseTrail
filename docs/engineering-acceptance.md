@@ -386,18 +386,22 @@ checks enabled, and no model files. This covers responsive empty-profile use
 with enabled checks; supported imports after failed checks remain separate.
 
 The `ParseTrail-Staging` profile was absent before that walkthrough and now
-contains acceptance state. Preserve it. Keychain restart/sign-out,
-fixture imports, model use, contribution, and database backup/restore remain
+contains acceptance state. Preserve it. Fixture imports, model use, and
+current-staging-database backup creation/verification remain
 pending. Sanitized `PATH` does not establish operation on a machine where build
 tools are physically absent.
 
-**Owner backup report:** the owner subsequently reported successful database
-backup creation and the backup test function. A read-only check found the active
-staging database healthy (SQLite integrity and foreign keys passed, revision
-`0003_precise_financial_schema`), but no second SQLite file was present inside
-the staging profile. Confirmation of the tested profile and whether the backup
-was retained is pending; schema/row parity and the staging-specific backup gate
-are not yet independently established. No database was changed by this check.
+**Owner backup report:** the owner reported successful backup creation and the
+backup test function, then confirmed a STAGING window and a retained backup.
+The supplied file was outside the staging profile and had older revision
+`e0ecdd6abcc6`; read-only checks passed SQLite integrity and foreign keys, but
+its schema and row counts differ from the current staging database. The latter
+also passed integrity/foreign-key checks at `0003_precise_financial_schema`.
+This accepts the owner's test of an existing older backup, not creation of a
+current staging backup. No second SQLite file was found inside the staging
+profile. A fresh **Back Up Database** / **Test Database Backup** check was
+requested with a new destination inside the staging profile, preserving both
+existing databases. No database was changed by these inspections.
 
 **Staging prerequisites:** unauthenticated checks from this Mac initially failed
 with curl exit **6**, HTTP **000** (hostname resolution), for
@@ -424,8 +428,29 @@ and SHA-256 digests**, and runtime compatibility against the installed app's
 public keys. Release sequence and manifest digest match the catalog above.
 The native `ParseTrail-Staging` Keychain item exists; the metadata-only lookup
 discarded its output and did not retrieve the token. The staging configuration
-contains no nonempty plaintext access token. This accepts initial credential
-storage; restoration across an app restart and sign-out deletion remain pending.
+contains no nonempty plaintext access token.
+
+**PASS — Keychain restoration and synthetic contribution:** after quitting and
+reopening the installed staging candidate, the owner submitted the prepared
+one-page synthetic PDF through **Statements > Send for Plugin Development** and
+its normal confirmation. No second login was requested, and the server-accepted
+popup appeared. The generated document contains only "ParseTrail smoke"; SHA-256
+`625fa34df0e8181c6421cde3a26ae9c7c7ffb91c62486bb90482c05c28c9826b`.
+No real financial fixture was uploaded. This accepts native credential reuse
+after restart and the explicit contribution flow against staging.
+
+**PASS — sign-out:** the owner confirmed **File > Sign Out of Server**, then
+repeated the synthetic submission flow and canceled the newly displayed login
+dialog. No second upload was intended. A subsequent metadata-only Keychain
+lookup for the staging service/account returned **44** (item not found),
+confirming deletion; the earlier lookup had returned **0**.
+
+Five synthetic cumulative CSV fixtures were prepared locally for the remaining
+offline import/model walkthrough. The installed signed MOHELA parser accepted
+them without validation errors or warnings. Expected statement rows/balances
+are **8/-396.00**, **10/-495.00**, **12/-594.00**, **14/-693.00**, and
+**16/-792.00**. Original and working copies are separate. This is fixture
+preparation, not completed installed import or model acceptance.
 
 The **404** for the 1.4 Intel installer manifest is a service
 prerequisite for the later coordinated transition; no server change was made.
