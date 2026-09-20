@@ -164,3 +164,44 @@ local views, and restart behavior separately. Record any launch prompt or first
 error. Signed parser installation, Keychain persistence, local fixture import,
 trained-model use, and the broader P2.2 workflow follow the initial empty-profile
 check above.
+
+### Windows 1.4.0 candidate: installation and first offline launch
+
+Use the preserved signed installer identified in the
+[Windows candidate record](engineering-acceptance.md#signed-windows-candidate-september-19-2026).
+The owner approved upgrading this PC after the
+[verified backup and fresh staging preparation](engineering-acceptance.md#windows-upgrade-safeguards-september-20-2026).
+The NSIS installer replaces the registered application machine-wide. A different
+Windows account or installation directory alone does not preserve the old app.
+
+The following local handoffs have been prepared on the owner's Windows checkout.
+Keep ParseTrail closed and run from the repository directory:
+
+```powershell
+powershell -NoProfile -File .\scratch\install-windows-1.4.0.ps1
+```
+
+Complete the administrator prompt and installer. The handoff verifies the
+backup and candidate before installation, then checks the installed executable.
+Report any error or Windows prompt. It does not launch the app automatically.
+Use the staging launcher below for acceptance; ordinary shortcuts open the
+production profile.
+
+Disconnect Wi-Fi/Ethernet and other network connections before the first launch:
+
+```powershell
+powershell -NoProfile -File .\scratch\launch-windows-1.4.0-staging.ps1
+```
+
+Confirm the **STAGING** marker, accept the offered database path inside the new
+staging profile, and complete all five guide pages. After at least ten seconds,
+switch local views and open Preferences. Quit normally, then run the same
+launcher while still disconnected. The chosen database and guide completion
+should persist, with no blocking login or frozen window.
+
+Report installer/launch prompts, STAGING marker, onboarding, responsiveness, and
+offline restart. Preserve the backups and the parked previous staging profile.
+Signed plugin installation, Credential Locker persistence/sign-out, synthetic
+imports, model operations, contribution, and backup/restore follow in the
+remaining walkthrough. This local installation does not complete the separate
+staging API/website/artifact transition rehearsal.

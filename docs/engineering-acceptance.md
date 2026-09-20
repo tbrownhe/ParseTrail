@@ -566,8 +566,8 @@ the target output directory contained only the installer: **no signed manifest,
 detached signature, or release inventory existed yet**. The local handoff checks
 the clean checkout, tag, and installer digest before using the tagged
 `scripts.client_release sign` / `verify` and `scripts.release_inventory` commands.
-It preserves these bytes and does not repeat packaging. This is a prepared
-candidate, not yet a completed signed dry run.
+It preserves these bytes and does not repeat packaging. At this stage the
+candidate awaited signing; the completed signed dry run is recorded below.
 
 The ignored local checkout is `scratch/windows-1.4.0-candidate`; its full build
 log is `scratch/windows-1.4.0-build.log`, SHA-256
@@ -576,16 +576,90 @@ The operator signing handoff is `scratch/sign-windows-1.4.0.ps1`; its PowerShell
 syntax check passed. These are local operator files rather than release payloads.
 
 An installed ParseTrail application and a `ParseTrail-Staging` profile already
-exist on this Windows account. Preserve both. A fresh installed-user check needs
-a separate Windows account or suitable isolated test environment; the NSIS
-installer detects and uninstalls a previous registered installation, so an
-alternate install directory alone does not establish isolation.
+exist on this Windows account. Preserve both. A separate Windows account can
+isolate user data and credentials, but installation state is machine-wide:
+the NSIS installer detects and uninstalls a previous installation registered in
+HKLM. Neither another account nor an alternate install directory isolates that
+installation. Use a disposable VM/second PC for a fresh installation, or prepare
+an owner-approved upgrade of the existing installation with retained backups.
 
 The focused `test/windows-native-acceptance` branch was pushed for a draft PR.
 SSH Git access works, but no authenticated GitHub API/CLI credential was
 available to create the PR automatically. The owner received the prepared PR
 link; hosted CI remains pending until it is opened. No installation, artifact
 publication, release-tag push, merge, or deployment was performed.
+
+### Signed Windows candidate: September 19, 2026
+
+The owner ran the local signing handoff and reported successful signing,
+verification, and inventory generation. A subsequent independent read-only
+review accepted the public-key signature, matched the reported inventory digest,
+and verified the sizes and SHA-256 digests of all three recorded release files.
+
+| Field | Recorded value |
+| --- | --- |
+| Client / target | `1.4.0` / `windows-x86_64` |
+| Source | `client-v1.4.0` at `42a3dac970459327d8f3144f40195f4166a98cc9` |
+| Signed release sequence | `20260920064925` |
+| Inventory SHA-256 | `7661e24a9b46edb5709091f8d29271b7b9cea49cf58b8b23275ee6196971b8a1` |
+| Installer SHA-256 | `08ee28ce3e64dd44f7efcbedf733fe2e31fda05f044ea8f08b7c8939731ccf07` |
+| Installer size | `154450323` bytes |
+
+The installer bytes are identical to the already-tested, pre-signing artifact.
+The inventory agrees with the pinned source/tag, target, architecture, manifest
+schema **2**, release sequence, version, and recorded build tools. Retain the
+complete sibling `parsetrail-resources/clients/windows-x86_64` directory and the
+original inventory digest. This completes the Windows tagged signed dry run;
+its source tests, native build, and frozen checks are recorded immediately above.
+No rebuild or repeated source suite was necessary for this signing follow-up.
+
+The signature is ParseTrail's Ed25519 manifest signature; Windows Authenticode
+remains deferred. No installation or publication was performed. This Windows
+host reports edition **Core (Home)**, version **25H2**, and no Windows Sandbox
+launcher. The owner is choosing a disposable Windows VM/second PC or preparation
+of a backed-up upgrade on this PC for the native installed walkthrough; the
+owner subsequently selected this PC, as recorded below.
+
+The GitHub read-only check still found no PR or Actions run for
+`test/windows-native-acceptance`; hosted CI remains pending. The existing
+prepared draft-PR link starts that work without merging into `main`.
+
+### Windows upgrade safeguards: September 20, 2026
+
+The owner approved using this PC after preparing backups. The installed app is
+registered as **1.3.0** in the 32-bit HKLM view. No ParseTrail process was running
+during preparation. Before installation, the assistant copied and independently
+verified **3,654 files / 588511211 bytes** covering the old installed app, both
+profiles, the configured financial database, managed statement archive, models,
+and reports. It also retained **two registry exports** and created **two SQLite
+snapshots**. Each snapshot passed integrity and foreign-key checks and matched
+its source's complete logical SQL dump digest.
+
+The private backup is retained locally at
+`scratch/windows-1.4.0-upgrade-backup-20260920T065839Z`. Its completion manifest
+SHA-256 is `f8307f5fd9c06b5b3720e93d76ecfbb56733bb8c436123ce7a6124edec36aca4`.
+The manifest and copied financial files are ignored local material, not Git
+artifacts. No OS credentials were exported. Restoring the prior application
+and machine registry would require owner administrator action; no rollback was
+performed or claimed as tested.
+
+A metadata-only lookup found no `ParseTrail-Staging` credential. After backup
+verification, the existing staging folder was preserved beside its original
+location as `ParseTrail-Staging.pre-1.4.0-20260920T065839Z`; the active staging
+path is now absent for the fresh-profile walkthrough. The production profile
+and its configured data remain in place. This isolates application data for
+the walkthrough while allowing the approved machine-wide installer upgrade.
+
+The ignored owner handoffs are `scratch/install-windows-1.4.0.ps1` and
+`scratch/launch-windows-1.4.0-staging.ps1`. The installer handoff rechecks every
+backup file, the unchanged original sources (including the preserved staging
+folder), installed version, and candidate installer hash before showing the
+native installer. It then checks the installed executable hash. The separate
+launcher uses native Qt, system-only `PATH`, and the staging API/profile.
+Both scripts passed PowerShell syntax checks, and the complete backup/source
+verification passed again after preserving the staging folder. **The installer
+and installed app have not yet been run.** Owner steps are in
+[Windows installation and first offline launch](client-offline-acceptance.md#windows-140-candidate-installation-and-first-offline-launch).
 
 ## Staging migration and recovery: August 2026
 

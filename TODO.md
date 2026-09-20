@@ -15,8 +15,8 @@ any implementation**. Remaining native/release acceptance still requires the
 prepared owner checks; the Intel installed offline/P2.2 walkthrough is accepted.
 
 The completed Mac results are in the [Intel return note](docs/intel-mac-return-note.md).
-The [Windows tagged-build record](docs/engineering-acceptance.md#windows-tagged-build-preparation-september-19-2026)
-identifies the preserved installer awaiting local signing and installed acceptance.
+The [signed Windows candidate record](docs/engineering-acceptance.md#signed-windows-candidate-september-19-2026)
+identifies the preserved installer awaiting installed acceptance.
 
 ## P1.5 — Client release reliability
 
@@ -27,9 +27,6 @@ identifies the preserved installer awaiting local signing and installed acceptan
   [installed candidate record](docs/engineering-acceptance.md#intel-installed-candidate-verification-september-19-2026).
 - [~] **R3b — Architecture gates:** obtain the hosted Windows x64 /
   `macos-15-intel` test results.
-- [~] `[USER]` Sign and verify the preserved Windows x64 tagged installer and
-  record its release inventory. Use the prepared local signing handoff; retain
-  the reviewed installer bytes instead of rebuilding the same version.
 - [ ] `[USER]` Rehearse preserved artifact publication, install/upgrade,
   credential storage, and plugin update on Windows x64 and Intel macOS.
   Include the [1.3-to-1.4 manual upgrade and API/website transition](docs/client-release-contract.md)
