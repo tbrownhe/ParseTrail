@@ -391,6 +391,14 @@ fixture imports, model use, contribution, and database backup/restore remain
 pending. Sanitized `PATH` does not establish operation on a machine where build
 tools are physically absent.
 
+**Owner backup report:** the owner subsequently reported successful database
+backup creation and the backup test function. A read-only check found the active
+staging database healthy (SQLite integrity and foreign keys passed, revision
+`0003_precise_financial_schema`), but no second SQLite file was present inside
+the staging profile. Confirmation of the tested profile and whether the backup
+was retained is pending; schema/row parity and the staging-specific backup gate
+are not yet independently established. No database was changed by this check.
+
 **Staging prerequisites:** unauthenticated checks from this Mac initially failed
 with curl exit **6**, HTTP **000** (hostname resolution), for
 `https://api.staging.parsetrail.com/api/v1/` routes `plugins/manifest`,
@@ -400,6 +408,9 @@ The documented LAN address with curl `--resolve` and normal HTTPS verification
 returned **200/200/404/200**, respectively. No system hosts entry existed for the
 API hostname; an attempted additive update stopped at `sudo`'s password
 requirement without changing the file. The owner was given the local command.
+The owner then reported applying it. A subsequent request to
+`plugins/manifest` using ordinary hostname resolution and normal HTTPS
+verification returned **HTTP 200**, closing the local DNS prerequisite.
 
 The public plugin catalog's signature and schema verified against the installed
 candidate's bundled keys, and all **22 artifacts** passed runtime compatibility
