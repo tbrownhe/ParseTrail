@@ -13,6 +13,9 @@ The owner has approved P1.5, P1.6, and P2.2. Later correctness/cleanup proposals
 remain pending, and **Client feature proposals require further discussion before
 any implementation**. Native acceptance still requires the prepared owner checks.
 
+The current Mac execution checklist and return-note template are in the
+[Intel Mac handover](docs/intel-mac-handover.md).
+
 ## P1.5 — Client release reliability
 
 - [~] **R2 — Intel macOS packaging:** `[USER]` Accept the installed runtime
