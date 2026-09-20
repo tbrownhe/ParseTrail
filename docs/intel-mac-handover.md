@@ -1,5 +1,9 @@
 # Intel Mac acceptance handover
 
+The completed Mac results and remaining release gates are in the
+[return note](intel-mac-return-note.md). The staging profile now contains
+acceptance data; preserve it rather than repeating the fresh-profile setup.
+
 Prepared September 19, 2026. The owner is transferring the Mac portion of
 ParseTrail acceptance to an assistant running on their Intel Mac, then returning
 the results to the Windows assistant. Take over the local Mac work below. The
