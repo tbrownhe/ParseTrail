@@ -20,7 +20,9 @@ The current Mac execution checklist and return-note template are in the
 
 - [~] **R2 — Intel macOS packaging:** `[USER]` Accept the installed runtime
   without build-tool paths using the preserved signed candidate and the
-  [Mac release gates](client/README.md#intel-mac-release-gates).
+  [Mac release gates](client/README.md#intel-mac-release-gates). Release verification
+  and separate DMG installation are complete; native owner observations remain
+  pending in the [installed candidate record](docs/engineering-acceptance.md#intel-installed-candidate-verification-september-19-2026).
 - [~] **R3b — Architecture gates:** obtain the hosted Windows x64 /
   `macos-15-intel` test results and `[USER]` accept the tagged Windows native build;
   source/header tests alone do not establish frozen-app acceptance.

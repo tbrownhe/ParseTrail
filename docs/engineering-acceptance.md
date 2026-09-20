@@ -333,6 +333,56 @@ Windows tagged build and hosted CI results. Use the installed-app procedure in
 owner confirmed that the Intel Mac's staging profile was new before starting
 the installed-app first-launch check.
 
+### Intel installed candidate verification: September 19, 2026
+
+The Mac assistant fetched and fast-forwarded the clean handover checkout from
+`42a3dac` to `1f69b6e`, then created `test/intel-macos-native-acceptance`.
+The existing ignored release configuration and preserved artifacts were retained.
+Direct checks confirmed macOS **15.7.9 (24G830)** and **x86_64**.
+
+- **PASS — preserved release:** `client-v1.4.0` still resolves to
+  `42a3dac970459327d8f3144f40195f4166a98cc9`. The inventory SHA-256 remains
+  `dff66e320cf2d97c3e8924707f1104de13f693926a7735808fd827c87776a655`.
+  Public-key verification accepted release **20260919222343**, with one artifact.
+- **PASS — installer identity:** the verified DMG is **126452768 bytes**, SHA-256
+  `679b1e431cda4711146394a17662f70c19040142a006255dbd815d4d6c04b781`.
+  The saved inventory records **379 Mach-O files**, one cryptography extension,
+  a passing system-only-PATH runtime smoke, and passing `fresh`, `cached`, and
+  `network-failure` frozen probes. Its actual build tools include **uv 0.12.7**,
+  CPython **3.13.15**, and PyInstaller **6.21.0**; uv 0.12.5 in the earlier record
+  was the preflight baseline. An exact final source-suite count was not recovered.
+- **PASS — separate installation:** mounted the preserved DMG read-only, created
+  the previously absent `~/Applications/ParseTrail-1.4.0-candidate` directory,
+  copied `ParseTrail.app` with `ditto`, and compared bundle files with `diff -qr`
+  successfully before ejecting the DMG. This was a command-line installation;
+  Finder drag-and-drop and owner launch-prompt observations remain separate.
+  The installed executable passed thin x86_64 Mach-O inspection. Its embedded
+  version, source commit, tag, and target match the preserved candidate.
+- **PASS — installed native diagnostics:** reran all three probes against the
+  installed executable with native Qt and system-only `PATH`. All reported
+  `frozen: true`, `passed: true`, and five onboarding pages. Fresh/cached/failing
+  network modes recorded **190/189/190 heartbeat ticks** and **0/0/2 intercepted
+  requests**, respectively. Both cached modes completed synthetic local import
+  and model operations. Each diagnostic owned a temporary profile; the staging
+  profile remained absent afterward. These checks do not establish physical
+  network disconnection, actual staging catalog access, or Keychain persistence.
+- **FAIL — offscreen diagnostic attempt:** an initial sandboxed run with
+  `QT_QPA_PLATFORM=offscreen` aborted in Qt's Mac wizard with
+  `NSInvalidArgumentException` (`-[NSBundle initWithURL:]: nil URL argument`).
+  The subsequent native Qt runs outside the sandbox all passed. The cause is
+  not isolated between platform-plugin and sandbox differences; no runtime fix
+  or candidate rebuild is justified by this result alone. Use native Qt for
+  the installed-app walkthrough, as specified in the handover.
+
+The `ParseTrail-Staging` profile was absent before the owner walkthrough.
+Do not create or reset it merely to repeat diagnostics. The owner will disconnect
+networking and run the installed native GUI locally, because disconnecting also
+interrupts the assistant connection. Visible first start/restart, Keychain,
+staging catalog installation, fixture imports, model use, contribution, and
+database backup/restore remain pending until their observations are returned.
+No replacement candidate, artifact activation, tag push, merge, or deployment
+was performed.
+
 ## Staging migration and recovery: August 2026
 
 The PostgreSQL 12-to-17 rehearsal preserved the source volume and matched every
