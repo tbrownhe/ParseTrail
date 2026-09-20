@@ -386,9 +386,9 @@ checks enabled, and no model files. This covers responsive empty-profile use
 with enabled checks; supported imports after failed checks remain separate.
 
 The `ParseTrail-Staging` profile was absent before that walkthrough and now
-contains acceptance state. Preserve it. Fixture imports, model use, and
-current-staging-database backup creation/verification remain
-pending. Sanitized `PATH` does not establish operation on a machine where build
+contains acceptance state. Preserve it. The results below distinguish the
+completed walkthrough from the remaining Move/Leave retention checks.
+Sanitized `PATH` does not establish operation on a machine where build
 tools are physically absent.
 
 **Owner backup report:** the owner reported successful backup creation and the
@@ -450,7 +450,47 @@ offline import/model walkthrough. The installed signed MOHELA parser accepted
 them without validation errors or warnings. Expected statement rows/balances
 are **8/-396.00**, **10/-495.00**, **12/-594.00**, **14/-693.00**, and
 **16/-792.00**. Original and working copies are separate. This is fixture
-preparation, not completed installed import or model acceptance.
+preparation; the owner's installed walkthrough and audit follow.
+
+**PASS — owner offline import/model walkthrough, with recorded order variation:**
+the owner reported that all checks passed while noting they did not follow the
+order precisely. This covers the requested disabled/enabled-update offline
+sessions, local responsiveness, installed-parser use, no-model guidance, training,
+restart, and prediction. The report does not reconstruct the precise chronology.
+The owner clarified that the initial five one-off source choices were **Copy to
+Archive**, including the files originally proposed for Move and Leave. Those two
+retention choices therefore remain separate pending checks, not inferred passes.
+
+The read-only audit found one synthetic account, **5 statements**, **16 canonical
+transactions**, and **60 statement memberships**. Every fixture hash appears in
+exactly one statement, with **8/10/12/14/16** memberships and matching end balances
+**-39600/-49500/-59400/-69300/-79200 USD minor units**. All synthetic transaction
+dates, descriptions, amounts, and running balances match the generated inputs
+exactly. SQLite integrity and foreign keys pass at revision
+`0003_precise_financial_schema`. The five preserved originals and working files
+remain, each managed archive matches its input hash, and the folder-import input
+was consumed while its fixture copy remained. This corroborates duplicate and
+overlap handling, copy retention, and the reported folder-import move.
+
+The local model is inside staging, uses bundle version `1.0-category-bundle`, and
+records **16 training samples and 2 categories**. Independent reload predicted
+all 16 saved rows into their stored categories. All 16 rows are categorized,
+9 are verified, and automatic update checks are enabled in the saved config.
+Because the model contains all initial 16 rows, two final synthetic exports with
+new rows were prepared for Move/Leave and prediction without retraining after
+another offline restart. They should yield **18/-891.00** and **20/-990.00**.
+This further check remains pending; the independent reload of the existing
+training rows is not presented as prediction on unseen transactions.
+
+**PASS — fresh staging backup and test restore:** following the clarified
+instructions, the owner's all-checks-passed report includes creation and testing
+of the new staging backup. The retained snapshot is inside staging, has the
+current schema, and passes integrity/foreign-key checks. It contains the empty
+pre-import state (zero accounts/statements/transactions), so row counts correctly
+differ from the populated live database. A separate disposable restore matched
+every row in every backup table and passed integrity checks. The live database,
+snapshot, and earlier non-staging backup were preserved. Switching the installed
+app to a new restored path was optional and **NOT RUN**.
 
 The **404** for the 1.4 Intel installer manifest is a service
 prerequisite for the later coordinated transition; no server change was made.

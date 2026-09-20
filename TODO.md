@@ -43,9 +43,9 @@ reviewed bytes. Intel clients start without Homebrew/build tools at runtime.
   tagged Windows x64 frozen build using the
   [offline acceptance procedure](docs/client-offline-acceptance.md).
 - [ ] `[USER]` Run the installed-app network-disabled first-start/restart
-  walkthrough on Windows x64. Intel macOS empty-profile first start/restart and
-  responsive local use passed; finish its installed-plugin and trained-model
-  walkthroughs, including imports with updates disabled and after failed checks.
+  walkthrough on Windows x64. Intel macOS owner checks passed with order
+  variation; finish the prepared saved-model/new-row offline prediction check
+  alongside the remaining source-retention choices below.
 
 Acceptance: disabled checks attempt no network access; enabled checks fail in the
 background after first paint and preserve local use. Parsing/categorization with
@@ -57,13 +57,11 @@ First import from an empty offline profile is the separate F1 proposal.
 - [ ] `[USER]` Walk through first run, account login, signed plugin install,
   one-off import, folder import, overlap handling, explicit statement contribution,
   and database backup/test restore on Windows.
-- [ ] `[USER]` Finish the Intel MacBook walkthrough: one-off/folder/overlap imports
-  and source retention, plus fresh staging database backup creation and test
-  restore with schema/row parity. Testing an existing older backup passed; it
-  does not establish creation of a current staging backup. Fresh offline first
-  run, staging login, signed plugin installation, Keychain restart/sign-out, and
-  explicit synthetic contribution are accepted.
-  Reserve Jacob's testing for official-release
+- [ ] `[USER]` Finish the Intel MacBook's **Move to Archive** and **Leave in
+  Place** checks using the prepared disposable synthetic files. The initial
+  walkthrough used Copy to Archive; exact-money imports, duplicate/overlap/folder
+  handling, copy retention, staging backup/test restore, login/Keychain/sign-out,
+  and synthetic contribution passed. Reserve Jacob's testing for official-release
   usability and product-gap feedback.
 
 Acceptance: both walkthroughs work without source-code knowledge, and each
