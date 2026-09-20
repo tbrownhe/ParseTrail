@@ -11,7 +11,8 @@ contains findings and detailed acceptance criteria for the chunk IDs below.
 
 The owner has approved P1.5, P1.6, and P2.2. Later correctness/cleanup proposals
 remain pending, and **Client feature proposals require further discussion before
-any implementation**. Native acceptance still requires the prepared owner checks.
+any implementation**. Remaining native/release acceptance still requires the
+prepared owner checks; the Intel installed offline/P2.2 walkthrough is accepted.
 
 The current Mac execution checklist and return-note template are in the
 [Intel Mac handover](docs/intel-mac-handover.md).
@@ -43,9 +44,8 @@ reviewed bytes. Intel clients start without Homebrew/build tools at runtime.
   tagged Windows x64 frozen build using the
   [offline acceptance procedure](docs/client-offline-acceptance.md).
 - [ ] `[USER]` Run the installed-app network-disabled first-start/restart
-  walkthrough on Windows x64. Intel macOS owner checks passed with order
-  variation; finish the prepared saved-model/new-row offline prediction check
-  alongside the remaining source-retention choices below.
+  walkthrough on Windows x64, including installed-plugin and trained-model use
+  with updates disabled and after failed background checks.
 
 Acceptance: disabled checks attempt no network access; enabled checks fail in the
 background after first paint and preserve local use. Parsing/categorization with
@@ -57,12 +57,8 @@ First import from an empty offline profile is the separate F1 proposal.
 - [ ] `[USER]` Walk through first run, account login, signed plugin install,
   one-off import, folder import, overlap handling, explicit statement contribution,
   and database backup/test restore on Windows.
-- [ ] `[USER]` Finish the Intel MacBook's **Move to Archive** and **Leave in
-  Place** checks using the prepared disposable synthetic files. The initial
-  walkthrough used Copy to Archive; exact-money imports, duplicate/overlap/folder
-  handling, copy retention, staging backup/test restore, login/Keychain/sign-out,
-  and synthetic contribution passed. Reserve Jacob's testing for official-release
-  usability and product-gap feedback.
+
+Reserve Jacob's testing for official-release usability and product-gap feedback.
 
 Acceptance: both walkthroughs work without source-code knowledge, and each
 source-file move/retention choice is explained before the action.

@@ -386,8 +386,8 @@ checks enabled, and no model files. This covers responsive empty-profile use
 with enabled checks; supported imports after failed checks remain separate.
 
 The `ParseTrail-Staging` profile was absent before that walkthrough and now
-contains acceptance state. Preserve it. The results below distinguish the
-completed walkthrough from the remaining Move/Leave retention checks.
+contains acceptance state. Preserve it. The results below include the completed
+Move/Leave retention checks and final offline prediction audit.
 Sanitized `PATH` does not establish operation on a machine where build
 tools are physically absent.
 
@@ -457,9 +457,9 @@ the owner reported that all checks passed while noting they did not follow the
 order precisely. This covers the requested disabled/enabled-update offline
 sessions, local responsiveness, installed-parser use, no-model guidance, training,
 restart, and prediction. The report does not reconstruct the precise chronology.
-The owner clarified that the initial five one-off source choices were **Copy to
-Archive**, including the files originally proposed for Move and Leave. Those two
-retention choices therefore remain separate pending checks, not inferred passes.
+The owner clarified that the two files originally proposed for Move and Leave
+were imported with **Copy to Archive** instead. Those two retention choices were
+therefore tested separately in the final check below, not inferred from this run.
 
 The read-only audit found one synthetic account, **5 statements**, **16 canonical
 transactions**, and **60 statement memberships**. Every fixture hash appears in
@@ -479,8 +479,8 @@ all 16 saved rows into their stored categories. All 16 rows are categorized,
 Because the model contains all initial 16 rows, two final synthetic exports with
 new rows were prepared for Move/Leave and prediction without retraining after
 another offline restart. They should yield **18/-891.00** and **20/-990.00**.
-This further check remains pending; the independent reload of the existing
-training rows is not presented as prediction on unseen transactions.
+The final result follows below; the independent reload of the existing training
+rows alone was not presented as prediction on unseen transactions.
 
 **PASS — fresh staging backup and test restore:** following the clarified
 instructions, the owner's all-checks-passed report includes creation and testing
@@ -491,6 +491,41 @@ differ from the populated live database. A separate disposable restore matched
 every row in every backup table and passed integrity checks. The live database,
 snapshot, and earlier non-staging backup were preserved. Switching the installed
 app to a new restored path was optional and **NOT RUN**.
+
+**PASS — final Move/Leave and offline saved-model prediction:** the owner reported
+following the final checklist precisely, with everything passing. It required
+normal quit, network disconnection, native STAGING restart with system-only
+`PATH`, importing two new synthetic exports into the existing account, and
+categorizing their new rows with the saved model without retraining.
+
+The final read-only audit confirmed:
+
+- **Move to Archive:** the working source disappeared, its managed archive
+  matches SHA-256 `ca8066ac1c70ab08e64c7de8f16795afddb433d6e0089783012d61f3426ce9b3`,
+  and the preserved original remains. Its statement contains **18 rows** and
+  ends at **-89100 USD minor units**.
+- **Leave in Place:** the working source remains unchanged, no managed archive
+  exists for it, and the preserved original remains. SHA-256 is
+  `4779689f33560279261c3258c8ea7e7da27473284b6e5cee7784bae037fee41e`; its statement
+  contains **20 rows** and ends at **-99000 USD minor units**.
+- The final database has **7 statements**, **20 canonical transactions**, and
+  **98 statement memberships**. Every expected synthetic date, description,
+  amount, and running balance matches exactly. SQLite integrity and foreign keys
+  pass at `0003_precise_financial_schema`; all seven fixture originals remain.
+- The saved model still records **16 training samples and 2 categories**. Its
+  independently reloaded predictions agree with all saved categories, including
+  the **4 new rows** beyond the training export. The earlier **9 verified rows**
+  remain verified. Onboarding version 1 and enabled automatic update checks persist.
+
+This completes the approved Intel installed offline and P2.2 walkthrough using
+synthetic fixtures. Local verification also reconfirmed the release signature,
+original inventory digest, and pinned tag after the final check. No runtime
+source change or replacement build was needed. Documentation changes passed
+`git diff --check`; no full source-suite rerun or release rebuild was necessary.
+The final dry-build source-suite count remains unavailable. Windows native
+acceptance, hosted CI results, preserved-artifact publication, the coordinated
+1.3-to-1.4 transition, and a machine with build tools physically absent remain
+open; optional installed restore-to-new-path and Apple Silicon were not run.
 
 The **404** for the 1.4 Intel installer manifest is a service
 prerequisite for the later coordinated transition; no server change was made.
