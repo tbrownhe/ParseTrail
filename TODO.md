@@ -14,8 +14,9 @@ remain pending, and **Client feature proposals require further discussion before
 any implementation**. Remaining native/release acceptance still requires the
 prepared owner checks; the Intel installed offline/P2.2 walkthrough is accepted.
 
-The current Mac execution checklist and return-note template are in the
-[Intel Mac handover](docs/intel-mac-handover.md).
+The completed Mac results are in the [Intel return note](docs/intel-mac-return-note.md).
+The [Windows tagged-build record](docs/engineering-acceptance.md#windows-tagged-build-preparation-september-19-2026)
+identifies the preserved installer awaiting local signing and installed acceptance.
 
 ## P1.5 — Client release reliability
 
@@ -25,10 +26,10 @@ The current Mac execution checklist and return-note template are in the
   and owner offline first start/restart with system-only `PATH` passed; see the
   [installed candidate record](docs/engineering-acceptance.md#intel-installed-candidate-verification-september-19-2026).
 - [~] **R3b — Architecture gates:** obtain the hosted Windows x64 /
-  `macos-15-intel` test results and `[USER]` accept the tagged Windows native build;
-  source/header tests alone do not establish frozen-app acceptance.
-- [ ] `[USER]` Complete the Windows x64 tagged signed dry run, including fresh
-  bootstrap, native build, architecture check, and frozen smoke.
+  `macos-15-intel` test results.
+- [~] `[USER]` Sign and verify the preserved Windows x64 tagged installer and
+  record its release inventory. Use the prepared local signing handoff; retain
+  the reviewed installer bytes instead of rebuilding the same version.
 - [ ] `[USER]` Rehearse preserved artifact publication, install/upgrade,
   credential storage, and plugin update on Windows x64 and Intel macOS.
   Include the [1.3-to-1.4 manual upgrade and API/website transition](docs/client-release-contract.md)
@@ -40,9 +41,6 @@ reviewed bytes. Intel clients start without Homebrew/build tools at runtime.
 
 ## P1.6 — Offline session acceptance
 
-- [~] **O1 — Offline harness:** `[USER]` accept all three modes in the final
-  tagged Windows x64 frozen build using the
-  [offline acceptance procedure](docs/client-offline-acceptance.md).
 - [ ] `[USER]` Run the installed-app network-disabled first-start/restart
   walkthrough on Windows x64, including installed-plugin and trained-model use
   with updates disabled and after failed background checks.

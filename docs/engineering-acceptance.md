@@ -532,6 +532,61 @@ prerequisite for the later coordinated transition; no server change was made.
 No replacement candidate, artifact activation, tag push, merge, or deployment
 was performed.
 
+### Windows tagged build preparation: September 19, 2026
+
+After reviewing the completed Intel handover, the Windows assistant created an
+isolated, clean checkout of the existing `client-v1.4.0` tag at
+`42a3dac970459327d8f3144f40195f4166a98cc9`. The tag was neither moved nor pushed,
+and no merge into `main` was needed. The build started on September 19 local
+Pacific time (September 20 UTC), using a new client virtual environment.
+
+- **PASS — bootstrap and locked sync:** native Windows 11 build 26200 / AMD64,
+  managed CPython **3.13.15**, uv **0.12.5**, PyInstaller **6.21.0**, NSIS **3.12**.
+  The package-free bootstrap ran before installing the locked client dependencies.
+- **PASS — full source suite:** **451 passed, 3 skipped in 138.08s**. The skips
+  cover Mac Bash integration and two POSIX `flock` cases. Bundled trust-key
+  validation also passed.
+- **PASS — tagged frozen build:** the unchanged tagged builder produced a
+  **PE32+ AMD64** executable, then passed the bounded runtime smoke and all three
+  real-entry-point offline modes: `fresh`, `cached`, and `network-failure`.
+  These automated Windows checks used `QT_QPA_PLATFORM=offscreen`; installed
+  native GUI and physical network-disconnection checks remain separate.
+  This completes the Windows O1 frozen-session gate.
+- **PASS — installer packaging:** NSIS produced
+  `parsetrail_1.4.0_windows-x86_64_setup.exe`, **154450323 bytes**, SHA-256
+  `08ee28ce3e64dd44f7efcbedf733fe2e31fda05f044ea8f08b7c8939731ccf07`.
+  The frozen application executable SHA-256 is
+  `655bfa4492f4fcda935e342e9206ccfbb2a224daf0ba45f06d0b06f19ec4c7ce`.
+  Its embedded metadata independently matches version **1.4.0**, the pinned
+  source/tag, Python **3.13.15**, and target **windows-x86_64**.
+
+The assistant stopped the builder at its signing boundary so the owner can
+enter the encrypted key's passphrase in their own terminal. At that boundary,
+the target output directory contained only the installer: **no signed manifest,
+detached signature, or release inventory existed yet**. The local handoff checks
+the clean checkout, tag, and installer digest before using the tagged
+`scripts.client_release sign` / `verify` and `scripts.release_inventory` commands.
+It preserves these bytes and does not repeat packaging. This is a prepared
+candidate, not yet a completed signed dry run.
+
+The ignored local checkout is `scratch/windows-1.4.0-candidate`; its full build
+log is `scratch/windows-1.4.0-build.log`, SHA-256
+`6405c67818a9a7973fbfa8c96918a65b2f4e0c2c31510f556d78a1c4166a7936`.
+The operator signing handoff is `scratch/sign-windows-1.4.0.ps1`; its PowerShell
+syntax check passed. These are local operator files rather than release payloads.
+
+An installed ParseTrail application and a `ParseTrail-Staging` profile already
+exist on this Windows account. Preserve both. A fresh installed-user check needs
+a separate Windows account or suitable isolated test environment; the NSIS
+installer detects and uninstalls a previous registered installation, so an
+alternate install directory alone does not establish isolation.
+
+The focused `test/windows-native-acceptance` branch was pushed for a draft PR.
+SSH Git access works, but no authenticated GitHub API/CLI credential was
+available to create the PR automatically. The owner received the prepared PR
+link; hosted CI remains pending until it is opened. No installation, artifact
+publication, release-tag push, merge, or deployment was performed.
+
 ## Staging migration and recovery: August 2026
 
 The PostgreSQL 12-to-17 rehearsal preserved the source volume and matched every
