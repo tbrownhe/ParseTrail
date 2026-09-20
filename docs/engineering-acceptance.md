@@ -374,12 +374,40 @@ Direct checks confirmed macOS **15.7.9 (24G830)** and **x86_64**.
   or candidate rebuild is justified by this result alone. Use native Qt for
   the installed-app walkthrough, as specified in the handover.
 
-The `ParseTrail-Staging` profile was absent before the owner walkthrough.
-Do not create or reset it merely to repeat diagnostics. The owner will disconnect
-networking and run the installed native GUI locally, because disconnecting also
-interrupts the assistant connection. Visible first start/restart, Keychain,
-staging catalog installation, fixture imports, model use, contribution, and
-database backup/restore remain pending until their observations are returned.
+**PASS — owner offline first start and restart:** after receiving the native,
+system-only-PATH launch command and the five-step offline checklist, the owner
+reported, "Everything ran fine as [STAGING] with no errors." This accepts the
+requested fresh start, five-page guide, ten-second wait, local views/Preferences,
+normal quit, and offline restart with database/onboarding persistence and no
+blocking login. No launch error was reported; individual macOS prompt wording
+was not supplied. A subsequent read-only check confirmed onboarding version 1,
+an existing selected database inside the staging profile, automatic update
+checks enabled, and no model files. This covers responsive empty-profile use
+with enabled checks; supported imports after failed checks remain separate.
+
+The `ParseTrail-Staging` profile was absent before that walkthrough and now
+contains acceptance state. Preserve it. Keychain, staging catalog installation,
+fixture imports, model use, contribution, and database backup/restore remain
+pending. Sanitized `PATH` does not establish operation on a machine where build
+tools are physically absent.
+
+**Staging prerequisites:** unauthenticated checks from this Mac initially failed
+with curl exit **6**, HTTP **000** (hostname resolution), for
+`https://api.staging.parsetrail.com/api/v1/` routes `plugins/manifest`,
+`plugins/manifest-signature`, `clients/macos-x86_64/manifest`, and
+`keys/public-key`. The owner confirmed connection to the staging LAN/VPN.
+The documented LAN address with curl `--resolve` and normal HTTPS verification
+returned **200/200/404/200**, respectively. No system hosts entry existed for the
+API hostname; an attempted additive update stopped at `sudo`'s password
+requirement without changing the file. The owner was given the local command.
+
+The public plugin catalog's signature and schema verified against the installed
+candidate's bundled keys, and all **22 artifacts** passed runtime compatibility
+checks: release **20260829091732**, manifest SHA-256
+`4a68f8035cc833f8bdc1e6f70578f84100d308a3eb3337c934eef92c7458a093`.
+This is catalog verification, not authenticated artifact installation or Keychain
+acceptance. The **404** for the 1.4 Intel installer manifest is a service
+prerequisite for the later coordinated transition; no server change was made.
 No replacement candidate, artifact activation, tag push, merge, or deployment
 was performed.
 

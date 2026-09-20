@@ -18,11 +18,11 @@ The current Mac execution checklist and return-note template are in the
 
 ## P1.5 — Client release reliability
 
-- [~] **R2 — Intel macOS packaging:** `[USER]` Accept the installed runtime
-  without build-tool paths using the preserved signed candidate and the
-  [Mac release gates](client/README.md#intel-mac-release-gates). Release verification
-  and separate DMG installation are complete; native owner observations remain
-  pending in the [installed candidate record](docs/engineering-acceptance.md#intel-installed-candidate-verification-september-19-2026).
+- [~] **R2 — Intel macOS packaging:** `[USER]` Accept operation on a machine
+  where build tools are physically absent when that environment is available.
+  The signed candidate's installation, native synthetic runtime/offline probes,
+  and owner offline first start/restart with system-only `PATH` passed; see the
+  [installed candidate record](docs/engineering-acceptance.md#intel-installed-candidate-verification-september-19-2026).
 - [~] **R3b — Architecture gates:** obtain the hosted Windows x64 /
   `macos-15-intel` test results and `[USER]` accept the tagged Windows native build;
   source/header tests alone do not establish frozen-app acceptance.
@@ -43,8 +43,9 @@ reviewed bytes. Intel clients start without Homebrew/build tools at runtime.
   tagged Windows x64 frozen build using the
   [offline acceptance procedure](docs/client-offline-acceptance.md).
 - [ ] `[USER]` Run the installed-app network-disabled first-start/restart
-  walkthrough on Windows x64 and Intel macOS, including responsive local use.
-  Record empty-profile, installed-plugin, and trained-model behavior separately.
+  walkthrough on Windows x64. Intel macOS empty-profile first start/restart and
+  responsive local use passed; finish its installed-plugin and trained-model
+  walkthroughs, including imports with updates disabled and after failed checks.
 
 Acceptance: disabled checks attempt no network access; enabled checks fail in the
 background after first paint and preserve local use. Parsing/categorization with
@@ -56,8 +57,11 @@ First import from an empty offline profile is the separate F1 proposal.
 - [ ] `[USER]` Walk through first run, account login, signed plugin install,
   one-off import, folder import, overlap handling, explicit statement contribution,
   and database backup/test restore on Windows.
-- [ ] `[USER]` Repeat on the owner's Intel MacBook. Reserve Jacob's testing for
-  official-release usability and product-gap feedback.
+- [ ] `[USER]` Finish the Intel MacBook walkthrough: login/Keychain/sign-out,
+  signed plugin installation, one-off/folder/overlap imports and source retention,
+  explicit synthetic contribution, and database backup/test restore. Fresh
+  offline first run is accepted. Reserve Jacob's testing for official-release
+  usability and product-gap feedback.
 
 Acceptance: both walkthroughs work without source-code knowledge, and each
 source-file move/retention choice is explained before the action.
