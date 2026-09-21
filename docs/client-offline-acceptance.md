@@ -210,7 +210,8 @@ Signed plugin installation, Credential Locker persistence/sign-out/relogin, and
 synthetic contribution subsequently passed; results are in the
 [Windows installed record](engineering-acceptance.md#windows-installed-offline-acceptance-september-20-2026).
 One-off/folder imports, duplicate/overlap handling, and Copy retention also passed.
-Move/Leave choices, model operations, and backup/restore remain.
+Move/Leave choices and offline model operations subsequently passed as well;
+database backup/test restore remains.
 This local installation does not complete the separate staging
 API/website/artifact transition rehearsal.
 
@@ -245,7 +246,7 @@ and working copies. One-off **Copy to Archive** imports of `04-training.csv` and
 `05-training-more.csv` reached the expected 16 transactions and −792.00 USD.
 Independent checks accepted all five archive hashes and 60 statement memberships.
 
-For the pending model check, create `Synthetic Payment` and `Synthetic Interest`
+For model training, create `Synthetic Payment` and `Synthetic Interest`
 through **Categories > Category Manager**, using Expense for both test categories.
 In **Transactions > Review Transactions**, filter `SYNTHETIC LOAN PAYMENT`, select
 its eight rows, apply `Synthetic Payment`, and save changes. Repeat for the eight
@@ -254,3 +255,35 @@ selected rows verified; training uses these saved, verified labels. Choose
 **Train Model > Train Model for Deployment** and save to the offered staging
 model location. Keep the last two files unimported until after training and
 restart so predictions are tested on new rows.
+
+The owner completed this training step. Independent verification accepted the
+16 saved, verified labels and the profile-selected model's two categories and
+16-sample metadata. The model's original digest is recorded in the
+[Windows installed evidence](engineering-acceptance.md#windows-installed-offline-acceptance-september-20-2026).
+
+The prediction check uses two offline restarts. First, keep update
+checks disabled, quit, reopen with the staging launcher, and wait ten seconds.
+Import `06-move-predict.csv` from `working` using **Move to Archive**: its working
+copy should disappear, its master should remain, and the total should reach
+18 transactions / −891.00 USD with categories assigned to the two new rows.
+Then enable automatic update checks in Preferences, quit, and reopen while
+networking remains disconnected. After 30 seconds, confirm local views respond
+and import `07-leave-predict.csv` using **Leave in Place**. Expect 20 transactions /
+−990.00 USD, the working source retained without a managed archive copy, and all
+four new rows correctly categorized but still unverified. Do not retrain or
+manually verify those rows before collecting the result.
+
+Both restarts and imports passed. Independent checks found seven statements,
+20 exact transactions, 98 memberships, four correct unverified predictions,
+16 unchanged verified labels, and an unchanged saved-model digest. Move/Leave
+source and archive checks passed, and both background update failures were logged
+before local work continued. Windows installed P1.6 is accepted; this does not
+complete the pending replacement-candidate provenance or release-publication gates.
+
+For the last Windows P2.2 step, use **File > Back Up Database** to save
+`windows-native-final.dbb` inside the staging profile's `backup` directory. Expect
+**Backup Verified**, then select that file through **File > Test Database Backup**.
+The disposable restore should report **Restore Test Passed** with one account,
+seven statements, 20 transactions, and two categories. It preserves the active
+database selection and removes its temporary restored copy. The database backup
+does not include the model or statement archive.

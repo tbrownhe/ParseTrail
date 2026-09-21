@@ -800,6 +800,51 @@ training. Native category assignment, model training/restart/prediction,
 Move/Leave choices, enabled-check offline use, and backup/test restore remain
 open. This checkpoint does not claim model acceptance.
 
+**PASS — native offline category review and model training:** the owner completed
+the category assignment and **Train Model for Deployment** steps and reported a
+saved `.mdl` file. Read-only verification found all **16** training rows verified,
+with eight payment rows assigned `Synthetic Payment` and eight interest rows
+assigned `Synthetic Interest`. The profile-selected model exists inside the
+staging profile and loads as bundle version **1.0-category-bundle**, recording
+**16 samples and two categories**. Its size is **2923 bytes**, SHA-256
+`eaa000e540b85524a8e0c8f9be8d76254ab0a6cc8b88a7ebe143a331092f8894`.
+The database retains five statements and 60 memberships; integrity and
+foreign-key checks pass. Automatic update checks remain disabled.
+
+Both remaining prediction fixtures still match their original hashes in the
+working directory. The model checksum is retained locally for comparison after
+restart and prediction, so successful use of this saved model can be separated
+from retraining. This accepts native labeling, persistence, and training only;
+restart, predictions on new rows under both offline update settings, Move/Leave
+choices, and backup/test restore remain pending.
+
+**PASS — installed offline saved-model predictions and Move/Leave choices:**
+the owner followed both restart sequences with networking disconnected, first
+with automatic checks disabled and then enabled, and imported the final two
+fixtures with **Move to Archive** and **Leave in Place**, respectively. The owner
+reported **−990.00 USD** and no further errors. Read-only verification found
+**seven statements, 20 canonical transactions, and 98 memberships**, with every
+financial field matching the synthetic expectations. The four new rows have
+the correct payment/interest categories and confidence values and remain
+unverified; all 16 original manual labels remain verified. The model SHA-256
+is unchanged from training, proving the saved model was used without retraining.
+
+The moved working file is absent and its archive hash matches. The Leave source
+remains unchanged without a managed archive copy. All seven masters and the
+other six working sources retain their original hashes. SQLite integrity and
+foreign-key checks pass. Config now enables automatic checks; the log records
+client and plugin update failures during the second restart, while the subsequent
+local import and prediction succeeded without a blocking login or model error.
+
+This completes **Windows P1.6 installed offline acceptance**, alongside the
+previously accepted Intel walkthrough and automated source/frozen network-denial
+checks. Physical disconnection demonstrates local usability; the automated
+interception checks provide the evidence for zero network attempts when checks
+are disabled. The empty-profile parser starter pack and improved no-model
+guidance remain F1 proposals. Windows database backup/test restore remains the
+last P2.2 walkthrough item; replacement-candidate provenance, hosted CI, and
+publication/transition rehearsal remain separate release gates.
+
 ## Staging migration and recovery: August 2026
 
 The PostgreSQL 12-to-17 rehearsal preserved the source volume and matched every

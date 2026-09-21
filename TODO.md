@@ -40,24 +40,12 @@ Acceptance: one clean tag produces traceable target-specific artifacts; a dry
 run does not change public directories, and publish-existing uses exactly the
 reviewed bytes. Intel clients start without Homebrew/build tools at runtime.
 
-## P1.6 — Offline session acceptance
-
-- [ ] `[USER]` Complete Windows trained-model offline use with updates disabled,
-  then parser/model use after failed background checks. Fresh offline first
-  start/restart and installed-plugin imports with checks disabled are accepted in the
-  [Windows installed record](docs/engineering-acceptance.md#windows-installed-offline-acceptance-september-20-2026).
-
-Acceptance: disabled checks attempt no network access; enabled checks fail in the
-background after first paint and preserve local use. Parsing/categorization with
-their local prerequisites never downloads package data or blocks on the network.
-First import from an empty offline profile is the separate F1 proposal.
-
 ## P2.2 — Native fresh-user walkthroughs
 
-- [ ] `[USER]` Complete Windows Move/Leave source-file choices and database
-  backup/test restore. First run, login, signed plugins, Credential
-  Locker persistence, sign-out/relogin, synthetic contribution, one-off import,
-  folder import, duplicate/overlap handling, and Copy retention are accepted in the
+- [ ] `[USER]` Complete Windows database backup/test restore. First run, login,
+  signed plugins, Credential Locker persistence, sign-out/relogin, synthetic contribution, one-off import,
+  folder import, duplicate/overlap handling, Copy/Move/Leave choices, and offline
+  model training/restart/prediction are accepted in the
   [Windows installed record](docs/engineering-acceptance.md#windows-installed-offline-acceptance-september-20-2026).
 
 Reserve Jacob's testing for official-release usability and product-gap feedback.
