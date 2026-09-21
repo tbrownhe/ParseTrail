@@ -27,10 +27,10 @@ identifies the preserved installer used for Windows native acceptance.
   [installed candidate record](docs/engineering-acceptance.md#intel-installed-candidate-verification-september-19-2026).
 - [~] **R3b — Architecture gates:** obtain the hosted Windows x64 /
   `macos-15-intel` test results.
-- [ ] Prepare and accept a new versioned candidate containing the Windows
-  build-metadata fix after collecting remaining walkthrough fixes. Preserve the
-  signed 1.4.0 installers and tag; repeat the frozen provenance gate and verify
-  the installed About label on the replacement.
+- [~] Prepare and accept the 1.4.1 candidate containing the Windows build-metadata
+  fix. Preserve the signed 1.4.0 installers and tag; use a separate output directory,
+  repeat the frozen provenance gate, and verify the installed About label on the
+  replacement. Rebuild both supported targets from the same source tag.
 - [ ] `[USER]` Rehearse preserved artifact publication, install/upgrade,
   credential storage, and plugin update on Windows x64 and Intel macOS.
   Include the [1.3-to-1.4 manual upgrade and API/website transition](docs/client-release-contract.md)

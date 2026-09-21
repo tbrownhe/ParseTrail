@@ -1,5 +1,9 @@
 Unreleased
 ==========
+- Prepare client 1.4.1 as the replacement candidate after Windows/Intel native
+  acceptance; preserve the signed 1.4.0 candidate artifacts and tag
+- Package Windows build metadata under its canonical resource filename and
+  reject missing or mismatched provenance in the frozen runtime smoke gate
 - Exercise real startup, onboarding, signed cached imports, and local models in
   isolated offline release probes; run them against each frozen build before signing
 - Publish preserved installer/plugin releases with public keys, recorded inventory
