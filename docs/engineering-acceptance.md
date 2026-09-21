@@ -673,6 +673,39 @@ file checks in 34.5 seconds**, followed by the candidate installer hash check.
 The backup, original app/data, and prepared fresh staging state still matched.
 This follow-up did not launch the installer or change the signed candidate.
 
+### Windows installed offline acceptance: September 20, 2026
+
+The owner completed the prepared installer and staging launcher and reported
+the **[STAGING] 1.4.0** window open. Read-only verification confirmed the machine
+registry now reports **1.4.0** and all **2,528** packaged application files match
+the tagged build exactly. The installed executable SHA-256 remains
+`655bfa4492f4fcda935e342e9206ccfbb2a224daf0ba45f06d0b06f19ec4c7ce`.
+All **1,091** backed-up production profile/database/archive/report files still
+match their original hashes. The prior staging folder remains preserved.
+
+**PASS — fresh offline first start and restart:** the owner explicitly confirmed
+networking was disconnected during the initial launch and again for the second
+staging launch, and reported that the requested checks all passed. This accepts
+the five-page onboarding, offered staging database location, ten-second wait,
+responsive local views and Preferences, normal quit, and offline restart with
+the database retained, onboarding complete, and no blocking login. No installer
+or launch error was reported. The independent config check found onboarding
+version **1**, enabled automatic update checks, the staging API URL, an existing
+database inside the staging profile, no trained model, and no plaintext token.
+Installed-parser/model use and the rest of P2.2 remain pending.
+
+**OPEN — Windows About provenance:** the file comparison also exposed a release
+packaging defect. Windows copies the correctly populated metadata into the bundle
+under a random `parsetrail-build-<id>.json` filename, while the application's
+resource reader requires `parsetrail/build-metadata.json`. Resolving the actual
+installed resource directory through that reader returns no metadata and the
+About label `development source`. The signature, inventory, and file hashes
+remain valid; the defect is the application's access to its embedded provenance.
+Correct the Windows resource filename and add a frozen smoke gate before the
+next candidate. Preserve the signed 1.4.0 bytes and tag; a replacement must use
+a new version/tag. Continue the remaining native workflow checks on this
+identified candidate while collecting any additional fixes.
+
 ## Staging migration and recovery: August 2026
 
 The PostgreSQL 12-to-17 rehearsal preserved the source volume and matched every

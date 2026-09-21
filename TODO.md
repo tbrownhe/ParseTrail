@@ -27,6 +27,10 @@ identifies the preserved installer awaiting installed acceptance.
   [installed candidate record](docs/engineering-acceptance.md#intel-installed-candidate-verification-september-19-2026).
 - [~] **R3b — Architecture gates:** obtain the hosted Windows x64 /
   `macos-15-intel` test results.
+- [ ] Fix the Windows bundled build-metadata filename and add a frozen smoke
+  gate for readable, matching release provenance. Collect remaining walkthrough
+  fixes before preparing a new versioned candidate; preserve the signed 1.4.0
+  installers and tag.
 - [ ] `[USER]` Rehearse preserved artifact publication, install/upgrade,
   credential storage, and plugin update on Windows x64 and Intel macOS.
   Include the [1.3-to-1.4 manual upgrade and API/website transition](docs/client-release-contract.md)
@@ -38,9 +42,10 @@ reviewed bytes. Intel clients start without Homebrew/build tools at runtime.
 
 ## P1.6 — Offline session acceptance
 
-- [ ] `[USER]` Run the installed-app network-disabled first-start/restart
-  walkthrough on Windows x64, including installed-plugin and trained-model use
-  with updates disabled and after failed background checks.
+- [ ] `[USER]` Complete Windows installed-plugin and trained-model offline use
+  with updates disabled and after failed background checks. Fresh offline first
+  start/restart is accepted in the
+  [Windows installed record](docs/engineering-acceptance.md#windows-installed-offline-acceptance-september-20-2026).
 
 Acceptance: disabled checks attempt no network access; enabled checks fail in the
 background after first paint and preserve local use. Parsing/categorization with
