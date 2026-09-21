@@ -54,10 +54,10 @@ First import from an empty offline profile is the separate F1 proposal.
 
 ## P2.2 — Native fresh-user walkthroughs
 
-- [ ] `[USER]` Complete Windows folder import, Move/Leave source-file choices,
-  and database backup/test restore. First run, login, signed plugins, Credential
+- [ ] `[USER]` Complete Windows Move/Leave source-file choices and database
+  backup/test restore. First run, login, signed plugins, Credential
   Locker persistence, sign-out/relogin, synthetic contribution, one-off import,
-  duplicate/overlap handling, and Copy retention are accepted in the
+  folder import, duplicate/overlap handling, and Copy retention are accepted in the
   [Windows installed record](docs/engineering-acceptance.md#windows-installed-offline-acceptance-september-20-2026).
 
 Reserve Jacob's testing for official-release usability and product-gap feedback.

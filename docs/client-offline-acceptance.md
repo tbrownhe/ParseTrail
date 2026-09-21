@@ -209,8 +209,8 @@ offline restart. Preserve the backups and the parked previous staging profile.
 Signed plugin installation, Credential Locker persistence/sign-out/relogin, and
 synthetic contribution subsequently passed; results are in the
 [Windows installed record](engineering-acceptance.md#windows-installed-offline-acceptance-september-20-2026).
-One-off imports, duplicate/overlap handling, and Copy retention also passed.
-Folder import, Move/Leave choices, model operations, and backup/restore remain.
+One-off/folder imports, duplicate/overlap handling, and Copy retention also passed.
+Move/Leave choices, model operations, and backup/restore remain.
 This local installation does not complete the separate staging
 API/website/artifact transition rehearsal.
 
@@ -239,10 +239,18 @@ archive hashes. The missing-model dialog occurs after the import commits; this
 candidate currently reports `Auto-categorization Failed` with a log reference.
 The imported rows remain available for manual categorization and training.
 
-For the next stage, one verified copy of `03-folder.csv` is prepared in the staging
-database's managed import directory. **Statements > Import All** moves that copy
-into the archive; the synthetic master and working copies are preserved. Expect
-12 transactions and −594.00 USD. Import `04-training.csv` and
-`05-training-more.csv` using **Copy to Archive** to reach 16 transactions and
-−792.00 USD. Keep the last two files unimported until after training so predictions
-are tested on new rows.
+The owner then imported the prepared `03-folder.csv` through **Statements >
+Import All**, which consumed the staged copy and preserved the synthetic master
+and working copies. One-off **Copy to Archive** imports of `04-training.csv` and
+`05-training-more.csv` reached the expected 16 transactions and −792.00 USD.
+Independent checks accepted all five archive hashes and 60 statement memberships.
+
+For the pending model check, create `Synthetic Payment` and `Synthetic Interest`
+through **Categories > Category Manager**, using Expense for both test categories.
+In **Transactions > Review Transactions**, filter `SYNTHETIC LOAN PAYMENT`, select
+its eight rows, apply `Synthetic Payment`, and save changes. Repeat for the eight
+`INTEREST` rows with `Synthetic Interest`. Applying a category also marks the
+selected rows verified; training uses these saved, verified labels. Choose
+**Train Model > Train Model for Deployment** and save to the offered staging
+model location. Keep the last two files unimported until after training and
+restart so predictions are tested on new rows.

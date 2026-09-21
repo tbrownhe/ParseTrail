@@ -782,6 +782,24 @@ F1 proposal; no feature implementation was started. Folder import, training and
 prediction, Move/Leave choices, enabled-check offline behavior, and database
 backup/test restore remain pending.
 
+**PASS — installed offline folder import and training inputs:** the owner
+completed **Statements > Import All** for the prepared third fixture, then copied
+the fourth and fifth fixtures into the archive through one-off import, reporting
+the expected **−792.00 USD** total. Read-only verification found **five statements,
+16 canonical transactions, and 60 statement memberships**. Every transaction
+matched the synthetic expected dates, descriptions, integer amounts, running
+balances, and USD currency. All five archived files matched their expected
+SHA-256 digests, and the third fixture no longer existed in the managed input
+folder. All seven master and working copies remained unchanged. SQLite integrity
+and foreign-key checks passed, and automatic update checks remained disabled.
+
+The 16 imported rows were still uncategorized and unverified at this checkpoint;
+no categories or model existed. The last two fixture hashes were absent from the
+database, preserving four new transactions for prediction acceptance after
+training. Native category assignment, model training/restart/prediction,
+Move/Leave choices, enabled-check offline use, and backup/test restore remain
+open. This checkpoint does not claim model acceptance.
+
 ## Staging migration and recovery: August 2026
 
 The PostgreSQL 12-to-17 rehearsal preserved the source volume and matched every
