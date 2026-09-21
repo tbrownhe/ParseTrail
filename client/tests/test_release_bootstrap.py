@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -328,3 +329,51 @@ def test_windows_builder_stops_before_project_sync_when_bootstrap_fails(tmp_path
     calls = [line for line in result.stdout.splitlines() if line.startswith("UV_CALL:")]
     assert len(calls) == 1
     assert "--script scripts/release_bootstrap.py check --platform windows-x86_64" in calls[0]
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows builder integration")
+def test_windows_builder_stages_canonical_metadata_and_cleans_up_on_failure(tmp_path):
+    installer_root = tmp_path / "installers"
+    installer_root.mkdir()
+    key = tmp_path / "dummy-key.pem"
+    key.write_text("not a signing key", encoding="utf-8")
+    builder_path = launcher.CLIENT_ROOT / "build_client_win64.ps1"
+
+    def quote(value):
+        return "'" + str(value).replace("'", "''") + "'"
+
+    harness = (
+        "function uv {\n"
+        "  $global:LASTEXITCODE = 0\n"
+        f"  if ($args -contains '--script') {{ Write-Output {quote(sys.executable)}; return }}\n"
+        "  if ($args -contains 'scripts.release_source') {\n"
+        "    $index = [Array]::IndexOf($args, '--metadata-output')\n"
+        "    $metadataPath = $args[$index + 1]\n"
+        "    Write-Host ('METADATA_PATH: ' + $metadataPath)\n"
+        "    Set-Content -LiteralPath $metadataPath -Value '{}'\n"
+        "    throw 'METADATA_PROBE_STOP'\n"
+        "  }\n"
+        "  throw 'Unexpected project command reached'\n"
+        "}\n"
+        f"& {quote(builder_path)} -ClientsDir {quote(installer_root)} -SigningKey {quote(key)}\n"
+    )
+    result = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", harness],
+        env={**os.environ, "TEMP": str(tmp_path), "TMP": str(tmp_path)},
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+    assert result.returncode != 0
+    assert "METADATA_PROBE_STOP" in result.stderr
+    metadata_paths = [
+        Path(line.removeprefix("METADATA_PATH: "))
+        for line in result.stdout.splitlines()
+        if line.startswith("METADATA_PATH: ")
+    ]
+    assert len(metadata_paths) == 1
+    metadata = metadata_paths[0]
+    assert metadata.name == "build-metadata.json"
+    assert metadata.parent.parent == tmp_path
+    assert not metadata.parent.exists()

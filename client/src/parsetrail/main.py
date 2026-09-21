@@ -28,7 +28,10 @@ def handle_signal(_signal, _frame):
 
 def run_runtime_smoke_test() -> int:
     """Exercise bootstrap and native libraries using synthetic in-memory inputs."""
-    from parsetrail.core.runtime_smoke import check_native_operations
+    from parsetrail.core.runtime_smoke import check_build_provenance, check_native_operations
+
+    if getattr(sys, "frozen", False):
+        check_build_provenance()
 
     for module_name in (
         "_socket",

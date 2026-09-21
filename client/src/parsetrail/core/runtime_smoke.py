@@ -5,6 +5,19 @@ from __future__ import annotations
 from io import BytesIO
 
 
+def check_build_provenance() -> None:
+    """Require the frozen app to read its own matching release identity."""
+    from parsetrail.core.build_metadata import read_build_metadata
+    from parsetrail.core.client_targets import native_installer_target
+    from parsetrail.version import __version__
+
+    metadata = read_build_metadata()
+    if metadata is None:
+        raise RuntimeError("Frozen build metadata is missing or invalid")
+    if metadata.client_version != __version__ or metadata.target_platform != native_installer_target():
+        raise RuntimeError("Frozen build metadata does not match the running client version/target")
+
+
 def _sample_pdf() -> bytes:
     stream = b"BT /F1 12 Tf 20 40 Td (ParseTrail smoke) Tj ET"
     objects = [

@@ -418,6 +418,12 @@ build before installer packaging/signing. To inspect a candidate directly with
 the verified interpreter, use `scripts/release_architecture.py --platform
 <target> --binary <executable>`; this package-free command does not launch it.
 
+The frozen runtime smoke also reads `parsetrail/build-metadata.json` through the
+same resource lookup as **Help > About**. Missing/invalid metadata or a version
+or target mismatch stops packaging before signing. Windows stages the canonical
+filename inside a unique temporary directory and cleans it up on failure as well
+as success. A source checkout still reports development provenance normally.
+
 Hosted source tests select Windows x64 and `macos-15-intel` explicitly, provision
 the exact native interpreter before dependencies, and assert the final client
 environment's target. Intel CI also runs the native toolchain/static-input sync.

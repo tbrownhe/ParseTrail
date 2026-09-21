@@ -54,45 +54,47 @@ if ($versionContents -notmatch '(?m)^__version__\s*=\s*"([^"]+)"') {
     exit 1
 }
 $version = $Matches[1]
-$buildMetadataPath = Join-Path ([System.IO.Path]::GetTempPath()) "parsetrail-build-$([guid]::NewGuid().ToString('N')).json"
-$sourceJson = uv run --no-env-file --frozen --python $releasePython --no-python-downloads python -m scripts.release_source client `
-    --version $version `
-    --platform windows-x86_64 `
-    --metadata-output $buildMetadataPath
-if ($LASTEXITCODE -ne 0) {
-    throw "Release source validation failed with exit code $LASTEXITCODE"
-}
-$releaseSource = $sourceJson | ConvertFrom-Json
-$installerPath = Join-Path $clientDir "parsetrail_${version}_windows-x86_64_setup.exe"
-if (Test-Path -LiteralPath $installerPath) {
-    Write-Error "Versioned installer already exists: $installerPath. Bump the client version before rebuilding."
-    exit 1
-}
-
-
-# --- Locate the external Windows installer compiler --------------------------
-$makensisCommand = Get-Command "makensis.exe" -ErrorAction SilentlyContinue
-$makensisCandidates = @(
-    if ($makensisCommand) { $makensisCommand.Source }
-    (Join-Path $env:ProgramFiles "NSIS\makensis.exe")
-    (Join-Path ${env:ProgramFiles(x86)} "NSIS\makensis.exe")
-) | Where-Object { $_ }
-$makensis = $makensisCandidates |
-    Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
-    Select-Object -First 1
-if (-not $makensis) {
-    Write-Error "makensis.exe was not found. Install NSIS and ensure it is on PATH or in its standard installation directory."
-    exit 1
-}
-$makensis = (Resolve-Path -LiteralPath $makensis).Path
-
-$nsisScript = Join-Path $PSScriptRoot "scripts\win64_installer.nsi"
-if (-not (Test-Path $nsisScript)) {
-    Write-Error "NSIS Script not found at $nsisScript"
-    exit 1
-}
-
+$buildMetadataDirectory = Join-Path ([System.IO.Path]::GetTempPath()) "parsetrail-build-$([guid]::NewGuid().ToString('N'))"
+$buildMetadataPath = Join-Path $buildMetadataDirectory "build-metadata.json"
 try {
+    New-Item -ItemType Directory -Path $buildMetadataDirectory | Out-Null
+    $sourceJson = uv run --no-env-file --frozen --python $releasePython --no-python-downloads python -m scripts.release_source client `
+        --version $version `
+        --platform windows-x86_64 `
+        --metadata-output $buildMetadataPath
+    if ($LASTEXITCODE -ne 0) {
+        throw "Release source validation failed with exit code $LASTEXITCODE"
+    }
+    $releaseSource = $sourceJson | ConvertFrom-Json
+    $installerPath = Join-Path $clientDir "parsetrail_${version}_windows-x86_64_setup.exe"
+    if (Test-Path -LiteralPath $installerPath) {
+        Write-Error "Versioned installer already exists: $installerPath. Bump the client version before rebuilding."
+        exit 1
+    }
+
+
+    # --- Locate the external Windows installer compiler --------------------------
+    $makensisCommand = Get-Command "makensis.exe" -ErrorAction SilentlyContinue
+    $makensisCandidates = @(
+        if ($makensisCommand) { $makensisCommand.Source }
+        (Join-Path $env:ProgramFiles "NSIS\makensis.exe")
+        (Join-Path ${env:ProgramFiles(x86)} "NSIS\makensis.exe")
+    ) | Where-Object { $_ }
+    $makensis = $makensisCandidates |
+        Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+        Select-Object -First 1
+    if (-not $makensis) {
+        Write-Error "makensis.exe was not found. Install NSIS and ensure it is on PATH or in its standard installation directory."
+        exit 1
+    }
+    $makensis = (Resolve-Path -LiteralPath $makensis).Path
+
+    $nsisScript = Join-Path $PSScriptRoot "scripts\win64_installer.nsi"
+    if (-not (Test-Path $nsisScript)) {
+        Write-Error "NSIS Script not found at $nsisScript"
+        exit 1
+    }
+
     Write-Host "Synchronizing the locked client environment with Python $pythonVersion..."
     uv sync --extra dev --frozen --python $releasePython --no-python-downloads
     if ($LASTEXITCODE -ne 0) {
@@ -216,12 +218,13 @@ try {
     }
 
 } catch {
-    Remove-Item -LiteralPath $buildMetadataPath -Force -ErrorAction SilentlyContinue
     Write-Error "ERROR: Build or packaging failed. $($_.Exception.Message)"
     throw
+} finally {
+    Remove-Item -LiteralPath $buildMetadataPath -Force -ErrorAction SilentlyContinue
+    # Only remove this builder's empty directory; never recurse through TEMP.
+    Remove-Item -LiteralPath $buildMetadataDirectory -ErrorAction SilentlyContinue
 }
-
-Remove-Item -LiteralPath $buildMetadataPath -Force -ErrorAction SilentlyContinue
 
 Write-Host "Signing the Windows client release..."
 uv run --no-env-file --frozen --python $releasePython --no-python-downloads python -m scripts.client_release sign `
