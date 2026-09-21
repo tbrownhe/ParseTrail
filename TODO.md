@@ -27,10 +27,10 @@ identifies the preserved installer awaiting installed acceptance.
   [installed candidate record](docs/engineering-acceptance.md#intel-installed-candidate-verification-september-19-2026).
 - [~] **R3b — Architecture gates:** obtain the hosted Windows x64 /
   `macos-15-intel` test results.
-- [ ] Fix the Windows bundled build-metadata filename and add a frozen smoke
-  gate for readable, matching release provenance. Collect remaining walkthrough
-  fixes before preparing a new versioned candidate; preserve the signed 1.4.0
-  installers and tag.
+- [ ] Prepare and accept a new versioned candidate containing the Windows
+  build-metadata fix after collecting remaining walkthrough fixes. Preserve the
+  signed 1.4.0 installers and tag; repeat the frozen provenance gate and verify
+  the installed About label on the replacement.
 - [ ] `[USER]` Rehearse preserved artifact publication, install/upgrade,
   credential storage, and plugin update on Windows x64 and Intel macOS.
   Include the [1.3-to-1.4 manual upgrade and API/website transition](docs/client-release-contract.md)
@@ -54,9 +54,11 @@ First import from an empty offline profile is the separate F1 proposal.
 
 ## P2.2 — Native fresh-user walkthroughs
 
-- [ ] `[USER]` Walk through first run, account login, signed plugin install,
-  one-off import, folder import, overlap handling, explicit statement contribution,
-  and database backup/test restore on Windows.
+- [ ] `[USER]` Complete Windows one-off/folder import, overlap handling,
+  source-file retention choices, and database backup/test restore. First run,
+  login, signed plugins, Credential Locker persistence, sign-out/relogin, and
+  synthetic contribution are accepted in the
+  [Windows installed record](docs/engineering-acceptance.md#windows-installed-offline-acceptance-september-20-2026).
 
 Reserve Jacob's testing for official-release usability and product-gap feedback.
 

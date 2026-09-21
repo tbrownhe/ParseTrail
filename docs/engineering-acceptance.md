@@ -643,8 +643,9 @@ artifacts. No OS credentials were exported. Restoring the prior application
 and machine registry would require owner administrator action; no rollback was
 performed or claimed as tested.
 
-A metadata-only lookup found no `ParseTrail-Staging` credential. After backup
-verification, the existing staging folder was preserved beside its original
+A sandbox-context metadata lookup found no `ParseTrail-Staging` credential;
+that lookup did not establish absence in the owner's Credential Locker. After
+backup verification, the existing staging folder was preserved beside its original
 location as `ParseTrail-Staging.pre-1.4.0-20260920T065839Z`; the active staging
 path is now absent for the fresh-profile walkthrough. The production profile
 and its configured data remain in place. This isolates application data for
@@ -705,6 +706,59 @@ Correct the Windows resource filename and add a frozen smoke gate before the
 next candidate. Preserve the signed 1.4.0 bytes and tag; a replacement must use
 a new version/tag. Continue the remaining native workflow checks on this
 identified candidate while collecting any additional fixes.
+
+**PASS — source fix and diagnostic frozen gate:** the Windows builder now stages
+`build-metadata.json` inside a unique temporary directory, preserving the
+canonical bundled filename and cleaning up after early failures. Frozen runtime
+smoke requires readable schema-2 metadata whose version and target match the
+running client. Source runs continue to work without release metadata. Regression
+coverage uses the real resource resolver for the About label and smoke path,
+rejects missing/misnamed/mismatched metadata, and exercises PowerShell builder
+cleanup before dependency sync. The complete Windows client suite passed
+**459 tests, 3 skipped**; Ruff check/format and PowerShell syntax checks passed.
+
+An unsigned diagnostic freeze of the changed source passed runtime smoke with
+the canonical resource and a system-only `PATH`. Renaming only that diagnostic
+resource to the old filename pattern caused exit **1** with the expected missing
+metadata error; the canonical resource was then restored byte-for-byte. This
+probe used explicitly synthetic source metadata and is not a release candidate.
+The installed app, signed installers, and `client-v1.4.0` tag remain unchanged.
+The replacement candidate and its installed About check remain open.
+
+**PASS — signed plugin installation and Windows credentials:** the owner
+reconnected, downloaded plugins using staging credentials, and confirmed they
+installed correctly. Independent local verification against the installed app's
+public keys accepted all **22** artifacts in release **20260829091732**, including
+runtime compatibility, sizes, and digests. The manifest SHA-256 is
+`4a68f8035cc833f8bdc1e6f70578f84100d308a3eb3337c934eef92c7458a093`.
+An owner-context, metadata-only Credential Locker lookup found the staging
+credential; no secret was read or exported, and config contained no plaintext
+token.
+
+After quitting and restarting online, the owner successfully submitted the
+generated one-page PDF containing only `ParseTrail smoke` through the normal
+confirmation flow, without another login. This accepts Credential Locker
+restoration across restart. The PDF SHA-256 is
+`625fa34df0e8181c6421cde3a26ae9c7c7ffb91c62486bb90482c05c28c9826b`.
+The owner then signed out and repeated the flow: it requested credentials, and
+signing back in allowed a second successful synthetic submission. This accepts
+functional sign-out/relogin. The owner completed login rather than cancelling
+the dialog, so credential-store absence between those actions was not observed.
+No real financial fixture was submitted.
+
+**Fixture preparation correction — offline imports remain pending:** the first
+generated MOHELA CSVs reached `NoParserMatchError` because CSV-writer escaping
+doubled quotes in the header marker. The earlier preparation check invoked the
+parser directly and missed the application's raw-text routing step. Reproducing
+the error against the complete installed catalog identified the fixture problem.
+Corrected copies preserve the parser's expected export header and pass
+`parse_any` against all 22 authenticated plugins, selecting only
+`csv_mohela_202411` with no validation diagnostics. The seven files produce
+8/10/12/14/16/18/20 transactions and final balances from **−396.00** to **−990.00**
+USD. The original attempted fixtures remain unchanged; corrected masters,
+working copies, and expected hashes are retained under the ignored local
+`scratch/windows-1.4.0-native-fixtures/routing-checked` directory. This routing
+check does not substitute for the pending installed-app imports.
 
 ## Staging migration and recovery: August 2026
 

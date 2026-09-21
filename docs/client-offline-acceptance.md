@@ -206,7 +206,28 @@ should persist, with no blocking login or frozen window.
 
 Report installer/launch prompts, STAGING marker, onboarding, responsiveness, and
 offline restart. Preserve the backups and the parked previous staging profile.
-Signed plugin installation, Credential Locker persistence/sign-out, synthetic
-imports, model operations, contribution, and backup/restore follow in the
-remaining walkthrough. This local installation does not complete the separate
-staging API/website/artifact transition rehearsal.
+Signed plugin installation, Credential Locker persistence/sign-out/relogin, and
+synthetic contribution subsequently passed; results are in the
+[Windows installed record](engineering-acceptance.md#windows-installed-offline-acceptance-september-20-2026).
+Synthetic imports, model operations, and backup/restore remain in the walkthrough.
+This local installation does not complete the separate staging
+API/website/artifact transition rehearsal.
+
+### Windows synthetic import fixtures
+
+Use the corrected local set under
+`scratch/windows-1.4.0-native-fixtures/routing-checked`: preserve `originals`,
+import from `working`, and compare with `expected.json`. These files were routed
+and parsed against the complete installed signed catalog, not just passed
+directly to one parser. This matters because CSV detection examines raw text;
+the MOHELA export's HTML marker must match before its decoded cells reach the
+parser. The first generated set had extra CSV quote escaping and failed that
+step. Keep that set only as diagnostic evidence.
+
+With updates disabled and networking disconnected, copy `01-first.csv` to the
+archive, repeat it to check duplicate handling, then copy `02-overlap.csv` to
+the archive using the same synthetic account. Expect 8 then 10 canonical
+transactions, balances −396.00 then −495.00 USD, and both working files retained.
+The later files add two transactions each. Retain separate checks for managed
+folder import, Move/Leave choices, model training and predictions on new rows,
+offline use after failed automatic checks, and database backup/test restore.
