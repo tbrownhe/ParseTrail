@@ -30,14 +30,14 @@ class _Engine:
 
 @pytest.mark.parametrize("platform", ["win64", "macos"])
 @pytest.mark.parametrize("operation", ["manifest", "manifest-signature", "latest", "1.3.1"])
-def test_legacy_channels_explain_manual_upgrade(client, platform, operation):
+def test_legacy_channels_explain_manual_upgrade(client: TestClient, platform: str, operation: str) -> None:
     response = client.get(f"{settings.API_V1_STR}/clients/{platform}/{operation}")
     assert response.status_code == 410
     assert "https://parsetrail.com/download.html" in response.json()["detail"]
 
 
 @pytest.mark.parametrize("platform", ["macos-arm64", "windows-arm64", "linux64"])
-def test_unsupported_target_is_not_available(client, platform):
+def test_unsupported_target_is_not_available(client: TestClient, platform: str) -> None:
     assert client.get(f"{settings.API_V1_STR}/clients/{platform}/manifest").status_code == 404
 
 
@@ -125,7 +125,11 @@ def test_catalog_is_derived_from_active_manifests(
     ]
 
 
-def test_current_targets_coexist_at_one_version_and_have_separate_downloads(client, tmp_path, monkeypatch):
+def test_current_targets_coexist_at_one_version_and_have_separate_downloads(
+    client: TestClient,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(clients, "CLIENTS_DIR", tmp_path)
     monkeypatch.setattr(clients, "engine", _Engine())
     for target in ("windows-x86_64", "macos-x86_64"):
@@ -138,7 +142,12 @@ def test_current_targets_coexist_at_one_version_and_have_separate_downloads(clie
 
 
 @pytest.mark.parametrize("change", ["schema", "architecture", "missing_architecture", "valid_other_target"])
-def test_incompatible_target_metadata_cannot_be_listed_or_downloaded(client, tmp_path, monkeypatch, change):
+def test_incompatible_target_metadata_cannot_be_listed_or_downloaded(
+    client: TestClient,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    change: str,
+) -> None:
     manifest_bytes, _ = _write_release(tmp_path)
     monkeypatch.setattr(clients, "CLIENTS_DIR", tmp_path)
     manifest = json.loads(manifest_bytes)
