@@ -30,8 +30,10 @@ If it already exists, verify its commit; never move an existing tag.
 
 Apple Silicon, Apple Developer signing/notarization, C1–C3 cleanup, and F1–F4
 features remain outside this task. Do not publish artifacts, push release tags,
-merge into main, or deploy the API/website. The 1.3-to-1.4 transition and hosted CI
-remain separate release gates. Keep private keys, passphrases, financial data,
+merge into main, or deploy the API/website. The 1.3-to-1.4 transition remains a
+separate release gate. Hosted Windows/Intel source jobs passed on PR #38; see
+[the CI record](engineering-acceptance.md#hosted-client-gates-and-backend-test-annotations).
+Keep private keys, passphrases, financial data,
 databases, models, and detailed application logs out of commits and return notes.
 
 ## Preserve the accepted 1.4.0 state

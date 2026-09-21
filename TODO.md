@@ -25,8 +25,6 @@ identifies the preserved installer used for Windows native acceptance.
   The signed candidate's installation, native synthetic runtime/offline probes,
   and owner offline first start/restart with system-only `PATH` passed; see the
   [installed candidate record](docs/engineering-acceptance.md#intel-installed-candidate-verification-september-19-2026).
-- [~] **R3b — Architecture gates:** obtain the hosted Windows x64 /
-  `macos-15-intel` test results.
 - [~] `[USER]` Sign and accept the Windows 1.4.1 candidate's installed About label
   and offline profile persistence. Its tagged build and frozen gates passed; the
   [candidate record](docs/engineering-acceptance.md#windows-141-candidate-september-20-2026)

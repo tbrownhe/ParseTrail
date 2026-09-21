@@ -920,6 +920,27 @@ into main is not required for local builds or hosted checks. Authenticated
 GitHub API/CLI access remains unavailable to the Windows assistant, so the
 prepared compare link and local PR body are an owner handoff.
 
+### Hosted client gates and backend test annotations
+
+The owner opened [PR #38](https://github.com/tbrownhe/ParseTrail/pull/38) from
+`release/client-1.4.1`. At commit `198339c0cb62c307fd5e52622bfb2aa1921e6c63`, both
+the [Windows x64 job](https://github.com/tbrownhe/ParseTrail/actions/runs/35556261970/job/106200377581)
+and [Intel macOS x86_64 job](https://github.com/tbrownhe/ParseTrail/actions/runs/35556261970/job/106200377568)
+completed successfully. These jobs include native interpreter/target assertions
+and the source suite; this closes **R3b hosted architecture acceptance**. Backend,
+frontend, Python lint/format, deployment-tooling tests, and Compose validation
+also passed. Intentionally skipped workflow jobs are not claimed as executed.
+
+The backend type job found four client-installer API tests missing parameter and
+return annotations. Commit `bef7b10af601173fbcfc0482455654170b5dbeed` adds the existing
+fixture types (`TestClient`, `Path`, `pytest.MonkeyPatch`), string parameter types,
+and `None` returns. Local strict mypy passed all **61 backend files**, and Ruff
+lint/format passed. The [hosted backend-types rerun](https://github.com/tbrownhe/ParseTrail/actions/runs/35570356972/job/106240515742)
+and Python lint job also passed. Other jobs on that rerun were still running at
+this checkpoint; their earlier successful client results apply to unchanged
+client source. This test-only correction does not change the pinned 1.4.1 build
+source, local tag, or preserved candidate bytes.
+
 ## Staging migration and recovery: August 2026
 
 The PostgreSQL 12-to-17 rehearsal preserved the source volume and matched every
