@@ -42,9 +42,9 @@ reviewed bytes. Intel clients start without Homebrew/build tools at runtime.
 
 ## P1.6 — Offline session acceptance
 
-- [ ] `[USER]` Complete Windows installed-plugin and trained-model offline use
-  with updates disabled and after failed background checks. Fresh offline first
-  start/restart is accepted in the
+- [ ] `[USER]` Complete Windows trained-model offline use with updates disabled,
+  then parser/model use after failed background checks. Fresh offline first
+  start/restart and installed-plugin imports with checks disabled are accepted in the
   [Windows installed record](docs/engineering-acceptance.md#windows-installed-offline-acceptance-september-20-2026).
 
 Acceptance: disabled checks attempt no network access; enabled checks fail in the
@@ -54,10 +54,10 @@ First import from an empty offline profile is the separate F1 proposal.
 
 ## P2.2 — Native fresh-user walkthroughs
 
-- [ ] `[USER]` Complete Windows one-off/folder import, overlap handling,
-  source-file retention choices, and database backup/test restore. First run,
-  login, signed plugins, Credential Locker persistence, sign-out/relogin, and
-  synthetic contribution are accepted in the
+- [ ] `[USER]` Complete Windows folder import, Move/Leave source-file choices,
+  and database backup/test restore. First run, login, signed plugins, Credential
+  Locker persistence, sign-out/relogin, synthetic contribution, one-off import,
+  duplicate/overlap handling, and Copy retention are accepted in the
   [Windows installed record](docs/engineering-acceptance.md#windows-installed-offline-acceptance-september-20-2026).
 
 Reserve Jacob's testing for official-release usability and product-gap feedback.

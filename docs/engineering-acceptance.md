@@ -760,6 +760,28 @@ working copies, and expected hashes are retained under the ignored local
 `scratch/windows-1.4.0-native-fixtures/routing-checked` directory. This routing
 check does not substitute for the pending installed-app imports.
 
+**PASS — installed offline one-off imports, duplicates, and overlap:** the owner
+successfully imported the corrected first two fixtures and reported the expected
+**−495.00 USD** total. Read-only verification found one synthetic account, two
+statements, **10 canonical transactions**, and **18 statement memberships**. All
+dates, descriptions, integer amounts, running balances, and currencies matched
+the synthetic expectations exactly. Both archived statements matched the
+expected SHA-256 digests; both working sources and master originals remained
+unchanged. SQLite integrity and foreign-key checks passed. The application log
+also recorded the repeated first file as a retained duplicate, with no added
+statement or transaction. Automatic update checks were disabled.
+
+The owner reported missing-categorization-model errors after each import. The
+profile has no model; all 10 transactions remain uncategorized and unverified.
+The log contains three missing-model exceptions, consistent with categorization
+being attempted after both successful imports and the duplicate retry. The
+current UI reports `Auto-categorization Failed` after data has already committed.
+This accepts the local import/data-preservation behavior, not the quality of
+first-use guidance. Actionable no-model guidance remains part of the unapproved
+F1 proposal; no feature implementation was started. Folder import, training and
+prediction, Move/Leave choices, enabled-check offline behavior, and database
+backup/test restore remain pending.
+
 ## Staging migration and recovery: August 2026
 
 The PostgreSQL 12-to-17 rehearsal preserved the source volume and matched every

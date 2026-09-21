@@ -209,7 +209,8 @@ offline restart. Preserve the backups and the parked previous staging profile.
 Signed plugin installation, Credential Locker persistence/sign-out/relogin, and
 synthetic contribution subsequently passed; results are in the
 [Windows installed record](engineering-acceptance.md#windows-installed-offline-acceptance-september-20-2026).
-Synthetic imports, model operations, and backup/restore remain in the walkthrough.
+One-off imports, duplicate/overlap handling, and Copy retention also passed.
+Folder import, Move/Leave choices, model operations, and backup/restore remain.
 This local installation does not complete the separate staging
 API/website/artifact transition rehearsal.
 
@@ -231,3 +232,17 @@ transactions, balances −396.00 then −495.00 USD, and both working files reta
 The later files add two transactions each. Retain separate checks for managed
 folder import, Move/Leave choices, model training and predictions on new rows,
 offline use after failed automatic checks, and database backup/test restore.
+
+The first two corrected files passed installed offline acceptance: two statements,
+10 canonical transactions, 18 memberships, and both sources retained with matching
+archive hashes. The missing-model dialog occurs after the import commits; this
+candidate currently reports `Auto-categorization Failed` with a log reference.
+The imported rows remain available for manual categorization and training.
+
+For the next stage, one verified copy of `03-folder.csv` is prepared in the staging
+database's managed import directory. **Statements > Import All** moves that copy
+into the archive; the synthetic master and working copies are preserved. Expect
+12 transactions and −594.00 USD. Import `04-training.csv` and
+`05-training-more.csv` using **Copy to Archive** to reach 16 transactions and
+−792.00 USD. Keep the last two files unimported until after training so predictions
+are tested on new rows.
