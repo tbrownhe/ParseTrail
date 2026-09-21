@@ -863,6 +863,63 @@ walkthrough**. Windows and Intel P1.6/P2.2 acceptance is now recorded; retain th
 1.4.0 candidates as evidence and prepare a separately versioned candidate for
 the Windows provenance fix. Later cleanup/features remain outside authorization.
 
+### Windows 1.4.1 candidate: September 20, 2026
+
+The complete Windows walkthrough exposed only the already-fixed release
+provenance defect within the approved implementation scope. The no-model error
+wording remains a recorded F1 proposal. A new **1.4.1** version preserves the
+signed 1.4.0 artifacts and tag rather than replacing their bytes.
+
+| Field | Recorded value |
+| --- | --- |
+| Build branch | `release/client-1.4.1` |
+| Exact source / local tag | `0261f1f9d4efc4ba6aa7e7e31df4f421ef628ebd` / `client-v1.4.1` |
+| Client / target | `1.4.1` / `windows-x86_64` |
+| Installer | `parsetrail_1.4.1_windows-x86_64_setup.exe` |
+| Installer size | `154450316` bytes |
+| Installer SHA-256 | `7bd95d347c72ce9aebefc9d7741d60b6483c6b400c6c89ff288fcd520c558f0b` |
+| Frozen executable SHA-256 | `89712148036e7b7647f3ec44cdfe91fd5e267a8785deb4dea3245cc6684a9bc6` |
+| Canonical metadata SHA-256 | `2767ac98f34b7a167804e27cec947670d46e2ca700e70487139e4f87c7c8dbb4` |
+
+**PASS — tagged build:** an isolated clean checkout at the exact tag completed
+the pinned Python **3.13.15** bootstrap and locked sync, **459 tests / 3 skipped
+in 91.63 seconds**, public trust-store check, PyInstaller freeze, **PE32+ AMD64**
+architecture gate, frozen runtime smoke including provenance, all three frozen
+offline modes, and NSIS packaging. The local lock check also passed without any
+dependency changes. These automated Qt checks used the offscreen platform;
+replacement installed-app acceptance remains separate.
+
+The canonical resource contains the exact source/tag/version/target above, and
+the application's resource reader against the actual bundle now returns About
+label **`client-v1.4.1 (0261f1f9d4ef)`**. No misnamed metadata file remains. The
+complete build log is retained locally as `scratch/windows-1.4.1-build.log`,
+SHA-256 `9e8ae2843e8c096f227fbd480936024981a782f08a21812d6a690c1d5410abff`.
+
+The preserved unsigned installer is in
+`scratch/windows-1.4.1-release/windows-x86_64`; its source checkout is
+`scratch/windows-1.4.1-candidate`. A local shell wrapper intercepted the signing
+invocation before it ran, so no private-key passphrase was requested and no
+manifest, signature, or inventory exists yet. The owner handoff
+`scratch/sign-windows-1.4.1.ps1` verifies the clean source, tag, installer and
+metadata hashes, unchanged 1.4.0 release files, and signing/inventory prerequisites.
+Its `-VerifyOnly` execution passed in the owner's normal Windows context. The
+normal invocation signs these exact bytes and records the inventory without
+rebuilding, installing, or publishing.
+
+The old 1.4.0 installer, manifest, signature, and inventory retain all recorded
+hashes. The installed application remains 1.4.0; no replacement installation,
+artifact publication, release-tag push, merge, or deployment has occurred. The
+1.4.1 tag is local only. Documentation commits may advance the branch after the
+pinned build source. The [Intel 1.4.1 handover](intel-mac-1.4.1-handover.md) specifies
+that same source and separate artifact/app locations.
+
+The public GitHub read-only check found no open PR for the candidate or preceding
+Windows result branches and no Actions run for `release/client-1.4.1`. This
+workflow runs on pull requests or main pushes. A draft PR is sufficient; merging
+into main is not required for local builds or hosted checks. Authenticated
+GitHub API/CLI access remains unavailable to the Windows assistant, so the
+prepared compare link and local PR body are an owner handoff.
+
 ## Staging migration and recovery: August 2026
 
 The PostgreSQL 12-to-17 rehearsal preserved the source volume and matched every
