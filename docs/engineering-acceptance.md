@@ -661,6 +661,18 @@ verification passed again after preserving the staging folder. **The installer
 and installed app have not yet been run.** Owner steps are in
 [Windows installation and first offline launch](client-offline-acceptance.md#windows-140-candidate-installation-and-first-offline-launch).
 
+**Installer handoff interruption:** the owner's first attempt ended with
+`KeyboardInterrupt` while reading a backup file, before launching the installer.
+The subsequent read-only registry check still showed **1.3.0**. The local helper
+now reports progress and elapsed time every two seconds, handles cancellation
+without a Python traceback, and supports `-VerifyOnly` through the same
+PowerShell entry point. Its standard-library verifier uses isolated, unbuffered
+Python (`-I -u`) and does not require Conda activation. Running that entry point
+with `-VerifyOnly` in the owner's normal execution context passed all **7,312
+file checks in 34.5 seconds**, followed by the candidate installer hash check.
+The backup, original app/data, and prepared fresh staging state still matched.
+This follow-up did not launch the installer or change the signed candidate.
+
 ## Staging migration and recovery: August 2026
 
 The PostgreSQL 12-to-17 rehearsal preserved the source volume and matched every

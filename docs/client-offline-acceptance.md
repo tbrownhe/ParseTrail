@@ -183,6 +183,11 @@ powershell -NoProfile -File .\scratch\install-windows-1.4.0.ps1
 
 Complete the administrator prompt and installer. The handoff verifies the
 backup and candidate before installation, then checks the installed executable.
+Verification prints its file-check count and elapsed time every two seconds;
+the recorded complete check took about 35 seconds. Let it finish before the
+administrator prompt. Ctrl+C cancels before installation. To check preparation
+without launching the installer, add `-VerifyOnly` to the same command. The
+helper invokes the pinned Python directly; no Conda activation is required.
 Report any error or Windows prompt. It does not launch the app automatically.
 Use the staging launcher below for acceptance; ordinary shortcuts open the
 production profile.
