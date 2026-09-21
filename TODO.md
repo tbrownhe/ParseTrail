@@ -11,12 +11,12 @@ contains findings and detailed acceptance criteria for the chunk IDs below.
 
 The owner has approved P1.5, P1.6, and P2.2. Later correctness/cleanup proposals
 remain pending, and **Client feature proposals require further discussion before
-any implementation**. Remaining native/release acceptance still requires the
-prepared owner checks; the Intel installed offline/P2.2 walkthrough is accepted.
+any implementation**. Windows and Intel installed offline/P2.2 walkthroughs are
+accepted; the remaining candidate and release gates below still require owner checks.
 
 The completed Mac results are in the [Intel return note](docs/intel-mac-return-note.md).
 The [signed Windows candidate record](docs/engineering-acceptance.md#signed-windows-candidate-september-19-2026)
-identifies the preserved installer awaiting installed acceptance.
+identifies the preserved installer used for Windows native acceptance.
 
 ## P1.5 — Client release reliability
 
@@ -39,19 +39,6 @@ identifies the preserved installer awaiting installed acceptance.
 Acceptance: one clean tag produces traceable target-specific artifacts; a dry
 run does not change public directories, and publish-existing uses exactly the
 reviewed bytes. Intel clients start without Homebrew/build tools at runtime.
-
-## P2.2 — Native fresh-user walkthroughs
-
-- [ ] `[USER]` Complete Windows database backup/test restore. First run, login,
-  signed plugins, Credential Locker persistence, sign-out/relogin, synthetic contribution, one-off import,
-  folder import, duplicate/overlap handling, Copy/Move/Leave choices, and offline
-  model training/restart/prediction are accepted in the
-  [Windows installed record](docs/engineering-acceptance.md#windows-installed-offline-acceptance-september-20-2026).
-
-Reserve Jacob's testing for official-release usability and product-gap feedback.
-
-Acceptance: both walkthroughs work without source-code knowledge, and each
-source-file move/retention choice is explained before the action.
 
 ## Client correctness and cleanup proposals
 

@@ -845,6 +845,24 @@ guidance remain F1 proposals. Windows database backup/test restore remains the
 last P2.2 walkthrough item; replacement-candidate provenance, hosted CI, and
 publication/transition rehearsal remain separate release gates.
 
+**PASS — native database backup and disposable restore test:** the owner reported
+both **Backup Verified** and **Restore Test Passed** for the final synthetic
+database. Independent read-only checks accepted the backup's SQLite integrity,
+foreign keys, schema revision **0003_precise_financial_schema**, and complete
+logical dump equality with the live database. Both contain **one account, seven
+statements, 20 transactions, 98 memberships, and two categories**. The active
+database path remains unchanged; no switch to a restored database was requested.
+
+The local `windows-native-final.dbb` is **106496 bytes**, SHA-256
+`ced63f582732093456380f3d53883ef4e23aee0dc3a9d2b2ae0bca42ffbf9917`.
+The matching logical dump SHA-256 is
+`4cc4de89780006493529035de6af078720c5f317eb141c5b9a31d724ca059363`.
+The backup remains inside the staging profile and contains database data only,
+not statement files or the model. This completes the **Windows P2.2 native
+walkthrough**. Windows and Intel P1.6/P2.2 acceptance is now recorded; retain the
+1.4.0 candidates as evidence and prepare a separately versioned candidate for
+the Windows provenance fix. Later cleanup/features remain outside authorization.
+
 ## Staging migration and recovery: August 2026
 
 The PostgreSQL 12-to-17 rehearsal preserved the source volume and matched every

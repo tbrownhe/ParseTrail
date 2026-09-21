@@ -210,8 +210,8 @@ Signed plugin installation, Credential Locker persistence/sign-out/relogin, and
 synthetic contribution subsequently passed; results are in the
 [Windows installed record](engineering-acceptance.md#windows-installed-offline-acceptance-september-20-2026).
 One-off/folder imports, duplicate/overlap handling, and Copy retention also passed.
-Move/Leave choices and offline model operations subsequently passed as well;
-database backup/test restore remains.
+Move/Leave choices, offline model operations, and database backup/test restore
+subsequently passed as well; the complete P1.6/P2.2 results are in that record.
 This local installation does not complete the separate staging
 API/website/artifact transition rehearsal.
 
@@ -280,10 +280,16 @@ source and archive checks passed, and both background update failures were logge
 before local work continued. Windows installed P1.6 is accepted; this does not
 complete the pending replacement-candidate provenance or release-publication gates.
 
-For the last Windows P2.2 step, use **File > Back Up Database** to save
+For the Windows P2.2 backup step, use **File > Back Up Database** to save
 `windows-native-final.dbb` inside the staging profile's `backup` directory. Expect
 **Backup Verified**, then select that file through **File > Test Database Backup**.
 The disposable restore should report **Restore Test Passed** with one account,
 seven statements, 20 transactions, and two categories. It preserves the active
 database selection and removes its temporary restored copy. The database backup
 does not include the model or statement archive.
+
+The owner completed both dialogs successfully. Independent checks confirmed the
+backup matches the live database's full logical dump, including 98 statement
+memberships, and passes integrity/foreign-key checks. The active database remains
+selected. Windows P2.2 is accepted alongside the Intel walkthrough; the remaining
+work is the replacement-candidate and release-transition acceptance in TODO.
