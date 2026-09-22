@@ -25,10 +25,9 @@ identifies the preserved installer used for Windows native acceptance.
   The signed candidate's installation, native synthetic runtime/offline probes,
   and owner offline first start/restart with system-only `PATH` passed; see the
   [installed candidate record](docs/engineering-acceptance.md#intel-installed-candidate-verification-september-19-2026).
-- [~] `[USER]` Recheck the desktop control/log-path fixes with the prepared private
-  database copy, then complete its remaining acceptance checks. The 1.4.1 native
-  check exposed broken Select All controls and budget date conversion; see the
-  [defect and regression record](docs/engineering-acceptance.md#windows-desktop-control-regressions-september-21-2026).
+- [~] `[USER]` Recheck transaction-review date display and ascending/descending
+  sorting with the prepared private database copy, then complete its remaining
+  acceptance checks. See the [date regression record](docs/engineering-acceptance.md#transaction-review-date-rendering-september-21-2026).
 - [ ] `[USER]` Build replacement Windows x64 and Intel macOS candidates containing
   those fixes under a new version/tag, then accept installed About identity and
   offline profile persistence. The preserved signed 1.4.1 candidate lacks these

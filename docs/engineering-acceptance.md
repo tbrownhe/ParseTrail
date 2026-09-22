@@ -984,11 +984,40 @@ filtering using the preserved database snapshot. Its checksum and the original
 live database checksum remained unchanged. Only aggregate pass/fail evidence is
 recorded here; private labels, amounts, dates, and log contents remain local.
 
-**Pending — native and release acceptance:** the owner must recheck selection,
-budgets, logging, and offline restart in the fixed source before replacement
-packaging. Signed 1.4.0/1.4.1 bytes and existing tags remain unchanged; neither
-contains this repair. A new version/tag must identify the replacement builds on
-Windows and Intel macOS. The previous Intel 1.4.1 build handover is on hold.
+**PASS — native control retest:** the owner confirmed the fixes while using the
+prepared database copy and fixed source at `1a002e3`. Local verification confirmed
+that the configured log file exists and is nonempty and the live database remains
+unchanged. During this walkthrough, the owner reported blank transaction-review
+dates; that separate defect is recorded below.
+
+Signed 1.4.0/1.4.1 bytes and existing tags remain unchanged; neither contains these
+repairs. A new version/tag must identify the replacement builds on Windows and
+Intel macOS. The previous Intel 1.4.1 build handover remains on hold.
+
+### Transaction review date rendering: September 21, 2026
+
+The review service returned valid Python calendar dates, but Qt's table delegate
+rendered those objects as empty text. Qt's proxy also could not sort the opaque
+objects chronologically. The fix in `gui/review_models.py` returns ISO
+`YYYY-MM-DD` strings for the date column's display and sort roles. Service records
+and stored dates retain their calendar-date types; no database writes or migration
+are needed.
+
+**PASS — regression checks:** three synthetic tests reproduced blank delegate
+text and incorrect ascending/descending ordering before the fix. The repaired
+model passes those tests, including a leap-day date and year/month boundaries;
+the combined review-service/model and previous desktop/logging regression run
+passed **19 tests**. Ruff lint/format passed.
+
+**PASS — confidential read-only check:** every review date in the preserved
+database snapshot reached the real Qt delegate as its expected ISO text, and both
+sort directions matched calendar ordering. The snapshot and live database hashes
+remained unchanged. Financial dates, descriptions, and account identifiers were
+not printed or committed.
+
+**Pending — native acceptance:** recheck populated dates and both date-header
+sort directions using the updated source launcher, then continue the remaining
+private-copy walkthrough and replacement release gates.
 
 ### Hosted client gates and backend test annotations
 
