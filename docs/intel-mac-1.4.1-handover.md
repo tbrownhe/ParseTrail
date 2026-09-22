@@ -1,5 +1,12 @@
 # Intel Mac 1.4.1 candidate handover
 
+**Build on hold, September 21:** Windows acceptance with an existing database
+exposed desktop control and logging defects in this pinned source. Do not start
+another 1.4.1 build; retain any existing candidate as evidence. The fixes require
+a replacement version/tag and an updated native handover after review. See the
+[defect record](engineering-acceptance.md#windows-desktop-control-regressions-september-21-2026).
+The instructions below preserve the original 1.4.1 build contract.
+
 Read the root README, TODO, and client README first. This handover supersedes
 the build instructions in the original [Intel handover](intel-mac-handover.md)
 for the new candidate only. Preserve its [1.4.0 return note](intel-mac-return-note.md)

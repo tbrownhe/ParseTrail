@@ -25,14 +25,15 @@ identifies the preserved installer used for Windows native acceptance.
   The signed candidate's installation, native synthetic runtime/offline probes,
   and owner offline first start/restart with system-only `PATH` passed; see the
   [installed candidate record](docs/engineering-acceptance.md#intel-installed-candidate-verification-september-19-2026).
-- [~] `[USER]` Accept the signed Windows 1.4.1 candidate's installed About label
-  and offline profile persistence. Complete the prepared private database-copy
-  walkthrough using the frozen 1.4.1 app; this does not replace installer acceptance.
-  Its tagged build, signing verification, and frozen gates passed; the
-  [candidate record](docs/engineering-acceptance.md#windows-141-candidate-september-20-2026)
-  identifies the preserved bytes and local acceptance handoff. Build and accept Intel 1.4.1
-  from the same source using the [Mac handover](docs/intel-mac-1.4.1-handover.md).
-  Preserve both signed 1.4.0 candidates and their tag; do not reuse their output directories.
+- [~] `[USER]` Recheck the desktop control/log-path fixes with the prepared private
+  database copy, then complete its remaining acceptance checks. The 1.4.1 native
+  check exposed broken Select All controls and budget date conversion; see the
+  [defect and regression record](docs/engineering-acceptance.md#windows-desktop-control-regressions-september-21-2026).
+- [ ] `[USER]` Build replacement Windows x64 and Intel macOS candidates containing
+  those fixes under a new version/tag, then accept installed About identity and
+  offline profile persistence. The preserved signed 1.4.1 candidate lacks these
+  fixes; the [1.4.1 Mac build handover](docs/intel-mac-1.4.1-handover.md) is on hold.
+  Preserve the signed 1.4.0/1.4.1 candidates and tags; use separate output directories.
 - [ ] `[USER]` Rehearse preserved artifact publication, install/upgrade,
   credential storage, and plugin update on Windows x64 and Intel macOS.
   Include the [1.3-to-1.4 manual upgrade and API/website transition](docs/client-release-contract.md)

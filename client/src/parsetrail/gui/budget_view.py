@@ -148,8 +148,8 @@ class BudgetTab(QWidget):
         try:
             mode = self.range_mode.currentText()
             if mode == "Custom Range":
-                start_dt = self.start_date.date().toPyDate()
-                end_inclusive = self.end_date.date().toPyDate()
+                start_dt = self.start_date.date().toPython()
+                end_inclusive = self.end_date.date().toPython()
                 end_dt = end_inclusive + timedelta(days=1)  # make exclusive
                 if start_dt >= end_dt:
                     self._render_placeholder("Start date must be before end date.")
@@ -157,7 +157,7 @@ class BudgetTab(QWidget):
                 prorate = True
                 range_label = f"{start_dt} to {end_inclusive}"
             else:
-                month_start = self.month_selector.date().toPyDate().replace(day=1)
+                month_start = self.month_selector.date().toPython().replace(day=1)
                 start_dt = month_start
                 end_dt = _first_of_next_month(month_start)
                 prorate = False
@@ -336,10 +336,10 @@ class BudgetTab(QWidget):
             return
 
         slices = []
-        other_total = 0.0
+        other_total = Decimal(0)
         for label, value in zip(spend_df["label"], magnitudes, strict=True):
             pct = value / total
-            if pct < 0.03:
+            if pct < Decimal("0.03"):
                 other_total += value
             else:
                 slices.append((label, value, pct))
@@ -349,7 +349,7 @@ class BudgetTab(QWidget):
         # Sort by percentage descending for legend order
         slices.sort(key=lambda x: x[2], reverse=True)
         labels = [s[0] for s in slices]
-        values = [s[1] for s in slices]
+        values = [float(s[1]) for s in slices]
 
         wedges, _ = self.util_axes.pie(
             values,

@@ -944,11 +944,51 @@ invocation runs the frozen 1.4.1 executable directly with a system-only `PATH`;
 configuration while retaining both databases and the working copies. This local
 launcher is specific to the prepared evidence and is not a distributed tool.
 
-**Pending — native owner check:** offline About identity, familiar data/views,
-restart persistence, and bounded duplicate/model/backup checks on the working
-copy. Direct execution of the frozen build does not complete the separate 1.4.1
-installer replacement gate. The installed application remains 1.4.0, and no merge
-or publication has occurred.
+The owner opened the prepared frozen build and reported the desktop regressions
+below. Native acceptance remains incomplete; subsequent checks must use the fixes.
+Direct execution of a frozen build does not complete installer replacement
+acceptance. The installed application remains 1.4.0, and no merge or publication
+has occurred.
+
+### Windows desktop control regressions: September 21, 2026
+
+The private-copy walkthrough exposed three failures in the preserved 1.4.1
+candidate: Category Spending's Select All could clear but not check items,
+Budgets always showed its failure placeholder, and the configured log file was
+absent. Local inspection found the budget traceback in the default staging log;
+logging had ignored the saved custom path.
+
+Branch `fix/client-desktop-controls` corrects these existing behaviors:
+
+- Both dashboard Select All controls consume the checkbox's boolean `toggled`
+  signal. The previous integer `stateChanged` value did not equal PySide6's enum.
+- Budget, appreciation, and recurring-input date controls use PySide6's
+  `QDate.toPython()`. The old `toPyDate()` raised `AttributeError`.
+- Budget spending-share aggregation keeps small-category amounts as `Decimal`
+  until chart presentation. Fixing date conversion exposed a second failure when
+  a small category was added to the float accumulator for Other.
+- Startup logging uses the loaded settings' log path and creates its parent
+  directory. Normal and staging profiles honor their saved paths.
+
+**PASS — regression checks:** all ten new synthetic checks failed before the
+fixes. The focused UI, budget-service, settings/profile, and offline checks then
+passed **40 tests**. The full client run passed **468 tests / 3 skipped**, with one
+Windows builder test blocked by the sandbox's PowerShell execution policy; that
+single test passed when rerun in the owner's normal context without changing
+policy. Ruff lint/format passed. No recurring-analysis algorithm, financial
+schema, feature proposal, or infrastructure change is included.
+
+**PASS — confidential read-only check:** the real Budgets widget rendered eight
+combinations of month/custom range, category/type grouping, and inactive-category
+filtering using the preserved database snapshot. Its checksum and the original
+live database checksum remained unchanged. Only aggregate pass/fail evidence is
+recorded here; private labels, amounts, dates, and log contents remain local.
+
+**Pending — native and release acceptance:** the owner must recheck selection,
+budgets, logging, and offline restart in the fixed source before replacement
+packaging. Signed 1.4.0/1.4.1 bytes and existing tags remain unchanged; neither
+contains this repair. A new version/tag must identify the replacement builds on
+Windows and Intel macOS. The previous Intel 1.4.1 build handover is on hold.
 
 ### Hosted client gates and backend test annotations
 

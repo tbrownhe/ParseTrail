@@ -114,6 +114,10 @@ and a network failure does not prevent local use. Disable **Check for Client and
 Plugin Updates After Startup** in Preferences for a completely network-silent
 launch; manual update checks and optional statement submission remain available.
 
+Application logging uses the saved `log_file` path when the app starts, including
+custom locations inside the staging profile. Restart after changing that path in
+Preferences. The default is `logs/parsetrail.log` inside the active profile.
+
 An empty profile still needs a signed parser catalog before its first import,
 and automatic categorization needs a locally trained model. Installed plugins
 and models remain usable offline. A bundled starter catalog is a proposal in
