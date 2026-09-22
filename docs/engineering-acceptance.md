@@ -880,6 +880,8 @@ signed 1.4.0 artifacts and tag rather than replacing their bytes.
 | Installer SHA-256 | `7bd95d347c72ce9aebefc9d7741d60b6483c6b400c6c89ff288fcd520c558f0b` |
 | Frozen executable SHA-256 | `89712148036e7b7647f3ec44cdfe91fd5e267a8785deb4dea3245cc6684a9bc6` |
 | Canonical metadata SHA-256 | `2767ac98f34b7a167804e27cec947670d46e2ca700e70487139e4f87c7c8dbb4` |
+| Signed release sequence | `20260921030412` |
+| Release inventory SHA-256 | `1883101dd467ae52d35e2c8d892a6dc501560240279f1103922f578490b84584` |
 
 **PASS — tagged build:** an isolated clean checkout at the exact tag completed
 the pinned Python **3.13.15** bootstrap and locked sync, **459 tests / 3 skipped
@@ -895,16 +897,15 @@ label **`client-v1.4.1 (0261f1f9d4ef)`**. No misnamed metadata file remains. The
 complete build log is retained locally as `scratch/windows-1.4.1-build.log`,
 SHA-256 `9e8ae2843e8c096f227fbd480936024981a782f08a21812d6a690c1d5410abff`.
 
-The preserved unsigned installer is in
+The preserved signed candidate is in
 `scratch/windows-1.4.1-release/windows-x86_64`; its source checkout is
-`scratch/windows-1.4.1-candidate`. A local shell wrapper intercepted the signing
-invocation before it ran, so no private-key passphrase was requested and no
-manifest, signature, or inventory exists yet. The owner handoff
-`scratch/sign-windows-1.4.1.ps1` verifies the clean source, tag, installer and
-metadata hashes, unchanged 1.4.0 release files, and signing/inventory prerequisites.
-Its `-VerifyOnly` execution passed in the owner's normal Windows context. The
-normal invocation signs these exact bytes and records the inventory without
-rebuilding, installing, or publishing.
+`scratch/windows-1.4.1-candidate`. The owner completed the separate signing handoff
+without rebuilding the installer. **PASS — signing verification:** independent
+public-key verification accepted the release, and all three inventory file sizes
+and SHA-256 hashes matched. Source, tag, version, target, and sequence matched the
+candidate; the installer retained its pre-signing hash above. Local evidence is
+`scratch/windows-1.4.1-signed-verification.json`. Signing did not install or publish
+the candidate.
 
 The old 1.4.0 installer, manifest, signature, and inventory retain all recorded
 hashes. The installed application remains 1.4.0; no replacement installation,
@@ -913,12 +914,41 @@ artifact publication, release-tag push, merge, or deployment has occurred. The
 pinned build source. The [Intel 1.4.1 handover](intel-mac-1.4.1-handover.md) specifies
 that same source and separate artifact/app locations.
 
-The public GitHub read-only check found no open PR for the candidate or preceding
-Windows result branches and no Actions run for `release/client-1.4.1`. This
-workflow runs on pull requests or main pushes. A draft PR is sufficient; merging
-into main is not required for local builds or hosted checks. Authenticated
-GitHub API/CLI access remains unavailable to the Windows assistant, so the
-prepared compare link and local PR body are an owner handoff.
+Hosted checks run on pull requests or main pushes. The owner opened PR #38 as
+recorded below; merging into main is not required for local builds or hosted checks.
+
+### Windows 1.4.1 private database-copy preparation: September 21, 2026
+
+The owner agreed to a short local acceptance check with their existing financial
+data before merging. **PASS — preparation:** with ParseTrail closed, the completed
+synthetic staging profile was preserved, SQLite's online backup API produced a
+consistent snapshot of the live database, and the snapshot matched its source's
+table counts, logical digest, integrity, foreign keys, and current schema revision.
+The working database, model, managed statement archive, and authenticated staging
+plugin catalog were copied into a separate directory inside the staging profile.
+Every copied file passed checksum verification; the source database and both
+active profile configurations remained unchanged.
+
+The pinned candidate's settings validation accepted the prepared configuration.
+All 22 signed plugins loaded, and the copied model loaded without warnings or
+missing database categories. Automatic update checks are disabled. No pending
+live import files were copied into the working import queue, and OS credentials
+were not exported. Private data, file inventories, hashes of financial files, and
+model contents remain in ignored local evidence rather than this repository.
+
+The owner handoff `scratch/launch-windows-1.4.1-real-data.ps1` verifies preserved
+evidence and the candidate identity before selecting the copied database. Its
+`-VerifyOnly` run passed without selecting a profile or opening the GUI. Normal
+invocation runs the frozen 1.4.1 executable directly with a system-only `PATH`;
+`-RestoreSynthetic`, after closing the app, restores the saved synthetic staging
+configuration while retaining both databases and the working copies. This local
+launcher is specific to the prepared evidence and is not a distributed tool.
+
+**Pending — native owner check:** offline About identity, familiar data/views,
+restart persistence, and bounded duplicate/model/backup checks on the working
+copy. Direct execution of the frozen build does not complete the separate 1.4.1
+installer replacement gate. The installed application remains 1.4.0, and no merge
+or publication has occurred.
 
 ### Hosted client gates and backend test annotations
 

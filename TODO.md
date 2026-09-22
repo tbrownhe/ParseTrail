@@ -25,10 +25,12 @@ identifies the preserved installer used for Windows native acceptance.
   The signed candidate's installation, native synthetic runtime/offline probes,
   and owner offline first start/restart with system-only `PATH` passed; see the
   [installed candidate record](docs/engineering-acceptance.md#intel-installed-candidate-verification-september-19-2026).
-- [~] `[USER]` Sign and accept the Windows 1.4.1 candidate's installed About label
-  and offline profile persistence. Its tagged build and frozen gates passed; the
+- [~] `[USER]` Accept the signed Windows 1.4.1 candidate's installed About label
+  and offline profile persistence. Complete the prepared private database-copy
+  walkthrough using the frozen 1.4.1 app; this does not replace installer acceptance.
+  Its tagged build, signing verification, and frozen gates passed; the
   [candidate record](docs/engineering-acceptance.md#windows-141-candidate-september-20-2026)
-  identifies the preserved bytes and signing handoff. Build and accept Intel 1.4.1
+  identifies the preserved bytes and local acceptance handoff. Build and accept Intel 1.4.1
   from the same source using the [Mac handover](docs/intel-mac-1.4.1-handover.md).
   Preserve both signed 1.4.0 candidates and their tag; do not reuse their output directories.
 - [ ] `[USER]` Rehearse preserved artifact publication, install/upgrade,
