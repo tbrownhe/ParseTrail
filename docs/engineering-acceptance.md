@@ -1053,6 +1053,55 @@ acceptance gap. Apple Silicon remains deferred. These unfinished release items
 and the unapproved future proposals stay in TODO; no further native test is
 requested as part of this development closeout.
 
+### Windows 1.4.2 candidate: September 21, 2026
+
+After the owner merged PR #38, the remote main commit
+`7bf64c7f453ea9c0ec46986cba3196664a9861d5` was verified to contain all accepted
+client repairs. Branch `release/client-1.4.2` changes only the client version at
+its pinned build commit; the dependency lock remains unchanged and its offline
+check passed. Later branch commits contain release documentation.
+
+| Field | Recorded value |
+| --- | --- |
+| Exact source / local tag | `4585f4c57d20101c1c6ac4f625b726e51913e562` / `client-v1.4.2` |
+| Client / target | `1.4.2` / `windows-x86_64` |
+| Installer | `parsetrail_1.4.2_windows-x86_64_setup.exe` |
+| Installer size | `154450900` bytes |
+| Installer SHA-256 | `733e5f6b0856f5225b56ba94bbd49c8543e6f758fde84aff68e677cd62ba7cd0` |
+| Frozen executable SHA-256 | `d517e06fa842d07b34a7510ca7bfec3657a5d0e21d29607e49e7cdd933e9dca0` |
+| Canonical metadata SHA-256 | `4927f076adf5aa9e50288d3113693c001012c8abf48f28b108528a0a2c584f27` |
+
+**PASS — tagged Windows build:** the isolated clean checkout completed the pinned
+Python 3.13.15 bootstrap/locked sync, **472 tests / 3 skipped in 96.21 seconds**,
+public trust-store check, PyInstaller build, PE32+ AMD64 architecture gate, frozen
+runtime/provenance smoke, all three frozen offline modes, and NSIS packaging.
+Automated Qt checks used the offscreen platform. The canonical build metadata
+matches the exact source/tag/version/target above. The full local build log is
+`scratch/windows-1.4.2-build.log`, SHA-256
+`b0e6986d7851763ac9a5471d35f4b86dd70e4e7b659d67a4d36987fe56c8c9e9`.
+
+The installer is preserved in `scratch/windows-1.4.2-release/windows-x86_64` and
+its tagged checkout in `scratch/windows-1.4.2-candidate`. Signing was intercepted
+before the private key was opened. The owner handoff
+`scratch/sign-windows-1.4.2.ps1` passed `-VerifyOnly` in the normal Windows context,
+including the source/tag, pristine checkout, exact installer and metadata hashes,
+signing/inventory prerequisites, and preserved 1.4.0/1.4.1 release hashes. The
+owner supplies the key passphrase privately to sign and record an inventory.
+
+**Pending — native release acceptance:** Windows signing and installed-app
+acceptance, plus the pinned [Intel 1.4.2 handover](intel-mac-1.4.2-handover.md).
+The local candidate tag has not been pushed, no installer has been replaced,
+and no artifact has been published. The old signed candidates and tags remain
+unchanged. The source-review acceptance does not replace these artifact checks.
+
+**Read-only interface preflight:** staging's client listing still advertised
+legacy `win64` 1.3.0 and `macos` 1.3.1 channels, and its legacy Windows manifest
+reported schema 1. The planned API/download-page transition must therefore be
+rehearsed with the new target channels before public activation. Direct production
+listing/manifest requests returned HTTP 403; this probe does not establish its
+active contract. Verify it from the authorized operator path during publication
+review. No deployment or server setting was changed by these checks.
+
 ### Hosted client gates and backend test annotations
 
 The owner opened [PR #38](https://github.com/tbrownhe/ParseTrail/pull/38) from

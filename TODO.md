@@ -31,13 +31,17 @@ identifies the preserved installer used for Windows native acceptance.
 - [~] `[USER]` Build, sign, and accept Windows x64 and Intel macOS **1.4.2**
   candidates from `4585f4c57d20101c1c6ac4f625b726e51913e562` / `client-v1.4.2`.
   Verify installed About identity, repaired controls, logging, and offline profile
-  persistence. Windows build preparation is in progress; use the
+  persistence. The Windows build and frozen gates passed; owner signing and
+  installed acceptance remain pending. See the
+  [Windows candidate record](docs/engineering-acceptance.md#windows-142-candidate-september-21-2026) and use the
   [1.4.2 Mac handover](docs/intel-mac-1.4.2-handover.md) for the native Intel build.
   Preserve the signed 1.4.0/1.4.1 candidates and tags; use separate output directories.
 - [ ] `[USER]` Rehearse preserved artifact publication, install/upgrade,
   credential storage, and plugin update on Windows x64 and Intel macOS.
   Include the [1.3-to-1.4 manual upgrade and API/website transition](docs/client-release-contract.md)
-  on staging before public activation.
+  on staging before public activation. The release preflight still found legacy
+  schema-1 client channels on staging; verify production's contract from the
+  authorized operator path after the direct probe returned HTTP 403.
 
 Acceptance: one clean tag produces traceable target-specific artifacts; a dry
 run does not change public directories, and publish-existing uses exactly the
