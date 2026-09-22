@@ -401,8 +401,8 @@ class RecurringTransactionsDialog(QDialog):
 
     def analyze_transactions(self):
         # Retrieve and process transactions
-        start_date = self.start_date.date().toPyDate()
-        end_date = self.end_date.date().toPyDate()
+        start_date = self.start_date.date().toPython()
+        end_date = self.end_date.date().toPython()
 
         try:
             rows = self.transaction_service.in_range(start_date, end_date)

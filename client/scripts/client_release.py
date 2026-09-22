@@ -53,6 +53,7 @@ def _artifact_for_installer(
         filename=installer_path.name,
         version=version,
         platform=platform,
+        architecture="x86_64",
         size=installer_path.stat().st_size,
         sha256=_sha256_file(installer_path),
     )

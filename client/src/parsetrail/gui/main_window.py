@@ -233,12 +233,12 @@ class ParseTrail(QMainWindow):
         row += 1
 
         # Connect "Select All" checkbox to toggle function
-        def toggle_select_all_accounts(state):
+        def toggle_select_all_accounts(checked: bool):
             for index in range(self.account_select_list.count()):
                 item = self.account_select_list.item(index)
-                item.setCheckState(Qt.Checked if state == Qt.Checked else Qt.Unchecked)
+                item.setCheckState(Qt.Checked if checked else Qt.Unchecked)
 
-        select_all_accounts_checkbox.stateChanged.connect(toggle_select_all_accounts)
+        select_all_accounts_checkbox.toggled.connect(toggle_select_all_accounts)
 
         # Add days of smoothing selection
         balance_smoothing_label = QLabel("Smoothing Days:")
@@ -324,12 +324,12 @@ class ParseTrail(QMainWindow):
         row += 1
 
         # Connect "Select All" checkbox to toggle function
-        def toggle_select_all_categories(state):
+        def toggle_select_all_categories(checked: bool):
             for index in range(self.category_select_list.count()):
                 item = self.category_select_list.item(index)
-                item.setCheckState(Qt.Checked if state == Qt.Checked else Qt.Unchecked)
+                item.setCheckState(Qt.Checked if checked else Qt.Unchecked)
 
-        select_all_category_checkbox.stateChanged.connect(toggle_select_all_categories)
+        select_all_category_checkbox.toggled.connect(toggle_select_all_categories)
 
         # Add days of smoothing selection
         category_smoothing_label = QLabel("Smoothing Months:")

@@ -61,9 +61,10 @@ def test_installer_download_runs_off_qt_thread(monkeypatch, tmp_path: Path) -> N
 
     monkeypatch.setattr(client, "download_client_installer", download)
     artifact = ClientInstallerArtifact(
-        filename="parsetrail_9.0.0_win64_setup.exe",
+        filename="parsetrail_9.0.0_windows-x86_64_setup.exe",
         version="9.0.0",
-        platform="win64",
+        platform="windows-x86_64",
+        architecture="x86_64",
         size=1,
         sha256="0" * 64,
     )

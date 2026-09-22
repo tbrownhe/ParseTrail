@@ -1,5 +1,26 @@
 Unreleased
 ==========
+- Prepare client 1.4.1 as the replacement candidate after Windows/Intel native
+  acceptance; preserve the signed 1.4.0 candidate artifacts and tag
+- Package Windows build metadata under its canonical resource filename and
+  reject missing or mismatched provenance in the frozen runtime smoke gate
+- Exercise real startup, onboarding, signed cached imports, and local models in
+  isolated offline release probes; run them against each frozen build before signing
+- Publish preserved installer/plugin releases with public keys, recorded inventory
+  hashes, source/target checks, explicit activation, concurrent-pointer protection,
+  and public smoke; use `publish-existing` after the signed dry run
+- Check frozen executable architecture before launch, force Intel Mac packaging,
+  and select explicit Windows x64/Intel Mac CI with native interpreter assertions
+- Prepare client 1.4.0 with version-2 signed installer metadata and explicit
+  Windows x64/Intel Mac channels; existing 1.3 clients require a manual upgrade
+- Reject unsupported installer architectures and label available download targets
+  explicitly on the public site
+- Preflight Intel Mac source-build tools, enforce static OpenSSL inputs, audit
+  bundled native dependencies, and record native release evidence
+- Bound the Mac frozen smoke to 30 seconds and exercise synthetic crypto, SQLite,
+  PDF/XLSX, Qt, and scientific/model operations in the shared runtime smoke
+- Bootstrap releases without client dependencies, enforce uv >= 0.12.5, and
+  provision/inspect exact native CPython before syncing the locked environment
 - Prompt immediately when saved credentials are rejected during a plugin update
   and resume the same signed catalog operation after successful authentication
 - Separate statement import persistence, deduplication, and archive state from Qt

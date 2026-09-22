@@ -61,14 +61,14 @@ def test_smokes_public_plugin_manifest_signature_and_listing(tmp_path: Path) -> 
 
 
 def test_smokes_public_client_installer_range(tmp_path: Path) -> None:
-    installer_name = "parsetrail_1.3.0_win64_setup.exe"
+    installer_name = "parsetrail_1.3.0_windows-x86_64_setup.exe"
     manifest = json.dumps(
         {
             "release_sequence": 5,
             "artifacts": [
                 {
                     "filename": installer_name,
-                    "platform": "win64",
+                    "platform": "windows-x86_64",
                     "version": "1.3.0",
                 }
             ],
@@ -78,7 +78,7 @@ def test_smokes_public_client_installer_range(tmp_path: Path) -> None:
     (tmp_path / "client-manifest.json").write_bytes(manifest)
     (tmp_path / "client-manifest.sig").write_bytes(signature)
     (tmp_path / installer_name).write_bytes(b"MZ installer")
-    base = "https://api.example.test/api/v1/clients/win64"
+    base = "https://api.example.test/api/v1/clients/windows-x86_64"
     opener = _Opener(
         {
             f"{base}/manifest": manifest,
@@ -91,7 +91,7 @@ def test_smokes_public_client_installer_range(tmp_path: Path) -> None:
         release_dir=tmp_path,
         release_kind="client",
         api_base_url="https://api.example.test/api/v1",
-        platform="win64",
+        platform="windows-x86_64",
         opener=opener,
     )
 

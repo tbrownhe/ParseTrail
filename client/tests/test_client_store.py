@@ -54,9 +54,10 @@ def _signed_release(
     )
     key_id = key_id_for_public_key(raw_public_key)
     artifact = ClientInstallerArtifact(
-        filename=f"parsetrail_{version}_win64_setup.exe",
+        filename=f"parsetrail_{version}_windows-x86_64_setup.exe",
         version=version,
-        platform="win64",
+        platform="windows-x86_64",
+        architecture="x86_64",
         size=len(payload),
         sha256=hashlib.sha256(payload).hexdigest(),
     )
@@ -74,7 +75,7 @@ def test_fetches_and_authenticates_latest_installer() -> None:
     artifact, manifest, signature, trusted_keys = _signed_release(b"installer")
     source = FakeSource(manifest, signature, [])
 
-    latest = fetch_latest_installer(source, "win64", trusted_keys)
+    latest = fetch_latest_installer(source, "windows-x86_64", trusted_keys)
 
     assert latest == artifact
     assert source.fetch_count == 1
@@ -85,7 +86,7 @@ def test_rejects_unauthenticated_catalog() -> None:
     source = FakeSource(manifest, b"x" * 64, [])
 
     with pytest.raises(ClientSignatureError):
-        fetch_latest_installer(source, "win64", trusted_keys)
+        fetch_latest_installer(source, "windows-x86_64", trusted_keys)
 
 
 def test_unsupported_platform_does_not_fetch() -> None:
@@ -110,7 +111,7 @@ def test_downloads_then_atomically_publishes_authenticated_installer(tmp_path: P
     )
 
     assert destination.read_bytes() == payload
-    assert source.stream_args == ("win64", "1.2.3")
+    assert source.stream_args == ("windows-x86_64", "1.2.3")
     assert updates == [(0, len(payload)), (8, len(payload)), (len(payload), len(payload))]
     assert not destination.with_name(f"{destination.name}.part").exists()
 

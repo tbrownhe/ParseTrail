@@ -4,6 +4,11 @@ The dashboard is a React/TypeScript account and administration surface built wit
 Vite, TanStack Query/Router, and Chakra UI. Financial transactions and the desktop
 SQLite database are not synchronized to it.
 
+The home page is an account/download/plugin landing page. The inherited template
+Items API/UI, sample CRUD table, placeholder search, and unused dashboard routes
+have been removed. Route guards remain eager while page components load lazily.
+Keep generated API code behind the `src/client` compatibility facade.
+
 ## Development
 
 Use the Node release recorded in `.nvmrc` (Node 22.22.0):
@@ -31,6 +36,11 @@ npm run build
 ```
 
 Use `npm run lint:fix` only when you intend to apply formatting fixes.
+
+The public website inserts untrusted plugin metadata as text through its shared
+renderer. `npm run test:website` verifies that hostile tags and event handlers
+remain inert. Both web surfaces use the validated startup runtime configuration;
+dashboard HTML is revalidated while fingerprinted assets remain immutable.
 
 ## Generated API client
 

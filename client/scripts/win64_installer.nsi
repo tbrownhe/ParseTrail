@@ -20,7 +20,7 @@
 !define APP_NAME "ParseTrail"
 !define SOURCE_DIR "..\build\ParseTrail\*.*"
 !define EXE_IN_SOURCE "ParseTrail.exe"
-!define OUTPUT_PATH "${DIST}\win64\parsetrail_${VERSION}_win64_setup.exe"
+!define OUTPUT_PATH "${DIST}\windows-x86_64\parsetrail_${VERSION}_windows-x86_64_setup.exe"
 !define INSTALLER_ICON "..\assets\parsetrail_128px.ico"
 !define COMPANY_NAME "ParseTrail"
 !define APP_REGKEY "Software\${APP_NAME}"

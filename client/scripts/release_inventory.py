@@ -13,6 +13,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
+from parsetrail.core.client_manifest import ClientManifest
 from parsetrail.core.versioning import validate_semver
 
 INVENTORY_FILENAME = "release-inventory.json"
@@ -22,6 +23,11 @@ PACKAGER_COMMANDS = {
     "create-dmg": ("create-dmg", "--version"),
 }
 SHA256_HEX = frozenset("0123456789abcdef")
+
+
+def inventory_digest(release_dir: Path) -> str:
+    """Record this digest with the dry-run evidence for publication review."""
+    return _sha256_file(release_dir / INVENTORY_FILENAME)
 
 
 def _sha256_file(path: Path) -> str:
@@ -107,6 +113,7 @@ def create_inventory(
     version: str | None,
     packager: str,
     packager_executable: Path | None = None,
+    native_report: Path | None = None,
 ) -> dict[str, object]:
     release_dir = release_dir.expanduser().resolve()
     if not release_dir.is_dir():
@@ -120,6 +127,10 @@ def create_inventory(
 
     manifest_name = "client-manifest.json" if release_kind == "client" else "plugin-manifest.json"
     manifest = json.loads((release_dir / manifest_name).read_text(encoding="utf-8"))
+    if release_kind == "client":
+        catalog = ClientManifest.model_validate(manifest)
+        if any(artifact.platform != target_platform or artifact.version != version for artifact in catalog.artifacts):
+            raise ValueError("Signed client manifest does not match the inventory target/version")
     if release_kind == "plugins" and manifest.get("source_commit") != source_commit:
         raise ValueError("Signed plugin manifest does not match the source commit")
 
@@ -158,6 +169,28 @@ def create_inventory(
         "tools": tools,
         "files": _artifact_records(release_dir, manifest),
     }
+    if release_kind == "client":
+        inventory["architecture"] = "x86_64"
+        inventory["manifest_schema_version"] = catalog.schema_version
+    if native_report is not None:
+        if release_kind != "client" or target_platform != "macos-x86_64":
+            raise ValueError("Native Mac evidence requires a macos client release")
+        evidence = json.loads(native_report.read_text(encoding="utf-8"))
+        if (
+            not isinstance(evidence, dict)
+            or evidence.get("schema_version") != 1
+            or not all(
+                isinstance(evidence.get(name), dict) for name in ("build_inputs", "library_audit", "frozen_smoke")
+            )
+            or evidence.get("build_inputs", {}).get("target_platform") != target_platform
+            or evidence.get("build_inputs", {}).get("architecture") != "x86_64"
+            or evidence.get("build_inputs", {}).get("openssl_static") is not True
+            or evidence.get("library_audit", {}).get("architecture") != "x86_64"
+            or not evidence.get("library_audit", {}).get("cryptography_extensions")
+            or evidence.get("frozen_smoke", {}).get("passed") is not True
+        ):
+            raise ValueError("Native Mac evidence is incomplete or disagrees with the release target")
+        inventory["native_build"] = evidence
     output = release_dir / INVENTORY_FILENAME
     temporary = output.with_suffix(".json.part")
     temporary.write_text(json.dumps(inventory, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -175,6 +208,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--version")
     parser.add_argument("--packager", choices=tuple(PACKAGER_COMMANDS), default="none")
     parser.add_argument("--packager-executable", type=Path)
+    parser.add_argument("--native-report", type=Path)
     return parser
 
 
@@ -190,11 +224,13 @@ def main() -> int:
             version=args.version,
             packager=args.packager,
             packager_executable=args.packager_executable,
+            native_report=args.native_report,
         )
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
     print(f"Recorded {len(inventory['files'])} release files in {args.release_dir / INVENTORY_FILENAME}")
+    print(f"Inventory SHA-256: {inventory_digest(args.release_dir)}")
     return 0
 
 

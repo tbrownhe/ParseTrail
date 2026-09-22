@@ -104,8 +104,8 @@ class AppreciationDialog(QDialog):
     def calculate_appreciation_rate(self):
         try:
             # Extract input values
-            start_date = self.start_date.date().toPyDate()
-            end_date = self.end_date.date().toPyDate()
+            start_date = self.start_date.date().toPython()
+            end_date = self.end_date.date().toPython()
             start_value = float(self.start_value_edit.text())
             end_value = float(self.end_value_edit.text())
 

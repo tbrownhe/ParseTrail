@@ -1,37 +1,31 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$ClientsDir,
-    [string]$SigningKey,
-    [switch]$Publish,
-    [string]$RemoteUser,
-    [string]$RemoteHost,
-    [string]$RemoteClientsDir,
-    [switch]$DeployOnly
+    [string]$SigningKey
 )
 
 $ErrorActionPreference = "Stop"
+Set-Location -LiteralPath $PSScriptRoot
+
+if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+    throw "uv was not found on PATH. Install uv >= 0.12.5 before releasing."
+}
 
 if (-not (Test-Path -LiteralPath $ClientsDir -PathType Container)) {
     throw "ClientsDir does not exist or is not a directory: $ClientsDir"
 }
 $distDir = (Resolve-Path -LiteralPath $ClientsDir).Path
 $privateKey = $SigningKey
-$remoteDir = $RemoteClientsDir
-if (-not $DeployOnly) {
-    if (-not $privateKey -or -not (Test-Path -LiteralPath $privateKey -PathType Leaf)) {
-        throw "SigningKey must name the encrypted release key for build/sign operations"
-    }
-    $privateKey = (Resolve-Path -LiteralPath $privateKey).Path
+if (-not $privateKey -or -not (Test-Path -LiteralPath $privateKey -PathType Leaf)) {
+    throw "SigningKey must name the encrypted release key for build/sign operations"
 }
-if ($DeployOnly) {
-    $Publish = $true
-}
+$privateKey = (Resolve-Path -LiteralPath $privateKey).Path
 
 # --- Define dirs for build stages --------------------------------------------
 $prebuildDir = Join-Path $PSScriptRoot "prebuild"
 $buildDir    = Join-Path $PSScriptRoot "build"
 $srcDir      = Join-Path $PSScriptRoot "src"
-$clientDir   = Join-Path $distDir "win64"
+$clientDir   = Join-Path $distDir "windows-x86_64"
 $pythonVersionFile = Join-Path $PSScriptRoot ".python-version"
 
 if (-not (Test-Path -LiteralPath $pythonVersionFile)) {
@@ -45,6 +39,14 @@ if (-not $pythonVersion) {
     exit 1
 }
 
+# Script metadata runs this with no client packages. Provision and inspect the
+# exact managed interpreter before the first project-aware uv invocation.
+$releasePython = uv run --no-env-file --script scripts/release_bootstrap.py check --platform windows-x86_64 --print-python
+if ($LASTEXITCODE -ne 0) {
+    throw "Release bootstrap failed; client dependencies and signing were not started."
+}
+$releasePython = $releasePython.Trim()
+
 $versionFile = Join-Path $srcDir "parsetrail\version.py"
 $versionContents = Get-Content -LiteralPath $versionFile -Raw
 if ($versionContents -notmatch '(?m)^__version__\s*=\s*"([^"]+)"') {
@@ -52,59 +54,54 @@ if ($versionContents -notmatch '(?m)^__version__\s*=\s*"([^"]+)"') {
     exit 1
 }
 $version = $Matches[1]
-$buildMetadataPath = Join-Path ([System.IO.Path]::GetTempPath()) "parsetrail-build-$([guid]::NewGuid().ToString('N')).json"
-$sourceJson = uv run --frozen --python $pythonVersion python -m scripts.release_source client `
-    --version $version `
-    --platform win64 `
-    --metadata-output $buildMetadataPath
-if ($LASTEXITCODE -ne 0) {
-    throw "Release source validation failed with exit code $LASTEXITCODE"
-}
-$releaseSource = $sourceJson | ConvertFrom-Json
-$installerPath = Join-Path $clientDir "parsetrail_${version}_win64_setup.exe"
-$manifestPath = Join-Path $clientDir "client-manifest.json"
-$signaturePath = Join-Path $clientDir "client-manifest.sig"
-if ($DeployOnly -and -not (Test-Path -LiteralPath $installerPath -PathType Leaf)) {
-    Write-Error "Installer for client version $version was not found: $installerPath"
-    exit 1
-}
-if (-not $DeployOnly -and (Test-Path -LiteralPath $installerPath)) {
-    Write-Error "Versioned installer already exists: $installerPath. Bump the client version before rebuilding."
-    exit 1
-}
-
-
-# --- Locate the external Windows installer compiler --------------------------
-if (-not $DeployOnly) {
-$makensisCommand = Get-Command "makensis.exe" -ErrorAction SilentlyContinue
-$makensisCandidates = @(
-    if ($makensisCommand) { $makensisCommand.Source }
-    (Join-Path $env:ProgramFiles "NSIS\makensis.exe")
-    (Join-Path ${env:ProgramFiles(x86)} "NSIS\makensis.exe")
-) | Where-Object { $_ }
-$makensis = $makensisCandidates |
-    Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
-    Select-Object -First 1
-if (-not $makensis) {
-    Write-Error "makensis.exe was not found. Install NSIS and ensure it is on PATH or in its standard installation directory."
-    exit 1
-}
-$makensis = (Resolve-Path -LiteralPath $makensis).Path
-
-$nsisScript = Join-Path $PSScriptRoot "scripts\win64_installer.nsi"
-if (-not (Test-Path $nsisScript)) {
-    Write-Error "NSIS Script not found at $nsisScript"
-    exit 1
-}
-
+$buildMetadataDirectory = Join-Path ([System.IO.Path]::GetTempPath()) "parsetrail-build-$([guid]::NewGuid().ToString('N'))"
+$buildMetadataPath = Join-Path $buildMetadataDirectory "build-metadata.json"
 try {
+    New-Item -ItemType Directory -Path $buildMetadataDirectory | Out-Null
+    $sourceJson = uv run --no-env-file --frozen --python $releasePython --no-python-downloads python -m scripts.release_source client `
+        --version $version `
+        --platform windows-x86_64 `
+        --metadata-output $buildMetadataPath
+    if ($LASTEXITCODE -ne 0) {
+        throw "Release source validation failed with exit code $LASTEXITCODE"
+    }
+    $releaseSource = $sourceJson | ConvertFrom-Json
+    $installerPath = Join-Path $clientDir "parsetrail_${version}_windows-x86_64_setup.exe"
+    if (Test-Path -LiteralPath $installerPath) {
+        Write-Error "Versioned installer already exists: $installerPath. Bump the client version before rebuilding."
+        exit 1
+    }
+
+
+    # --- Locate the external Windows installer compiler --------------------------
+    $makensisCommand = Get-Command "makensis.exe" -ErrorAction SilentlyContinue
+    $makensisCandidates = @(
+        if ($makensisCommand) { $makensisCommand.Source }
+        (Join-Path $env:ProgramFiles "NSIS\makensis.exe")
+        (Join-Path ${env:ProgramFiles(x86)} "NSIS\makensis.exe")
+    ) | Where-Object { $_ }
+    $makensis = $makensisCandidates |
+        Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
+        Select-Object -First 1
+    if (-not $makensis) {
+        Write-Error "makensis.exe was not found. Install NSIS and ensure it is on PATH or in its standard installation directory."
+        exit 1
+    }
+    $makensis = (Resolve-Path -LiteralPath $makensis).Path
+
+    $nsisScript = Join-Path $PSScriptRoot "scripts\win64_installer.nsi"
+    if (-not (Test-Path $nsisScript)) {
+        Write-Error "NSIS Script not found at $nsisScript"
+        exit 1
+    }
+
     Write-Host "Synchronizing the locked client environment with Python $pythonVersion..."
-    uv sync --extra dev --frozen --python $pythonVersion
+    uv sync --extra dev --frozen --python $releasePython --no-python-downloads
     if ($LASTEXITCODE -ne 0) {
         throw "uv sync failed with exit code $LASTEXITCODE"
     }
 
-    $actualPythonVersion = uv run --frozen --python $pythonVersion python -c "import platform; print(platform.python_version())"
+    $actualPythonVersion = uv run --no-env-file --frozen --python $releasePython --no-python-downloads python -c "import platform; print(platform.python_version())"
     if ($LASTEXITCODE -ne 0) {
         throw "Failed to determine the synchronized Python version (exit code $LASTEXITCODE)"
     }
@@ -114,13 +111,13 @@ try {
     Write-Host "Release interpreter: Python $actualPythonVersion"
 
     Write-Host "Running client regression tests..."
-    uv run --extra dev --frozen --python $pythonVersion pytest -q
+    uv run --no-env-file --extra dev --frozen --python $releasePython --no-python-downloads pytest -q
     if ($LASTEXITCODE -ne 0) {
         throw "Client tests failed with exit code $LASTEXITCODE"
     }
 
     Write-Host "Checking bundled plugin release trust keys..."
-    uv run --frozen --python $pythonVersion python -m scripts.plugin_release check-trust-store
+    uv run --no-env-file --frozen --python $releasePython --no-python-downloads python -m scripts.plugin_release check-trust-store
     if ($LASTEXITCODE -ne 0) {
         throw "Plugin trust-store check failed with exit code $LASTEXITCODE"
     }
@@ -128,7 +125,7 @@ try {
     # --- Build the executable -------------------------------------------------
     Write-Host "Running PyInstaller..."
 
-    uv run --frozen --python $pythonVersion pyinstaller `
+    uv run --no-env-file --frozen --python $releasePython --no-python-downloads pyinstaller `
         --clean `
         --noconfirm `
         --noconsole `
@@ -161,6 +158,10 @@ try {
     if (-not (Test-Path -LiteralPath $builtExecutable)) {
         throw "Frozen executable not found at $builtExecutable"
     }
+    & $releasePython -I -S scripts/release_architecture.py --platform windows-x86_64 --binary $builtExecutable
+    if ($LASTEXITCODE -ne 0) {
+        throw "Frozen Windows executable architecture check failed; packaging and signing were not started"
+    }
 
     $smokeProcess = Start-Process `
         -FilePath $builtExecutable `
@@ -177,7 +178,30 @@ try {
     }
     Write-Host "Frozen runtime smoke test passed."
 
-    # --- Create Install Package at dist\win64\parsetrail_version_win64_setup.exe
+    foreach ($offlineMode in @("fresh", "cached", "network-failure")) {
+        Write-Host "Smoke-testing frozen offline session: $offlineMode"
+        $offlineReportPath = Join-Path ([System.IO.Path]::GetTempPath()) "parsetrail-offline-$([guid]::NewGuid().ToString('N')).json"
+        $offlineProcess = Start-Process `
+            -FilePath $builtExecutable `
+            -ArgumentList "--offline-session-smoke-test $offlineMode --offline-smoke-report `"$offlineReportPath`"" `
+            -WorkingDirectory $PSScriptRoot `
+            -WindowStyle Hidden `
+            -PassThru
+        if (-not $offlineProcess.WaitForExit(75000)) {
+            Stop-Process -Id $offlineProcess.Id -Force -ErrorAction SilentlyContinue
+            throw "Frozen offline session '$offlineMode' timed out after 75 seconds. Progress / stack dump: $offlineReportPath.log"
+        }
+        if ($offlineProcess.ExitCode -ne 0) {
+            throw "Frozen offline session '$offlineMode' failed with exit code $($offlineProcess.ExitCode). Report: $offlineReportPath; progress / stack dump: $offlineReportPath.log"
+        }
+        $offlineReport = Get-Content -LiteralPath $offlineReportPath -Raw | ConvertFrom-Json
+        if (-not $offlineReport.passed -or -not $offlineReport.frozen -or $offlineReport.mode -ne $offlineMode) {
+            throw "Frozen offline session '$offlineMode' report did not pass: $offlineReportPath"
+        }
+        Remove-Item -LiteralPath $offlineReportPath
+    }
+
+    # --- Create the installer in the explicit Windows x64 release channel ------
     Write-Host "Creating installer with NSIS..."
 
     Write-Host "Found version: $version"
@@ -194,110 +218,43 @@ try {
     }
 
 } catch {
-    Remove-Item -LiteralPath $buildMetadataPath -Force -ErrorAction SilentlyContinue
     Write-Error "ERROR: Build or packaging failed. $($_.Exception.Message)"
     throw
-}
-}
-
-Remove-Item -LiteralPath $buildMetadataPath -Force -ErrorAction SilentlyContinue
-
-# Sign new installers offline; deployment-only mode must independently verify
-# the existing release using only the bundled public trust store.
-if ($DeployOnly) {
-    Write-Host "Synchronizing the locked environment for release verification..."
-    uv sync --frozen --python $pythonVersion
-    if ($LASTEXITCODE -ne 0) {
-        throw "uv sync failed with exit code $LASTEXITCODE"
-    }
+} finally {
+    Remove-Item -LiteralPath $buildMetadataPath -Force -ErrorAction SilentlyContinue
+    # Only remove this builder's empty directory; never recurse through TEMP.
+    Remove-Item -LiteralPath $buildMetadataDirectory -ErrorAction SilentlyContinue
 }
 
-if (-not $DeployOnly) {
-    Write-Host "Signing the Windows client release..."
-    uv run --frozen --python $pythonVersion python -m scripts.client_release sign `
-        --private-key $privateKey `
-        --installer $installerPath `
-        --platform win64 `
-        --version $version
-    if ($LASTEXITCODE -ne 0) {
-        throw "Client release signing failed with exit code $LASTEXITCODE"
-    }
+Write-Host "Signing the Windows client release..."
+uv run --no-env-file --frozen --python $releasePython --no-python-downloads python -m scripts.client_release sign `
+    --private-key $privateKey `
+    --installer $installerPath `
+    --platform windows-x86_64 `
+    --version $version
+if ($LASTEXITCODE -ne 0) {
+    throw "Client release signing failed with exit code $LASTEXITCODE"
 }
 
 Write-Host "Verifying the signed Windows client release..."
-uv run --frozen --python $pythonVersion python -m scripts.client_release verify `
+uv run --no-env-file --frozen --python $releasePython --no-python-downloads python -m scripts.client_release verify `
     --release-dir $clientDir
 if ($LASTEXITCODE -ne 0) {
     throw "Client release verification failed with exit code $LASTEXITCODE"
 }
 
-if (-not $DeployOnly) {
-    Write-Host "Recording checksums and release-tool versions..."
-    uv run --frozen --python $pythonVersion python -m scripts.release_inventory `
-        --release-dir $clientDir `
-        --source-commit $releaseSource.source_commit `
-        --source-tag $releaseSource.source_tag `
-        --kind client `
-        --platform win64 `
-        --version $version `
-        --packager nsis `
-        --packager-executable $makensis
-    if ($LASTEXITCODE -ne 0) {
-        throw "Release inventory generation failed with exit code $LASTEXITCODE"
-    }
+Write-Host "Recording checksums and release-tool versions..."
+uv run --no-env-file --frozen --python $releasePython --no-python-downloads python -m scripts.release_inventory `
+    --release-dir $clientDir `
+    --source-commit $releaseSource.source_commit `
+    --source-tag $releaseSource.source_tag `
+    --kind client `
+    --platform windows-x86_64 `
+    --version $version `
+    --packager nsis `
+    --packager-executable $makensis
+if ($LASTEXITCODE -ne 0) {
+    throw "Release inventory generation failed with exit code $LASTEXITCODE"
 }
-$inventoryPath = Join-Path $clientDir "release-inventory.json"
-if (-not (Test-Path -LiteralPath $inventoryPath -PathType Leaf)) {
-    throw "Release inventory was not found: $inventoryPath"
-}
-$inventory = Get-Content -LiteralPath $inventoryPath -Raw | ConvertFrom-Json
-if ($inventory.source_commit -ne $releaseSource.source_commit -or $inventory.source_tag -ne $releaseSource.source_tag) {
-    throw "Release inventory does not match the checked-out source"
-}
-
-# Publication requires the explicit -Publish switch. The unified release command
-# obtains an additional typed confirmation before setting it.
-if (-not $Publish) {
-    Write-Host "Installer built successfully; deployment skipped."
-    exit 0
-}
-
-# Deploy client installers
-try {
-    Write-Host "Starting deployment..."
-
-    if (-not $remoteUser -or -not $remoteHost -or -not $remoteDir) {
-        throw "REMOTE_USER, REMOTE_HOST, and REMOTE_CLIENTS_DIR are required for deployment"
-    }
-
-    if (-not (Test-Path $clientDir)) {
-        Write-Warning "Local directory not found: $clientDir"
-        exit 1
-    }
-
-    $manifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json
-    $releaseSequence = [Int64]$manifest.release_sequence
-    if ($releaseSequence -le 0) {
-        throw "Signed client manifest has an invalid release sequence"
-    }
-    if ($manifest.artifacts.Count -ne 1 -or $manifest.artifacts[0].filename -ne (Split-Path $installerPath -Leaf)) {
-        throw "Signed client manifest does not describe the expected Windows installer"
-    }
-
-    $remotePlatformDir = "$($remoteDir.TrimEnd('/'))/win64"
-    uv run --frozen --python $pythonVersion python -m scripts.immutable_publish `
-        --release-dir $clientDir `
-        --manifest client-manifest.json `
-        --signature client-manifest.sig `
-        --inventory release-inventory.json `
-        --remote "${RemoteUser}@${RemoteHost}" `
-        --remote-root $remotePlatformDir
-    if ($LASTEXITCODE -ne 0) {
-        throw "Immutable Windows client publication failed with exit code $LASTEXITCODE"
-    }
-} catch {
-    Write-Error "ERROR: Deployment failed. $($_.Exception.Message)"
-    throw
-}
-
+Write-Host "Signed Windows dry run completed; preserve this output and use publish-existing after review."
 exit 0

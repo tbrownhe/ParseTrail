@@ -36,6 +36,12 @@ origin. Four owner-machine hosts-file entries resolve the names directly to
 `silicide`'s reserved LAN address. A private VPN DNS override can do the same for
 remote testing.
 
+The owner reserved `silicide` at `192.168.1.89` in DHCP and aligned the smoke
+configuration and owner-machine hosts entries during acceptance. If that address
+changes, update all three references together; a stale override makes staging
+unavailable and fails its smoke gate. This is a recorded LAN configuration, not
+a public DNS address.
+
 The shared Compose definition attaches a target-specific IP allow-list middleware
 to every HTTPS application router. Staging's `TRAEFIK_ALLOWED_IP_RANGES` must list
 only the actual LAN/VPN ranges. Production traffic first passes the shared

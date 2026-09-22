@@ -12,6 +12,7 @@ certs/
 scratch/
 keys/
 client/release-config.json
+client/publish-config.json
 
 # Python tooling and test output
 **/__pycache__/

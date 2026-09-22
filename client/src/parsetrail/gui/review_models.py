@@ -65,7 +65,7 @@ class TransactionTableModel(QtCore.QAbstractTableModel):
             if col == self.COL_ID:
                 return record.transaction_id
             if col == self.COL_DATE:
-                return record.date
+                return record.date.isoformat()
             if col == self.COL_ACCOUNT:
                 return record.account_name
             if col == self.COL_DESC:
@@ -89,7 +89,8 @@ class TransactionTableModel(QtCore.QAbstractTableModel):
             if col == self.COL_CLUSTER:
                 return record.cluster if record.cluster is not None else -1
             if col == self.COL_DATE:
-                return record.date or ""
+                # ISO calendar text sorts chronologically in Qt; Python dates do not.
+                return record.date.isoformat()
             if col == self.COL_ACCOUNT:
                 return (record.account_name or "").lower()
             if col == self.COL_DESC:

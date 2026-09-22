@@ -65,8 +65,10 @@ jobs:
         include:
           - name: Windows x64
             os: windows-latest
-          - name: macOS
-            os: macos-latest
+            target: windows-x86_64
+          - name: Intel macOS x86_64
+            os: macos-15-intel
+            target: macos-x86_64
     runs-on: ${{ matrix.os }}
     env:
       QT_QPA_PLATFORM: offscreen
@@ -77,16 +79,38 @@ jobs:
         uses: actions/setup-python@v6
         with:
           python-version: "3.13.15"
+          architecture: "x64"
       - name: Install uv
         uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           version: "0.12.5"
           enable-cache: true
-      - name: Install locked dependencies
-        run: uv sync --extra dev --frozen --python 3.13.15
+      - name: Verify exact native interpreter before client packages
+        run: uv run --no-env-file --script scripts/release_bootstrap.py check --platform ${{ matrix.target }}
+        working-directory: client
+      - name: Install Intel Mac build tools
+        if: runner.os == 'macOS'
+        run: brew install openssl@3 rust pkg-config create-dmg
+      - name: Install locked Intel Mac dependencies with native preflight
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          release_python=$(uv run --no-env-file --script scripts/release_bootstrap.py check --platform macos-x86_64 --print-python)
+          "$release_python" -I -S scripts/macos_release.py sync --fresh-cryptography
+        working-directory: client
+      - name: Install locked Windows dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $releasePython = uv run --no-env-file --script scripts/release_bootstrap.py check --platform windows-x86_64 --print-python
+          if ($LASTEXITCODE -ne 0) { throw "Release interpreter check failed" }
+          uv sync --extra dev --frozen --python $releasePython --no-python-downloads
+        working-directory: client
+      - name: Assert the client environment target
+        run: uv run --no-env-file --no-sync python -c "from parsetrail.core.client_targets import native_installer_target; assert native_installer_target() == '${{ matrix.target }}'"
         working-directory: client
       - name: Run client tests
-        run: uv run --frozen --python 3.13.15 pytest -q
+        run: uv run --no-env-file --no-sync pytest -q
         working-directory: client
 
   frontend:

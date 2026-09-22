@@ -13,11 +13,12 @@ def test_reads_embedded_release_provenance(
     metadata_path.write_text(
         json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": 2,
+                "architecture": "x86_64",
                 "client_version": "1.3.0",
                 "source_commit": "a" * 40,
                 "source_tag": "client-v1.3.0",
-                "target_platform": "win64",
+                "target_platform": "windows-x86_64",
                 "built_at": "2026-08-29T00:00:00+00:00",
             }
         ),

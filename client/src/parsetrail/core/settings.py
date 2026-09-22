@@ -11,6 +11,7 @@ from loguru import logger
 from pydantic import AnyHttpUrl, Field, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from parsetrail.core.client_targets import native_installer_target
 from parsetrail.core.profile import (
     STAGING_PROFILE,
     active_profile,
@@ -26,20 +27,13 @@ class SettingsSaveError(RuntimeError):
 
 
 def get_platform() -> str:
-    """Define platform naming conventions.
-    win32, win64, macos32, macos64, linux32, linux64
-
-    Returns:
-        str: Platform and architecture
-    """
-    sys_name = system()
-    arch = [bits for bits in ["32", "64"] if bits in architecture()[0]][0]
-    if sys_name == "Windows":
-        return "win" + arch
-    elif sys_name == "Darwin":
-        return "macos"
-    elif sys_name == "Linux":
-        return "linux" + arch
+    """Select only a supported installer; Linux source execution remains experimental."""
+    target = native_installer_target()
+    if target is not None:
+        return target
+    if system() == "Linux":
+        return "linux64" if architecture()[0] == "64bit" else "linux32"
+    return "unsupported"
 
 
 def get_download_dir() -> Path:

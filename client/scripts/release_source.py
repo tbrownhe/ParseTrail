@@ -12,6 +12,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
+from parsetrail.core.client_targets import TARGET_SYSTEMS
 from parsetrail.core.versioning import validate_semver
 
 CLIENT_ROOT = Path(__file__).resolve().parents[1]
@@ -75,6 +76,17 @@ def validate_client_release(
     )
 
 
+def resolve_release_tag(*, expected_tag: str, repository: Path = REPOSITORY_ROOT) -> ReleaseSource:
+    """Resolve preserved output's tag without requiring the build checkout at HEAD."""
+    repository = repository.resolve()
+    reference = f"refs/tags/{expected_tag}"
+    _git(repository, "check-ref-format", reference)
+    commit = _git(repository, "rev-parse", "--verify", f"{reference}^{{commit}}")
+    if not COMMIT_PATTERN.fullmatch(commit):
+        raise ReleaseSourceError("Git did not return a full source commit for the release tag")
+    return ReleaseSource(source_commit=commit, source_tag=expected_tag)
+
+
 def write_build_metadata(
     output: Path,
     *,
@@ -82,11 +94,14 @@ def write_build_metadata(
     version: str,
     target_platform: str,
 ) -> None:
+    if target_platform not in TARGET_SYSTEMS:
+        raise ReleaseSourceError("Build metadata requires an explicit supported installer target")
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "client_version": validate_semver(version),
         **asdict(source),
         "target_platform": target_platform,
+        "architecture": "x86_64",
         "built_at": datetime.now(timezone.utc).isoformat(),
         "python_version": platform.python_version(),
         "python_compiler": platform.python_compiler(),
@@ -103,7 +118,7 @@ def _parser() -> argparse.ArgumentParser:
 
     client = subparsers.add_parser("client")
     client.add_argument("--version", required=True)
-    client.add_argument("--platform", choices=("macos", "win64"), required=True)
+    client.add_argument("--platform", choices=("macos-x86_64", "windows-x86_64"), required=True)
     client.add_argument("--metadata-output", type=Path, required=True)
 
     plugins = subparsers.add_parser("plugins")

@@ -80,12 +80,12 @@ def smoke_release(
         route = f"{api_base_url}/plugins"
         manifest_name = "plugin-manifest.json"
         signature_name = "plugin-manifest.sig"
-    elif release_kind == "client" and platform in {"macos", "win64"}:
+    elif release_kind == "client" and platform in {"macos-x86_64", "windows-x86_64"}:
         route = f"{api_base_url}/clients/{platform}"
         manifest_name = "client-manifest.json"
         signature_name = "client-manifest.sig"
     else:
-        raise ValueError("A client smoke test requires platform macos or win64")
+        raise ValueError("A client smoke test requires platform macos-x86_64 or windows-x86_64")
 
     manifest_path = release_dir / manifest_name
     signature_path = release_dir / signature_name

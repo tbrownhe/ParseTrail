@@ -118,6 +118,7 @@ def test_review_queries_preserve_filters_order_and_category_state(tmp_path: Path
         "uncategorized",
     ]
     assert unverified[0].account_name == "Checking"
+    assert [record.date for record in unverified] == [date(2026, 8, day) for day in (1, 2, 3)]
     assert unverified[0].amount == Decimal("-10.00")
     assert unverified[0].confidence == 0.75
     assert unverified[1].category_active is False

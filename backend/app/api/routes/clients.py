@@ -24,7 +24,7 @@ CURRENT_RELEASE = "current-release.json"
 CLIENT_RELEASES_DIR = "releases"
 MAX_CLIENT_MANIFEST_BYTES = 1024 * 1024
 MAX_RELEASE_POINTER_BYTES = 1024
-SUPPORTED_PLATFORMS = {"macos": ".dmg", "win64": ".exe"}
+SUPPORTED_PLATFORMS = {"macos-x86_64": ".dmg", "windows-x86_64": ".exe"}
 SEMVER_PATTERN = (
     r"(0|[1-9][0-9]*)\."
     r"(0|[1-9][0-9]*)\."
@@ -50,7 +50,8 @@ class ClientInstallerArtifact(BaseModel):
     artifact_type: Literal["client_installer"]
     filename: str
     version: str = Field(pattern=rf"^{SEMVER_PATTERN}$", max_length=64)
-    platform: Literal["macos", "win64"]
+    platform: Literal["macos-x86_64", "windows-x86_64"]
+    architecture: Literal["x86_64"]
     size: int = Field(gt=0, le=1024 * 1024 * 1024)
     sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
 
@@ -82,7 +83,7 @@ class ClientManifest(BaseModel):
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: Literal[1]
+    schema_version: Literal[2]
     release_sequence: int = Field(gt=0)
     published_at: datetime
     key_id: str = Field(pattern=r"^plugin-ed25519-[0-9a-f]{32}$")
@@ -107,6 +108,11 @@ class ClientManifest(BaseModel):
 
 
 def _platform_root(platform: str) -> Path:
+    if platform in {"win64", "macos"}:
+        raise HTTPException(
+            status_code=410,
+            detail="The legacy client update channel is retired. Install the current Windows x64 or Intel Mac client from https://parsetrail.com/download.html.",
+        )
     if platform not in SUPPORTED_PLATFORMS:
         raise HTTPException(status_code=404, detail="Platform not found")
     return CLIENTS_DIR / platform
@@ -180,6 +186,8 @@ async def get_clients() -> JSONResponse:
                 "file_name": artifact.filename,
                 "version": artifact.version,
                 "platform": artifact.platform,
+                "architecture": artifact.architecture,
+                "manifest_schema_version": manifest.schema_version,
                 "file_path": artifact.platform,
                 "size": artifact.size,
                 "sha256": artifact.sha256,

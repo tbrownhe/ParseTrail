@@ -98,9 +98,13 @@ from routing diagnostics.
 - [Backend operations and tests](backend/README.md)
 - [Server deployment runbook](deployment.md)
 - [Security policy](SECURITY.md)
+- [Engineering contracts](development.md#engineering-contracts) and
+  [accepted release/migration evidence](docs/engineering-acceptance.md)
 
-Official desktop releases support Windows x64 and macOS. Linux source execution
-is experimental: there is no tested Linux installer yet.
+The active desktop release targets are Windows x64 and Intel macOS (x86_64).
+Native Apple Silicon (arm64) development and release acceptance are deferred
+until suitable test hardware is available. Linux source execution is
+experimental: there is no tested Linux installer yet.
 
 ## Contributing
 

@@ -28,62 +28,7 @@
 	</script>
 	<script src="runtime-config.js"></script>
 	<script src="assets/js/config.js"></script>
-	<script>
-		document.addEventListener("DOMContentLoaded", async () => {
-			const apiBaseUrl = window.ParseTrailConfig.apiBaseUrl;
-			const platformMapBackend = {
-				Win32: "win64",
-				MacIntel: "macos",
-				"Mac ARM": "macos"
-			};
-			const platformMapWebsite = {
-				Win32: "Windows",
-				MacIntel: "MacOS",
-				"Mac ARM": "MacOS"
-			};
-
-			// Detect platform
-			const apiPlatform = platformMapBackend[navigator.platform] || null;
-			const webPlatform = platformMapWebsite[navigator.platform] || null;
-
-			try {
-				// Fetch available installers
-				const response = await fetch(`${apiBaseUrl}/clients/`);
-				if (!response.ok) {
-					throw new Error(`HTTP error! status: ${response.status}`);
-				}
-				const installers = await response.json();
-
-				// Find the appropriate installer
-				const installer = apiPlatform
-					? installers.find(i => i.platform === apiPlatform)
-					: null;
-
-				// Create a download button
-				const downloadSection = document.getElementById("download-button");
-				if (installer) {
-					const button = document.createElement("a");
-					button.href = `${apiBaseUrl}/clients/${installer.platform}/latest`;
-					button.textContent = `Download for ${webPlatform}`;
-					button.className = "button primary";
-					downloadSection.appendChild(button);
-				} else {
-					downloadSection.innerHTML = "<p>Sorry, we couldn't detect your platform. Please select an installer below:</p>";
-					installers.forEach(inst => {
-						const link = document.createElement("a");
-						link.href = `${apiBaseUrl}/clients/${inst.platform}/latest`;
-						link.textContent = `Download for ${inst.platform}`;
-						link.className = "button secondary";
-						downloadSection.appendChild(link);
-						downloadSection.appendChild(document.createElement("br"));
-					});
-				}
-			} catch (error) {
-				console.error("Error fetching installers:", error);
-				document.getElementById("download-button").innerHTML = "<p>Failed to load download options. Please try again later.</p>";
-			}
-		});
-	</script>
+	<script src="assets/js/downloads.js" defer></script>
 </head>
 
 <body class="is-preload">

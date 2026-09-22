@@ -1,0 +1,8 @@
+{
+  "schema_version": 1,
+  "clients_dir": "~/parsetrail-release-artifacts/clients",
+  "plugins_dir": "~/parsetrail-release-artifacts/plugins",
+  "signing_key": "~/.local/share/parsetrail-release-keys/plugin-signing-key.pem",
+  "public_api_base_url": "https://api.parsetrail.com/api/v1",
+  "remote": null
+}
