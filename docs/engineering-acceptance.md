@@ -1070,6 +1070,8 @@ check passed. Later branch commits contain release documentation.
 | Installer SHA-256 | `733e5f6b0856f5225b56ba94bbd49c8543e6f758fde84aff68e677cd62ba7cd0` |
 | Frozen executable SHA-256 | `d517e06fa842d07b34a7510ca7bfec3657a5d0e21d29607e49e7cdd933e9dca0` |
 | Canonical metadata SHA-256 | `4927f076adf5aa9e50288d3113693c001012c8abf48f28b108528a0a2c584f27` |
+| Signed release sequence | `20260922070935` |
+| Release inventory SHA-256 | `37b23405475eeda83a732d7ebe2962b59b7bdf6e6901bc095656a40fa3df0162` |
 
 **PASS — tagged Windows build:** the isolated clean checkout completed the pinned
 Python 3.13.15 bootstrap/locked sync, **472 tests / 3 skipped in 96.21 seconds**,
@@ -1080,16 +1082,23 @@ matches the exact source/tag/version/target above. The full local build log is
 `scratch/windows-1.4.2-build.log`, SHA-256
 `b0e6986d7851763ac9a5471d35f4b86dd70e4e7b659d67a4d36987fe56c8c9e9`.
 
-The installer is preserved in `scratch/windows-1.4.2-release/windows-x86_64` and
-its tagged checkout in `scratch/windows-1.4.2-candidate`. Signing was intercepted
-before the private key was opened. The owner handoff
-`scratch/sign-windows-1.4.2.ps1` passed `-VerifyOnly` in the normal Windows context,
-including the source/tag, pristine checkout, exact installer and metadata hashes,
-signing/inventory prerequisites, and preserved 1.4.0/1.4.1 release hashes. The
-owner supplies the key passphrase privately to sign and record an inventory.
+The signed installer is preserved in `scratch/windows-1.4.2-release/windows-x86_64`
+and its tagged checkout in `scratch/windows-1.4.2-candidate`. The owner completed
+`scratch/sign-windows-1.4.2.ps1`, supplying the passphrase privately, after its
+verification-only mode had checked the source/tag, pristine checkout, installer
+and metadata hashes, prerequisites, and preserved older release files.
 
-**Pending — native release acceptance:** Windows signing and installed-app
-acceptance, plus the pinned [Intel 1.4.2 handover](intel-mac-1.4.2-handover.md).
+**PASS — signing verification, September 22:** independent public-key verification
+accepted sequence `20260922070935`. The inventory matched the owner's recorded
+digest above; all three listed file sizes and SHA-256 hashes matched. Source,
+tag, target, version, architecture, and interpreter matched the pinned candidate.
+The installer retained its pre-signing hash, and all preserved 1.4.0/1.4.1 release
+files remained unchanged. The tagged checkout is clean. Local evidence is
+`scratch/windows-1.4.2-signed-verification.json`.
+
+**Pending — native release acceptance:** Windows installed-app acceptance, plus
+the pinned [Intel 1.4.2 handover](intel-mac-1.4.2-handover.md). The owner is moving
+to the Intel Mac for that build before returning to the Windows acceptance work.
 The local candidate tag has not been pushed, no installer has been replaced,
 and no artifact has been published. The old signed candidates and tags remain
 unchanged. The source-review acceptance does not replace these artifact checks.
