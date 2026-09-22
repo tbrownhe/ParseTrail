@@ -332,7 +332,7 @@ Every release requires a clean worktree and an exact tag at `HEAD`. Client tags
 are derived from `src/parsetrail/version.py`, for example:
 
 ```powershell
-git tag client-v1.4.1
+git tag client-v1.4.2
 ```
 
 Plugin tags are explicit operator-chosen identifiers, such as

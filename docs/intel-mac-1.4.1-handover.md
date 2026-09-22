@@ -1,5 +1,9 @@
 # Intel Mac 1.4.1 candidate handover
 
+Superseded by the [1.4.2 release handover](intel-mac-1.4.2-handover.md), which pins
+the merged repairs and replacement release source. Retain this document only as
+the original candidate's build record.
+
 **Build on hold, September 21:** Windows acceptance with an existing database
 exposed desktop control and logging defects in this pinned source. Do not start
 another 1.4.1 build; retain any existing candidate as evidence. The fixes require

@@ -28,10 +28,11 @@ identifies the preserved installer used for Windows native acceptance.
   The signed candidate's installation, native synthetic runtime/offline probes,
   and owner offline first start/restart with system-only `PATH` passed; see the
   [installed candidate record](docs/engineering-acceptance.md#intel-installed-candidate-verification-september-19-2026).
-- [ ] `[USER]` Build replacement Windows x64 and Intel macOS candidates containing
-  the accepted desktop fixes under a new version/tag, then accept installed About identity and
-  offline profile persistence. The preserved signed 1.4.1 candidate lacks these
-  fixes; the [1.4.1 Mac build handover](docs/intel-mac-1.4.1-handover.md) is on hold.
+- [~] `[USER]` Build, sign, and accept Windows x64 and Intel macOS **1.4.2**
+  candidates from `4585f4c57d20101c1c6ac4f625b726e51913e562` / `client-v1.4.2`.
+  Verify installed About identity, repaired controls, logging, and offline profile
+  persistence. Windows build preparation is in progress; use the
+  [1.4.2 Mac handover](docs/intel-mac-1.4.2-handover.md) for the native Intel build.
   Preserve the signed 1.4.0/1.4.1 candidates and tags; use separate output directories.
 - [ ] `[USER]` Rehearse preserved artifact publication, install/upgrade,
   credential storage, and plugin update on Windows x64 and Intel macOS.
