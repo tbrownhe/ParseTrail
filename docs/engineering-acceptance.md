@@ -1015,9 +1015,43 @@ sort directions matched calendar ordering. The snapshot and live database hashes
 remained unchanged. Financial dates, descriptions, and account identifiers were
 not printed or committed.
 
-**Pending — native acceptance:** recheck populated dates and both date-header
-sort directions using the updated source launcher, then continue the remaining
-private-copy walkthrough and replacement release gates.
+**PASS — native acceptance:** the owner confirmed dates work after the requested
+display and two-direction sorting retest, using fixed source at `c567330`. The
+owner then accepted the existing feature set and requested development closeout.
+
+### Client development closeout: September 21, 2026
+
+The owner accepted the existing client feature set after the Windows controls,
+budget/logging, and transaction-review date retests. This closes the client
+development and supplemental private-copy investigation in the approved scope.
+No additional feature proposals or C1–C3 implementation were started. The original
+Windows and Intel native synthetic walkthrough evidence remains applicable to
+the preserved candidates; the later desktop fixes have Windows native source
+acceptance and the regression evidence above.
+
+The final repairs are `1a002e3` (desktop controls, budget rendering, configured
+logging) and `c567330` (review-date display and sorting), developed on
+`fix/client-desktop-controls`. The closeout advances the existing
+`release/client-1.4.1` review branch to include those commits for
+[PR #38](https://github.com/tbrownhe/ParseTrail/pull/38). The branch name does not
+change the immutable source of the already signed 1.4.1 artifacts.
+
+Private test data, models, logs, working copies, and preserved profiles remain
+local and untracked. The source-review launcher still selects the prepared copy
+inside STAGING; the original live database and preserved synthetic profile are
+retained. Closing the app and using the original handoff's `-RestoreSynthetic`
+mode remains the way to return STAGING to its saved synthetic configuration.
+The supplemental duplicate-import, model, and backup walkthrough on real data
+was not performed; those workflows already have native synthetic acceptance.
+
+The development closeout does not claim a replacement installer or published
+release. New Windows and Intel candidates must include these repairs under a new
+version/tag, pass their frozen and native release gates, and rehearse preserved
+artifact publication and the 1.3-to-1.4 transition before public activation.
+Operation on an Intel machine physically lacking build tools remains a recorded
+acceptance gap. Apple Silicon remains deferred. These unfinished release items
+and the unapproved future proposals stay in TODO; no further native test is
+requested as part of this development closeout.
 
 ### Hosted client gates and backend test annotations
 

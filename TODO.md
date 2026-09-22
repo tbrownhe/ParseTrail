@@ -12,7 +12,10 @@ contains findings and detailed acceptance criteria for the chunk IDs below.
 The owner has approved P1.5, P1.6, and P2.2. Later correctness/cleanup proposals
 remain pending, and **Client feature proposals require further discussion before
 any implementation**. Windows and Intel installed offline/P2.2 walkthroughs are
-accepted; the remaining candidate and release gates below still require owner checks.
+accepted. The owner also accepted the existing feature set after the Windows
+private-copy retests and closed this development effort; see the
+[closeout record](docs/engineering-acceptance.md#client-development-closeout-september-21-2026).
+The remaining candidate and publication gates below belong to the next release.
 
 The completed Mac results are in the [Intel return note](docs/intel-mac-return-note.md).
 The [signed Windows candidate record](docs/engineering-acceptance.md#signed-windows-candidate-september-19-2026)
@@ -25,11 +28,8 @@ identifies the preserved installer used for Windows native acceptance.
   The signed candidate's installation, native synthetic runtime/offline probes,
   and owner offline first start/restart with system-only `PATH` passed; see the
   [installed candidate record](docs/engineering-acceptance.md#intel-installed-candidate-verification-september-19-2026).
-- [~] `[USER]` Recheck transaction-review date display and ascending/descending
-  sorting with the prepared private database copy, then complete its remaining
-  acceptance checks. See the [date regression record](docs/engineering-acceptance.md#transaction-review-date-rendering-september-21-2026).
 - [ ] `[USER]` Build replacement Windows x64 and Intel macOS candidates containing
-  those fixes under a new version/tag, then accept installed About identity and
+  the accepted desktop fixes under a new version/tag, then accept installed About identity and
   offline profile persistence. The preserved signed 1.4.1 candidate lacks these
   fixes; the [1.4.1 Mac build handover](docs/intel-mac-1.4.1-handover.md) is on hold.
   Preserve the signed 1.4.0/1.4.1 candidates and tags; use separate output directories.
