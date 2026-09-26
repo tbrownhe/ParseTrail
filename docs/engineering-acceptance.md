@@ -1111,6 +1111,43 @@ listing/manifest requests returned HTTP 403; this probe does not establish its
 active contract. Verify it from the authorized operator path during publication
 review. No deployment or server setting was changed by these checks.
 
+### Intel 1.4.2 candidate: September 26, 2026
+
+The pinned clean source `4585f4c57d20101c1c6ac4f625b726e51913e562` and local
+`client-v1.4.2` tag completed the native Intel build on macOS 15.7.9 (24G830).
+The source suite passed **470 tests with 5 skipped**. Thin x86_64 architecture,
+the **379-file** native loader audit with one cryptography extension, frozen
+provenance/runtime smoke, all three offscreen offline modes, DMG packaging,
+private Ed25519 signing, and independent public-key verification passed.
+
+Release sequence is `20260926200410`. The DMG is **126446802 bytes**, SHA-256
+`b3a25c5b6f1f0611acefb41fa29187883064eb1abff4b40b7526e93d4a07e7b5`.
+Inventory SHA-256 is
+`677c6cc99eccacf8956010cc1758ea71e37fb14d9d4848f841731284ec2311ae`;
+every listed size/hash matched, and canonical metadata matches the pinned
+source/tag/version/target. The full evidence and remaining acceptance status are
+in the [1.4.2 Intel return note](intel-mac-1.4.2-return-note.md).
+
+The separately installed DMG app matched all **2,141 file/symlink entries** in
+the built bundle and passed thin x86_64 inspection. Its isolated installed
+runtime smoke and all three offscreen offline probes passed with system-only
+`PATH`; heartbeat counts were **189/190/189**, intercepted requests **0/0/2**.
+Owner native GUI, configured logging, and offline restart checks are pending.
+
+The earlier release files, installed 1.4.0 app, and original release config
+matched their pre-build checksums. The closed staging profile was backed up and
+all 44 file copies verified before candidate use. No release tag was pushed,
+artifact published, or production deployment performed.
+
+**Open diagnostic limitation:** the pinned offline diagnostic explicitly forces
+`QT_QPA_PLATFORM=offscreen`; clearing the caller's variable does not make it
+native. Its installed runs must be reported separately from the native owner
+walkthrough. The same code exists in 1.4.0, so the earlier native-diagnostic
+description does not establish its backend. This clarification preserves the
+original return note and does not alter the separate owner GUI acceptance.
+Native offline diagnostic coverage and 1.4.2 installed owner acceptance remain
+open, as does R2's physically absent build-tool environment.
+
 ### Hosted client gates and backend test annotations
 
 The owner opened [PR #38](https://github.com/tbrownhe/ParseTrail/pull/38) from
