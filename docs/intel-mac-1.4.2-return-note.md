@@ -162,3 +162,19 @@ coverage requirement during combined publication review. Then rehearse the
 preserved-artifact and 1.3-to-1.4 API/website transition on staging. Public
 activation remains a separate reviewed operator step. No artifact activation,
 deployment, source fix, or replacement of prior signed candidates was performed.
+
+## Windows review disposition: September 26, 2026
+
+The Windows counterpart reviewed the pinned diagnostic and the original
+[offline acceptance contract](client-offline-acceptance.md). That contract uses
+automated source/frozen probes plus a separate native owner walkthrough. The
+1.4.2 handover incorrectly added a requirement for native Qt in the three
+automated offline modes, although they intentionally force offscreen Qt.
+
+The handover and acceptance guide now state the actual backend explicitly.
+Installed offscreen probes and the separate native runtime/owner checks passed,
+so the Intel replacement-candidate gate is accepted with that documented
+coverage. The original report above is retained; no native automated offline
+run is claimed and no signed source or artifact changed. Physical absence of
+build tools remains the separate R2 gap. Windows installed acceptance and the
+staging release-transition rehearsal remain pending.

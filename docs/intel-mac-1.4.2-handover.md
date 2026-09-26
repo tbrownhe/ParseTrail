@@ -68,8 +68,12 @@ notarization, production deployment, or artifact activation belongs to this task
 
 With ParseTrail closed, back up the existing staging profile before the first
 1.4.2 launch and verify the copies. Keep the production profile untouched. Run
-the installed runtime and three offline diagnostics in temporary profiles with
-native Qt, retaining their results separately from the builder's offscreen gates.
+the installed runtime smoke with native Qt and the three offline diagnostics in
+their temporary profiles, retaining results separately from the builder's gates.
+The offline diagnostics force offscreen Qt internally. Their installed runs
+verify the installed bytes; the owner walkthrough below supplies native GUI
+coverage. The original handover incorrectly requested native Qt for those three
+automated probes; see the return note's September 26 disposition.
 
 Launch the candidate using the staging URL, native Qt, and a system-only `PATH`,
 with networking disconnected. The original full synthetic walkthrough need not

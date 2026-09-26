@@ -36,11 +36,9 @@ identifies the preserved installer used for Windows native acceptance.
   [Windows candidate record](docs/engineering-acceptance.md#windows-142-candidate-september-21-2026) and
   [Intel return note](docs/intel-mac-1.4.2-return-note.md). Intel build/signing and
   owner installed GUI/offline-restart/logging acceptance are complete.
+  The [Windows installation handoff](docs/windows-1.4.2-acceptance.md) is prepared
+  with refreshed, verified backups and local installer/staging launch scripts.
   Preserve the signed 1.4.0/1.4.1 candidates and tags; use separate output directories.
-- [ ] Resolve the Intel handover's native offline diagnostic coverage gap:
-  the pinned probes force offscreen Qt. Automated offscreen checks and the native
-  owner GUI walkthrough passed; the three native diagnostic runs remain unmet.
-  See the [Intel return note](docs/intel-mac-1.4.2-return-note.md).
 - [ ] `[USER]` Rehearse preserved artifact publication, install/upgrade,
   credential storage, and plugin update on Windows x64 and Intel macOS.
   Include the [1.3-to-1.4 manual upgrade and API/website transition](docs/client-release-contract.md)

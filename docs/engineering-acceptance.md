@@ -358,8 +358,9 @@ Direct checks confirmed macOS **15.7.9 (24G830)** and **x86_64**.
   Finder drag-and-drop and owner launch-prompt observations remain separate.
   The installed executable passed thin x86_64 Mach-O inspection. Its embedded
   version, source commit, tag, and target match the preserved candidate.
-- **PASS — installed native diagnostics:** reran all three probes against the
-  installed executable with native Qt and system-only `PATH`. All reported
+- **PASS — installed offscreen diagnostics (backend corrected September 26):**
+  reran all three probes against the installed executable with system-only
+  `PATH`. The diagnostic forces offscreen Qt internally. All reported
   `frozen: true`, `passed: true`, and five onboarding pages. Fresh/cached/failing
   network modes recorded **190/189/190 heartbeat ticks** and **0/0/2 intercepted
   requests**, respectively. Both cached modes completed synthetic local import
@@ -369,8 +370,8 @@ Direct checks confirmed macOS **15.7.9 (24G830)** and **x86_64**.
 - **FAIL — offscreen diagnostic attempt:** an initial sandboxed run with
   `QT_QPA_PLATFORM=offscreen` aborted in Qt's Mac wizard with
   `NSInvalidArgumentException` (`-[NSBundle initWithURL:]: nil URL argument`).
-  The subsequent native Qt runs outside the sandbox all passed. The cause is
-  not isolated between platform-plugin and sandbox differences; no runtime fix
+  The subsequent runs outside the sandbox all passed, also using the internally
+  forced offscreen backend. The cause of the sandboxed failure is not isolated; no runtime fix
   or candidate rebuild is justified by this result alone. Use native Qt for
   the installed-app walkthrough, as specified in the handover.
 
@@ -1096,9 +1097,9 @@ The installer retained its pre-signing hash, and all preserved 1.4.0/1.4.1 relea
 files remained unchanged. The tagged checkout is clean. Local evidence is
 `scratch/windows-1.4.2-signed-verification.json`.
 
-**Pending — native release acceptance:** Windows installed-app acceptance, plus
-the pinned [Intel 1.4.2 handover](intel-mac-1.4.2-handover.md). The owner is moving
-to the Intel Mac for that build before returning to the Windows acceptance work.
+**Pending — native release acceptance:** Windows installed-app acceptance.
+The Intel build and owner walkthrough subsequently passed; see the September 26
+record below and the [Intel return note](intel-mac-1.4.2-return-note.md).
 The local candidate tag has not been pushed, no installer has been replaced,
 and no artifact has been published. The old signed candidates and tags remain
 unchanged. The source-review acceptance does not replace these artifact checks.
@@ -1110,6 +1111,17 @@ rehearsed with the new target channels before public activation. Direct producti
 listing/manifest requests returned HTTP 403; this probe does not establish its
 active contract. Verify it from the authorized operator path during publication
 review. No deployment or server setting was changed by these checks.
+
+**PASS — refreshed Windows upgrade preparation, September 26:** with the app
+closed, copied and verified **4,643 files / 817,266,779 bytes**, two consistent
+SQLite snapshots, and two application registry exports. Backup manifest SHA-256
+is `b054ce0897df9590fd4d30370e6cd4769e570a233adec9c6cc3bbe584975dff9`.
+The prepared installer helper passed **9,296 pre-install checks**, including all
+backup hashes, unchanged originals, selected private staging copy, registered
+1.4.0 application, pinned inventory/artifacts, and public-key signature verification.
+No installation or launch occurred. The [Windows handoff](windows-1.4.2-acceptance.md)
+contains owner steps and the private evidence location; installed acceptance
+remains pending.
 
 ### Intel 1.4.2 candidate: September 26, 2026
 
@@ -1150,15 +1162,19 @@ matched their pre-build checksums. The closed staging profile was backed up and
 all 44 file copies verified before candidate use. No release tag was pushed,
 artifact published, or production deployment performed.
 
-**Open diagnostic limitation:** the pinned offline diagnostic explicitly forces
+**Resolved handover wording, September 26:** the pinned offline diagnostic explicitly forces
 `QT_QPA_PLATFORM=offscreen`; clearing the caller's variable does not make it
 native. Its installed runs must be reported separately from the native owner
 walkthrough. The same code exists in 1.4.0, so the earlier native-diagnostic
 description does not establish its backend. This clarification preserves the
 original return note and does not alter the separate owner GUI acceptance.
-Native offline diagnostic coverage remains open, as does R2's physically absent
-build-tool environment. Windows 1.4.2 installed acceptance and the coordinated
-staging publication/upgrade rehearsal remain for the Windows counterpart.
+The original offline acceptance contract separates automated source/frozen
+probes from the native owner walkthrough. Both passed. The 1.4.2 handover's added
+request for three native automated offline runs was a documentation error;
+correcting it requires no source change or candidate rebuild. No native backend
+coverage is claimed for these probes. R2's physically absent build-tool
+environment remains open, as do Windows 1.4.2 installed acceptance and the
+coordinated staging publication/upgrade rehearsal.
 
 ### Hosted client gates and backend test annotations
 
