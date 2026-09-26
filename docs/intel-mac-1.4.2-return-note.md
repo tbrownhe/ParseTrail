@@ -1,6 +1,6 @@
 # Intel Mac 1.4.2 handover result
 
-Build/signing verified September 26, 2026; installed acceptance in progress, following the
+Build/signing and owner installed GUI acceptance completed September 26, 2026, following the
 [1.4.2 handover](intel-mac-1.4.2-handover.md). The
 [original Intel acceptance](intel-mac-return-note.md) is preserved.
 
@@ -94,13 +94,35 @@ synthetic import/model operations. Separate JSON/log files are retained under
 `scratch/intel-1.4.2-evidence/installed-*`. Before the owner launch, the staging
 profile still matched the backup exactly. The final older-file comparison passed.
 
-**Pending — owner native GUI acceptance:** the prepared staging launcher and
-checklist were opened for the owner. The launcher waits for networking to be
-disconnected and uses native Qt, staging URL, and system-only `PATH`. Installed
-About text, native repaired controls, offline restart/data persistence,
-current configured-log entries, custom log-path restart, and macOS launch-prompt
-observations await the owner's results. Saved prior logs/config remain backed up.
-Do not interpret automated diagnostics as acceptance of these manual checks.
+**PASS — owner native GUI acceptance:** after completing the prepared offline
+checklist, the owner confirmed, "Confirmed, all tests pass". The launcher used
+native Qt, the staging URL, and system-only `PATH`, waiting for networking to be
+disconnected before launch. This accepts:
+
+- STAGING 1.4.2 window identity and installed Help > About text
+  `client-v1.4.2 (4585f4c57d20)`.
+- Existing synthetic accounts, transactions, plugins, categories, and model;
+  responsive local views after the background-check delay without blocking login.
+- Select All selecting and clearing every item in Category Spending and Balance
+  History; Budgets refreshing in September 2026 Month and September 1–10 Custom
+  Range, grouped by Category and Type.
+- Transaction Review dates rendered as `YYYY-MM-DD`, with ascending and descending
+  Date-header sorting.
+- Configured logging, selecting the unused staging path
+  `logs/intel-1.4.2-custom.log`, and current entries after restarting offline.
+- Offline quit/reopen with saved data and responsive local views, without a
+  blocking login. No defect or launch error was reported; individual macOS
+  prompt wording was not supplied.
+
+**PASS — post-walkthrough verification:** with the app closed, the configured
+custom log existed (**1,739 bytes**, **15** entries dated September 26, latest
+**16:31:02**). The prior log still exists, and the original configuration/log
+copies remain in the checksum-verified 44-file backup. SQLite integrity and
+foreign-key checks passed; all application-table rows match the backup. Only
+SQLite's internal `sqlite_stat1` query-planner statistics changed. Cached plugin
+and model bytes remain unchanged, as do all preserved older release/app/config
+files. Local evidence is
+`scratch/intel-1.4.2-evidence/owner-acceptance-verification.json`.
 
 The prepared offline owner walkthrough is
 `scratch/intel-1.4.2-evidence/owner-checklist.md`. It covers About identity,
@@ -117,14 +139,26 @@ runs remain unmet. The same forced setting exists in the 1.4.0 source, so the
 earlier return note's native-diagnostic characterization should not be relied on
 as proof of the Qt backend; its owner GUI evidence remains separate.
 
-The signed build and installation are reviewable; the release handoff remains
-open at the diagnostic limitation and pending owner checks. Resolve the native
+The signed build, installation, and native owner walkthrough are accepted;
+the release handoff retains the diagnostic limitation. Resolve the native
 probe requirement explicitly before accepting that gate; this task did not
 change diagnostic code or the pinned release source.
 
 Physical absence of development tools remains the existing R2 acceptance gap.
 Apple Silicon, production deployment, publication/activation, and the coordinated
 1.3-to-1.4 staging transition are outside this build/acceptance checkpoint.
-TODO now records the completed Intel build/signing step while preserving the
-remaining installed acceptance and diagnostic gaps. No whole acceptance item
-has been removed.
+TODO now records the completed Intel build/signing and owner GUI acceptance;
+Windows installed acceptance and the Intel diagnostic gap remain open.
+
+## Return to the Windows counterpart
+
+Fetch `test/intel-macos-1.4.2-acceptance`. Commit `2970fc5` records the signed
+build and installed automated checks; this subsequent documentation commit
+records the owner walkthrough and post-walkthrough verification. Both belong
+to the focused result branch; no release tag was pushed.
+
+Complete Windows 1.4.2 installed acceptance and resolve the native diagnostic
+coverage requirement during combined publication review. Then rehearse the
+preserved-artifact and 1.3-to-1.4 API/website transition on staging. Public
+activation remains a separate reviewed operator step. No artifact activation,
+deployment, source fix, or replacement of prior signed candidates was performed.

@@ -28,16 +28,19 @@ identifies the preserved installer used for Windows native acceptance.
   The signed candidate's installation, synthetic runtime/offline probes,
   and owner offline first start/restart with system-only `PATH` passed; see the
   [installed candidate record](docs/engineering-acceptance.md#intel-installed-candidate-verification-september-19-2026).
-- [~] `[USER]` Complete **1.4.2** installed acceptance on both Windows x64 and
-  Intel macOS, using the verified signed candidates from
+- [~] `[USER]` Complete **1.4.2** installed acceptance on Windows x64, using the
+  verified signed candidate from
   `4585f4c57d20101c1c6ac4f625b726e51913e562` / `client-v1.4.2`.
   Verify installed About identity, repaired controls, logging, and offline profile
   persistence. See the verified signed
   [Windows candidate record](docs/engineering-acceptance.md#windows-142-candidate-september-21-2026) and
-  [Intel return note](docs/intel-mac-1.4.2-return-note.md). Intel build/signing is
-  complete. Resolve the handover's native offline diagnostic coverage gap:
-  the pinned probes force offscreen Qt, independently of the native GUI checks.
+  [Intel return note](docs/intel-mac-1.4.2-return-note.md). Intel build/signing and
+  owner installed GUI/offline-restart/logging acceptance are complete.
   Preserve the signed 1.4.0/1.4.1 candidates and tags; use separate output directories.
+- [ ] Resolve the Intel handover's native offline diagnostic coverage gap:
+  the pinned probes force offscreen Qt. Automated offscreen checks and the native
+  owner GUI walkthrough passed; the three native diagnostic runs remain unmet.
+  See the [Intel return note](docs/intel-mac-1.4.2-return-note.md).
 - [ ] `[USER]` Rehearse preserved artifact publication, install/upgrade,
   credential storage, and plugin update on Windows x64 and Intel macOS.
   Include the [1.3-to-1.4 manual upgrade and API/website transition](docs/client-release-contract.md)

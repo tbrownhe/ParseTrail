@@ -1132,7 +1132,18 @@ The separately installed DMG app matched all **2,141 file/symlink entries** in
 the built bundle and passed thin x86_64 inspection. Its isolated installed
 runtime smoke and all three offscreen offline probes passed with system-only
 `PATH`; heartbeat counts were **189/190/189**, intercepted requests **0/0/2**.
-Owner native GUI, configured logging, and offline restart checks are pending.
+**PASS — owner native GUI acceptance:** the owner confirmed all checklist tests
+passed, including STAGING 1.4.2/About `client-v1.4.2 (4585f4c57d20)`, preserved
+synthetic data/model/plugins, responsive offline views, both Select All controls,
+budget date/grouping modes, review-date rendering/sorting, configured logging,
+and offline quit/reopen without blocking login. No defect was reported.
+
+With the app closed, independent verification found the selected custom staging
+log with **15 current-day entries**, preserved prior log/config backup, intact
+SQLite integrity/foreign keys, unchanged application-table rows, and unchanged
+cached plugin/model bytes. Only internal SQLite planner statistics changed.
+All original backup and older-release checksums still match. This accepts the
+Intel owner walkthrough separately from automated diagnostic backend coverage.
 
 The earlier release files, installed 1.4.0 app, and original release config
 matched their pre-build checksums. The closed staging profile was backed up and
@@ -1145,8 +1156,9 @@ native. Its installed runs must be reported separately from the native owner
 walkthrough. The same code exists in 1.4.0, so the earlier native-diagnostic
 description does not establish its backend. This clarification preserves the
 original return note and does not alter the separate owner GUI acceptance.
-Native offline diagnostic coverage and 1.4.2 installed owner acceptance remain
-open, as does R2's physically absent build-tool environment.
+Native offline diagnostic coverage remains open, as does R2's physically absent
+build-tool environment. Windows 1.4.2 installed acceptance and the coordinated
+staging publication/upgrade rehearsal remain for the Windows counterpart.
 
 ### Hosted client gates and backend test annotations
 
