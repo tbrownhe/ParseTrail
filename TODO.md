@@ -83,12 +83,7 @@ and request targeted native cross-platform testing when dependencies, packaging,
 OS integration, or evidence of platform-specific behavior warrants it. Record
 only platforms actually tested; this does not claim Intel acceptance by inference.
 
-- [USER] **C2a-2 — Background model training:** implemented with worker-owned
-  reads, cancellable training, and validated atomic model replacement. Awaiting
-  Windows GUI acceptance of completion, Cancel, and window-X using the
-  [synthetic walkthrough](devtools/recurring_acceptance/README.md#c2a-2-background-training-acceptance).
-  Failed or cancelled training preserves the last usable model. Pause before CF1.
-- [ ] **CF1 — Coverage and freshness service:** extract/reuse per-account coverage
+- [~] **CF1 — Coverage and freshness service:** extract/reuse per-account coverage
   intervals for the existing grid and new analytics. Test overlap, gaps, empty
   accounts, different account cutoffs, and fully covered comparison periods.
 - [ ] **CF2 — Cash-flow calculation contract:** define account scope, income,
@@ -137,9 +132,6 @@ reviewed bytes. Intel clients start without Homebrew/build tools at runtime.
 Implement after the release/offline chunks. Each item is a focused change with
 the review's acceptance checks, not a broad refactor.
 
-- [~] **C2a — Responsive local analysis:** move recurring analysis and model
-  training to cancellable workers. Verify GUI heartbeat, safe close/cancel,
-  worker-owned sessions, and preservation of the prior model on failed training.
 - [ ] **C2b — Responsive imports:** move import work to a worker with account and
   warning decisions on the UI thread. Cancellation must preserve commit/archive
   recovery invariants and accurately report committed work.

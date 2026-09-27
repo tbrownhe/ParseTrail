@@ -6,7 +6,7 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
-## Client C2a-2 source verification — September 26, 2026
+## Client C2a-2 verification and Windows acceptance — September 26, 2026
 
 On `feature/client-financial-insights`, both model-training actions now use the
 local-analysis worker lifecycle. The worker owns the verified-training-data
@@ -38,10 +38,11 @@ Windows AMD64 source evidence (Python 3.13.15, PySide6 6.11.2):
   (**175 Python files**); Git whitespace checks passed.
 
 No private database/model was accessed, no installer was built or published,
-and no hosted CI or Intel run is claimed. Native Windows acceptance remains
-pending using the [synthetic training walkthrough](../devtools/recurring_acceptance/README.md#c2a-2-background-training-acceptance).
-Implementation pauses here before CF1. The walkthrough creates and removes a
-temporary profile and verifies old-model bytes after cancellation/failure.
+and no hosted CI or Intel run is claimed. The owner reported the requested
+Windows training test successful at `1b75c90`; this closes the C2a-2 native gate
+and completes C2a. No optional failure-demonstration or Intel acceptance is
+inferred. CF1 may proceed. The [synthetic training walkthrough](../devtools/recurring_acceptance/README.md#c2a-2-background-training-acceptance)
+remains available for regression checks with a temporary profile.
 
 ## Client C2a-1 verification and Windows acceptance — September 26, 2026
 
