@@ -44,8 +44,10 @@ Windows AMD64 source evidence (Python 3.13.15, PySide6 6.11.2):
 
 No private database was accessed, no installer was built/published, and no hosted
 CI or Intel execution is claimed. The owner clarified in `c9809b2` that ordinary
-client features need not wait for duplicate Intel walkthroughs. Windows owner
-acceptance of responsiveness/Cancel/Close is pending; the
+client features need not wait for duplicate Intel walkthroughs. The owner tested
+`7411bd0` on Windows and confirmed Cancel works both with and without `--review`.
+This records Cancel acceptance in both views; Close and heartbeat/responsiveness
+have not yet been explicitly confirmed. The
 [delayed-analysis walkthrough](../devtools/recurring_acceptance/README.md#c2a-1-background-analysis-acceptance)
 prepares a temporary profile and visible heartbeat. Stop at this gate before
 C2a-2.
