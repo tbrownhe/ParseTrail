@@ -204,6 +204,13 @@ digest-pinned PostgreSQL image, pulls application images, re-hashes the database
 backup, records the current Alembic revision and signed artifact inventories, and
 captures the exact rollback target. It prints a deployment ID used below.
 
+Staging normally requires signed-artifact parity with production. A reviewed
+desktop contract transition may add `--staging-client-release` pointing to the
+paired release record verified on the trusted client release host. Only those
+two explicit client targets can differ; plugin/legacy parity and environment
+isolation remain required. The saved review is rechecked before later phases.
+See [staging candidate handling](docs/staging.md#3-signed-artifacts-and-captured-mail).
+
 ## 5. Migrate without replacing application services
 
 Enter the maintenance window and run:

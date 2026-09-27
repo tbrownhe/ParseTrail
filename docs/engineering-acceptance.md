@@ -1234,6 +1234,25 @@ the signing key was not opened. Mac input and real paired adoption/review remain
 pending the owner's private transfer, followed by the coordinated staging
 transition. A private empty inbox was prepared outside the public resource tree.
 
+The owner subsequently transferred all four Mac release files to that inbox.
+Remote and local verification matched the accepted inventory digest
+`677c6cc99eccacf8956010cc1758ea71e37fb14d9d4848f841731284ec2311ae` and the
+126,446,802-byte DMG digest
+`b3a25c5b6f1f0611acefb41fa29187883064eb1abff4b40b7526e93d4a07e7b5`.
+The new command adopted both installers unchanged into the private
+`scratch/desktop-releases/1.4.2/desktop-release.json` layout. Paired `status` and
+staging publication review passed with an empty publication record. No signing
+key was opened and no remote channel was activated. This completes R4's real
+adoption/review acceptance; the one-time API/website staging transition remains.
+
+The deployment interface fix records both explicit targets alongside legacy
+channels and accepts the reviewed paired record for staging only. It verifies
+all candidate bytes, retains plugin/legacy parity, and binds later phases to the
+preflight inventories. All **50 deployment-tool tests passed**, including nine
+candidate tests covering unreviewed targets, modified files, changed identity or
+pointers, unsafe inventory names, and drift after preflight. Both real accepted
+installers also passed that verifier in a private local transition layout.
+
 ### Hosted client gates and backend test annotations
 
 The owner opened [PR #38](https://github.com/tbrownhe/ParseTrail/pull/38) from

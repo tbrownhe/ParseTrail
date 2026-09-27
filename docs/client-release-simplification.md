@@ -54,8 +54,10 @@ wrong/failed CI runs, archive boundaries, changed artifacts, source/target
 disagreement, one signing prompt, unchanged adoption, cross-host provenance,
 staging-before-production, and interrupted paired publication. Both hosted native
 packaging jobs subsequently passed in [run 36282715627](https://github.com/tbrownhe/ParseTrail/actions/runs/36282715627).
-Real-artifact adoption/publication review remains pending the Mac transfer; the
-validation outputs are not replacements for the accepted signed 1.4.2 pair.
+The accepted Mac files were transferred and both real installers subsequently
+passed unchanged adoption, paired status verification, and local staging
+publication review. The validation outputs are not replacements for the accepted
+signed 1.4.2 pair. The remaining gate is the coordinated staging transition.
 
 ## One-time contract transition
 
@@ -64,13 +66,13 @@ The 1.3-to-1.4 target change still requires the coordinated staging rehearsal in
 should not require a server rebuild/deployment when that contract is unchanged.
 
 Read-only operator inspection found legacy Windows 1.3.0 and Mac 1.3.1 channels
-in both environments, with no new target channels. Deployment evidence currently
-enumerates only `win64` and `macos`. The transition needs an audit of the explicit
-1.4 targets and an explicitly reviewed staging candidate, retaining plugin and
-production isolation and rollback evidence. Do not bypass parity checks or
-publish to production first merely to make staging match it.
+in both environments, with no new target channels. Deployment inventory now
+enumerates legacy and explicit 1.4 targets. Its optional
+`--staging-client-release` reference permits only the reviewed pair to differ
+from production, verifies actual files against accepted inventory hashes, and
+retains plugin/legacy-channel parity. Preflight saves both environment inventories
+and rechecks them before migration, deployment, or rollback. See the
+[staging guide](staging.md#3-signed-artifacts-and-captured-mail).
 
-Windows 1.4.2 passed local publication review against staging. The Mac output
-remains on its builder; an empty private inbox is prepared under
-`/srv/parsetrail-staging/release-input/client-v1.4.2-artifacts/macos-x86_64`.
-No candidate has been published.
+The paired release record is ready on the signing/publishing computer. Neither
+installer was rebuilt or re-signed, and no candidate has been published.

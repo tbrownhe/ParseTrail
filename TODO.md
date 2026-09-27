@@ -23,12 +23,6 @@ identifies the preserved installer used for Windows native acceptance.
 
 ## P1.5 — Client release reliability
 
-- [~] **R4 — Complete simplified 1.4.2 release acceptance:** transfer the preserved
-  Mac output, adopt the accepted pair without rebuilding/signing, and verify the
-  real paired publication review. CI packaging and automated workflow acceptance
-  are recorded in [engineering evidence](docs/engineering-acceptance.md#simplified-desktop-release-workflow-september-26-2026).
-  Use the [short release guide](docs/client-releases.md). Publication stays on hold
-  until the simplified workflow and staging transition are accepted.
 - [~] **R2 — Intel macOS packaging:** `[USER]` Accept operation on a machine
   where build tools are physically absent when that environment is available.
   The signed candidate's installation, synthetic runtime/offline probes,
@@ -38,9 +32,12 @@ identifies the preserved installer used for Windows native acceptance.
   credential storage, and plugin update on Windows x64 and Intel macOS.
   Include the [1.3-to-1.4 manual upgrade and API/website transition](docs/client-release-contract.md)
   on staging before public activation. Operator inspection confirmed legacy
-  schema-1 channels on both staging and production. Extend deployment inventory
-  to the explicit client targets and a reviewed staging candidate before the
-  transition, preserving plugin/production isolation and rollback evidence.
+  schema-1 channels on both staging and production. Deploy the reviewed candidate
+  using the explicit-target inventory support and paired release reference,
+  preserving plugin/production isolation and rollback evidence. CI packaging,
+  unchanged adoption of both accepted installers, and real paired publication
+  review passed; see [engineering evidence](docs/engineering-acceptance.md#simplified-desktop-release-workflow-september-26-2026)
+  and the [short release guide](docs/client-releases.md).
 
 Acceptance: one clean tag produces traceable target-specific artifacts; a dry
 run does not change public directories, and publish-existing uses exactly the

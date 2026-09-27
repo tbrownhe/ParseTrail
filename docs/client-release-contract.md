@@ -71,10 +71,10 @@ old channels.
 
 Release order:
 
-1. Finish the approved release-tool implementation and source/offline checks;
-   create the clean `client-v1.4.0` candidate tag when ready for native builds.
-   Complete the native build, offline, and publication rehearsals. Retain
-   verified Windows x64 and Intel Mac installers, signatures, and inventories.
+1. Finish release-tool and source/offline checks and retain verified Windows x64
+   and Intel Mac installers, signatures, and inventories from one clean version
+   tag. The accepted `client-v1.4.2` pair now supplies this transition; preserve
+   it through the [paired release workflow](client-releases.md), without rebuilding.
 2. Rehearse the complete API/website/installer transition on staging with those
    exact bytes. Include a 1.3 client's retired-channel response and a manual
    installation that preserves its local profile.

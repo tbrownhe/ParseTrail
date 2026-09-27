@@ -28,6 +28,7 @@ SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 DEFAULT_COMPOSE_FILE = Path("docker-compose.yml")
 DEFAULT_BUILD_COMPOSE_FILE = Path("docker-compose.build.yml")
 SERVICES = ("backend", "frontend", "website")
+CLIENT_TARGETS = ("windows-x86_64", "macos-x86_64")
 REGISTRY_PUSH_ATTEMPTS = 3
 IMAGE_ENV = {
     "backend": "BACKEND_IMAGE_REF",
@@ -310,16 +311,117 @@ def deployment_context(
 def validate_staging_artifacts(
     deploy_values: dict[str, str],
     production_values: dict[str, str] | None,
-) -> None:
+    client_release: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
     if deploy_values["ENVIRONMENT"] != "staging":
-        return
+        if client_release is not None:
+            raise ReleaseError("A staging client candidate cannot be used for production deployment")
+        return None
     assert production_values is not None
     staging_inventory = artifact_inventory(deploy_values)
     production_inventory = artifact_inventory(production_values)
     if production_inventory["plugins"] is None or not production_inventory["clients"]:
         raise ReleaseError("Production signed artifact inventory is incomplete")
-    if staging_inventory != production_inventory:
+    expected = {"plugins": production_inventory["plugins"], "clients": dict(production_inventory["clients"])}
+    candidate = None
+    if client_release is not None:
+        candidate = validate_client_candidate(deploy_values, client_release)
+        for target in CLIENT_TARGETS:
+            expected["clients"][target] = staging_inventory["clients"].get(target)
+    if staging_inventory != expected:
         raise ReleaseError("Staging signed artifact inventory does not match production")
+    return {"client_release": candidate, "staging": staging_inventory, "production": production_inventory}
+
+
+def validate_client_candidate(deploy_values: dict[str, str], record: dict[str, Any]) -> dict[str, Any]:
+    """Bind staged bytes to a paired release already signature-verified on the signing host."""
+    version = record.get("version")
+    targets = record.get("targets")
+    if (
+        record.get("schema_version") != 1
+        or not isinstance(version, str)
+        or not re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", version)
+        or record.get("source_tag") != f"client-v{version}"
+        or not COMMIT_PATTERN.fullmatch(str(record.get("source_commit", "")))
+        or not isinstance(targets, dict)
+        or set(targets) != set(CLIENT_TARGETS)
+    ):
+        raise ReleaseError("Staging candidate must be a verified paired desktop-release.json")
+    root = Path(deploy_values["CLIENTS_DIR"]).resolve()
+    for target in CLIENT_TARGETS:
+        entry = targets[target]
+        if not isinstance(entry, dict):
+            raise ReleaseError("Invalid staging candidate target")
+        sequence = entry.get("release_sequence")
+        digest = entry.get("inventory_sha256")
+        if type(sequence) is not int or sequence <= 0 or not SHA256_PATTERN.fullmatch(str(digest)):
+            raise ReleaseError("Invalid staging candidate sequence/inventory hash")
+        channel = root / target
+        pointer = load_json(channel / "current-release.json")
+        if pointer != {"schema_version": 1, "release_sequence": sequence}:
+            raise ReleaseError(f"Staging {target} does not select the reviewed candidate")
+        directory = channel / "releases" / str(sequence)
+        inventory_path = directory / "release-inventory.json"
+        if inventory_path.is_symlink() or not inventory_path.resolve().is_relative_to(root):
+            raise ReleaseError("Staging candidate inventory must remain inside its artifact root")
+        if sha256_file(inventory_path) != digest:
+            raise ReleaseError(f"Staging {target} inventory differs from the reviewed candidate")
+        inventory = load_json(inventory_path)
+        identity = {
+            "schema_version": 1,
+            "release_kind": "client",
+            "target_platform": target,
+            "architecture": "x86_64",
+            "manifest_schema_version": 2,
+            "version": version,
+            "source_tag": record["source_tag"],
+            "source_commit": record["source_commit"],
+            "release_sequence": sequence,
+        }
+        if any(inventory.get(key) != value for key, value in identity.items()):
+            raise ReleaseError("Staging inventory disagrees with the paired candidate identity")
+        suffix = "exe" if target == "windows-x86_64" else "dmg"
+        installer = f"parsetrail_{version}_{target}_setup.{suffix}"
+        expected_names = {"client-manifest.json", "client-manifest.sig", installer}
+        files = inventory.get("files")
+        if not isinstance(files, list) or len(files) != 3:
+            raise ReleaseError("Staging client inventory must contain exactly three release files")
+        seen = set()
+        for file in files:
+            if not isinstance(file, dict):
+                raise ReleaseError("Invalid staging client file record")
+            name = file.get("filename")
+            if not isinstance(name, str) or name not in expected_names or name in seen:
+                raise ReleaseError("Staging client inventory contains unexpected/duplicate filenames")
+            seen.add(name)
+            path = directory / name
+            if (
+                path.is_symlink()
+                or not path.is_file()
+                or not path.resolve().is_relative_to(root)
+                or path.stat().st_size != file.get("size")
+                or sha256_file(path) != file.get("sha256")
+            ):
+                raise ReleaseError(f"Staging candidate file differs from accepted bytes: {name}")
+    # Publication progress can change independently; retain only the reviewed identity.
+    return {key: record[key] for key in ("schema_version", "version", "source_tag", "source_commit", "targets")}
+
+
+def staging_client_reference(args: argparse.Namespace) -> dict[str, Any] | None:
+    path = getattr(args, "staging_client_release", None)
+    return load_json(path) if path is not None else None
+
+
+def recheck_staging_review(
+    deploy_values: dict[str, str], production_values: dict[str, str] | None, review: dict[str, Any] | None
+) -> None:
+    if deploy_values["ENVIRONMENT"] != "staging":
+        return
+    if review is None:
+        raise ReleaseError("Staging deployment needs a fresh preflight with artifact review evidence")
+    current = validate_staging_artifacts(deploy_values, production_values, review.get("client_release"))
+    if current != review:
+        raise ReleaseError("Staging or production artifact inventory changed after review; repeat preflight")
 
 
 def validate_staging_smoke_credentials(
@@ -502,7 +604,7 @@ def artifact_inventory(deploy_values: dict[str, str]) -> dict[str, Any]:
                     summarized.append(
                         {
                             key: artifact.get(key)
-                            for key in ("filename", "version", "platform", "size", "sha256")
+                            for key in ("filename", "version", "platform", "architecture", "size", "sha256")
                             if key in artifact
                         }
                     )
@@ -518,7 +620,7 @@ def artifact_inventory(deploy_values: dict[str, str]) -> dict[str, Any]:
         inventory["plugins"] = manifest_record(Path(plugins_dir), pointer_required=False)
     clients_dir = deploy_values.get("CLIENTS_DIR")
     if clients_dir:
-        for platform in ("macos", "win64"):
+        for platform in ("macos", "win64", *CLIENT_TARGETS):
             record = manifest_record(Path(clients_dir) / platform, pointer_required=True)
             if record is not None:
                 inventory["clients"][platform] = record
@@ -647,7 +749,7 @@ def command_adopt(args: argparse.Namespace) -> None:
     repo_root = repository_root()
     state_dir = state_directory(args.state_dir, repo_root)
     deploy_values, production_values = deployment_context(args, state_dir=state_dir)
-    validate_staging_artifacts(deploy_values, production_values)
+    artifact_review = validate_staging_artifacts(deploy_values, production_values, staging_client_reference(args))
     current_path = state_dir / "current-release.json"
     if current_path.exists():
         raise ReleaseError("A current immutable release has already been adopted")
@@ -686,6 +788,7 @@ def command_adopt(args: argparse.Namespace) -> None:
         "release": adopted,
         "schema_revision": revision,
         "artifacts": artifact_inventory(deploy_values),
+        "staging_artifact_review": artifact_review,
         "rollback_target": None,
     }
     atomic_json(state_dir / "records" / f"{record['deployment_id']}.json", record, exclusive=True)
@@ -700,7 +803,7 @@ def command_preflight(args: argparse.Namespace) -> None:
         raise ReleaseError("Checked-out commit does not match the release descriptor")
     state_dir = state_directory(args.state_dir, repo_root)
     deploy_values, production_values = deployment_context(args, state_dir=state_dir)
-    validate_staging_artifacts(deploy_values, production_values)
+    artifact_review = validate_staging_artifacts(deploy_values, production_values, staging_client_reference(args))
     current_path = state_dir / "current-release.json"
     if not current_path.is_file():
         raise ReleaseError("Adopt the current immutable deployment before the first gated release")
@@ -736,6 +839,7 @@ def command_preflight(args: argparse.Namespace) -> None:
         "compose_images": rendered_images,
         "backup_evidence": evidence,
         "artifacts_before": artifact_inventory(deploy_values),
+        "staging_artifact_review": artifact_review,
     }
     atomic_json(pending_path(state_dir, identifier), pending, exclusive=True)
     print(f"Preflight passed. Deployment ID: {identifier}")
@@ -748,7 +852,8 @@ def load_pending(args: argparse.Namespace) -> tuple[Path, dict[str, Any], dict[s
     pending = load_json(path)
     if pending.get("deployment_id") != args.deployment_id:
         raise ReleaseError("Pending deployment identifier mismatch")
-    deploy_values, _production_values = deployment_context(args, state_dir=state_dir)
+    deploy_values, production_values = deployment_context(args, state_dir=state_dir)
+    recheck_staging_review(deploy_values, production_values, pending.get("staging_artifact_review"))
     return path, pending, deploy_values, state_dir
 
 
@@ -838,6 +943,7 @@ def command_deploy(args: argparse.Namespace) -> None:
         "migration_policy": pending["migration_policy"],
         "migration_log_sha256": pending["migration_log_sha256"],
         "backup_evidence": pending["backup_evidence"],
+        "staging_artifact_review": pending.get("staging_artifact_review"),
     }
     try:
         activate(args, deploy_values, release)
@@ -890,7 +996,7 @@ def command_rollback(args: argparse.Namespace) -> None:
     target = validate_release(source_record["rollback_target"])
     current = validate_release(load_json(state_dir / "current-release.json"))
     deploy_values, production_values = deployment_context(args, state_dir=state_dir)
-    validate_staging_artifacts(deploy_values, production_values)
+    recheck_staging_review(deploy_values, production_values, source_record.get("staging_artifact_review"))
     smoke_config = SmokeConfig.from_file(args.smoke_config)
     validate_staging_smoke_credentials(
         deploy_values,
@@ -912,6 +1018,7 @@ def command_rollback(args: argparse.Namespace) -> None:
         "source_deployment_id": args.deployment_id,
         "schema_revision": schema_revision(args, deploy_values, target),
         "artifacts": artifact_inventory(deploy_values),
+        "staging_artifact_review": source_record.get("staging_artifact_review"),
         "smoke": smoke,
     }
     atomic_json(final_record_path(state_dir, identifier), record, exclusive=True)
@@ -962,11 +1069,19 @@ def parser() -> argparse.ArgumentParser:
     adopt = commands.add_parser("adopt", help="Adopt running digest-pinned images as baseline")
     add_state_arguments(adopt)
     adopt.add_argument("--source-commit", required=True)
+    adopt.add_argument(
+        "--staging-client-release", type=Path, help="Reviewed paired desktop-release.json for a staging candidate"
+    )
     adopt.set_defaults(handler=command_adopt)
 
     preflight = commands.add_parser("preflight", help="Validate release, backup, config, and rollback")
     add_state_arguments(preflight)
     preflight.add_argument("--release", type=Path, required=True)
+    preflight.add_argument(
+        "--staging-client-release",
+        type=Path,
+        help="Reviewed paired desktop-release.json; only the two explicit client targets may differ",
+    )
     preflight.add_argument("--backup-evidence", type=Path, required=True)
     preflight.add_argument("--max-backup-age-hours", type=float, default=48)
     preflight.set_defaults(handler=command_preflight)

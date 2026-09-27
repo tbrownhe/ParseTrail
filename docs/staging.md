@@ -144,6 +144,32 @@ staging directories while preserving names and bytes. Preflight compares release
 sequences, exact manifest/signature hashes, and artifact metadata and fails on any
 difference.
 
+For a client contract transition, preflight can instead use
+`--staging-client-release /secure/path/desktop-release.json`. Copy this record
+from the trusted machine after `scripts.desktop_release adopt` or `prepare`
+verifies both signatures and inventories. Treat it as the explicit reviewed
+candidate reference, not an automatically generated snapshot of whatever happens
+to be on staging. The deployment host needs no signing key or client environment.
+
+Only `windows-x86_64` and `macos-x86_64` may differ from production. Both staged
+pointers must select the referenced sequences; inventory hashes, source/tag,
+architecture, version, and every manifest/signature/installer byte must match
+that reference. Plugins and preserved legacy channels must still match production.
+This option is rejected for production deployment. The resulting preflight record
+retains the candidate and both environment inventories; migration, deployment and
+rollback recheck them and stop on drift. Later commands use that saved review,
+without another path/hash entry. Without a candidate reference, exact parity
+remains required.
+
+The 1.3-to-1.4 transition stages the two new channels while the old API still
+serves the preserved legacy channels, then deploys the matching API and website.
+Run the paired client's normal staging publication command afterward to reconcile
+the active pointers, smoke the public downloads, and record both targets as
+verified. Do not run its public smoke against the old API and interpret that
+expected incompatibility as a successful release. Keep the previous API/website
+digests and legacy pointers for rollback; ordinary client releases do not require
+this server transition.
+
 Staging SMTP must point to the separate Mailpit capture service, not the
 production relay. The checked-in definition is pinned, has no SMTP host port or
 relay/forward configuration, and receives application mail only on the main
