@@ -6,7 +6,7 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
-## Client C2a-1 source verification — September 26, 2026
+## Client C2a-1 verification and Windows acceptance — September 26, 2026
 
 On `feature/client-financial-insights`, recurring analysis now runs outside the
 Qt GUI thread in both Identify Recurring and Transaction Review. Identify
@@ -46,11 +46,12 @@ No private database was accessed, no installer was built/published, and no hoste
 CI or Intel execution is claimed. The owner clarified in `c9809b2` that ordinary
 client features need not wait for duplicate Intel walkthroughs. The owner tested
 `7411bd0` on Windows and confirmed Cancel works both with and without `--review`.
-This records Cancel acceptance in both views; Close and heartbeat/responsiveness
-have not yet been explicitly confirmed. The
+The owner subsequently confirmed that window-X worked as described (responsive
+while waiting for the current step, then safe close). This closes the Windows
+Cancel/Close/responsiveness gate for C2a-1; C2a-2 may proceed. The
 [delayed-analysis walkthrough](../devtools/recurring_acceptance/README.md#c2a-1-background-analysis-acceptance)
-prepares a temporary profile and visible heartbeat. Stop at this gate before
-C2a-2.
+remains available for regression checks with a temporary profile and visible
+heartbeat. No Intel native acceptance is inferred from the Windows result.
 
 ## Client C1 verification and Windows acceptance — September 26, 2026
 
