@@ -27,6 +27,9 @@ identifies the preserved installer used for Windows native acceptance.
   builds, one local signing/publication command and release record, and a short
   routine guide. Adopt the accepted 1.4.2 bytes without rebuilding. The owner
   approved this prerequisite; see the [implementation scope](docs/client-release-simplification.md).
+  The implementation is on `feat/client-release-workflow`; remaining acceptance
+  is a hosted packaging run and real paired adoption/publication review after
+  the Mac files are transferred. Use the [short release guide](docs/client-releases.md).
 - [~] **R2 — Intel macOS packaging:** `[USER]` Accept operation on a machine
   where build tools are physically absent when that environment is available.
   The signed candidate's installation, synthetic runtime/offline probes,
@@ -35,9 +38,10 @@ identifies the preserved installer used for Windows native acceptance.
 - [ ] `[USER]` Rehearse preserved artifact publication, install/upgrade,
   credential storage, and plugin update on Windows x64 and Intel macOS.
   Include the [1.3-to-1.4 manual upgrade and API/website transition](docs/client-release-contract.md)
-  on staging before public activation. The release preflight still found legacy
-  schema-1 client channels on staging; verify production's contract from the
-  authorized operator path after the direct probe returned HTTP 403.
+  on staging before public activation. Operator inspection confirmed legacy
+  schema-1 channels on both staging and production. Extend deployment inventory
+  to the explicit client targets and a reviewed staging candidate before the
+  transition, preserving plugin/production isolation and rollback evidence.
 
 Acceptance: one clean tag produces traceable target-specific artifacts; a dry
 run does not change public directories, and publish-existing uses exactly the

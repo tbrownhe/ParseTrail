@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$ClientsDir,
-    [string]$SigningKey
+    [string]$SigningKey,
+    [switch]$BuildOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -16,10 +17,12 @@ if (-not (Test-Path -LiteralPath $ClientsDir -PathType Container)) {
 }
 $distDir = (Resolve-Path -LiteralPath $ClientsDir).Path
 $privateKey = $SigningKey
-if (-not $privateKey -or -not (Test-Path -LiteralPath $privateKey -PathType Leaf)) {
-    throw "SigningKey must name the encrypted release key for build/sign operations"
+if (-not $BuildOnly) {
+    if (-not $privateKey -or -not (Test-Path -LiteralPath $privateKey -PathType Leaf)) {
+        throw "SigningKey must name the encrypted release key for build/sign operations"
+    }
+    $privateKey = (Resolve-Path -LiteralPath $privateKey).Path
 }
-$privateKey = (Resolve-Path -LiteralPath $privateKey).Path
 
 # --- Define dirs for build stages --------------------------------------------
 $prebuildDir = Join-Path $PSScriptRoot "prebuild"
@@ -216,6 +219,11 @@ try {
     if (-not (Test-Path -LiteralPath $installerPath -PathType Leaf)) {
         throw "NSIS did not create the expected installer: $installerPath"
     }
+    if ($BuildOnly) {
+        uv run --no-env-file --no-sync --python $releasePython --no-python-downloads python -m scripts.client_candidate `
+            --installer $installerPath --metadata $buildMetadataPath --packager nsis --packager-executable $makensis
+        if ($LASTEXITCODE -ne 0) { throw "Unsigned build record failed" }
+    }
 
 } catch {
     Write-Error "ERROR: Build or packaging failed. $($_.Exception.Message)"
@@ -225,6 +233,8 @@ try {
     # Only remove this builder's empty directory; never recurse through TEMP.
     Remove-Item -LiteralPath $buildMetadataDirectory -ErrorAction SilentlyContinue
 }
+
+if ($BuildOnly) { exit 0 }
 
 Write-Host "Signing the Windows client release..."
 uv run --no-env-file --frozen --python $releasePython --no-python-downloads python -m scripts.client_release sign `

@@ -103,6 +103,30 @@ def _artifact_records(release_dir: Path, manifest: dict[str, object]) -> list[di
     return records
 
 
+def tool_versions(packager: str, executable: Path | None = None) -> dict[str, str]:
+    """Capture versions on the builder, before artifacts travel to a signing host."""
+    tools = {
+        "operating_system": platform.platform(),
+        "python": platform.python_version(),
+        "python_compiler": platform.python_compiler(),
+        "uv": _command_version(("uv", "--version")),
+    }
+    try:
+        tools["pyinstaller"] = importlib.metadata.version("pyinstaller")
+    except importlib.metadata.PackageNotFoundError:
+        tools["pyinstaller"] = "not-used"
+    command = PACKAGER_COMMANDS[packager]
+    if command is None:
+        if executable is not None:
+            raise ValueError("packager_executable cannot be used when the packager is none")
+        tools["packager"] = "not-used"
+    elif executable is None:
+        tools["packager"] = _command_version(command)
+    else:
+        tools["packager"] = _command_version(command, executable=executable)
+    return tools
+
+
 def create_inventory(
     *,
     release_dir: Path,
@@ -114,6 +138,7 @@ def create_inventory(
     packager: str,
     packager_executable: Path | None = None,
     native_report: Path | None = None,
+    build_record: Path | None = None,
 ) -> dict[str, object]:
     release_dir = release_dir.expanduser().resolve()
     if not release_dir.is_dir():
@@ -134,28 +159,19 @@ def create_inventory(
     if release_kind == "plugins" and manifest.get("source_commit") != source_commit:
         raise ValueError("Signed plugin manifest does not match the source commit")
 
-    tools = {
-        "operating_system": platform.platform(),
-        "python": platform.python_version(),
-        "python_compiler": platform.python_compiler(),
-        "uv": _command_version(("uv", "--version")),
-    }
-    try:
-        tools["pyinstaller"] = importlib.metadata.version("pyinstaller")
-    except importlib.metadata.PackageNotFoundError:
-        tools["pyinstaller"] = "not-used"
-    packager_command = PACKAGER_COMMANDS[packager]
-    if packager_command is None:
-        if packager_executable is not None:
-            raise ValueError("packager_executable cannot be used when the packager is none")
-        tools["packager"] = "not-used"
-    elif packager_executable is None:
-        tools["packager"] = _command_version(packager_command)
-    else:
-        tools["packager"] = _command_version(
-            packager_command,
-            executable=packager_executable,
-        )
+    candidate = None
+    if build_record is not None:
+        from scripts.client_candidate import BUILD_RECORD, verify_candidate
+
+        if release_kind != "client" or native_report is not None or build_record.name != BUILD_RECORD:
+            raise ValueError("A build record is only valid for a client without a separate native report")
+        candidate = verify_candidate(build_record.parent, source_commit=source_commit, source_tag=source_tag)
+        if candidate["target_platform"] != target_platform or candidate["version"] != version:
+            raise ValueError("Build record differs from the signed target/version")
+        installer = candidate["installer"]
+        if _sha256_file(release_dir / installer["filename"]) != installer["sha256"]:
+            raise ValueError("Signed installer differs from the preserved build")
+    tools = candidate["tools"] if candidate is not None else tool_versions(packager, packager_executable)
 
     inventory: dict[str, object] = {
         "schema_version": 1,
@@ -172,6 +188,8 @@ def create_inventory(
     if release_kind == "client":
         inventory["architecture"] = "x86_64"
         inventory["manifest_schema_version"] = catalog.schema_version
+    if candidate is not None and "native_build" in candidate:
+        inventory["native_build"] = candidate["native_build"]
     if native_report is not None:
         if release_kind != "client" or target_platform != "macos-x86_64":
             raise ValueError("Native Mac evidence requires a macos client release")

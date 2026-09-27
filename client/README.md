@@ -408,6 +408,17 @@ profile. The complete server/client rehearsal is in
 
 ## Build and release the desktop installer
 
+Use the [short desktop release guide](../docs/client-releases.md) for the normal
+workflow: GitHub Actions builds/tests both native installers, and
+`scripts.desktop_release` retrieves, verifies, signs, and promotes the pair using
+one saved release record. Signing remains local. The accepted 1.4.2 output can be
+adopted unchanged; no new build/signing is needed for that release.
+
+The native builder details below also support local diagnosis. CI invokes them
+with `-BuildOnly` on Windows or `--build-only` on Intel macOS; these modes require
+no signing key and produce an installer plus `build-record.json`. They retain the
+source, architecture, frozen-runtime and offline gates.
+
 Before building, update `src/parsetrail/version.py`, commit it, and create the
 matching `client-v<version>` tag. Both platform builders refuse a dirty tree,
 missing/mismatched tag, reused versioned installer, or empty public-key trust

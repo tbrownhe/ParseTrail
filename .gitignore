@@ -13,6 +13,7 @@ scratch/
 keys/
 client/release-config.json
 client/publish-config.json
+client/desktop-release-config.json
 
 # Python tooling and test output
 **/__pycache__/

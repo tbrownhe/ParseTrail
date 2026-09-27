@@ -12,6 +12,8 @@ import pytest
     "module",
     (
         "scripts.client_release",
+        "scripts.client_candidate",
+        "scripts.desktop_release",
         "scripts.immutable_publish",
         "scripts.plugin_release",
         "scripts.release",

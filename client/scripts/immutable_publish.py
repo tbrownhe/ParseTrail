@@ -292,6 +292,7 @@ def publish_release(
     inventory_name: str | None = None,
     remote_root: str,
     transport: RemoteTransport,
+    resume_inventory_sha256: str | None = None,
 ) -> int:
     if not REMOTE_ROOT_PATTERN.fullmatch(remote_root) or ".." in PurePosixPath(remote_root).parts:
         raise PublishError("Remote root must be an absolute safe POSIX path")
@@ -304,16 +305,27 @@ def publish_release(
     )
     releases_root = _remote_join(remote_root, "releases")
     remote_release = _remote_join(releases_root, str(sequence))
-    if transport.exists(remote_release):
+    if resume_inventory_sha256 is not None:
+        inventory = next((item for item in artifacts if item.filename == inventory_name), None)
+        if inventory is None or inventory.sha256 != resume_inventory_sha256:
+            raise PublishError("Resume requires this exact locally verified release inventory")
+    exists = transport.exists(remote_release)
+    if exists and resume_inventory_sha256 is None:
         raise PublishError(f"Remote release sequence {sequence} already exists")
     pointer_final = _remote_join(remote_root, "current-release.json")
     original_pointer = transport.read(pointer_final, MAX_POINTER_BYTES)
     if sequence <= _pointer_sequence(original_pointer):
         raise PublishError("Release sequence must exceed the active remote sequence")
-    transport.create_release(releases_root, remote_release)
+    if not exists:
+        transport.create_release(releases_root, remote_release)
 
     for artifact in artifacts:
         remote_path = _remote_join(remote_release, artifact.filename)
+        if exists and transport.exists(remote_path):
+            # A resumed release can fill missing files, never replace existing
+            # bytes. A different/tampered partial upload stops before activation.
+            _verify_remote(transport, artifact, remote_path)
+            continue
         transport.upload(artifact.path, remote_path)
         _verify_remote(transport, artifact, remote_path)
 

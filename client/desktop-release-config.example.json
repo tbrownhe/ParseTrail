@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "releases_dir": "~/parsetrail-releases",
+  "signing_key": "~/private/parsetrail-release-key.pem",
+  "staging": {
+    "public_api_base_url": "https://api.staging.parsetrail.com/api/v1",
+    "remote": {
+      "user": "release-operator",
+      "host": "release-host",
+      "clients_dir": "/srv/parsetrail-staging/resources/clients",
+      "plugins_dir": "/srv/parsetrail-staging/resources/plugins"
+    }
+  },
+  "production": {
+    "public_api_base_url": "https://api.parsetrail.com/api/v1",
+    "remote": {
+      "user": "release-operator",
+      "host": "release-host",
+      "clients_dir": "/srv/resources/clients",
+      "plugins_dir": "/srv/resources/plugins"
+    }
+  }
+}

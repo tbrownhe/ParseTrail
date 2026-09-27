@@ -47,6 +47,15 @@ on the default branch; see [workflow dispatch](https://docs.github.com/en/action
 These are release-workflow changes within the approved client release scope.
 Unrelated client features remain deferred.
 
+The implementation branch adds the build-only native modes and CI workflow,
+`scripts.desktop_release` for paired preparation/adoption/publication, and the
+[short operator guide](client-releases.md). The focused automated tests cover
+wrong/failed CI runs, archive boundaries, changed artifacts, source/target
+disagreement, one signing prompt, unchanged adoption, cross-host provenance,
+staging-before-production, and interrupted paired publication. Hosted packaging
+and real-artifact adoption remain acceptance steps; source tests alone do not
+establish that both hosted installers were built successfully.
+
 ## One-time contract transition
 
 The 1.3-to-1.4 target change still requires the coordinated staging rehearsal in
