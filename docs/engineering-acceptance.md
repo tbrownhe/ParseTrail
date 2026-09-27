@@ -6,6 +6,46 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## Client L1 ledger contract and initial audit — September 27, 2026
+
+The owner approved the double-entry foundation in
+[client-ledger-contract.md](client-ledger-contract.md), ahead of cash-flow totals.
+TODO now sequences accounting design/audit, recovery preparation, the ledger
+kernel, parallel migration/reconciliation, and Windows review UI acceptance.
+These are staged commitments, not claims that ledger migration has occurred.
+
+The [standalone auditor](../devtools/ledger_audit/README.md) opens the authorized
+source read-only, uses SQLite online backup into a new ignored directory, and
+audits only the snapshot. It imports no application settings/credentials/network
+components. Existing output cannot be overwritten. Source main/WAL hashes and
+snapshot immutability are recorded privately. Reports contain no raw descriptions
+or account/category names; all reports, snapshot hashes, source identities,
+counts, dates, monetary differences, and source-PDF investigations remain local.
+
+The authorized snapshot passed integrity/foreign-key checks and its stored
+within-statement amount/balance equations. The audit identified unresolved
+counterpart candidates, manual-origin rows, coverage gaps, and adjacent-statement
+discontinuities. Passing equations do not independently verify balances computed
+by historical parsers. The source files were unchanged during snapshot creation;
+the read-only audit left the snapshot unchanged and reproduced its original
+results after adding manual-origin markers.
+
+The owner clarified that legacy manual closure rows are bookkeeping instructions,
+not money movements; the contract maps their intent to lifecycle metadata while
+preserving evidence and exposing unexplained residual balances. Source-PDF review
+then reproduced HSA continuation-page omissions in the current parser. L1 remains
+open for parser correction, source-repair review, and explicit migration mappings.
+
+Windows source verification: **604 passed, 3 skipped** in 148.36 seconds for the
+full client suite (offscreen Qt, process-only `RemoteSigned` for the existing
+builder probe). The final audit suite passed **8 tests**, including the origin
+marker test added after full-suite collection. Tests cover read-only enforcement,
+source preservation, WAL-aware snapshots, overwrite refusal, independent copies,
+overlapping evidence, empty history, balance/count/ownership/date discrepancies,
+candidate ambiguity/currency/date/account limits, and description exclusion.
+No live repair/migration, schema change, new dependency, server operation, release,
+or native GUI acceptance occurred.
+
 ## Client CF1 coverage service verification — September 26, 2026
 
 The client feature branch now has a headless `CoverageService` with read-session

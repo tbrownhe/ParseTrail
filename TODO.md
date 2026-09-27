@@ -73,6 +73,14 @@ routine client development or automated tests.
   money and original transactions; store confirmed interpretations/provenance
   separately and keep derived insights reproducible. Prepare full backup/restore
   support before substantial schema expansion.
+- On September 27, the owner approved a genuine double-entry ledger as the
+  authoritative financial model before new cash-flow totals. Preserve imported
+  evidence separately from journal entries and postings. Categories are migration
+  evidence, not proof of a transfer; distinguish interpretation review, balanced
+  posting, statement reconciliation, and coverage/freshness. Keep predictions and
+  ML suggestions separate from posted facts. The owner authorized testing against
+  a disposable snapshot of the live database; private paths/data/reports stay out
+  of Git. See the [ledger contract](docs/client-ledger-contract.md).
 
 ### Approved implementation sequence
 
@@ -83,12 +91,31 @@ and request targeted native cross-platform testing when dependencies, packaging,
 OS integration, or evidence of platform-specific behavior warrants it. Record
 only platforms actually tested; this does not claim Intel acceptance by inference.
 
-- [USER] **CF2 — Cash-flow calculation contract:** decide whether an existing
-  verified Transfer category is sufficient evidence to exclude a transaction
-  from income/spending when its counterpart is missing. Recommendation: trust
-  that verified classification, retain account cash movement, and show the
-  missing counterpart explicitly; unverified interpretations remain unresolved.
-  Then define account scope, income,
+- [USER] **L1 — Accounting contract and migration audit:** the
+  [contract](docs/client-ledger-contract.md) and [read-only auditor](devtools/ledger_audit/README.md)
+  are prepared and exercised on a consistent authorized snapshot. The owner
+  confirmed legacy manual closures are bookkeeping instructions: preserve them as
+  evidence and map their intent to account-status metadata, not cash postings.
+  Source inspection identified an HSA parser truncation at a page-one interest
+  table and extraction underscores before continuation rows/balance labels.
+  Repair/reparse and prepare an explicit source-correction preview before migration.
+  Private findings/review notes stay in ignored storage. Complete account/sign/
+  evidence mappings after review; unknown residual balances remain explicit.
+- [ ] **L2 — Recovery preparation:** verify a complete local backup set and
+  disposable restore before schema expansion; bring forward the required F4
+  work. Preserve the old database and archives throughout parallel migration.
+- [ ] **L3 — Ledger kernel:** add accounts/journal/postings/evidence links with
+  atomic balanced posting, exact allocation limits, review/reconciliation states,
+  immutable posted history with corrections, and deterministic import identity.
+  Test invariants and failure rollback before using private migrated data.
+- [ ] **L4 — Parallel migration and reconciliation:** derive a ledger beside the
+  existing model; retain provenance and unresolved cases. Check statement balances,
+  duplicated evidence, repeated imports, splits, transfers across posting dates,
+  and opening equity. No silent balancing adjustments or automatic trust of old
+  Transfer labels. Prove reproducibility and recovery before switching reports.
+- [ ] **L5 — Ledger review UI:** review transfers, splits, suspense, corrections,
+  and statement reconciliation; request Windows owner acceptance.
+- [ ] **CF2 — Ledger-backed cash-flow contract:** after L1–L5, define account scope, income,
   purchases, refunds, internal transfers, card payments, and loan treatment.
   Synthetic transfers/card payments cannot double-count consolidated spending;
   unresolved matches stay visible. Establish reviewed transfer interpretations
