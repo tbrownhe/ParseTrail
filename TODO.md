@@ -23,13 +23,12 @@ identifies the preserved installer used for Windows native acceptance.
 
 ## P1.5 — Client release reliability
 
-- [~] **R4 — Simplify releases before publishing 1.4.2:** implement CI installer
-  builds, one local signing/publication command and release record, and a short
-  routine guide. Adopt the accepted 1.4.2 bytes without rebuilding. The owner
-  approved this prerequisite; see the [implementation scope](docs/client-release-simplification.md).
-  The implementation is on `feat/client-release-workflow`; remaining acceptance
-  is a hosted packaging run and real paired adoption/publication review after
-  the Mac files are transferred. Use the [short release guide](docs/client-releases.md).
+- [~] **R4 — Complete simplified 1.4.2 release acceptance:** transfer the preserved
+  Mac output, adopt the accepted pair without rebuilding/signing, and verify the
+  real paired publication review. CI packaging and automated workflow acceptance
+  are recorded in [engineering evidence](docs/engineering-acceptance.md#simplified-desktop-release-workflow-september-26-2026).
+  Use the [short release guide](docs/client-releases.md). Publication stays on hold
+  until the simplified workflow and staging transition are accepted.
 - [~] **R2 — Intel macOS packaging:** `[USER]` Accept operation on a machine
   where build tools are physically absent when that environment is available.
   The signed candidate's installation, synthetic runtime/offline probes,

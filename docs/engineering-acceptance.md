@@ -1187,6 +1187,53 @@ coverage is claimed for these probes. R2's physically absent build-tool
 environment remains open, as does the coordinated staging publication/upgrade
 rehearsal. Windows installed acceptance subsequently passed as recorded above.
 
+### Simplified desktop release workflow: September 26, 2026
+
+The owner required simplification before publishing 1.4.2. Commit
+`c80306b13f9084cae43aec0249d3084965d7800e` on `feat/client-release-workflow` adds
+key-free native packaging, one GitHub Actions matrix, and a paired local release
+command. It retrieves/validates CI artifacts, prompts once for signing both
+targets, preserves native builder provenance, and manages reviewed staging/public
+promotion from one saved release record. The adoption path copies existing signed
+output unchanged. The [short operator guide](client-releases.md) replaces bespoke
+scripts for the routine path.
+
+The full local Windows suite passed **500 tests / 3 skipped**. Two further
+rejection cases were added afterward; the final focused run passed **30 tests**.
+Coverage includes rejected validation/fork/failed CI runs, unsafe archives,
+changed inputs, both-target validation before signing, one passphrase prompt,
+unchanged adoption, preserved native metadata, staging-before-production, and
+resumption after a partial second-target upload without replacing existing bytes.
+Python lint/format, PowerShell/Bash syntax, and pre-commit YAML checks passed.
+
+[Hosted run 36282715627](https://github.com/tbrownhe/ParseTrail/actions/runs/36282715627)
+passed **both Windows x64 and Intel macOS packaging jobs**, plus the paired
+completion job. Each native builder ran the source suite, architecture and
+frozen-runtime/offline gates and produced its installer/build record without a
+signing key. These are test-only outputs from an isolated validation checkout;
+the release command rejects their push-triggered run and artifact names.
+No release tag was created on the remote or moved, and the accepted signed
+1.4.2 files remain unchanged.
+
+| CI validation artifact | ZIP size | ZIP SHA-256 |
+| --- | --- | --- |
+| `client-validation-windows-x86_64` | `154563937` | `c9907179f8569e60263011ff255cb1a1266d97ef9accc00d510ed4ea042fc5ab` |
+| `client-validation-macos-x86_64` | `126558834` | `7b56cb7f5b4bd80071f1004ca34976c48f42b40e978631e80ab10cd41a665558` |
+
+Read-only operator inspection also confirmed both environments still have schema-1
+Windows 1.3.0/Mac 1.3.1 channels and no new target channels. Their legacy pointer,
+manifest, and plugin-pointer hashes match. Staging runs `fedd236` image digests;
+production runs `0ec65f2`. The deployment inventory enumerates only legacy target
+names, an exposed client-contract gap to address during the one-time transition.
+No API/website deployment or artifact activation occurred.
+
+Windows 1.4.2 passed the existing command's local publication review against the
+explicit staging destination. Its preserved files have been copied and verified
+in the new paired input layout. The new ignored operator configuration is ready;
+the signing key was not opened. Mac input and real paired adoption/review remain
+pending the owner's private transfer, followed by the coordinated staging
+transition. A private empty inbox was prepared outside the public resource tree.
+
 ### Hosted client gates and backend test annotations
 
 The owner opened [PR #38](https://github.com/tbrownhe/ParseTrail/pull/38) from

@@ -114,3 +114,26 @@ local generated configs out of commits.
 Return the note to the Windows counterpart for the combined publication review.
 The next stage is the preserved-artifact and 1.3-to-1.4 API/website transition
 rehearsal on staging; public activation is a separate reviewed operator step.
+
+## One-time transfer of the accepted output
+
+The owner subsequently required release simplification before publication. CI
+now builds future candidates, and the paired release command can adopt this
+already accepted output unchanged. The Mac has no inbound SSH access, so run
+this once on that Mac to copy only the four release files to the prepared private
+server inbox:
+
+```bash
+release_dir="$HOME/dev/parsetrail-resources/candidates/client-v1.4.2/clients/macos-x86_64"
+scp "$release_dir/client-manifest.json" \
+    "$release_dir/client-manifest.sig" \
+    "$release_dir/release-inventory.json" \
+    "$release_dir/parsetrail_1.4.2_macos-x86_64_setup.dmg" \
+    tbrownhe@silicide:/srv/parsetrail-staging/release-input/client-v1.4.2-artifacts/macos-x86_64/
+```
+
+The inbox is separate from public artifact directories. The Windows counterpart
+will compare the inventory against its recorded acceptance hash, retrieve the
+files, and adopt both targets with `scripts.desktop_release`. This transfer does
+not publish anything or include a private key, passphrase, profile, or database.
+Future release builds are retrieved directly from CI by the same local command.

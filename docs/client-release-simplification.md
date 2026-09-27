@@ -52,9 +52,10 @@ The implementation branch adds the build-only native modes and CI workflow,
 [short operator guide](client-releases.md). The focused automated tests cover
 wrong/failed CI runs, archive boundaries, changed artifacts, source/target
 disagreement, one signing prompt, unchanged adoption, cross-host provenance,
-staging-before-production, and interrupted paired publication. Hosted packaging
-and real-artifact adoption remain acceptance steps; source tests alone do not
-establish that both hosted installers were built successfully.
+staging-before-production, and interrupted paired publication. Both hosted native
+packaging jobs subsequently passed in [run 36282715627](https://github.com/tbrownhe/ParseTrail/actions/runs/36282715627).
+Real-artifact adoption/publication review remains pending the Mac transfer; the
+validation outputs are not replacements for the accepted signed 1.4.2 pair.
 
 ## One-time contract transition
 
