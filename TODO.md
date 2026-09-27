@@ -102,6 +102,13 @@ only platforms actually tested; this does not claim Intel acceptance by inferenc
   still need source review before migration; do not invent balancing adjustments.
   Private findings/review notes stay in ignored storage. Complete account/sign/
   evidence mappings after review; unknown residual balances remain explicit.
+  LendingClub savings now validates its independent printed summary; Capital One
+  Auto validates printed principal/interest/payment components but still has a
+  reconstructed opening balance because the source supplies only the closing
+  principal. Preserve reported/derived/assumed balance provenance in the ledger
+  design, and use separate prior-statement evidence for cross-statement checks.
+  Do not label a derived-endpoint equation as independent reconciliation. See the
+  [parser verification record](docs/engineering-acceptance.md#lendingclub-and-capital-one-balance-evidence--september-27-2026).
 - [ ] **L2 — Recovery preparation:** verify a complete local backup set and
   disposable restore before schema expansion; bring forward the required F4
   work. Preserve the old database and archives throughout parallel migration.

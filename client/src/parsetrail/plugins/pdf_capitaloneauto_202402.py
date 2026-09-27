@@ -12,7 +12,7 @@ from parsetrail.core.validation import Account, Statement, Transaction
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_capitaloneauto_202402"
-    VERSION = "0.2.0"
+    VERSION = "0.2.1"
     MIN_CLIENT_VERSION = "1.3.0"
     SUFFIX = ".pdf"
     COMPANY = "Capital One"
@@ -29,7 +29,7 @@ class Parser(IParser):
     HEADER_DATE = r"%m/%d/%Y"
     DATE_REGEX = re.compile(r"\d{2}/\d{2}/\d{4}")
     LEADING_DATE = re.compile(r"^\d{2}/\d{2}/\d{4}")
-    AMOUNT = re.compile(r"-?\$\d{1,3}(?:,\d{3})*(?:\.\d{2})?")
+    AMOUNT = re.compile(r"-?\$(?:\d{1,3}(?:,\d{3})+|\d+)\.\d{2}")
 
     def parse(self, reader: PDFReader) -> Statement:
         """Entry point
@@ -141,95 +141,96 @@ class Parser(IParser):
         return account_num
 
     def get_statement_balances(self) -> None:
-        """Extract the starting balance from the statement.
-        Only the ending principle balance is given.
-        Starting balance must be estimated from transaction.
+        """Extract the printed closing principal balance.
+
+        This layout has no printed opening balance. Reconstructing it from
+        principal activity is not independent statement reconciliation; that
+        requires a separate prior closing balance outside this parser.
 
         Raises:
             ValueError: Unable to extract balances
         """
         pattern = "Principal Balance:"
         try:
-            _, balance_line = find_param_in_line(self.lines, pattern)
+            matches = [line for line in self.lines if pattern in line]
+            if len(matches) != 1:
+                raise ValueError("Expected exactly one printed principal balance.")
+            balance_line = matches[0]
             balance_str = balance_line.split(pattern)[-1].strip().split()[0]
+            if self.AMOUNT.fullmatch(balance_str) is None:
+                raise ValueError("Invalid printed principal balance.")
             self.end_balance = -parse_money(balance_str)
         except ValueError as e:
             raise ValueError(f"Failed to extract balance for pattern '{pattern}': {e}")
 
     def parse_transaction_lines(self) -> list[Transaction]:
-        """Convert raw transaction table into structured data.
-
-        Returns:
-            list[tuple]: Unsorted transaction array
-        """
-
-        def column_names(lines: list[str]):
-            # Get the column headers
-            for i, line in enumerate(lines):
-                if all(word in line for word in ["Date", "Description", "Principal", "Total"]):
-                    return i, line.split()
-            raise ValueError("Column header not found in statement")
-
-        # Get the header position and column names
-        i, columns = column_names(self.lines)
-
-        # Get the entries in the table.
-        transaction_lines = []
-        for line in self.lines[i + 1 :]:
-            if self.LEADING_DATE.search(line):
-                transaction_lines.append(line)
-            else:
-                # reached end of table
-                break
-
+        """Validate the whole bounded history table and its printed components."""
+        starts = [i for i, line in enumerate(self.lines) if line.startswith("Transactions between ")]
+        if len(starts) != 1:
+            raise ValueError("Expected exactly one transaction history range.")
+        first = starts[0] + 1
+        last = next(
+            (
+                i
+                for i in range(first, len(self.lines))
+                if self.lines[i] == "Please detach and return the portion below with your payment."
+            ),
+            None,
+        )
+        if last is None:
+            raise ValueError("Transaction history end marker not found.")
+        lines = [line for line in self.lines[first:last] if line.strip()]
+        headers = {
+            "Date Description Principal Total": False,
+            "Date Description Principal Interest Total": True,
+        }
+        if not lines or lines[0] not in headers:
+            raise ValueError("Unsupported transaction history columns.")
+        header = lines[0]
+        has_interest = headers[header]
         self.start_balance = self.end_balance
         transactions = []
-        for line in transaction_lines:
+        for line in lines[1:]:
+            if line == header:
+                continue
             words = line.split()
-
-            if len(words) < len(columns):
-                raise ValueError(f"Invalid transaction line: {line}")
-
-            # Remove equals sign
-            if words[-2] == "=":
-                words.pop(-2)
-
-            # Get date
+            amount_count = 3 if has_interest else 2
+            # Date, nonempty description, principal, optional interest, '=', total.
+            if len(words) < amount_count + 3 or words[-2] != "=" or self.LEADING_DATE.match(line) is None:
+                raise ValueError("Unrecognized transaction history row.")
+            values = words[-(amount_count + 1) : -2] + [words[-1]]
+            if any(self.AMOUNT.fullmatch(value) is None for value in values):
+                raise ValueError("Invalid transaction history amounts.")
+            amounts = list(map(parse_money, values))
+            principal, total = amounts[0], amounts[-1]
+            interest = amounts[1] if has_interest else parse_money("0")
+            if principal + interest != total:
+                raise ValueError("Printed principal and interest do not reconcile to the transaction total.")
             posting_date = datetime.strptime(words[0], self.HEADER_DATE)
-
-            # Get the amounts
-            amounts = {}
-            for i, col in enumerate(reversed(columns)):
-                if col == "Principal":
-                    break
-                amount = parse_money(words[-1 - i])
-                amounts[col] = amount if col == "Interest" else -amount
-
-            # Get the description
-            desc = " ".join(words[1 : -i - 1])
-
-            # Melt the table into a transaction list
-            for col, amount in amounts.items():
-                self.start_balance -= amount
-                if col == "Total":
-                    transactions.append(
-                        Transaction(
-                            transaction_date=posting_date,
-                            posting_date=posting_date,
-                            amount=amount,
-                            desc=desc,
-                        )
+            if not self.start_date <= posting_date <= self.end_date:
+                raise ValueError("Transaction date is outside the printed history range.")
+            desc = " ".join(words[1 : -(amount_count + 1)])
+            # Liability balances use the opposite sign to the printed principal.
+            # Preserve the existing payment/interest representation, but derive
+            # the opening from the separately printed principal component.
+            self.start_balance += principal
+            transactions.append(
+                Transaction(
+                    transaction_date=posting_date,
+                    posting_date=posting_date,
+                    amount=-total,
+                    desc=desc,
+                )
+            )
+            if has_interest:
+                transactions.append(
+                    Transaction(
+                        transaction_date=posting_date,
+                        posting_date=posting_date,
+                        amount=interest,
+                        desc="Interest Fee",
                     )
-                elif col == "Interest":
-                    transactions.append(
-                        Transaction(
-                            transaction_date=posting_date,
-                            posting_date=posting_date,
-                            amount=amount,
-                            desc="Interest Fee",
-                        )
-                    )
-                else:
-                    raise ValueError(f"Unexpected column {col}")
-
+                )
+        if not transactions:
+            raise ValueError("Empty transaction history requires explicit source evidence of no activity.")
         return transactions

@@ -6,6 +6,52 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## LendingClub and Capital One balance evidence — September 27, 2026
+
+The owner requested source-parser fixes against the authorized local statement
+archive after the balance-evidence audit. `pdf_lendingclubsavings_202601` version
+`0.1.1` now extracts both endpoints from the separately printed six-column
+summary. It requires a unique recognized summary, validates its arithmetic,
+compares Balance Forward to the summary opening, and checks every running balance
+and the final activity total exactly. Missing tail activity can no longer select
+its own closing balance from the last parsed transaction.
+
+`pdf_capitaloneauto_202402` version `0.2.1` requires a unique printed closing
+principal balance and validates principal plus interest against each printed
+transaction total. It reads the whole history through the payment-coupon boundary,
+allows blank lines/repeated identical column headers, and rejects unsupported
+columns, malformed/unrecognized rows, missing boundaries, out-of-period dates,
+and empty histories without explicit no-activity evidence. Payment/interest signs,
+descriptions, and transaction ordering retain the existing representation.
+
+The Capital One source format supplies no independent opening principal balance.
+The parser reconstructs it from the separately printed principal components;
+this is still derived, not independent within-statement reconciliation. An entire
+missing row can evade the component checks. A separate prior closing observation
+is needed to check completeness across statements. No database lookup or inferred
+prior balance was added to the parser. The archive review found consecutive
+printed closings consistent with the reconstructed openings; this was an audit,
+not a new automatic import-time cross-statement check.
+
+Every applicable authorized archived PDF matched its recorded content hash and
+passed revised parsing. Outputs matched both the previous parsers and stored
+history, including transaction multiplicity, dates, amounts, descriptions, and
+statement balances. The disposable database snapshot hash was unchanged. Private
+sources, counts, identities, amounts, dates, extracted text, and verification
+reports remain in ignored storage; committed regression fixtures are synthetic.
+
+The focused suites passed **27 tests**, covering independent summary evidence,
+missing tails, inconsistent running balances, corrupt summary/component amounts,
+zero savings activity, origination, payment/interest preservation, blank/repeated
+table headers, malformed and unsupported layouts, and boundary requirements.
+The full Windows source suite passed **638 tests, 3 skipped** in 129.99 seconds
+with offscreen Qt and process-only `RemoteSigned` for the existing builder probe.
+Ruff lint and format passed across **181 Python files**; Git whitespace checks
+passed.
+No dependencies, parser interface, schema, live history, server, signed plugin
+catalog, or installed application were changed. Publication and historical repair
+remain separate actions; these source fixes require no new native GUI acceptance.
+
 ## HealthEquity cash continuation parsing — September 27, 2026
 
 The L1 source audit reproduced a client parser defect: `pdf_hehsa_201810` stopped

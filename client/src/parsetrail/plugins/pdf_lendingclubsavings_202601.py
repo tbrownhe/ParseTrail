@@ -12,7 +12,7 @@ from parsetrail.core.validation import Account, Statement, Transaction
 
 class Parser(IParser):
     PLUGIN_NAME = "pdf_lendingclubsavings_202601"
-    VERSION = "0.1.0"
+    VERSION = "0.1.1"
     MIN_CLIENT_VERSION = "1.3.0"
     SUFFIX = ".pdf"
     COMPANY = "LendingClub Bank"
@@ -50,10 +50,17 @@ class Parser(IParser):
 
         start_date, end_date = self.extract_statement_dates()
         account_number = self.extract_account_number()
-        start_balance, transactions = self.extract_activity(start_date, end_date)
-        end_balance = transactions[-1].balance if transactions else start_balance
-        if end_balance is None:
-            raise ValueError("Ending balance not found.")
+        start_balance, end_balance = self.extract_summary_balances()
+        forward_balance, transactions = self.extract_activity(start_date, end_date)
+        if forward_balance != start_balance:
+            raise ValueError("Balance Forward does not match the printed beginning balance.")
+        running = start_balance
+        for transaction in transactions:
+            running += transaction.amount
+            if running != transaction.balance:
+                raise ValueError("Parsed activity does not match its printed running balance.")
+        if running != end_balance:
+            raise ValueError("Parsed activity does not reconcile to the printed ending balance.")
 
         return Statement(
             start_date=start_date,
@@ -67,6 +74,23 @@ class Parser(IParser):
                 )
             ],
         )
+
+    def extract_summary_balances(self) -> tuple[Decimal, Decimal]:
+        """Use the printed summary, never the last successfully parsed row."""
+        header = "Balance + Deposits + Paid - Deductions- Charge = Balance"
+        matches = [index for index, line in enumerate(self.lines) if line == header]
+        if len(matches) != 1:
+            raise ValueError("Expected exactly one printed balance summary.")
+        index = matches[0]
+        if index == 0 or self.lines[index - 1] != "Beginning Interest Service Ending":
+            raise ValueError("Unrecognized printed balance summary headings.")
+        values = next((line.split() for line in self.lines[index + 1 :] if line.strip()), [])
+        if len(values) != 6 or any(re.fullmatch(self.MONEY_TEXT, value) is None for value in values):
+            raise ValueError("Invalid printed balance summary amounts.")
+        opening, deposits, interest, deductions, charges, closing = map(parse_money, values)
+        if opening + deposits + interest - deductions - charges != closing:
+            raise ValueError("Printed balance summary does not reconcile.")
+        return opening, closing
 
     def extract_statement_dates(self) -> tuple[datetime, datetime]:
         for line in self.lines:
