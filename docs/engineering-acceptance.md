@@ -6,6 +6,46 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## Client CF1 coverage service verification — September 26, 2026
+
+The client feature branch now has a headless `CoverageService` with read-session
+ownership, immutable statement provenance, and explicit empty-account handling.
+Inclusive overlapping/adjacent statement ranges share one merger with the
+existing Completeness Grid. The grid retains its existing query window and
+datetime drawing inputs; analytics use an unfiltered history snapshot instead.
+
+The service reports uncovered intervals and separates the last covered date
+from import time. It selects the latest fully covered adjacent-month or
+year-over-year pair across every selected account, excluding the current month.
+It never replaces missing data with zero activity. Coverage reflects declared
+statement intervals, not an independent institution-export audit; calendar
+reference dates do not replay historical import availability.
+
+Windows AMD64 source evidence (Python 3.13.15, PySide6 6.11.2):
+
+- **16 focused tests passed**, including 100 deterministic calendar cases checked
+  against independent day sets, overlaps/duplicates/adjacency, one-day gaps,
+  empty and missing accounts, differing cutoffs, stale history imported today,
+  future dates, leap years, year boundaries, and fully covered comparison pairs.
+- Full client suite: **597 passed, 3 skipped** in 122.15 seconds, with offscreen
+  Qt and process-scoped `RemoteSigned` for the existing PowerShell builder probe.
+  No machine/user execution policy changed.
+- A real temporary SQLite fixture verifies statement provenance, old history,
+  zero-transaction statements, empty accounts, and session closure. A manual
+  transaction outside statement coverage does not extend coverage. Read errors
+  remain errors rather than masquerading as empty history.
+- The grid adapter preserves its padding, account order, merged intervals,
+  datetime bounds, and empty response. A fresh-process import verifies no Qt
+  dependency in the service.
+- Ruff lint/format passed for client source/tests and the local-analysis devtool
+  (**177 Python files**); Git whitespace checks passed.
+
+No private financial data was accessed. No database schema, dependency, server,
+installer, or release version changed. There is no new visual workflow in this
+service chunk; no additional native GUI acceptance is required. No Intel run or
+hosted CI is claimed. Future spending UI will expose these service results under
+its own Windows acceptance gate.
+
 ## Client C2a-2 verification and Windows acceptance — September 26, 2026
 
 On `feature/client-financial-insights`, both model-training actions now use the

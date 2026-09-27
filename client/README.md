@@ -176,6 +176,35 @@ exclude statement archives; back up the managed folders separately.
 
 ## Application service boundaries
 
+### Statement coverage and freshness
+
+`CoverageService` reads immutable per-account statement evidence, including
+accounts with no statements. Inclusive date ranges merge only when overlapping
+or adjacent; missing days remain explicit. A manual transaction or a balance
+observation does not establish statement coverage. Statement IDs and import
+timestamps remain attached to the snapshot for later explanations.
+
+Freshness reports the latest covered date and its age against an explicit
+reference date, separately from the most recent import timestamp. Importing old
+history today does not make that history current. The latest covered date does
+not imply earlier gaps are filled. Empty history has unknown freshness, not zero
+spending, and no arbitrary stale/fresh threshold is imposed by this service.
+
+Monthly comparisons require full coverage of both closed calendar months across
+every explicitly selected account. Month-over-month uses adjacent months;
+year-over-year uses the same month in the prior year, including leap-year month
+lengths. The current calendar month is excluded. Missing accounts are an error;
+selected accounts without statements prevent a complete comparison. The service
+returns no comparison if the evidence is insufficient. Reference dates constrain
+calendar periods; they do not reconstruct which imports existed at a past time.
+
+The existing Completeness Grid uses the same interval merger through a display
+adapter, retaining its date filter, three-month padding, and datetime painter.
+Analytics use the full-history snapshot, not that filtered display. Coverage
+means the dates declared by imported statements; it does not independently prove
+that an institution's export included every transaction. This service adds no
+schema, dependency, or financial-data mutation.
+
 ### Recurring analysis
 
 Recurring analysis groups descriptions locally and optionally filters by mean
@@ -246,6 +275,7 @@ the characterization tests and explicit transaction owner when extending a flow:
 | `TransactionReviewService` | Review filters, atomic edits, stale/missing references, and model-category compatibility retry. |
 | `TransactionService` | Transaction ranges, latest balances, and atomic manual entry with truthful duplicate results. |
 | `DashboardQueryService` | Deterministically ordered balances/checklists, chart/discrepancy inputs, and verified training data. |
+| `CoverageService` | Statement interval evidence, missing days, per-account freshness, fully covered monthly comparisons, and the existing completeness-grid adapter. |
 | `ArtifactService` | Account-config exports and spreadsheet reports; account-config files are replaced atomically. |
 | `StatementSubmissionService` | File validation, memory-only encryption, cancellation, upload/response cleanup, and server confirmation. |
 

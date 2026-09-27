@@ -1,5 +1,5 @@
 from dataclasses import asdict, is_dataclass
-from datetime import timedelta
+from datetime import datetime, time, timedelta
 
 import pandas as pd
 from PySide6.QtCore import QAbstractTableModel, QSize, Qt
@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 from sqlalchemy.orm import sessionmaker
 
 from parsetrail.core import query
+from parsetrail.core.coverage import CoverageService
 from parsetrail.core.validation import Statement
 
 
@@ -63,46 +64,22 @@ def get_missing_coverage(Session: sessionmaker, months=12):
 
 
 def get_account_coverage(Session: sessionmaker, months=60):
-    """
-    Returns per-account statement coverage ranges and the global time window.
-    """
-    with Session() as session:
-        data, columns = query.statement_date_ranges(session, months=months + 3)
-    df = pd.DataFrame(data, columns=columns)
-    if df.empty:
+    """Adapt shared inclusive coverage intervals to the existing datetime painter."""
+    ranges = CoverageService(Session).grid_ranges(months)
+    if not ranges:
         return [], None, None
-
-    df["StartDate"] = pd.to_datetime(df["StartDate"])
-    df["EndDate"] = pd.to_datetime(df["EndDate"])
-
-    overall_start = df["StartDate"].min().to_pydatetime()
-    overall_end = df["EndDate"].max().to_pydatetime()
-
-    accounts = []
-    for account, group in df.groupby("AccountName"):
-        intervals = []
-        for _, row in group.sort_values("StartDate").iterrows():
-            intervals.append((row["StartDate"].to_pydatetime(), row["EndDate"].to_pydatetime()))
-
-        merged = []
-        for start, end in sorted(intervals, key=lambda item: item[0]):
-            if not merged:
-                merged.append([start, end])
-                continue
-            last_start, last_end = merged[-1]
-            if start <= last_end + timedelta(days=1):
-                merged[-1][1] = max(last_end, end)
-            else:
-                merged.append([start, end])
-
-        accounts.append(
-            {
-                "name": account,
-                "intervals": [(start, end) for start, end in merged],
-            }
-        )
-
-    accounts.sort(key=lambda item: item["name"])
+    accounts = [
+        {
+            "name": name,
+            "intervals": [
+                (datetime.combine(interval.start, time.min), datetime.combine(interval.end, time.min))
+                for interval in intervals
+            ],
+        }
+        for name, intervals in ranges
+    ]
+    overall_start = min(start for account in accounts for start, _ in account["intervals"])
+    overall_end = max(end for account in accounts for _, end in account["intervals"])
     return accounts, overall_start, overall_end
 
 

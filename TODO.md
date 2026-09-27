@@ -83,10 +83,12 @@ and request targeted native cross-platform testing when dependencies, packaging,
 OS integration, or evidence of platform-specific behavior warrants it. Record
 only platforms actually tested; this does not claim Intel acceptance by inference.
 
-- [~] **CF1 — Coverage and freshness service:** extract/reuse per-account coverage
-  intervals for the existing grid and new analytics. Test overlap, gaps, empty
-  accounts, different account cutoffs, and fully covered comparison periods.
-- [ ] **CF2 — Cash-flow calculation contract:** define account scope, income,
+- [USER] **CF2 — Cash-flow calculation contract:** decide whether an existing
+  verified Transfer category is sufficient evidence to exclude a transaction
+  from income/spending when its counterpart is missing. Recommendation: trust
+  that verified classification, retain account cash movement, and show the
+  missing counterpart explicitly; unverified interpretations remain unresolved.
+  Then define account scope, income,
   purchases, refunds, internal transfers, card payments, and loan treatment.
   Synthetic transfers/card payments cannot double-count consolidated spending;
   unresolved matches stay visible. Establish reviewed transfer interpretations
