@@ -3,8 +3,28 @@
 Use the preserved signed candidate from commit
 `4585f4c57d20101c1c6ac4f625b726e51913e562`, tag `client-v1.4.2`, release sequence
 `20260922070935`. The [candidate record](engineering-acceptance.md#windows-142-candidate-september-21-2026)
-contains the installer and inventory hashes. Intel replacement-candidate
-acceptance has passed; this is the remaining Windows artifact walkthrough.
+contains the installer and inventory hashes. Windows and Intel replacement-candidate
+acceptance have passed. The procedure below is retained as the Windows evidence
+record, not a request to repeat installation.
+
+## Accepted results: September 26, 2026
+
+The owner confirmed the installed identity, repaired Select All/Budgets/review
+date controls, and offline restart passed. With ParseTrail closed, independent
+verification accepted the entire installed tree against the built candidate,
+registered 1.4.2 identity, executable/metadata hashes, and unchanged signed release.
+
+All **4,647 backup records** remain intact. **2,112 original data files** were
+unchanged, including production files and the staging model, plugins, and archive.
+The working database's bytes changed, but every application and internal SQLite
+table retained identical schema and row contents; integrity and foreign-key
+checks passed. The staging configuration and selected private copy are unchanged.
+The configured custom log appended **2,970 bytes / 22 timestamped entries**,
+latest **2026-09-26 16:54:55**, with **zero new ERROR/CRITICAL entries**.
+
+Local evidence is `scratch/windows-1.4.2-owner-acceptance-verification.json`.
+The remaining release work is the coordinated staging publication/upgrade
+rehearsal and subsequent reviewed production activation.
 
 ## Prepared local upgrade
 

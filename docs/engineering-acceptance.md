@@ -1097,12 +1097,11 @@ The installer retained its pre-signing hash, and all preserved 1.4.0/1.4.1 relea
 files remained unchanged. The tagged checkout is clean. Local evidence is
 `scratch/windows-1.4.2-signed-verification.json`.
 
-**Pending — native release acceptance:** Windows installed-app acceptance.
-The Intel build and owner walkthrough subsequently passed; see the September 26
-record below and the [Intel return note](intel-mac-1.4.2-return-note.md).
-The local candidate tag has not been pushed, no installer has been replaced,
-and no artifact has been published. The old signed candidates and tags remain
-unchanged. The source-review acceptance does not replace these artifact checks.
+**PASS — native release acceptance, September 26:** Windows and Intel installed
+walkthroughs subsequently passed; see the records below and the
+[Intel return note](intel-mac-1.4.2-return-note.md). The local candidate tag has
+not been pushed and no artifact has been published. The old signed candidates
+and tags remain unchanged.
 
 **Read-only interface preflight:** staging's client listing still advertised
 legacy `win64` 1.3.0 and `macos` 1.3.1 channels, and its legacy Windows manifest
@@ -1120,8 +1119,20 @@ The prepared installer helper passed **9,296 pre-install checks**, including all
 backup hashes, unchanged originals, selected private staging copy, registered
 1.4.0 application, pinned inventory/artifacts, and public-key signature verification.
 No installation or launch occurred. The [Windows handoff](windows-1.4.2-acceptance.md)
-contains owner steps and the private evidence location; installed acceptance
-remains pending.
+contains owner steps and the private evidence location.
+
+**PASS — Windows installed acceptance, September 26:** the owner confirmed
+STAGING/About identity, repaired controls, and offline restart. Independent
+closed-app checks accepted the complete installed tree against the build,
+registered version and pinned executable/metadata hashes, signed artifact, and
+all **4,647 backup records**. **2,112 original data files**, including production
+files and the staging model/plugins/archive, are unchanged. The selected working
+database retained every application/internal table's schema and rows despite
+file-byte changes; integrity and foreign keys passed. Staging configuration is
+unchanged. Its configured custom log appended **22 entries / 2,970 bytes**, latest
+**16:54:55**, with zero new ERROR/CRITICAL entries. Local evidence is
+`scratch/windows-1.4.2-owner-acceptance-verification.json`; the
+[Windows acceptance record](windows-1.4.2-acceptance.md) preserves details.
 
 ### Intel 1.4.2 candidate: September 26, 2026
 
@@ -1173,8 +1184,8 @@ probes from the native owner walkthrough. Both passed. The 1.4.2 handover's adde
 request for three native automated offline runs was a documentation error;
 correcting it requires no source change or candidate rebuild. No native backend
 coverage is claimed for these probes. R2's physically absent build-tool
-environment remains open, as do Windows 1.4.2 installed acceptance and the
-coordinated staging publication/upgrade rehearsal.
+environment remains open, as does the coordinated staging publication/upgrade
+rehearsal. Windows installed acceptance subsequently passed as recorded above.
 
 ### Hosted client gates and backend test annotations
 
