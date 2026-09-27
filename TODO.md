@@ -28,16 +28,16 @@ identifies the preserved installer used for Windows native acceptance.
   The signed candidate's installation, synthetic runtime/offline probes,
   and owner offline first start/restart with system-only `PATH` passed; see the
   [installed candidate record](docs/engineering-acceptance.md#intel-installed-candidate-verification-september-19-2026).
-- [ ] `[USER]` Rehearse preserved artifact publication, install/upgrade,
-  credential storage, and plugin update on Windows x64 and Intel macOS.
-  Include the [1.3-to-1.4 manual upgrade and API/website transition](docs/client-release-contract.md)
-  on staging before public activation. Operator inspection confirmed legacy
-  schema-1 channels on both staging and production. Deploy the reviewed candidate
-  using the explicit-target inventory support and paired release reference,
-  preserving plugin/production isolation and rollback evidence. CI packaging,
-  unchanged adoption of both accepted installers, and real paired publication
-  review passed; see [engineering evidence](docs/engineering-acceptance.md#simplified-desktop-release-workflow-september-26-2026)
-  and the [short release guide](docs/client-releases.md).
+- [ ] `[USER]` **Promote 1.4.2 to production:** merge/review the release-workflow
+  and staging-transition branch, approve public activation, and complete fresh
+  production restore evidence and normal deployment gates. Promote the exact
+  accepted installers and server image digests tested on staging, then verify
+  both public downloads and the manual-upgrade response for 1.3 clients. Staging
+  deployment, eight smoke checks, rollback/redeployment, both browser download
+  buttons, legacy HTTP 410 guidance, and paired publication passed; see the
+  [transition evidence](docs/engineering-acceptance.md#client-142-staging-transition-september-26-2026)
+  and [short release guide](docs/client-releases.md). Preserve legacy channels and
+  previous API/website digests for cross-contract rollback.
 
 Acceptance: one clean tag produces traceable target-specific artifacts; a dry
 run does not change public directories, and publish-existing uses exactly the

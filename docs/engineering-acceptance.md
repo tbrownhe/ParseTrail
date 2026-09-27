@@ -1253,6 +1253,72 @@ candidate tests covering unreviewed targets, modified files, changed identity or
 pointers, unsafe inventory names, and drift after preflight. Both real accepted
 installers also passed that verifier in a private local transition layout.
 
+### Client 1.4.2 staging transition: September 26, 2026
+
+The simplified workflow is accepted through real staging publication. The
+transition implementation is commit `919a1ad5690f462c038d31b06388db400cc35ae7`
+on `fix/client-release-staging-transition`; its parent includes the CI packaging
+workflow. The trusted local builder produced and pushed these immutable server
+images once:
+
+| Service | GHCR image digest |
+| --- | --- |
+| Backend | `ghcr.io/tbrownhe/parsetrail-backend@sha256:4937901aba6295af774ac5328ea42d04f76a993c5e822ece68462aecbb668b7c` |
+| Dashboard | `ghcr.io/tbrownhe/parsetrail-frontend@sha256:01b8d6ad4d633adfb771fce20858f6daa4e6d63ecf4d189be34cf65a273dafe1` |
+| Website | `ghcr.io/tbrownhe/parsetrail-website@sha256:69a091ec50c817c2ede2574949abcf1dff7d80ae362eff3f8caa94f7400ad120` |
+
+The descriptor is retained privately on the builder and at
+`/srv/parsetrail-staging/release-input/release-919a1ad-client-transition.json`.
+An isolated clean checkout under staging was used; the production checkout was
+not changed. The accepted client pair still comes from tag `client-v1.4.2`,
+commit `4585f4c57d20101c1c6ac4f625b726e51913e562`, with the same installer,
+manifest/signature and inventory bytes recorded above.
+
+The first restore attempt stopped before mutation because the running staging
+backend used `:local`, not its recorded immutable image. Read-only comparison
+found all 84 application/script/project/lock files identical to the recorded
+`fedd236` source. Only that staging backend was reconciled to the recorded
+digest, without migration; its old local image remains available and the finding
+is recorded in staging's private `client-1.4.2-baseline-reconciliation.json`.
+Production's actual running images already matched its release record.
+
+A fresh staging whole-boundary backup/restore drill then passed with IDs
+`staging-pg17-restore-20260927T032000Z`,
+`staging-files-restore-20260927T032000Z`, and
+`staging-keys-restore-20260927T032000Z`. Database, resource-file and submission-key
+comparisons passed; the staging backend resumed healthy. Restore evidence is at
+`/srv/parsetrail-staging/restore-drill/client-1.4.2-20260927T031931Z/restore-evidence.json`;
+the deployment backup evidence was verified at `2026-09-27T03:20:11.468466Z`.
+
+Both accepted installers were uploaded and verified in the new staging channels,
+preserving the legacy channels. The explicit paired candidate reference passed
+deployment preflight. These records all passed **eight public smoke checks**:
+
+- Initial deployment: `20260927T032123Z-919a1ad5690f`.
+- Rollback to the previous API/website: `rollback-20260927T032444Z-fedd236fb82a`.
+- Redeployment of the same new images: `20260927T032510Z-919a1ad5690f`.
+
+The schema revision remained `3b7a1f4c2d91`. Health, dashboard, website, login,
+authenticated plugin catalog/range, client catalog/range, invalid contribution
+rejection without a write, and oversized-request rejection without a write all
+passed. The paired desktop release record now marks both staging targets
+`verified`; independent read-only checks after redeployment again matched each
+public manifest/signature and installer range to the accepted local files.
+
+A headless browser exercised the actual staging download page before and after
+rollback/redeployment. Both labeled buttons selected the correct 1.4.2 target and
+returned HTTP 206 for a one-byte installer range. For each legacy `win64` and
+`macos` target, manifest, signature, and latest-installer routes returned HTTP 410
+with the manual-upgrade URL. There were no page JavaScript errors. The private
+local result is `scratch/client-1.4.2-staging-browser.json`.
+
+Final inventory comparison confirmed the production inventory and all legacy and
+plugin inventories remained unchanged. Production still runs `0ec65f2`; no new
+production channel was activated. A local-only paired production publication
+review passed. Public promotion still needs owner approval, fresh production
+restore evidence, and the normal deployment gates. Reuse the exact server
+digests and accepted installers above; do not rebuild either pair.
+
 ### Hosted client gates and backend test annotations
 
 The owner opened [PR #38](https://github.com/tbrownhe/ParseTrail/pull/38) from

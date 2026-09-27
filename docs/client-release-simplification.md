@@ -57,7 +57,10 @@ packaging jobs subsequently passed in [run 36282715627](https://github.com/tbrow
 The accepted Mac files were transferred and both real installers subsequently
 passed unchanged adoption, paired status verification, and local staging
 publication review. The validation outputs are not replacements for the accepted
-signed 1.4.2 pair. The remaining gate is the coordinated staging transition.
+signed 1.4.2 pair. The coordinated staging transition, rollback, and redeployment
+also passed; [the acceptance record](engineering-acceptance.md#client-142-staging-transition-september-26-2026)
+identifies the exact server images and deployment records. Production promotion
+remains pending owner approval and its normal fresh-restore/deployment gates.
 
 ## One-time contract transition
 
@@ -74,5 +77,6 @@ retains plugin/legacy-channel parity. Preflight saves both environment inventori
 and rechecks them before migration, deployment, or rollback. See the
 [staging guide](staging.md#3-signed-artifacts-and-captured-mail).
 
-The paired release record is ready on the signing/publishing computer. Neither
-installer was rebuilt or re-signed, and no candidate has been published.
+The paired release record on the signing/publishing computer now records both
+staging targets as verified. Neither installer was rebuilt or re-signed.
+Production's previous release and artifact channels are unchanged.

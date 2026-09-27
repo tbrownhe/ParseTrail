@@ -100,6 +100,8 @@ tag identity, then copies the unchanged files into the normal release layout.
 It does not request the signing key. The existing Windows/Intel owner walkthroughs
 remain accepted; routine `status` and `publish` commands now apply to this pair.
 
-The one-time [1.3-to-1.4 API/website transition](client-release-contract.md) still
-needs its staging rehearsal before public activation. Adoption does not deploy
-the API or bypass that gate.
+The one-time [1.3-to-1.4 API/website transition](client-release-contract.md) passed
+its staging deployment, rollback/redeployment, and public-route/browser checks;
+see the [recorded evidence](engineering-acceptance.md#client-142-staging-transition-september-26-2026).
+Production activation remains pending its approval and normal deployment gates.
+Adoption itself does not deploy the API or bypass those gates.
