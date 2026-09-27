@@ -176,6 +176,14 @@ exclude statement archives; back up the managed folders separately.
 
 ## Application service boundaries
 
+The approved double-entry foundation is being developed under the
+[ledger contract](../docs/client-ledger-contract.md). Current databases still use
+the existing transaction/category model; no ledger migration or report cutover
+has occurred. Imported evidence, reviewed interpretations, journal balance, and
+statement reconciliation will remain distinct. The
+[migration auditor](../devtools/ledger_audit/README.md) creates a disposable,
+read-only snapshot without loading application settings.
+
 ### Statement coverage and freshness
 
 `CoverageService` reads immutable per-account statement evidence, including

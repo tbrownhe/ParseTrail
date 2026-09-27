@@ -1,5 +1,6 @@
 import re
 from datetime import datetime
+from decimal import Decimal
 
 from loguru import logger
 
@@ -7,7 +8,6 @@ from parsetrail.core.interfaces import IParser
 from parsetrail.core.money import parse_money
 from parsetrail.core.utils import (
     PDFReader,
-    find_line_startswith,
     find_param_in_line,
     find_regex_in_line,
 )
@@ -17,7 +17,7 @@ from parsetrail.core.validation import Account, Statement, Transaction
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_hehsa_201810"
-    VERSION = "0.2.0"
+    VERSION = "0.2.1"
     MIN_CLIENT_VERSION = "1.3.0"
     SUFFIX = ".pdf"
     COMPANY = "HealthEquity"
@@ -48,7 +48,8 @@ class Parser(IParser):
         logger.trace(f"Parsing {self.STATEMENT_TYPE} statement")
 
         try:
-            self.lines = reader.extract_lines_simple()
+            # Some statement table borders are extracted as leading underscores.
+            self.lines = [line.lstrip("_ ") for line in reader.extract_lines_simple()]
             if not self.lines:
                 raise ValueError("No lines extracted from the PDF.")
 
@@ -124,13 +125,13 @@ class Parser(IParser):
 
         # Extract statement balances
         try:
-            start_balance, i_start = self.get_statement_balances()
+            start_balance, end_balance, i_start, i_end = self.get_statement_balances()
         except Exception as e:
             raise ValueError(f"Failed to extract balances for account {account_num}: {e}")
 
         # Extract transaction lines
         try:
-            transaction_lines = self.get_transaction_lines(i_start)
+            transaction_lines = self.get_transaction_lines(i_start, i_end)
         except Exception as e:
             raise ValueError(f"Failed to extract transactions for account {account_num}: {e}")
 
@@ -140,8 +141,15 @@ class Parser(IParser):
         except Exception as e:
             raise ValueError(f"Failed to parse transactions for account {account_num}: {e}")
 
-        # Get the ending balance
-        end_balance = transactions[-1].balance if transactions else start_balance
+        # Validate against the independently printed cash closing balance. A
+        # self-derived closing balance would hide truncated continuation pages.
+        running = start_balance
+        for transaction in transactions:
+            running += transaction.amount
+            if transaction.balance != running:
+                raise ValueError("Parsed cash transaction does not reconcile to its printed running balance.")
+        if running != end_balance:
+            raise ValueError("Parsed cash activity does not reconcile to the printed ending balance.")
 
         # Return the Account dataclass
         return Account(
@@ -163,27 +171,21 @@ class Parser(IParser):
         account_num = rline.split()[0]
         return account_num
 
-    def get_statement_balances(self) -> tuple[float, float]:
-        """
-        Extract the starting balance from the statement.
+    def get_statement_balances(self) -> tuple[Decimal, Decimal, int, int]:
+        """Locate exactly one printed opening/closing cash boundary."""
+        boundaries = []
+        for label in ("BeginningBalance", "EndingBalance"):
+            matches = [(index, line) for index, line in enumerate(self.lines) if line.startswith(label)]
+            if len(matches) != 1:
+                raise ValueError(f"Expected exactly one printed {label}.")
+            index, line = matches[0]
+            boundaries.append((parse_money(line.removeprefix(label).strip()), index))
+        (opening, first), (closing, last) = boundaries
+        if first >= last:
+            raise ValueError("Printed cash balance boundaries are out of order.")
+        return opening, closing, first, last
 
-        Raises:
-            ValueError: Unable to extract both balances.
-        """
-        pattern = "BeginningBalance"
-
-        try:
-            i_line, balance_line = find_line_startswith(self.lines, pattern)
-            balance_str = balance_line.split()[-1]
-
-            balance = parse_money(balance_str)
-            logger.trace(f"Extracted {pattern}: {balance}")
-        except ValueError as e:
-            logger.warning(f"Failed to extract balance for pattern '{pattern}': {e}")
-
-        return balance, i_line
-
-    def get_transaction_lines(self, i_start: int) -> list[str]:
+    def get_transaction_lines(self, i_start: int, i_end: int) -> list[str]:
         """
         Extract lines containing transaction information.
 
@@ -194,11 +196,10 @@ class Parser(IParser):
             list[str]: Processed lines containing dates and amounts for this statement.
         """
         transaction_lines = []
-        for line in self.lines[i_start:]:
-            # Stop when reaching the end of the transaction section
-            if line.startswith("InterestRateScheduleEffective"):
-                break
-
+        # Rate/fee tables may be page footers before continued cash activity.
+        # Only the printed ending cash balance closes this section; investment
+        # portfolio rows following that boundary belong to a different scope.
+        for line in self.lines[i_start + 1 : i_end]:
             # Check if the line starts with a valid date
             if self.LEADING_DATE.search(line):
                 transaction_lines.append(line)

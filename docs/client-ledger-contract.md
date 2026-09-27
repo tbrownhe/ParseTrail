@@ -10,7 +10,11 @@ source-parser omissions and explicit migration mappings. Source investigation
 identified HealthEquity cash activity continuing after a page-one interest table,
 plus extraction underscores before some continuation rows/balance labels. The
 legacy parser stops early and derives its closing balance from incomplete rows.
-Prepare and verify corrected parsing before designing any historical repair.
+The corrected source parser now reads the complete cash section and validates
+printed running/closing balances. The private correction preview preserves all
+existing transactions and identifies omitted rows. Separate differences between
+consecutive printed statement balances remain unresolved; do not convert them
+into automatic journal adjustments. Historical correction has not been applied.
 The standalone [auditor](../devtools/ledger_audit/README.md)
 reproduces structural checks without loading application settings or opening the
 live database through a writable connection.

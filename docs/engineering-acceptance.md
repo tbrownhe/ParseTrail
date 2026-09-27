@@ -6,6 +6,41 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## HealthEquity cash continuation parsing — September 27, 2026
+
+The L1 source audit reproduced a client parser defect: `pdf_hehsa_201810` stopped
+at an interest-rate table even when cash activity continued on later pages. It
+also missed table rows/labels preceded by extracted underscore borders. Deriving
+the closing balance from the last parsed transaction let incomplete activity
+pass the within-statement equation.
+
+Source parser version `0.2.1` reads the cash section through its independently
+printed EndingBalance, normalizes leading underscore borders, and requires unique
+ordered opening/closing boundaries. It checks every running balance and the final
+printed balance exactly, and excludes the investment-portfolio section after the
+cash closing boundary. Unknown/truncated/mismatched layouts fail rather than
+manufacturing a closing balance. The plugin interface and dependencies are unchanged.
+
+**17 focused tests passed** across parser and audit tooling. Parser fixtures are
+synthetic and cover continued pages, underscore rows/labels, ignored portfolio
+rows, missing/duplicate/reversed boundaries, running-balance mismatch, truncated
+activity, and zero activity. The complete authorized local source fixture set
+also passed corrected parsing; each archived PDF matched its recorded content
+hash. A private impact preview preserves every existing transaction, identifies
+omitted rows, and lists residual differences between consecutive printed balances.
+Those remaining differences are not resolved by this parser fix. Private sources,
+counts, dates, amounts, identities, reports, and archive locations are not committed.
+
+The final full client suite passed **614 tests, 3 skipped** in 127.41 seconds,
+using offscreen Qt and process-only `RemoteSigned` for the existing builder probe.
+No machine/user execution policy changed.
+
+Ruff lint/format passed for client source/tests and both analysis/audit devtools
+(**180 Python files**); Git whitespace checks passed. No live history repair,
+ledger migration, plugin catalog publication, server operation, or installer build
+occurred. Normal reimport can skip known content hashes; historical repair needs
+an explicit reviewed procedure and recovery checks. L1 remains open at that boundary.
+
 ## Client L1 ledger contract and initial audit — September 27, 2026
 
 The owner approved the double-entry foundation in

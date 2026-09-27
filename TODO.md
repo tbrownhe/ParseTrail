@@ -96,9 +96,10 @@ only platforms actually tested; this does not claim Intel acceptance by inferenc
   are prepared and exercised on a consistent authorized snapshot. The owner
   confirmed legacy manual closures are bookkeeping instructions: preserve them as
   evidence and map their intent to account-status metadata, not cash postings.
-  Source inspection identified an HSA parser truncation at a page-one interest
-  table and extraction underscores before continuation rows/balance labels.
-  Repair/reparse and prepare an explicit source-correction preview before migration.
+  The HSA parser now reads continuation pages and validates printed cash balances;
+  all authorized source fixtures reparse successfully. A private history-correction
+  preview is ready. Remaining differences between consecutive printed balances
+  still need source review before migration; do not invent balancing adjustments.
   Private findings/review notes stay in ignored storage. Complete account/sign/
   evidence mappings after review; unknown residual balances remain explicit.
 - [ ] **L2 — Recovery preparation:** verify a complete local backup set and
