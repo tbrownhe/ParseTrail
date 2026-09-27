@@ -43,16 +43,20 @@ synthetic fixtures or redacted evidence.
 
 Use focused branches, commit and push reviewable chunks, and prepare candidate
 artifacts/isolated profiles before requesting owner GUI or platform testing.
+The September 26 client roadmap uses the owner's explicitly requested long-running
+`feature/client-financial-insights` branch with focused commits. If client work
+requires a server interface change, stop, merge accepted client work first, and
+use a separate short-lived server branch; see [the active roadmap](TODO.md#active-client-roadmap--local-spending-and-cash-planning).
 Keep [TODO](TODO.md) limited to unfinished work; move lasting behavior into the
 component guides and dated verification into the
 [engineering acceptance record](docs/engineering-acceptance.md) when a task closes.
 Server P0 acceptance is complete. Client development should touch the server only
 when it exposes an interface requirement; unrelated infrastructure stays separate.
 
-The current implementation approval covers P1.5, P1.6, and P2.2 in TODO.
-Later correctness/cleanup proposals remain pending. Client feature proposals
-(F1-F4) require further discussion before implementation; do not treat release
-or offline acceptance as permission to add those features.
+The current implementation approval covers the local spending/cash-planning
+roadmap in TODO, beginning with C1 and C2a. Unselected correctness/cleanup and
+F1-F4 proposals remain pending; do not treat earlier release/offline acceptance
+as permission to add those features. Stop at ambiguity or owner native acceptance.
 
 ## Prerequisites
 
