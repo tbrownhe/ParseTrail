@@ -1,15 +1,16 @@
 from __future__ import annotations
 
+import os
+import tempfile
 from collections.abc import Iterable
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import joblib
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
 from loguru import logger
 from sklearn.compose import ColumnTransformer
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -18,6 +19,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
+
+from parsetrail.core.analysis import AnalysisInputError, CancellationCheck, check_cancelled
 
 MODEL_VERSION = "1.0-category-bundle"
 
@@ -35,12 +38,59 @@ class CategoryCompatibilityError(RuntimeError):
         super().__init__(message)
 
 
-def save_model(model_path: Path, bundle: ModelBundle) -> None:
-    """
-    Persist a complete model bundle (pipeline + metadata) to disk.
-    """
-    logger.info("Saving machine learning model bundle to {}", model_path)
-    joblib.dump(bundle, model_path)
+@dataclass(frozen=True)
+class PreparedModel:
+    model_path: Path
+    temporary_path: Path
+
+
+@dataclass(frozen=True)
+class TrainingEvaluation:
+    actual: tuple[str, ...]
+    predicted: tuple[str, ...]
+    categories: tuple[str, ...]
+    accuracy: float
+    training_count: int
+
+
+def prepare_model_save(model_path: Path, bundle: ModelBundle, cancelled: CancellationCheck = None) -> PreparedModel:
+    """Serialize and verify a same-directory candidate without replacing a model."""
+    check_cancelled(cancelled)
+    model_path = Path(model_path)
+    fd, name = tempfile.mkstemp(prefix=f".{model_path.name}.", suffix=".partial", dir=model_path.parent)
+    temporary = Path(name)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            joblib.dump(bundle, stream)
+            stream.flush()
+            os.fsync(stream.fileno())
+        check_cancelled(cancelled)
+        load_model(temporary)
+        check_cancelled(cancelled)
+        return PreparedModel(model_path, temporary)
+    except BaseException:
+        temporary.unlink(missing_ok=True)
+        raise
+
+
+def discard_prepared_model(value: object) -> None:
+    if isinstance(value, PreparedModel):
+        value.temporary_path.unlink(missing_ok=True)
+
+
+def publish_prepared_model(prepared: PreparedModel) -> None:
+    """Commit a validated candidate atomically; callers own the cancellation boundary."""
+    os.replace(prepared.temporary_path, prepared.model_path)
+
+
+def save_model(model_path: Path, bundle: ModelBundle, cancelled: CancellationCheck = None) -> None:
+    """Replace a model only after serialization/validation completes successfully."""
+    prepared = prepare_model_save(model_path, bundle, cancelled)
+    try:
+        check_cancelled(cancelled)
+        publish_prepared_model(prepared)
+    finally:
+        discard_prepared_model(prepared)
 
 
 def load_model(model_path: Path) -> ModelBundle:
@@ -165,10 +215,15 @@ def plot_confusion_matrix(
     y_pred: np.ndarray,
     categories: list[str],
     normalized: bool = True,
+    title: str | None = None,
 ) -> None:
     """
     Generate and display a confusion matrix heatmap.
     """
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+
+    plt.figure()
     conf_mat = confusion_matrix(y_test, y_pred, labels=categories)
     if normalized:
         conf_mat = conf_mat.astype("float")
@@ -196,68 +251,78 @@ def plot_confusion_matrix(
         )
     plt.ylabel("Actual")
     plt.xlabel("Predicted")
+    if title:
+        plt.title(title)
     plt.tight_layout()
     plt.show()
 
 
-def train_pipeline_test(df: pd.DataFrame, amount: bool = False) -> None:
-    """
-    Train a classification model and report accuracy + confusion matrix.
-    This is for experimentation / evaluation only; it does not save the model.
+def _training_labels(y: pd.Series | None) -> None:
+    if y is None or y.empty:
+        raise AnalysisInputError("There are no verified, categorized transactions to train a model.")
+    if y.nunique() < 2:
+        raise AnalysisInputError("Verify transactions in at least two categories before training a model.")
 
-    Several models were tested with and without a numeric Amount column.
-    The Amount column typically degraded performance slightly. With text input only,
-    accuracy was approximately:
-        - LogisticRegression: 94.0%
-        - LinearSVC: 97.2%
-        - RandomForest: 93.1%
-    """
+
+def evaluate_pipeline(
+    df: pd.DataFrame, amount: bool = False, cancelled: CancellationCheck = None
+) -> TrainingEvaluation:
+    """Fit and evaluate without plotting or saving; safe for a worker thread."""
     logger.info("Training classification model to test accuracy")
+    check_cancelled(cancelled)
 
     # Prepare the training set and preprocessor
     X, y, features = prepare_data(df, amount=amount)
-    if y is None:
-        raise ValueError("Training data must include a 'Category' column.")
+    _training_labels(y)
+    check_cancelled(cancelled)
 
     pipeline = prepare_pipeline(features)
 
     # Train-Test split
-    x_train, x_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=0)
+    try:
+        x_train, x_test, y_train, y_test = train_test_split(X, y, test_size=0.3, random_state=0)
+    except ValueError as exc:
+        raise AnalysisInputError("More verified transactions are needed to create a training/test split.") from exc
+    if y_train.nunique() < 2:
+        raise AnalysisInputError(
+            "The training split needs at least two categories. Verify more transactions and retry."
+        )
 
     # Train pipeline
+    check_cancelled(cancelled)
     pipeline.fit(x_train, y_train)
+    check_cancelled(cancelled)
 
     # Report accuracy and display confusion matrix
     y_pred = pipeline.predict(x_test)
+    check_cancelled(cancelled)
     acc = accuracy_score(y_test, y_pred)
     logger.info(f"Validation accuracy: {acc:.1%}")
 
-    categories = sorted(y.unique())
-    plot_confusion_matrix(y_test, y_pred, categories=categories)
+    return TrainingEvaluation(tuple(y_test), tuple(y_pred), tuple(sorted(y.unique())), float(acc), len(y_train))
 
 
-def train_pipeline_save(df: pd.DataFrame, model_path: Path, amount: bool = False) -> None:
-    """
-    Train a classification model on the provided data and save it for future use.
+def train_pipeline_test(df: pd.DataFrame, amount: bool = False) -> None:
+    """Synchronous interactive adapter; desktop workers use evaluate_pipeline."""
+    result = evaluate_pipeline(df, amount)
+    plot_confusion_matrix(result.actual, result.predicted, categories=list(result.categories))
 
-    The saved model bundle includes:
-        - sklearn Pipeline
-        - whether Amount was used as a numeric feature
-        - list of category names seen during training
-        - feature configuration
-        - basic metadata (timestamp, counts)
-    """
+
+def fit_model_bundle(df: pd.DataFrame, amount: bool = False, cancelled: CancellationCheck = None) -> ModelBundle:
+    """Fit a bundle without modifying any model on disk."""
     logger.info("Training classification pipeline for later use.")
+    check_cancelled(cancelled)
 
     # Prepare the training set and preprocessor
     X, y, features = prepare_data(df, amount=amount)
-    if y is None:
-        raise ValueError("Training data must include a 'Category' column.")
+    _training_labels(y)
+    check_cancelled(cancelled)
 
     pipeline = prepare_pipeline(features)
 
     # Train on all provided data
     pipeline.fit(X, y)
+    check_cancelled(cancelled)
 
     categories = sorted(y.unique())
     bundle: ModelBundle = {
@@ -267,13 +332,21 @@ def train_pipeline_save(df: pd.DataFrame, model_path: Path, amount: bool = False
         "categories": categories,
         "features": features,
         "meta": {
-            "trained_at": datetime.utcnow().isoformat() + "Z",
+            "trained_at": datetime.now(timezone.utc).isoformat(),
             "n_samples": int(len(df)),
             "n_categories": len(categories),
         },
     }
 
-    save_model(model_path, bundle)
+    return bundle
+
+
+def train_pipeline_save(
+    df: pd.DataFrame, model_path: Path, amount: bool = False, cancelled: CancellationCheck = None
+) -> None:
+    """Synchronous service adapter; preserve the prior model until the commit."""
+    bundle = fit_model_bundle(df, amount, cancelled)
+    save_model(model_path, bundle, cancelled)
     logger.success("Pipeline saved to {}", model_path)
 
 

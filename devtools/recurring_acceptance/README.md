@@ -1,9 +1,10 @@
-# Recurring-analysis acceptance
+# Local-analysis acceptance
 
 Run from `client/` on `feature/client-financial-insights`. This launches the real
 source UI with a temporary profile and synthetic database. It disables networking,
 uses a null credential backend, and never loads the normal or staging config.
-No installer, publication, model training, or server connection is involved.
+No installer, publication, or server connection is involved. Model training runs
+only when explicitly selected with `--training`, using synthetic data.
 Close the window to discard the temporary profile. Exported CSVs selected through
 Save Table are intentionally retained at the destination you choose.
 
@@ -92,5 +93,41 @@ completed analysis should still annotate the three subscription rows.
 The delay intentionally represents a library call that cannot stop midway; it
 is only a devtool option. Normal execution checks cancellation during text
 preprocessing, between analysis stages, and between filter groups. No dependency,
-schema, or server changes are part of C2a-1. Windows owner acceptance is requested;
+schema, or server changes are part of C2a-1. Windows owner acceptance passed;
 repeat on Intel only if a concrete compatibility concern arises.
+
+## C2a-2 background-training acceptance
+
+Run from `client/` on the feature branch. Each invocation creates 40 synthetic
+verified transactions and a usable baseline model in a temporary profile.
+Training starts automatically. The five-second delay lets you exercise the
+worker lifecycle; it is not part of normal training.
+
+```powershell
+uv run --no-env-file --frozen python ../devtools/recurring_acceptance/launch.py --training save --slow-seconds 5
+```
+
+1. Let training complete. The title heartbeat should keep advancing, the window
+   should close, and the console should confirm the new model saved and reloaded.
+2. Rerun and click **Cancel Training** during the delay. The heartbeat should
+   continue while cancellation waits for the current step. After the canceled
+   message, click Close. The console should confirm the previous model is
+   preserved byte-for-byte.
+3. Rerun and click window-X during the delay. It should wait responsively for
+   the worker, close safely, and print the same preservation confirmation.
+4. Run with `--training test --slow-seconds 5` and let it complete. A confusion
+   matrix should open with 100% accuracy for this deliberately simple synthetic
+   dataset. Close the plot to finish; no model is replaced by test training.
+
+Optional failure demonstration: add `--fail-training-save` to the save command.
+The progress window should report failure; close it to see the byte-for-byte
+preservation confirmation. The injected failure writes only an incomplete
+temporary candidate, which is discarded. Successful saves are also confined to
+the temporary profile, removed when the launcher exits. Training mode does not
+accept a private `--database` or `--review`.
+
+Automated checks use `--smoke-test --training save`, `--smoke-test --training test`,
+and `--smoke-test --training save --fail-training-save`. They cover saving,
+evaluation, isolation, and failed-write preservation; native Windows acceptance
+still covers visible responsiveness and window behavior. No new dependencies
+were added, so a duplicate Intel walkthrough is not requested for this chunk.

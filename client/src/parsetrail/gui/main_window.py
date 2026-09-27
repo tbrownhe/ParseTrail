@@ -46,7 +46,7 @@ from parsetrail.core.parser_routing import ParseError, ParseWarningsRejectedErro
 from parsetrail.core.plugins import PluginManager, PluginUpdateThread
 from parsetrail.core.profile import ProfileError, is_staging_profile, profile_display_name, require_profile_owned_path
 from parsetrail.core.review import TransactionReviewError, TransactionReviewService
-from parsetrail.core.settings import save_settings, settings
+from parsetrail.core.settings import SettingsSaveError, save_settings, settings
 from parsetrail.core.statements import ArchivePendingError
 from parsetrail.core.utils import open_file_in_os
 from parsetrail.gui.accounts import (
@@ -70,6 +70,7 @@ from parsetrail.gui.plugins import (
 from parsetrail.gui.preferences import PreferencesDialog
 from parsetrail.gui.send import StatementSubmissionDialog
 from parsetrail.gui.statements import CompletenessDialog
+from parsetrail.gui.training import ModelTrainingDialog
 from parsetrail.gui.transactions import (
     InsertTransactionDialog,
     RecurringTransactionsDialog,
@@ -915,23 +916,18 @@ class ParseTrail(QMainWindow):
         self.update_main_gui()
 
     def train_pipeline_test(self):
+        dialog = ModelTrainingDialog(self.dashboard_service, parent=self)
         try:
-            data, columns = self.dashboard_service.training_set()
-        except DashboardServiceError:
-            logger.exception("Failed to load model-training data")
-            QMessageBox.critical(self, "Error", "Failed to load model-training data. See log for details.")
-            return
-        if len(data) == 0:
-            QMessageBox.information(
-                self,
-                "No Verified Categories",
-                "There are no verified transactions to train a model.",
-            )
-            return
-        df = pd.DataFrame(data, columns=columns)
-
-        # Train and test a pipeline
-        learn.train_pipeline_test(df, amount=False)
+            if dialog.exec() == QDialog.Accepted and dialog.evaluation is not None:
+                result = dialog.evaluation
+                learn.plot_confusion_matrix(
+                    result.actual,
+                    result.predicted,
+                    categories=list(result.categories),
+                    title=f"Validation accuracy: {result.accuracy:.1%} ({len(result.actual)} test transactions)",
+                )
+        finally:
+            dialog.deleteLater()
 
     def train_pipeline_save(self):
         # Prompt user for new save location
@@ -952,30 +948,29 @@ class ParseTrail(QMainWindow):
             QMessageBox.warning(self, "Staging Path Blocked", str(exc))
             return
 
-        # Retrieve verified transactions
+        dialog = ModelTrainingDialog(self.dashboard_service, model_path, parent=self)
         try:
-            data, columns = self.dashboard_service.training_set()
-        except DashboardServiceError:
-            logger.exception("Failed to load model-training data")
-            QMessageBox.critical(self, "Error", "Failed to load model-training data. See log for details.")
-            return
-        if len(data) == 0:
-            QMessageBox.information(
+            if dialog.exec() != QDialog.Accepted or dialog.saved_path is None:
+                return
+        finally:
+            dialog.deleteLater()
+
+        # Training and model publication succeeded. Report a preference failure
+        # separately, retaining the previous selection and the valid saved file.
+        previous_path = settings.model_path
+        settings.model_path = model_path
+        try:
+            save_settings(settings)
+        except SettingsSaveError:
+            settings.model_path = previous_path
+            QMessageBox.warning(
                 self,
-                "No Verified Categories",
-                "There are no verified transactions to train a model.",
+                "Model Saved; Preferences Not Saved",
+                "The trained model was saved, but the default model preference could not be saved. "
+                "The previous selection is retained. Select the saved model in Preferences when ready.",
             )
             return
-        df = pd.DataFrame(data, columns=columns)
-
-        # Train and save pipeline
-        learn.train_pipeline_save(df, model_path, amount=False)
-
         QMessageBox.information(self, "Pipeline Saved", "Trained pipeline has been saved successfully.")
-
-        # Save new pipeline path to config
-        settings.model_path = model_path
-        save_settings(settings)
 
     # CENTRAL WIDGET FUNCTIONS
 

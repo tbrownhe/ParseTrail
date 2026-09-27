@@ -6,6 +6,43 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## Client C2a-2 source verification — September 26, 2026
+
+On `feature/client-financial-insights`, both model-training actions now use the
+local-analysis worker lifecycle. The worker owns the verified-training-data
+session, fits the existing classifier, and returns scalar evaluation data or a
+serialized, reloaded candidate beside the destination model. Test plots and
+atomic model publication run on the GUI thread after accepted completion.
+Canceled results are discarded even if computation has finished and Qt delivery
+is pending. Fit, serialization, validation, or replacement failure preserves the
+previous model. Settings are updated only after publication; preference-save
+failure reports the saved file separately and restores the previous selection.
+
+Cancel/Close/Escape/window-X wait for an active library step while the GUI keeps
+processing events. Application shutdown joins workers and cleans up staged
+output. This chunk adds no dependency, schema, server, or release-version change.
+
+Windows AMD64 source evidence (Python 3.13.15, PySide6 6.11.2):
+
+- Focused training, shared-worker, and isolated-launcher checks: **41 passed**.
+  Covered actual worker-owned SQLite reads, GUI heartbeat/plot/commit thread,
+  Cancel/Escape/X, both late-cancellation boundaries, shutdown cleanup, failed
+  replacement, partial serialization, reload validation, and preference failure.
+- Full client suite: **581 passed, 3 skipped** in 122.98 seconds, with offscreen
+  Qt and process-scoped `RemoteSigned` for the existing PowerShell builder probe.
+  No machine/user execution policy changed.
+- All three synthetic training modes passed: save/reload, evaluation without
+  save, and injected partial-write failure preserving the original model bytes.
+  Existing recurring launch modes and profile/environment isolation also passed.
+- Ruff lint/format passed for client source/tests and the acceptance devtool
+  (**175 Python files**); Git whitespace checks passed.
+
+No private database/model was accessed, no installer was built or published,
+and no hosted CI or Intel run is claimed. Native Windows acceptance remains
+pending using the [synthetic training walkthrough](../devtools/recurring_acceptance/README.md#c2a-2-background-training-acceptance).
+Implementation pauses here before CF1. The walkthrough creates and removes a
+temporary profile and verifies old-model bytes after cancellation/failure.
+
 ## Client C2a-1 verification and Windows acceptance — September 26, 2026
 
 On `feature/client-financial-insights`, recurring analysis now runs outside the

@@ -208,13 +208,29 @@ cancels and joins outstanding workers before Qt destroys their owners.
 
 Inputs that can invalidate a running analysis are disabled until it settles.
 Refreshing review rows programmatically cancels the old snapshot; old cluster
-results cannot be applied to the replacement rows. Model training remains
-synchronous until the separate C2a-2 chunk. The
-[C1 acceptance launcher](../devtools/recurring_acceptance/README.md) exercises
+results cannot be applied to the replacement rows. The
+[local-analysis acceptance launcher](../devtools/recurring_acceptance/README.md) exercises
 both real windows with synthetic data or a disposable snapshot of an explicitly
 selected database. C1 was accepted by the owner on Windows. Routine feature
 acceptance uses Windows; targeted Intel checks remain appropriate for dependency,
 packaging, OS-integration changes, or concrete compatibility concerns.
+
+Both model-training actions also run database reads and fitting in a cancellable
+worker with its own read session. Test training returns evaluation data; its
+confusion-matrix window opens on the GUI thread. Deployment training serializes
+and reloads a temporary candidate beside the chosen model, then atomically
+replaces the destination only after the GUI accepts successful completion.
+Cancellation, fitting/serialization/validation failures, and failed replacement
+preserve the previous model. Cancel also discards a completed candidate awaiting
+GUI delivery. An in-progress library call must finish before cancellation or
+closing settles; the progress window remains responsive during that wait.
+
+The default model preference changes only after a successful save. A preference
+write failure is reported separately: the valid model file remains saved and the
+previous selection is retained. Training still uses verified categorized rows,
+the existing classifier, and the existing model bundle format; no dependency or
+schema change is needed. The acceptance launcher supports synthetic training,
+including a partial-write failure, without touching the owner's model or profile.
 
 ### Service ownership
 

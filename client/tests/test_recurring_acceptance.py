@@ -11,8 +11,17 @@ import pytest
 LAUNCHER = Path(__file__).resolve().parents[2] / "devtools" / "recurring_acceptance" / "launch.py"
 
 
-@pytest.mark.parametrize("review", [False, True])
-def test_recurring_acceptance_uses_synthetic_profile_despite_environment_overrides(tmp_path, review):
+@pytest.mark.parametrize(
+    "arguments,kind",
+    [
+        ([], "Recurring"),
+        (["--review"], "Recurring"),
+        (["--training", "save"], "Training"),
+        (["--training", "test"], "Training"),
+        (["--training", "save", "--fail-training-save"], "Training"),
+    ],
+)
+def test_recurring_acceptance_uses_synthetic_profile_despite_environment_overrides(tmp_path, arguments, kind):
     sentinel = tmp_path / "must-not-open.db"
     sentinel.write_bytes(b"not a sqlite database: must remain untouched")
     env = os.environ.copy()
@@ -23,12 +32,10 @@ def test_recurring_acceptance_uses_synthetic_profile_despite_environment_overrid
         PARSETRAIL_PROFILE="staging",
         PARSETRAIL_STAGING_SERVER_URL="https://must-not-connect.invalid/api/v1",
     )
-    command = [sys.executable, str(LAUNCHER), "--smoke-test"]
-    if review:
-        command.append("--review")
+    command = [sys.executable, str(LAUNCHER), "--smoke-test", *arguments]
     result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=45, check=False)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "Recurring synthetic smoke passed." in result.stdout
+    assert f"{kind} synthetic smoke passed." in result.stdout
     assert sentinel.read_bytes() == b"not a sqlite database: must remain untouched"
     assert str(sentinel) not in result.stdout + result.stderr
 

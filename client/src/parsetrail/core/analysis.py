@@ -9,6 +9,10 @@ class AnalysisCancelled(Exception):
     """The caller no longer needs this calculation's result."""
 
 
+class AnalysisInputError(ValueError):
+    """An actionable, safe-to-display problem with local analysis inputs."""
+
+
 def check_cancelled(cancelled: CancellationCheck) -> None:
     if cancelled is not None and cancelled():
         raise AnalysisCancelled

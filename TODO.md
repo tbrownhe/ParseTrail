@@ -83,8 +83,11 @@ and request targeted native cross-platform testing when dependencies, packaging,
 OS integration, or evidence of platform-specific behavior warrants it. Record
 only platforms actually tested; this does not claim Intel acceptance by inference.
 
-- [~] **C2a-2 — Background model training:** separate worker chunk; failed or
-  cancelled training preserves the last usable model.
+- [USER] **C2a-2 — Background model training:** implemented with worker-owned
+  reads, cancellable training, and validated atomic model replacement. Awaiting
+  Windows GUI acceptance of completion, Cancel, and window-X using the
+  [synthetic walkthrough](devtools/recurring_acceptance/README.md#c2a-2-background-training-acceptance).
+  Failed or cancelled training preserves the last usable model. Pause before CF1.
 - [ ] **CF1 — Coverage and freshness service:** extract/reuse per-account coverage
   intervals for the existing grid and new analytics. Test overlap, gaps, empty
   accounts, different account cutoffs, and fully covered comparison periods.

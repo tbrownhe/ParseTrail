@@ -1,4 +1,4 @@
-"""Exercise the real recurring-analysis windows in a disposable local profile."""
+"""Exercise recurring analysis or model training in a disposable local profile."""
 
 from __future__ import annotations
 
@@ -57,6 +57,33 @@ def _no_network(*_args, **_kwargs):
     raise RuntimeError("Networking is disabled in recurring acceptance.")
 
 
+def _seed_training(Session):
+    from parsetrail.core.orm import Accounts, AccountTypes, Categories, Transactions
+
+    with Session.begin() as session:
+        session.add(AccountTypes(AccountTypeID=1, AccountType="Checking", AssetType="Asset"))
+        session.add(Accounts(AccountID=1, AccountName="Synthetic", Company="Example", AccountTypeID=1))
+        for category_id, category, description in [
+            (1, "Food", "Grocery market produce"),
+            (2, "Utilities", "Electric utility energy"),
+        ]:
+            session.add(Categories(CategoryID=category_id, Name=category, Type="Expense", Active=True))
+            for day in range(1, 21):
+                session.add(
+                    Transactions(
+                        AccountID=1,
+                        PostingDate=date(2026, 8, day),
+                        Amount=Decimal("-10"),
+                        Balance=Decimal("5000"),
+                        Description=description,
+                        CategoryID=category_id,
+                        Verified=True,
+                        Fingerprint=hashlib.sha256(f"training:{category_id}:{day}".encode()).hexdigest(),
+                        FingerprintVersion=1,
+                    )
+                )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -67,11 +94,17 @@ def main() -> int:
         "--smoke-test", action="store_true", help="Run synthetic analysis and exit without interaction."
     )
     parser.add_argument("--slow-seconds", type=int, default=0, help="Delay each worker calculation by 0-30 seconds.")
+    parser.add_argument("--training", choices=["test", "save"], help="Exercise model training instead of clustering.")
+    parser.add_argument("--fail-training-save", action="store_true", help="Inject a model serialization failure.")
     args = parser.parse_args()
     if args.smoke_test and args.database:
         parser.error("--smoke-test accepts synthetic inputs only")
     if not 0 <= args.slow_seconds <= 30:
         parser.error("--slow-seconds must be between 0 and 30")
+    if args.training and (args.review or args.database):
+        parser.error("training acceptance uses synthetic data only and cannot be combined with --review")
+    if args.fail_training_save and args.training != "save":
+        parser.error("--fail-training-save requires --training save")
     if "parsetrail.core.settings" in sys.modules:
         raise RuntimeError("Launch in a fresh process, before importing client settings.")
 
@@ -119,8 +152,40 @@ def main() -> int:
         Session = create_database(settings.db_path)
         stack.callback(Session.kw["bind"].dispose)
         if not args.database:
-            _seed(Session)
-        if args.slow_seconds:
+            if args.training:
+                _seed_training(Session)
+            else:
+                _seed(Session)
+        baseline = None
+        if args.training:
+            from parsetrail.core import learn
+            from parsetrail.core.dashboard import DashboardQueryService
+            from parsetrail.core.training import train_from_database
+
+            training_service = DashboardQueryService(Session)
+            settings.model_path.parent.mkdir(parents=True, exist_ok=True)
+            prepared = train_from_database(training_service, settings.model_path, None)
+            try:
+                learn.publish_prepared_model(prepared)
+            finally:
+                learn.discard_prepared_model(prepared)
+            baseline = settings.model_path.read_bytes()
+            if args.slow_seconds:
+                fit = learn.Pipeline.fit
+
+                def slow_fit(pipeline, *fit_args, **fit_kwargs):
+                    time.sleep(args.slow_seconds)
+                    return fit(pipeline, *fit_args, **fit_kwargs)
+
+                stack.enter_context(patch.object(learn.Pipeline, "fit", slow_fit))
+            if args.fail_training_save:
+
+                def partial_write_then_fail(_bundle, stream):
+                    stream.write(b"incomplete candidate")
+                    raise OSError("Synthetic serialization failure")
+
+                stack.enter_context(patch.object(learn.joblib, "dump", partial_write_then_fail))
+        elif args.slow_seconds:
             from parsetrail.core import cluster
             from parsetrail.core.analysis import check_cancelled
 
@@ -135,7 +200,11 @@ def main() -> int:
 
             stack.enter_context(patch.object(cluster, "recurring_transactions", slow_analysis))
         app = QApplication.instance() or QApplication([])
-        if args.review:
+        if args.training:
+            from parsetrail.gui.training import ModelTrainingDialog
+
+            window = ModelTrainingDialog(training_service, settings.model_path if args.training == "save" else None)
+        elif args.review:
             from parsetrail.gui.verification import TransactionReviewWindow
 
             window = TransactionReviewWindow(Session)
@@ -151,7 +220,7 @@ def main() -> int:
                 window.start_date.setDate(QDate(2026, 1, 1))
                 window.end_date.setDate(QDate(2026, 3, 31))
             window.variance_slider["slider"].setValue(10)
-        title = "RECURRING ACCEPTANCE — DISPOSABLE COPY — " + window.windowTitle()
+        title = "LOCAL ANALYSIS ACCEPTANCE — DISPOSABLE COPY — " + window.windowTitle()
         window.setWindowTitle(title)
         heartbeat = QTimer(window)
         heartbeat.setInterval(250)
@@ -164,7 +233,9 @@ def main() -> int:
 
         heartbeat.timeout.connect(tick)
         heartbeat.start()
-        print("Recurring acceptance: disposable profile, network disabled, original database unchanged.", flush=True)
+        print(
+            "Local analysis acceptance: disposable profile, network disabled, original database unchanged.", flush=True
+        )
         print("Closing this process removes the temporary database and profile.", flush=True)
 
         def wait_for_analysis():
@@ -176,7 +247,24 @@ def main() -> int:
 
         try:
             if args.smoke_test:
-                if args.review:
+                if args.training:
+                    window.start_training()
+                    wait_for_analysis()
+                    if args.fail_training_save:
+                        assert window.saved_path is None
+                        assert "Training failed" in window.status_label.text()
+                        assert settings.model_path.read_bytes() == baseline
+                    elif args.training == "save":
+                        assert window.saved_path == settings.model_path
+                        assert learn.load_model(settings.model_path)["meta"]["n_samples"] == 40
+                    else:
+                        assert window.evaluation is not None
+                        assert window.evaluation.accuracy == 1
+                        assert settings.model_path.read_bytes() == baseline
+                    assert not list(settings.model_path.parent.glob(".*.partial"))
+                    print("Training synthetic smoke passed.")
+                    return 0
+                elif args.review:
                     window.cluster_recurring_transactions()
                     wait_for_analysis()
                     assert sum(rec.cluster is not None for rec in window.model._records) == 3
@@ -199,7 +287,24 @@ def main() -> int:
                 print("Recurring synthetic smoke passed.")
                 return 0
             window.show()
-            return app.exec()
+            result = app.exec()
+            if args.training:
+                if window.saved_path is None:
+                    assert settings.model_path.read_bytes() == baseline
+                    print("Previous model preserved: verified byte-for-byte.", flush=True)
+                else:
+                    learn.load_model(settings.model_path)
+                    print("New model saved and reloaded successfully in the disposable profile.", flush=True)
+                assert not list(settings.model_path.parent.glob(".*.partial"))
+                if window.evaluation is not None:
+                    evaluation = window.evaluation
+                    learn.plot_confusion_matrix(
+                        evaluation.actual,
+                        evaluation.predicted,
+                        list(evaluation.categories),
+                        title=f"Synthetic validation accuracy: {evaluation.accuracy:.1%}",
+                    )
+            return result
         finally:
             window.analysis_job.cancel()
             # Preserve worker lifetime even if the launcher's own checks fail.
