@@ -103,5 +103,8 @@ remain accepted; routine `status` and `publish` commands now apply to this pair.
 The one-time [1.3-to-1.4 API/website transition](client-release-contract.md) passed
 its staging deployment, rollback/redeployment, and public-route/browser checks;
 see the [recorded evidence](engineering-acceptance.md#client-142-staging-transition-september-26-2026).
-Production activation remains pending its approval and normal deployment gates.
-Adoption itself does not deploy the API or bypass those gates.
+Production promotion subsequently passed its fresh restore/deployment gates and
+both paired installer checks. Release 1.4.2 is public on both supported targets;
+see the [production evidence](engineering-acceptance.md#client-142-production-release-september-26-2026).
+Adoption itself does not deploy the API or bypass those gates. Future releases
+with the same target contract use the normal CI/paired-publication flow above.

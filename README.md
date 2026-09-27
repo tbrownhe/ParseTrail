@@ -106,6 +106,12 @@ Native Apple Silicon (arm64) development and release acceptance are deferred
 until suitable test hardware is available. Linux source execution is
 experimental: there is no tested Linux installer yet.
 
+The current published desktop release is **1.4.2**, available from the
+[download page](https://parsetrail.com/download.html). Users on 1.3 need one
+manual installer upgrade; its old updater cannot deliver the new signed target
+contract. See [the upgrade contract](docs/client-release-contract.md) and the
+[short release guide](docs/client-releases.md).
+
 ## Contributing
 
 Bug reports, parser fixtures, and pull requests are welcome. Do not commit real

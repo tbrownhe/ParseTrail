@@ -1319,6 +1319,66 @@ review passed. Public promotion still needs owner approval, fresh production
 restore evidence, and the normal deployment gates. Reuse the exact server
 digests and accepted installers above; do not rebuild either pair.
 
+### Client 1.4.2 production release: September 26, 2026
+
+The owner explicitly approved production promotion subject to fresh backup
+verification and merged the release-workflow/staging-transition branch into
+`main` at `5ad8475`. Production uses the **exact three image digests** accepted
+on staging above, from source `919a1ad5690f462c038d31b06388db400cc35ae7`.
+The merged backend, dashboard, website, and Compose sources match that build.
+The original client tag `client-v1.4.2` was pushed unchanged at
+`4585f4c57d20101c1c6ac4f625b726e51913e562`; neither installer was rebuilt or
+re-signed.
+
+The existing encrypted production backup and its automatic restore drill had
+also succeeded on September 27 UTC at approximately 02:00/02:06. A separate
+consistent pre-release snapshot briefly quiesced the production backend and
+resumed it healthy before testing restoration. All **seven database tables**
+matched restored row counts, **78 resource files** matched their inventory, and
+all **five submission-key files** matched after restoration into isolated,
+memory-backed disposable containers. Environment, release state/inputs, and
+recovery credentials were retained privately on the server. No production data
+or keys were transferred to the workstation or committed. Disposable restore
+containers were removed after verification.
+
+Fresh restore evidence was verified at `2026-09-27T04:01:00.527144Z`:
+
+- Details: `/srv/parsetrail-production/restore-drill/client-1.4.2-20260927T040022Z/restore-evidence.json`.
+- Deployment gate: `/srv/parsetrail-production/release-input/client-1.4.2-backup-evidence.json`.
+- Restore IDs: `production-pg17-restore-20260927T040022Z`,
+  `production-files-restore-20260927T040022Z`, and
+  `production-keys-restore-20260927T040022Z`.
+
+Production preflight, migration, health and all **eight public smoke checks**
+passed under deployment **`20260927T040207Z-919a1ad5690f`**. The schema remained
+`3b7a1f4c2d91`. The previous immutable `0ec65f2` API/website release remains the
+recorded rollback target. Legacy client channels and plugin inventories were
+unchanged; staging and production again have exact signed-artifact parity.
+
+The paired publication command verified both production manifests/signatures,
+complete remote release-file hashes, and public installer ranges, then recorded
+both targets as `verified`. The final record is retained locally under
+`scratch/desktop-releases/1.4.2/desktop-release.json` and privately on the server
+as `release-input/client-v1.4.2-publication-record.json`. Public downloads are:
+
+- [Windows x64 1.4.2](https://api.parsetrail.com/api/v1/clients/windows-x86_64/1.4.2).
+- [Intel Mac 1.4.2](https://api.parsetrail.com/api/v1/clients/macos-x86_64/1.4.2).
+
+A real headless browser verified both labeled links on the public download page,
+correct 1.4.2 target URLs, and HTTP 206 one-byte installer ranges. All six legacy
+manifest/signature/latest routes returned HTTP 410 with the manual-upgrade URL.
+The additional zero-console-error assertion **failed** on a pre-existing theme
+race: the version-driven head script can execute `main.js?v=1.0.1` before jQuery.
+That loader is identical in the previous and released website source. The normal
+bottom-of-page theme load still initializes correctly and both download links
+work. This non-blocking website cleanup is tracked as W1; the approved release
+images were not changed to hide or fix it. The private browser evidence is
+`scratch/client-1.4.2-production-browser.json`.
+
+Windows x64 and Intel macOS 1.4.2 publication is complete. Users on 1.3 require
+one manual installer upgrade from the public download page. Apple Silicon and
+the existing physical-no-build-tools Intel acceptance gap remain deferred.
+
 ### Hosted client gates and backend test annotations
 
 The owner opened [PR #38](https://github.com/tbrownhe/ParseTrail/pull/38) from

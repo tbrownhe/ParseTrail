@@ -15,7 +15,9 @@ any implementation**. Windows and Intel installed offline/P2.2 walkthroughs are
 accepted. The owner also accepted the existing feature set after the Windows
 private-copy retests and closed this development effort; see the
 [closeout record](docs/engineering-acceptance.md#client-development-closeout-september-21-2026).
-The remaining candidate and publication gates below belong to the next release.
+Client 1.4.2 is published for Windows x64 and Intel macOS; the
+[production acceptance record](docs/engineering-acceptance.md#client-142-production-release-september-26-2026)
+preserves release, recovery, and verification evidence.
 
 The completed Mac results are in the [Intel return note](docs/intel-mac-return-note.md).
 The [signed Windows candidate record](docs/engineering-acceptance.md#signed-windows-candidate-september-19-2026)
@@ -28,16 +30,6 @@ identifies the preserved installer used for Windows native acceptance.
   The signed candidate's installation, synthetic runtime/offline probes,
   and owner offline first start/restart with system-only `PATH` passed; see the
   [installed candidate record](docs/engineering-acceptance.md#intel-installed-candidate-verification-september-19-2026).
-- [ ] `[USER]` **Promote 1.4.2 to production:** merge/review the release-workflow
-  and staging-transition branch, approve public activation, and complete fresh
-  production restore evidence and normal deployment gates. Promote the exact
-  accepted installers and server image digests tested on staging, then verify
-  both public downloads and the manual-upgrade response for 1.3 clients. Staging
-  deployment, eight smoke checks, rollback/redeployment, both browser download
-  buttons, legacy HTTP 410 guidance, and paired publication passed; see the
-  [transition evidence](docs/engineering-acceptance.md#client-142-staging-transition-september-26-2026)
-  and [short release guide](docs/client-releases.md). Preserve legacy channels and
-  previous API/website digests for cross-contract rollback.
 
 Acceptance: one clean tag produces traceable target-specific artifacts; a dry
 run does not change public directories, and publish-existing uses exactly the
@@ -62,6 +54,12 @@ the review's acceptance checks, not a broad refactor.
   graph, separate release/server-devtool dependencies into appropriate extras,
   and include client scripts/migrations in hosted lint. Keep devtools functional
   and pass native frozen/offline checks before removing a dependency.
+- [ ] **W1 — Website theme script order:** remove the duplicate asynchronous
+  `main.js` loader from the download page and review matching pages. It can run
+  before jQuery, producing a console error even though the normal theme and both
+  installer downloads work. Verify with delayed dependency loads and a public
+  browser check. This pre-existing issue was recorded during 1.4.2 publication;
+  its fix requires a separately tested website release, not new client installers.
 
 ## Client feature proposals
 

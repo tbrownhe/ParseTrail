@@ -1,15 +1,16 @@
 # Client installer target contract
 
-Client **1.4.0** introduces version-2 signed installer manifests. This is the
-prepared source contract; it does not establish that 1.4.0 has been built, tagged,
-published, or deployed. The remaining native/release gates are in [TODO](../TODO.md).
+Client **1.4** introduces version-2 signed installer manifests. The contract is
+now deployed with the published **1.4.2** Windows x64 and Intel Mac installers;
+see the [production acceptance](engineering-acceptance.md#client-142-production-release-september-26-2026).
+Deferred platform work remains in [TODO](../TODO.md).
 
 ## Supported targets
 
-| Target / channel | Signed architecture | Filename for version 1.4.0 | Website label |
+| Target / channel | Signed architecture | Filename for version 1.4.2 | Website label |
 | --- | --- | --- | --- |
-| `windows-x86_64` | `x86_64` | `parsetrail_1.4.0_windows-x86_64_setup.exe` | Windows (x64) |
-| `macos-x86_64` | `x86_64` | `parsetrail_1.4.0_macos-x86_64_setup.dmg` | Intel Mac (x86_64) |
+| `windows-x86_64` | `x86_64` | `parsetrail_1.4.2_windows-x86_64_setup.exe` | Windows (x64) |
+| `macos-x86_64` | `x86_64` | `parsetrail_1.4.2_macos-x86_64_setup.dmg` | Intel Mac (x86_64) |
 
 The signed artifact's `platform` is the full target above, and `architecture` is
 required explicitly. The exact filename must agree with the version and target.

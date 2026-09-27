@@ -59,8 +59,10 @@ passed unchanged adoption, paired status verification, and local staging
 publication review. The validation outputs are not replacements for the accepted
 signed 1.4.2 pair. The coordinated staging transition, rollback, and redeployment
 also passed; [the acceptance record](engineering-acceptance.md#client-142-staging-transition-september-26-2026)
-identifies the exact server images and deployment records. Production promotion
-remains pending owner approval and its normal fresh-restore/deployment gates.
+identifies the exact server images and deployment records. The owner approved
+production promotion, which passed its fresh restore/deployment gates and both
+paired installer checks. Release 1.4.2 is public; see the
+[production acceptance](engineering-acceptance.md#client-142-production-release-september-26-2026).
 
 ## One-time contract transition
 
@@ -78,5 +80,6 @@ and rechecks them before migration, deployment, or rollback. See the
 [staging guide](staging.md#3-signed-artifacts-and-captured-mail).
 
 The paired release record on the signing/publishing computer now records both
-staging targets as verified. Neither installer was rebuilt or re-signed.
-Production's previous release and artifact channels are unchanged.
+targets as verified on staging and production. Neither installer was rebuilt or
+re-signed. Production's previous release images and legacy artifact channels are
+preserved for rollback.
