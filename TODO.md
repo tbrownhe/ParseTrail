@@ -79,8 +79,10 @@ routine client development or automated tests.
 Each service/calculation chunk precedes its GUI chunk. Retain native Windows x64
 and Intel macOS acceptance; source/offscreen tests do not close those gates.
 
-- [~] **C1 — Recurring correctness:** implement the bounded fix below, then
-  prepare synthetic and confidential-copy GUI acceptance before continuing.
+- [~] **C1 — Recurring correctness:** implementation and isolated launcher ready;
+  `[USER]` run the [synthetic and confidential-copy GUI walkthrough](devtools/recurring_acceptance/README.md)
+  on Windows x64 and Intel macOS before continuing to C2a. Retain this gate until
+  owner acceptance is recorded.
 - [ ] **C2a-1 — Background recurring analysis:** cancellable worker, responsive
   heartbeat, worker-owned sessions, safe close, and no stale result after cancel.
 - [ ] **C2a-2 — Background model training:** separate worker chunk; failed or
@@ -137,6 +139,9 @@ the review's acceptance checks, not a broad refactor.
   independent of debit/credit sign; define zero-mean, mixed-sign, singleton, and
   empty-vocabulary behavior. Equivalent positive/negative series must produce
   equivalent decisions and uninformative descriptions a useful no-result state.
+  Implemented with exact comparisons, corrected percentage/minimum-interval GUI
+  controls, and stale-result clearing. `[USER]` native acceptance remains open;
+  see the active roadmap and acceptance launcher above.
 - [ ] **C2a — Responsive local analysis:** move recurring analysis and model
   training to cancellable workers. Verify GUI heartbeat, safe close/cancel,
   worker-owned sessions, and preservation of the prior model on failed training.

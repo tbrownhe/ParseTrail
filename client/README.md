@@ -176,6 +176,29 @@ exclude statement archives; back up the managed folders separately.
 
 ## Application service boundaries
 
+### Recurring analysis
+
+Recurring analysis groups descriptions locally and optionally filters by mean
+interval and amount dispersion. Dispersion is sample standard deviation divided
+by the absolute mean: 10% in Identify Recurring equals a ratio of 0.1 in
+Transaction Review. Equivalent debit and credit series receive equivalent amount
+decisions. The comparison preserves exact money, including at the threshold;
+optional numeric clustering features do not replace the stored amounts.
+
+Amount filtering excludes singleton, nonfinite, zero-valued, and mixed-sign
+groups, including purchases mixed with refunds. An infinite dispersion limit
+removes the size-of-variation restriction, not those evidence requirements.
+Descriptions with no usable tokens and noise-only results return a normal
+no-match state. Failed/empty analysis clears the previous exportable result.
+
+These are descriptive clusters, not confirmed bill schedules or forecasts.
+Analysis remains synchronous until C2a. The
+[C1 acceptance launcher](../devtools/recurring_acceptance/README.md) exercises
+both real windows with synthetic data or a disposable snapshot of an explicitly
+selected database; native Windows/Intel owner acceptance remains required.
+
+### Service ownership
+
 GUI modules delegate database queries and mutations to headless services. Preserve
 the characterization tests and explicit transaction owner when extending a flow:
 

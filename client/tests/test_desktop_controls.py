@@ -6,6 +6,7 @@ from unittest.mock import Mock
 
 import pytest
 from parsetrail.core.budgets import BudgetRow
+from parsetrail.core.transactions import TransactionRangeRow
 from parsetrail.gui.accounts import AppreciationDialog
 from parsetrail.gui.budget_view import BudgetTab
 from parsetrail.gui.main_window import ParseTrail
@@ -116,6 +117,93 @@ def test_recurring_input_receives_calendar_dates(app):
         dialog.analyze_transactions()
         in_range.assert_called_once_with(date(2026, 8, 1), date(2026, 8, 31))
         assert dialog.model.rowCount() == 0
+    finally:
+        dialog.close()
+        dialog.deleteLater()
+        app.processEvents()
+
+
+def _recurring_rows(amounts, description="Synthetic subscription", days=None):
+    return [
+        TransactionRangeRow(
+            account_name="Synthetic checking",
+            date=date(2026, 1, days[index]) if days else date(2026, index + 1, 1),
+            amount=Decimal(str(amount)),
+            category=None,
+            description=description,
+        )
+        for index, amount in enumerate(amounts)
+    ]
+
+
+def test_recurring_controls_apply_percent_and_minimum_interval(app):
+    dialog = RecurringTransactionsDialog(None)
+    source = Mock(return_value=_recurring_rows([-9, -10, -11]))
+    dialog.transaction_service = SimpleNamespace(in_range=source)
+    try:
+        dialog.variance_slider["slider"].setValue(10)
+        dialog.analyze_transactions()
+        assert dialog.model.rowCount() == 3
+        assert dialog.save_button.isEnabled()
+        dialog.variance_slider["slider"].setValue(9)
+        dialog.analyze_transactions()
+        assert dialog.model.rowCount() == 0
+        assert not dialog.save_button.isEnabled()
+        assert "No recurring matches" in dialog.status_label.text()
+
+        source.return_value = _recurring_rows([-10, -10, -10], days=[1, 2, 3])
+        dialog.min_frequency_slider["slider"].setValue(3)
+        dialog.analyze_transactions()
+        assert dialog.model.rowCount() == 0
+        dialog.min_frequency_slider["slider"].setValue(1)
+        dialog.analyze_transactions()
+        assert dialog.model.rowCount() == 3
+    finally:
+        dialog.close()
+        dialog.deleteLater()
+        app.processEvents()
+
+
+def test_recurring_no_words_and_no_input_clear_previous_export(app, monkeypatch):
+    dialog = RecurringTransactionsDialog(None)
+    source = Mock(return_value=_recurring_rows([-10, -10, -10]))
+    dialog.transaction_service = SimpleNamespace(in_range=source)
+    errors = []
+    monkeypatch.setattr(QMessageBox, "critical", lambda *args: errors.append(args))
+    try:
+        dialog.analyze_transactions()
+        assert dialog.save_button.isEnabled()
+        source.return_value = _recurring_rows([-10, -10, -10], description="the and or")
+        dialog.analyze_transactions()
+        assert not errors
+        assert dialog.model.rowCount() == 0
+        assert not dialog.save_button.isEnabled()
+        assert "usable words" in dialog.status_label.text()
+        source.return_value = []
+        dialog.analyze_transactions()
+        assert dialog.clustered is None
+        assert not dialog.save_button.isEnabled()
+        assert "No transactions" in dialog.status_label.text()
+    finally:
+        dialog.close()
+        dialog.deleteLater()
+        app.processEvents()
+
+
+def test_recurring_failure_clears_previous_result(app, monkeypatch):
+    dialog = RecurringTransactionsDialog(None)
+    dialog.transaction_service = SimpleNamespace(in_range=Mock(return_value=_recurring_rows([-10, -10, -10])))
+    errors = []
+    monkeypatch.setattr(QMessageBox, "critical", lambda *args: errors.append(args))
+    try:
+        dialog.analyze_transactions()
+        assert dialog.save_button.isEnabled()
+        monkeypatch.setattr("parsetrail.gui.transactions.cluster.recurring_transactions", Mock(side_effect=ValueError))
+        dialog.analyze_transactions()
+        assert len(errors) == 1
+        assert dialog.clustered is None
+        assert dialog.model.rowCount() == 0
+        assert not dialog.save_button.isEnabled()
     finally:
         dialog.close()
         dialog.deleteLater()

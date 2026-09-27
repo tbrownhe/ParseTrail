@@ -312,7 +312,7 @@ class RecurringTransactionsDialog(QDialog):
         self.start_date.setDate(QDate.currentDate().addYears(-1))
         control_layout.addWidget(self.start_date, row, 1)
 
-        end_date_label = QLabel("Start Date:")
+        end_date_label = QLabel("End Date:")
         end_date_label.setAlignment(Qt.AlignRight)
         control_layout.addWidget(end_date_label, row, 2)
 
@@ -332,7 +332,7 @@ class RecurringTransactionsDialog(QDialog):
         self.min_samples_slider = self._create_slider("Min Members per Cluster", 1, 10, 2, 1)
         self.min_frequency_slider = self._create_slider("Min Interval (days)", 1, 30, 3, 1)
         self.max_interval_slider = self._create_slider("Max Interval (days)", 1, 100, 35, 1, show_inf=True)
-        self.variance_slider = self._create_slider("Max Amount Variance (%)", 0, 300, 100, 1, show_inf=True)
+        self.variance_slider = self._create_slider("Max Amount Dispersion (%)", 0, 300, 100, 1, show_inf=True)
 
         sliders = [
             self.eps_slider,
@@ -353,6 +353,9 @@ class RecurringTransactionsDialog(QDialog):
 
         # Add the control section to the main layout
         main_layout.addWidget(control_widget)
+        self.status_label = QLabel("Choose a date range and select Analyze.")
+        self.status_label.setWordWrap(True)
+        main_layout.addWidget(self.status_label)
 
         # Table for displaying results
         self.table = QTableView()
@@ -366,6 +369,7 @@ class RecurringTransactionsDialog(QDialog):
         # Save Table and Close buttons
         button_layout = QHBoxLayout()
         self.save_button = QPushButton("Save Table")
+        self.save_button.setEnabled(False)
         self.save_button.clicked.connect(self.save_to_csv)
         button_layout.addWidget(self.save_button)
 
@@ -396,10 +400,14 @@ class RecurringTransactionsDialog(QDialog):
         return {"slider": slider, "label": slider_label}
 
     def inf_slider(self, slider):
-        value = 1e6 if slider.value() == slider.maximum() else slider.value()
+        value = math.inf if slider.value() == slider.maximum() else slider.value()
         return value
 
     def analyze_transactions(self):
+        self.clustered = None
+        self.save_button.setEnabled(False)
+        self.model.update_data(pd.DataFrame([], columns=self.columns))
+        self.status_label.setText("Analyzing transactions...")
         # Retrieve and process transactions
         start_date = self.start_date.date().toPython()
         end_date = self.end_date.date().toPython()
@@ -408,6 +416,7 @@ class RecurringTransactionsDialog(QDialog):
             rows = self.transaction_service.in_range(start_date, end_date)
         except TransactionServiceError:
             logger.exception("Failed to load recurring-transaction input")
+            self.status_label.setText("Could not load transactions. Try again.")
             QMessageBox.critical(self, "Error", "Failed to load transactions. See log for details.")
             return
         transactions = pd.DataFrame(
@@ -425,30 +434,47 @@ class RecurringTransactionsDialog(QDialog):
         )
 
         if transactions.empty:
-            self.model.update_data(pd.DataFrame([], columns=self.columns))
+            self.status_label.setText("No transactions in this date range. Choose a different date range.")
             return
 
         # Preprocess and cluster
         eps = self.eps_slider["slider"].value() / 100
         min_samples = self.min_samples_slider["slider"].value()
-        min_frequency = self.min_frequency_slider["slider"].value()
+        min_interval = self.min_frequency_slider["slider"].value()
         max_interval = self.inf_slider(self.max_interval_slider["slider"])
-        max_variance = self.inf_slider(self.variance_slider["slider"])
+        max_variance = self.inf_slider(self.variance_slider["slider"]) / 100
         include_amount = self.include_amount_checkbox.isChecked()
 
         # Perform the clustering
-        self.clustered = cluster.recurring_transactions(
-            transactions,
-            eps=eps,
-            min_samples=min_samples,
-            min_frequency=min_frequency,
-            max_interval=max_interval,
-            include_amount=include_amount,
-            max_variance=max_variance,
-        )
+        try:
+            self.clustered = cluster.recurring_transactions(
+                transactions,
+                eps=eps,
+                min_samples=min_samples,
+                min_interval=min_interval,
+                max_interval=max_interval,
+                include_amount=include_amount,
+                max_variance=max_variance,
+            )
+        except Exception:
+            logger.exception("Recurring transaction analysis failed")
+            self.status_label.setText("Analysis failed. Try another range or settings; see the log for details.")
+            QMessageBox.critical(self, "Error", "Analysis failed. See the application log for details.")
+            return
 
         # Update table
         self.model.update_data(self.clustered[self.columns].reset_index(drop=True))
+        self.save_button.setEnabled(not self.clustered.empty)
+        if self.clustered.empty:
+            self.status_label.setText(
+                "No recurring matches. Try another date range or adjust the filters. "
+                "Descriptions need usable words; amount filtering requires repeated nonzero amounts of one sign."
+            )
+        else:
+            self.status_label.setText(
+                f"Found {self.clustered['Cluster'].nunique()} recurring clusters "
+                f"affecting {len(self.clustered)} transactions."
+            )
 
     def update_table(self, df: pd.DataFrame):
         self.table.setRowCount(len(df))
@@ -466,7 +492,7 @@ class RecurringTransactionsDialog(QDialog):
         """
         Save the clustered transactions to a CSV file.
         """
-        if self.clustered is None:
+        if self.clustered is None or self.clustered.empty:
             QMessageBox.warning(self, "No Data", "There are no clustered transactions to save.")
             return
 

@@ -6,6 +6,46 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## Client C1 source verification — September 26, 2026
+
+Client branch `feature/client-financial-insights` starts at `stable-1.4.2`
+(`effced9`). The roadmap was recorded in `4060469`. C1 corrects sign-dependent
+recurring amount filtering and its Decimal incompatibility, uses exact squared
+dispersion comparisons, returns no matches for unusable descriptions, and keeps
+source data unchanged. Amount filtering abstains on singleton, nonfinite,
+zero-valued, and mixed-sign groups. Optional amount features use magnitudes so
+debit/credit mirrors receive equivalent clustering inputs.
+
+The Identify Recurring controls now pass percentages as ratios and the minimum
+interval under its actual parameter name. Both analysis windows explain ordinary
+no-match results; Identify Recurring clears obsolete results/export availability
+after empty or failed analysis. This is not scheduling/forecasting or background
+execution, and makes no server, database schema, or release-version change.
+
+Windows AMD64 source evidence (Python 3.13.15, PySide6 6.11.2):
+
+- Focused recurring/core and Qt-control checks: **46 passed**.
+- Full client run with offscreen Qt: **542 passed, 3 skipped, 1 failed** in
+  99.79 seconds. The failure was the unchanged Windows release-builder metadata
+  test: its child PowerShell refused local script execution under the sandbox
+  account's default policy, before reaching its stubbed builder probe.
+- Reran that one test with process-scoped `RemoteSigned`: **1 passed**. No user
+  or machine execution-policy setting changed. Across these runs all 543 runnable
+  checks passed; the three platform skips remain explicit.
+- Ruff lint and format checks passed for client source/tests and the new
+  recurring-acceptance devtool (**168 Python files** formatted).
+- The full suite includes two isolated launcher smokes and a snapshot-isolation
+  test. Environment canaries remain untouched; editing a copied SQLite database
+  does not change its source bytes. Synthetic Identify Recurring and Transaction
+  Review smokes also passed when run directly.
+
+No private database was opened for this implementation, and no installer was
+built or published. Hosted CI and Intel execution have not been obtained for
+this chunk. Native GUI and confidential-copy usefulness acceptance remain open
+in TODO. The [prepared walkthrough](../devtools/recurring_acceptance/README.md)
+provides the exact commands and expected results for both platforms. Work stops
+at this owner gate before C2a.
+
 ## Where the lasting contracts live
 
 | Completed work | Maintained documentation |

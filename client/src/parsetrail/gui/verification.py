@@ -126,7 +126,7 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
         self.spin_max_interval.setRange(1, 365)
         self.spin_max_interval.setValue(35)
 
-        self.chk_use_max_variance = QtWidgets.QCheckBox("Use max_variance")
+        self.chk_use_max_variance = QtWidgets.QCheckBox("Max amount dispersion (ratio; 0.1 = 10%)")
         self.spin_max_variance = QtWidgets.QDoubleSpinBox()
         self.spin_max_variance.setRange(0.0, 10.0)
         self.spin_max_variance.setSingleStep(0.05)
@@ -588,7 +588,13 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
 
             num_clusters = len({c for c in cluster_map.values() if c != -1})
             num_rows = len(cluster_map)
-            self.status_label.setText(f"Found {num_clusters} recurring clusters affecting {num_rows} transactions.")
+            if num_clusters:
+                self.status_label.setText(f"Found {num_clusters} recurring clusters affecting {num_rows} transactions.")
+            else:
+                self.status_label.setText(
+                    "No recurring matches. Try other filters or descriptions with usable words; "
+                    "amount filtering needs repeated nonzero amounts of one sign."
+                )
         except Exception:
             logger.exception("Clustering recurring transactions failed")
             QtWidgets.QMessageBox.critical(
