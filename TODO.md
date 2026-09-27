@@ -91,6 +91,11 @@ and request targeted native cross-platform testing when dependencies, packaging,
 OS integration, or evidence of platform-specific behavior warrants it. Record
 only platforms actually tested; this does not claim Intel acceptance by inference.
 
+L2 recovery preparation and L3 isolated kernel passed automated acceptance on
+September 27; see the [verification record](docs/engineering-acceptance.md#ledger-recovery-and-isolated-kernel--september-27-2026)
+and [kernel guide](docs/client-ledger-kernel.md). The active application still uses
+the legacy model. L4 remains behind the L1 interpretation review below.
+
 - [USER] **L1 — Accounting contract and migration audit:** the
   [contract](docs/client-ledger-contract.md) and [read-only auditor](devtools/ledger_audit/README.md)
   are prepared and exercised on a consistent authorized snapshot. The owner
@@ -109,13 +114,11 @@ only platforms actually tested; this does not claim Intel acceptance by inferenc
   design, and use separate prior-statement evidence for cross-statement checks.
   Do not label a derived-endpoint equation as independent reconciliation. See the
   [parser verification record](docs/engineering-acceptance.md#lendingclub-and-capital-one-balance-evidence--september-27-2026).
-- [ ] **L2 — Recovery preparation:** verify a complete local backup set and
-  disposable restore before schema expansion; bring forward the required F4
-  work. Preserve the old database and archives throughout parallel migration.
-- [ ] **L3 — Ledger kernel:** add accounts/journal/postings/evidence links with
-  atomic balanced posting, exact allocation limits, review/reconciliation states,
-  immutable posted history with corrections, and deterministic import identity.
-  Test invariants and failure rollback before using private migrated data.
+  Wells Fargo personal-loan parser changes are deferred at the owner's request;
+  preserve legacy synthetic-loan uncertainty in migration. A private account-mapping
+  and source-exception review is prepared. Decide whether the first shadow run
+  uses the source-corrected HSA observations with remaining gaps unreconciled;
+  do not apply historical repairs or fabricate counterpart/opening evidence.
 - [ ] **L4 — Parallel migration and reconciliation:** derive a ledger beside the
   existing model; retain provenance and unresolved cases. Check statement balances,
   duplicated evidence, repeated imports, splits, transfers across posting dates,
@@ -200,10 +203,11 @@ features. Scope and acceptance must be settled before implementing each proposal
   merchant/account rules, read-only preview, and atomic bulk application.
   Preserve manual verification unless the user explicitly selects those rows;
   prove deterministic precedence with synthetic merchants.
-- [ ] **F4 — Complete local backup set:** optionally bundle a consistent database
-  snapshot and managed archive with checksums, missing-source reporting, safe
-  extraction, and disposable restore into a new profile. Exclude credentials and
-  preserve plain database backup. Test without the original source paths.
+- [ ] **F4 — Complete local backup GUI:** expose the verified
+  [recovery service](devtools/recovery/README.md) through an optional database/archive
+  workflow and restore into a new profile. Preserve plain database backup and
+  request Windows native acceptance. The L2 command-line bundle/isolated restore
+  checks are complete; profile activation and GUI integration remain proposals.
 
 ## Deferred platform and product work
 

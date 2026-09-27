@@ -1,7 +1,8 @@
 # Client double-entry ledger contract
 
-Status: L1 design and migration audit, authorized September 27, 2026. This is the
-implementation target, not a claim that the current database is a ledger. The
+Status: authorized September 27, 2026; recovery rehearsal and an isolated kernel
+are implemented. L1 source interpretations remain open before shadow migration.
+This is the implementation target, not a claim that the current database is a ledger. The
 active sequence and acceptance gates are in [TODO](../TODO.md). All work remains
 local and client-only on `feature/client-financial-insights`.
 
@@ -18,6 +19,14 @@ into automatic journal adjustments. Historical correction has not been applied.
 The standalone [auditor](../devtools/ledger_audit/README.md)
 reproduces structural checks without loading application settings or opening the
 live database through a writable connection.
+
+The [recovery tool](../devtools/recovery/README.md) has verified a database/archive
+bundle and independent disposable restore. The [isolated kernel](client-ledger-kernel.md)
+implements posting, evidence allocation, correction and statement-reconciliation
+rules against synthetic fixtures. It does not migrate live history or drive reports.
+Wells Fargo personal-loan parser changes are deferred at the owner's request;
+legacy synthetic loan entries require explicit migration provenance rather than
+being silently treated as observed disbursements.
 
 ## Evidence and books
 

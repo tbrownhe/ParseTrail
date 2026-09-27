@@ -184,6 +184,12 @@ statement reconciliation will remain distinct. The
 [migration auditor](../devtools/ledger_audit/README.md) creates a disposable,
 read-only snapshot without loading application settings.
 
+The [recovery tool](../devtools/recovery/README.md) verifies a complete managed
+statement/database bundle and disposable restore. The
+[isolated ledger kernel](../docs/client-ledger-kernel.md) implements exact posting,
+evidence allocation, corrections and reconciliation on a separate SQLite file.
+It is not wired into current imports, reports or the active application database.
+
 ### Statement coverage and freshness
 
 `CoverageService` reads immutable per-account statement evidence, including

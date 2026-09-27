@@ -6,6 +6,58 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## Ledger recovery and isolated kernel — September 27, 2026
+
+The owner authorized proceeding through recovery preparation and the kernel,
+while keeping historical interpretation and native GUI acceptance gates explicit.
+The [recovery tool](../devtools/recovery/README.md) creates a consistent read-only
+SQLite snapshot and a manifest-bearing database/managed-archive ZIP. It verifies
+every statement's recorded source hash and retains pending/failed/duplicate import
+material, including opaque ZIP/text export companions. Profile configuration,
+authentication and application runtime artifacts are outside the selected scope.
+
+The authorized private bundle passed both its internal disposable restore and an
+independent restore invoked with only the bundle and a new destination. Database
+integrity, foreign keys, schema/record fingerprints, file hashes and statement
+references matched. The initial archive-type check stopped at export companion
+files; the complete run includes those files as opaque evidence, without nested
+extraction. All bundles, snapshots, reports and real account mappings remain in
+ignored private storage. A workspace-local recovery copy is not an off-device
+disaster backup. No live database, archive, profile or report was modified.
+
+The [isolated ledger kernel](client-ledger-kernel.md) implements exact USD debit/
+credit posting, explicit account mappings, canonical observations and allocation
+limits, idempotent processing, atomic reversal/replacement, append-only review,
+and versioned statement reconciliation. It rejects changes to posted history and
+source facts. The SQLite store is explicitly created at a new path and does not
+initialize legacy application databases. No production Alembic migration, import
+integration, private-history conversion or report cutover is included.
+
+**18 recovery tests and 35 kernel tests** cover committed WAL, unavailable source
+paths during restore, archive corruption/missing files, traversal/overwrite
+refusal, exact monetary values, card purchase/repayment, refunds, fees, loan
+splits, cross-month clearing, partial evidence, duplicate processing, unsupported
+currency, opening equity, suspense, correction rollback, overlapping statement
+membership and stale reconciliation. The full-suite rehearsal exposed a Windows
+file lock in a test fixture; its SQLite connection is now explicitly closed before
+simulating unavailable source paths. This was a fixture lifetime issue, not a
+failure of the independently exercised recovery bundle.
+
+After correcting that fixture, the full Windows source suite passed **691 tests,
+3 skipped** in 130.70 seconds with offscreen Qt and process-only `RemoteSigned`
+for the existing builder probe. Ruff lint/format passed across **188 Python files**;
+Git whitespace checks passed. A final read-only comparison confirmed the live
+database's schema/record fingerprint and all bundled archive-source hashes still
+matched the verified backup. No new dependencies or platform-specific runtime
+integration were introduced. No native GUI acceptance or Intel execution is claimed.
+
+L1 remains open for reviewed source corrections and migration interpretations.
+The private review document proposes identity mappings and lists HSA, synthetic
+loan, account-closure, tangible-asset and unconfirmed-transfer cases. Wells Fargo
+parser changes remain deferred at the owner's request. L4 will preserve these
+decisions explicitly; it must not turn unresolved differences into balancing
+entries. F4 GUI integration and L5 Windows native acceptance remain future work.
+
 ## LendingClub and Capital One balance evidence — September 27, 2026
 
 The owner requested source-parser fixes against the authorized local statement
