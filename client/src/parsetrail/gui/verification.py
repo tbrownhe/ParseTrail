@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from functools import partial
 
-import pandas as pd
 from loguru import logger
 from PySide6 import QtCore, QtWidgets
 from sqlalchemy.orm import sessionmaker
 
-from parsetrail.core.cluster import recurring_transactions
+from parsetrail.core.recurring import analyze_snapshot
 from parsetrail.core.review import (
     InvalidReviewChangesError,
     TransactionRecord,
@@ -15,6 +15,7 @@ from parsetrail.core.review import (
     TransactionReviewService,
 )
 from parsetrail.core.settings import settings
+from parsetrail.gui.analysis_worker import LocalAnalysisJob
 from parsetrail.gui.review_models import TransactionFilterProxyModel, TransactionTableModel
 
 
@@ -37,6 +38,13 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
     ):
         super().__init__(parent)
         self.review_service = TransactionReviewService(Session)
+        self.analysis_job = LocalAnalysisJob(self)
+        self.analysis_job.completed.connect(self._show_cluster_result)
+        self.analysis_job.failed.connect(self._analysis_failed)
+        self.analysis_job.cancelled.connect(self._analysis_cancelled)
+        self.analysis_job.finished.connect(self._analysis_finished)
+        self._close_after_analysis = False
+        self._analysis_control_states = []
 
         self.categories: list[tuple[int, str]] = []  # (CategoryID, Name)
 
@@ -137,9 +145,12 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
         self.edit_extra_stopwords.setPlaceholderText("e.g. 'payment, purchase, debit'")
 
         self.btn_cluster = QtWidgets.QPushButton("Find Recurring Transactions")
+        self.btn_cancel_analysis = QtWidgets.QPushButton("Cancel Analysis")
+        self.btn_cancel_analysis.setEnabled(False)
 
         # Status label
         self.status_label = QtWidgets.QLabel("")
+        self.status_label.setWordWrap(True)
         self.status_label.setStyleSheet("color: gray;")
 
         self._update_clustering_controls_enabled()
@@ -206,6 +217,7 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
         # Status bar row
         bottom_layout = QtWidgets.QHBoxLayout()
         bottom_layout.addWidget(self.status_label)
+        bottom_layout.addWidget(self.btn_cancel_analysis)
 
         layout = QtWidgets.QVBoxLayout()
         layout.addLayout(top_layout)
@@ -228,6 +240,7 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
         self.btn_save_changes.clicked.connect(self.save_changes)
         self.btn_apply_category.clicked.connect(self.apply_category_to_selected)
         self.btn_cluster.clicked.connect(self.cluster_recurring_transactions)
+        self.btn_cancel_analysis.clicked.connect(self.cancel_analysis)
 
         self.chk_use_min_size.toggled.connect(self._update_clustering_controls_enabled)
         self.chk_use_min_interval.toggled.connect(self._update_clustering_controls_enabled)
@@ -273,6 +286,10 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
         """
         Load unverified transactions from the database and populate the model.
         """
+        # Refreshes may also be requested by the main window while a snapshot
+        # is being analyzed. Such a snapshot must never annotate the new rows.
+        if self.analysis_job.busy:
+            self.cancel_analysis()
         try:
             logger.info("Loading unverified transactions for review")
             only_unverified = getattr(self, "chk_only_unverified", None) is None or self.chk_only_unverified.isChecked()
@@ -548,57 +565,86 @@ class TransactionReviewWindow(QtWidgets.QMainWindow):
         Use recurring_transactions(...) to identify recurring clusters and
         annotate the current rows with Cluster IDs.
         """
+        if self.analysis_job.busy:
+            return
         if not self.model._records:
             QtWidgets.QMessageBox.information(self, "No Data", "No transactions loaded.")
             return
 
-        try:
-            logger.info("Running recurring transaction clustering")
+        # Only immutable scalar values cross into the worker; editable review
+        # records and the Qt models remain on the GUI thread.
+        snapshot = tuple((rec.transaction_id, rec.date, rec.amount, rec.description) for rec in self.model._records)
+        options = self._build_clustering_kwargs()
+        self._apply_cluster_map({})
+        controls = [
+            self.group_clustering,
+            self.btn_refresh,
+            self.chk_only_unverified,
+            self.show_archived_only_checkbox,
+            self.table_view,
+            self.combo_category,
+            self.btn_auto_categorize,
+            self.btn_mark_verified,
+            self.btn_clear_verified,
+            self.btn_save_changes,
+            self.btn_apply_category,
+        ]
+        self._analysis_control_states = [(widget, widget.isEnabled()) for widget in controls]
+        for widget in controls:
+            widget.setEnabled(False)
+        self.btn_cancel_analysis.setEnabled(True)
+        self.status_label.setText("Analyzing recurring transactions...")
+        self.analysis_job.start(partial(analyze_snapshot, snapshot, options))
 
-            df = pd.DataFrame(
-                [
-                    {
-                        "TransactionID": rec.transaction_id,
-                        "Date": rec.date,
-                        "Amount": rec.amount,
-                        "Description": rec.description,
-                    }
-                    for rec in self.model._records
-                ]
+    def _apply_cluster_map(self, cluster_map):
+        for rec in self.model._records:
+            rec.cluster = cluster_map.get(rec.transaction_id)
+        if self.model.rowCount():
+            top_left = self.model.index(0, TransactionTableModel.COL_CLUSTER)
+            bottom_right = self.model.index(self.model.rowCount() - 1, TransactionTableModel.COL_CLUSTER)
+            self.model.dataChanged.emit(top_left, bottom_right, [QtCore.Qt.DisplayRole])
+
+    def _show_cluster_result(self, clustered):
+        cluster_map = {int(row["TransactionID"]): int(row["Cluster"]) for _, row in clustered.iterrows()}
+        self._apply_cluster_map(cluster_map)
+        self._resize_columns()
+        num_clusters = len(set(cluster_map.values()))
+        if num_clusters:
+            self.status_label.setText(
+                f"Found {num_clusters} recurring clusters affecting {len(cluster_map)} transactions."
+            )
+        else:
+            self.status_label.setText(
+                "No recurring matches. Try other filters or descriptions with usable words; "
+                "amount filtering needs repeated nonzero amounts of one sign."
             )
 
-            kwargs = self._build_clustering_kwargs()
-            clustered = recurring_transactions(df, **kwargs)
+    def cancel_analysis(self):
+        if self.analysis_job.busy:
+            self.analysis_job.cancel()
+            self.btn_cancel_analysis.setEnabled(False)
+            self.status_label.setText("Canceling analysis; waiting for the current calculation step to finish...")
 
-            # Map TransactionID -> Cluster
-            cluster_map = {int(row["TransactionID"]): int(row["Cluster"]) for _, row in clustered.iterrows()}
+    def _analysis_cancelled(self):
+        self.status_label.setText("Analysis canceled. No cluster results were applied.")
 
-            # Update records in place
-            for rec in self.model._records:
-                rec.cluster = cluster_map.get(rec.transaction_id, None)
+    def _analysis_failed(self):
+        self.status_label.setText("Analysis failed. See the application log for details.")
+        QtWidgets.QMessageBox.critical(self, "Error", "Clustering failed. See the application log for details.")
 
-            # Notify view: Cluster column changed
-            row_count = self.model.rowCount()
-            if row_count > 0:
-                top_left = self.model.index(0, TransactionTableModel.COL_CLUSTER)
-                bottom_right = self.model.index(row_count - 1, TransactionTableModel.COL_CLUSTER)
-                self.model.dataChanged.emit(top_left, bottom_right, [QtCore.Qt.DisplayRole])
+    def _analysis_finished(self):
+        for widget, enabled in self._analysis_control_states:
+            widget.setEnabled(enabled)
+        self._analysis_control_states = []
+        self.btn_cancel_analysis.setEnabled(False)
+        if self._close_after_analysis:
+            self._close_after_analysis = False
+            self.close()
 
-            self._resize_columns()
-
-            num_clusters = len({c for c in cluster_map.values() if c != -1})
-            num_rows = len(cluster_map)
-            if num_clusters:
-                self.status_label.setText(f"Found {num_clusters} recurring clusters affecting {num_rows} transactions.")
-            else:
-                self.status_label.setText(
-                    "No recurring matches. Try other filters or descriptions with usable words; "
-                    "amount filtering needs repeated nonzero amounts of one sign."
-                )
-        except Exception:
-            logger.exception("Clustering recurring transactions failed")
-            QtWidgets.QMessageBox.critical(
-                self,
-                "Error",
-                "Clustering failed. See the application log for details.",
-            )
+    def closeEvent(self, event):
+        if self.analysis_job.busy:
+            self._close_after_analysis = True
+            self.cancel_analysis()
+            event.ignore()
+            return
+        super().closeEvent(event)

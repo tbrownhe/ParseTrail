@@ -6,6 +6,50 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## Client C2a-1 source verification — September 26, 2026
+
+On `feature/client-financial-insights`, recurring analysis now runs outside the
+Qt GUI thread in both Identify Recurring and Transaction Review. Identify
+Recurring opens/closes its read session in the worker. Review supplies immutable
+scalar snapshots, leaving its editable records and Qt models on the GUI thread.
+Results are delivered after worker exit; cancellation discards even a completed
+result that is still queued for GUI delivery. Refreshing review rows invalidates
+the old analysis.
+
+Cancellation checks cover text preprocessing, stage boundaries, and filter-group
+boundaries. SQLite/scientific-library calls already in progress finish before
+cancellation takes effect. Canceling leaves the interface responsive and restores
+controls when the worker settles. Escape/Close/window-X defer closing until the
+worker exits; main-window close cancels child analyses and waits asynchronously.
+The application-quit guard cancels and joins workers before Qt destroys them.
+No thread termination, dependency, database schema, server, or release-version
+change is involved. Model training remains the separate C2a-2 chunk.
+
+Windows AMD64 source evidence (Python 3.13.15, PySide6 6.11.2):
+
+- Focused analysis/control/launcher checks: **61 passed** before the final two
+  lifecycle test additions.
+- Full client suite: **555 passed, 3 skipped** in 114.10 seconds. Used offscreen
+  Qt and process-scoped `RemoteSigned` for the existing PowerShell builder probe;
+  no machine/user policy changed.
+- Final worker suite: **14 passed**, including two tests added after full-suite
+  collection for the actual review window's `WA_DeleteOnClose` behavior and
+  programmatic quit cleanup. Covered read-session thread ownership, GUI heartbeat,
+  result delivery thread, Cancel/retry, queued-result suppression, failures,
+  duplicate start, review refresh, dialog Escape/Close/X, and parent-window close.
+- Both isolated synthetic launchers passed with a one-second simulated library
+  step (`--smoke-test --slow-seconds 1`, with and without `--review`).
+- Ruff lint and format passed for client source/tests and the acceptance devtool
+  (**172 Python files**); Git whitespace checks passed.
+
+No private database was accessed, no installer was built/published, and no hosted
+CI or Intel execution is claimed. The owner clarified in `c9809b2` that ordinary
+client features need not wait for duplicate Intel walkthroughs. Windows owner
+acceptance of responsiveness/Cancel/Close is pending; the
+[delayed-analysis walkthrough](../devtools/recurring_acceptance/README.md#c2a-1-background-analysis-acceptance)
+prepares a temporary profile and visible heartbeat. Stop at this gate before
+C2a-2.
+
 ## Client C1 verification and Windows acceptance — September 26, 2026
 
 Client branch `feature/client-financial-insights` starts at `stable-1.4.2`

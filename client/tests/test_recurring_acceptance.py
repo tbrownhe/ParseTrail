@@ -28,7 +28,7 @@ def test_recurring_acceptance_uses_synthetic_profile_despite_environment_overrid
         command.append("--review")
     result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=45, check=False)
     assert result.returncode == 0, result.stdout + result.stderr
-    assert "C1 synthetic smoke passed." in result.stdout
+    assert "Recurring synthetic smoke passed." in result.stdout
     assert sentinel.read_bytes() == b"not a sqlite database: must remain untouched"
     assert str(sentinel) not in result.stdout + result.stderr
 

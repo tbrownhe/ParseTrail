@@ -85,6 +85,11 @@ only platforms actually tested; this does not claim Intel acceptance by inferenc
 
 - [~] **C2a-1 — Background recurring analysis:** cancellable worker, responsive
   heartbeat, worker-owned sessions, safe close, and no stale result after cancel.
+  Implemented for Identify Recurring and Transaction Review without dependency
+  changes. `[USER]` Windows Cancel/Close/responsiveness acceptance using the
+  [delayed-analysis walkthrough](devtools/recurring_acceptance/README.md#c2a-1-background-analysis-acceptance)
+  remains open before starting C2a-2. Individual library calls finish before
+  cancellation takes effect; their results are discarded and closing is deferred.
 - [ ] **C2a-2 — Background model training:** separate worker chunk; failed or
   cancelled training preserves the last usable model.
 - [ ] **CF1 — Coverage and freshness service:** extract/reuse per-account coverage

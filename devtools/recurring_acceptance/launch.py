@@ -8,6 +8,7 @@ import os
 import sqlite3
 import sys
 import tempfile
+import time
 from contextlib import ExitStack, closing
 from datetime import date
 from decimal import Decimal
@@ -65,9 +66,12 @@ def main() -> int:
     parser.add_argument(
         "--smoke-test", action="store_true", help="Run synthetic analysis and exit without interaction."
     )
+    parser.add_argument("--slow-seconds", type=int, default=0, help="Delay each worker calculation by 0-30 seconds.")
     args = parser.parse_args()
     if args.smoke_test and args.database:
         parser.error("--smoke-test accepts synthetic inputs only")
+    if not 0 <= args.slow_seconds <= 30:
+        parser.error("--slow-seconds must be between 0 and 30")
     if "parsetrail.core.settings" in sys.modules:
         raise RuntimeError("Launch in a fresh process, before importing client settings.")
 
@@ -102,7 +106,8 @@ def main() -> int:
         from parsetrail.core.migrate import upgrade_db
         from parsetrail.core.orm import create_database
         from parsetrail.core.settings import settings
-        from PySide6.QtCore import QDate
+        from PySide6.QtCore import QDate, QTimer
+        from PySide6.QtTest import QTest
         from PySide6.QtWidgets import QApplication
 
         logger.remove()
@@ -115,6 +120,20 @@ def main() -> int:
         stack.callback(Session.kw["bind"].dispose)
         if not args.database:
             _seed(Session)
+        if args.slow_seconds:
+            from parsetrail.core import cluster
+            from parsetrail.core.analysis import check_cancelled
+
+            analyze = cluster.recurring_transactions
+
+            def slow_analysis(frame, *, cancelled=None, **options):
+                # Rehearse waiting for a non-interruptible library step while
+                # the GUI processes events. Discard after cancellation.
+                time.sleep(args.slow_seconds)
+                check_cancelled(cancelled)
+                return analyze(frame, cancelled=cancelled, **options)
+
+            stack.enter_context(patch.object(cluster, "recurring_transactions", slow_analysis))
         app = QApplication.instance() or QApplication([])
         if args.review:
             from parsetrail.gui.verification import TransactionReviewWindow
@@ -132,32 +151,61 @@ def main() -> int:
                 window.start_date.setDate(QDate(2026, 1, 1))
                 window.end_date.setDate(QDate(2026, 3, 31))
             window.variance_slider["slider"].setValue(10)
-        window.setWindowTitle("C1 ACCEPTANCE — DISPOSABLE COPY — " + window.windowTitle())
-        print("C1 acceptance: disposable profile, network disabled, original database unchanged.", flush=True)
+        title = "RECURRING ACCEPTANCE — DISPOSABLE COPY — " + window.windowTitle()
+        window.setWindowTitle(title)
+        heartbeat = QTimer(window)
+        heartbeat.setInterval(250)
+        ticks = 0
+
+        def tick():
+            nonlocal ticks
+            ticks += 1
+            window.setWindowTitle(f"{title} — GUI heartbeat {ticks}")
+
+        heartbeat.timeout.connect(tick)
+        heartbeat.start()
+        print("Recurring acceptance: disposable profile, network disabled, original database unchanged.", flush=True)
         print("Closing this process removes the temporary database and profile.", flush=True)
+
+        def wait_for_analysis():
+            deadline = time.monotonic() + 40
+            while window.analysis_job.busy and time.monotonic() < deadline:
+                QTest.qWait(5)
+            if window.analysis_job.busy:
+                raise RuntimeError("Acceptance analysis did not finish within 40 seconds.")
+
         try:
             if args.smoke_test:
                 if args.review:
                     window.cluster_recurring_transactions()
+                    wait_for_analysis()
                     assert sum(rec.cluster is not None for rec in window.model._records) == 3
                 else:
                     window.analyze_transactions()
+                    wait_for_analysis()
                     assert window.model.rowCount() == 3
                     assert window.save_button.isEnabled()
                     window.start_date.setDate(QDate(2026, 4, 1))
                     window.end_date.setDate(QDate(2026, 6, 30))
                     window.analyze_transactions()
+                    wait_for_analysis()
                     assert window.model.rowCount() == 0
                     window.start_date.setDate(QDate(2026, 7, 1))
                     window.end_date.setDate(QDate(2026, 9, 30))
                     window.analyze_transactions()
+                    wait_for_analysis()
                     assert "No recurring matches" in window.status_label.text()
                     assert not window.save_button.isEnabled()
-                print("C1 synthetic smoke passed.")
+                print("Recurring synthetic smoke passed.")
                 return 0
             window.show()
             return app.exec()
         finally:
+            window.analysis_job.cancel()
+            # Preserve worker lifetime even if the launcher's own checks fail.
+            while window.analysis_job.busy:
+                QTest.qWait(5)
+            heartbeat.stop()
             window.close()
             window.deleteLater()
             app.processEvents()

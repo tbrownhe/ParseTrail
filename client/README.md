@@ -192,7 +192,24 @@ Descriptions with no usable tokens and noise-only results return a normal
 no-match state. Failed/empty analysis clears the previous exportable result.
 
 These are descriptive clusters, not confirmed bill schedules or forecasts.
-Analysis remains synchronous until C2a. The
+Both Identify Recurring and Transaction Review run recurring analysis in a
+background worker. Range queries open/close their database sessions in that
+worker; review analysis uses a snapshot of scalar values and leaves editable
+records on the GUI thread. Results are applied only after the worker exits.
+
+Cancel Analysis discards the current result, including one queued for display.
+Cancellation is checked during preprocessing, between calculation stages, and
+between filter groups; an individual SQLite or scientific-library call may need
+to finish first. While canceling, the UI remains responsive and explains the
+wait. Closing a window (including Escape/Close in Identify Recurring) requests
+cancellation and defers closing until the worker exits. Main-window close also
+waits asynchronously for child analyses. Direct programmatic application quit
+cancels and joins outstanding workers before Qt destroys their owners.
+
+Inputs that can invalidate a running analysis are disabled until it settles.
+Refreshing review rows programmatically cancels the old snapshot; old cluster
+results cannot be applied to the replacement rows. Model training remains
+synchronous until the separate C2a-2 chunk. The
 [C1 acceptance launcher](../devtools/recurring_acceptance/README.md) exercises
 both real windows with synthetic data or a disposable snapshot of an explicitly
 selected database. C1 was accepted by the owner on Windows. Routine feature

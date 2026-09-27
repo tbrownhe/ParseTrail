@@ -8,6 +8,7 @@ from sklearn.cluster import DBSCAN
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.preprocessing import MinMaxScaler
 
+from parsetrail.core.analysis import CancellationCheck, check_cancelled
 from parsetrail.core.english_stopwords import ENGLISH_STOP_WORDS, normalize_words
 
 
@@ -31,6 +32,7 @@ def cluster_transactions(
     min_samples=2,
     include_amount=False,
     extra_stopwords: list[str] | None = None,
+    cancelled: CancellationCheck = None,
 ):
     """
     Cluster similar transaction descriptions using TF-IDF and DBSCAN.
@@ -43,6 +45,7 @@ def cluster_transactions(
     Returns:
         pd.DataFrame: Transactions with an additional 'Cluster' column.
     """
+    check_cancelled(cancelled)
     transactions = transactions.copy(deep=True)
     if extra_stopwords:
         local_stopwords = ENGLISH_STOP_WORDS.union(word for extra in extra_stopwords for word in normalize_words(extra))
@@ -50,9 +53,11 @@ def cluster_transactions(
         local_stopwords = ENGLISH_STOP_WORDS
 
     # Preprocess text
-    transactions["Normalized"] = transactions["Description"].apply(
-        lambda d: preprocess_text(d, stopwords=local_stopwords)
-    )
+    def normalize(description):
+        check_cancelled(cancelled)
+        return preprocess_text(description, stopwords=local_stopwords)
+
+    transactions["Normalized"] = transactions["Description"].apply(normalize)
 
     # Convert to numerical vectors using TF-IDF
     tfidf = TfidfVectorizer()
@@ -60,13 +65,20 @@ def cluster_transactions(
     # Empty descriptions are not evidence for a recurring series, even when
     # amount features are enabled or min_samples is one.
     analyzer = tfidf.build_analyzer()
-    informative = transactions["Normalized"].map(lambda text: bool(analyzer(text))).astype(bool)
+
+    def has_tokens(text):
+        check_cancelled(cancelled)
+        return bool(analyzer(text))
+
+    informative = transactions["Normalized"].map(has_tokens).astype(bool)
     transactions = transactions.loc[informative].copy()
     index = transactions.columns.to_list().index("Description")
     if transactions.empty:
         transactions.insert(loc=index, column="Cluster", value=pd.Series(index=transactions.index, dtype="int64"))
         return transactions
+    check_cancelled(cancelled)
     features = tfidf.fit_transform(transactions["Normalized"])
+    check_cancelled(cancelled)
 
     # Construct the DBSCAN clusterer
     dbscan = DBSCAN(eps=eps, min_samples=min_samples, metric="cosine")
@@ -82,7 +94,9 @@ def cluster_transactions(
         features = hstack([features, amount_scaled])
 
     # Run the clustering for description only
+    check_cancelled(cancelled)
     clusters = dbscan.fit_predict(features)
+    check_cancelled(cancelled)
 
     # Add cluster labels to the DataFrame
     transactions.insert(loc=index, column="Cluster", value=clusters)
@@ -90,7 +104,9 @@ def cluster_transactions(
     return transactions
 
 
-def identify_recurring_clusters(transactions: pd.DataFrame, min_size=3, min_interval=0, max_interval=35):
+def identify_recurring_clusters(
+    transactions: pd.DataFrame, min_size=3, min_interval=0, max_interval=35, cancelled: CancellationCheck = None
+):
     """
     Identify recurring clusters based on transaction dates and frequency.
 
@@ -106,6 +122,7 @@ def identify_recurring_clusters(transactions: pd.DataFrame, min_size=3, min_inte
     """
     recurring = []
     for cluster_id, group in transactions.groupby("Cluster"):
+        check_cancelled(cancelled)
         # Skip noise
         if cluster_id == -1:
             continue
@@ -123,7 +140,9 @@ def identify_recurring_clusters(transactions: pd.DataFrame, min_size=3, min_inte
     return transactions[transactions["Cluster"].isin(recurring)]
 
 
-def filter_by_amount_variance(transactions: pd.DataFrame, max_variance: float) -> pd.DataFrame:
+def filter_by_amount_variance(
+    transactions: pd.DataFrame, max_variance: float, cancelled: CancellationCheck = None
+) -> pd.DataFrame:
     """Filter by sample standard deviation / absolute mean (0.1 means 10%).
 
     Retain the historical argument name, but this is relative dispersion, not
@@ -138,6 +157,7 @@ def filter_by_amount_variance(transactions: pd.DataFrame, max_variance: float) -
     limit = Fraction(threshold) ** 2 if threshold.is_finite() else None
     recurring = []
     for cluster_id, group in transactions.groupby("Cluster"):
+        check_cancelled(cancelled)
         # Skip noise
         if cluster_id == -1:
             continue
@@ -159,7 +179,9 @@ def filter_by_amount_variance(transactions: pd.DataFrame, max_variance: float) -
     return transactions[transactions["Cluster"].isin(recurring)]
 
 
-def recurring_transactions(transactions: pd.DataFrame, **kwargs) -> pd.DataFrame:
+def recurring_transactions(
+    transactions: pd.DataFrame, *, cancelled: CancellationCheck = None, **kwargs
+) -> pd.DataFrame:
     """Performs a TF-IDF clustering analysis to find recurring transactions
 
     Args:
@@ -168,6 +190,7 @@ def recurring_transactions(transactions: pd.DataFrame, **kwargs) -> pd.DataFrame
     Returns:
         pd.DataFrame: Clustered Transactions
     """
+    check_cancelled(cancelled)
     columns = transactions.columns.to_list()
     required_cols = ["Date", "Amount", "Description"]
     if any(rcol not in columns for rcol in required_cols):
@@ -186,10 +209,11 @@ def recurring_transactions(transactions: pd.DataFrame, **kwargs) -> pd.DataFrame
     amount_kwargs = {key: kwargs[key] for key in ["max_variance"] if key in kwargs}
 
     # Analyze
-    transactions = cluster_transactions(transactions, **cluster_kwargs)
+    transactions = cluster_transactions(transactions, cancelled=cancelled, **cluster_kwargs)
     if recurring_kwargs:
-        transactions = identify_recurring_clusters(transactions, **recurring_kwargs)
+        transactions = identify_recurring_clusters(transactions, cancelled=cancelled, **recurring_kwargs)
     if amount_kwargs:
-        transactions = filter_by_amount_variance(transactions, **amount_kwargs)
+        transactions = filter_by_amount_variance(transactions, cancelled=cancelled, **amount_kwargs)
 
+    check_cancelled(cancelled)
     return transactions[transactions["Cluster"] != -1].sort_values(by=["Cluster", "Date"])

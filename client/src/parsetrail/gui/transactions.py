@@ -1,6 +1,7 @@
 import math
 from datetime import timedelta
 from decimal import Decimal
+from functools import partial
 
 import pandas as pd
 from loguru import logger
@@ -28,14 +29,15 @@ from PySide6.QtWidgets import (
 )
 from sqlalchemy.orm import sessionmaker
 
-from parsetrail.core import cluster
 from parsetrail.core.money import parse_money, require_minor_units
+from parsetrail.core.recurring import RecurringResult, analyze_range
 from parsetrail.core.transactions import (
     ManualTransactionResult,
     TransactionService,
     TransactionServiceError,
 )
 from parsetrail.core.validation import Transaction
+from parsetrail.gui.analysis_worker import LocalAnalysisJob
 
 
 class InsertTransactionDialog(QDialog):
@@ -285,6 +287,12 @@ class RecurringTransactionsDialog(QDialog):
 
         self.transaction_service = TransactionService(Session)
         self.clustered = None
+        self._pending_done = None
+        self.analysis_job = LocalAnalysisJob(self)
+        self.analysis_job.completed.connect(self._show_analysis_result)
+        self.analysis_job.failed.connect(self._analysis_failed)
+        self.analysis_job.cancelled.connect(self._analysis_cancelled)
+        self.analysis_job.finished.connect(self._analysis_finished)
         self.columns = [
             "AccountName",
             "Date",
@@ -299,6 +307,7 @@ class RecurringTransactionsDialog(QDialog):
 
         # Control section layout
         control_widget = QWidget()
+        self.analysis_controls = control_widget
         control_layout = QGridLayout()
         control_widget.setLayout(control_layout)
 
@@ -347,9 +356,9 @@ class RecurringTransactionsDialog(QDialog):
         row += len(sliders)
 
         # Analyze button
-        analyze_button = QPushButton("Analyze")
-        analyze_button.clicked.connect(self.analyze_transactions)
-        control_layout.addWidget(analyze_button, row, 2, 1, 2)
+        self.analyze_button = QPushButton("Analyze")
+        self.analyze_button.clicked.connect(self.analyze_transactions)
+        control_layout.addWidget(self.analyze_button, row, 2, 1, 2)
 
         # Add the control section to the main layout
         main_layout.addWidget(control_widget)
@@ -372,6 +381,10 @@ class RecurringTransactionsDialog(QDialog):
         self.save_button.setEnabled(False)
         self.save_button.clicked.connect(self.save_to_csv)
         button_layout.addWidget(self.save_button)
+        self.cancel_analysis_button = QPushButton("Cancel Analysis")
+        self.cancel_analysis_button.setEnabled(False)
+        self.cancel_analysis_button.clicked.connect(self.cancel_analysis)
+        button_layout.addWidget(self.cancel_analysis_button)
 
         self.close_button = QPushButton("Close", self)
         self.close_button.clicked.connect(self.accept)
@@ -404,6 +417,8 @@ class RecurringTransactionsDialog(QDialog):
         return value
 
     def analyze_transactions(self):
+        if self.analysis_job.busy:
+            return
         self.clustered = None
         self.save_button.setEnabled(False)
         self.model.update_data(pd.DataFrame([], columns=self.columns))
@@ -411,31 +426,6 @@ class RecurringTransactionsDialog(QDialog):
         # Retrieve and process transactions
         start_date = self.start_date.date().toPython()
         end_date = self.end_date.date().toPython()
-
-        try:
-            rows = self.transaction_service.in_range(start_date, end_date)
-        except TransactionServiceError:
-            logger.exception("Failed to load recurring-transaction input")
-            self.status_label.setText("Could not load transactions. Try again.")
-            QMessageBox.critical(self, "Error", "Failed to load transactions. See log for details.")
-            return
-        transactions = pd.DataFrame(
-            [
-                {
-                    "AccountName": row.account_name,
-                    "Date": row.date,
-                    "Amount": row.amount,
-                    "Category": row.category,
-                    "Description": row.description,
-                }
-                for row in rows
-            ],
-            columns=["AccountName", "Date", "Amount", "Category", "Description"],
-        )
-
-        if transactions.empty:
-            self.status_label.setText("No transactions in this date range. Choose a different date range.")
-            return
 
         # Preprocess and cluster
         eps = self.eps_slider["slider"].value() / 100
@@ -445,27 +435,27 @@ class RecurringTransactionsDialog(QDialog):
         max_variance = self.inf_slider(self.variance_slider["slider"]) / 100
         include_amount = self.include_amount_checkbox.isChecked()
 
-        # Perform the clustering
-        try:
-            self.clustered = cluster.recurring_transactions(
-                transactions,
-                eps=eps,
-                min_samples=min_samples,
-                min_interval=min_interval,
-                max_interval=max_interval,
-                include_amount=include_amount,
-                max_variance=max_variance,
-            )
-        except Exception:
-            logger.exception("Recurring transaction analysis failed")
-            self.status_label.setText("Analysis failed. Try another range or settings; see the log for details.")
-            QMessageBox.critical(self, "Error", "Analysis failed. See the application log for details.")
-            return
+        options = {
+            "eps": eps,
+            "min_samples": min_samples,
+            "min_interval": min_interval,
+            "max_interval": max_interval,
+            "include_amount": include_amount,
+            "max_variance": max_variance,
+        }
+        self.analysis_controls.setEnabled(False)
+        self.cancel_analysis_button.setEnabled(True)
+        self.analysis_job.start(partial(analyze_range, self.transaction_service, start_date, end_date, options))
 
+    def _show_analysis_result(self, result: RecurringResult):
+        self.clustered = result.transactions
         # Update table
         self.model.update_data(self.clustered[self.columns].reset_index(drop=True))
         self.save_button.setEnabled(not self.clustered.empty)
-        if self.clustered.empty:
+        if result.input_count == 0:
+            self.clustered = None
+            self.status_label.setText("No transactions in this date range. Choose a different date range.")
+        elif self.clustered.empty:
             self.status_label.setText(
                 "No recurring matches. Try another date range or adjust the filters. "
                 "Descriptions need usable words; amount filtering requires repeated nonzero amounts of one sign."
@@ -475,6 +465,40 @@ class RecurringTransactionsDialog(QDialog):
                 f"Found {self.clustered['Cluster'].nunique()} recurring clusters "
                 f"affecting {len(self.clustered)} transactions."
             )
+
+    def cancel_analysis(self):
+        if self.analysis_job.busy:
+            self.analysis_job.cancel()
+            self.cancel_analysis_button.setEnabled(False)
+            self.status_label.setText("Canceling analysis; waiting for the current calculation step to finish...")
+
+    def _analysis_cancelled(self):
+        self.status_label.setText("Analysis canceled. No results were applied.")
+
+    def _analysis_failed(self):
+        self.status_label.setText("Analysis failed. Try another range or settings; see the log for details.")
+        QMessageBox.critical(self, "Error", "Analysis failed. See the application log for details.")
+
+    def _analysis_finished(self):
+        self.analysis_controls.setEnabled(True)
+        self.cancel_analysis_button.setEnabled(False)
+        if self._pending_done is not None:
+            result, self._pending_done = self._pending_done, None
+            self.done(result)
+
+    def done(self, result):
+        if self.analysis_job.busy:
+            self._pending_done = result
+            self.cancel_analysis()
+            return
+        super().done(result)
+
+    def closeEvent(self, event):
+        if self.analysis_job.busy:
+            self.done(QDialog.Rejected)
+            event.ignore()
+            return
+        super().closeEvent(event)
 
     def update_table(self, df: pd.DataFrame):
         self.table.setRowCount(len(df))

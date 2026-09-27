@@ -1,4 +1,5 @@
 import sys
+import time
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
@@ -12,6 +13,7 @@ from parsetrail.gui.budget_view import BudgetTab
 from parsetrail.gui.main_window import ParseTrail
 from parsetrail.gui.transactions import RecurringTransactionsDialog
 from PySide6.QtCore import QDate, Qt
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QCheckBox, QListWidgetItem, QMessageBox
 
 
@@ -107,6 +109,15 @@ def test_appreciation_calculator_accepts_qt_dates(app, monkeypatch):
         app.processEvents()
 
 
+def _analyze(dialog, app):
+    dialog.analyze_transactions()
+    deadline = time.monotonic() + 10
+    while dialog.analysis_job.busy and time.monotonic() < deadline:
+        app.processEvents()
+        QTest.qWait(1)
+    assert not dialog.analysis_job.busy, "recurring analysis did not finish"
+
+
 def test_recurring_input_receives_calendar_dates(app):
     dialog = RecurringTransactionsDialog(None)
     in_range = Mock(return_value=[])
@@ -114,7 +125,7 @@ def test_recurring_input_receives_calendar_dates(app):
     try:
         dialog.start_date.setDate(QDate(2026, 8, 1))
         dialog.end_date.setDate(QDate(2026, 8, 31))
-        dialog.analyze_transactions()
+        _analyze(dialog, app)
         in_range.assert_called_once_with(date(2026, 8, 1), date(2026, 8, 31))
         assert dialog.model.rowCount() == 0
     finally:
@@ -142,21 +153,21 @@ def test_recurring_controls_apply_percent_and_minimum_interval(app):
     dialog.transaction_service = SimpleNamespace(in_range=source)
     try:
         dialog.variance_slider["slider"].setValue(10)
-        dialog.analyze_transactions()
+        _analyze(dialog, app)
         assert dialog.model.rowCount() == 3
         assert dialog.save_button.isEnabled()
         dialog.variance_slider["slider"].setValue(9)
-        dialog.analyze_transactions()
+        _analyze(dialog, app)
         assert dialog.model.rowCount() == 0
         assert not dialog.save_button.isEnabled()
         assert "No recurring matches" in dialog.status_label.text()
 
         source.return_value = _recurring_rows([-10, -10, -10], days=[1, 2, 3])
         dialog.min_frequency_slider["slider"].setValue(3)
-        dialog.analyze_transactions()
+        _analyze(dialog, app)
         assert dialog.model.rowCount() == 0
         dialog.min_frequency_slider["slider"].setValue(1)
-        dialog.analyze_transactions()
+        _analyze(dialog, app)
         assert dialog.model.rowCount() == 3
     finally:
         dialog.close()
@@ -171,16 +182,16 @@ def test_recurring_no_words_and_no_input_clear_previous_export(app, monkeypatch)
     errors = []
     monkeypatch.setattr(QMessageBox, "critical", lambda *args: errors.append(args))
     try:
-        dialog.analyze_transactions()
+        _analyze(dialog, app)
         assert dialog.save_button.isEnabled()
         source.return_value = _recurring_rows([-10, -10, -10], description="the and or")
-        dialog.analyze_transactions()
+        _analyze(dialog, app)
         assert not errors
         assert dialog.model.rowCount() == 0
         assert not dialog.save_button.isEnabled()
         assert "usable words" in dialog.status_label.text()
         source.return_value = []
-        dialog.analyze_transactions()
+        _analyze(dialog, app)
         assert dialog.clustered is None
         assert not dialog.save_button.isEnabled()
         assert "No transactions" in dialog.status_label.text()
@@ -196,10 +207,10 @@ def test_recurring_failure_clears_previous_result(app, monkeypatch):
     errors = []
     monkeypatch.setattr(QMessageBox, "critical", lambda *args: errors.append(args))
     try:
-        dialog.analyze_transactions()
+        _analyze(dialog, app)
         assert dialog.save_button.isEnabled()
-        monkeypatch.setattr("parsetrail.gui.transactions.cluster.recurring_transactions", Mock(side_effect=ValueError))
-        dialog.analyze_transactions()
+        monkeypatch.setattr("parsetrail.core.recurring.cluster.recurring_transactions", Mock(side_effect=ValueError))
+        _analyze(dialog, app)
         assert len(errors) == 1
         assert dialog.clustered is None
         assert dialog.model.rowCount() == 0

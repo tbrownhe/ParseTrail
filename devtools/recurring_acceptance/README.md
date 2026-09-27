@@ -1,4 +1,4 @@
-# C1 recurring-analysis acceptance
+# Recurring-analysis acceptance
 
 Run from `client/` on `feature/client-financial-insights`. This launches the real
 source UI with a temporary profile and synthetic database. It disables networking,
@@ -61,4 +61,36 @@ Automated preparation checks use `--smoke-test`, optionally with `--review`, and
 synthetic data only. These checks do not substitute for owner GUI acceptance.
 C1 was accepted on Windows; a duplicate Intel walkthrough is not required for
 routine features unless dependencies or platform-specific concerns warrant it.
-Background execution/cancellation remains C2a.
+
+## C2a-1 background-analysis acceptance
+
+The launcher now shows a ticking GUI heartbeat in the window title. To make
+Cancel and Close easy to exercise, add a five-second synthetic delay to each
+worker calculation (no real financial data is needed):
+
+```powershell
+uv run --no-env-file --frozen python ../devtools/recurring_acceptance/launch.py --slow-seconds 5
+```
+
+1. Select Analyze. The title's heartbeat should keep ticking and the window
+   should repaint/move normally while analysis controls are disabled. After
+   roughly five seconds, expect the same three January-March subscription rows
+   and Save Table enabled.
+2. Analyze again and immediately select Cancel Analysis. Expect the canceling
+   status while the simulated library step finishes, followed by Analysis
+   canceled, an empty result table, disabled Save Table, and enabled controls.
+   Analyze once more and let it complete to confirm retry works.
+3. Start another analysis and press Escape, Close, or the window's X. The window
+   should remain responsive while canceling, then close once the current step
+   finishes. No crash or late result should appear.
+
+Repeat Cancel and window-X with `--review --slow-seconds 5`. The loaded review
+rows should stay intact, canceled analysis should leave no cluster IDs, and the
+review controls should be restored to their previous enabled states. A fresh
+completed analysis should still annotate the three subscription rows.
+
+The delay intentionally represents a library call that cannot stop midway; it
+is only a devtool option. Normal execution checks cancellation during text
+preprocessing, between analysis stages, and between filter groups. No dependency,
+schema, or server changes are part of C2a-1. Windows owner acceptance is requested;
+repeat on Intel only if a concrete compatibility concern arises.

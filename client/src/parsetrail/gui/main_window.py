@@ -54,6 +54,7 @@ from parsetrail.gui.accounts import (
     BalanceCheckDialog,
     EditAccountsDialog,
 )
+from parsetrail.gui.analysis_worker import LocalAnalysisJob
 from parsetrail.gui.budget_view import BudgetTab
 from parsetrail.gui.category import CategoryManagerDialog
 from parsetrail.gui.dashboard_widgets import MatplotlibCanvas, PandasModel
@@ -650,9 +651,33 @@ class ParseTrail(QMainWindow):
             self.update_main_gui()
 
     def recurring_transactions(self):
-        dialog = RecurringTransactionsDialog(self.Session)
-        if dialog.exec() == QDialog.Accepted:
-            pass
+        dialog = RecurringTransactionsDialog(self.Session, parent=self)
+        try:
+            dialog.exec()
+        finally:
+            dialog.deleteLater()
+
+    def closeEvent(self, event):
+        jobs = [job for job in self.findChildren(LocalAnalysisJob) if job.busy]
+        if jobs:
+            if not getattr(self, "_closing_after_analysis", False):
+                self._closing_after_analysis = True
+                self.setEnabled(False)
+                for job in jobs:
+                    job.finished.connect(self._finish_close_after_analysis)
+            for job in jobs:
+                job.cancel()
+            self.statusBar().showMessage("Closing after the current analysis step finishes...")
+            event.ignore()
+            return
+        super().closeEvent(event)
+
+    def _finish_close_after_analysis(self):
+        if getattr(self, "_closing_after_analysis", False):
+            if not any(job.busy for job in self.findChildren(LocalAnalysisJob)):
+                self._closing_after_analysis = False
+                self.setEnabled(True)
+                self.close()
 
     def import_all_statements(self):
         # Import everything
