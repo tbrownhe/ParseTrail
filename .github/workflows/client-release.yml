@@ -1,0 +1,118 @@
+name: Build desktop release
+
+on:
+  push:
+    branches-ignore: [main]
+    paths:
+      - .github/workflows/client-release.yml
+      - client/build_client_*
+      - client/scripts/client_candidate.py
+      - client/scripts/desktop_release.py
+      - client/scripts/github_candidate.py
+      - client/scripts/release_inventory.py
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing client-vX.Y.Z tag containing the CI build-only tooling
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-release-${{ inputs.tag || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Installer / ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-2025
+            target: windows-x86_64
+          - os: macos-15-intel
+            target: macos-x86_64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    env:
+      QT_QPA_PLATFORM: offscreen
+      RELEASE_TAG: ${{ inputs.tag }}
+      BUILD_EVENT: ${{ github.event_name }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag || github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Validate release input
+        shell: bash
+        run: |
+          if [[ "$BUILD_EVENT" != workflow_dispatch ]]; then
+            version=$(sed -nE 's/^__version__[[:space:]]*=[[:space:]]*"([0-9]+\.[0-9]+\.[0-9]+)"/\1/p' client/src/parsetrail/version.py)
+            RELEASE_TAG="client-v$version"
+            [[ "$RELEASE_TAG" =~ ^client-v[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+            # This tag exists only in the isolated shallow validation checkout.
+            # Never replace a tag or push it; these outputs cannot be prepared for release.
+            if git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
+              test "$(git rev-parse HEAD)" = "$(git rev-parse "$RELEASE_TAG^{commit}")"
+            else
+              git tag "$RELEASE_TAG"
+            fi
+          fi
+          [[ "$RELEASE_TAG" =~ ^client-v[0-9]+\.[0-9]+\.[0-9]+$ ]] || exit 1
+          test "$(git rev-parse HEAD)" = "$(git rev-parse "$RELEASE_TAG^{commit}")"
+          test -f client/scripts/client_candidate.py || { echo 'Tag predates CI packaging; adopt its preserved signed artifacts locally.'; exit 1; }
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        with:
+          version: "0.12.5"
+          enable-cache: true
+      - name: Install Windows packager
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: choco install nsis --yes --no-progress
+      - name: Build and test Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $output = Join-Path $env:RUNNER_TEMP 'client-installers'
+          New-Item -ItemType Directory -Path $output | Out-Null
+          ./client/build_client_win64.ps1 -ClientsDir $output -BuildOnly
+      - name: Install Intel Mac packager and toolchain
+        if: runner.os == 'macOS'
+        run: brew install openssl@3 rust pkg-config create-dmg
+      - name: Build and test Intel Mac installer
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          mkdir "$RUNNER_TEMP/client-installers"
+          bash client/build_client_macos.sh --clients-dir "$RUNNER_TEMP/client-installers" --build-only
+      - name: Retain tested installer and builder provenance
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ github.event_name == 'workflow_dispatch' && 'client-installer' || 'client-validation' }}-${{ matrix.target }}
+          path: ${{ runner.temp }}/client-installers/${{ matrix.target }}/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: ${{ github.event_name == 'workflow_dispatch' && 30 || 7 }}
+
+  complete:
+    name: Both installers ready
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Release handoff
+        env:
+          RUN_ID: ${{ github.run_id }}
+          RELEASE_TAG: ${{ inputs.tag }}
+          BUILD_EVENT: ${{ github.event_name }}
+        run: |
+          if [[ "$BUILD_EVENT" != workflow_dispatch ]]; then
+            echo 'Packaging validation passed for both targets. These test-only artifacts cannot be signed/published by the desktop release command.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "Both installers passed for $RELEASE_TAG." >> "$GITHUB_STEP_SUMMARY"
+          echo "Use the local desktop-release command with run $RUN_ID to verify and sign these exact bytes." >> "$GITHUB_STEP_SUMMARY"
+          echo "No release key or server credential was used; nothing was activated." >> "$GITHUB_STEP_SUMMARY"

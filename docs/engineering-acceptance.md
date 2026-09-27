@@ -358,8 +358,9 @@ Direct checks confirmed macOS **15.7.9 (24G830)** and **x86_64**.
   Finder drag-and-drop and owner launch-prompt observations remain separate.
   The installed executable passed thin x86_64 Mach-O inspection. Its embedded
   version, source commit, tag, and target match the preserved candidate.
-- **PASS — installed native diagnostics:** reran all three probes against the
-  installed executable with native Qt and system-only `PATH`. All reported
+- **PASS — installed offscreen diagnostics (backend corrected September 26):**
+  reran all three probes against the installed executable with system-only
+  `PATH`. The diagnostic forces offscreen Qt internally. All reported
   `frozen: true`, `passed: true`, and five onboarding pages. Fresh/cached/failing
   network modes recorded **190/189/190 heartbeat ticks** and **0/0/2 intercepted
   requests**, respectively. Both cached modes completed synthetic local import
@@ -369,8 +370,8 @@ Direct checks confirmed macOS **15.7.9 (24G830)** and **x86_64**.
 - **FAIL — offscreen diagnostic attempt:** an initial sandboxed run with
   `QT_QPA_PLATFORM=offscreen` aborted in Qt's Mac wizard with
   `NSInvalidArgumentException` (`-[NSBundle initWithURL:]: nil URL argument`).
-  The subsequent native Qt runs outside the sandbox all passed. The cause is
-  not isolated between platform-plugin and sandbox differences; no runtime fix
+  The subsequent runs outside the sandbox all passed, also using the internally
+  forced offscreen backend. The cause of the sandboxed failure is not isolated; no runtime fix
   or candidate rebuild is justified by this result alone. Use native Qt for
   the installed-app walkthrough, as specified in the handover.
 
@@ -1052,6 +1053,271 @@ Operation on an Intel machine physically lacking build tools remains a recorded
 acceptance gap. Apple Silicon remains deferred. These unfinished release items
 and the unapproved future proposals stay in TODO; no further native test is
 requested as part of this development closeout.
+
+### Windows 1.4.2 candidate: September 21, 2026
+
+After the owner merged PR #38, the remote main commit
+`7bf64c7f453ea9c0ec46986cba3196664a9861d5` was verified to contain all accepted
+client repairs. Branch `release/client-1.4.2` changes only the client version at
+its pinned build commit; the dependency lock remains unchanged and its offline
+check passed. Later branch commits contain release documentation.
+
+| Field | Recorded value |
+| --- | --- |
+| Exact source / local tag | `4585f4c57d20101c1c6ac4f625b726e51913e562` / `client-v1.4.2` |
+| Client / target | `1.4.2` / `windows-x86_64` |
+| Installer | `parsetrail_1.4.2_windows-x86_64_setup.exe` |
+| Installer size | `154450900` bytes |
+| Installer SHA-256 | `733e5f6b0856f5225b56ba94bbd49c8543e6f758fde84aff68e677cd62ba7cd0` |
+| Frozen executable SHA-256 | `d517e06fa842d07b34a7510ca7bfec3657a5d0e21d29607e49e7cdd933e9dca0` |
+| Canonical metadata SHA-256 | `4927f076adf5aa9e50288d3113693c001012c8abf48f28b108528a0a2c584f27` |
+| Signed release sequence | `20260922070935` |
+| Release inventory SHA-256 | `37b23405475eeda83a732d7ebe2962b59b7bdf6e6901bc095656a40fa3df0162` |
+
+**PASS — tagged Windows build:** the isolated clean checkout completed the pinned
+Python 3.13.15 bootstrap/locked sync, **472 tests / 3 skipped in 96.21 seconds**,
+public trust-store check, PyInstaller build, PE32+ AMD64 architecture gate, frozen
+runtime/provenance smoke, all three frozen offline modes, and NSIS packaging.
+Automated Qt checks used the offscreen platform. The canonical build metadata
+matches the exact source/tag/version/target above. The full local build log is
+`scratch/windows-1.4.2-build.log`, SHA-256
+`b0e6986d7851763ac9a5471d35f4b86dd70e4e7b659d67a4d36987fe56c8c9e9`.
+
+The signed installer is preserved in `scratch/windows-1.4.2-release/windows-x86_64`
+and its tagged checkout in `scratch/windows-1.4.2-candidate`. The owner completed
+`scratch/sign-windows-1.4.2.ps1`, supplying the passphrase privately, after its
+verification-only mode had checked the source/tag, pristine checkout, installer
+and metadata hashes, prerequisites, and preserved older release files.
+
+**PASS — signing verification, September 22:** independent public-key verification
+accepted sequence `20260922070935`. The inventory matched the owner's recorded
+digest above; all three listed file sizes and SHA-256 hashes matched. Source,
+tag, target, version, architecture, and interpreter matched the pinned candidate.
+The installer retained its pre-signing hash, and all preserved 1.4.0/1.4.1 release
+files remained unchanged. The tagged checkout is clean. Local evidence is
+`scratch/windows-1.4.2-signed-verification.json`.
+
+**PASS — native release acceptance, September 26:** Windows and Intel installed
+walkthroughs subsequently passed; see the records below and the
+[Intel return note](intel-mac-1.4.2-return-note.md). The local candidate tag has
+not been pushed and no artifact has been published. The old signed candidates
+and tags remain unchanged.
+
+**Read-only interface preflight:** staging's client listing still advertised
+legacy `win64` 1.3.0 and `macos` 1.3.1 channels, and its legacy Windows manifest
+reported schema 1. The planned API/download-page transition must therefore be
+rehearsed with the new target channels before public activation. Direct production
+listing/manifest requests returned HTTP 403; this probe does not establish its
+active contract. Verify it from the authorized operator path during publication
+review. No deployment or server setting was changed by these checks.
+
+**PASS — refreshed Windows upgrade preparation, September 26:** with the app
+closed, copied and verified **4,643 files / 817,266,779 bytes**, two consistent
+SQLite snapshots, and two application registry exports. Backup manifest SHA-256
+is `b054ce0897df9590fd4d30370e6cd4769e570a233adec9c6cc3bbe584975dff9`.
+The prepared installer helper passed **9,296 pre-install checks**, including all
+backup hashes, unchanged originals, selected private staging copy, registered
+1.4.0 application, pinned inventory/artifacts, and public-key signature verification.
+No installation or launch occurred. The [Windows handoff](windows-1.4.2-acceptance.md)
+contains owner steps and the private evidence location.
+
+**PASS — Windows installed acceptance, September 26:** the owner confirmed
+STAGING/About identity, repaired controls, and offline restart. Independent
+closed-app checks accepted the complete installed tree against the build,
+registered version and pinned executable/metadata hashes, signed artifact, and
+all **4,647 backup records**. **2,112 original data files**, including production
+files and the staging model/plugins/archive, are unchanged. The selected working
+database retained every application/internal table's schema and rows despite
+file-byte changes; integrity and foreign keys passed. Staging configuration is
+unchanged. Its configured custom log appended **22 entries / 2,970 bytes**, latest
+**16:54:55**, with zero new ERROR/CRITICAL entries. Local evidence is
+`scratch/windows-1.4.2-owner-acceptance-verification.json`; the
+[Windows acceptance record](windows-1.4.2-acceptance.md) preserves details.
+
+### Intel 1.4.2 candidate: September 26, 2026
+
+The pinned clean source `4585f4c57d20101c1c6ac4f625b726e51913e562` and local
+`client-v1.4.2` tag completed the native Intel build on macOS 15.7.9 (24G830).
+The source suite passed **470 tests with 5 skipped**. Thin x86_64 architecture,
+the **379-file** native loader audit with one cryptography extension, frozen
+provenance/runtime smoke, all three offscreen offline modes, DMG packaging,
+private Ed25519 signing, and independent public-key verification passed.
+
+Release sequence is `20260926200410`. The DMG is **126446802 bytes**, SHA-256
+`b3a25c5b6f1f0611acefb41fa29187883064eb1abff4b40b7526e93d4a07e7b5`.
+Inventory SHA-256 is
+`677c6cc99eccacf8956010cc1758ea71e37fb14d9d4848f841731284ec2311ae`;
+every listed size/hash matched, and canonical metadata matches the pinned
+source/tag/version/target. The full evidence and remaining acceptance status are
+in the [1.4.2 Intel return note](intel-mac-1.4.2-return-note.md).
+
+The separately installed DMG app matched all **2,141 file/symlink entries** in
+the built bundle and passed thin x86_64 inspection. Its isolated installed
+runtime smoke and all three offscreen offline probes passed with system-only
+`PATH`; heartbeat counts were **189/190/189**, intercepted requests **0/0/2**.
+**PASS — owner native GUI acceptance:** the owner confirmed all checklist tests
+passed, including STAGING 1.4.2/About `client-v1.4.2 (4585f4c57d20)`, preserved
+synthetic data/model/plugins, responsive offline views, both Select All controls,
+budget date/grouping modes, review-date rendering/sorting, configured logging,
+and offline quit/reopen without blocking login. No defect was reported.
+
+With the app closed, independent verification found the selected custom staging
+log with **15 current-day entries**, preserved prior log/config backup, intact
+SQLite integrity/foreign keys, unchanged application-table rows, and unchanged
+cached plugin/model bytes. Only internal SQLite planner statistics changed.
+All original backup and older-release checksums still match. This accepts the
+Intel owner walkthrough separately from automated diagnostic backend coverage.
+
+The earlier release files, installed 1.4.0 app, and original release config
+matched their pre-build checksums. The closed staging profile was backed up and
+all 44 file copies verified before candidate use. No release tag was pushed,
+artifact published, or production deployment performed.
+
+**Resolved handover wording, September 26:** the pinned offline diagnostic explicitly forces
+`QT_QPA_PLATFORM=offscreen`; clearing the caller's variable does not make it
+native. Its installed runs must be reported separately from the native owner
+walkthrough. The same code exists in 1.4.0, so the earlier native-diagnostic
+description does not establish its backend. This clarification preserves the
+original return note and does not alter the separate owner GUI acceptance.
+The original offline acceptance contract separates automated source/frozen
+probes from the native owner walkthrough. Both passed. The 1.4.2 handover's added
+request for three native automated offline runs was a documentation error;
+correcting it requires no source change or candidate rebuild. No native backend
+coverage is claimed for these probes. R2's physically absent build-tool
+environment remains open, as does the coordinated staging publication/upgrade
+rehearsal. Windows installed acceptance subsequently passed as recorded above.
+
+### Simplified desktop release workflow: September 26, 2026
+
+The owner required simplification before publishing 1.4.2. Commit
+`c80306b13f9084cae43aec0249d3084965d7800e` on `feat/client-release-workflow` adds
+key-free native packaging, one GitHub Actions matrix, and a paired local release
+command. It retrieves/validates CI artifacts, prompts once for signing both
+targets, preserves native builder provenance, and manages reviewed staging/public
+promotion from one saved release record. The adoption path copies existing signed
+output unchanged. The [short operator guide](client-releases.md) replaces bespoke
+scripts for the routine path.
+
+The full local Windows suite passed **500 tests / 3 skipped**. Two further
+rejection cases were added afterward; the final focused run passed **30 tests**.
+Coverage includes rejected validation/fork/failed CI runs, unsafe archives,
+changed inputs, both-target validation before signing, one passphrase prompt,
+unchanged adoption, preserved native metadata, staging-before-production, and
+resumption after a partial second-target upload without replacing existing bytes.
+Python lint/format, PowerShell/Bash syntax, and pre-commit YAML checks passed.
+
+[Hosted run 36282715627](https://github.com/tbrownhe/ParseTrail/actions/runs/36282715627)
+passed **both Windows x64 and Intel macOS packaging jobs**, plus the paired
+completion job. Each native builder ran the source suite, architecture and
+frozen-runtime/offline gates and produced its installer/build record without a
+signing key. These are test-only outputs from an isolated validation checkout;
+the release command rejects their push-triggered run and artifact names.
+No release tag was created on the remote or moved, and the accepted signed
+1.4.2 files remain unchanged.
+
+| CI validation artifact | ZIP size | ZIP SHA-256 |
+| --- | --- | --- |
+| `client-validation-windows-x86_64` | `154563937` | `c9907179f8569e60263011ff255cb1a1266d97ef9accc00d510ed4ea042fc5ab` |
+| `client-validation-macos-x86_64` | `126558834` | `7b56cb7f5b4bd80071f1004ca34976c48f42b40e978631e80ab10cd41a665558` |
+
+Read-only operator inspection also confirmed both environments still have schema-1
+Windows 1.3.0/Mac 1.3.1 channels and no new target channels. Their legacy pointer,
+manifest, and plugin-pointer hashes match. Staging runs `fedd236` image digests;
+production runs `0ec65f2`. The deployment inventory enumerates only legacy target
+names, an exposed client-contract gap to address during the one-time transition.
+No API/website deployment or artifact activation occurred.
+
+Windows 1.4.2 passed the existing command's local publication review against the
+explicit staging destination. Its preserved files have been copied and verified
+in the new paired input layout. The new ignored operator configuration is ready;
+the signing key was not opened. Mac input and real paired adoption/review remain
+pending the owner's private transfer, followed by the coordinated staging
+transition. A private empty inbox was prepared outside the public resource tree.
+
+The owner subsequently transferred all four Mac release files to that inbox.
+Remote and local verification matched the accepted inventory digest
+`677c6cc99eccacf8956010cc1758ea71e37fb14d9d4848f841731284ec2311ae` and the
+126,446,802-byte DMG digest
+`b3a25c5b6f1f0611acefb41fa29187883064eb1abff4b40b7526e93d4a07e7b5`.
+The new command adopted both installers unchanged into the private
+`scratch/desktop-releases/1.4.2/desktop-release.json` layout. Paired `status` and
+staging publication review passed with an empty publication record. No signing
+key was opened and no remote channel was activated. This completes R4's real
+adoption/review acceptance; the one-time API/website staging transition remains.
+
+The deployment interface fix records both explicit targets alongside legacy
+channels and accepts the reviewed paired record for staging only. It verifies
+all candidate bytes, retains plugin/legacy parity, and binds later phases to the
+preflight inventories. All **50 deployment-tool tests passed**, including nine
+candidate tests covering unreviewed targets, modified files, changed identity or
+pointers, unsafe inventory names, and drift after preflight. Both real accepted
+installers also passed that verifier in a private local transition layout.
+
+### Client 1.4.2 staging transition: September 26, 2026
+
+The simplified workflow is accepted through real staging publication. The
+transition implementation is commit `919a1ad5690f462c038d31b06388db400cc35ae7`
+on `fix/client-release-staging-transition`; its parent includes the CI packaging
+workflow. The trusted local builder produced and pushed these immutable server
+images once:
+
+| Service | GHCR image digest |
+| --- | --- |
+| Backend | `ghcr.io/tbrownhe/parsetrail-backend@sha256:4937901aba6295af774ac5328ea42d04f76a993c5e822ece68462aecbb668b7c` |
+| Dashboard | `ghcr.io/tbrownhe/parsetrail-frontend@sha256:01b8d6ad4d633adfb771fce20858f6daa4e6d63ecf4d189be34cf65a273dafe1` |
+| Website | `ghcr.io/tbrownhe/parsetrail-website@sha256:69a091ec50c817c2ede2574949abcf1dff7d80ae362eff3f8caa94f7400ad120` |
+
+The descriptor is retained privately on the builder and at
+`/srv/parsetrail-staging/release-input/release-919a1ad-client-transition.json`.
+An isolated clean checkout under staging was used; the production checkout was
+not changed. The accepted client pair still comes from tag `client-v1.4.2`,
+commit `4585f4c57d20101c1c6ac4f625b726e51913e562`, with the same installer,
+manifest/signature and inventory bytes recorded above.
+
+The first restore attempt stopped before mutation because the running staging
+backend used `:local`, not its recorded immutable image. Read-only comparison
+found all 84 application/script/project/lock files identical to the recorded
+`fedd236` source. Only that staging backend was reconciled to the recorded
+digest, without migration; its old local image remains available and the finding
+is recorded in staging's private `client-1.4.2-baseline-reconciliation.json`.
+Production's actual running images already matched its release record.
+
+A fresh staging whole-boundary backup/restore drill then passed with IDs
+`staging-pg17-restore-20260927T032000Z`,
+`staging-files-restore-20260927T032000Z`, and
+`staging-keys-restore-20260927T032000Z`. Database, resource-file and submission-key
+comparisons passed; the staging backend resumed healthy. Restore evidence is at
+`/srv/parsetrail-staging/restore-drill/client-1.4.2-20260927T031931Z/restore-evidence.json`;
+the deployment backup evidence was verified at `2026-09-27T03:20:11.468466Z`.
+
+Both accepted installers were uploaded and verified in the new staging channels,
+preserving the legacy channels. The explicit paired candidate reference passed
+deployment preflight. These records all passed **eight public smoke checks**:
+
+- Initial deployment: `20260927T032123Z-919a1ad5690f`.
+- Rollback to the previous API/website: `rollback-20260927T032444Z-fedd236fb82a`.
+- Redeployment of the same new images: `20260927T032510Z-919a1ad5690f`.
+
+The schema revision remained `3b7a1f4c2d91`. Health, dashboard, website, login,
+authenticated plugin catalog/range, client catalog/range, invalid contribution
+rejection without a write, and oversized-request rejection without a write all
+passed. The paired desktop release record now marks both staging targets
+`verified`; independent read-only checks after redeployment again matched each
+public manifest/signature and installer range to the accepted local files.
+
+A headless browser exercised the actual staging download page before and after
+rollback/redeployment. Both labeled buttons selected the correct 1.4.2 target and
+returned HTTP 206 for a one-byte installer range. For each legacy `win64` and
+`macos` target, manifest, signature, and latest-installer routes returned HTTP 410
+with the manual-upgrade URL. There were no page JavaScript errors. The private
+local result is `scratch/client-1.4.2-staging-browser.json`.
+
+Final inventory comparison confirmed the production inventory and all legacy and
+plugin inventories remained unchanged. Production still runs `0ec65f2`; no new
+production channel was activated. A local-only paired production publication
+review passed. Public promotion still needs owner approval, fresh production
+restore evidence, and the normal deployment gates. Reuse the exact server
+digests and accepted installers above; do not rebuild either pair.
 
 ### Hosted client gates and backend test annotations
 

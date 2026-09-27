@@ -12,16 +12,20 @@ require_cmd() {
 
 CLIENTS_DIR=""
 SIGNING_KEY=""
+BUILD_ONLY=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --clients-dir) CLIENTS_DIR="${2:-}"; shift 2 ;;
         --signing-key) SIGNING_KEY="${2:-}"; shift 2 ;;
+        --build-only) BUILD_ONLY=true; shift ;;
         *) error_exit "Unknown argument: $1" ;;
     esac
 done
 
 [[ -d "$CLIENTS_DIR" ]] || error_exit "clients directory does not exist: $CLIENTS_DIR"
-[[ -f "$SIGNING_KEY" ]] || error_exit "signing key does not exist: $SIGNING_KEY"
+if [[ "$BUILD_ONLY" == false ]]; then
+    [[ -f "$SIGNING_KEY" ]] || error_exit "signing key does not exist: $SIGNING_KEY"
+fi
 
 require_cmd create-dmg
 require_cmd uv
@@ -30,7 +34,9 @@ CREATE_DMG=$(command -v create-dmg)
 SCRIPT_DIR="$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 CLIENTS_DIR="$(cd "$CLIENTS_DIR" && pwd)"
-SIGNING_KEY="$(cd "$(dirname "$SIGNING_KEY")" && pwd)/$(basename "$SIGNING_KEY")"
+if [[ "$BUILD_ONLY" == false ]]; then
+    SIGNING_KEY="$(cd "$(dirname "$SIGNING_KEY")" && pwd)/$(basename "$SIGNING_KEY")"
+fi
 PYTHON_VERSION_FILE="${SCRIPT_DIR}/.python-version"
 [[ -f "$PYTHON_VERSION_FILE" ]] || error_exit "Missing Python version file: $PYTHON_VERSION_FILE"
 PYTHON_VERSION=$(tr -d '[:space:]' < "$PYTHON_VERSION_FILE")
@@ -137,6 +143,13 @@ create-dmg \
     --app-drop-link 650 175 \
     "$DMG_PATH" \
     "$APP_PATH"
+
+if [[ "$BUILD_ONLY" == true ]]; then
+    uv run --no-env-file --no-sync --python "$RELEASE_PYTHON" --no-python-downloads python -m scripts.client_candidate \
+        --installer "$DMG_PATH" --metadata "$BUILD_METADATA" --packager create-dmg \
+        --packager-executable "$CREATE_DMG" --native-report "$NATIVE_REPORT"
+    exit 0
+fi
 
 echo "Signing and independently verifying the macOS release..."
 uv run --no-env-file --no-sync --python "$RELEASE_PYTHON" --no-python-downloads python -m scripts.client_release sign \

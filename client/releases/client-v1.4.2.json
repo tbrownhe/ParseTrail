@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "source_tag": "client-v1.4.2",
+  "source_commit": "4585f4c57d20101c1c6ac4f625b726e51913e562",
+  "targets": {
+    "windows-x86_64": {
+      "inventory_sha256": "37b23405475eeda83a732d7ebe2962b59b7bdf6e6901bc095656a40fa3df0162"
+    },
+    "macos-x86_64": {
+      "inventory_sha256": "677c6cc99eccacf8956010cc1758ea71e37fb14d9d4848f841731284ec2311ae"
+    }
+  }
+}

@@ -38,8 +38,10 @@ The entry point still performs icon setup, UI hook registration, real window
 construction, and `QApplication.exec()`. A timer advances the real onboarding
 wizard and accepts the new-database information message. The database file
 chooser is supplied its temporary default path. Native file dialogs and OS
-credentials remain owner checks. Windows respects an explicitly selected Qt
-platform, allowing these probes to use the offscreen platform.
+credentials remain owner checks. On both Windows and macOS, the offline
+diagnostic explicitly selects offscreen Qt, including when the caller unsets
+`QT_QPA_PLATFORM`. Installed probes validate the installed bytes using that same
+backend; native Qt acceptance comes from the separate owner walkthrough below.
 The message check uses its temporary database path, parent, icon, and buttons;
 it cannot rely on a window title because
 [Qt ignores message-box titles on macOS](https://doc.qt.io/qt-6/qmessagebox.html#setWindowTitle).

@@ -25,18 +25,19 @@ identifies the preserved installer used for Windows native acceptance.
 
 - [~] **R2 — Intel macOS packaging:** `[USER]` Accept operation on a machine
   where build tools are physically absent when that environment is available.
-  The signed candidate's installation, native synthetic runtime/offline probes,
+  The signed candidate's installation, synthetic runtime/offline probes,
   and owner offline first start/restart with system-only `PATH` passed; see the
   [installed candidate record](docs/engineering-acceptance.md#intel-installed-candidate-verification-september-19-2026).
-- [ ] `[USER]` Build replacement Windows x64 and Intel macOS candidates containing
-  the accepted desktop fixes under a new version/tag, then accept installed About identity and
-  offline profile persistence. The preserved signed 1.4.1 candidate lacks these
-  fixes; the [1.4.1 Mac build handover](docs/intel-mac-1.4.1-handover.md) is on hold.
-  Preserve the signed 1.4.0/1.4.1 candidates and tags; use separate output directories.
-- [ ] `[USER]` Rehearse preserved artifact publication, install/upgrade,
-  credential storage, and plugin update on Windows x64 and Intel macOS.
-  Include the [1.3-to-1.4 manual upgrade and API/website transition](docs/client-release-contract.md)
-  on staging before public activation.
+- [ ] `[USER]` **Promote 1.4.2 to production:** merge/review the release-workflow
+  and staging-transition branch, approve public activation, and complete fresh
+  production restore evidence and normal deployment gates. Promote the exact
+  accepted installers and server image digests tested on staging, then verify
+  both public downloads and the manual-upgrade response for 1.3 clients. Staging
+  deployment, eight smoke checks, rollback/redeployment, both browser download
+  buttons, legacy HTTP 410 guidance, and paired publication passed; see the
+  [transition evidence](docs/engineering-acceptance.md#client-142-staging-transition-september-26-2026)
+  and [short release guide](docs/client-releases.md). Preserve legacy channels and
+  previous API/website digests for cross-contract rollback.
 
 Acceptance: one clean tag produces traceable target-specific artifacts; a dry
 run does not change public directories, and publish-existing uses exactly the

@@ -1,5 +1,9 @@
 # Publish preserved artifact output
 
+For paired desktop releases, use the [short release guide](client-releases.md).
+Its command manages both targets, inventory anchors and retry state. The commands
+below remain the lower-level interface for individual targets and parser catalogs.
+
 Client and plugin builders produce signed dry runs. Publication is a separate
 `publish-existing` operation that uses the saved files and public trust keys.
 It never rebuilds an installer, executes a parser, compiles plugins, re-signs,
@@ -109,6 +113,13 @@ An incomplete upload never changes the active pointer. Its immutable directory
 is preserved for diagnosis and cannot be reused by this command. Do not delete
 or overwrite it to bypass the guard. Reconcile a failed candidate before deciding
 on a new signed sequence.
+
+The paired desktop command supplies an additional verified inventory anchor for
+safe resumption. It verifies every existing file and uploads only missing files
+from the same preserved output before attempting pointer activation. It never
+overwrites mismatched files. A target already active at the expected sequence is
+re-verified and smoked without re-uploading; another target's completed state is
+preserved. The lower-level command's default refusal to reuse a directory remains.
 
 If activation succeeds but public smoke fails, the error explicitly reports that
 the release **is active**. Investigate routing/caches/API compatibility and use
