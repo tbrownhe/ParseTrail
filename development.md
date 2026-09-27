@@ -47,6 +47,11 @@ The September 26 client roadmap uses the owner's explicitly requested long-runni
 `feature/client-financial-insights` branch with focused commits. If client work
 requires a server interface change, stop, merge accepted client work first, and
 use a separate short-lived server branch; see [the active roadmap](TODO.md#active-client-roadmap--local-spending-and-cash-planning).
+For routine client features, owner Windows GUI acceptance is sufficient. Request
+targeted Intel/native cross-platform testing for dependency, packaging, or OS
+integration changes, or concrete compatibility concerns; do not block each
+feature on duplicate walkthroughs. Keep supported-platform automated checks and
+record which platforms were actually tested.
 Keep [TODO](TODO.md) limited to unfinished work; move lasting behavior into the
 component guides and dated verification into the
 [engineering acceptance record](docs/engineering-acceptance.md) when a task closes.

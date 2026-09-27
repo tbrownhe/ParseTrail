@@ -6,7 +6,7 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
-## Client C1 source verification — September 26, 2026
+## Client C1 verification and Windows acceptance — September 26, 2026
 
 Client branch `feature/client-financial-insights` starts at `stable-1.4.2`
 (`effced9`). The roadmap was recorded in `4060469`. C1 corrects sign-dependent
@@ -39,12 +39,15 @@ Windows AMD64 source evidence (Python 3.13.15, PySide6 6.11.2):
   does not change its source bytes. Synthetic Identify Recurring and Transaction
   Review smokes also passed when run directly.
 
-No private database was opened for this implementation, and no installer was
-built or published. Hosted CI and Intel execution have not been obtained for
-this chunk. Native GUI and confidential-copy usefulness acceptance remain open
-in TODO. The [prepared walkthrough](../devtools/recurring_acceptance/README.md)
-provides the exact commands and expected results for both platforms. Work stops
-at this owner gate before C2a.
+No private database was opened by the agent for this implementation, and no
+installer was built or published. Hosted CI and Intel execution have not been
+obtained for this chunk. The owner accepted C1 (`148cc2f`) and explicitly
+confirmed Windows-only testing. No claim is made about which optional private
+fixture steps were exercised. The owner also clarified that routine client
+features do not require rigorous duplicate cross-platform walkthroughs, absent
+dependency changes or a concrete platform concern. C1 is closed and C2a may
+proceed. The [prepared walkthrough](../devtools/recurring_acceptance/README.md)
+remains available for repeat checks and targeted platform testing.
 
 ## Where the lasting contracts live
 

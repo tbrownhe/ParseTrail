@@ -58,5 +58,7 @@ Record only OS/architecture, commit, steps, and pass/fail observations, not priv
 transactions, account names, or paths.
 
 Automated preparation checks use `--smoke-test`, optionally with `--review`, and
-synthetic data only. These checks do not substitute for Windows x64 and Intel
-macOS native GUI acceptance. Background execution/cancellation remains C2a.
+synthetic data only. These checks do not substitute for owner GUI acceptance.
+C1 was accepted on Windows; a duplicate Intel walkthrough is not required for
+routine features unless dependencies or platform-specific concerns warrant it.
+Background execution/cancellation remains C2a.

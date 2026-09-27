@@ -195,7 +195,9 @@ These are descriptive clusters, not confirmed bill schedules or forecasts.
 Analysis remains synchronous until C2a. The
 [C1 acceptance launcher](../devtools/recurring_acceptance/README.md) exercises
 both real windows with synthetic data or a disposable snapshot of an explicitly
-selected database; native Windows/Intel owner acceptance remains required.
+selected database. C1 was accepted by the owner on Windows. Routine feature
+acceptance uses Windows; targeted Intel checks remain appropriate for dependency,
+packaging, OS-integration changes, or concrete compatibility concerns.
 
 ### Service ownership
 

@@ -76,14 +76,14 @@ routine client development or automated tests.
 
 ### Approved implementation sequence
 
-Each service/calculation chunk precedes its GUI chunk. Retain native Windows x64
-and Intel macOS acceptance; source/offscreen tests do not close those gates.
+Each service/calculation chunk precedes its GUI chunk. Windows x64 owner GUI
+acceptance is sufficient for routine client features; do not require a separate
+Intel walkthrough for every feature. Retain supported-platform automated checks
+and request targeted native cross-platform testing when dependencies, packaging,
+OS integration, or evidence of platform-specific behavior warrants it. Record
+only platforms actually tested; this does not claim Intel acceptance by inference.
 
-- [~] **C1 — Recurring correctness:** implementation and isolated launcher ready;
-  `[USER]` run the [synthetic and confidential-copy GUI walkthrough](devtools/recurring_acceptance/README.md)
-  on Windows x64 and Intel macOS before continuing to C2a. Retain this gate until
-  owner acceptance is recorded.
-- [ ] **C2a-1 — Background recurring analysis:** cancellable worker, responsive
+- [~] **C2a-1 — Background recurring analysis:** cancellable worker, responsive
   heartbeat, worker-owned sessions, safe close, and no stale result after cancel.
 - [ ] **C2a-2 — Background model training:** separate worker chunk; failed or
   cancelled training preserves the last usable model.
@@ -98,7 +98,8 @@ and Intel macOS acceptance; source/offscreen tests do not close those gates.
 - [ ] **CF3a — Spending comparison service:** exact totals, comparable periods,
   merchant/category drivers, uncategorized rows, and source transaction evidence.
 - [ ] **CF3b — Spending overview UI:** account/date filters, coverage/freshness,
-  reconciled totals, and drill-down; owner Windows/Intel workflow acceptance.
+  reconciled totals, and drill-down; owner Windows workflow acceptance, with
+  targeted Intel checks under the testing policy above.
 - [ ] **CF4a — Upcoming-obligation detector:** fixed/variable monthly patterns,
   expected dates/amount ranges, supporting history, and abstention on insufficient
   evidence. Backtest using earlier data only; cover refunds, irregular purchases,
@@ -135,14 +136,7 @@ reviewed bytes. Intel clients start without Homebrew/build tools at runtime.
 Implement after the release/offline chunks. Each item is a focused change with
 the review's acceptance checks, not a broad refactor.
 
-- [~] **C1 — Recurring-analysis correctness:** make relative dispersion
-  independent of debit/credit sign; define zero-mean, mixed-sign, singleton, and
-  empty-vocabulary behavior. Equivalent positive/negative series must produce
-  equivalent decisions and uninformative descriptions a useful no-result state.
-  Implemented with exact comparisons, corrected percentage/minimum-interval GUI
-  controls, and stale-result clearing. `[USER]` native acceptance remains open;
-  see the active roadmap and acceptance launcher above.
-- [ ] **C2a — Responsive local analysis:** move recurring analysis and model
+- [~] **C2a — Responsive local analysis:** move recurring analysis and model
   training to cancellable workers. Verify GUI heartbeat, safe close/cancel,
   worker-owned sessions, and preservation of the prior model on failed training.
 - [ ] **C2b — Responsive imports:** move import work to a worker with account and
