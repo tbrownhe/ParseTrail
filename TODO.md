@@ -94,17 +94,18 @@ only platforms actually tested; this does not claim Intel acceptance by inferenc
 L2 recovery preparation and L3 isolated kernel passed automated acceptance on
 September 27; see the [verification record](docs/engineering-acceptance.md#ledger-recovery-and-isolated-kernel--september-27-2026)
 and [kernel guide](docs/client-ledger-kernel.md). The active application still uses
-the legacy model. L4 remains behind the L1 interpretation review below.
+the legacy model. The owner approved corrected HSA evidence for the first disposable
+shadow migration, retaining printed-balance gaps as explicit exceptions.
 
-- [USER] **L1 — Accounting contract and migration audit:** the
+- [~] **L1 — Accounting contract and migration audit:** the
   [contract](docs/client-ledger-contract.md) and [read-only auditor](devtools/ledger_audit/README.md)
   are prepared and exercised on a consistent authorized snapshot. The owner
   confirmed legacy manual closures are bookkeeping instructions: preserve them as
   evidence and map their intent to account-status metadata, not cash postings.
   The HSA parser now reads continuation pages and validates printed cash balances;
   all authorized source fixtures reparse successfully. A private history-correction
-  preview is ready. Remaining differences between consecutive printed balances
-  still need source review before migration; do not invent balancing adjustments.
+  preview is approved for shadow conversion. Remaining differences between consecutive
+  printed balances stay unresolved through migration; do not invent balancing adjustments.
   Private findings/review notes stay in ignored storage. Complete account/sign/
   evidence mappings after review; unknown residual balances remain explicit.
   LendingClub savings now validates its independent printed summary; Capital One
@@ -116,16 +117,24 @@ the legacy model. L4 remains behind the L1 interpretation review below.
   [parser verification record](docs/engineering-acceptance.md#lendingclub-and-capital-one-balance-evidence--september-27-2026).
   Wells Fargo personal-loan parser changes are deferred at the owner's request;
   preserve legacy synthetic-loan uncertainty in migration. A private account-mapping
-  and source-exception review is prepared. Decide whether the first shadow run
-  uses the source-corrected HSA observations with remaining gaps unreconciled;
-  do not apply historical repairs or fabricate counterpart/opening evidence.
-- [ ] **L4 — Parallel migration and reconciliation:** derive a ledger beside the
-  existing model; retain provenance and unresolved cases. Check statement balances,
-  duplicated evidence, repeated imports, splits, transfers across posting dates,
-  and opening equity. No silent balancing adjustments or automatic trust of old
-  Transfer labels. Prove reproducibility and recovery before switching reports.
-- [ ] **L5 — Ledger review UI:** review transfers, splits, suspense, corrections,
-  and statement reconciliation; request Windows owner acceptance.
+  and source-exception review is prepared. The approved first shadow run uses the
+  source-corrected HSA observations with remaining gaps unreconciled; live history
+  is untouched. Opening anchors, synthetic-loan treatment and investment/valuation
+  semantics still need explicit review before posting those interpretations.
+- [~] **L4 — Parallel migration and reconciliation:** the
+  [shadow converter](devtools/ledger_audit/SHADOW.md) preserves legacy bytes, applies
+  the exact approved additive HSA evidence, carries supported legacy income/expense
+  categories as unreviewed entries, and leaves transfers/unknowns unresolved.
+  Atomic batch replay and independent clean builds passed. Complete source balance/
+  timing verification, reviewed opening positions, confirmed transfers and remaining
+  evidence allocation before report cutover. No automatic balancing adjustments.
+- [USER] **L5a — Read-only shadow review:** the Windows review window and concrete
+  walkthrough are ready in the [shadow guide](devtools/ledger_audit/SHADOW.md).
+  Accept filtering, row details, source corrections, unresolved candidates and
+  reconciliation limits on the authorized private shadow artifact.
+- [ ] **L5b — Ledger interpretation editing:** persist review decisions, confirmed
+  transfers/splits, opening anchors, source corrections and reversal/replacement
+  workflows; require a separate Windows native walkthrough before report cutover.
 - [ ] **CF2 — Ledger-backed cash-flow contract:** after L1–L5, define account scope, income,
   purchases, refunds, internal transfers, card payments, and loan treatment.
   Synthetic transfers/card payments cannot double-count consolidated spending;

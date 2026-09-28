@@ -189,6 +189,8 @@ statement/database bundle and disposable restore. The
 [isolated ledger kernel](../docs/client-ledger-kernel.md) implements exact posting,
 evidence allocation, corrections and reconciliation on a separate SQLite file.
 It is not wired into current imports, reports or the active application database.
+The [shadow conversion and review guide](../devtools/ledger_audit/SHADOW.md) describes
+the first disposable legacy conversion and its read-only Windows acceptance window.
 
 ### Statement coverage and freshness
 

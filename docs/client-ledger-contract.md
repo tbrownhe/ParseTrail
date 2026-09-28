@@ -1,7 +1,8 @@
 # Client double-entry ledger contract
 
 Status: authorized September 27, 2026; recovery rehearsal and an isolated kernel
-are implemented. L1 source interpretations remain open before shadow migration.
+are implemented. The first approved shadow conversion is complete; unresolved
+interpretations remain open before posting them or changing reports.
 This is the implementation target, not a claim that the current database is a ledger. The
 active sequence and acceptance gates are in [TODO](../TODO.md). All work remains
 local and client-only on `feature/client-financial-insights`.
@@ -15,7 +16,9 @@ The corrected source parser now reads the complete cash section and validates
 printed running/closing balances. The private correction preview preserves all
 existing transactions and identifies omitted rows. Separate differences between
 consecutive printed statement balances remain unresolved; do not convert them
-into automatic journal adjustments. Historical correction has not been applied.
+into automatic journal adjustments. The owner approved using corrected HSA evidence
+only in the disposable shadow conversion, with remaining gaps explicit. Live
+historical correction has not been applied.
 The standalone [auditor](../devtools/ledger_audit/README.md)
 reproduces structural checks without loading application settings or opening the
 live database through a writable connection.
@@ -27,6 +30,12 @@ rules against synthetic fixtures. It does not migrate live history or drive repo
 Wells Fargo personal-loan parser changes are deferred at the owner's request;
 legacy synthetic loan entries require explicit migration provenance rather than
 being silently treated as observed disbursements.
+The [first shadow converter and read-only review](../devtools/ledger_audit/SHADOW.md)
+preserve the legacy database byte-for-byte, bind HSA corrections to the approved
+preview, and leave unknown counterparts/openings unposted. Existing supported
+income/expense categories are provisional, unreviewed accounting interpretations.
+Legacy Verified flags are retained, not promoted to confirmed transfers or reviewed
+journals. Other historical balance endpoints remain unverified until source review.
 
 ## Evidence and books
 

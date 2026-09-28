@@ -6,6 +6,50 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## First shadow ledger and read-only review — September 27, 2026
+
+The owner approved corrected HSA evidence in a disposable shadow migration while
+retaining remaining printed-balance discontinuities. The
+[converter and acceptance guide](../devtools/ledger_audit/SHADOW.md) document the
+rule version, artifact contracts and native walkthrough. Every source HSA file
+matched its recorded content hash, account identity and period. Reparsed additions,
+surviving rows, endpoints and remaining continuity differences matched the exact
+owner-reviewed preview. Live history and current reports were not changed.
+
+The shadow retains legacy database bytes and annotations, constructs stable
+account/observation/membership identities, and posts supported legacy income/expense
+categories only as unreviewed interpretations. Transfers remain candidates;
+closures remain control evidence. Synthetic loan positions, valuation activity,
+manual interpretations and opening anchors stay unresolved where evidence or
+policy is missing. No suspense or balancing adjustment was introduced. Other
+historical statement balances are explicitly unverified rather than certified by
+the current source parser's implementation alone.
+
+Atomic batch loading validates evidence and journals together. Same-plan replay
+adds no entries. Two independent clean builds produced identical plans, ledger
+contents excluding creation timestamps, retained legacy bytes and reconciliation
+results. Reconciliation reports are bound to the ledger checksum and show why
+unallocated activity/unverified endpoints cannot establish reconciled history.
+Private plans, source rows, account mappings, counts, file identities and reports
+remain in ignored storage. No report cutover or live historical repair occurred.
+
+The read-only window verifies artifact checksums and exposes transaction review
+states, possible counterparts, original/corrected closings, continuity gaps and
+unposted opening proposals. It has no mutation/activation controls and imports
+no active profile, credentials or network service. An automated offscreen smoke
+on the complete private artifact passed tab selection, filtering, detail display,
+no-match clearing and close. Native owner Windows acceptance is still pending;
+this is L5a, not acceptance of later transfer/split/correction editing.
+
+Windows source verification: **707 passed, 3 skipped** in 137.92 seconds for the
+full client suite, with offscreen Qt and process-only `RemoteSigned` for the
+existing builder probe. **51 focused migration/kernel/preview tests** passed.
+A final selection-reset refinement passed the **3 preview tests** and full-data
+offscreen smoke, ensuring reselecting the same row after filtering restores its
+details. Ruff lint/format passed across **194 Python files**; Git whitespace checks
+passed. No new dependency, server change, installer/catalog release, or Intel/native
+GUI acceptance is claimed.
+
 ## Ledger recovery and isolated kernel — September 27, 2026
 
 The owner authorized proceeding through recovery preparation and the kernel,

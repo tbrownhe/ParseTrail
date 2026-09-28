@@ -2,8 +2,10 @@
 
 The kernel implements the [ledger contract](client-ledger-contract.md) on explicit
 inputs. It is not connected to the current application's database, import path,
-or reports. L4 will provide reviewed source mappings and shadow conversion; L5
-will provide the review UI. Never point this prototype at the live client file.
+or reports. The first [L4 converter](../devtools/ledger_audit/SHADOW.md) supplies
+conservative source mappings and a disposable shadow; L5a supplies read-only review.
+Interpretation editing and report cutover remain future work. Never point this
+prototype at the live client file.
 
 `core.ledger` defines immutable account, observation, allocation, posting and
 journal inputs. `core.ledger_store.LedgerStore(path, create=True)` creates a new
@@ -40,6 +42,11 @@ Use separate balanced entries with the same `event_id` for different posting
 dates: sending account to clearing, then clearing to receiving account. The kernel
 does not identify transfers or guess counterparts. Reports can query balances at
 a calendar cutoff without moving either bank's observed date.
+
+`load_batch` applies a whole deterministic shadow plan under one transaction,
+loading validation context once. It checks existing identities/payloads before
+adding accounts, observations, statements or entries. Replaying the same batch
+does nothing; any conflicting or invalid item rolls back the complete batch.
 
 ## Corrections and review
 
