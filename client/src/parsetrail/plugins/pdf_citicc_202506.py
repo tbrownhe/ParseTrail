@@ -18,13 +18,17 @@ from parsetrail.core.validation import Account, Statement, Transaction
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_citicc_202506"
-    VERSION = "0.3.0"
+    VERSION = "0.3.1"
     MIN_CLIENT_VERSION = "1.3.0"
     SUFFIX = ".pdf"
     COMPANY = "Citibank"
     STATEMENT_TYPE = "Credit Account Monthly Statement"
     SEARCH_STRING = "www.citicards.com"
-    ROUTING_RULE = {"header": '"trans. post description amount"'}
+    ROUTING_RULE = {
+        "pdf_metadata": {"Producer": '"crawfordtech"'},
+        "header": '("trans. post description amount" || ("trans. post" && "date date description amount"))'
+        ' && !"sale post"',
+    }
     INSTRUCTIONS = (
         "Login to https://www.citi.com/, then navigate to your account."
         " Click 'View Statements', then click 'View All Statements'."
@@ -283,7 +287,10 @@ class Parser(IParser):
             return [
                 header[header_cols[0]]["x0"] - 3,  # Trans. Date left
                 header[header_cols[1]]["x0"] - 2,  # Post Date left
-                header[header_cols[2]]["x0"] - 2,  # Description left
+                # Transaction descriptions can start left of the printed
+                # heading. Split the gutter so their first letter stays in
+                # the description instead of leaking into the posting date.
+                (header[header_cols[1]]["x1"] + header[header_cols[2]]["x0"]) / 2,
                 header[header_cols[3]]["x0"] - 20,  # Amount left
                 header[header_cols[3]]["x1"] + 2,  # Amount right
             ]
@@ -292,14 +299,21 @@ class Parser(IParser):
         vertical_lines = calculate_vertical_lines(header)
         table_settings = {
             "vertical_strategy": "explicit",
-            "horizontal_strategy": "lines",
+            "horizontal_strategy": "text",
+            # Accessible PDF glyph boxes can be less than a point high. The
+            # default snapping merges top/bottom boundaries and loses the final
+            # row, including foreign-currency continuations across pages.
+            "snap_y_tolerance": 0,
             "explicit_vertical_lines": vertical_lines,
         }
         raw_array = crop_page.extract_table(table_settings=table_settings)
+        if raw_array is None:
+            raise ValueError("Transaction table could not be extracted.")
 
         # Array validation
         array = []
         for row in raw_array:
+            row = [(cell or "").strip() for cell in row]
             # Make sure each row has the right number of columns
             if len(row) != len(vertical_lines) - 1:
                 raise ValueError(f"Incorrect number of columns for row: {row}")

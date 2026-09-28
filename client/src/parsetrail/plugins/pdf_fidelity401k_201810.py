@@ -1,3 +1,5 @@
+import re
+import unicodedata
 from datetime import datetime
 
 from loguru import logger
@@ -15,7 +17,7 @@ from parsetrail.core.validation import Account, Statement, Transaction
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_fidelity401k_201810"
-    VERSION = "0.2.0"
+    VERSION = "0.2.1"
     MIN_CLIENT_VERSION = "1.3.0"
     SUFFIX = ".pdf"
     COMPANY = "Fidelity"
@@ -147,15 +149,42 @@ class Parser(IParser):
         )
 
     def extract_account_number(self) -> str:
+        """Retain the established plan-label key above the statement title.
+
+        Browser-printed statements use a NetBenefits page header instead of
+        "Statement Details". A plan's display name can continue below the title;
+        that continuation is deliberately excluded to preserve existing account
+        aliases. Never use the customer name/address as an account identifier.
         """
-        Fidelity retirement savings statements don't contain an account number.
-        Instead use the account description: First line containing text after
-        "Statement Details", and before "Retirement Savings Statement"
-        """
-        row0, _ = find_param_in_line(self.lines, "Statement Details")
-        row1, _ = find_param_in_line(self.lines, "Retirement Savings Statement")
-        account = " ".join([line for line in self.lines[row0 + 1 : row1] if line])
-        return account
+        header = [" ".join(unicodedata.normalize("NFKC", line).split()) for line in self.lines[:30]]
+        titles = [i for i, line in enumerate(header) if "Retirement Savings Statement" in line]
+        if len(titles) != 1:
+            raise ValueError("Expected one retirement statement title in the page header.")
+        end = titles[0]
+        starts = [
+            i
+            for i, line in enumerate(header[:end])
+            if line == "Statement Details"
+            or re.fullmatch(
+                r"(?:\d{1,2}/\d{1,2}/(?:\d{4}|\d{2})(?:,\s+\d{1,2}:\d{2}\s+[AP]M)?\s+)?"
+                r"Fidelity NetBenefits - SOD detail page",
+                line,
+                re.IGNORECASE,
+            )
+        ]
+        if not starts:
+            # Headerless exports must start with one recognizable plan label.
+            # Never consume arbitrary preceding text or the customer block.
+            labels = [line for line in header[:end] if line]
+            if len(labels) != 1 or not re.search(r"\bretirement\b|\b401\(k\)", labels[0], re.IGNORECASE):
+                raise ValueError("Missing or ambiguous retirement plan label in headerless export.")
+            return labels[0]
+        if len(starts) != 1:
+            raise ValueError("Expected a recognized Fidelity statement or browser-print header.")
+        labels = [line for line in header[starts[0] + 1 : end] if line]
+        if not 1 <= len(labels) <= 4:
+            raise ValueError("Missing or ambiguous retirement plan label.")
+        return " ".join(labels)
 
     def get_statement_balances(self) -> tuple[float, float]:
         """

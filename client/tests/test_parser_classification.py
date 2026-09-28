@@ -63,8 +63,13 @@ def test_citi_layout_headers_route_to_one_plugin_each() -> None:
 
     cases = (
         ("Date Description Amount", "pdf_citicc_201505"),
+        ("Trans. Post\ndate date Description Amount", "pdf_citicc_201505"),
+        ("Trans. Post\ndate date Description Amount\nDate Description Amount", "pdf_citicc_201505"),
         ("Trans. Post Description Amount", "pdf_citicc_202506"),
+        ("Trans. Post Description Amount\nDate Description Amount", "pdf_citicc_202506"),
+        ("Trans. Post\ndate date Description Amount", "pdf_citicc_202506"),
         ("Sale Post Description Amount", "pdf_citicc_202511"),
+        ("Sale Post Description Amount\nDate Description Amount", "pdf_citicc_202511"),
         ("Sale Post\nDate Date Description Amount", "pdf_citicc_202511"),
     )
     for header, expected in cases:
@@ -72,6 +77,11 @@ def test_citi_layout_headers_route_to_one_plugin_each() -> None:
             suffix=".pdf",
             body_text="www.citicards.com",
             header_text=header,
-            pdf_metadata=normalize_pdf_metadata({"Author": "Citibank, N.A."}),
+            pdf_metadata=normalize_pdf_metadata(
+                {
+                    "Author": "Citibank, N.A.",
+                    "Producer": "PDFLib+PDI" if expected == "pdf_citicc_201505" else "CrawfordTech PDF/UA Driver",
+                }
+            ),
         )
         assert matching_plugins(features, catalog) == (expected,)

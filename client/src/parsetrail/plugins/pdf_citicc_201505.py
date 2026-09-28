@@ -17,14 +17,17 @@ from parsetrail.core.validation import Account, Statement, Transaction
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_citicc_201505"
-    VERSION = "0.3.0"
+    VERSION = "0.3.1"
     MIN_CLIENT_VERSION = "1.3.0"
     SUFFIX = ".pdf"
     COMPANY = "Citibank"
     STATEMENT_TYPE = "Credit Account Monthly Statement"
     SEARCH_STRING = "www.citicards.com"
     ROUTING_RULE = {
-        "header": '"date description amount" && !("date date description amount")',
+        "pdf_metadata": {"Producer": '!"crawfordtech"'},
+        "header": '(("date description amount" && !"date date description amount")'
+        ' || ("trans. post" && "date date description amount"))'
+        ' && !"trans. post description amount" && !"sale post"',
     }
     INSTRUCTIONS = (
         "Login to https://www.citi.com/, then navigate to your account."
