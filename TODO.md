@@ -100,7 +100,10 @@ only platforms actually tested; this does not claim Intel acceptance by inferenc
 
 L2 recovery preparation and L3 isolated kernel passed automated acceptance on
 September 27; see the [verification record](docs/engineering-acceptance.md#ledger-recovery-and-isolated-kernel--september-27-2026)
-and [kernel guide](docs/client-ledger-kernel.md). The active application still uses
+and [kernel guide](docs/client-ledger-kernel.md). L4R fresh-source/category and
+asset-value preservation passed owner Windows acceptance on September 27; see the
+[accepted rebuild record](docs/engineering-acceptance.md#historical-parser-compatibility-and-complete-annotation-preservation--september-27-2026).
+The active application still uses
 the legacy model. The owner approved corrected HSA evidence for the first disposable
 shadow migration, retaining printed-balance gaps as explicit exceptions.
 
@@ -135,17 +138,13 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   compatibility layer. Complete balance/timing provenance, reviewed opening positions,
   confirmed transfers and remaining evidence allocation before report cutover.
   No automatic balancing adjustments or duplicate purchase/asset recognition.
-- [~] **L4R — Fresh rebuild and verified-category carry-forward:** the
-  [fresh replay and review workflow](devtools/ledger_audit/REBUILD.md) creates a new
-  evidence database from hash-verified archive sources, preserving category hierarchy
-  and unambiguous verified expense decisions. Exact counts/amounts account for every
-  restored/pending annotation. Original data stays retained; existing outputs cannot
-  be overwritten. No journal entries or report cutover occur in this checkpoint.
-  Historical Citi routing/table extraction and Fidelity account-header compatibility
-  are fixed. Repeated exact details can be distinguished only by unchanged complete
-  balance groups. Explicitly reviewed manual asset values retain historical category
-  verification separately from cash/expense postings. [USER] Accept the updated
-  Windows category-preservation and asset-value review before closing this checkpoint.
+  Next bounded service chunk: map fresh checking/savings/card observations into
+  kernel evidence, preserve source membership and balance provenance, and generate
+  proposed ordinary purchase/refund entries using retained categories. Keep category
+  verification separate from accounting review; transfers, loans, valuation activity,
+  synthetic origins and uncertain interpretations remain explicit. Verify exact
+  balance, ownership/sign/date preservation, no duplicate allocations and idempotent
+  replay before adding posting/review controls.
 - [ ] **L5b — Ledger interpretation editing:** persist review decisions, confirmed
   transfers/splits, opening anchors, source corrections and reversal/replacement
   workflows; require a separate Windows native walkthrough before report cutover.

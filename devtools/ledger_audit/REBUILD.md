@@ -89,7 +89,9 @@ The review window verifies artifact checksums, then opens without the active pro
 For automated selection/filter/detail/close checks, add `--smoke` to the review
 command. This does not replace native owner acceptance.
 
-This is the first fresh-import checkpoint, not an application/report cutover.
-Historical parser compatibility, ambiguous category matches, opening anchors,
-transfer/split interpretation, valuations, manual controls, and independent balance
-provenance remain gates. The normal application continues using the old database.
+The owner accepted this Windows evidence/category and asset-value checkpoint on
+September 27, 2026. Historical parser compatibility and annotation preservation
+passed against the retained reference archive. New ambiguous imports still require
+review. Opening anchors, transfer/split interpretation, valuation posting, manual
+controls and independent balance provenance remain gates before report cutover.
+The normal application continues using the old database.

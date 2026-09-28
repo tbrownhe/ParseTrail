@@ -52,8 +52,10 @@ Windows verification: **750 tests passed, 3 skipped** in 133.05 seconds with off
 Qt and process-only `RemoteSigned` for the builder probe. Ruff lint/format passed
 across **200 files**, as did Git whitespace checks. The final private artifact passed
 the offscreen read-only tab/filter/selection/detail/close smoke, including **Asset
-values**. Owner Windows acceptance of that updated review remains pending. No new
-dependency, server operation, installer build or Intel acceptance is claimed.
+values**. The owner accepted the updated Windows category-preservation and asset-value
+review on September 27, closing L4R. This acceptance covers evidence/annotation
+preservation, not journal posting, statement reconciliation or report cutover.
+No new dependency, server operation, installer build or Intel acceptance is claimed.
 
 ## Fresh archive rebuild and category preservation — September 27, 2026
 
