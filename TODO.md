@@ -81,7 +81,7 @@ routine client development or automated tests.
   ML suggestions separate from posted facts. The owner authorized testing against
   a disposable snapshot of the live database; private paths/data/reports stay out
   of Git. See the [ledger contract](docs/client-ledger-contract.md).
-- A fresh database rebuilt by local archive replay is the proposed simpler breaking
+- A fresh database rebuilt by local archive replay is the approved simpler breaking
   transition. Preserving the owner's verified expense categorizations is an
   acceptance requirement: restore the category and category-level verification on
   unambiguous matches, retain category definitions, and report every unmatched or
@@ -135,14 +135,16 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   Atomic batch replay and independent clean builds passed. Complete source balance/
   timing verification, reviewed opening positions, confirmed transfers and remaining
   evidence allocation before report cutover. No automatic balancing adjustments.
-- [ ] **L4R — Fresh rebuild and verified-category carry-forward:** prepare a
-  deterministic archive replay into a new database and a dry-run annotation match
-  report. Preserve custom expense category identity/hierarchy and verified expense
-  decisions. Match canonical transactions using account identity, source membership
-  and exact transaction evidence; handle overlapping statements once. Queue missing,
-  ambiguous, changed, split/merged and manual-only records for explicit review.
-  Reconcile restored/pending counts to the complete verified-expense inventory;
-  prove replay cannot duplicate or overwrite annotations before any report cutover.
+- [~] **L4R — Fresh rebuild and verified-category carry-forward:** the
+  [fresh replay and review workflow](devtools/ledger_audit/REBUILD.md) creates a new
+  evidence database from hash-verified archive sources, preserving category hierarchy
+  and unambiguous verified expense decisions. Exact counts/amounts account for every
+  restored/pending annotation. Original data stays retained; existing outputs cannot
+  be overwritten. No journal entries or report cutover occur in this checkpoint.
+  [USER] Windows category-preservation review is pending. Historical Citi routing
+  and Fidelity account-header parsing prevent complete source replay; inspect and
+  resolve those compatibility gaps before cutover. Ambiguous and manual-only category
+  decisions need explicit review, along with later ledger interpretation work.
 - [ ] **L5b — Ledger interpretation editing:** persist review decisions, confirmed
   transfers/splits, opening anchors, source corrections and reversal/replacement
   workflows; require a separate Windows native walkthrough before report cutover.

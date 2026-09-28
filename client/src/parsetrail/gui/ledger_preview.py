@@ -287,11 +287,11 @@ class PreviewPage(QWidget):
 class LedgerPreviewWindow(QMainWindow):
     def __init__(self, data: dict):
         super().__init__()
-        self.setWindowTitle("ParseTrail — Shadow ledger review (read only)")
+        self.setWindowTitle(data.get("window_title", "ParseTrail — Shadow ledger review (read only)"))
         self.resize(1280, 820)
         body = QWidget()
         layout = QVBoxLayout(body)
-        title = QLabel("Shadow ledger preview — live accounts and reports are unchanged")
+        title = QLabel(data.get("title", "Shadow ledger preview — live accounts and reports are unchanged"))
         title.setStyleSheet("font-size: 17px; font-weight: bold;")
         layout.addWidget(title)
         summary = QLabel(data["summary"])

@@ -6,6 +6,43 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## Fresh archive rebuild and category preservation — September 27, 2026
+
+The owner approved a breaking fresh database rebuilt locally from the retained
+statement archive, with verified expense categories preserved. The
+[rebuild guide](../devtools/ledger_audit/REBUILD.md) documents this first disposable
+evidence/category checkpoint. It does not activate a new application database or
+post journals. The original database and archive remain intact.
+
+Normal routing/validation reparses hash-verified successful sources into a separate
+evidence schema. Categories, hierarchy and unambiguous category verification are
+retained independently of accounting interpretation. Exact counts and signed amounts
+partition every verified expense into restored or pending, with source/match reasons.
+Manual-only decisions remain retained. Unknown accounts, parser failures, warnings
+and changed account coverage cannot silently restore verification.
+
+Two full private archive passes reproduced canonical transaction evidence, source
+membership and source outcomes. Historical Citi routing and Fidelity account-header
+parsing failures block complete replay; ambiguous category matches also remain
+pending. No compatibility fallback or balancing adjustment was introduced. Private
+counts, statement identities, mappings and artifacts remain in ignored storage.
+
+Replay verification caught numeric source-map keys changing canonical checksum order
+after JSON reload. The final source maps use string keys and database insert order is
+explicit. A regression test exercises nonlexical numeric identities, saved-plan reload
+and repeated construction. Final databases materialized from independently reparsed
+evidence have identical bytes, matching embedded/serialized plan checksums, unchanged
+source/archive hashes, and identical category decisions. Existing output is refused;
+immutability triggers protect restored assertions from replacement by ML or edits.
+
+Windows verification: the full client suite passed **724 tests, 3 skipped** in
+147.55 seconds using offscreen Qt and process-only `RemoteSigned` for the existing
+builder probe. After the serialization fix, **21 rebuild/preview tests** passed.
+Ruff lint/format passed across **198 files**. The complete private review artifact
+passed the offscreen tab/filter/selection/detail/close smoke. Windows owner native
+category-preservation acceptance remains pending. No dependency, server change,
+installer/catalog release, Intel acceptance or report cutover is claimed.
+
 ## First shadow ledger and read-only review — September 27, 2026
 
 The owner approved corrected HSA evidence in a disposable shadow migration while

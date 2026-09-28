@@ -180,7 +180,7 @@ it cannot establish accounting correctness by itself.
 
 ### Verified expense categories during a fresh rebuild
 
-The owner is considering a breaking database rebuild through local statement
+The owner approved a breaking database rebuild through local statement
 archive replay to simplify legacy conversion. Preservation of verified expense
 categorization is required for that path; the original database/archive remain
 retained throughout. Fresh parsing must not erase the owner's completed review work.
@@ -207,6 +207,12 @@ Before cutover, the carry-forward report must account for every legacy verified
 expense as restored or pending with a reason. Check counts and exact amounts by
 account/category, preserve refunds, reject conflicting annotations and prove rerun
 idempotency. A partial transfer of annotations must never be reported as complete.
+
+The first [fresh-replay checkpoint](../devtools/ledger_audit/REBUILD.md) implements
+source evidence and category preservation in a disposable new format. Historical
+rows commonly lack a transaction date; exact posting date remains required, and
+known transaction dates must agree. No journal is posted by annotation restoration.
+Parser failures and ambiguous matches remain visible cutover blockers.
 
 ### Existing staged rollout
 

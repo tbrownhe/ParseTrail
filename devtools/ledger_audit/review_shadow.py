@@ -9,13 +9,21 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--folder", type=Path, required=True)
     parser.add_argument("--smoke", action="store_true")
+    parser.add_argument(
+        "--fresh", action="store_true", help="Review a fresh archive rebuild instead of a shadow conversion."
+    )
     args = parser.parse_args()
     if args.smoke:
         os.environ["QT_QPA_PLATFORM"] = "offscreen"
     from parsetrail.gui.ledger_preview import LedgerPreviewWindow, load_preview
     from PySide6.QtWidgets import QApplication
 
-    data = load_preview(args.folder)
+    if args.fresh:
+        from parsetrail.gui.ledger_rebuild_preview import load_rebuild_preview
+
+        data = load_rebuild_preview(args.folder)
+    else:
+        data = load_preview(args.folder)
     app = QApplication([])
     window = LedgerPreviewWindow(data)
     window.show()
@@ -34,7 +42,7 @@ def main():
             page.search.clear()
         window.close()
         app.processEvents()
-        print("Read-only shadow review smoke passed.")
+        print("Read-only ledger review smoke passed.")
         return 0
     return app.exec()
 

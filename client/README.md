@@ -191,6 +191,10 @@ evidence allocation, corrections and reconciliation on a separate SQLite file.
 It is not wired into current imports, reports or the active application database.
 The [shadow conversion and review guide](../devtools/ledger_audit/SHADOW.md) describes
 the first disposable legacy conversion and its read-only Windows acceptance window.
+The [fresh rebuild guide](../devtools/ledger_audit/REBUILD.md) describes the approved
+breaking transition through local archive replay, preserved verified expense
+categories, and a separate read-only category-preservation checkpoint. It creates
+a disposable new database; active imports and reports have not switched formats.
 
 ### Statement coverage and freshness
 
