@@ -214,6 +214,14 @@ rows commonly lack a transaction date; exact posting date remains required, and
 known transaction dates must agree. No journal is posted by annotation restoration.
 Parser failures and ambiguous matches remain visible cutover blockers.
 
+The second checkpoint permits a running balance to distinguish repeated exact
+transaction details only when the complete, unique balance inventory is unchanged
+in every contributing source group. Changed/added/removed or indistinguishable
+evidence still requires review. Confirmed manual asset-value observations retain
+their original category verification as history, separately from cash evidence or
+expense postings. Rounded asset values must not create balancing adjustments to
+purchase funding. Category accounting includes these retained observations explicitly.
+
 ### Existing staged rollout
 
 1. L1 audits a consistent read-only snapshot. Inventory schema, exact amounts,

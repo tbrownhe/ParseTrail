@@ -128,23 +128,24 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   source-corrected HSA observations with remaining gaps unreconciled; live history
   is untouched. Opening anchors, synthetic-loan treatment and investment/valuation
   semantics still need explicit review before posting those interpretations.
-- [~] **L4 — Parallel migration and reconciliation:** the
-  [shadow converter](devtools/ledger_audit/SHADOW.md) preserves legacy bytes, applies
-  the exact approved additive HSA evidence, carries supported legacy income/expense
-  categories as unreviewed entries, and leaves transfers/unknowns unresolved.
-  Atomic batch replay and independent clean builds passed. Complete source balance/
-  timing verification, reviewed opening positions, confirmed transfers and remaining
-  evidence allocation before report cutover. No automatic balancing adjustments.
+- [~] **L4 — Fresh-ledger posting and reconciliation:** the
+  [shadow converter](devtools/ledger_audit/SHADOW.md) established kernel/replay checks;
+  the approved breaking transition now uses freshly parsed evidence from L4R.
+  Wire that evidence into journal/reconciliation workflows without a permanent legacy
+  compatibility layer. Complete balance/timing provenance, reviewed opening positions,
+  confirmed transfers and remaining evidence allocation before report cutover.
+  No automatic balancing adjustments or duplicate purchase/asset recognition.
 - [~] **L4R — Fresh rebuild and verified-category carry-forward:** the
   [fresh replay and review workflow](devtools/ledger_audit/REBUILD.md) creates a new
   evidence database from hash-verified archive sources, preserving category hierarchy
   and unambiguous verified expense decisions. Exact counts/amounts account for every
   restored/pending annotation. Original data stays retained; existing outputs cannot
   be overwritten. No journal entries or report cutover occur in this checkpoint.
-  [USER] Windows category-preservation review is pending. Historical Citi routing
-  and Fidelity account-header parsing prevent complete source replay; inspect and
-  resolve those compatibility gaps before cutover. Ambiguous and manual-only category
-  decisions need explicit review, along with later ledger interpretation work.
+  Historical Citi routing/table extraction and Fidelity account-header compatibility
+  are fixed. Repeated exact details can be distinguished only by unchanged complete
+  balance groups. Explicitly reviewed manual asset values retain historical category
+  verification separately from cash/expense postings. [USER] Accept the updated
+  Windows category-preservation and asset-value review before closing this checkpoint.
 - [ ] **L5b — Ledger interpretation editing:** persist review decisions, confirmed
   transfers/splits, opening anchors, source corrections and reversal/replacement
   workflows; require a separate Windows native walkthrough before report cutover.

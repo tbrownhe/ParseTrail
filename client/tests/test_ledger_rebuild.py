@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 from parsetrail.core.diagnostics import Diagnostic, DiagnosticSeverity
-from parsetrail.core.ledger_rebuild import match_categories, replay_sources, write_rebuild
+from parsetrail.core.ledger_rebuild import match_categories, replay_sources, retain_reviewed_asset_values, write_rebuild
 from parsetrail.core.ledger_store import encoded
 from parsetrail.core.parser_routing import NoParserMatchError, ParseResult
 from parsetrail.core.recovery_bundle import digest
@@ -250,3 +250,109 @@ def test_saved_plan_round_trip_preserves_checksum_and_database(example, tmp_path
     write_rebuild(tmp_path / "first.db", plan)
     write_rebuild(tmp_path / "second.db", decoded)
     assert digest(tmp_path / "first.db") == digest(tmp_path / "second.db")
+
+
+def repeated_purchase(example):
+    legacy, archive, registry, parsed = example
+    legacy["Transactions"].append(
+        {**legacy["Transactions"][0], "TransactionID": 2, "BalanceMinor": 7532, "CategoryID": 1}
+    )
+    for sid in (1, 2):
+        legacy["StatementTransactions"].append({"StatementID": sid, "TransactionID": 2, "StatementRow": 2})
+    parsed.accounts[0].transactions.append(copy.deepcopy(parsed.accounts[0].transactions[0]))
+    parsed.accounts[0].transactions[1].balance = Decimal("75.32")
+    return legacy, replay_sources(legacy, archive, registry)
+
+
+def test_unchanged_complete_balance_group_preserves_distinct_verified_decisions(example):
+    legacy, evidence = repeated_purchase(example)
+    result = match_categories(legacy, evidence)
+    assert result["counts"] == {"restored": 2}
+    assert {d["category_id"] for d in result["decisions"]} == {1, 2}
+    for d in result["decisions"]:
+        assert d["match_method"] == "exact_source_details_and_unchanged_balance_group"
+        assert evidence["transactions"][d["transaction_id"]]["BalanceMinor"] == d["legacy"]["BalanceMinor"]
+
+
+@pytest.mark.parametrize("change", ["changed_balance", "added_row", "duplicate_balance", "removed_membership"])
+def test_changed_or_incomplete_balance_group_cannot_break_a_tie(example, change):
+    legacy, evidence = repeated_purchase(example)
+    ids = list(evidence["transactions"])
+    if change == "changed_balance":
+        evidence["transactions"][ids[1]]["BalanceMinor"] += 1
+    elif change == "duplicate_balance":
+        evidence["transactions"][ids[1]]["BalanceMinor"] = evidence["transactions"][ids[0]]["BalanceMinor"]
+    elif change == "added_row":
+        evidence["transactions"]["extra"] = {**evidence["transactions"][ids[1]], "id": "extra", "BalanceMinor": 6298}
+        evidence["memberships"].append({**evidence["memberships"][0], "transaction_id": "extra", "row": 2})
+    else:
+        legacy["StatementTransactions"] = [
+            r for r in legacy["StatementTransactions"] if not (r["StatementID"] == 1 and r["TransactionID"] == 2)
+        ]
+    result = match_categories(legacy, evidence)
+    assert all(d["status"] == "ambiguous_match" for d in result["decisions"])
+
+
+def asset_plan(example):
+    legacy, archive, registry, _ = example
+    legacy["AccountTypes"].append({"AccountTypeID": 2, "AssetType": "TangibleAsset"})
+    legacy["Accounts"].append({"AccountID": 2, "AccountTypeID": 2, "AccountName": "Vehicle", "CurrencyCode": "USD"})
+    legacy["Transactions"].append(
+        {
+            **legacy["Transactions"][0],
+            "TransactionID": 2,
+            "AccountID": 2,
+            "AmountMinor": 100000,
+            "BalanceMinor": 100000,
+            "Description": "Manual asset",
+        }
+    )
+    evidence = replay_sources(legacy, archive, registry)
+    plan = {
+        "source_sha256": "1" * 64,
+        "legacy_metadata": legacy,
+        "evidence": evidence,
+        "annotations": match_categories(legacy, evidence),
+    }
+    review = {"source_sha256": "1" * 64, "valuations": [{"legacy_id": 2, "reason": "Owner confirmed asset value"}]}
+    return plan, review
+
+
+def test_reviewed_manual_value_retains_category_without_cash_or_expense_posting(example, tmp_path):
+    plan, review = asset_plan(example)
+    retain_reviewed_asset_values(plan, review)
+    assert plan["annotations"]["counts"] == {"restored": 1, "retained_asset_value": 1}
+    for t in plan["annotations"]["totals"]:
+        for suffix in ("count", "minor"):
+            assert t[f"original_{suffix}"] == sum(
+                t[f"{prefix}_{suffix}"] for prefix in ("restored", "pending", "retained")
+            )
+    write_rebuild(tmp_path / "asset.db", plan)
+    with closing(sqlite3.connect(tmp_path / "asset.db")) as c:
+        assert c.execute("SELECT category_id,category_verified FROM AssetValuations").fetchall() == [(2, 1)]
+        assert c.execute("SELECT count(*) FROM LedgerEntries").fetchone() == (0,)
+        assert c.execute("SELECT count(*) FROM CategoryAnnotations").fetchone() == (1,)
+        with pytest.raises(sqlite3.IntegrityError, match="immutable"):
+            c.execute("DELETE FROM AssetValuations")
+        c.rollback()
+    with pytest.raises(ValueError, match="already applied"):
+        retain_reviewed_asset_values(plan, review)
+
+
+@pytest.mark.parametrize("problem", ["different_snapshot", "duplicate", "empty_reason", "bank_account", "linked"])
+def test_manual_review_rejects_wrong_or_uncertain_evidence_atomically(example, problem):
+    plan, review = asset_plan(example)
+    if problem == "different_snapshot":
+        review["source_sha256"] = "2" * 64
+    elif problem == "duplicate":
+        review["valuations"].append(copy.deepcopy(review["valuations"][0]))
+    elif problem == "empty_reason":
+        review["valuations"][0]["reason"] = " "
+    elif problem == "bank_account":
+        plan["legacy_metadata"]["Accounts"][1]["AccountTypeID"] = 1
+    else:
+        review["valuations"][0]["legacy_id"] = 1
+    before = copy.deepcopy(plan)
+    with pytest.raises(ValueError):
+        retain_reviewed_asset_values(plan, review)
+    assert plan == before

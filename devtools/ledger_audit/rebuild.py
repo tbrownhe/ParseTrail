@@ -33,6 +33,9 @@ def main():
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--archive", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--manual-review", type=Path, help="Owner-reviewed, snapshot-bound manual asset-value annotations."
+    )
     args = parser.parse_args()
     logger.remove()
     report = create_rebuild(
@@ -41,6 +44,7 @@ def main():
         args.output,
         SourceRegistry(),
         lambda n, total: print(f"Parsed {n}/{total} sources", flush=True) if n % 50 == 0 else None,
+        manual_review=args.manual_review,
     )
     print(json.dumps({k: v for k, v in report.items() if k != "totals"}, indent=2))
 

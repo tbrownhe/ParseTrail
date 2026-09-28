@@ -42,7 +42,8 @@ def load_rebuild_preview(folder: Path) -> dict:
                 indent=2,
             ),
         }
-        (restored if decision["status"] == "restored" else pending).append(record)
+        if decision["status"] != "retained_asset_value":
+            (restored if decision["status"] == "restored" else pending).append(record)
     for row in plan["annotations"]["totals"]:
         totals.append(
             {
@@ -52,12 +53,14 @@ def load_rebuild_preview(folder: Path) -> dict:
                     str(row["original_count"]),
                     str(row["restored_count"]),
                     str(row["pending_count"]),
+                    str(row.get("retained_count", 0)),
                     money(row["original_minor"]),
                     money(row["restored_minor"]),
                     money(row["pending_minor"]),
+                    money(row.get("retained_minor", 0)),
                 ],
-                "details": "Signed account movement amounts, including refunds. Original = restored + pending.\n"
-                + json.dumps(row, indent=2),
+                "details": "Original signed annotation amounts, including refunds and manual asset observations. "
+                "Original = restored + pending + retained asset values.\n" + json.dumps(row, indent=2),
             }
         )
     for record in plan["evidence"]["files"].values():
@@ -78,10 +81,25 @@ def load_rebuild_preview(folder: Path) -> dict:
         for path in plan["evidence"]["unreferenced_archive_files"]
     ]
     headers = ["Account", "Date", "Description", "Amount", "Category", "Review status"]
+    valuations = [
+        {
+            "cells": [
+                accounts[v["account_id"]],
+                v["date"],
+                money(v["value_minor"]),
+                categories[v["category_id"]],
+                "Verified category retained as history",
+            ],
+            "details": "Owner-reviewed asset-value observation. No cash movement or purchase expense is posted.\n"
+            + json.dumps(v, indent=2),
+        }
+        for v in plan.get("asset_valuations", [])
+    ]
     return {
         "window_title": "ParseTrail — Fresh rebuild review (read only)",
         "title": "Fresh archive rebuild — category preservation review",
         "summary": f"{len(restored):,} verified expense categories restored · {len(pending):,} pending, with old decisions retained\n"
+        f"{len(valuations):,} reviewed asset values retained with historical category verification\n"
         f"{report['transactions']:,} fresh evidence transactions · {report['statements']:,} account statements\n"
         "No journal entries posted. This database is not ready for report cutover. The active profile is unchanged.",
         "tabs": [
@@ -93,9 +111,11 @@ def load_rebuild_preview(folder: Path) -> dict:
                     "Original count",
                     "Restored count",
                     "Pending count",
+                    "Retained asset count",
                     "Original amount",
                     "Restored amount",
                     "Pending amount",
+                    "Retained asset amount",
                 ],
                 totals,
             ),
@@ -103,5 +123,6 @@ def load_rebuild_preview(folder: Path) -> dict:
             ("Restored categories", headers, restored),
             ("Source replay", ["File", "Status", "Parser", "Error", "Diagnostics"], sources),
             ("Other archive files", ["Retained file"], untouched),
+            ("Asset values", ["Account", "Date", "Value", "Historical category", "Review status"], valuations),
         ],
     }

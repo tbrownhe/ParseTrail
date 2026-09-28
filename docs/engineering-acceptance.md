@@ -6,6 +6,55 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## Historical parser compatibility and complete annotation preservation — September 27, 2026
+
+The owner approved repairing historical source compatibility and continuing the
+fresh rebuild. `pdf_citicc_201505` 0.3.1 routes historical split date headers while
+producer metadata separates them from the accessible-PDF generation handled by
+`pdf_citicc_202506` 0.3.1. Its tables now use text row boundaries without vertical
+snapping: sub-point glyph boxes previously collapsed the final row boundaries.
+The date/description separator uses the column gutter so it retains the first
+description character. Missing table extraction remains an error. A synthetic
+thin-glyph PDF tests the last row and left-shifted descriptions with actual PDF
+extraction, alongside unique routing tests for historical/newer layouts.
+
+`pdf_fidelity401k_201810` 0.2.1 accepts standard, browser-printed, headerless and
+inline-continuation plan headers while retaining existing plan-label account keys.
+Unknown/ambiguous labels fail closed. All archived retirement account mappings
+were checked against their saved source/account associations. The HSA parser did
+not require changes. Existing endpoint validation remains enabled throughout.
+
+Full archive replay followed by targeted replay of every source using the final
+Citi table fix passed routing, parsing, validation and exact account mapping for
+all referenced successful sources. All source hashes remained unchanged. Private
+fixture counts, monetary contents, account names, source identifiers and artifacts
+remain in ignored storage. This is source verification, not a signed parser-catalog
+publication or an installed-client upgrade.
+
+Rule `fresh-evidence-2` preserves repeated-detail category decisions only when every
+contributing source group retains its complete, unique balance inventory. Changed,
+added, removed and indistinguishable groups still remain pending. The owner also
+confirmed a legacy manual vehicle entry represents a rounded initial asset value.
+Snapshot-bound manual review retains that value and historical category verification
+in `AssetValuations`, without posting another purchase, cash movement or rounding
+adjustment. The input is fully validated before mutating the plan; immutable SQLite
+history retains the decision and review reason.
+
+The final private artifact accounts for the complete verified-expense inventory:
+all source-linked decisions are restored, and the reviewed manual decision is
+retained as an asset-value observation. No category decision remains pending.
+Independent materializations of the saved plan have identical database bytes.
+Original signed annotation counts/amounts equal restored plus pending plus retained
+asset values for every account/category/currency group. Journals, opening positions,
+transfer interpretations and report cutover remain separate unfinished work.
+
+Windows verification: **750 tests passed, 3 skipped** in 133.05 seconds with offscreen
+Qt and process-only `RemoteSigned` for the builder probe. Ruff lint/format passed
+across **200 files**, as did Git whitespace checks. The final private artifact passed
+the offscreen read-only tab/filter/selection/detail/close smoke, including **Asset
+values**. Owner Windows acceptance of that updated review remains pending. No new
+dependency, server operation, installer build or Intel acceptance is claimed.
+
 ## Fresh archive rebuild and category preservation — September 27, 2026
 
 The owner approved a breaking fresh database rebuilt locally from the retained
@@ -22,9 +71,9 @@ Manual-only decisions remain retained. Unknown accounts, parser failures, warnin
 and changed account coverage cannot silently restore verification.
 
 Two full private archive passes reproduced canonical transaction evidence, source
-membership and source outcomes. Historical Citi routing and Fidelity account-header
-parsing failures block complete replay; ambiguous category matches also remain
-pending. No compatibility fallback or balancing adjustment was introduced. Private
+membership and source outcomes. At this first checkpoint, historical Citi routing
+and Fidelity account-header failures blocked complete replay; ambiguous categories
+remained pending. No compatibility fallback or balancing adjustment was introduced. Private
 counts, statement identities, mappings and artifacts remain in ignored storage.
 
 Replay verification caught numeric source-map keys changing canonical checksum order

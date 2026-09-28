@@ -20,7 +20,7 @@ from parsetrail.core.parse import parse_any
 from parsetrail.core.parser_routing import ParseError
 from parsetrail.core.recovery_bundle import digest, inspect_database, safe_member
 
-RULE_VERSION = "fresh-evidence-1"
+RULE_VERSION = "fresh-evidence-2"
 
 
 def key(value) -> str:
@@ -164,10 +164,28 @@ def match_categories(legacy: dict, evidence: dict) -> dict:
     new_links = defaultdict(set)
     for link in evidence["memberships"]:
         new_links[link["transaction_id"]].add(link["source"])
+    old_groups, new_groups = defaultdict(dict), defaultdict(dict)
+    for row in legacy["Transactions"]:
+        for source in old_links[row["TransactionID"]]:
+            old_groups[source, signature(row)][row["TransactionID"]] = row["BalanceMinor"]
+    for tid, row in evidence["transactions"].items():
+        for source in new_links[tid]:
+            new_groups[source, signature(row)][tid] = row["BalanceMinor"]
+    stable_balance_groups = set()
+    for group, rows in old_groups.items():
+        old_balances = list(rows.values())
+        new_balances = list(new_groups[group].values())
+        if (
+            len(old_balances) > 1
+            and None not in old_balances
+            and len(set(old_balances)) == len(old_balances)
+            and Counter(old_balances) == Counter(new_balances)
+        ):
+            stable_balance_groups.add(group)
     candidates = defaultdict(list)
     for tid, row in evidence["transactions"].items():
         candidates[signature(row)].append(tid)
-    matches, reverse = {}, defaultdict(list)
+    matches, reverse, methods = {}, defaultdict(list), {}
     for old in legacy["Transactions"]:
         oid = old["TransactionID"]
         matches[oid] = sorted(
@@ -179,6 +197,14 @@ def match_categories(legacy: dict, evidence: dict) -> dict:
                 or old["TransactionDate"] == evidence["transactions"][tid]["TransactionDate"]
             )
         )
+        methods[oid] = "exact_source_details"
+        if len(matches[oid]) > 1:
+            shared_sources = old_links[oid] & set().union(*(new_links[tid] for tid in matches[oid]))
+            if shared_sources and all((s, signature(old)) in stable_balance_groups for s in shared_sources):
+                matches[oid] = [
+                    tid for tid in matches[oid] if evidence["transactions"][tid]["BalanceMinor"] == old["BalanceMinor"]
+                ]
+                methods[oid] = "exact_source_details_and_unchanged_balance_group"
         for tid in matches[oid]:
             reverse[tid].append(oid)
     decisions, totals = [], {}
@@ -214,6 +240,7 @@ def match_categories(legacy: dict, evidence: dict) -> dict:
             "candidates": choices,
             "legacy": old,
             "sources": sorted(old_links[oid]),
+            "match_method": methods[oid] if reason == "restored" else None,
         }
         decisions.append(decision)
         group = (old["AccountID"], old["CategoryID"], old["CurrencyCode"])
@@ -229,6 +256,8 @@ def match_categories(legacy: dict, evidence: dict) -> dict:
                 "restored_minor": 0,
                 "pending_count": 0,
                 "pending_minor": 0,
+                "retained_count": 0,
+                "retained_minor": 0,
             },
         )
         bucket = "restored" if reason == "restored" else "pending"
@@ -243,6 +272,65 @@ def match_categories(legacy: dict, evidence: dict) -> dict:
         "totals": [totals[k] for k in sorted(totals)],
         "counts": dict(sorted(Counter(d["status"] for d in decisions).items())),
     }
+
+
+def retain_reviewed_asset_values(plan: dict, review: dict) -> None:
+    """Preserve owner-confirmed manual valuations without inventing cash postings."""
+    if review.get("source_sha256") != plan["source_sha256"]:
+        raise ValueError("Manual review belongs to a different source snapshot.")
+    if plan.get("asset_valuations"):
+        raise ValueError("Manual asset review is already applied.")
+    metadata = plan["legacy_metadata"]
+    types = {r["AccountTypeID"]: r["AssetType"] for r in metadata["AccountTypes"]}
+    accounts = {r["AccountID"]: r for r in metadata["Accounts"]}
+    decisions = {d["legacy_id"]: d for d in plan["annotations"]["decisions"]}
+    valuations, seen = [], set()
+    # Validate the complete review before changing decisions or totals.
+    for item in review["valuations"]:
+        oid = item["legacy_id"]
+        if oid in seen:
+            raise ValueError("Duplicate manual review.")
+        seen.add(oid)
+        decision = decisions[oid]
+        old = decision["legacy"]
+        reason = item["reason"].strip()
+        if (
+            decision["status"] != "manual_only"
+            or types[accounts[old["AccountID"]]["AccountTypeID"]] != "TangibleAsset"
+            or old["AmountMinor"] <= 0
+            or not reason
+        ):
+            raise ValueError("Only reviewed, positive, manual tangible-asset observations are supported.")
+        valuations.append(
+            {
+                "id": key([plan["source_sha256"], oid, "asset_value"]),
+                "legacy_id": oid,
+                "account_id": old["AccountID"],
+                "date": old["PostingDate"],
+                "value_minor": old["AmountMinor"],
+                "currency": old["CurrencyCode"],
+                "category_id": old["CategoryID"],
+                "category_verified": bool(old["Verified"]),
+                "reason": reason,
+                "kind": "owner_reviewed_legacy_asset_value",
+            }
+        )
+    for valuation in valuations:
+        d = decisions[valuation["legacy_id"]]
+        d["status"] = "retained_asset_value"
+        d["match_method"] = "owner_reviewed_manual_asset_value"
+        d["review_reason"] = valuation["reason"]
+        total = next(
+            t
+            for t in plan["annotations"]["totals"]
+            if (t["account_id"], t["category_id"], t["currency"]) == (d["account_id"], d["category_id"], d["currency"])
+        )
+        for suffix, amount in (("count", 1), ("minor", d["amount_minor"])):
+            total[f"pending_{suffix}"] -= amount
+            total[f"retained_{suffix}"] += amount
+    plan["annotations"]["counts"] = dict(sorted(Counter(d["status"] for d in decisions.values()).items()))
+    plan["asset_valuations"] = valuations
+    plan["manual_review_sha256"] = key(review)
 
 
 def write_rebuild(path: Path, plan: dict) -> None:
@@ -281,6 +369,10 @@ def write_rebuild(path: Path, plan: dict) -> None:
                 category_id INTEGER NOT NULL REFERENCES CategoryDefinitions(id), verified INTEGER NOT NULL CHECK(verified=1),
                 legacy_id INTEGER NOT NULL UNIQUE REFERENCES CategoryDecisions(legacy_id));
             CREATE TABLE RetainedMetadata(name TEXT PRIMARY KEY, payload TEXT NOT NULL);
+            CREATE TABLE AssetValuations(id TEXT PRIMARY KEY, account_id TEXT NOT NULL REFERENCES LedgerAccounts(id),
+                legacy_id INTEGER NOT NULL UNIQUE REFERENCES CategoryDecisions(legacy_id),
+                category_id INTEGER NOT NULL REFERENCES CategoryDefinitions(id), category_verified INTEGER NOT NULL CHECK(category_verified=1),
+                payload TEXT NOT NULL);
         """)
         try:
             c.execute("INSERT INTO RebuildMeta VALUES(1,?)", (key(plan),))
@@ -321,6 +413,20 @@ def write_rebuild(path: Path, plan: dict) -> None:
             c.executemany(
                 "INSERT INTO RetainedMetadata VALUES(?,?)", [(k, encoded(v)) for k, v in sorted(legacy.items())]
             )
+            c.executemany(
+                "INSERT INTO AssetValuations VALUES(?,?,?,?,?,?)",
+                [
+                    (
+                        v["id"],
+                        f"account:{v['account_id']}",
+                        v["legacy_id"],
+                        v["category_id"],
+                        int(v["category_verified"]),
+                        encoded(v),
+                    )
+                    for v in plan.get("asset_valuations", [])
+                ],
+            )
             for table in (
                 "RebuildMeta",
                 "SourceFiles",
@@ -331,6 +437,7 @@ def write_rebuild(path: Path, plan: dict) -> None:
                 "CategoryDecisions",
                 "CategoryAnnotations",
                 "RetainedMetadata",
+                "AssetValuations",
             ):
                 for action in ("UPDATE", "DELETE"):
                     c.execute(
@@ -347,7 +454,9 @@ def write_rebuild(path: Path, plan: dict) -> None:
             raise ValueError("Fresh database integrity check failed.")
 
 
-def create_rebuild(source: Path, archive: Path, output: Path, registry, progress=None) -> dict:
+def create_rebuild(
+    source: Path, archive: Path, output: Path, registry, progress=None, *, manual_review: Path | None = None
+) -> dict:
     """Build from a retained, inactive recovery snapshot, never a live profile."""
     if any(Path(str(source) + suffix).exists() for suffix in ("-wal", "-shm", "-journal")):
         raise ValueError("Use an inactive verified recovery snapshot.")
@@ -369,6 +478,8 @@ def create_rebuild(source: Path, archive: Path, output: Path, registry, progress
         "evidence": evidence,
         "annotations": annotations,
     }
+    if manual_review:
+        retain_reviewed_asset_values(plan, json.loads(manual_review.read_text(encoding="utf-8")))
     (output / "plan.json").write_text(encoded(plan), encoding="utf-8")
     write_rebuild(output / "fresh.db", plan)
     if digest(source) != before or digest(retained) != before:
