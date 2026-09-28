@@ -38,8 +38,9 @@ states, possible counterparts, original/corrected closings, continuity gaps and
 unposted opening proposals. It has no mutation/activation controls and imports
 no active profile, credentials or network service. An automated offscreen smoke
 on the complete private artifact passed tab selection, filtering, detail display,
-no-match clearing and close. Native owner Windows acceptance is still pending;
-this is L5a, not acceptance of later transfer/split/correction editing.
+no-match clearing and close. The owner accepted the Windows read-only review
+window on September 27. This closes L5a only; transfer/split/correction editing
+and report cutover still require their own acceptance.
 
 Windows source verification: **707 passed, 3 skipped** in 137.92 seconds for the
 full client suite, with offscreen Qt and process-only `RemoteSigned` for the
@@ -47,8 +48,8 @@ existing builder probe. **51 focused migration/kernel/preview tests** passed.
 A final selection-reset refinement passed the **3 preview tests** and full-data
 offscreen smoke, ensuring reselecting the same row after filtering restores its
 details. Ruff lint/format passed across **194 Python files**; Git whitespace checks
-passed. No new dependency, server change, installer/catalog release, or Intel/native
-GUI acceptance is claimed.
+passed. No new dependency, server change, installer/catalog release or Intel
+acceptance is claimed. Windows native acceptance is the owner result above.
 
 ## Ledger recovery and isolated kernel — September 27, 2026
 

@@ -128,10 +128,6 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   Atomic batch replay and independent clean builds passed. Complete source balance/
   timing verification, reviewed opening positions, confirmed transfers and remaining
   evidence allocation before report cutover. No automatic balancing adjustments.
-- [USER] **L5a — Read-only shadow review:** the Windows review window and concrete
-  walkthrough are ready in the [shadow guide](devtools/ledger_audit/SHADOW.md).
-  Accept filtering, row details, source corrections, unresolved candidates and
-  reconciliation limits on the authorized private shadow artifact.
 - [ ] **L5b — Ledger interpretation editing:** persist review decisions, confirmed
   transfers/splits, opening anchors, source corrections and reversal/replacement
   workflows; require a separate Windows native walkthrough before report cutover.
