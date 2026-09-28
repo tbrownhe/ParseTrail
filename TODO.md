@@ -138,13 +138,17 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   compatibility layer. Complete balance/timing provenance, reviewed opening positions,
   confirmed transfers and remaining evidence allocation before report cutover.
   No automatic balancing adjustments or duplicate purchase/asset recognition.
-  Next bounded service chunk: map fresh checking/savings/card observations into
-  kernel evidence, preserve source membership and balance provenance, and generate
-  proposed ordinary purchase/refund entries using retained categories. Keep category
-  verification separate from accounting review; transfers, loans, valuation activity,
-  synthetic origins and uncertain interpretations remain explicit. Verify exact
-  balance, ownership/sign/date preservation, no duplicate allocations and idempotent
-  replay before adding posting/review controls.
+  The [cash/card proposal service](devtools/ledger_audit/PROPOSALS.md) now maps fresh
+  checking/savings/card observations into kernel evidence and generates immutable,
+  unposted ordinary expense/refund proposals from retained verified categories.
+  Source membership, signs, dates and category verification are preserved; accounting
+  review remains false. Exact balance, allocation uniqueness and deterministic replay
+  pass on synthetic fixtures and the accepted private rebuild. Unknown interpretations,
+  zero rows and accounts outside this scope remain explicit. Balance endpoints remain
+  unverified; no opening positions or reconciliation certification are inferred.
+  Next bounded chunk: review/posting controls for ordinary proposals, with explicit
+  accept/reject decisions and Windows owner acceptance before broader interpretation
+  workflows or report cutover.
 - [ ] **L5b — Ledger interpretation editing:** persist review decisions, confirmed
   transfers/splits, opening anchors, source corrections and reversal/replacement
   workflows; require a separate Windows native walkthrough before report cutover.

@@ -6,6 +6,40 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## Fresh cash/card journal proposal service — September 27, 2026
+
+The owner approved connecting accepted fresh evidence to the isolated kernel.
+The [proposal service](../devtools/ledger_audit/PROPOSALS.md) copies checksum-bound
+rebuild artifacts into a new private directory and preserves the original source,
+category, account and reviewed asset-value records. Checking/savings/card movements
+retain their signs, posting dates, ownership and overlapping source memberships.
+Known parser/account contracts and exact statement equations gate kernel evidence;
+unknown contracts, date/balance exceptions and other account types remain explicit.
+
+Restored verified expense categories generate balanced, unposted expense/refund
+proposals. Category verification remains separate from accounting review. Proposals
+cannot claim review, partially allocate an observation, duplicate its consumption,
+or rename an existing proposal for the same observation. Immutable registration is
+transactional and retryable after interruption. No income/transfer interpretation,
+opening position, reconciliation certification or balancing adjustment is inferred.
+Endpoint provenance remains conservatively assumed until independently established.
+
+The accepted private rebuild passed all in-scope statement equations. Two independent
+proposal runs produced identical plan/database bytes and completion reports. Every
+original source/category/asset-value table and original account mapping remained
+unchanged. Posted journal, allocation, review and reconciliation tables stayed empty.
+Private counts, identities, monetary amounts and artifact hashes remain in ignored
+storage. The live database and normal application were not changed.
+
+Windows verification: **776 tests passed, 3 skipped** in 141.46 seconds with offscreen
+Qt and process-only `RemoteSigned` for the builder probe. The **26 new focused tests**
+cover cash/card purchase/refund signs, overlaps, category ownership, source exceptions,
+exact allocation, review separation, immutable replay, interrupted registration,
+checksum rejection and independent-copy preservation. Ruff lint/format passed across
+**203 files**. No dependency, server, packaging or GUI change was introduced. Ordinary
+proposal review/posting controls and owner Windows acceptance are the next checkpoint;
+broader interpretation workflows and report cutover remain unfinished.
+
 ## Historical parser compatibility and complete annotation preservation — September 27, 2026
 
 The owner approved repairing historical source compatibility and continuing the
