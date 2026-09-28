@@ -178,6 +178,38 @@ it cannot establish accounting correctness by itself.
 
 ## Migration and rollout
 
+### Verified expense categories during a fresh rebuild
+
+The owner is considering a breaking database rebuild through local statement
+archive replay to simplify legacy conversion. Preservation of verified expense
+categorization is required for that path; the original database/archive remain
+retained throughout. Fresh parsing must not erase the owner's completed review work.
+
+Carry category definitions and hierarchy through an explicit identity mapping.
+On an unambiguous canonical transaction match, restore both the expense category
+and its category-level verified assertion, recording the legacy decision and match
+evidence. The user should not have to reconfirm that category merely because the
+transaction was reparsed. Ledger interpretation, transfer confirmation and statement
+reconciliation remain separate assertions; preserving category verification cannot
+silently certify them. Automatic categorization must not replace restored verified
+decisions.
+
+Match using established account identity, source-file/statement membership and
+exact transaction evidence. Dates and amounts alone are insufficient; positional
+row IDs can shift after parser fixes. Repeated/overlapping statements must converge
+on one canonical transaction. Changed descriptions, duplicate indistinguishable
+rows, split/merged parser output and other ambiguous matches require explicit
+review; fuzzy matching may suggest candidates but may not restore a verified flag.
+Manual-only records and verified expenses with no reimported counterpart remain
+visible exceptions, with their old annotations intact in retained evidence.
+
+Before cutover, the carry-forward report must account for every legacy verified
+expense as restored or pending with a reason. Check counts and exact amounts by
+account/category, preserve refunds, reject conflicting annotations and prove rerun
+idempotency. A partial transfer of annotations must never be reported as complete.
+
+### Existing staged rollout
+
 1. L1 audits a consistent read-only snapshot. Inventory schema, exact amounts,
    category review, source links, balance equations, coverage, and candidate
    transfers. Preserve private diagnostics locally. Resolve material exceptions
