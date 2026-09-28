@@ -203,6 +203,69 @@ class LedgerStore:
                 self._insert(entry, usage)
         return entry.key
 
+    def load_batch(
+        self,
+        accounts: list[LedgerAccount],
+        observations: list[Observation],
+        statements: list[StatementEvidence],
+        entries: list[JournalEntry],
+    ) -> None:
+        """Apply a deterministic shadow plan atomically, including replay checks.
+
+        Load validation context once rather than rereading all observations for
+        every entry. A bad item rolls back the entire batch, including mappings.
+        """
+        with self._transaction():
+            known_accounts = self.accounts()
+            known_observations = self.observations()
+            known_statements = dict(self.connection.execute("SELECT id,payload FROM LedgerStatements"))
+            known_entries = dict(self.connection.execute("SELECT key,payload FROM LedgerEntries"))
+            used = self.consumed()
+            for account in accounts:
+                account.validate()
+                if account.id in known_accounts:
+                    if known_accounts[account.id] != account:
+                        raise LedgerError("Account identity already has a different mapping.")
+                    continue
+                self.connection.execute(
+                    "INSERT INTO LedgerAccounts VALUES (?,?,?)",
+                    (account.id, account.source_account_id, encoded(asdict(account))),
+                )
+                known_accounts[account.id] = account
+            for observation in observations:
+                observation.validate(known_accounts)
+                if observation.id in known_observations:
+                    if known_observations[observation.id] != observation:
+                        raise LedgerError("Evidence identity already has different source facts.")
+                    continue
+                data = asdict(observation)
+                data["posting_date"] = observation.posting_date.isoformat()
+                self.connection.execute(
+                    "INSERT INTO LedgerObservations VALUES (?,?,?)",
+                    (observation.id, observation.account_id, encoded(data)),
+                )
+                known_observations[observation.id] = observation
+            for statement in statements:
+                statement.validate(known_accounts, known_observations)
+                payload = encoded(statement.payload())
+                if statement.id in known_statements:
+                    if known_statements[statement.id] != payload:
+                        raise LedgerError("Statement identity already has different source facts.")
+                    continue
+                self.connection.execute("INSERT INTO LedgerStatements VALUES (?,?)", (statement.id, payload))
+                known_statements[statement.id] = payload
+            for entry in entries:
+                payload = encoded(entry.payload())
+                if entry.key in known_entries:
+                    if known_entries[entry.key] != payload:
+                        raise LedgerError("Idempotency key already identifies different journal contents.")
+                    continue
+                usage = validate_entry(entry, known_accounts, known_observations, used)
+                self._insert(entry, usage)
+                for key, amount in usage.items():
+                    used[key] = used.get(key, 0) + amount
+                known_entries[entry.key] = payload
+
     def correct(self, original_key: str, replacement: JournalEntry, *, reason: str) -> str:
         """Atomically reverse and replace; release evidence only in the same transaction."""
         identifier(reason)
