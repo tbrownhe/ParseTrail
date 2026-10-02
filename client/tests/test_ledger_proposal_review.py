@@ -4,7 +4,7 @@ import sqlite3
 import pytest
 from parsetrail.core.ledger import LedgerError
 from parsetrail.core.ledger_candidates import create_candidates
-from parsetrail.core.ledger_proposal_review import ProposalReview, prepare_review
+from parsetrail.core.ledger_proposal_review import DEFAULT_ACCEPTANCE_REASON, ProposalReview, prepare_review
 from parsetrail.core.ledger_store import decode_entry
 from parsetrail.core.recovery_bundle import digest
 from parsetrail.gui.ledger_proposal_review import ProposalReviewWindow
@@ -61,7 +61,7 @@ def test_accept_post_and_reject_persist_without_changing_sources(workspace):
     [
         ([], "accepted", "reviewed"),
         (["proposal:bank_purchase"] * 2, "accepted", "reviewed"),
-        (["proposal:bank_purchase"], "accepted", " "),
+        (["proposal:bank_purchase"], "rejected", " "),
         (["proposal:bank_purchase"], "unknown", "reviewed"),
         (["proposal:bank_purchase", "missing"], "accepted", "reviewed"),
     ],
@@ -145,7 +145,8 @@ def test_filtered_selection_cancel_accept_and_reopen(app, workspace):
         window.page.table.selectRow(0)
         app.processEvents()
         assert "Card debt decreases by $5.00" in window.page.details.toPlainText()
-        assert not window.accept.isEnabled()
+        assert window.accept.isEnabled()
+        assert not window.reject.isEnabled()
         window.reason.setText("Refund confirmed")
         assert window.accept.isEnabled()
         window.confirm = lambda *_: False
@@ -169,6 +170,27 @@ def test_filtered_selection_cancel_accept_and_reopen(app, workspace):
         assert window.page.proxy.rowCount() == 1
         window.page.table.selectRow(0)
         assert "Decision reason: Refund confirmed" in window.page.details.toPlainText()
+        window.close()
+
+
+@pytest.mark.usefixtures("app")
+def test_accept_without_note_records_default_and_retries_once(workspace):
+    with ProposalReview(workspace[0]) as review:
+        window = ProposalReviewWindow(review)
+        window.page.search.setText("bank_purchase")
+        window.page.table.selectRow(0)
+        seen = []
+        window.confirm = lambda action, rows, reason: seen.append(reason) or True
+        window.accept.click()
+        assert seen == [DEFAULT_ACCEPTANCE_REASON]
+        assert review.decisions()["proposal:bank_purchase"]["reason"] == DEFAULT_ACCEPTANCE_REASON
+        before = list(review.store.connection.iterdump())
+        review.decide(["proposal:bank_purchase"], "accepted", "  ")
+        assert list(review.store.connection.iterdump()) == before
+        review.decide(["proposal:card_purchase"], "accepted")
+        assert review.decisions()["proposal:card_purchase"]["reason"] == DEFAULT_ACCEPTANCE_REASON
+        for (payload,) in review.store.connection.execute("SELECT payload FROM LedgerEntries"):
+            assert decode_entry(payload).reason == DEFAULT_ACCEPTANCE_REASON
         window.close()
 
 

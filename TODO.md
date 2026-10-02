@@ -148,11 +148,18 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   unverified; no opening positions or reconciliation certification are inferred.
   Ordinary proposal review/posting controls are implemented in a separate disposable
   workspace: filtered batch selection, explicit accept/post or reject decisions,
-  required reasons, cancel-safe confirmation and atomic persistent history.
-  [USER] Complete the [Windows review walkthrough](devtools/ledger_audit/PROPOSALS.md#windows-review-walkthrough)
-  before broader interpretation workflows or report cutover. Automated checks do not
-  establish owner acceptance. The active application and original proposals remain
-  unchanged; rejected movements need a later interpretation.
+  cancel-safe confirmation and atomic persistent history. The owner accepted the
+  [Windows review walkthrough](devtools/ledger_audit/PROPOSALS.md#windows-review-walkthrough)
+  on October 2. Ordinary acceptance now uses a standard audit reason unless an
+  optional note is supplied; rejection/corrections still require explanations.
+  The active application and original proposals remain unchanged; rejection means
+  the accounting interpretation needs work, not that the source movement disappears.
+  Next bounded service chunk: suggest transfer/card-payment counterparts from fresh
+  evidence, preserving account ownership, exact amounts and each source posting date.
+  Expose missing/multiple matches and already-allocated observations; do not infer
+  confirmation from old transfer labels or silently post suggestions. Follow with
+  confirmation controls and their Windows walkthrough before opening anchors,
+  reconciliation and report cutover.
 - [ ] **L5b — Ledger interpretation editing:** persist review decisions, confirmed
   transfers/splits, opening anchors, source corrections and reversal/replacement
   workflows; require a separate Windows native walkthrough before report cutover.

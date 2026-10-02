@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from parsetrail.core.ledger import LedgerError
+from parsetrail.core.ledger_proposal_review import DEFAULT_ACCEPTANCE_REASON
 from parsetrail.core.ledger_store import decode_entry
 from parsetrail.gui.ledger_preview import PreviewPage, money
 
@@ -52,7 +53,7 @@ class ProposalReviewWindow(QMainWindow):
         layout.addWidget(self.selection_summary)
         controls = QHBoxLayout()
         self.reason = QLineEdit()
-        self.reason.setPlaceholderText("Reason for this accounting decision (required)")
+        self.reason.setPlaceholderText("Optional acceptance note; reason required for rejection")
         controls.addWidget(self.reason, 1)
         self.accept = QPushButton("Accept and post selected…")
         self.reject = QPushButton("Reject selected…")
@@ -166,9 +167,9 @@ class ProposalReviewWindow(QMainWindow):
         self.selection_summary.setText(
             f"{len(rows):,} selected · Net expense effect: {money(sum(r['expense_minor'] for r in rows))}"
         )
-        enabled = bool(rows and self.reason.text().strip() and all(r["state"] == "pending" for r in rows))
+        enabled = bool(rows and all(r["state"] == "pending" for r in rows))
         self.accept.setEnabled(enabled)
-        self.reject.setEnabled(enabled)
+        self.reject.setEnabled(enabled and bool(self.reason.text().strip()))
 
     def confirm(self, action, rows, reason):
         verb = "Accept and post" if action == "accepted" else "Reject"
@@ -192,6 +193,8 @@ class ProposalReviewWindow(QMainWindow):
 
     def act(self, action):
         rows, reason = self.selected(), self.reason.text().strip()
+        if action == "accepted" and not reason:
+            reason = DEFAULT_ACCEPTANCE_REASON
         if not rows or not reason or any(r["state"] != "pending" for r in rows):
             return
         if not self.confirm(action, rows, reason):

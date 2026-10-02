@@ -35,9 +35,17 @@ cancel/accept/reject/filter/close/reopen and preserved all source/category/propo
 tables. A separate owner workspace was prepared with zero decisions or postings.
 Private screenshots, identities and artifact data remain ignored.
 
-**Owner Windows acceptance is pending.** No server, dependency, installer, active
-profile or report-cutover change occurred. The agent stops at the native walkthrough;
-broader interpretation editing follows only after this checkpoint is accepted.
+The owner subsequently confirmed the Windows workflow behaved as described on
+October 2, including cancel, accept/reject and persistence. Ordinary review/posting
+is accepted. The owner requested less friction for routine expenses: acceptance now
+uses "Accepted as ordinary expense/refund" when no optional note is supplied, while
+rejection and accounting corrections retain explanatory-reason requirements.
+The effective reason is displayed before confirmation and saved with both the
+decision and posting. **40 focused proposal/review tests passed** after this change,
+including default-note persistence, idempotent retries and note-required rejection;
+Ruff lint/format passed. This small follow-up has automated coverage, not a second
+native acceptance claim. No server, dependency, installer, active-profile or
+report-cutover change occurred. Transfer/card-payment interpretation is next.
 
 ## Fresh cash/card journal proposal service — September 27, 2026
 

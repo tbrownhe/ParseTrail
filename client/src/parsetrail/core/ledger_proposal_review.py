@@ -11,6 +11,8 @@ from parsetrail.core.ledger_rebuild import key
 from parsetrail.core.ledger_store import LedgerStore, decode_entry, encoded
 from parsetrail.core.recovery_bundle import digest
 
+DEFAULT_ACCEPTANCE_REASON = "Accepted as ordinary expense/refund"
+
 
 def prepare_review(candidates: Path, output: Path) -> Path:
     """Create a separately writable review copy; refuse overwrites and active inputs."""
@@ -107,8 +109,12 @@ class ProposalReview:
             for pid, action, reason, entry, when in self.store.connection.execute("SELECT * FROM ProposalDecisions")
         }
 
-    def decide(self, proposal_ids: list[str], action: str, reason: str) -> None:
+    def decide(self, proposal_ids: list[str], action: str, reason: str = "") -> None:
         """Accept/post or reject the entire batch. Exact retries do not duplicate history."""
+        if isinstance(reason, str):
+            reason = reason.strip()
+            if action == "accepted" and not reason:
+                reason = DEFAULT_ACCEPTANCE_REASON
         identifier(reason)
         if action not in {"accepted", "rejected"} or not proposal_ids or len(set(proposal_ids)) != len(proposal_ids):
             raise LedgerError("Choose distinct proposals and an explicit accept or reject decision.")

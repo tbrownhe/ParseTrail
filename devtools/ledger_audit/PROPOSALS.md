@@ -102,8 +102,9 @@ The window shows pending, posted and rejected proposals with source statement
 filenames, retained category verification, financial-account effects and both
 postings. Dates run newest first. Text filtering searches all displayed columns;
 Ctrl/Shift selects multiple rows, and Ctrl+A selects the currently visible rows.
-Changing filters clears selection. A nonempty reason and pending selection enable
-the actions. The confirmation shows the selected count, proposed expense effect,
+Changing filters clears selection. Pending selection enables acceptance; an optional
+note overrides the standard audit reason, "Accepted as ordinary expense/refund".
+Rejection requires a nonempty explanation. The confirmation shows the selected count, proposed expense effect,
 reason and expandable row details; Cancel is the default.
 
 **Accept and post** validates the journal against current kernel evidence usage,
@@ -112,6 +113,10 @@ one transaction. **Reject** records the reason without posting or consuming anyt
 The entire selected batch commits or rolls back. Exact service retries are idempotent;
 conflicting/stale decisions and already-consumed evidence fail without partial writes.
 Historical category assertions and proposal payloads are never rewritten.
+
+Rejecting a proposal rejects its expense/refund interpretation, not the existence
+of the statement charge. Suspected fraud and asset purchases still retain their
+source movements and need appropriate accounting treatment in a later workflow.
 
 Decisions are final in this bounded workflow. Posted corrections will use the later
 reversal/replacement workflow; rejected movements await a new interpretation. Neither
@@ -124,7 +129,7 @@ Use a fresh prepared owner copy; there is no need to review the entire history n
 
 1. Filter for a familiar ordinary purchase. Select it and check the source account,
    category, amount and cash/card effect in the details pane.
-2. Enter a reason, click **Accept and post selected**, then **Cancel**. It must remain
+2. Optionally enter a note, click **Accept and post selected**, then **Cancel**. It must remain
    pending. Repeat and confirm; find it under **Posted** with the saved reason.
 3. Select a different pending row and reject it with a test reason. It must appear
    under **Rejected** while its source evidence and category remain visible.
@@ -139,6 +144,8 @@ For automated accept/reject/filter/reopen checks on a **new test copy**, pass
 and one posting only in that disposable workspace, and saves a private screenshot.
 It is not owner acceptance. Never use the smoke copy as the untouched owner copy.
 
-Owner Windows acceptance is pending. Confirmed transfers/splits, opening positions,
+The owner accepted the Windows walkthrough on October 2, 2026. The subsequent
+optional-acceptance-note change passed focused automated checks; no repeated native
+walkthrough is claimed. Confirmed transfers/splits, opening positions,
 source corrections, reversal/replacement workflows and ledger-backed reports follow
 separately after this checkpoint.
