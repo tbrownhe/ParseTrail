@@ -146,9 +146,13 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   pass on synthetic fixtures and the accepted private rebuild. Unknown interpretations,
   zero rows and accounts outside this scope remain explicit. Balance endpoints remain
   unverified; no opening positions or reconciliation certification are inferred.
-  Next bounded chunk: review/posting controls for ordinary proposals, with explicit
-  accept/reject decisions and Windows owner acceptance before broader interpretation
-  workflows or report cutover.
+  Ordinary proposal review/posting controls are implemented in a separate disposable
+  workspace: filtered batch selection, explicit accept/post or reject decisions,
+  required reasons, cancel-safe confirmation and atomic persistent history.
+  [USER] Complete the [Windows review walkthrough](devtools/ledger_audit/PROPOSALS.md#windows-review-walkthrough)
+  before broader interpretation workflows or report cutover. Automated checks do not
+  establish owner acceptance. The active application and original proposals remain
+  unchanged; rejected movements need a later interpretation.
 - [ ] **L5b — Ledger interpretation editing:** persist review decisions, confirmed
   transfers/splits, opening anchors, source corrections and reversal/replacement
   workflows; require a separate Windows native walkthrough before report cutover.

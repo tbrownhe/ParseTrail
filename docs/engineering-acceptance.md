@@ -1,10 +1,43 @@
 # Engineering acceptance record
 
 This document preserves durable acceptance evidence previously embedded in the
-July-September 2026 TODO. It records completed work, not a new live-system audit.
+July-October 2026 TODO. It records completed work, not a new live-system audit.
 Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
+
+## Ordinary proposal review and posting — October 2, 2026
+
+The owner authorized the next TODO chunk. The
+[ordinary proposal review workflow](../devtools/ledger_audit/PROPOSALS.md#ordinary-proposal-review-and-posting)
+creates a separate writable workspace from checksum-verified unposted proposals.
+The workspace binds to the original proposal plan; reopening checks integrity,
+foreign keys and proposal identity without treating the writable database as an
+unchanged snapshot. Original proposal/evidence artifacts and the active profile
+remain untouched.
+
+The window supports pending/posted/rejected filters, text search, multi-row selection,
+source statements and plain-language cash/card effects alongside debit/credit details.
+Required reasons and cancel-default confirmation precede writes. Acceptance posts a
+reviewed entry and records the decision in one transaction; rejection records its
+reason without allocating evidence. Kernel validation preserves exact balance,
+ownership, signs, dates and allocation limits. Whole-batch rollback, identical retries
+and stale/conflicting decisions are covered. Proposals and category assertions remain
+immutable; these controls do not implement corrections, transfers or opening anchors.
+
+Windows verification: **789 tests passed, 3 skipped** in 164.07 seconds, with offscreen
+Qt and process-only `RemoteSigned` for the builder probe. The **13 new tests** include
+filtered selection, confirmation cancellation, posting/rejection persistence,
+concurrent conflicting decisions, duplicate evidence consumption, malformed batches,
+mid-batch database failure, checksum rejection and workspace identity. Ruff lint and
+format passed across **207 files**. A private archive-sized offscreen smoke completed
+cancel/accept/reject/filter/close/reopen and preserved all source/category/proposal
+tables. A separate owner workspace was prepared with zero decisions or postings.
+Private screenshots, identities and artifact data remain ignored.
+
+**Owner Windows acceptance is pending.** No server, dependency, installer, active
+profile or report-cutover change occurred. The agent stops at the native walkthrough;
+broader interpretation editing follows only after this checkpoint is accepted.
 
 ## Fresh cash/card journal proposal service — September 27, 2026
 
