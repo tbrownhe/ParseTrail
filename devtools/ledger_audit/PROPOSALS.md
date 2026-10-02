@@ -144,8 +144,11 @@ For automated accept/reject/filter/reopen checks on a **new test copy**, pass
 and one posting only in that disposable workspace, and saves a private screenshot.
 It is not owner acceptance. Never use the smoke copy as the untouched owner copy.
 
-The owner accepted the Windows walkthrough on October 2, 2026. The subsequent
+The owner accepted the Windows walkthrough on October 2, 2026, and clarified that
+this was UI acceptance rather than approval of the test accounting decisions.
+Keep those decisions confined to their disposable workspace. The subsequent
 optional-acceptance-note change passed focused automated checks; no repeated native
-walkthrough is claimed. Confirmed transfers/splits, opening positions,
+walkthrough is claimed. The [transfer/card-payment review](TRANSFERS.md) is the next
+implemented checkpoint, awaiting its own Windows check. Splits, opening positions,
 source corrections, reversal/replacement workflows and ledger-backed reports follow
 separately after this checkpoint.

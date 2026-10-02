@@ -6,6 +6,51 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## Transfer and card-payment matching/review — October 2, 2026
+
+The owner clarified that earlier disposable ordinary-review decisions exercised the
+UI rather than certifying accounting interpretations, then authorized transfer/card
+payment handling. The [new workflow](../devtools/ledger_audit/TRANSFERS.md) starts from
+a fresh copy of verified unposted candidates; prior test decisions are not migrated.
+
+Candidate generation uses eligible cash/card evidence, exact opposite amounts,
+matching currency, distinct owned accounts and a configurable 0–31-day posting-date
+window. It exposes unique/ambiguous candidates, pending expense conflicts, allocated
+movements and missing candidates without automatically matching from labels or
+verification flags. Unsupported loans, investments, cash advances, card-to-card
+activity, fees and partial settlements remain outside this interpretation workflow.
+Repeated source membership does not duplicate an economic movement.
+
+Explicit confirmation atomically records a reviewed balanced journal, evidence usage
+and event links. Same-day pairs use one entry; different-date pairs use two entries
+through dedicated transfer clearing, preserving each source date and the intermediate
+in-transit balance, including when the receiving bank posts first. Both forms have
+zero expense/income effect. Failure rolls back clearing creation, both dated entries,
+allocations and the decision. Whole or partial prior allocations block reuse. A pending
+expense proposal must be rejected explicitly before its evidence can become a transfer;
+the historical verified category remains intact. Dismissal affects only the pairing.
+
+The UI shows both observations and source statements, candidate/decision filters,
+all-source movement allocation states, and an ordinary-interpretation tab for conflicts.
+Confirmation has an optional note and a standard audit reason; dismissal requires an
+explanation. Cancellation, stale allocation checks and persisted decisions are covered.
+The window explicitly identifies itself as a disposable workflow test. Different-date
+confirmation, dismissal, filtering and close/reopen passed an archive-sized offscreen
+smoke. A separate owner copy has zero decisions/postings and byte-equivalent contents
+for every original table; matching is deterministic and does not write to that copy.
+Private candidate counts, artifacts and screenshots remain ignored.
+
+Windows verification: **809 tests passed, 3 skipped** in 137.53 seconds with offscreen
+Qt and process-only `RemoteSigned` for the builder probe. **19 new tests** cover exact
+matching, ambiguous alternatives, source overlap, same-account/fee exclusions, source
+scope, conflicting expense review, partial allocations, same-day and month-crossing
+postings, idempotency, transactional failure, GUI selection/cancellation/dismissal,
+cross-tab conflict resolution and persistence. Ruff lint/format passed across **210
+files**. No server, dependency, packaging, live-profile or report-cutover change occurred.
+
+**Windows owner acceptance of the transfer workflow is pending.** Opening anchors,
+split/correction workflows, independent reconciliation and report cutover remain open.
+
 ## Ordinary proposal review and posting — October 2, 2026
 
 The owner authorized the next TODO chunk. The

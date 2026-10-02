@@ -154,12 +154,15 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   optional note is supplied; rejection/corrections still require explanations.
   The active application and original proposals remain unchanged; rejection means
   the accounting interpretation needs work, not that the source movement disappears.
-  Next bounded service chunk: suggest transfer/card-payment counterparts from fresh
-  evidence, preserving account ownership, exact amounts and each source posting date.
-  Expose missing/multiple matches and already-allocated observations; do not infer
-  confirmation from old transfer labels or silently post suggestions. Follow with
-  confirmation controls and their Windows walkthrough before opening anchors,
-  reconciliation and report cutover.
+  The [transfer/card-payment service and review](devtools/ledger_audit/TRANSFERS.md)
+  now suggest exact opposite movements on distinct owned cash/card accounts, exposing
+  missing/multiple candidates, expense conflicts and existing allocations. Confirmation
+  posts atomically: one same-day entry or two source-dated entries through clearing.
+  No expense/income, balancing adjustment or automatic transfer confirmation is inferred.
+  [USER] Complete the Windows transfer workflow check on a fresh disposable copy.
+  Earlier ordinary-review test decisions are UI exercises, not accounting decisions
+  to carry into rebuilt books. Opening anchors, broader split/correction workflows,
+  reconciliation and report cutover remain after this checkpoint.
 - [ ] **L5b — Ledger interpretation editing:** persist review decisions, confirmed
   transfers/splits, opening anchors, source corrections and reversal/replacement
   workflows; require a separate Windows native walkthrough before report cutover.
