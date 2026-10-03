@@ -33,8 +33,9 @@ single test passed on rerun with process-only `RemoteSigned` in 0.47 seconds, fo
 
 The new focused UI/inventory tests cover purchase/refund signs, exact decimal input,
 required reasons, split totals and no-op rejection, preview invalidation, cancellation,
-active/superseded history, stale concurrent corrections and persistence. The owner Windows
-preview/cancel/apply/persistence walkthrough is pending. No dependency, schema migration,
+active/superseded history, stale concurrent corrections and persistence. The owner accepted
+the Windows walkthrough without errors on October 3 and authorized continued work.
+Sample choices remain disposable workflow tests. No dependency, schema migration,
 server, live-profile change or report cutover was introduced.
 
 ## Ordinary expense/refund correction service — October 3, 2026

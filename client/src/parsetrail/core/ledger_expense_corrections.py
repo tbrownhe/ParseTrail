@@ -11,6 +11,42 @@ from parsetrail.core.ledger_store import decode_entry, encoded
 RULE = "expense-correction-1"
 
 
+def expense_split(store, accounts, observation, splits):
+    """Validate exact expense counterparts shared by new interpretations and corrections."""
+    c = store.connection
+    if not isinstance(splits, (list, tuple)) or not splits:
+        raise LedgerError("Provide one or more exact expense category amounts.")
+    normalized = []
+    for part in splits:
+        if not isinstance(part, (list, tuple)) or len(part) != 2 or type(part[0]) is not int:
+            raise LedgerError("Each split requires an integer category identity and positive minor units.")
+        cid, amount = part
+        minor_units(amount)
+        if amount < 0:
+            raise LedgerError("Split amounts must be positive; the source determines expense versus refund signs.")
+        normalized.append((cid, amount))
+    normalized.sort()
+    if len({cid for cid, _ in normalized}) != len(normalized):
+        raise LedgerError("Combine repeated categories into one split amount.")
+    if sum(amount for _, amount in normalized) != abs(observation.amount_minor):
+        raise LedgerError("Split amounts must exactly equal the whole source movement.")
+    definitions = {cid: json.loads(payload) for cid, payload in c.execute("SELECT id,payload FROM CategoryDefinitions")}
+    mappings, postings = [], []
+    for cid, amount in normalized:
+        category = definitions.get(cid)
+        if not category or category["Type"] != "Expense":
+            raise LedgerError(
+                "Choose an existing expense category; income and financial accounts are outside this scope."
+            )
+        account = LedgerAccount(f"category:{cid}", category["Name"], AccountKind.EXPENSE, observation.currency)
+        account.validate()
+        if account.id in accounts and accounts[account.id] != account:
+            raise LedgerError("Expense category account mapping conflicts with the retained definition.")
+        mappings.append(asdict(account))
+        postings.append(Posting(account.id, amount if observation.amount_minor < 0 else -amount))
+    return normalized, mappings, postings
+
+
 class ExpenseCorrections:
     """Preserve the whole financial observation; only its expense counterparts change.
 
@@ -48,38 +84,7 @@ class ExpenseCorrections:
         scoped = {a["id"] for a in self.review.plan["accounts"] if a["source_account_id"] is not None}
         movement, counterparts = self._movement(original, accounts, observations, scoped)
         observation = observations[movement.allocations[0].observation_id]
-        if not isinstance(splits, (list, tuple)) or not splits:
-            raise LedgerError("Provide one or more exact expense category amounts.")
-        normalized = []
-        for part in splits:
-            if not isinstance(part, (list, tuple)) or len(part) != 2 or type(part[0]) is not int:
-                raise LedgerError("Each split requires an integer category identity and positive minor units.")
-            cid, amount = part
-            minor_units(amount)
-            if amount < 0:
-                raise LedgerError("Split amounts must be positive; the source determines expense versus refund signs.")
-            normalized.append((cid, amount))
-        normalized.sort()
-        if len({cid for cid, _ in normalized}) != len(normalized):
-            raise LedgerError("Combine repeated categories into one split amount.")
-        if sum(amount for _, amount in normalized) != abs(movement.amount_minor):
-            raise LedgerError("Split amounts must exactly equal the whole source movement.")
-        definitions = {
-            cid: json.loads(payload) for cid, payload in c.execute("SELECT id,payload FROM CategoryDefinitions")
-        }
-        mappings, postings = [], []
-        for cid, amount in normalized:
-            category = definitions.get(cid)
-            if not category or category["Type"] != "Expense":
-                raise LedgerError(
-                    "Choose an existing expense category; income and financial accounts are outside this scope."
-                )
-            account = LedgerAccount(f"category:{cid}", category["Name"], AccountKind.EXPENSE, observation.currency)
-            account.validate()
-            if account.id in accounts and accounts[account.id] != account:
-                raise LedgerError("Expense category account mapping conflicts with the retained definition.")
-            mappings.append(asdict(account))
-            postings.append(Posting(account.id, amount if movement.amount_minor < 0 else -amount))
+        normalized, mappings, postings = expense_split(store, accounts, observation, splits)
         if sorted((p.account_id, p.amount_minor) for p in counterparts) == sorted(
             (p.account_id, p.amount_minor) for p in postings
         ):

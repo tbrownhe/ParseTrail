@@ -3,7 +3,8 @@
 `ExpenseCorrections` provides a read-only preview and atomic application for changing
 the expense-category counterparts of an already posted cash/card purchase or refund.
 It follows the accepted [reconciliation review](RECONCILIATION.md). The service and
-disposable correction editor are implemented; owner Windows acceptance is pending.
+disposable correction editor passed owner Windows workflow/persistence acceptance on
+October 3, 2026. Test choices remain disposable, not approval of actual financial history.
 
 The caller selects an active imported ordinary entry, one or more existing expense
 categories, exact positive minor-unit amounts, and a required explanation. Split amounts
