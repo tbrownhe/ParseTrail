@@ -122,5 +122,7 @@ This accepts **UI behavior only**, not the financial assertions entered in the t
    **Estimated posting dates** and disabled. Closing the window and reopening with
    the command above must retain the saved source review and opening statuses.
 
-Native workflow acceptance is pending. The automated exercise uses a different copy;
-the owner copy begins with no source assertions, opening decisions or posted journals.
+The owner accepted this Windows workflow and persistence on October 2, 2026. This
+accepts UI behavior only; sample financial assertions remain confined to the disposable
+copy. The automated exercise used a different copy, and the owner copy began with no
+source assertions, opening decisions or posted journals.

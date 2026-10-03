@@ -30,12 +30,13 @@ openings, prior-posting conflicts, atomic rollback, stale/concurrent source revi
 immutable history, invalid/tampered evidence, date-label consumers, cancellation and
 persistence. Ruff lint/format passed across **216 files**. An archive-sized offscreen
 exercise passed cancellation, source review, nonzero/zero confirmation and reopen;
-its screenshot was inspected. A separate owner copy preserves every original table
-and has no source assertions, opening decisions, journals or allocations. Private
+its screenshot was inspected. A separate owner copy initially preserved every original
+table and had no source assertions, opening decisions, journals or allocations. Private
 financial data and artifacts remain ignored.
 
-Owner Windows workflow acceptance is pending. This checkpoint accepts implementation
-checks, not actual financial assertions or report cutover. Raw reconciliation still
+The owner accepted the Windows opening workflow and persistence on October 2,
+confirming that it worked as intended. This accepts UI behavior, not the disposable
+sample financial assertions or report cutover. Raw reconciliation still
 uses unverified endpoint provenance; connecting the reviewed view to independent,
 date-aware reconciliation is next. Coverage gaps, correction/split workflows and
 other account scopes remain open. No dependency, server or live-profile change occurred.

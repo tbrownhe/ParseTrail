@@ -171,9 +171,11 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   nonzero openings use opening equity, and zero openings record no journal.
   Estimated dates remain visible in ordinary/transfer details; later source-review
   changes mark affected opening decisions stale. Raw evidence and gaps are preserved.
-  Pending: owner Windows opening-workflow and persistence acceptance. Then connect
-  reviewed provenance to independent reconciliation, retaining estimated-date and
-  coverage limits. Broader split/correction workflows and report cutover remain open.
+  The owner accepted the Windows opening workflow and persistence on October 2.
+  These disposable sample decisions are workflow tests, not financial attestations.
+  Next connect reviewed provenance to independent reconciliation, retaining
+  estimated-date and coverage limits. Broader split/correction workflows and report
+  cutover remain open.
 - [ ] **L5b — Ledger interpretation editing:** persist review decisions, confirmed
   transfers/splits, opening anchors, source corrections and reversal/replacement
   workflows; require a separate Windows native walkthrough before report cutover.
