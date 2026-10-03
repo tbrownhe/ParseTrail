@@ -198,7 +198,8 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   sample decisions remain disposable tests. The next bounded chunk explicitly classifies
   wholly unallocated cash/card evidence as an expense/refund with exact category splits,
   preserving rejected proposal history. Its [service](devtools/ledger_audit/EXPENSE_INTERPRETATIONS.md)
-  is implemented; next is its preview/post UI and owner Windows acceptance.
+  and Unposted movements tab are implemented; next is owner Windows
+  preview/cancel/post/persistence acceptance on a fresh disposable copy.
   Income, transfer/clearing, loan, asset, opening and source corrections remain separate scopes.
 - [ ] **CF2 — Ledger-backed cash-flow contract:** after L1–L5, define account scope, income,
   purchases, refunds, internal transfers, card payments, and loan treatment.

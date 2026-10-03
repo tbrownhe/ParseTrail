@@ -44,6 +44,7 @@ class ExpenseCorrectionDialog(QDialog):
         super().__init__(parent)
         self.service, self.record = service, record
         self.plan, self.result_key = None, None
+        self.confirmation_title = "Apply expense/refund correction"
         self.setWindowTitle("Preview expense/refund correction — disposable copy")
         self.resize(880, 760)
         layout = QVBoxLayout(self)
@@ -61,6 +62,7 @@ class ExpenseCorrectionDialog(QDialog):
         notice.setTextFormat(Qt.TextFormat.PlainText)
         notice.setWordWrap(True)
         layout.addWidget(notice)
+        self.notice = notice
         definitions = {
             cid: json.loads(payload)
             for cid, payload in service.store.connection.execute("SELECT id,payload FROM CategoryDefinitions")
@@ -161,6 +163,10 @@ class ExpenseCorrectionDialog(QDialog):
             self.error.setText(str(exc))
             return
         self.error.clear()
+        self.preview_text.setPlainText("\n".join(self.preview_lines()))
+        self.apply.setEnabled(True)
+
+    def preview_lines(self):
         lines = [
             "Current category amounts:",
             *[f"  {c['name']}: {money(c['amount_minor'])}" for c in self.record["categories"]],
@@ -179,17 +185,19 @@ class ExpenseCorrectionDialog(QDialog):
             "Previous reconciliation checks become stale.",
             f"Reason: {self.plan['reason']}",
         ]
-        self.preview_text.setPlainText("\n".join(lines))
-        self.apply.setEnabled(True)
+        return lines
 
-    def confirm(self):
-        dialog = QMessageBox(self)
-        dialog.setWindowTitle("Apply expense/refund correction")
-        dialog.setTextFormat(Qt.TextFormat.PlainText)
-        dialog.setText(
+    def confirm_message(self):
+        return (
             "Apply this preview in the disposable copy?\n\nThe original journal will be reversed and replaced.\n"
             f"Financial movement: {money(self.record['amount_minor'])} (unchanged)\nReason: {self.plan['reason']}"
         )
+
+    def confirm(self):
+        dialog = QMessageBox(self)
+        dialog.setWindowTitle(self.confirmation_title)
+        dialog.setTextFormat(Qt.TextFormat.PlainText)
+        dialog.setText(self.confirm_message())
         dialog.setDetailedText(self.preview_text.toPlainText())
         dialog.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
         dialog.setDefaultButton(QMessageBox.StandardButton.Cancel)
@@ -208,9 +216,10 @@ class ExpenseCorrectionDialog(QDialog):
 
 
 class ExpenseCorrectionWindow(QMainWindow):
-    def __init__(self, review):
+    def __init__(self, review, *, interpretations=False):
         super().__init__()
         self.review, self.service = review, ExpenseCorrections(review)
+        self.interpretations = None
         self.setWindowTitle("ParseTrail — Expense correction workflow test (disposable copy)")
         self.resize(1350, 900)
         body = QWidget()
@@ -248,6 +257,19 @@ class ExpenseCorrectionWindow(QMainWindow):
         self.page.table.selectionModel().selectionChanged.connect(self.selection_changed)
         self.tabs.currentChanged.connect(self.tab_changed)
         self.refresh()
+        if interpretations:
+            from parsetrail.gui.ledger_expense_interpretations import ExpenseInterpretationPage
+
+            self.setWindowTitle("ParseTrail — Expense interpretation workflow test (disposable copy)")
+            self.interpretations = ExpenseInterpretationPage(review, self.show_posted, self)
+            self.tabs.addTab(self.interpretations, "Unposted movements")
+            self.tabs.setCurrentIndex(2)
+
+    def show_posted(self, entry_key):
+        self.tabs.setCurrentIndex(0)
+        self.filter.setCurrentText("Active")
+        self.page.search.clear()
+        self.refresh(keep=entry_key)
 
     def selected(self):
         rows = self.page.table.selectionModel().selectedRows()
@@ -319,10 +341,14 @@ class ExpenseCorrectionWindow(QMainWindow):
         self.edit.setEnabled(bool(self.tabs.currentIndex() == 0 and selected and selected["record"]["active"]))
 
     def tab_changed(self, index):
+        self.filter.setEnabled(index == 0)
+        self.reload.setEnabled(index == 0)
         if index == 0:
             self.refresh()
-        else:
+        elif index == 1:
             self.ordinary.refresh()
+        elif self.interpretations:
+            self.interpretations.refresh()
         self.selection_changed()
 
     def edit_entry(self):

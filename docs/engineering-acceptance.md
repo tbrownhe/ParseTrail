@@ -6,6 +6,51 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## Unposted expense/refund interpretation service and UI — October 3, 2026
+
+After accepting the correction editor, the owner authorized the next ledger chunk.
+The [interpretation service and UI](../devtools/ledger_audit/EXPENSE_INTERPRETATIONS.md)
+explicitly classify wholly unallocated eligible cash/card evidence without an ordinary
+proposal, or after explicit rejection of that proposal. No expense classification is
+inferred from inclusion in the list. Pending proposals, source exceptions, other account
+types and partially/wholly allocated evidence remain outside this workflow.
+
+Exact category splits preserve the complete source movement, date, description and event.
+Ordinary new classifications have an optional note; reinterpreting a rejected proposal
+requires a reason. Preview binds the source/proposal state, date provenance and category
+mappings. Apply rechecks these inputs and atomically saves category mappings, one balanced
+reviewed journal, evidence consumption and an append-only interpretation plan. Exact
+retries survive reopen and later corrections without duplicating or resurrecting journals.
+Source evidence, verified annotations and original rejection history are preserved.
+
+The new Unposted movements tab provides searchable unclassified/rejected rows, provenance,
+prior rejection/category details and explicit category selection. Preview reports the
+expense/refund and financial movement being added. Form edits invalidate preview;
+cancellation and closing write nothing. Posting selects the active entry in the accepted
+correction editor and removes it from the unposted list. Historical proposal decisions
+remain distinct from current postings.
+
+The archive-sized offscreen exercise passed rejection, preview/cancel, cancelled final
+confirmation, posting, history and reopen; screenshots were inspected. A fresh owner copy
+preserves all original candidate tables and starts with no decisions, journals, allocations
+or interpretations; integrity and foreign-key checks passed. Private source identifiers,
+amounts and screenshots stay ignored. Sample choices are workflow tests, not approvals of
+the owner's financial history. Native Windows acceptance is pending.
+
+Windows verification: **929 tests passed, 3 skipped** in 173.28 seconds with offscreen
+Qt and process-only `RemoteSigned`. **18 new service cases** and **5 new GUI cases**
+passed; the focused new/existing editor suite passed **20 tests**. Ruff lint/format
+passed across **230 files**.
+
+The focused tests cover expense/refund signs, optional/required reasons, exact splits,
+read-only preview/inventory, scope rejection, stale/tampered plans, competing transfer and
+partial postings, duplicate interpretations, rollback including schema/category creation,
+preserved source/category history, retry/reopen, correction chains and reconciliation
+invalidation. GUI tests cover explicit category choice, preview invalidation, cancel/post,
+stale transfer handling, filter clearing, history and persistence. The isolated workspace
+gains an append-only interpretation table on first posting; no active-profile migration,
+dependency, server change or financial report cutover is introduced.
+
 ## Ordinary expense/refund correction editor — October 3, 2026
 
 The owner authorized implementation of the next ledger chunk without routine check-ins.

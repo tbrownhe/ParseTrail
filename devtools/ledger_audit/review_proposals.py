@@ -22,6 +22,9 @@ def main():
     modes.add_argument(
         "--corrections", action="store_true", help="Preview and apply ordinary expense/refund category corrections."
     )
+    modes.add_argument(
+        "--interpretations", action="store_true", help="Explicitly classify unposted cash/card expenses and refunds."
+    )
     parser.add_argument(
         "--readiness", type=Path, help="Verified opening-readiness folder, required for a new opening workspace."
     )
@@ -67,10 +70,10 @@ def main():
             families = QFontDatabase.applicationFontFamilies(font_id)
             if families:
                 app.setFont(QFont(families[0], 10))
-        if args.corrections:
+        if args.corrections or args.interpretations:
             from parsetrail.gui.ledger_expense_corrections import ExpenseCorrectionWindow
 
-            window = ExpenseCorrectionWindow(review)
+            window = ExpenseCorrectionWindow(review, interpretations=args.interpretations)
         elif args.reconciliation:
             from parsetrail.core.ledger_opening_review import OpeningReview
             from parsetrail.gui.ledger_reconciliation_review import ReconciliationReviewWindow
@@ -89,7 +92,50 @@ def main():
         else:
             window = ProposalReviewWindow(review)
         window.show()
-        if args.smoke and args.corrections:
+        if args.smoke and args.interpretations:
+            from parsetrail.gui.ledger_expense_interpretations import ExpenseInterpretationDialog
+            from PySide6.QtCore import QTimer
+
+            window.tabs.setCurrentIndex(1)
+            index = next(i for i, r in enumerate(window.ordinary.page.model.records) if r["expense_minor"] > 1)
+            window.ordinary.page.table.selectRow(index)
+            window.ordinary.reason.setText("Disposable reinterpretation exercise; not financial approval")
+            window.ordinary.confirm = lambda *_: True
+            window.ordinary.reject.click()
+            window.tabs.setCurrentIndex(2)
+            page = window.interpretations
+            page.filter.setCurrentText("Rejected proposal")
+            page.page.table.selectRow(0)
+
+            def exercise_interpretation(save):
+                dialog = app.activeModalWidget()
+                assert isinstance(dialog, ExpenseInterpretationDialog)
+                assert dialog.table.cellWidget(0, 0).currentIndex() == -1
+                dialog.table.cellWidget(0, 0).setCurrentIndex(0)
+                dialog.reason.setText("Disposable explicit expense interpretation; not financial approval")
+                dialog.preview.click()
+                assert dialog.apply.isEnabled()
+                if not save:
+                    dialog.close()
+                    return
+                dialog.grab().save(str(args.folder / "interpretation-preview-smoke.png"))
+                dialog.confirm = lambda: False
+                dialog.apply.click()
+                assert review.store.connection.execute("SELECT count(*) FROM LedgerEntries").fetchone() == (0,)
+                dialog.confirm = lambda: True
+                dialog.apply.click()
+
+            QTimer.singleShot(0, lambda: exercise_interpretation(False))
+            page.interpret.click()
+            assert review.store.connection.execute("SELECT count(*) FROM LedgerEntries").fetchone() == (0,)
+            page.page.table.selectRow(0)
+            QTimer.singleShot(0, lambda: exercise_interpretation(True))
+            page.interpret.click()
+            assert window.tabs.currentIndex() == 0 and window.selected()["record"]["active"]
+            app.processEvents()
+            window.grab().save(str(args.folder / "review-smoke.png"))
+            window.close()
+        elif args.smoke and args.corrections:
             from parsetrail.gui.ledger_expense_corrections import ExpenseCorrectionDialog
             from PySide6.QtCore import QTimer
 
@@ -262,7 +308,19 @@ def main():
         else:
             return app.exec()
     with ProposalReview(args.folder) as reopened:
-        if args.corrections:
+        if args.interpretations:
+            from parsetrail.gui.ledger_expense_corrections import ExpenseCorrectionWindow
+
+            window = ExpenseCorrectionWindow(reopened, interpretations=True)
+            window.interpretations.filter.setCurrentText("Rejected proposal")
+            assert not window.interpretations.page.model.records
+            assert not window.interpretations.interpret.isEnabled()
+            window.tabs.setCurrentIndex(0)
+            assert len(window.page.model.records) == 1
+            assert next(iter(reopened.decisions().values()))["action"] == "rejected"
+            assert reopened.store.connection.execute("SELECT count(*) FROM ExpenseInterpretations").fetchone() == (1,)
+            window.close()
+        elif args.corrections:
             from parsetrail.gui.ledger_expense_corrections import ExpenseCorrectionWindow
 
             window = ExpenseCorrectionWindow(reopened)
