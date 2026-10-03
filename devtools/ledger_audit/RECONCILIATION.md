@@ -140,5 +140,6 @@ The owner copy starts from unposted candidates, so unresolved balances are expec
 4. Inspect a Chase source: posting dates must remain **Estimated posting dates**, with
    that control disabled. Neither source review nor recalculation posts journals.
 
-Owner Windows acceptance is pending. Automated workflow artifacts and owner test
+The owner accepted the Windows workflow, persistence and source-review visibility on
+October 3, 2026. Automated workflow artifacts and owner test
 decisions remain in separate disposable workspaces; no live profile is changed.

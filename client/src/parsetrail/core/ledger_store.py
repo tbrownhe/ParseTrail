@@ -271,45 +271,51 @@ class LedgerStore:
 
     def correct(self, original_key: str, replacement: JournalEntry, *, reason: str) -> str:
         """Atomically reverse and replace; release evidence only in the same transaction."""
-        identifier(reason)
         with self._transaction():
-            existing = self.connection.execute(
-                "SELECT replacement_key,reason FROM LedgerCorrections WHERE original_key=?", (original_key,)
-            ).fetchone()
-            if existing:
-                if existing == (replacement.key, reason) and self._existing(replacement):
-                    return replacement.key
-                raise LedgerError("Entry already has a different correction.")
-            row = self.connection.execute("SELECT payload FROM LedgerEntries WHERE key=?", (original_key,)).fetchone()
-            if row is None:
-                raise LedgerError("Original entry does not exist.")
-            original = decode_entry(row[0])
-            if original.origin == "reversal" or replacement.key == original.key or self._existing(replacement):
-                raise LedgerError("Correction requires an active original and a new replacement.")
-            if replacement.event_id != original.event_id:
-                raise LedgerError("A correction must preserve the economic event identity.")
-            consumed = self.consumed()
-            for observation_id, amount in self.connection.execute(
-                "SELECT observation_id,amount FROM LedgerAllocations WHERE entry_key=?", (original_key,)
-            ):
-                consumed[observation_id] -= amount
-            usage = validate_entry(replacement, self.accounts(), self.observations(), consumed)
-            reversal = JournalEntry(
-                key="reversal:" + hashlib.sha256(original_key.encode()).hexdigest(),
-                event_id=original.event_id,
-                posting_date=original.posting_date,
-                description="Reversal: " + original.description,
-                postings=tuple(Posting(p.account_id, -p.amount_minor) for p in original.postings),
-                origin="reversal",
-                reviewed=True,
-                reason=reason,
-            )
-            self._insert(reversal, {})
-            self._insert(replacement, usage)
-            self.connection.execute(
-                "INSERT INTO LedgerCorrections(original_key,reversal_key,replacement_key,reason) VALUES (?,?,?,?)",
-                (original_key, reversal.key, replacement.key, reason),
-            )
+            return self._correct(original_key, replacement, reason=reason)
+
+    def _correct(self, original_key: str, replacement: JournalEntry, *, reason: str) -> str:
+        """Correction primitive for services that add mappings in the same transaction."""
+        if not self.connection.in_transaction:
+            raise LedgerError("Correction requires an enclosing transaction.")
+        identifier(reason)
+        existing = self.connection.execute(
+            "SELECT replacement_key,reason FROM LedgerCorrections WHERE original_key=?", (original_key,)
+        ).fetchone()
+        if existing:
+            if existing == (replacement.key, reason) and self._existing(replacement):
+                return replacement.key
+            raise LedgerError("Entry already has a different correction.")
+        row = self.connection.execute("SELECT payload FROM LedgerEntries WHERE key=?", (original_key,)).fetchone()
+        if row is None:
+            raise LedgerError("Original entry does not exist.")
+        original = decode_entry(row[0])
+        if original.origin == "reversal" or replacement.key == original.key or self._existing(replacement):
+            raise LedgerError("Correction requires an active original and a new replacement.")
+        if replacement.event_id != original.event_id:
+            raise LedgerError("A correction must preserve the economic event identity.")
+        consumed = self.consumed()
+        for observation_id, amount in self.connection.execute(
+            "SELECT observation_id,amount FROM LedgerAllocations WHERE entry_key=?", (original_key,)
+        ):
+            consumed[observation_id] -= amount
+        usage = validate_entry(replacement, self.accounts(), self.observations(), consumed)
+        reversal = JournalEntry(
+            key="reversal:" + hashlib.sha256(original_key.encode()).hexdigest(),
+            event_id=original.event_id,
+            posting_date=original.posting_date,
+            description="Reversal: " + original.description,
+            postings=tuple(Posting(p.account_id, -p.amount_minor) for p in original.postings),
+            origin="reversal",
+            reviewed=True,
+            reason=reason,
+        )
+        self._insert(reversal, {})
+        self._insert(replacement, usage)
+        self.connection.execute(
+            "INSERT INTO LedgerCorrections(original_key,reversal_key,replacement_key,reason) VALUES (?,?,?,?)",
+            (original_key, reversal.key, replacement.key, reason),
+        )
         return replacement.key
 
     def review(self, key: str, *, reviewed: bool, reason: str) -> None:

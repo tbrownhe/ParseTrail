@@ -6,6 +6,44 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## Ordinary expense/refund correction service — October 3, 2026
+
+After accepting the source-review visibility follow-up, the owner authorized continued
+ledger work. The [correction service](../devtools/ledger_audit/EXPENSE_CORRECTIONS.md)
+previews category reassignments and exact splits for already posted ordinary cash/card
+expenses and refunds. It preserves the entire financial movement and source allocation,
+date, description and economic event. Corrections require explanations; routine ordinary
+acceptance remains unchanged.
+
+Applying revalidates the original entry/review and retained category mappings. Category
+account creation, reversal, replacement, allocation release and correction history
+share one transaction. Stale previews, invalid amounts/categories, no-op requests,
+partial movements and other accounting scopes are rejected. Exact retry/reopen is
+idempotent; later corrections target the active replacement. Imported evidence, original
+journals, proposal decisions and verified category annotations remain immutable history.
+
+A fresh private archive exercise covered purchase and refund splits, deterministic
+preview, reversal/replacement, exact retries and reopen. Financial-account balances,
+total expense and evidence consumption were unchanged. Reconciliation became stale
+after correction, then retained identical balance-check results. Raw evidence and
+annotation tables were preserved and candidate input hashes remained unchanged. The
+sample decisions are disposable exercises, not financial approvals; private artifacts
+and identifiers remain ignored.
+
+Windows verification: **891 tests passed, 3 skipped** in 161.50 seconds with offscreen
+Qt and process-only `RemoteSigned`. **21 new tests** cover purchase/refund signs,
+read-only/deterministic preview, exact split validation, scope/no-op rejection,
+required reasons, stale/tampered previews, concurrent correction, replacement chains,
+atomic rollback including category creation, unchanged annotations/evidence, retry/reopen
+and reconciliation invalidation with unchanged balance results. The focused correction,
+kernel and reconciliation suite passed **73 tests**; Ruff lint/format passed across
+**224 files**.
+
+The next chunk is the correction editor and owner Windows preview/cancel/persistence
+walkthrough. This service adds no GUI, schema migration, dependency, server, live-profile
+change or report cutover. Unposted interpretations, transfer/clearing, loan, asset,
+opening and source corrections remain unfinished.
+
 ## Statement reconciliation review UI — October 3, 2026
 
 The owner authorized the next UI chunk after the reviewed-source service passed.
@@ -40,7 +78,8 @@ unadmitted zero-date provenance, filter clearing, concurrent editing, stale reop
 recalculation, transient-check retry, atomic saved-view failure, tampering and malformed
 snapshot refusal. Ruff lint/format passed across **222 files**.
 
-Owner Windows workflow/cancellation/persistence acceptance is pending. This is a
+The owner accepted the Windows reconciliation workflow, source-review persistence and
+status/filter visibility on October 3. This is a
 disposable UI exercise, not approval of its sample financial assertions. No dependency,
 server, live-profile or financial report cutover change occurred. Remaining interpretations
 and split/correction workflows remain open.
@@ -54,8 +93,8 @@ review is recorded without implying verification or reconciliation. Rows leaving
 not-recorded filter clear their selected evidence safely. **13 focused UI tests passed**,
 including the new combined-filter regression and extended save/reopen/concurrent-change
 assertions; lint/format and a separate archive-sized smoke passed, with its screenshot
-inspected. Owner visibility retest remains pending; the original owner workspace is
-preserved for reopening with the updated code.
+inspected. The owner accepted the visibility update and authorized continued work;
+the original owner workspace remains a disposable test, not approved financial history.
 
 ## Reviewed-source reconciliation service — October 2, 2026
 

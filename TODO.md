@@ -183,11 +183,18 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   display snapshots survive reopen and become visibly stale after source/ledger changes.
   Owner feedback confirmed source-review persistence; the table now shows current
   recorded/not-recorded status and a dedicated filter independently of stale checks.
-  Pending: owner Windows workflow, cancellation and persistence acceptance. Broader
-  split/correction workflows, remaining interpretations and report cutover remain open.
-- [ ] **L5b — Ledger interpretation editing:** persist review decisions, confirmed
+  The owner accepted the Windows reconciliation workflow, persisted source review and
+  status/filter visibility on October 3. Sample decisions remain disposable UI tests.
+  Broader split/correction workflows, remaining interpretations and report cutover remain open.
+- [~] **L5b — Ledger interpretation editing:** persist review decisions, confirmed
   transfers/splits, opening anchors, source corrections and reversal/replacement
   workflows; require a separate Windows native walkthrough before report cutover.
+  The [expense/refund correction service](devtools/ledger_audit/EXPENSE_CORRECTIONS.md)
+  now previews exact category splits and atomically reverses/replaces posted ordinary
+  entries, preserving the whole original financial movement and verified category history.
+  Next: correction editor with explicit preview/reason, cancellation and owner Windows
+  acceptance. New interpretations for unposted evidence and transfer/clearing, loan,
+  asset, opening and source corrections remain separate scopes.
 - [ ] **CF2 — Ledger-backed cash-flow contract:** after L1–L5, define account scope, income,
   purchases, refunds, internal transfers, card payments, and loan treatment.
   Synthetic transfers/card payments cannot double-count consolidated spending;
