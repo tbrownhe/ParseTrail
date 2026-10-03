@@ -173,9 +173,13 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   changes mark affected opening decisions stale. Raw evidence and gaps are preserved.
   The owner accepted the Windows opening workflow and persistence on October 2.
   These disposable sample decisions are workflow tests, not financial attestations.
-  Next connect reviewed provenance to independent reconciliation, retaining
-  estimated-date and coverage limits. Broader split/correction workflows and report
-  cutover remain open.
+  The [reviewed-source reconciliation service](devtools/ledger_audit/RECONCILIATION.md)
+  now checks saved provenance and current openings against exact balances and evidence.
+  Versioned, read-only reports keep interpretation review, date uncertainty, unresolved
+  movements and coverage independent; no GUI test decisions become financial approvals.
+  Next: statement-reconciliation review UI, including source review beyond the earliest
+  period, evidence/difference drill-down and stale-result handling; owner Windows
+  acceptance required. Broader split/correction workflows and report cutover remain open.
 - [ ] **L5b — Ledger interpretation editing:** persist review decisions, confirmed
   transfers/splits, opening anchors, source corrections and reversal/replacement
   workflows; require a separate Windows native walkthrough before report cutover.

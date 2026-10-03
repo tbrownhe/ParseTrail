@@ -6,6 +6,48 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## Reviewed-source reconciliation service — October 2, 2026
+
+After accepting the opening workflow, the owner authorized continued ledger work.
+The [reviewed-source reconciliation service](../devtools/ledger_audit/RECONCILIATION.md)
+connects saved endpoint/timing assertions and current opening decisions to the exact
+kernel checks. Each calculation uses a committed SQLite read snapshot. It writes no
+journals, assertions, raw evidence or kernel reconciliation history. The exporter
+opens the prepared workspace in SQLite read-only mode and preserves input bytes.
+
+Results retain exact opening/closing/source differences, unallocated evidence and
+postings outside statement membership. Balance agreement, interpretation review,
+posting-date certainty and source coverage remain independent. Known estimated dates
+prevent an unqualified reconciliation result even when balances agree. Reconciling a
+later statement never fills an earlier coverage gap. Ineligible statements and unmapped
+movements remain visible, including missing memberships and unsupported account scope.
+Canonical unresolved observations are listed once globally, without netting opposites.
+
+Versioned exports preserve checked periods and input identities. Source assertions,
+zero-opening decisions, interpretation reviews, new entries and corrections invalidate
+prior results. Corrections retain reversal arithmetic and active replacement allocations;
+month-crossing transfers retain their source dates and intermediate clearing balances.
+The original raw-kernel reconciliation API remains unchanged.
+
+Two independent exports from a fresh unposted private workspace produced identical
+artifact bytes. Every original candidate table was preserved, and source/decision/
+journal tables remained untouched. The report correctly inferred no financial approval
+or reconciliation; estimated dates, unresolved evidence and gaps stayed explicit.
+Private amounts, counts, source names and artifacts remain ignored.
+
+Windows verification: **857 tests passed, 3 skipped** in 151.87 seconds with offscreen
+Qt and process-only `RemoteSigned`. **17 new tests** cover reviewed/estimated/unverified
+provenance, exact unresolved differences, interpretation independence, stale results,
+zero openings, full/partial corrections, canceling unbacked postings, equal-balance
+gaps, ineligible/overlapping sources, missing membership, month-crossing transfers,
+read-only enforcement, deterministic export/reopen and overwrite/active-input refusal.
+Ruff lint/format passed across **219 files**.
+
+The next chunk is the statement-reconciliation review UI, including source review
+beyond the earliest period and stale-result handling. That UI requires owner Windows
+acceptance. This calculation/report chunk adds no GUI, dependency, server, live-profile
+change or report cutover. Split/correction controls and other account scopes remain open.
+
 ## Source provenance and opening review implementation — October 2, 2026
 
 After accepting the opening-readiness audit, the owner authorized the next bounded

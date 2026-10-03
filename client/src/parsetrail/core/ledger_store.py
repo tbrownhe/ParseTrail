@@ -45,14 +45,17 @@ def decode_entry(payload: str) -> JournalEntry:
 class LedgerStore:
     """Use as a context manager. Creation refuses to overwrite any existing file."""
 
-    def __init__(self, path: Path, *, create: bool = False):
+    def __init__(self, path: Path, *, create: bool = False, read_only: bool = False):
         path = path.resolve()
+        if create and read_only:
+            raise LedgerError("Cannot create a read-only ledger.")
         if create:
             with path.open("xb"):
                 pass
         elif not path.is_file():
             raise LedgerError("Ledger file does not exist.")
-        self.connection = sqlite3.connect(path.as_uri() + "?mode=rw", uri=True, isolation_level=None)
+        mode = "ro" if read_only else "rw"
+        self.connection = sqlite3.connect(path.as_uri() + f"?mode={mode}", uri=True, isolation_level=None)
         self.connection.execute("PRAGMA foreign_keys=ON")
         try:
             if create:

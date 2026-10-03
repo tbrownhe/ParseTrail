@@ -63,11 +63,11 @@ def prepare_review(candidates: Path, output: Path) -> Path:
 class ProposalReview:
     """Open only a prepared review folder. Decisions and postings commit together."""
 
-    def __init__(self, folder: Path):
+    def __init__(self, folder: Path, *, read_only: bool = False):
         manifest = json.loads((folder / "review.json").read_text(encoding="utf-8"))
         if manifest.get("version") != 1:
             raise LedgerError("Unsupported proposal review workspace version.")
-        self.store = LedgerStore(folder / "review.db")
+        self.store = LedgerStore(folder / "review.db", read_only=read_only)
         try:
             c = self.store.connection
             if c.execute("SELECT version,proposal_hash,source_hash FROM ProposalReviewMeta").fetchall() != [

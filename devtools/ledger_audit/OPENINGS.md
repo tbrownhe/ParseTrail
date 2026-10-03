@@ -101,10 +101,11 @@ stale without rewriting it; reversal/replacement controls remain future work.
 
 Known Chase date proxies cannot be relabeled as reported bank dates. Opening review
 does not remove coverage gaps or certify transaction dates. Raw `LedgerStatements`
-remain unchanged and the existing reconciliation entry point still uses their original
-unverified provenance. A separate reviewed statement view is available, but integrating
-it with independent, date-aware reconciliation is the next bounded chunk. There is no
-active-profile or report cutover here.
+remain unchanged and the raw kernel reconciliation entry point still uses their original
+unverified provenance. The [reviewed-source reconciliation service](RECONCILIATION.md)
+now uses the separate reviewed statement view and reports date certainty, interpretation
+review and coverage separately. Its review UI is next. There is no active-profile or
+report cutover here.
 
 ## Windows workflow walkthrough
 
