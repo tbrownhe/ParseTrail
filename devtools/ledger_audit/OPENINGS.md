@@ -104,7 +104,8 @@ does not remove coverage gaps or certify transaction dates. Raw `LedgerStatement
 remain unchanged and the raw kernel reconciliation entry point still uses their original
 unverified provenance. The [reviewed-source reconciliation service](RECONCILIATION.md)
 now uses the separate reviewed statement view and reports date certainty, interpretation
-review and coverage separately. Its review UI is next. There is no active-profile or
+review and coverage separately. Its statement review UI is implemented and awaits
+owner Windows workflow acceptance. There is no active-profile or
 report cutover here.
 
 ## Windows workflow walkthrough

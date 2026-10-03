@@ -149,7 +149,18 @@ class OpeningReview:
             "source_hash": key(self.sources[sid]),
         }
 
-    def assert_source(self, sid, *, opening, closing, timing_confirmed, posting_dates, reference, reason):
+    def assert_source(
+        self,
+        sid,
+        *,
+        opening,
+        closing,
+        timing_confirmed,
+        posting_dates,
+        reference,
+        reason,
+        expected_provenance_hash=None,
+    ):
         """Record a user's source assertion, not an automatic certification."""
         identifier(reference)
         identifier(reason)
@@ -163,6 +174,8 @@ class OpeningReview:
         c = self.store.connection
         with self.store._transaction():
             previous = self.provenance(sid)
+            if expected_provenance_hash is not None and key(previous) != expected_provenance_hash:
+                raise LedgerError("Source review changed while editing. Reopen the source review before saving.")
             baseline = c.execute("SELECT basis FROM SourceDateProvenance WHERE statement_id=?", (sid,)).fetchone()[0]
             if baseline == "estimated" and posting_dates != "estimated":
                 raise LedgerError(

@@ -6,6 +6,45 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## Statement reconciliation review UI — October 3, 2026
+
+The owner authorized the next UI chunk after the reviewed-source service passed.
+The [statement review window](../devtools/ledger_audit/RECONCILIATION.md#statement-review-window)
+exposes searchable saved statement checks, source/ledger differences, selected-statement
+evidence, account coverage and movements outside the ledger. Unresolved amounts and
+date provenance remain explicit; numeric agreement cannot hide coverage or review limits.
+
+Source review is available for every eligible statement, including later periods.
+Save appends explicit balance/date/timing assertions with a source reference; cancellation
+or closing the dialog writes nothing. A concurrent edit to the same source requires
+reopening the form. Known Chase estimates remain locked. The window cannot post journals,
+confirm openings, override source ineligibility or certify the owner's rebuilt books.
+
+The last displayed check is saved atomically outside the immutable evidence, with
+checksum/rule/evidence bindings. Source or ledger changes leave the old results visibly
+stale until explicit recalculation, including after close/reopen. SQLite change indicators
+trigger currentness checks for other-window commits without continuously rehashing the
+workspace. Failed replacement retains the previous snapshot; malformed/mismatched
+snapshots are preserved and rejected. Rechecking does not write raw reconciliation history.
+
+An archive-sized offscreen exercise passed source-dialog cancellation, later-statement
+save, stale display, reopen and recalculation; screenshots were inspected. The separate
+owner copy preserves every original table and begins with zero source assertions,
+opening decisions, journals, allocations and kernel reconciliation records. Private
+artifacts, source identifiers, amounts and screenshots remain ignored.
+
+Windows verification: **869 tests passed, 3 skipped** in 154.47 seconds with offscreen
+Qt and process-only `RemoteSigned`. **12 new tests** cover dialog cancellation/save,
+later and ineligible sources, exact differences and coverage display, locked estimates,
+unadmitted zero-date provenance, filter clearing, concurrent editing, stale reopen and
+recalculation, transient-check retry, atomic saved-view failure, tampering and malformed
+snapshot refusal. Ruff lint/format passed across **222 files**.
+
+Owner Windows workflow/cancellation/persistence acceptance is pending. This is a
+disposable UI exercise, not approval of its sample financial assertions. No dependency,
+server, live-profile or financial report cutover change occurred. Remaining interpretations
+and split/correction workflows remain open.
+
 ## Reviewed-source reconciliation service — October 2, 2026
 
 After accepting the opening workflow, the owner authorized continued ledger work.

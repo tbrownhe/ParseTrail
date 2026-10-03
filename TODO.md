@@ -177,9 +177,12 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   now checks saved provenance and current openings against exact balances and evidence.
   Versioned, read-only reports keep interpretation review, date uncertainty, unresolved
   movements and coverage independent; no GUI test decisions become financial approvals.
-  Next: statement-reconciliation review UI, including source review beyond the earliest
-  period, evidence/difference drill-down and stale-result handling; owner Windows
-  acceptance required. Broader split/correction workflows and report cutover remain open.
+  The statement-reconciliation review UI now exposes source/ledger differences,
+  selected-statement evidence, coverage and movements outside the ledger. Any eligible
+  statement can receive explicit source review; known estimates remain locked. Saved
+  display snapshots survive reopen and become visibly stale after source/ledger changes.
+  Pending: owner Windows workflow, cancellation and persistence acceptance. Broader
+  split/correction workflows, remaining interpretations and report cutover remain open.
 - [ ] **L5b — Ledger interpretation editing:** persist review decisions, confirmed
   transfers/splits, opening anchors, source corrections and reversal/replacement
   workflows; require a separate Windows native walkthrough before report cutover.
