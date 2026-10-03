@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from parsetrail.core.ledger import LedgerError
+from parsetrail.core.ledger_opening_review import observation_date_provenance
 from parsetrail.core.ledger_proposal_review import DEFAULT_ACCEPTANCE_REASON
 from parsetrail.core.ledger_store import decode_entry
 from parsetrail.gui.ledger_preview import PreviewPage, money
@@ -71,6 +72,7 @@ class ProposalReviewWindow(QMainWindow):
     def refresh(self):
         store = self.review.store
         accounts, decisions = store.accounts(), self.review.decisions()
+        date_provenance = observation_date_provenance(store)
         c = store.connection
         files = {
             sid: json.loads(payload).get("filename", sid)
@@ -97,6 +99,7 @@ class ProposalReviewWindow(QMainWindow):
             details = [
                 entry.description,
                 f"{entry.posting_date} · {financial_account.name}",
+                f"Posting-date provenance: {date_provenance.get(observation_id, 'unknown')}",
                 f"{effect} by {money(abs(amount))}.",
                 f"Expense {'increases' if expense.amount_minor > 0 else 'decreases'} by {money(abs(expense.amount_minor))}.",
                 "",

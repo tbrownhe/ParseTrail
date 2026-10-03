@@ -14,6 +14,7 @@ from parsetrail.core.ledger import (
     identifier,
     validate_entry,
 )
+from parsetrail.core.ledger_opening_review import observation_date_provenance
 from parsetrail.core.ledger_rebuild import key
 from parsetrail.core.ledger_store import encoded
 
@@ -152,6 +153,9 @@ class TransferReview:
             pair["alternative_counts"] = [degree[pair[k]] for k in ("outgoing_id", "incoming_id")]
             if pair["status"] == "available":
                 pair["status"] = "unique_candidate" if pair["alternative_counts"] == [1, 1] else "ambiguous"
+        dates = observation_date_provenance(self.store)
+        for pair in pairs.values():
+            pair["posting_date_basis"] = [dates.get(pair[k], "unknown") for k in ("outgoing_id", "incoming_id")]
         movements = []
         for oid, o in sorted(observations.items()):
             if used.get(oid):

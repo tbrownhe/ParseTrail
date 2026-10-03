@@ -6,6 +6,40 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## Source provenance and opening review implementation — October 2, 2026
+
+After accepting the opening-readiness audit, the owner authorized the next bounded
+chunk. The [opening review](../devtools/ledger_audit/OPENINGS.md#source-provenance-and-opening-confirmation)
+uses a fresh copy of accepted unposted candidates, bound to the readiness artifact.
+Earlier GUI sample decisions are not migrated. Proposed amounts, dates and earliest
+source sets are checked against raw evidence before review.
+
+Append-only source assertions record balance origin, inclusive-period timing, date
+provenance and source references. Explicit confirmation atomically records the opening
+decision and a balanced opening-equity journal for nonzero positions. Zero positions
+record a decision without a journal or equity account. Neither consumes transaction
+evidence or creates expense/income. Raw statements and observations remain unchanged.
+Retries are idempotent; prior openings/earlier postings and stale review cannot be
+silently offset. Later assertion changes mark an existing opening stale without
+rewriting it. Known Chase date estimates cannot be upgraded by user attestation;
+ordinary/transfer details now also show conservative source-date provenance.
+
+Windows verification: **840 tests passed, 3 skipped** in 145.52 seconds with offscreen
+Qt and process-only `RemoteSigned`. **17 new tests** cover source gates, signed/zero
+openings, prior-posting conflicts, atomic rollback, stale/concurrent source review,
+immutable history, invalid/tampered evidence, date-label consumers, cancellation and
+persistence. Ruff lint/format passed across **216 files**. An archive-sized offscreen
+exercise passed cancellation, source review, nonzero/zero confirmation and reopen;
+its screenshot was inspected. A separate owner copy preserves every original table
+and has no source assertions, opening decisions, journals or allocations. Private
+financial data and artifacts remain ignored.
+
+Owner Windows workflow acceptance is pending. This checkpoint accepts implementation
+checks, not actual financial assertions or report cutover. Raw reconciliation still
+uses unverified endpoint provenance; connecting the reviewed view to independent,
+date-aware reconciliation is next. Coverage gaps, correction/split workflows and
+other account scopes remain open. No dependency, server or live-profile change occurred.
+
 ## Opening-position readiness and continuity audit — October 2, 2026
 
 After accepting transfer workflow/persistence, the owner authorized continued ledger

@@ -137,6 +137,7 @@ class TransferReviewWindow(QMainWindow):
                 self.source_detail(incoming.id),
                 "",
                 f"Possible counterparts for outgoing/incoming: {pair['alternative_counts']}",
+                f"Posting-date provenance (outgoing/incoming): {', '.join(pair['posting_date_basis'])}",
                 "Spending effect if confirmed: $0.00. The original cash/card movements remain recorded.",
             ]
             if pair["date_gap_days"]:

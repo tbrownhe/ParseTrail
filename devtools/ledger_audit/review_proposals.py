@@ -1,4 +1,4 @@
-"""Prepare or reopen a disposable ordinary-journal review workspace."""
+"""Prepare or reopen a disposable ledger workflow review workspace."""
 
 import argparse
 import json
@@ -13,13 +13,22 @@ def main():
     )
     parser.add_argument("--candidates", type=Path, help="Checksum-verified proposal directory; creates --folder once.")
     parser.add_argument("--prepare-only", action="store_true")
-    parser.add_argument(
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument(
         "--transfers", action="store_true", help="Review transfers/card payments alongside ordinary proposals."
+    )
+    modes.add_argument("--openings", action="store_true", help="Review source provenance and opening positions.")
+    parser.add_argument(
+        "--readiness", type=Path, help="Verified opening-readiness folder, required for a new opening workspace."
     )
     parser.add_argument(
         "--smoke", action="store_true", help="Offscreen accept/reject/reopen test; requires a new --candidates copy."
     )
     args = parser.parse_args()
+    if args.readiness and not args.openings:
+        parser.error("--readiness requires --openings")
+    if args.openings and args.candidates and not args.readiness:
+        parser.error("A new opening workspace requires --readiness")
     if args.smoke:
         if not args.candidates or args.prepare_only:
             parser.error("--smoke requires --candidates and cannot use --prepare-only")
@@ -35,6 +44,10 @@ def main():
 
                 snapshot = TransferReview(review).snapshot()
                 (args.folder / "transfer-preview.json").write_text(json.dumps(snapshot, indent=2), encoding="utf-8")
+            if args.openings:
+                from parsetrail.core.ledger_opening_review import OpeningReview
+
+                OpeningReview(review, args.readiness)
             print("Disposable proposal review is ready.")
         return 0
     from parsetrail.gui.ledger_proposal_review import ProposalReviewWindow
@@ -50,14 +63,48 @@ def main():
             families = QFontDatabase.applicationFontFamilies(font_id)
             if families:
                 app.setFont(QFont(families[0], 10))
-        if args.transfers:
+        if args.openings:
+            from parsetrail.core.ledger_opening_review import OpeningReview
+            from parsetrail.gui.ledger_opening_review import OpeningReviewWindow
+
+            window = OpeningReviewWindow(OpeningReview(review, args.readiness))
+        elif args.transfers:
             from parsetrail.gui.ledger_transfer_review import TransferReviewWindow
 
             window = TransferReviewWindow(review)
         else:
             window = ProposalReviewWindow(review)
         window.show()
-        if args.smoke and args.transfers:
+        if args.smoke and args.openings:
+            app.processEvents()
+            for zero in (False, True):
+                index = next(
+                    i
+                    for i, r in enumerate(window.page.model.records)
+                    if (window.openings.anchors[r["account_id"]]["proposed_amount_minor"] == 0) == zero
+                )
+                window.page.table.selectRow(index)
+                aid = window.selected()["account_id"]
+                window.opening.setCurrentIndex(window.opening.findData("reported"))
+                window.timing.setChecked(True)
+                window.reference.setText("Automated workflow test; not actual source verification")
+                window.note.setText("Disposable UI exercise only")
+                window.confirm = lambda *_: False
+                window.save.click()
+                assert window.openings.provenance(window.current_source)["sequence"] is None
+                window.confirm = lambda *_: True
+                window.save.click()
+                assert window.post.isEnabled()
+                window.confirm = lambda *_: False
+                window.post.click()
+                assert aid not in window.openings.decisions()
+                window.confirm = lambda *_: True
+                window.post.click()
+                assert window.openings.status(aid)["state"] == ("confirmed_zero" if zero else "posted")
+            app.processEvents()
+            window.grab().save(str(args.folder / "review-smoke.png"))
+            window.close()
+        elif args.smoke and args.transfers:
             app.processEvents()
             rows = window.page.model.records
             index = next(
@@ -119,7 +166,13 @@ def main():
         else:
             return app.exec()
     with ProposalReview(args.folder) as reopened:
-        if args.transfers:
+        if args.openings:
+            from parsetrail.core.ledger_opening_review import OpeningReview
+
+            assert len(OpeningReview(reopened).decisions()) == 2
+            assert reopened.store.connection.execute("SELECT count(*) FROM LedgerEntries").fetchone() == (1,)
+            assert reopened.store.connection.execute("SELECT count(*) FROM LedgerAllocations").fetchone() == (0,)
+        elif args.transfers:
             from parsetrail.core.ledger_transfers import TransferReview
 
             assert len(TransferReview(reopened).decisions()) == 2
@@ -127,7 +180,7 @@ def main():
         else:
             assert len(reopened.decisions()) == 2
             assert reopened.store.connection.execute("SELECT count(*) FROM LedgerEntries").fetchone() == (1,)
-    print("Disposable proposal review accept/reject/reopen smoke passed.")
+    print("Disposable ledger workflow and reopen smoke passed.")
     return 0
 
 

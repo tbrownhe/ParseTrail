@@ -166,9 +166,14 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   interval-aware continuity checks without posting journals. Equal balances across
   missing periods do not establish coverage. Chase posting dates are transaction-date
   proxies and must remain explicitly estimated, not silently certified as bank dates.
-  Next bounded chunk: explicit source balance/date provenance and reviewed opening
-  anchors, preserving raw evidence and unresolved gaps. Broader split/correction
-  workflows, reconciliation and report cutover remain unfinished.
+  Explicit source balance/date review and atomic opening confirmation are now
+  implemented in a fresh disposable workspace. Source assertions are append-only;
+  nonzero openings use opening equity, and zero openings record no journal.
+  Estimated dates remain visible in ordinary/transfer details; later source-review
+  changes mark affected opening decisions stale. Raw evidence and gaps are preserved.
+  Pending: owner Windows opening-workflow and persistence acceptance. Then connect
+  reviewed provenance to independent reconciliation, retaining estimated-date and
+  coverage limits. Broader split/correction workflows and report cutover remain open.
 - [ ] **L5b — Ledger interpretation editing:** persist review decisions, confirmed
   transfers/splits, opening anchors, source corrections and reversal/replacement
   workflows; require a separate Windows native walkthrough before report cutover.

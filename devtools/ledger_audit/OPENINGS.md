@@ -1,4 +1,4 @@
-# Opening-position readiness audit
+# Opening-position readiness and review
 
 This read-only service follows the accepted transfer workflow. It inspects the
 immutable [fresh rebuild](REBUILD.md) and [cash/card candidate plan](PROPOSALS.md),
@@ -57,14 +57,70 @@ Known date limitations are retained explicitly. The current Chase parser exposes
 only source transaction dates and uses statement-bounded posting-date proxies. Those
 are not established bank posting dates, even though earlier transfer handling
 preserved the normalized dates exactly. Other parser dates have not been independently
-certified by this audit. The next source-provenance chunk must carry these distinctions
-into opening review and date-sensitive reconciliation without rewriting raw evidence.
+certified by this audit. The source-review controls below carry these distinctions
+into opening review without rewriting raw evidence.
 
 The reference archive's unused-file inventory was also inspected during development;
 no missing card-period source was identified there. This does not establish that
 those statements never existed or cannot be obtained from their institutions.
 
-Next: explicit source balance/date provenance and reviewed opening anchors, preserving
-unresolved gaps and estimated dates. Transfer/ordinary GUI test decisions remain
-confined to their disposable workspaces. No new native GUI test is needed for this
-read-only calculation/report chunk.
+## Source provenance and opening confirmation
+
+Create a new disposable workflow copy from the accepted **unposted** candidates and
+the matching readiness report. Earlier ordinary/transfer GUI test decisions are not
+accounting approvals and must not be carried into this copy.
+
+```powershell
+& client/.venv/Scripts/python.exe devtools/ledger_audit/review_proposals.py `
+  --openings --readiness <verified-readiness-directory> `
+  --candidates <verified-candidate-directory> --folder <new-private-review-directory>
+```
+
+Use `--prepare-only` to create it without opening the window, or `--smoke` for an
+offscreen cancellation/posting/reopen exercise in a separate new test copy. Reopen
+with only `--openings --folder <prepared-review-directory>`.
+
+The service verifies artifact binding and independently checks each proposed amount,
+cutoff and earliest-source set against the raw statements. The review stores separate,
+append-only source assertions: opening/closing balance origin, inclusive-period timing,
+posting-date provenance, source reference and review note. A source reference is
+required; a blank optional note receives a standard audit reason. All tied earliest
+sources need review. Structural readiness blockers cannot be dismissed by attestation.
+The GUI reviews earliest sources; the service retains date provenance for every
+eligible statement. Ordinary and transfer details also expose conservative date labels,
+including in older review copies. A movement with any estimated source remains estimated.
+
+Only a reported opening with confirmed period timing can authorize confirmation.
+Nonzero positions post a balanced, reviewed opening-equity journal without consuming
+transaction evidence or creating income/expense. Zero positions record a decision
+without a journal. Posting and decision history commit atomically; exact retries are
+idempotent. Earlier postings or another opening require separate correction, not an
+offset. Unsaved form changes disable confirmation; changed source assertions during
+confirmation require a refresh. Revising source review after posting marks the opening
+stale without rewriting it; reversal/replacement controls remain future work.
+
+Known Chase date proxies cannot be relabeled as reported bank dates. Opening review
+does not remove coverage gaps or certify transaction dates. Raw `LedgerStatements`
+remain unchanged and the existing reconciliation entry point still uses their original
+unverified provenance. A separate reviewed statement view is available, but integrating
+it with independent, date-aware reconciliation is the next bounded chunk. There is no
+active-profile or report cutover here.
+
+## Windows workflow walkthrough
+
+This accepts **UI behavior only**, not the financial assertions entered in the test copy.
+
+1. Select a nonzero opening. Choose **Printed on statement** for its opening origin,
+   check period timing, and enter **Workflow test** as the source reference. Leave
+   closing provenance and transaction dates unchanged for this exercise. Cancel
+   **Record source review**, then repeat and save. Confirm that the opening button
+   enables only after saving. An optional note is not required.
+2. Cancel **Confirm opening position**, then repeat and confirm. The account should
+   show **Opening posted**. Select a zero opening and repeat; it should show
+   **Zero opening confirmed**. No zero-valued journal is created.
+3. Inspect an earliest Chase source: its posting-date control should remain
+   **Estimated posting dates** and disabled. Closing the window and reopening with
+   the command above must retain the saved source review and opening statuses.
+
+Native workflow acceptance is pending. The automated exercise uses a different copy;
+the owner copy begins with no source assertions, opening decisions or posted journals.
