@@ -6,6 +6,7 @@ import sqlite3
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFormLayout,
@@ -142,7 +143,18 @@ class ReconciliationReviewWindow(QMainWindow):
         buttons.addStretch()
         layout.addLayout(buttons)
         self.tabs = QTabWidget()
-        self.page = PreviewPage(["Account", "Start", "End", "Balance check", "Reconciliation", "Source"], [])
+        self.page = PreviewPage(
+            ["Account", "Start", "End", "Balance check", "Reconciliation", "Source review", "Source"], []
+        )
+        self.source_filter = QComboBox()
+        self.source_filter.addItems(["All sources", "Recorded", "Not recorded", "Unavailable"])
+        source_filter_row = QHBoxLayout()
+        source_filter_row.addWidget(QLabel("Source review"))
+        source_filter_row.addWidget(self.source_filter)
+        source_filter_row.addWidget(QLabel("Current saved review; reconciliation results may still be stale."))
+        source_filter_row.addStretch()
+        self.page.layout().insertLayout(0, source_filter_row)
+        self.source_filter.currentTextChanged.connect(self.filter_statements)
         self.evidence = PreviewPage(["Date", "Description", "Amount", "Unallocated", "Date provenance"], [])
         self.coverage = PreviewPage(
             ["Account", "First period", "Last period", "Coverage gaps", "Statements reconciled"], []
@@ -209,8 +221,8 @@ class ReconciliationReviewWindow(QMainWindow):
                 details += [
                     f"Source activity equation difference: {money(balance['source_difference_minor'])}",
                     f"Posted interpretations reviewed: {'Yes' if row['posted_interpretations_reviewed'] else 'No'}",
-                    f"Saved source reference: {row['source_review']['reference'] or 'Not reviewed'}",
-                    f"Saved posting-date provenance: {row['source_review']['posting_dates']}",
+                    f"Source reference at last check: {row['source_review']['reference'] or 'Not reviewed'}",
+                    f"Posting-date provenance at last check: {row['source_review']['posting_dates']}",
                     "Unreviewed entries: " + (", ".join(row["unreviewed_entry_keys"]) or "None"),
                     "Postings outside statement evidence: " + (", ".join(balance["uncovered_entry_keys"]) or "None"),
                 ]
@@ -230,13 +242,15 @@ class ReconciliationReviewWindow(QMainWindow):
                         row["end"],
                         "Agrees" if balance and balance["reconciled"] else "Needs review" if balance else "Unavailable",
                         "Reconciled" if row["reconciled"] else "Needs review" if balance else "Unavailable",
+                        "",
                         filename,
                     ],
-                    "details": "\n".join(details),
+                    "check_details": "\n".join(details),
                 }
             )
         records.sort(key=lambda record: record["cells"][:3])
-        self.set_records(self.page, records)
+        self.statement_records = records
+        self.refresh_source_reviews(keep)
         coverage = []
         for account in report["accounts"]:
             details = [f"Opening: {account['opening_state']['state'].replace('_', ' ')}"]
@@ -283,6 +297,44 @@ class ReconciliationReviewWindow(QMainWindow):
             )
         self.set_records(self.unmapped, unmapped)
         self.selection_changed()
+
+    def refresh_source_reviews(self, keep=None):
+        for record in self.statement_records:
+            row = record["row"]
+            current = []
+            state = "Unavailable"
+            if row["status"] == "checked":
+                p = self.openings.provenance(row["statement_id"])
+                state = "Recorded" if p["sequence"] is not None else "Not recorded"
+                if p["sequence"] is not None:
+                    current = [
+                        f"Current source reference: {p['reference']}",
+                        f"Current balance origins: opening {BALANCES[p['opening']]}; closing {BALANCES[p['closing']]}",
+                        f"Current period timing checked: {'Yes' if p['timing_confirmed'] else 'No'}",
+                        f"Current posting-date provenance: {p['posting_dates']}",
+                    ]
+            record["source_review_state"] = state
+            record["cells"][5] = state
+            record["details"] = "\n".join(
+                [
+                    f"Source review now: {state}",
+                    *current,
+                    "Recorded means a source review was saved, not that reconciliation passed.",
+                    "",
+                    "Last reconciliation check:",
+                    record["check_details"],
+                ]
+            )
+        self.filter_statements(keep=keep)
+
+    def filter_statements(self, *_args, keep=None):
+        selected = self.selected()
+        if keep is None and selected:
+            keep = selected["row"]["statement_id"]
+        state = self.source_filter.currentText()
+        records = [r for r in self.statement_records if state == "All sources" or r["source_review_state"] == state]
+        self.set_records(self.page, records)
+        self.selection_changed()
         if keep:
             for index in range(self.page.proxy.rowCount()):
                 source = self.page.proxy.mapToSource(self.page.proxy.index(index, 0)).row()
@@ -328,6 +380,7 @@ class ReconciliationReviewWindow(QMainWindow):
             if not force and self.revision == revision:
                 return
             self.current = self.view.is_current()
+            self.refresh_source_reviews()
             self.revision = revision
             self.banner.setText(
                 "Current saved check. Balances, interpretation review, dates and coverage are separate."

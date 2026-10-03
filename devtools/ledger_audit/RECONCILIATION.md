@@ -90,6 +90,14 @@ Evidence retains original amounts/dates and shows exact unallocated amounts and 
 provenance. Unadmitted zero rows do not acquire an invented reported-date assertion.
 Clearing the statement selection also clears its evidence and disables source review.
 
+The **Source review** column shows the current saved assertion independently of the
+last reconciliation check: **Recorded**, **Not recorded**, or **Unavailable**. Its
+dedicated filter combines with the text search. Saving updates this status immediately,
+even while the old check is stale; the details distinguish the current review from the
+reference used at the last check. Recorded means a review was saved, including a partial
+review, not that all evidence was verified or reconciliation passed. Under **Not
+recorded**, a newly reviewed row leaves the list; find it under **Recorded**.
+
 **Review selected source** works for any eligible statement, including later periods.
 The dialog records opening/closing origin, period timing, posting-date provenance,
 a required source reference and an optional note. Cancel or closing the dialog records
@@ -123,7 +131,9 @@ The owner copy starts from unposted candidates, so unresolved balances are expec
 2. Open **Review selected source**. For this disposable exercise, set both balance
    origins to **Printed on statement**, check period timing, and enter **Workflow test**
    as the reference. Leave posting dates unchanged. Cancel once, then repeat and save.
-   The main window should show **STALE**, retaining the previous check.
+   The main window should show **STALE**, retaining the previous check, while its
+   **Source review** column immediately shows **Recorded**. Use the **Recorded** filter
+   to find it without recalculating.
 3. Close and reopen before recalculating. The stale banner and saved source review
    should persist. Click **Check statements**: the banner should become current,
    with remaining accounting work still visible.

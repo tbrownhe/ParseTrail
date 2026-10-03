@@ -181,6 +181,8 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   selected-statement evidence, coverage and movements outside the ledger. Any eligible
   statement can receive explicit source review; known estimates remain locked. Saved
   display snapshots survive reopen and become visibly stale after source/ledger changes.
+  Owner feedback confirmed source-review persistence; the table now shows current
+  recorded/not-recorded status and a dedicated filter independently of stale checks.
   Pending: owner Windows workflow, cancellation and persistence acceptance. Broader
   split/correction workflows, remaining interpretations and report cutover remain open.
 - [ ] **L5b — Ledger interpretation editing:** persist review decisions, confirmed

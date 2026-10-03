@@ -45,6 +45,18 @@ disposable UI exercise, not approval of its sample financial assertions. No depe
 server, live-profile or financial report cutover change occurred. Remaining interpretations
 and split/correction workflows remain open.
 
+Owner follow-up confirmed that source review persisted but found its status unclear
+in the table and filters. The table now has a current **Source review** column and
+dedicated **Recorded / Not recorded / Unavailable** filter. Saving, reopening and
+other-window commits update that status independently of the last reconciliation check.
+Details show both current provenance and the reference used at the last check. A partial
+review is recorded without implying verification or reconciliation. Rows leaving the
+not-recorded filter clear their selected evidence safely. **13 focused UI tests passed**,
+including the new combined-filter regression and extended save/reopen/concurrent-change
+assertions; lint/format and a separate archive-sized smoke passed, with its screenshot
+inspected. Owner visibility retest remains pending; the original owner workspace is
+preserved for reopening with the updated code.
+
 ## Reviewed-source reconciliation service — October 2, 2026
 
 After accepting the opening workflow, the owner authorized continued ledger work.

@@ -66,11 +66,15 @@ def test_cancel_save_stale_reopen_and_recheck(app, workspace):
         window.edit.click()
         assert not window.current and "STALE" in window.banner.text()
         assert window.view.report["input_version"] == old
+        assert window.selected()["cells"][5] == "Recorded"
+        assert "Current source reference: Workflow test, page 1" in window.page.details.toPlainText()
+        assert "Source reference at last check: Not reviewed" in window.page.details.toPlainText()
         window.close()
     with ProposalReview(workspace[0]) as review:
         window = ReconciliationReviewWindow(review, workspace[0])
         assert not window.current
         select(window, "s1")
+        assert window.selected()["cells"][5] == "Recorded"
         dialog = SourceReviewDialog(window.openings, "s1", window)
         assert dialog.reference.text() == "Workflow test, page 1"
         assert dialog.closing.currentData() == "reported"
@@ -114,7 +118,47 @@ def test_concurrent_source_edit_is_rejected_and_external_change_marks_view_stale
         assert window.openings.provenance("s1")["reference"] == "Another window's review"
         window.check_current()
         assert not window.current and "STALE" in window.banner.text()
+        window.source_filter.setCurrentText("Recorded")
+        assert window.page.proxy.rowCount() == 1
+        select(window, "s1")
+        assert "Another window's review" in window.page.details.toPlainText()
         dialog.reject()
+        window.close()
+
+
+def test_source_review_filter_tracks_saved_work_without_rechecking(app, workspace):
+    with prepared(workspace) as review:
+        window = ReconciliationReviewWindow(review, workspace[0])
+        window.show()
+        old = window.view.report["input_version"]
+        window.source_filter.setCurrentText("Not recorded")
+        select(window, "s1")
+
+        def save_partial_review():
+            dialog = app.activeModalWidget()
+            # Recording an incomplete review must not imply verification passed.
+            dialog.reference.setText("Workflow test, still investigating")
+            dialog.save.click()
+
+        QTimer.singleShot(0, save_partial_review)
+        window.edit.click()
+        assert window.view.report["input_version"] == old and not window.current
+        assert all(r["row"]["statement_id"] != "s1" for r in window.page.model.records)
+        assert not window.selected() and not window.edit.isEnabled() and not window.evidence.model.records
+        window.source_filter.setCurrentText("Recorded")
+        assert window.page.proxy.rowCount() == 1
+        select(window, "s1")
+        assert window.selected()["cells"][5] == "Recorded"
+        assert not window.selected()["row"]["reconciled"]
+        assert "opening Unverified" in window.page.details.toPlainText()
+        window.page.search.setText("Credit Card")
+        assert window.page.proxy.rowCount() == 0
+        window.page.search.clear()
+        assert window.page.proxy.rowCount() == 1
+        window.check.click()
+        assert window.current and window.source_filter.currentText() == "Recorded"
+        assert window.page.proxy.rowCount() == 1
+        assert review.store.connection.execute("SELECT count(*) FROM LedgerEntries").fetchone() == (0,)
         window.close()
 
 
