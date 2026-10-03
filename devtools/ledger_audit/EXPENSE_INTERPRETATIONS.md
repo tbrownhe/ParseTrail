@@ -39,7 +39,8 @@ Synthetic tests cover expense/refund signs, read-only preview/inventory, exact a
 optional/required reasons, scope rejection, stale/tampered previews, concurrent transfer
 and partial allocation, competing interpretations, atomic rollback including new schema,
 retry/reopen, correction chains, preserved evidence/history and reconciliation invalidation.
-The service and UI are implemented; Windows owner acceptance is pending. All archive
+The owner accepted Windows rejection, recategorization and persistence on October 3,
+2026. All archive
 exercises use fresh disposable copies; sample decisions are not financial approvals.
 
 ## Review window

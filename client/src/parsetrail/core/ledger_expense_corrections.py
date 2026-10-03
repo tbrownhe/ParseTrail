@@ -11,11 +11,13 @@ from parsetrail.core.ledger_store import decode_entry, encoded
 RULE = "expense-correction-1"
 
 
-def expense_split(store, accounts, observation, splits):
-    """Validate exact expense counterparts shared by new interpretations and corrections."""
+def expense_split(store, accounts, observation, splits, *, kind=AccountKind.EXPENSE):
+    """Validate exact category counterparts shared by interpretations and corrections."""
+    if kind not in (AccountKind.EXPENSE, AccountKind.INCOME):
+        raise LedgerError("Choose an expense or income category scope.")
     c = store.connection
     if not isinstance(splits, (list, tuple)) or not splits:
-        raise LedgerError("Provide one or more exact expense category amounts.")
+        raise LedgerError(f"Provide one or more exact {kind.value} category amounts.")
     normalized = []
     for part in splits:
         if not isinstance(part, (list, tuple)) or len(part) != 2 or type(part[0]) is not int:
@@ -23,7 +25,7 @@ def expense_split(store, accounts, observation, splits):
         cid, amount = part
         minor_units(amount)
         if amount < 0:
-            raise LedgerError("Split amounts must be positive; the source determines expense versus refund signs.")
+            raise LedgerError("Split amounts must be positive; the source determines posting signs.")
         normalized.append((cid, amount))
     normalized.sort()
     if len({cid for cid, _ in normalized}) != len(normalized):
@@ -34,14 +36,14 @@ def expense_split(store, accounts, observation, splits):
     mappings, postings = [], []
     for cid, amount in normalized:
         category = definitions.get(cid)
-        if not category or category["Type"] != "Expense":
+        if not category or category["Type"] != kind.value.title():
             raise LedgerError(
-                "Choose an existing expense category; income and financial accounts are outside this scope."
+                f"Choose an existing {kind.value} category; other account classes are outside this scope."
             )
-        account = LedgerAccount(f"category:{cid}", category["Name"], AccountKind.EXPENSE, observation.currency)
+        account = LedgerAccount(f"category:{cid}", category["Name"], kind, observation.currency)
         account.validate()
         if account.id in accounts and accounts[account.id] != account:
-            raise LedgerError("Expense category account mapping conflicts with the retained definition.")
+            raise LedgerError("Category account mapping conflicts with the retained definition.")
         mappings.append(asdict(account))
         postings.append(Posting(account.id, amount if observation.amount_minor < 0 else -amount))
     return normalized, mappings, postings
@@ -53,6 +55,10 @@ class ExpenseCorrections:
     No guessing, partial settlements, income reclassification, financial-account
     changes, or transfer/loan/asset/opening corrections belong in this service.
     """
+
+    category_kind = AccountKind.EXPENSE
+    rule = RULE
+    key_prefix = "expense-correction:"
 
     def __init__(self, review):
         self.review, self.store = review, review.store
@@ -84,15 +90,15 @@ class ExpenseCorrections:
         scoped = {a["id"] for a in self.review.plan["accounts"] if a["source_account_id"] is not None}
         movement, counterparts = self._movement(original, accounts, observations, scoped)
         observation = observations[movement.allocations[0].observation_id]
-        normalized, mappings, postings = expense_split(store, accounts, observation, splits)
+        normalized, mappings, postings = expense_split(store, accounts, observation, splits, kind=self.category_kind)
         if sorted((p.account_id, p.amount_minor) for p in counterparts) == sorted(
             (p.account_id, p.amount_minor) for p in postings
         ):
             raise LedgerError("Category amounts are unchanged; no correction is needed.")
-        request = {"rule": RULE, "original_key": original_key, "splits": normalized, "reason": reason}
+        request = {"rule": self.rule, "original_key": original_key, "splits": normalized, "reason": reason}
         replacement = replace(
             original,
-            key="expense-correction:" + key(request),
+            key=self.key_prefix + key(request),
             postings=(movement, *postings),
             reviewed=True,
             reason=reason,
@@ -106,17 +112,17 @@ class ExpenseCorrections:
             "replacement": replacement.payload(),
             "category_accounts": mappings,
             "financial_movement_unchanged": True,
-            "net_expense_change_minor": 0,
+            f"net_{self.category_kind.value}_change_minor": 0,
         }
         # Canonical JSON types make persisted previews compare identically on reopen.
         plan = json.loads(encoded(plan))
         return {**plan, "preview_hash": key(plan)}
 
-    @staticmethod
-    def _movement(original, accounts, observations, scoped):
+    @classmethod
+    def _movement(cls, original, accounts, observations, scoped):
         financial = [p for p in original.postings if accounts[p.account_id].source_account_id is not None]
         if original.origin != "imported" or len(financial) != 1 or financial[0].account_id not in scoped:
-            raise LedgerError("Only ordinary cash/card expense or refund entries can be corrected here.")
+            raise LedgerError(f"Only ordinary imported {cls.category_kind.value} entries can be corrected here.")
         movement = financial[0]
         if len(movement.allocations) != 1:
             raise LedgerError("Correction requires one whole source movement.")
@@ -131,17 +137,17 @@ class ExpenseCorrections:
             raise LedgerError("Correction requires the unchanged whole source amount, account and date.")
         counterparts = [p for p in original.postings if p is not movement]
         if not counterparts or any(
-            accounts[p.account_id].kind != AccountKind.EXPENSE
+            accounts[p.account_id].kind != cls.category_kind
             or accounts[p.account_id].purpose != "normal"
             or p.allocations
             or (p.amount_minor > 0) == (movement.amount_minor > 0)
             for p in counterparts
         ):
             raise LedgerError(
-                "Transfer, asset, income and mixed-sign counterparts require a different correction workflow."
+                "Other account classes and mixed-sign counterparts require a different correction workflow."
             )
         if sum(p.amount_minor for p in counterparts) != -movement.amount_minor:
-            raise LedgerError("Original expense counterparts do not match the source amount.")
+            raise LedgerError("Original category counterparts do not match the source amount.")
         return movement, counterparts
 
     def entries(self):
@@ -191,7 +197,7 @@ class ExpenseCorrections:
     def apply(self, plan):
         """Atomically create needed category mappings and reverse/replace a checked plan."""
         if (
-            plan.get("rule") != RULE
+            plan.get("rule") != self.rule
             or plan.get("candidate_hash") != key(self.review.plan)
             or plan.get("preview_hash") != key({k: v for k, v in plan.items() if k != "preview_hash"})
         ):

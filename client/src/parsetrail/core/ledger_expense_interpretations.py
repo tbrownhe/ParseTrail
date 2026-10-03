@@ -4,7 +4,15 @@ import json
 from contextlib import contextmanager
 from dataclasses import asdict
 
-from parsetrail.core.ledger import Allocation, JournalEntry, LedgerError, Posting, identifier, validate_entry
+from parsetrail.core.ledger import (
+    AccountKind,
+    Allocation,
+    JournalEntry,
+    LedgerError,
+    Posting,
+    identifier,
+    validate_entry,
+)
 from parsetrail.core.ledger_expense_corrections import expense_split
 from parsetrail.core.ledger_opening_review import observation_date_provenance
 from parsetrail.core.ledger_rebuild import key
@@ -15,6 +23,12 @@ DEFAULT_REASON = "Explicitly classified as ordinary expense/refund"
 
 
 class ExpenseInterpretations:
+    category_kind = AccountKind.EXPENSE
+    rule = RULE
+    default_reason = DEFAULT_REASON
+    history_table = "ExpenseInterpretations"
+    key_prefix = "expense-interpretation:"
+
     def __init__(self, review):
         self.review, self.store = review, review.store
         self.scope = {o["id"]: o for o in review.plan["observations"]}
@@ -32,11 +46,11 @@ class ExpenseInterpretations:
 
     def _history(self):
         c = self.store.connection
-        if not c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='ExpenseInterpretations'").fetchone():
+        if not c.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (self.history_table,)).fetchone():
             return {}
         return {
             oid: json.loads(payload)
-            for oid, payload in c.execute("SELECT observation_id,payload FROM ExpenseInterpretations")
+            for oid, payload in c.execute(f"SELECT observation_id,payload FROM {self.history_table}")
         }
 
     def _proposal(self, oid):
@@ -110,14 +124,14 @@ class ExpenseInterpretations:
         if isinstance(reason, str):
             reason = reason.strip()
             if not reason and not proposal:
-                reason = DEFAULT_REASON
+                reason = self.default_reason
         identifier(reason)
         tid = observation_id.removeprefix("source:")
         source = json.loads(c.execute("SELECT payload FROM SourceTransactions WHERE id=?", (tid,)).fetchone()[0])
-        splits, mappings, counterparts = expense_split(store, accounts, observation, splits)
-        request = {"rule": RULE, "observation_id": observation_id, "splits": splits, "reason": reason}
+        splits, mappings, counterparts = expense_split(store, accounts, observation, splits, kind=self.category_kind)
+        request = {"rule": self.rule, "observation_id": observation_id, "splits": splits, "reason": reason}
         entry = JournalEntry(
-            "expense-interpretation:" + key(request),
+            self.key_prefix + key(request),
             "event:" + tid,
             observation.posting_date,
             source["Description"],
@@ -150,7 +164,7 @@ class ExpenseInterpretations:
 
     def apply(self, plan):
         if (
-            plan.get("rule") != RULE
+            plan.get("rule") != self.rule
             or plan.get("candidate_hash") != key(self.review.plan)
             or plan.get("preview_hash") != key({k: v for k, v in plan.items() if k != "preview_hash"})
         ):
@@ -166,14 +180,14 @@ class ExpenseInterpretations:
             fresh = self._build(plan["observation_id"], plan["splits"], plan["reason"])
             if fresh != plan:
                 raise LedgerError("Interpretation inputs changed since preview; review a fresh preview.")
-            c.execute("""CREATE TABLE IF NOT EXISTS ExpenseInterpretations(
+            c.execute(f"""CREATE TABLE IF NOT EXISTS {self.history_table}(
                 observation_id TEXT PRIMARY KEY REFERENCES LedgerObservations(id),
                 entry_key TEXT NOT NULL UNIQUE REFERENCES LedgerEntries(key), payload TEXT NOT NULL,
                 created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')))""")
             for action in ("UPDATE", "DELETE"):
                 c.execute(
-                    f"CREATE TRIGGER IF NOT EXISTS ExpenseInterpretations_{action} BEFORE {action} ON ExpenseInterpretations "
-                    "BEGIN SELECT RAISE(ABORT,'Expense interpretations are immutable'); END"
+                    f"CREATE TRIGGER IF NOT EXISTS {self.history_table}_{action} BEFORE {action} ON {self.history_table} "
+                    "BEGIN SELECT RAISE(ABORT,'Category interpretations are immutable'); END"
                 )
             for account in fresh["category_accounts"]:
                 if not c.execute("SELECT 1 FROM LedgerAccounts WHERE id=?", (account["id"],)).fetchone():
@@ -183,7 +197,7 @@ class ExpenseInterpretations:
             usage = validate_entry(entry, store.accounts(), store.observations(), store.consumed())
             store._insert(entry, usage)
             c.execute(
-                "INSERT INTO ExpenseInterpretations(observation_id,entry_key,payload) VALUES(?,?,?)",
+                f"INSERT INTO {self.history_table}(observation_id,entry_key,payload) VALUES(?,?,?)",
                 (plan["observation_id"], entry.key, encoded(plan)),
             )
             return entry.key

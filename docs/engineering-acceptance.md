@@ -35,7 +35,8 @@ confirmation, posting, history and reopen; screenshots were inspected. A fresh o
 preserves all original candidate tables and starts with no decisions, journals, allocations
 or interpretations; integrity and foreign-key checks passed. Private source identifiers,
 amounts and screenshots stay ignored. Sample choices are workflow tests, not approvals of
-the owner's financial history. Native Windows acceptance is pending.
+the owner's financial history. The owner accepted Windows rejection, recategorization
+and persistence on October 3 and authorized continued work.
 
 Windows verification: **929 tests passed, 3 skipped** in 173.28 seconds with offscreen
 Qt and process-only `RemoteSigned`. **18 new service cases** and **5 new GUI cases**
