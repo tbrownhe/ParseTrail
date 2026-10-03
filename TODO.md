@@ -159,10 +159,16 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   missing/multiple candidates, expense conflicts and existing allocations. Confirmation
   posts atomically: one same-day entry or two source-dated entries through clearing.
   No expense/income, balancing adjustment or automatic transfer confirmation is inferred.
-  [USER] Complete the Windows transfer workflow check on a fresh disposable copy.
+  The owner accepted the Windows transfer workflow and persistence on October 2.
   Earlier ordinary-review test decisions are UI exercises, not accounting decisions
-  to carry into rebuilt books. Opening anchors, broader split/correction workflows,
-  reconciliation and report cutover remain after this checkpoint.
+  to carry into rebuilt books. The [opening-readiness audit](devtools/ledger_audit/OPENINGS.md)
+  now records earliest source balances, conditional cutoffs, provenance blockers and
+  interval-aware continuity checks without posting journals. Equal balances across
+  missing periods do not establish coverage. Chase posting dates are transaction-date
+  proxies and must remain explicitly estimated, not silently certified as bank dates.
+  Next bounded chunk: explicit source balance/date provenance and reviewed opening
+  anchors, preserving raw evidence and unresolved gaps. Broader split/correction
+  workflows, reconciliation and report cutover remain unfinished.
 - [ ] **L5b — Ledger interpretation editing:** persist review decisions, confirmed
   transfers/splits, opening anchors, source corrections and reversal/replacement
   workflows; require a separate Windows native walkthrough before report cutover.

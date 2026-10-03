@@ -6,6 +6,45 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## Opening-position readiness and continuity audit — October 2, 2026
+
+After accepting transfer workflow/persistence, the owner authorized continued ledger
+work. The [read-only opening audit](../devtools/ledger_audit/OPENINGS.md) binds the
+accepted rebuild and cash/card candidate artifacts, preserves their hashes and emits
+deterministic private reports. It does not use GUI test decisions, open databases
+for writing, post opening journals or promote source provenance.
+
+The service retains all earliest-period statements for each scoped account and their
+exact opening signs. Conflicting earliest balances produce no chosen amount; missing
+or ineligible earliest sources cannot be bypassed with later statements. Conditional
+cutoffs follow the kernel's before-inclusive-start convention and remain subject to
+source review. Zero openings require no zero journal but still require timing and
+provenance. Every candidate remains unreviewed, with explicit posting/cutover blockers.
+
+Continuity uses the furthest covered endpoint, preventing nested statements from
+creating false gaps. Equal-date endpoint conflicts remain visible, and missing periods
+remain gaps even when boundary amounts agree. On the private reference archive all
+directly adjacent cash/card boundary amounts agreed; uncovered card periods remained
+explicit. The unused archive inventory did not identify corresponding missing-period
+sources. Private dates, monetary amounts, counts and filenames remain ignored.
+
+Source inspection also confirmed that the current Chase parser has only transaction
+dates and uses statement-bounded posting-date proxies. The audit records that limitation;
+it does not label normalized dates as independently established bank posting dates.
+Other endpoint/date provenance also remains uncertified by this audit. The next chunk
+must attach explicit source provenance before reviewed opening entries and independent
+reconciliation can rely on it. No parser or accepted source data was changed here.
+
+Windows verification: **823 tests passed, 3 skipped** in 150.52 seconds with offscreen
+Qt and process-only `RemoteSigned` for the builder probe. **14 new focused tests**
+cover signed/zero openings, unresolved provenance, earliest-source conflicts, adjacent
+agreements/differences, zero-difference gaps, nested periods, conflicting prior closings,
+missing sources, snapshot binding, deterministic reports, immutable inputs, overwrite
+refusal and tamper/active-input rejection. Ruff lint/format passed across **213 files**.
+Two independent private audit runs produced identical readiness and completion report
+bytes. This calculation/report chunk introduces no GUI, dependency, server, installer
+or live-profile change, and requires no additional native walkthrough.
+
 ## Transfer and card-payment matching/review — October 2, 2026
 
 The owner clarified that earlier disposable ordinary-review decisions exercised the
@@ -48,8 +87,10 @@ postings, idempotency, transactional failure, GUI selection/cancellation/dismiss
 cross-tab conflict resolution and persistence. Ruff lint/format passed across **210
 files**. No server, dependency, packaging, live-profile or report-cutover change occurred.
 
-**Windows owner acceptance of the transfer workflow is pending.** Opening anchors,
-split/correction workflows, independent reconciliation and report cutover remain open.
+The owner confirmed the Windows transfer workflow and persistence on October 2.
+This accepts the UI behavior, not the disposable sample accounting decisions.
+Opening anchors, split/correction workflows, independent reconciliation and report
+cutover remain open.
 
 ## Ordinary proposal review and posting — October 2, 2026
 

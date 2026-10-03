@@ -96,5 +96,7 @@ reopen, saving a private screenshot. Its archive-sized fixture needs at least on
 unique different-date pair and another available candidate. This smoke does not
 establish native owner acceptance; synthetic tests cover edge cases independently.
 
-Owner Windows acceptance is pending. Keep all snapshots, reports and screenshots
+The owner confirmed Windows workflow and persistence on October 2, 2026. This accepts
+the controls, not the sample financial interpretations. The next service checkpoint
+is [opening-position readiness](OPENINGS.md). Keep all snapshots, reports and screenshots
 in ignored private storage. No server operation or new dependency is required.
