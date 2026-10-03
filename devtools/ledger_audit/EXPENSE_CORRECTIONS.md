@@ -2,8 +2,8 @@
 
 `ExpenseCorrections` provides a read-only preview and atomic application for changing
 the expense-category counterparts of an already posted cash/card purchase or refund.
-It follows the accepted [reconciliation review](RECONCILIATION.md). This is the service
-chunk; a correction editor and owner Windows acceptance are still required.
+It follows the accepted [reconciliation review](RECONCILIATION.md). The service and
+disposable correction editor are implemented; owner Windows acceptance is pending.
 
 The caller selects an active imported ordinary entry, one or more existing expense
 categories, exact positive minor-unit amounts, and a required explanation. Split amounts
@@ -59,9 +59,45 @@ reason; routine ordinary acceptance retains its optional-note behavior.
 Testing uses synthetic fixtures and a fresh disposable archive workspace. Private
 purchase/refund decisions made to exercise corrections are UI/service tests, not actual
 financial approvals to migrate into rebuilt books. Accepted candidate inputs and the
-live profile remain unchanged. No GUI, schema migration, server change or report cutover
-is introduced by this service chunk.
+live profile remain unchanged. No schema migration, dependency, server change or report
+cutover is introduced.
 
-Next: an editor that lists active ordinary entries, previews the category split and
-reversal/replacement, requires a correction reason, and offers cancellation before
-application. Native Windows workflow/persistence acceptance precedes broader use.
+## Correction editor
+
+Prepare a fresh copy from accepted unposted candidates (repository root):
+
+```powershell
+& client/.venv/Scripts/python.exe devtools/ledger_audit/review_proposals.py --corrections --candidates <candidate-folder> --folder <new-review-folder> --prepare-only
+```
+
+Open or reopen that same workspace:
+
+```powershell
+& client/.venv/Scripts/pythonw.exe devtools/ledger_audit/review_proposals.py --corrections --folder <review-folder>
+```
+
+The fresh **Posted expenses and refunds** tab starts empty. In **Original proposals**,
+accept one ordinary expense/refund as a disposable workflow exercise, then return to
+the posted tab. Select its active entry and choose **Edit category split…**. Choose
+another expense category or add splits, supply a correction reason, then preview.
+Amounts use positive USD text with at most two decimal places, without commas or currency
+symbols; they must sum exactly to the original movement. Refund amounts reduce expenses.
+
+The preview shows current and replacement category amounts, unchanged financial movement
+and total expense, the reason, and reversal/replacement history. Any edit clears the
+preview and disables Apply until previewed again. Cancel or closing the editor writes
+nothing. Apply requires confirmation and rechecks the committed inputs; another correction
+or interpretation-review change invalidates a stale preview.
+
+After applying, the active list selects the replacement. **Superseded** and **All** filters
+expose original entries with replacement links; superseded entries cannot be edited.
+Later corrections target the active replacement. **Original proposals** retains historical
+proposal categories and decisions; current category distribution comes from posted entries.
+Returning from proposal review or choosing **Refresh entries** reloads current postings.
+
+For native acceptance, cancel a preview once, then preview/apply a sample correction,
+inspect both active and superseded entries, and close/reopen to confirm persistence.
+These test choices do not approve the owner's financial history. Native Windows acceptance
+precedes broader use; prepare each owner test from unposted candidates rather than copying
+earlier test decisions. `--smoke --corrections` exercises cancellation, confirmation,
+application, history/filter behavior and reopen in a separate disposable workspace.

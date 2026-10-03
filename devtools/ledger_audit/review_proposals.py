@@ -19,6 +19,9 @@ def main():
     )
     modes.add_argument("--openings", action="store_true", help="Review source provenance and opening positions.")
     modes.add_argument("--reconciliation", action="store_true", help="Review statement checks and source provenance.")
+    modes.add_argument(
+        "--corrections", action="store_true", help="Preview and apply ordinary expense/refund category corrections."
+    )
     parser.add_argument(
         "--readiness", type=Path, help="Verified opening-readiness folder, required for a new opening workspace."
     )
@@ -64,7 +67,11 @@ def main():
             families = QFontDatabase.applicationFontFamilies(font_id)
             if families:
                 app.setFont(QFont(families[0], 10))
-        if args.reconciliation:
+        if args.corrections:
+            from parsetrail.gui.ledger_expense_corrections import ExpenseCorrectionWindow
+
+            window = ExpenseCorrectionWindow(review)
+        elif args.reconciliation:
             from parsetrail.core.ledger_opening_review import OpeningReview
             from parsetrail.gui.ledger_reconciliation_review import ReconciliationReviewWindow
 
@@ -82,7 +89,50 @@ def main():
         else:
             window = ProposalReviewWindow(review)
         window.show()
-        if args.smoke and args.reconciliation:
+        if args.smoke and args.corrections:
+            from parsetrail.gui.ledger_expense_corrections import ExpenseCorrectionDialog
+            from PySide6.QtCore import QTimer
+
+            window.tabs.setCurrentIndex(1)
+            index = next(i for i, r in enumerate(window.ordinary.page.model.records) if r["expense_minor"] > 1)
+            window.ordinary.page.table.selectRow(index)
+            window.ordinary.reason.setText("Disposable correction workflow exercise; not financial approval")
+            window.ordinary.confirm = lambda *_: True
+            window.ordinary.accept.click()
+            window.tabs.setCurrentIndex(0)
+            window.page.table.selectRow(0)
+
+            def exercise_correction(save):
+                dialog = app.activeModalWidget()
+                assert isinstance(dialog, ExpenseCorrectionDialog)
+                original_cid = dialog.table.cellWidget(0, 0).currentData()
+                other = next(cid for cid in dialog.categories if cid != original_cid)
+                total = abs(dialog.record["amount_minor"])
+                dialog.table.cellWidget(0, 1).setText("0.01")
+                dialog.add_split(other, total - 1)
+                dialog.reason.setText("Disposable split exercise; not financial approval")
+                dialog.preview.click()
+                assert dialog.apply.isEnabled()
+                if not save:
+                    dialog.reject()
+                    return
+                dialog.grab().save(str(args.folder / "correction-preview-smoke.png"))
+                dialog.confirm = lambda: False
+                dialog.apply.click()
+                assert review.store.connection.execute("SELECT count(*) FROM LedgerCorrections").fetchone() == (0,)
+                dialog.confirm = lambda: True
+                dialog.apply.click()
+
+            QTimer.singleShot(0, lambda: exercise_correction(False))
+            window.edit.click()
+            assert review.store.connection.execute("SELECT count(*) FROM LedgerCorrections").fetchone() == (0,)
+            QTimer.singleShot(0, lambda: exercise_correction(True))
+            window.edit.click()
+            assert window.selected()["record"]["previous_key"]
+            app.processEvents()
+            window.grab().save(str(args.folder / "review-smoke.png"))
+            window.close()
+        elif args.smoke and args.reconciliation:
             from parsetrail.gui.ledger_reconciliation_review import SourceReviewDialog
             from PySide6.QtCore import QTimer
 
@@ -212,7 +262,23 @@ def main():
         else:
             return app.exec()
     with ProposalReview(args.folder) as reopened:
-        if args.reconciliation:
+        if args.corrections:
+            from parsetrail.gui.ledger_expense_corrections import ExpenseCorrectionWindow
+
+            window = ExpenseCorrectionWindow(reopened)
+            assert window.page.proxy.rowCount() == 1
+            window.page.table.selectRow(0)
+            assert window.selected()["record"]["previous_key"]
+            window.filter.setCurrentText("Superseded")
+            assert window.page.proxy.rowCount() == 1
+            window.page.table.selectRow(0)
+            assert not window.edit.isEnabled()
+            window.page.search.setText("NO-MATCH-SYNTHETIC-FILTER-123456")
+            assert not window.selected()
+            window.close()
+            assert reopened.store.connection.execute("SELECT count(*) FROM LedgerEntries").fetchone() == (3,)
+            assert reopened.store.connection.execute("SELECT count(*) FROM LedgerCorrections").fetchone() == (1,)
+        elif args.reconciliation:
             from parsetrail.gui.ledger_reconciliation_review import ReconciliationReviewWindow
 
             window = ReconciliationReviewWindow(reopened, args.folder)

@@ -6,6 +6,37 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## Ordinary expense/refund correction editor — October 3, 2026
+
+The owner authorized implementation of the next ledger chunk without routine check-ins.
+The [correction editor](../devtools/ledger_audit/EXPENSE_CORRECTIONS.md#correction-editor)
+lists posted ordinary expenses/refunds separately from historical proposals, with active,
+superseded and all-entry filters. It supports category reassignment and exact USD splits,
+requires a correction reason, and previews the unchanged financial movement and total
+expense alongside the replacement category amounts. Any form edit invalidates the preview.
+Cancellation and window close write nothing; Apply requires confirmation and revalidates
+the committed inputs. Superseded entries cannot be edited; later corrections target the
+active replacement. Verified source-category annotations remain preserved history.
+
+A separate archive-sized offscreen exercise passed acceptance of a sample proposal,
+preview/cancel, cancelled confirmation, application, history/filter behavior and reopen;
+both screenshots were inspected. The fresh owner copy preserves all original candidate
+tables and starts with zero proposal decisions, journals, allocations and corrections.
+Integrity and foreign-key checks passed. Sample choices remain disposable workflow tests,
+not financial approvals. Private source identifiers, amounts and screenshots stay ignored.
+
+Windows verification: the full offscreen suite returned **905 passed, 3 skipped** and
+one build-script test blocked by PowerShell execution policy in 179.51 seconds. That
+single test passed on rerun with process-only `RemoteSigned` in 0.47 seconds, for
+**906 passing tests overall**. The focused service/UI suite passed **36 tests**, including
+**15 new UI/inventory cases**. Ruff lint/format passed across **226 files**.
+
+The new focused UI/inventory tests cover purchase/refund signs, exact decimal input,
+required reasons, split totals and no-op rejection, preview invalidation, cancellation,
+active/superseded history, stale concurrent corrections and persistence. The owner Windows
+preview/cancel/apply/persistence walkthrough is pending. No dependency, schema migration,
+server, live-profile change or report cutover was introduced.
+
 ## Ordinary expense/refund correction service — October 3, 2026
 
 After accepting the source-review visibility follow-up, the owner authorized continued

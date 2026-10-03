@@ -192,8 +192,10 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   The [expense/refund correction service](devtools/ledger_audit/EXPENSE_CORRECTIONS.md)
   now previews exact category splits and atomically reverses/replaces posted ordinary
   entries, preserving the whole original financial movement and verified category history.
-  Next: correction editor with explicit preview/reason, cancellation and owner Windows
-  acceptance. New interpretations for unposted evidence and transfer/clearing, loan,
+  The correction editor now lists active/superseded entries, previews exact category
+  splits with a required reason, and supports cancellation before application.
+  Next: owner Windows preview/cancel/apply/persistence acceptance on a fresh disposable
+  copy. New interpretations for unposted evidence and transfer/clearing, loan,
   asset, opening and source corrections remain separate scopes.
 - [ ] **CF2 — Ledger-backed cash-flow contract:** after L1–L5, define account scope, income,
   purchases, refunds, internal transfers, card payments, and loan treatment.
