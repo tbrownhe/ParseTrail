@@ -40,7 +40,8 @@ cases covering signs, exact splits, scope, proposal history, optional/required r
 concurrent transfer/expense consumption, partial postings, stale/tampered previews,
 mapping conflicts, atomic rollback, category correction chains, read-only inventory,
 retry/reopen and reconciliation invalidation. The income review UI is implemented;
-Windows owner acceptance is pending. Private archive exercises use disposable copies and are not
+The owner accepted the Windows income workflow and persistence on October 3, 2026.
+Private archive exercises use disposable copies and are not
 financial approvals; the active client profile and reports remain unchanged.
 
 ## Income review window

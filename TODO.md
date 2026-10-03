@@ -131,6 +131,12 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   source-corrected HSA observations with remaining gaps unreconciled; live history
   is untouched. Opening anchors, synthetic-loan treatment and investment/valuation
   semantics still need explicit review before posting those interpretations.
+  The [loan-readiness audit and read-only view](devtools/ledger_audit/LOANS.md) now
+  inventory fresh loan source periods, exact balance equations, distinct movements
+  and parser/component limits. Synthetic origination, capitalized interest and asset
+  funding remain explicit review hints; no loan observation is admitted or posted.
+  Next: owner Windows navigation/evidence-clarity check, then a bounded loan posting
+  design using these source contracts. Keep Wells Fargo origination uncertainty deferred.
 - [~] **L4 — Fresh-ledger posting and reconciliation:** the
   [shadow converter](devtools/ledger_audit/SHADOW.md) established kernel/replay checks;
   the approved breaking transition now uses freshly parsed evidence from L4R.
@@ -202,8 +208,8 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   acceptance on October 3. The next bounded chunk adds explicit positive checking/savings
   income receipts and category corrections, preserving the deposited amount without
   inferring gross pay/deductions. Its [service and UI](devtools/ledger_audit/INCOME.md)
-  are implemented; next is owner Windows preview/cancel/post/correction/persistence
-  acceptance on a fresh disposable copy.
+  passed owner Windows workflow and persistence acceptance on October 3.
+  The next accounting scope is the read-only loan-readiness checkpoint under L1.
   Negative income adjustments, transfer/clearing, loan, asset, opening and source
   corrections remain separate scopes.
 - [ ] **CF2 — Ledger-backed cash-flow contract:** after L1–L5, define account scope, income,

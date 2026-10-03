@@ -6,6 +6,41 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## Read-only loan evidence readiness — October 3, 2026
+
+After the owner accepted the cash-income workflow, the next L1 checkpoint inventoried
+loan source evidence before admitting it to the ledger. The
+[loan-readiness service and view](../devtools/ledger_audit/LOANS.md) expose loan accounts,
+source balance equations and distinct movements, with source membership and recorded
+parser manifests. They distinguish principal/register balance meaning, derived endpoints,
+assumed periods and activity ranges. Equation agreement never certifies independent
+reconciliation or coverage. This checkpoint does not check cross-statement continuity.
+
+Payment, interest, financing, purchase/asset-funding and capitalized-interest hints are
+explicitly unreviewed. Synthetic Wells Fargo origination retains estimated provenance;
+the owner's parser-change deferral remains in force. Missing/failed sources, malformed
+memberships, out-of-period rows and unsupported parser/account/currency contracts remain
+visible or are refused. Overlapping membership never duplicates account movement totals.
+No observations are admitted, interpretations confirmed, loan postings proposed, parser
+files altered or report cutover enabled.
+
+The private archive-sized report reproduced identically in independent output folders;
+accepted plan/fresh/legacy input hashes remained unchanged. The offscreen view passed
+selection, text filtering, detail clearing and close across all three tabs. Screenshots
+were inspected. Archive inspection exposed an interest-description/purchase-hint overlap;
+the final rules prioritize interest and have a regression for “Interest Charge on Purchases.”
+Private account details, amounts and screenshots remain ignored. The owner view is a
+read-only artifact, with native Windows navigation/evidence-clarity acceptance pending.
+
+Windows full-suite verification passed **973 tests, 3 skipped** in 199.21 seconds with
+offscreen Qt and process-only `RemoteSigned`. After the final hint-ordering and detail-view
+refinement, the focused loan suite passed **21 tests**, including the additional regression.
+Coverage includes exact money, parser provenance, synthetic/financing limits, overlapping
+evidence, missing/failed sources, date/balance exceptions, malformed membership/periods,
+non-USD display, checksum refusal, inactive-source/overwrite guards, unchanged source bytes,
+deterministic reports and GUI selection/filter behavior. Ruff lint/format passed across
+**238 files**. No dependency, server, active-profile or financial posting change occurred.
+
 ## Positive cash income receipts and category corrections — October 3, 2026
 
 The owner accepted expense rejection/recategorization/persistence and authorized continued
@@ -35,8 +70,8 @@ posting, correction preview/cancel/apply, active/superseded history and reopen. 
 were inspected. The fresh owner copy contains the unchanged candidate tables with no
 decisions, postings, allocations or income interpretations; integrity and foreign-key
 checks passed. Private source details and screenshots remain ignored. Sample decisions
-are disposable workflow exercises, not financial approvals. Windows owner acceptance
-is pending.
+are disposable workflow exercises, not financial approvals. The owner accepted the
+Windows workflow and persistence on October 3 and authorized continued ledger work.
 
 Windows verification: **953 tests passed, 3 skipped** in 200.91 seconds with offscreen
 Qt and process-only `RemoteSigned`. **20 new service cases** cover income signs and exact
