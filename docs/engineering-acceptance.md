@@ -6,6 +6,55 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## Positive cash income receipts and category corrections — October 3, 2026
+
+The owner accepted expense rejection/recategorization/persistence and authorized continued
+ledger work. The [income service and review window](../devtools/ledger_audit/INCOME.md)
+explicitly classify positive, wholly unallocated checking/savings receipts into existing
+income categories. Inventory eligibility does not imply income; transfers, loan proceeds
+and refunds need their own treatment. The posted amount is exactly the observed receipt,
+without inferred gross pay or deductions. Card credits, outflows and other account types
+remain outside this income scope.
+
+Read-only previews bind source facts, proposal history, date provenance, category mappings
+and exact split amounts. Posting atomically creates required income mappings, a balanced
+reviewed journal, one full source allocation and append-only interpretation history.
+Pending ordinary proposals block the action until explicitly rejected; earlier rejection
+and category annotations remain preserved. New ordinary income notes are optional;
+reinterpreting rejected evidence and later corrections require explanations.
+
+The UI requires an explicit income-category choice and displays income amounts positively
+while storing income credits with the correct negative journal sign. Category corrections
+preview zero net change in income and cash received, then atomically reverse and replace
+the journal. Active/superseded history, retry and reopen retain original evidence and
+interpretations. Concurrent allocations, changed review state and tampered previews are
+rejected; preview edits and cancellation leave no posting.
+
+An archive-sized offscreen workflow passed income preview/cancel, cancelled confirmation,
+posting, correction preview/cancel/apply, active/superseded history and reopen. Screenshots
+were inspected. The fresh owner copy contains the unchanged candidate tables with no
+decisions, postings, allocations or income interpretations; integrity and foreign-key
+checks passed. Private source details and screenshots remain ignored. Sample decisions
+are disposable workflow exercises, not financial approvals. Windows owner acceptance
+is pending.
+
+Windows verification: **953 tests passed, 3 skipped** in 200.91 seconds with offscreen
+Qt and process-only `RemoteSigned`. **20 new service cases** cover income signs and exact
+splits, excluded scopes, optional/required reasons, prior refund rejection, competing
+transfer/expense postings, partial consumption, stale/tampered plans, mapping conflicts,
+rollback, correction history, read-only inventory and retry/reopen. **4 new GUI cases**
+cover preview/cancel/post/correct/reopen, positive income display, category selection,
+required correction reasons, exact amounts, preview invalidation, rejected history,
+stale transfer handling and filter clearing. The focused service suite passed **59 tests**;
+the combined new/existing editor suite passed **24 tests**. Ruff lint/format passed
+across **234 files**.
+
+The new income services reuse the tested category split, interpretation transaction and
+correction machinery. No new dependency, server interface, active-profile migration or
+financial report cutover was introduced. The isolated workspace creates its append-only
+income interpretation table on first posting. Negative income adjustments and richer
+payroll interpretations remain separate scopes.
+
 ## Unposted expense/refund interpretation service and UI — October 3, 2026
 
 After accepting the correction editor, the owner authorized the next ledger chunk.

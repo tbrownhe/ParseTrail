@@ -76,22 +76,29 @@ class ExpenseInterpretationDialog(ExpenseCorrectionDialog):
 
 
 class ExpenseInterpretationPage(QWidget):
+    service_type = ExpenseInterpretations
+    dialog_type = ExpenseInterpretationDialog
+    action_text = "Classify as expense/refund…"
+    scope_text = "movements"
+    notice_text = (
+        "These movements have no posted interpretation. Their presence here does not mean they are expenses.\n"
+        "Use this action only for ordinary expenses/refunds. Pending proposals remain in Original proposals; "
+        "income, transfers, loans and assets need their own workflows."
+    )
+    detail_text = "No expense/refund classification is implied. Choose the accounting treatment explicitly."
+
     def __init__(self, review, on_posted, parent=None):
         super().__init__(parent)
-        self.service, self.on_posted = ExpenseInterpretations(review), on_posted
+        self.service, self.on_posted = self.service_type(review), on_posted
         layout = QVBoxLayout(self)
-        notice = QLabel(
-            "These movements have no posted interpretation. Their presence here does not mean they are expenses.\n"
-            "Use this action only for ordinary expenses/refunds. Pending proposals remain in Original proposals; "
-            "income, transfers, loans and assets need their own workflows."
-        )
+        notice = QLabel(self.notice_text)
         notice.setWordWrap(True)
         layout.addWidget(notice)
         controls = QHBoxLayout()
         self.filter = QComboBox()
         self.filter.addItems(["All", "Unclassified", "Rejected proposal"])
         self.reload = QPushButton("Refresh movements")
-        self.interpret = QPushButton("Classify as expense/refund…")
+        self.interpret = QPushButton(self.action_text)
         for widget in (QLabel("Prior interpretation"), self.filter, self.reload, self.interpret):
             controls.addWidget(widget)
         controls.addStretch()
@@ -130,7 +137,7 @@ class ExpenseInterpretationPage(QWidget):
                 f"{record['account_name']} · {record['posting_date']} · {money(record['amount_minor'])}",
                 f"Posting-date provenance: {record['date_provenance']}",
                 f"Prior interpretation: {record['status']}",
-                "No expense/refund classification is implied. Choose the accounting treatment explicitly.",
+                self.detail_text,
                 f"Observation: {record['observation_id']}",
             ]
             if proposal:
@@ -156,7 +163,9 @@ class ExpenseInterpretationPage(QWidget):
                 }
             )
         self.records.sort(key=lambda r: (r["cells"][1], r["cells"][0], r["record"]["observation_id"]), reverse=True)
-        self.summary.setText(f"{len(self.records):,} wholly unallocated movements without a pending ordinary proposal.")
+        self.summary.setText(
+            f"{len(self.records):,} wholly unallocated {self.scope_text} without a pending ordinary proposal."
+        )
         self.render()
 
     def render(self, *_):
@@ -174,7 +183,7 @@ class ExpenseInterpretationPage(QWidget):
         selected = self.selected()
         if not selected:
             return
-        dialog = ExpenseInterpretationDialog(self.service, selected["record"], self)
+        dialog = self.dialog_type(self.service, selected["record"], self)
         dialog.exec()
         self.refresh()
         if dialog.result_key:

@@ -25,6 +25,9 @@ def main():
     modes.add_argument(
         "--interpretations", action="store_true", help="Explicitly classify unposted cash/card expenses and refunds."
     )
+    modes.add_argument(
+        "--income", action="store_true", help="Review positive cash income receipts and category corrections."
+    )
     parser.add_argument(
         "--readiness", type=Path, help="Verified opening-readiness folder, required for a new opening workspace."
     )
@@ -70,7 +73,11 @@ def main():
             families = QFontDatabase.applicationFontFamilies(font_id)
             if families:
                 app.setFont(QFont(families[0], 10))
-        if args.corrections or args.interpretations:
+        if args.income:
+            from parsetrail.gui.ledger_income import IncomeReviewWindow
+
+            window = IncomeReviewWindow(review)
+        elif args.corrections or args.interpretations:
             from parsetrail.gui.ledger_expense_corrections import ExpenseCorrectionWindow
 
             window = ExpenseCorrectionWindow(review, interpretations=args.interpretations)
@@ -92,7 +99,67 @@ def main():
         else:
             window = ProposalReviewWindow(review)
         window.show()
-        if args.smoke and args.interpretations:
+        if args.smoke and args.income:
+            from parsetrail.gui.ledger_income import IncomeCorrectionDialog, IncomeInterpretationDialog
+            from PySide6.QtCore import QTimer
+
+            page = window.interpretations
+            index = next(i for i, r in enumerate(page.page.model.records) if r["record"]["amount_minor"] > 1)
+            page.page.table.selectRow(index)
+            oid = page.selected()["record"]["observation_id"]
+
+            def exercise_income(save):
+                dialog = app.activeModalWidget()
+                assert isinstance(dialog, IncomeInterpretationDialog)
+                assert dialog.table.cellWidget(0, 0).currentIndex() == -1
+                dialog.table.cellWidget(0, 0).setCurrentIndex(0)
+                dialog.preview.click()
+                assert dialog.apply.isEnabled()
+                if not save:
+                    dialog.close()
+                    return
+                dialog.grab().save(str(args.folder / "income-preview-smoke.png"))
+                dialog.confirm = lambda: False
+                dialog.apply.click()
+                assert review.store.connection.execute("SELECT count(*) FROM LedgerEntries").fetchone() == (0,)
+                dialog.confirm = lambda: True
+                dialog.apply.click()
+
+            QTimer.singleShot(0, lambda: exercise_income(False))
+            page.interpret.click()
+            assert review.store.connection.execute("SELECT count(*) FROM LedgerEntries").fetchone() == (0,)
+            page.page.table.selectRow(index)
+            QTimer.singleShot(0, lambda: exercise_income(True))
+            page.interpret.click()
+            assert window.tabs.currentIndex() == 0 and window.selected()["record"]["active"]
+
+            def exercise_income_correction(save):
+                dialog = app.activeModalWidget()
+                assert isinstance(dialog, IncomeCorrectionDialog)
+                dialog.table.cellWidget(0, 0).setCurrentIndex(1)
+                dialog.reason.setText("Disposable income category correction; not financial approval")
+                dialog.preview.click()
+                assert dialog.apply.isEnabled()
+                if not save:
+                    dialog.close()
+                    return
+                dialog.grab().save(str(args.folder / "income-correction-smoke.png"))
+                dialog.confirm = lambda: False
+                dialog.apply.click()
+                assert review.store.connection.execute("SELECT count(*) FROM LedgerCorrections").fetchone() == (0,)
+                dialog.confirm = lambda: True
+                dialog.apply.click()
+
+            QTimer.singleShot(0, lambda: exercise_income_correction(False))
+            window.edit.click()
+            QTimer.singleShot(0, lambda: exercise_income_correction(True))
+            window.edit.click()
+            assert window.selected()["record"]["previous_key"]
+            assert oid not in {r["observation_id"] for r in page.service.inventory()}
+            app.processEvents()
+            window.grab().save(str(args.folder / "review-smoke.png"))
+            window.close()
+        elif args.smoke and args.interpretations:
             from parsetrail.gui.ledger_expense_interpretations import ExpenseInterpretationDialog
             from PySide6.QtCore import QTimer
 
@@ -308,7 +375,22 @@ def main():
         else:
             return app.exec()
     with ProposalReview(args.folder) as reopened:
-        if args.interpretations:
+        if args.income:
+            from parsetrail.gui.ledger_income import IncomeReviewWindow
+
+            window = IncomeReviewWindow(reopened)
+            assert oid not in {r["record"]["observation_id"] for r in window.interpretations.records}
+            window.tabs.setCurrentIndex(0)
+            window.page.table.selectRow(0)
+            assert window.selected()["record"]["previous_key"]
+            window.filter.setCurrentText("Superseded")
+            window.page.table.selectRow(0)
+            assert not window.edit.isEnabled()
+            assert reopened.store.connection.execute("SELECT count(*) FROM IncomeInterpretations").fetchone() == (1,)
+            assert reopened.store.connection.execute("SELECT count(*) FROM LedgerEntries").fetchone() == (3,)
+            assert reopened.store.connection.execute("SELECT count(*) FROM LedgerCorrections").fetchone() == (1,)
+            window.close()
+        elif args.interpretations:
             from parsetrail.gui.ledger_expense_corrections import ExpenseCorrectionWindow
 
             window = ExpenseCorrectionWindow(reopened, interpretations=True)

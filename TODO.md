@@ -201,8 +201,9 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   and Unposted movements tab passed owner Windows rejection/recategorization/persistence
   acceptance on October 3. The next bounded chunk adds explicit positive checking/savings
   income receipts and category corrections, preserving the deposited amount without
-  inferring gross pay/deductions. Its [service](devtools/ledger_audit/INCOME.md) is implemented;
-  next is its preview/post/correction UI and owner Windows acceptance.
+  inferring gross pay/deductions. Its [service and UI](devtools/ledger_audit/INCOME.md)
+  are implemented; next is owner Windows preview/cancel/post/correction/persistence
+  acceptance on a fresh disposable copy.
   Negative income adjustments, transfer/clearing, loan, asset, opening and source
   corrections remain separate scopes.
 - [ ] **CF2 — Ledger-backed cash-flow contract:** after L1–L5, define account scope, income,

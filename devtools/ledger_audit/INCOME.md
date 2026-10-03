@@ -39,6 +39,49 @@ The service and its shared expense paths passed 59 focused tests, including 20 n
 cases covering signs, exact splits, scope, proposal history, optional/required reasons,
 concurrent transfer/expense consumption, partial postings, stale/tampered previews,
 mapping conflicts, atomic rollback, category correction chains, read-only inventory,
-retry/reopen and reconciliation invalidation. The income review UI and Windows acceptance
-follow this service chunk. Private archive exercises use disposable copies and are not
+retry/reopen and reconciliation invalidation. The income review UI is implemented;
+Windows owner acceptance is pending. Private archive exercises use disposable copies and are not
 financial approvals; the active client profile and reports remain unchanged.
+
+## Income review window
+
+Prepare a fresh candidate copy from the repository root:
+
+```powershell
+& client/.venv/Scripts/python.exe devtools/ledger_audit/review_proposals.py --income --candidates <candidate-folder> --folder <new-review-folder> --prepare-only
+```
+
+Open or reopen that workspace:
+
+```powershell
+& client/.venv/Scripts/pythonw.exe devtools/ledger_audit/review_proposals.py --income --folder <review-folder>
+```
+
+**Unposted movements** lists only positive, wholly unallocated checking/savings receipts
+without a pending expense/refund proposal. Its notice explicitly distinguishes receipt
+eligibility from income classification. Use **Classify as income…**, choose an existing
+income category (none is preselected), and optionally add positive USD category splits
+that total the exact deposit. Routine income posting keeps the note optional. A rejected
+expense/refund proposal remains accessible through the prior-interpretation filter and
+requires a reason for its new classification; its earlier decision remains in history.
+
+The preview shows income and cash received as positive amounts and explains that income
+journal credits are stored negative. It preserves the observed amount, date and source
+description. It does not infer gross pay or deductions, promote date provenance, or certify
+statement reconciliation. Form edits invalidate the preview. Cancel, closing the dialog,
+and cancelling final confirmation write nothing. Apply checks for competing allocations
+and changed inputs under the transaction before committing.
+
+After posting, the window selects the receipt in **Posted income receipts**. Use
+**Edit category split…** to preview a later income-category correction with a required
+reason. Its preview shows zero change to total income and cash received, then confirms
+reversal/replacement. **Active**, **Superseded**, and **All** filters expose the history;
+only active receipts are editable. Income category amounts are displayed positive in
+the table and preview. Reopening preserves the posting and correction chain.
+
+For Windows acceptance, select one test receipt in the disposable copy, preview/cancel,
+then preview/post. Change or split its income category with a sample correction reason,
+preview/cancel once, then apply. Inspect the active replacement and superseded original
+and close/reopen to check persistence. These are workflow checks only, not approval of
+actual income categorization. `--smoke --income` automates posting and correction checks
+with cancellation, history and reopen in a separate disposable copy.

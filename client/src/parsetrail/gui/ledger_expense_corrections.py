@@ -40,6 +40,8 @@ def split_amount(text):
 
 
 class ExpenseCorrectionDialog(QDialog):
+    category_type = "Expense"
+
     def __init__(self, service, record, parent=None):
         super().__init__(parent)
         self.service, self.record = service, record
@@ -67,9 +69,9 @@ class ExpenseCorrectionDialog(QDialog):
             cid: json.loads(payload)
             for cid, payload in service.store.connection.execute("SELECT id,payload FROM CategoryDefinitions")
         }
-        self.categories = {cid: d["Name"] for cid, d in definitions.items() if d["Type"] == "Expense"}
+        self.categories = {cid: d["Name"] for cid, d in definitions.items() if d["Type"] == self.category_type}
         self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(["Expense category", "Amount (USD)", ""])
+        self.table.setHorizontalHeaderLabels([f"{self.category_type} category", "Amount (USD)", ""])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.table.setColumnWidth(1, 160)
         self.table.setColumnWidth(2, 90)
@@ -216,11 +218,20 @@ class ExpenseCorrectionDialog(QDialog):
 
 
 class ExpenseCorrectionWindow(QMainWindow):
+    service_type = ExpenseCorrections
+    dialog_type = ExpenseCorrectionDialog
+    window_title = "ParseTrail — Expense correction workflow test (disposable copy)"
+    interpretation_window_title = "ParseTrail — Expense interpretation workflow test (disposable copy)"
+    posted_title = "Posted expenses and refunds"
+    entry_label = "ordinary"
+    category_sign = 1
+    guidance = "Start in Original proposals to accept a test expense/refund, then return here to correct it. Transfers and other account interpretations are outside this editor."
+
     def __init__(self, review, *, interpretations=False):
         super().__init__()
-        self.review, self.service = review, ExpenseCorrections(review)
+        self.review, self.service = review, self.service_type(review)
         self.interpretations = None
-        self.setWindowTitle("ParseTrail — Expense correction workflow test (disposable copy)")
+        self.setWindowTitle(self.window_title)
         self.resize(1350, 900)
         body = QWidget()
         layout = QVBoxLayout(body)
@@ -247,7 +258,7 @@ class ExpenseCorrectionWindow(QMainWindow):
         self.page.table.setColumnWidth(2, 260)
         self.page.table.setColumnWidth(4, 280)
         self.ordinary = ProposalReviewWindow(review)
-        self.tabs.addTab(self.page, "Posted expenses and refunds")
+        self.tabs.addTab(self.page, self.posted_title)
         self.tabs.addTab(self.ordinary, "Original proposals")
         layout.addWidget(self.tabs)
         self.setCentralWidget(body)
@@ -258,12 +269,15 @@ class ExpenseCorrectionWindow(QMainWindow):
         self.tabs.currentChanged.connect(self.tab_changed)
         self.refresh()
         if interpretations:
-            from parsetrail.gui.ledger_expense_interpretations import ExpenseInterpretationPage
-
-            self.setWindowTitle("ParseTrail — Expense interpretation workflow test (disposable copy)")
-            self.interpretations = ExpenseInterpretationPage(review, self.show_posted, self)
+            self.setWindowTitle(self.interpretation_window_title)
+            self.interpretations = self.make_interpretations(review)
             self.tabs.addTab(self.interpretations, "Unposted movements")
             self.tabs.setCurrentIndex(2)
+
+    def make_interpretations(self, review):
+        from parsetrail.gui.ledger_expense_interpretations import ExpenseInterpretationPage
+
+        return ExpenseInterpretationPage(review, self.show_posted, self)
 
     def show_posted(self, entry_key):
         self.tabs.setCurrentIndex(0)
@@ -286,7 +300,9 @@ class ExpenseCorrectionWindow(QMainWindow):
         self.records = []
         for record in entries:
             entry = record["entry"]
-            categories = "; ".join(f"{c['name']}: {money(c['amount_minor'])}" for c in record["categories"])
+            categories = "; ".join(
+                f"{c['name']}: {money(self.category_sign * c['amount_minor'])}" for c in record["categories"]
+            )
             details = [
                 entry["description"],
                 f"{record['account_name']} · {entry['posting_date']} · {money(record['amount_minor'])}",
@@ -316,8 +332,8 @@ class ExpenseCorrectionWindow(QMainWindow):
         self.records.sort(key=lambda r: (r["cells"][1], r["cells"][0], r["record"]["entry"]["key"]), reverse=True)
         active = sum(r["record"]["active"] for r in self.records)
         self.summary.setText(
-            f"{active:,} active ordinary entries · {len(self.records) - active:,} superseded entries.\n"
-            "Start in Original proposals to accept a test expense/refund, then return here to correct it. Transfers and other account interpretations are outside this editor."
+            f"{active:,} active {self.entry_label} entries · {len(self.records) - active:,} superseded entries.\n"
+            + self.guidance
         )
         self.render(keep=keep)
 
@@ -355,6 +371,6 @@ class ExpenseCorrectionWindow(QMainWindow):
         selected = self.selected()
         if not selected or not self.edit.isEnabled():
             return
-        dialog = ExpenseCorrectionDialog(self.service, selected["record"], self)
+        dialog = self.dialog_type(self.service, selected["record"], self)
         dialog.exec()
         self.refresh(keep=dialog.result_key or selected["record"]["entry"]["key"])
