@@ -108,17 +108,22 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
 
 - [~] **V2-1 — Preservation manifest:** first-pass code/schema inventory and
   read-only private report tool are in [the preservation inventory](docs/client-v2-preservation-inventory.md).
-  Continue alongside P2-1 with an authorized private snapshot. Read-only inventory of
+  The authorized closed-copy inventory is structurally covered; continue user-state
+  dispositions and package parity. Read-only inventory of
   database fields, manual/category/budget state, profile resources, parser availability
   and legacy UI actions. Assign every item a preservation/rebuild/disposition rule;
   stop for uncovered user-data policy. No live writes or schema changes.
 - [~] **P2-1 — Parser/engine review:** first-pass 22-parser source/fixture matrix is in
-  [the parser inventory](docs/client-v2-parser-inventory.md). Continue with authorized
-  archive and installed-catalog comparison. Inventory all current parsers, archive layouts,
+  [the parser inventory](docs/client-v2-parser-inventory.md). Read-only archive replay
+  and installed-catalog checks passed; continue fixture gaps and explicit
+  operation-cost review. Inventory all current parsers, archive layouts,
   repeated extraction/normalization/checks, source provenance, developer tools and
   release coupling. Produce a family/fixture matrix and explicit custom-operation needs.
-- [ ] **P2-2–3 — Declaration/evidence pilot:** define strict schemas and a bounded
-  engine; exercise MOHELA CSV, simple and continuation/layout PDFs, plus synthetic
+- [~] **P2-2–3 — Declaration/evidence pilot:** a bounded synthetic table prototype is
+  in [the parser engine pilot](devtools/parser_engine_pilot/README.md). Continue with
+  real-source P2-3 comparisons before choosing final schema and operations.
+  Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and
+  continuation/layout PDFs, plus synthetic
   XLSX. Compare against corrected archive evidence, retain unknown balances and
   source locations, and prove validation/cancellation. Inform V2-2 before schema freeze.
 - [ ] **P2-4–5 — Conversion and catalog client:** convert parser families in small

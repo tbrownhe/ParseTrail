@@ -121,9 +121,16 @@ public 2.0 release. Local prototypes need no server deployment. At the server bo
 merge accepted client work first, then use a short-lived server branch; server P0
 remains closed outside this interface change.
 
-The first-pass [P2-1 parser inventory](client-v2-parser-inventory.md) lists all
-shipped parser IDs, source-level fixture coverage, repeated operations and likely
-client-built exceptions. Private archive and installed-catalog comparison remains open.
+The [P2-1 parser inventory](client-v2-parser-inventory.md) lists all shipped
+parser IDs, source-level fixture coverage, repeated operations and likely
+client-built exceptions. Read-only archive replay and installed-catalog checks
+have been performed; declarative parity and fixture gaps remain open.
+
+The isolated [P2-2 table pilot](../devtools/parser_engine_pilot/README.md)
+demonstrates strict JSON validation, exact components, source locations,
+nullable balances and cancellation on synthetic CSV/XLSX-shaped data. It is not
+a runtime parser, an XLSX/PDF decoder or a final evidence schema. P2-3 archive
+comparison remains the next interface decision gate.
 
 The release gate is a reviewed engine and declarative catalog, archive-preserving
 coverage of needed formats, explicit client-built exceptions and signed offline

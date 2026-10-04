@@ -1,0 +1,170 @@
+{
+  "$defs": {
+    "Columns": {
+      "additionalProperties": false,
+      "properties": {
+        "account": {
+          "title": "Account",
+          "type": "string"
+        },
+        "balance": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Balance"
+        },
+        "date": {
+          "title": "Date",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "fees": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fees"
+        },
+        "interest": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Interest"
+        },
+        "principal": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Principal"
+        },
+        "total": {
+          "title": "Total",
+          "type": "string"
+        }
+      },
+      "required": [
+        "account",
+        "date",
+        "description",
+        "total"
+      ],
+      "title": "Columns",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "capabilities": {
+      "items": {
+        "enum": [
+          "table_rows_v1",
+          "components_v1"
+        ],
+        "type": "string"
+      },
+      "title": "Capabilities",
+      "type": "array"
+    },
+    "columns": {
+      "$ref": "#/$defs/Columns"
+    },
+    "date_format": {
+      "enum": [
+        "MM/DD/YYYY",
+        "YYYY-MM-DD"
+      ],
+      "title": "Date Format",
+      "type": "string"
+    },
+    "header": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "title": "Header",
+      "type": "array"
+    },
+    "kind": {
+      "const": "activity_export",
+      "title": "Kind",
+      "type": "string"
+    },
+    "money_format": {
+      "const": "usd_symbol_2dp",
+      "title": "Money Format",
+      "type": "string"
+    },
+    "parser_id": {
+      "pattern": "^[a-z][a-z0-9_-]{2,79}$",
+      "title": "Parser Id",
+      "type": "string"
+    },
+    "revision": {
+      "pattern": "^[1-9][0-9]{0,8}$",
+      "title": "Revision",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "suffix": {
+      "enum": [
+        ".csv",
+        ".xlsx"
+      ],
+      "title": "Suffix",
+      "type": "string"
+    },
+    "unknown_balance_literals": {
+      "default": [],
+      "items": {
+        "type": "string"
+      },
+      "title": "Unknown Balance Literals",
+      "type": "array"
+    }
+  },
+  "required": [
+    "schema_version",
+    "parser_id",
+    "revision",
+    "suffix",
+    "kind",
+    "capabilities",
+    "header",
+    "columns",
+    "date_format",
+    "money_format"
+  ],
+  "title": "Definition",
+  "type": "object"
+}
