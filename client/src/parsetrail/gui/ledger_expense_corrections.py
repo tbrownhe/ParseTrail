@@ -1,6 +1,5 @@
 """Exact category-split editor in a disposable ledger workflow workspace."""
 
-import json
 import re
 import sqlite3
 
@@ -22,7 +21,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from parsetrail.core.ledger import LedgerError, minor_units
+from parsetrail.core.ledger import AccountKind, LedgerError, minor_units
+from parsetrail.core.ledger_categories import BUILTIN_CATEGORIES, category_accounts
 from parsetrail.core.ledger_expense_corrections import ExpenseCorrections
 from parsetrail.core.money import to_minor_units
 from parsetrail.gui.ledger_preview import PreviewPage, money
@@ -65,11 +65,8 @@ class ExpenseCorrectionDialog(QDialog):
         notice.setWordWrap(True)
         layout.addWidget(notice)
         self.notice = notice
-        definitions = {
-            cid: json.loads(payload)
-            for cid, payload in service.store.connection.execute("SELECT id,payload FROM CategoryDefinitions")
-        }
-        self.categories = {cid: d["Name"] for cid, d in definitions.items() if d["Type"] == self.category_type}
+        definitions = category_accounts(service.store, kind=AccountKind(self.category_type.lower()))
+        self.categories = {cid: account.name for cid, account in definitions.items()}
         self.table = QTableWidget(0, 3)
         self.table.setHorizontalHeaderLabels([f"{self.category_type} category", "Amount (USD)", ""])
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
@@ -113,8 +110,8 @@ class ExpenseCorrectionDialog(QDialog):
         row = self.table.rowCount()
         self.table.insertRow(row)
         category = QComboBox()
-        for cid, name in sorted(self.categories.items(), key=lambda item: (item[1].casefold(), item[0])):
-            category.addItem(f"{name} (#{cid})", cid)
+        for cid, name in sorted(self.categories.items(), key=lambda item: (item[1].casefold(), str(item[0]))):
+            category.addItem(f"{name} (built-in)" if cid in BUILTIN_CATEGORIES else f"{name} (#{cid})", cid)
         category.setCurrentIndex(category.findData(category_id) if category_id is not None else -1)
         value = QLineEdit("" if amount is None else f"{amount // 100}.{amount % 100:02d}")
         value.setPlaceholderText("0.00")

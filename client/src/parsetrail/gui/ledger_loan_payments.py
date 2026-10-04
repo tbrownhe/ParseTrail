@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from parsetrail.core.ledger import LedgerError
+from parsetrail.core.ledger_categories import LOAN_INTEREST
 from parsetrail.core.ledger_loan_payments import LoanPayments
 from parsetrail.gui.ledger_preview import PreviewPage, money
 from parsetrail.gui.ledger_proposal_review import ProposalReviewWindow
@@ -55,16 +56,11 @@ class LoanPaymentDialog(QDialog):
         )
         notice.setWordWrap(True)
         layout.addWidget(notice)
-        layout.addWidget(QLabel("Expense category for the separate interest component:"))
-        self.category = QComboBox()
-        definitions = [
-            json.loads(p) for (p,) in service.store.connection.execute("SELECT payload FROM CategoryDefinitions")
-        ]
-        for row in sorted(definitions, key=lambda r: (r["Name"], r["CategoryID"])):
-            if row["Type"] == "Expense":
-                self.category.addItem(row["Name"], row["CategoryID"])
-        self.category.setCurrentIndex(-1)
-        self.category.setEnabled(bool(pair["interest_minor"]))
+        self.category = QLabel(
+            f"Expense category: {LOAN_INTEREST.name} (fixed by the interest component)"
+            if pair["interest_minor"]
+            else "Explicit zero interest — no expense category or posting needed."
+        )
         layout.addWidget(self.category)
         self.reason = QLineEdit()
         self.reason.setPlaceholderText("Optional confirmation note")
@@ -79,7 +75,6 @@ class LoanPaymentDialog(QDialog):
         self.apply.setEnabled(False)
         layout.addWidget(buttons)
         buttons.rejected.connect(self.reject)
-        self.category.currentIndexChanged.connect(self.invalidate)
         self.reason.textChanged.connect(self.invalidate)
         self.preview.clicked.connect(self.build_preview)
         self.apply.clicked.connect(self.post)
@@ -95,9 +90,8 @@ class LoanPaymentDialog(QDialog):
             self.plan = self.service.preview(
                 self.pair["outgoing_id"],
                 self.pair["payment_id"],
-                self.category.currentData() if self.category.isEnabled() else None,
-                self.reason.text(),
-                self.days,
+                reason=self.reason.text(),
+                window_days=self.days,
             )
         except (LedgerError, sqlite3.Error) as exc:
             self.preview_text.setPlainText(str(exc))
@@ -109,7 +103,7 @@ class LoanPaymentDialog(QDialog):
                     f"Bank cash outflow: {money(self.pair['amount_minor'])} on {self.pair['bank_date']}",
                     f"Loan payment credit: {money(self.pair['amount_minor'])} on {self.pair['loan_date']}",
                     f"Interest expense: {money(p['interest_minor'])}"
-                    + (f" · {self.category.currentText()}" if p["interest_minor"] else " · explicitly zero in source"),
+                    + (f" · {LOAN_INTEREST.name}" if p["interest_minor"] else " · explicitly zero in source"),
                     f"Net loan principal reduction: {money(p['principal_reduction_minor'])}",
                     "The payment transfer adds no expense; interest is recognized once.",
                     "Different dates use clearing to preserve the bank outflow and loan receipt on their own dates.",
@@ -267,9 +261,9 @@ class LoanPaymentWindow(QMainWindow):
         for p in snapshot["decisions"].values():
             o = observations[p["outgoing_id"]]
             incoming = observations["source:" + p["payment_id"]]
-            category = (
-                accounts[f"category:{p['category_id']}"].name if p["interest_minor"] else "Explicit zero interest"
-            )
+            # Earlier disposable decisions keep their actual category; never relabel history.
+            interest_account_id = p.get("interest_account_id") or f"category:{p.get('category_id')}"
+            category = accounts[interest_account_id].name if p["interest_minor"] else "Explicit zero interest"
             confirmed.append(
                 {
                     "plan": p,

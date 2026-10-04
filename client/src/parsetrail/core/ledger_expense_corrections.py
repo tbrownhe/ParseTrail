@@ -3,7 +3,8 @@
 import json
 from dataclasses import asdict, replace
 
-from parsetrail.core.ledger import AccountKind, LedgerAccount, LedgerError, Posting, identifier, minor_units
+from parsetrail.core.ledger import AccountKind, LedgerError, Posting, identifier, minor_units
+from parsetrail.core.ledger_categories import category_accounts
 from parsetrail.core.ledger_opening_review import observation_date_provenance
 from parsetrail.core.ledger_rebuild import key
 from parsetrail.core.ledger_store import decode_entry, encoded
@@ -15,32 +16,31 @@ def expense_split(store, accounts, observation, splits, *, kind=AccountKind.EXPE
     """Validate exact category counterparts shared by interpretations and corrections."""
     if kind not in (AccountKind.EXPENSE, AccountKind.INCOME):
         raise LedgerError("Choose an expense or income category scope.")
-    c = store.connection
     if not isinstance(splits, (list, tuple)) or not splits:
         raise LedgerError(f"Provide one or more exact {kind.value} category amounts.")
     normalized = []
     for part in splits:
-        if not isinstance(part, (list, tuple)) or len(part) != 2 or type(part[0]) is not int:
-            raise LedgerError("Each split requires an integer category identity and positive minor units.")
+        if not isinstance(part, (list, tuple)) or len(part) != 2 or type(part[0]) not in (int, str):
+            raise LedgerError("Each split requires a category identity and positive minor units.")
         cid, amount = part
         minor_units(amount)
         if amount < 0:
             raise LedgerError("Split amounts must be positive; the source determines posting signs.")
         normalized.append((cid, amount))
-    normalized.sort()
+    normalized.sort(key=lambda part: (isinstance(part[0], str), part[0]))
     if len({cid for cid, _ in normalized}) != len(normalized):
         raise LedgerError("Combine repeated categories into one split amount.")
     if sum(amount for _, amount in normalized) != abs(observation.amount_minor):
         raise LedgerError("Split amounts must exactly equal the whole source movement.")
-    definitions = {cid: json.loads(payload) for cid, payload in c.execute("SELECT id,payload FROM CategoryDefinitions")}
+    definitions = category_accounts(store, kind=kind)
     mappings, postings = [], []
     for cid, amount in normalized:
-        category = definitions.get(cid)
-        if not category or category["Type"] != kind.value.title():
+        account = definitions.get(cid)
+        if not account:
             raise LedgerError(
                 f"Choose an existing {kind.value} category; other account classes are outside this scope."
             )
-        account = LedgerAccount(f"category:{cid}", category["Name"], kind, observation.currency)
+        account = replace(account, currency=observation.currency)
         account.validate()
         if account.id in accounts and accounts[account.id] != account:
             raise LedgerError("Category account mapping conflicts with the retained definition.")

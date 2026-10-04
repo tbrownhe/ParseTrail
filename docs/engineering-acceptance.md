@@ -6,6 +6,37 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## Built-in ledger categories and enforced loan interest — October 3, 2026
+
+The owner accepted the loan-payment workflow and requested fixed built-in categories
+alongside user-defined categories. The shared catalog starts with **Loan interest**,
+using a stable semantic key and fixed expense type. User-defined names/IDs remain
+separate; a matching display name never overrides the built-in or merges history.
+Catalog reads are read-only, and posting installs account mappings atomically.
+
+Loan payment previews no longer take a category argument or show a category picker.
+The service requires the catalog's Loan interest account for nonzero interest and
+refuses conflicting mappings or modified previews. An explicit zero component
+still creates no expense posting. The rule version changed so an earlier preview
+must be regenerated. Earlier saved decisions remain immutable and display their
+actual original category; they are not silently relabeled.
+
+Ordinary expense classification/corrections expose built-ins alongside custom
+categories, marked “built-in” in the selector. Mixed category splits retain exact
+money, deterministic ordering, correction history and reopen selection. Income
+workflows cannot use expense built-ins. Loan components remain excluded from
+ordinary category corrections.
+
+The focused categories, loan, expense and income suites passed **121 tests**.
+The complete Windows suite passed **1,012 tests, 3 skipped** in 244.59 seconds
+with offscreen Qt and process-only `RemoteSigned`; Ruff passed across **245 files**.
+The archive smoke passed preview/cancel/post/reopen with the fixed category and
+its screenshot was inspected. A read-only check of the preceding disposable
+workflow confirmed that its original category still displays accurately and its
+database hash is unchanged. Native acceptance applies to the prior workflow;
+the new fixed label/category selectors have automated coverage. The live database,
+server and dependencies are unchanged.
+
 ## Capital One loan payment and interest workflow — October 3, 2026
 
 Following owner acceptance of the read-only loan view, the
@@ -43,8 +74,9 @@ bundles, checked account totals against source payment/interest arithmetic,
 balanced entries, exact retries, SQLite integrity and reopen persistence. Source
 tables/categories and accepted candidate/fresh/legacy file hashes stayed unchanged.
 Private values, identifiers, reports and screenshots remain ignored. A separate
-owner workspace starts with no sample decisions. **Native Windows acceptance is
-pending** at this checkpoint. The active database, parsers, server, dependencies
+owner workspace starts with no sample decisions. The owner subsequently accepted
+the Windows workflow and requested fixed categories, recorded above.
+The active database, parsers, server, dependencies
 and report cutover are unchanged.
 
 ## Read-only loan evidence readiness — October 3, 2026

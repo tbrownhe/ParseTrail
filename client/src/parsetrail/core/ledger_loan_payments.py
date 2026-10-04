@@ -17,13 +17,13 @@ from parsetrail.core.ledger import (
     identifier,
     validate_entry,
 )
-from parsetrail.core.ledger_expense_corrections import expense_split
+from parsetrail.core.ledger_categories import LOAN_INTEREST
 from parsetrail.core.ledger_opening_review import observation_date_provenance
 from parsetrail.core.ledger_rebuild import key
 from parsetrail.core.ledger_store import decode_entry, encoded
 from parsetrail.core.ledger_transfers import TransferReview, validate_window
 
-RULE = "capital-one-loan-payments-1"
+RULE = "capital-one-loan-payments-2"
 DEFAULT_REASON = "Confirmed loan payment and separately evidenced interest"
 
 
@@ -191,11 +191,11 @@ class LoanPayments:
                 "components": bundles,
             }
 
-    def preview(self, outgoing_id, payment_id, category_id, reason="", window_days=7):
+    def preview(self, outgoing_id, payment_id, *, reason="", window_days=7):
         with self._snapshot():
-            return self._build(outgoing_id, payment_id, category_id, reason, window_days)
+            return self._build(outgoing_id, payment_id, reason, window_days)
 
-    def _build(self, outgoing_id, payment_id, category_id, reason, window_days):
+    def _build(self, outgoing_id, payment_id, reason, window_days):
         validate_window(window_days)
         reason = reason.strip() or DEFAULT_REASON if isinstance(reason, str) else reason
         identifier(reason)
@@ -244,16 +244,15 @@ class LoanPayments:
             observations[o.id] = o
         mappings, interest_postings = [], []
         if interest["AmountMinor"]:
-            _, mappings, interest_postings = expense_split(
-                self.store, accounts, new_observations[1], [(category_id, -interest["AmountMinor"])]
-            )
-        elif category_id is not None:
-            raise LedgerError("A zero interest component has no expense category or posting.")
+            if LOAN_INTEREST.id in accounts and accounts[LOAN_INTEREST.id] != LOAN_INTEREST:
+                raise LedgerError("Fixed loan interest account conflicts with its required mapping.")
+            mappings = [asdict(LOAN_INTEREST)]
+            interest_postings = [Posting(LOAN_INTEREST.id, -interest["AmountMinor"])]
         request = {
             "rule": RULE,
             "outgoing_id": outgoing_id,
             "payment_id": payment_id,
-            "category_id": category_id,
+            "interest_account_id": LOAN_INTEREST.id if interest_postings else None,
             "reason": reason,
             "window_days": window_days,
         }
@@ -317,9 +316,7 @@ class LoanPayments:
                 if existing == plan and all(self.store._existing(decode_entry(encoded(e))) for e in plan["entries"]):
                     return [e["key"] for e in plan["entries"]]
                 raise LedgerError("Loan payment already has a different confirmation.")
-            fresh = self._build(
-                *(plan[k] for k in ("outgoing_id", "payment_id", "category_id", "reason", "window_days"))
-            )
+            fresh = self._build(*(plan[k] for k in ("outgoing_id", "payment_id", "reason", "window_days")))
             if fresh != plan:
                 raise LedgerError("Loan inputs changed since preview; review a fresh preview.")
             c.execute("""CREATE TABLE IF NOT EXISTS LoanPaymentDecisions(payment_id TEXT PRIMARY KEY REFERENCES SourceTransactions(id),

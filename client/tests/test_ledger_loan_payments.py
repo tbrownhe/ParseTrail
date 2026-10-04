@@ -4,6 +4,7 @@ from datetime import date
 
 import pytest
 from parsetrail.core.ledger import LedgerError
+from parsetrail.core.ledger_categories import LOAN_INTEREST
 from parsetrail.core.ledger_loan_payments import LoanPayments
 from parsetrail.core.ledger_opening_review import OpeningReview
 from parsetrail.core.ledger_proposal_review import ProposalReview
@@ -46,8 +47,8 @@ def loan_workspace(tmp_path, loan_rebuild):
     return prepare_custom(tmp_path, loan_rebuild)[0]
 
 
-def preview(service, category=2):
-    return service.preview("source:bank_payment", "loan", category)
+def preview(service):
+    return service.preview("source:bank_payment", "loan")
 
 
 def test_payment_interest_atomic_exact_retry_reopen_and_evidence(loan_workspace):
@@ -68,7 +69,7 @@ def test_payment_interest_atomic_exact_retry_reopen_and_evidence(loan_workspace)
         balances = review.store.balances(date(2026, 8, 31))
         assert balances["account:1"] == -1000
         assert balances["account:4"] == 900
-        assert balances["category:2"] == 100
+        assert balances[LOAN_INTEREST.id] == 100
         assert review.store.consumed() == {
             "source:bank_payment": -1000,
             "source:loan": 1000,
@@ -103,8 +104,8 @@ def test_cross_month_dates_clear_without_duplicate_expense(tmp_path, loan_rebuil
         final = review.store.balances(date(2026, 9, 30))
         clearing = next(a["id"] for a in plan["accounts"] if a["purpose"] == "clearing")
         assert abs(interim[clearing]) == 1000 and final[clearing] == 0
-        assert final["account:1"] == -1000 and final["account:4"] == 900 and final["category:2"] == 100
-        assert interim.get("category:2", 0) == (100 if loan_date < bank_date else 0)
+        assert final["account:1"] == -1000 and final["account:4"] == 900 and final[LOAN_INTEREST.id] == 100
+        assert interim.get(LOAN_INTEREST.id, 0) == (100 if loan_date < bank_date else 0)
 
 
 @pytest.mark.parametrize("problem", ["version", "balance", "date", "status", "parser"])
@@ -152,19 +153,18 @@ def test_explicit_zero_interest_no_fake_posting(tmp_path, loan_rebuild):
     loan_rebuild["evidence"]["statements"]["s4"]["closing_minor"] = -4000
     with ProposalReview(prepare_custom(tmp_path, loan_rebuild)[0]) as review:
         service = LoanPayments(review)
-        with pytest.raises(LedgerError, match="zero interest"):
-            preview(service)
-        plan = preview(service, None)
+        plan = preview(service)
+        assert plan["interest_account_id"] is None and not plan["accounts"]
         assert len(plan["entries"]) == 1
         service.apply(plan)
         assert "source:loan_interest" not in review.store.observations()
 
 
-@pytest.mark.parametrize("category", [None, True, 999, 2.0])
-def test_interest_requires_real_expense_category(loan_workspace, category):
+@pytest.mark.parametrize("category", [None, 1, 2, "Groceries"])
+def test_caller_cannot_choose_interest_category(loan_workspace, category):
     with ProposalReview(loan_workspace) as review:
-        with pytest.raises(LedgerError):
-            preview(LoanPayments(review), category)
+        with pytest.raises(TypeError):
+            LoanPayments(review).preview("source:bank_payment", "loan", category_id=category)
 
 
 def test_pending_expense_requires_rejection(tmp_path, loan_rebuild):
@@ -179,7 +179,7 @@ def test_pending_expense_requires_rejection(tmp_path, loan_rebuild):
             preview(service)
         review.decide(["proposal:bank_payment"], "rejected", "Payment is a transfer")
         service.apply(preview(service))
-        assert review.store.balances(date(2026, 8, 31))["category:2"] == 100
+        assert review.store.balances(date(2026, 8, 31))[LOAN_INTEREST.id] == 100
 
 
 def test_stale_preview_and_tampering_refused(loan_workspace):
@@ -244,7 +244,7 @@ def test_overlapping_sources_do_not_duplicate_interest(tmp_path, loan_rebuild):
         plan = preview(service)
         assert len(plan["source_basis"]["sources"]) == 2
         service.apply(plan)
-        assert review.store.balances(date(2026, 8, 31))["category:2"] == 100
+        assert review.store.balances(date(2026, 8, 31))[LOAN_INTEREST.id] == 100
 
 
 def test_multiple_bank_matches_require_choice_and_consume_once(tmp_path, loan_rebuild):
@@ -260,4 +260,4 @@ def test_multiple_bank_matches_require_choice_and_consume_once(tmp_path, loan_re
         service.apply(preview(service))
         assert "source:bank_other" not in review.store.consumed()
         with pytest.raises(LedgerError, match="already confirmed"):
-            service.preview("source:bank_other", "loan", 2)
+            service.preview("source:bank_other", "loan")

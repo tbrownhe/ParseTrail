@@ -152,6 +152,16 @@ ACH or peer-to-peer transfers do not determine it.
 
 Drafts can change. Posted entries retain an audit trail through explicit reversal
 and replacement entries linked to the original, including reason and provenance.
+Built-in categories have stable semantic keys in a code-owned catalog, with fixed
+names and income/expense types. User-defined categories occupy a separate identity
+namespace and can extend the catalog without overriding a built-in. The first is
+`builtin:loan-interest`, displayed as **Loan interest**. A loan-interest workflow
+must post to that built-in; arbitrary expense recategorization is not available
+for its interest component. Ordinary expense classification can select built-ins
+or user categories and split across them. A matching custom display name neither
+establishes built-in identity nor merges previously verified history. Account mappings
+are created atomically with posting, while catalog reads remain read-only.
+
 Changing a category's name/type must not rewrite historical postings. Prevent
 reusing evidence between an original and its active replacement. Reconciliation
 must be invalidated or reopened explicitly when a correction changes its result.

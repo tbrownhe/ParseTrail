@@ -52,9 +52,7 @@ def main():
         def exercise(save):
             dialog = app.activeModalWidget()
             assert isinstance(dialog, LoanPaymentDialog)
-            assert dialog.category.currentIndex() == -1
-            if dialog.category.isEnabled():
-                dialog.category.setCurrentIndex(0)
+            assert "Loan interest" in dialog.category.text() or "zero interest" in dialog.category.text()
             dialog.preview.click()
             assert dialog.apply.isEnabled()
             if not save:

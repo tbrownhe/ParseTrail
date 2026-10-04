@@ -42,6 +42,11 @@ routine client development or automated tests.
 
 - All financial analysis and ML stay local. Prioritize understanding spending,
   cash flow, and upcoming obligations ahead of categorization automation.
+- Fixed built-in categories coexist with user-defined categories. Built-ins have
+  stable semantic identities and fixed account types; workflows enforce the relevant
+  built-in when the evidence establishes the expense type. Start with Loan interest.
+  Preserve custom definitions and verified history; matching names do not imply
+  matching accounting semantics. Add further built-ins as their workflows are scoped.
 - Present spending separately from account cash movement. A card purchase counts
   as spending once; its repayment transfers money to the card account and still
   reduces available checking cash on its payment date. Exclude internal transfers
@@ -217,8 +222,10 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   payment dates survive through clearing when needed. Pending expense conflicts,
   missing/ambiguous components and allocated movements block posting. No loan opening,
   financing, synthetic origination or reconciliation is inferred.
-  **[USER]** Windows preview/cancel/post/reopen acceptance is next on a fresh disposable
-  copy. After that, loan bundle corrections and other parser contracts need separate
+  The owner accepted the Windows workflow on October 3 and requested fixed categories.
+  Interest now enforces the shared Loan interest built-in; ordinary expense workflows
+  retain built-in/custom category choices and splits. Loan bundle corrections and other
+  parser contracts need separate
   bounded chunks before complete loan reconciliation or report cutover.
   Negative income adjustments, transfer/clearing, loan, asset, opening and source
   corrections remain separate scopes.

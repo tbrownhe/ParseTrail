@@ -21,8 +21,9 @@ greater than the payment needs a different interpretation.
 
 An exact opposite checking/savings movement within the selected 0–31-day window
 (default seven) is a candidate only. Multiple matches remain visible. The user
-explicitly chooses a pair and an existing expense category for nonzero interest;
-no category is preselected. A pending ordinary expense/refund proposal on the bank
+explicitly chooses a pair. Nonzero interest always uses the fixed **Loan interest**
+built-in category; there is no category picker or service-level category override.
+A pending ordinary expense/refund proposal on the bank
 movement must first be rejected with a reason. Already allocated movements block
 posting. Prior category annotations and rejected proposal history remain intact.
 
@@ -48,6 +49,16 @@ independent of the candidate date window, with category/reason/source details.
 Cash reconciliation notices the new postings and invalidates previous results;
 loan statements and opening balances remain outside certification.
 
+The [shared category catalog](../../client/src/parsetrail/core/ledger_categories.py)
+keeps built-ins separate from user-defined categories. `builtin:loan-interest` maps
+to a fixed expense account; matching display names never establish that identity.
+Ordinary expense classification and corrections can use built-ins alongside the
+retained user categories, including mixed splits. Catalog reads do not create
+accounts; posting creates the required mappings atomically. The loan workflow
+enforces its built-in even if a modified preview asks for another category.
+Zero interest creates no expense account or posting. Old disposable decisions keep
+their actual category in history; version-one previews must be regenerated.
+
 Other loan parsers, fees without this component contract, financing, asset
 purchases, disbursements, synthetic origination, openings and loan corrections
 are separate scopes. The Wells Fargo parser-change deferral remains in force.
@@ -65,13 +76,15 @@ client/.venv/Scripts/python.exe devtools/ledger_audit/loan_payments.py --folder 
 The first command refuses an existing destination. Resume with only `--folder`.
 An automated offscreen exercise uses a separate new folder with `--candidates`
 and `--smoke`; it tests preview, window-close cancellation, final-confirmation
-cancellation, posting and reopening. Its arbitrary category choice is a test.
+cancellation, posting and reopening. Interest always uses its built-in category.
 Screenshots and databases remain in ignored storage.
 
-Native Windows acceptance is pending:
+The owner accepted the Windows workflow on October 3, then requested fixed built-in
+categories. The updated fixed label and shared category selectors have automated
+coverage. A targeted visual check can use this walkthrough:
 
 1. Select a payment candidate, inspect the bank and loan sources, and open
-   **Review payment and interest**. Choose an interest expense category.
+   **Review payment and interest**. **Loan interest** should be a fixed label.
 2. Preview. Check that full cash outflow, interest expense and principal reduction
    are clearly distinguished. Close/Cancel; nothing should be confirmed.
 3. Reopen the preview, confirm and post. Check **Confirmed payments** for the
