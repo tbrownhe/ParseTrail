@@ -2,7 +2,8 @@
 
 Started October 4, 2026 on `feature/client-financial-insights`. This is a code/schema
 inventory and a read-only private-inventory tool, not an accepted cutover manifest.
-No live profile was opened for this repository document. The [cutover contract](client-v2-cutover.md)
+The authorized profile was inspected read-only; no profile file was written.
+The [cutover contract](client-v2-cutover.md)
 controls activation; the old database and archive remain authoritative until a
 reviewed rebuild is explicitly activated.
 
@@ -86,7 +87,13 @@ JSON report **outside the repository**. It records actual table/field policies,
 ordered table content fingerprints, row and preservation-class counts, legacy
 parser references, archive file hashes/reference status, profile file hashes,
 known setting keys/path availability, bounded hashes of configured external
-resources such as historical reports, and unresolved items. Legacy credential
+resources such as historical reports, and unresolved items. It also fingerprints
+individual account metadata, account aliases, category definitions and every
+authored transaction assertion without copying names, descriptions or amounts
+into the report. Each assertion has explicit pending tags for verified expense,
+verified other, unverified category, confidence, manual closure or manual-only
+state. It detects category parent cycles and an alias shared by different
+accounts. Legacy credential
 key files are recorded by presence only. The configured database path is bound
 to the selected closed source copy by byte identity when they differ. It
 does not write to the source, import application settings, parse statements,
@@ -109,16 +116,17 @@ recheck database, WAL, archive and configuration before activation. Do not
 put private report content in Git or attach it to a public issue.
 
 An authorized closed-copy run found no structural inventory exceptions: known
-legacy schema, source references, profile files/settings and configured report
-resources were all accounted for, and the configured database matched the copy
-byte-for-byte. This is structural coverage, not approval of accounting meaning
-or a cutover-ready manifest. The exact private report stays outside Git.
+legacy schema, source references, profile files/settings, configured report
+resources and the authored-state fingerprints were all accounted for, and the
+configured database matched the copy byte-for-byte. This is structural
+coverage, not approval of accounting meaning or a cutover-ready manifest. The
+exact private report stays outside Git.
 
 ## Remaining V2-1 decisions and evidence
 
-1. Run the private command on an authorized, consistent copy of the owner's
-   source/profile and inspect every unknown table, field, setting and file.
-   Record only aggregate, nonprivate findings in the repository.
+1. Repeat the private command on the frozen cutover snapshot and compare its
+   per-item fingerprints with the selected preservation package. Record only
+   aggregate, nonprivate findings in the repository.
 2. Compare every category definition and verified assertion against the fresh
    replay preservation report; add exact parity for unverified categories,
    edited values, manual-only rows and profile resources. Resolve uncovered

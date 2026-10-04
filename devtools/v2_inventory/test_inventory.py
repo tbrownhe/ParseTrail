@@ -116,7 +116,43 @@ def test_unknown_user_state_and_missing_source_remain_unresolved(tmp_path: Path)
     assert {"unknown_field", "source_reference_missing", "unknown_setting", "unknown_profile_file"} <= kinds
     assert result["source"]["tables"]["Categories"]["fields"]["OwnerNote"] == "unresolved"
     assert result["source"]["state_counts"]["verified_expense"] == 1
+    assert result["source"]["user_state"]["status"] == "known_fields_only_unresolved"
+    assert result["source"]["user_state"]["unmapped_fields"] == {"Categories": ["OwnerNote"]}
     assert "synthetic user note" not in json.dumps(result)
+
+
+def test_authored_state_is_fingerprinted_without_exposing_values(tmp_path: Path) -> None:
+    source, archive, profile = _source(tmp_path)
+    baseline = create_inventory(source, archive, profile)["source"]["user_state"]
+    assert baseline["status"] == "fingerprinted_pending_disposition"
+    assert len(baseline["accounts"]) == len(baseline["account_aliases"]) == len(baseline["categories"]) == 1
+    assert baseline["annotation_tag_counts"] == {
+        "manual_closure_status_pending": 1,
+        "verified_expense_match_or_pending": 1,
+    }
+    assert "Groceries" not in json.dumps(baseline)
+    assert "Synthetic purchase" not in json.dumps(baseline)
+    with sqlite3.connect(source) as connection:
+        connection.execute("UPDATE Categories SET BudgetMinor=13000 WHERE CategoryID=1")
+        connection.execute("UPDATE Transactions SET ConfidenceScore=0.75 WHERE TransactionID=1")
+    changed = create_inventory(source, archive, profile)["source"]["user_state"]
+    assert changed["categories"][0]["fields_sha256"] != baseline["categories"][0]["fields_sha256"]
+    assert changed["annotations"][0]["assertion_sha256"] != baseline["annotations"][0]["assertion_sha256"]
+    assert changed["annotation_tag_counts"]["confidence_retained_pending"] == 1
+
+
+def test_category_cycle_blocks_preservation_inventory(tmp_path: Path) -> None:
+    source, archive, profile = _source(tmp_path)
+    with sqlite3.connect(source) as connection:
+        connection.execute(
+            "INSERT INTO Categories(CategoryID,Name,Type,Active,ParentID) VALUES(2,'Synthetic child','Expense',1,3)"
+        )
+        connection.execute(
+            "INSERT INTO Categories(CategoryID,Name,Type,Active,ParentID) VALUES(3,'Synthetic child two','Expense',1,2)"
+        )
+    result = create_inventory(source, archive, profile)
+    assert "category_parent_cycle" in {issue["kind"] for issue in result["issues"]}
+    assert result["activation_ready"] is False
 
 
 def test_live_wal_sidecar_is_refused_without_mutation(tmp_path: Path) -> None:

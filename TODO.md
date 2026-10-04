@@ -108,8 +108,9 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
 
 - [~] **V2-1 — Preservation manifest:** first-pass code/schema inventory and
   read-only private report tool are in [the preservation inventory](docs/client-v2-preservation-inventory.md).
-  The authorized closed-copy inventory is structurally covered; continue user-state
-  dispositions and package parity. Read-only inventory of
+  The authorized closed-copy inventory is structurally covered, including
+  per-item authored-state fingerprints; continue user-state dispositions and
+  package parity. Read-only inventory of
   database fields, manual/category/budget state, profile resources, parser availability
   and legacy UI actions. Assign every item a preservation/rebuild/disposition rule;
   stop for uncovered user-data policy. No live writes or schema changes.

@@ -104,6 +104,124 @@ def _quoted(identifier: str) -> str:
     return '"' + identifier.replace('"', '""') + '"'
 
 
+def _value_digest(values: tuple) -> str:
+    payload = json.dumps(values, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _user_state_inventory(connection: sqlite3.Connection, tables: dict) -> tuple[dict, list[dict]]:
+    """Fingerprint each authored assertion without publishing private values."""
+    required = {"Accounts", "AccountNumbers", "Categories", "Transactions", "StatementTransactions"}
+    if not required.issubset(tables) or any(not FIELDS[name].issubset(tables[name]["fields"]) for name in required):
+        return {"status": "unavailable_missing_fields"}, []
+    unmapped = {
+        name: sorted(set(tables[name]["fields"]) - FIELDS[name])
+        for name in sorted(required)
+        if set(tables[name]["fields"]) - FIELDS[name]
+    }
+    issues = []
+    accounts = [
+        {"legacy_id": row[0], "fields_sha256": _value_digest(row)}
+        for row in connection.execute(
+            "SELECT AccountID,AccountName,AccountTypeID,CurrencyCode,Company,Description,AppreciationRate "
+            "FROM Accounts ORDER BY AccountID"
+        )
+    ]
+    aliases = []
+    by_alias = {}
+    for row in connection.execute(
+        "SELECT AccountNumberID,AccountID,AccountNumber FROM AccountNumbers ORDER BY AccountNumberID"
+    ):
+        aliases.append({"legacy_id": row[0], "account_id": row[1], "fields_sha256": _value_digest(row)})
+        by_alias.setdefault(row[2], set()).add(row[1])
+    for alias, account_ids in by_alias.items():
+        if len(account_ids) > 1:
+            issues.append({"kind": "account_alias_maps_multiple_accounts", "alias_sha256": _value_digest((alias,))})
+
+    categories = []
+    parents = {}
+    category_types = {}
+    for row in connection.execute(
+        "SELECT CategoryID,Name,Type,Active,ParentID,BudgetMinor,BudgetCurrencyCode FROM Categories ORDER BY CategoryID"
+    ):
+        category_id, _name, category_type, _active, parent_id, *_budget = row
+        parents[category_id] = parent_id
+        category_types[category_id] = category_type
+        categories.append(
+            {
+                "legacy_id": category_id,
+                "parent_id": parent_id,
+                "fields_sha256": _value_digest(row),
+                "policy": "preserve_exact_definition_builtin_identity_pending",
+            }
+        )
+    for category_id, parent_id in parents.items():
+        if parent_id is not None and parent_id not in parents:
+            issues.append({"kind": "category_parent_missing", "category_id": category_id})
+    visited = set()
+    for start in parents:
+        if start in visited:
+            continue
+        trail = set()
+        current = start
+        while current in parents and current not in visited:
+            if current in trail:
+                issues.append({"kind": "category_parent_cycle", "category_id": current})
+                break
+            trail.add(current)
+            current = parents[current]
+        visited.update(trail)
+
+    linked = {row[0] for row in connection.execute("SELECT DISTINCT TransactionID FROM StatementTransactions")}
+    annotations = []
+    tag_counts = Counter()
+    for row in connection.execute(
+        "SELECT TransactionID,CategoryID,Verified,ConfidenceScore,Description FROM Transactions ORDER BY TransactionID"
+    ):
+        transaction_id, category_id, verified, confidence, description = row
+        tags = []
+        if verified:
+            tags.append(
+                "verified_expense_match_or_pending"
+                if category_types.get(category_id) == "Expense"
+                else "verified_other_requires_review"
+            )
+        elif category_id is not None:
+            tags.append("unverified_category_retained_pending")
+        if confidence is not None:
+            tags.append("confidence_retained_pending")
+        if transaction_id not in linked:
+            tags.append(
+                "manual_closure_status_pending"
+                if description == "Manual Entry: Account Closed Manually"
+                else "manual_only_requires_review"
+            )
+        if not tags:
+            continue
+        tag_counts.update(tags)
+        annotations.append(
+            {
+                "legacy_id": transaction_id,
+                "category_id": category_id,
+                "assertion_sha256": _value_digest((category_id, verified, confidence)),
+                "source_linked": transaction_id in linked,
+                "tags": tags,
+            }
+        )
+    return (
+        {
+            "status": "known_fields_only_unresolved" if unmapped else "fingerprinted_pending_disposition",
+            "unmapped_fields": unmapped,
+            "accounts": accounts,
+            "account_aliases": aliases,
+            "categories": categories,
+            "annotations": annotations,
+            "annotation_tag_counts": dict(sorted(tag_counts.items())),
+        },
+        issues,
+    )
+
+
 def _source_markers(source: Path) -> dict[str, dict[str, int | str]]:
     result = {}
     for suffix in ("", "-wal", "-shm", "-journal"):
@@ -166,6 +284,9 @@ def database_inventory(source: Path) -> dict:
             }
         for missing in sorted(set(FIELDS) - set(names)):
             issues.append({"kind": "missing_table", "table": missing})
+
+        user_state, state_issues = _user_state_inventory(connection, tables)
+        issues.extend(state_issues)
 
         state = {}
         if {"Transactions", "Categories", "StatementTransactions"}.issubset(tables) and not any(
@@ -275,6 +396,7 @@ def database_inventory(source: Path) -> dict:
     return {
         "tables": tables,
         "state_counts": state,
+        "user_state": user_state,
         "references": references,
         "schema_revisions": revisions,
         "legacy_absent_fields": legacy_absent_fields,
