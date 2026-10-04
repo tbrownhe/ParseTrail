@@ -128,9 +128,10 @@ have been performed; declarative parity and fixture gaps remain open.
 
 The isolated [P2-2 table pilot](../devtools/parser_engine_pilot/README.md)
 demonstrates strict JSON validation, exact components, source locations,
-nullable balances and cancellation on synthetic CSV/XLSX-shaped data. It is not
-a runtime parser, an XLSX/PDF decoder or a final evidence schema. P2-3 archive
-comparison remains the next interface decision gate.
+nullable balances and cancellation. Its first P2-3 read-only comparison matched
+an authorized detailed CSV against the accepted reader row for row. It is not
+a runtime parser, an XLSX/PDF decoder or a final evidence schema. PDF and
+bounded real XLSX comparisons remain open before the interface decision gate.
 
 The release gate is a reviewed engine and declarative catalog, archive-preserving
 coverage of needed formats, explicit client-built exceptions and signed offline

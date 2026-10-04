@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from devtools.parser_engine_pilot import engine
+from devtools.parser_engine_pilot.compare_mohela import DEFINITION, compare
 from devtools.parser_engine_pilot.engine import (
     MAX_SOURCE_BYTES,
     Definition,
@@ -193,3 +194,32 @@ def test_row_cell_and_csv_structure_bounds(monkeypatch: pytest.MonkeyPatch) -> N
         parse_table(definition(), b"synthetic", [HEADER, oversized_row()], suffix=".csv")
     with pytest.raises(EngineError, match="csv_structure"):
         parse_csv(definition(), ",".join(HEADER).encode() + b'\n"unfinished')
+
+
+def mohela_download() -> bytes:
+    return (
+        b"<!DOCTYPE html>Date,LoanName,Description,Principal,Interest,Fees,Total,UnpaidPrincipalBalanceValue,\r\n"
+        b"10/01/2026,1-01 Direct Loan,DISBURSEMENT,$5.00,$0.00,$0.00,$5.00,Unavailable,\r\n"
+        b"10/02/2026,1-01 Direct Loan,PAYMENT,-$1.00,-$0.20,$0.00,-$1.20,$4.00,\r\n"
+        b"10/02/2026,1-01 Direct Loan,PAYMENT,-$1.00,-$0.20,$0.00,-$1.20,$4.00,\r\n"
+    )
+
+
+def test_detailed_mohela_operations_match_accepted_reader() -> None:
+    source = mohela_download()
+    declaration = DEFINITION.read_bytes()
+    assert all(compare(source, declaration).values())
+    evidence = parse_csv(declaration, source)
+    assert evidence.account_identities == ("1-01",)
+    assert evidence.rows[0].account.raw == "1-01 Direct Loan"
+    assert evidence.rows[0].balance.normalized is None
+    assert (evidence.rows[1].occurrence, evidence.rows[2].occurrence) == (0, 1)
+
+
+def test_detailed_mohela_refuses_trailing_data_or_conflicting_name() -> None:
+    source = mohela_download()
+    declaration = DEFINITION.read_bytes()
+    with pytest.raises(EngineError, match="trailing_column"):
+        parse_csv(declaration, source.replace(b"$4.00,\r\n", b"$4.00,unexpected\r\n", 1))
+    with pytest.raises(EngineError, match="account_name_conflict"):
+        parse_csv(declaration, source.replace(b"1-01 Direct Loan,PAYMENT", b"1-01 Changed Loan,PAYMENT", 1))

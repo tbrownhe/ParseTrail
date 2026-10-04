@@ -16,7 +16,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-ENGINE_VERSION = "table-pilot-1"
+ENGINE_VERSION = "table-pilot-2"
 MAX_DEFINITION_BYTES = 64 * 1024
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_ROWS = 100_000
@@ -26,6 +26,7 @@ MAX_CELL_CHARS = 4096
 MAX_MONEY_CHARS = 30
 MAX_MONEY_MINOR = 9_000_000_000_000_000
 MONEY_PATTERN = re.compile(r"-?\$(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)\.[0-9]{2}\Z")
+LOAN_ID_PATTERN = re.compile(r"([0-9]+-[0-9]+) .+\Z")
 
 
 class EngineError(ValueError):
@@ -64,6 +65,9 @@ class Definition(BaseModel):
     date_format: Literal["MM/DD/YYYY", "YYYY-MM-DD"]
     money_format: Literal["usd_symbol_2dp"]
     unknown_balance_literals: tuple[str, ...] = ()
+    first_header_cell: Literal["exact", "after_last_gt"] = "exact"
+    empty_trailing_column: bool = False
+    account_key: Literal["observed", "loan_id_dash_v1"] = "observed"
 
     @model_validator(mode="after")
     def valid_layout(self) -> Definition:
@@ -89,6 +93,8 @@ class Definition(BaseModel):
             raise ValueError("duplicate unknown balance literal")
         if any(not value or len(value) > 80 for value in self.unknown_balance_literals):
             raise ValueError("invalid unknown balance literal")
+        if self.empty_trailing_column and len(self.header) == MAX_COLUMNS:
+            raise ValueError("trailing column exceeds limit")
         return self
 
 
@@ -146,6 +152,7 @@ class Evidence:
     extraction_adapter: str
     parser_id: str
     definition_revision: str
+    account_key: str
     date_format: str
     money_format: str
     kind: Literal["activity_export"]
@@ -217,6 +224,7 @@ def parse_table(
     parsed = []
     ignored = []
     seen = Counter()
+    account_names = {}
     cell_count = 0
     for row_number, raw_row in enumerate(rows, 1):
         if cancelled is not None and cancelled():
@@ -232,12 +240,22 @@ def parse_table(
         ):
             raise EngineError("cell_limit", row_number)
         if row_number == 1:
+            if definition.empty_trailing_column:
+                if not values or values[-1] != "":
+                    raise EngineError("header_mismatch", row_number)
+                values = values[:-1]
+            if definition.first_header_cell == "after_last_gt" and values:
+                values = (values[0].split(">")[-1], *values[1:])
             if values != definition.header:
                 raise EngineError("header_mismatch", row_number)
             continue
         if not any(values):
             ignored.append(IgnoredRow(row_number, "blank_row"))
             continue
+        if definition.empty_trailing_column:
+            if not values or values[-1] != "":
+                raise EngineError("trailing_column", row_number)
+            values = values[:-1]
         if len(values) != len(definition.header):
             raise EngineError("row_width", row_number)
 
@@ -261,7 +279,16 @@ def parse_table(
         description_raw = values[index[definition.columns.description]]
         if not account_raw.strip() or not description_raw.strip():
             raise EngineError("missing_identity_or_description", row_number)
-        account = field(definition.columns.account, account_raw)
+        account_key = account_raw
+        if definition.account_key == "loan_id_dash_v1":
+            match = LOAN_ID_PATTERN.fullmatch(account_raw)
+            if match is None:
+                raise EngineError("account_identity", row_number)
+            account_key = match[1]
+            if account_key in account_names and account_names[account_key] != account_raw:
+                raise EngineError("account_name_conflict", row_number)
+            account_names[account_key] = account_raw
+        account = field(definition.columns.account, account_key)
         date_column = definition.columns.date
         date = field(date_column, _date(values[index[date_column]], definition.date_format, row_number))
         description = field(definition.columns.description, description_raw)
@@ -300,6 +327,7 @@ def parse_table(
         extraction_adapter=extraction_adapter,
         parser_id=definition.parser_id,
         definition_revision=definition.revision,
+        account_key=definition.account_key,
         date_format=definition.date_format,
         money_format=definition.money_format,
         kind="activity_export",

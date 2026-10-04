@@ -7,15 +7,17 @@ for real-statement ingestion. No database or server code is changed.
 `engine.py` accepts an exact JSON declaration under
 [`declaration-schema-v1.json`](declaration-schema-v1.json). The Pydantic model
 rejects extra fields and unsupported schema versions, suffixes, evidence kinds
-or required capabilities. The only operations are exact table-header mapping,
-fixed date/money formats, account grouping by an observed column and an optional
-principal + interest + fees = total check. Definitions contain no code,
+or required capabilities. The pilot operations are controlled table-header mapping,
+fixed date/money formats, account grouping by an observed column or a fixed
+loan-ID operation, and an optional principal + interest + fees = total check.
+The detailed CSV comparison also exercises a first-header-cell download prefix
+and an exact empty trailing column. Definitions contain no code,
 user-supplied regex, module reference, SQL or general expression language.
 
 The prototype returns immutable activity-export evidence: source and exact
 definition hashes, engine and extraction-adapter versions, normalization formats,
-raw and normalized fields, CSV row/column or
-synthetic XLSX sheet/cell locations, duplicate occurrences, explicit blank-row
+raw and normalized fields, CSV record/column or synthetic XLSX sheet/cell
+locations, duplicate occurrences, explicit blank-row
 dispositions and nullable reported balances. It leaves statement endpoints
 unknown and coverage/reconciliation false. Component arithmetic is an internal
 source check; it does not prove statement coverage or authorize postings.
@@ -35,12 +37,21 @@ Run the synthetic tests from the repository root:
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_engine.py
 ```
 
-Before P2-3 can use detailed MOHELA exports, the accepted reader's download
-header prefix/trailing empty column and loan-ID extraction need explicit finite
-operations. The pilot currently groups by the complete observed `LoanName`
-field and requires an exact header. The P2-3 comparison must retain unknown
-principal balances, zero components, raw signs and duplicate occurrences, and
-refuse revised/ambiguous exports without overwriting prior evidence. Other
-representative pilots are a simple card/bank PDF, a continuation-heavy HSA PDF,
-a dynamic table PDF and a bounded real XLSX adapter. These results should inform
-V2-2 storage before its schema is frozen.
+`mohela-pilot-definition.json` exercises those three finite layout/identity
+operations against the accepted `read_export` behavior. The read-only comparison
+can be run with an authorized detailed CSV:
+
+```powershell
+client/.venv/Scripts/python.exe -m devtools.parser_engine_pilot.compare_mohela C:\private\detailed-export.csv
+```
+
+It reports only aggregate parity booleans and never writes the input. An
+authorized archived detailed export matched the accepted reader row for row,
+including raw signs, zero components, unknown principal balances, duplicate
+occurrences and activity span. The source file was unchanged. This is one
+fixture comparison, not a declaration-schema freeze or accounting acceptance.
+The accepted reader's more permissive money syntax still needs a disposition
+for other exports, and revised/ambiguous exports must never overwrite previous
+evidence. Other representative pilots are a simple card/bank PDF, a
+continuation-heavy HSA PDF, a dynamic table PDF and a bounded real XLSX adapter.
+These results should inform V2-2 storage before its schema is frozen.

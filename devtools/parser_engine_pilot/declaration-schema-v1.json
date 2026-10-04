@@ -7,6 +7,18 @@
           "title": "Account",
           "type": "string"
         },
+        "date": {
+          "title": "Date",
+          "type": "string"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "total": {
+          "title": "Total",
+          "type": "string"
+        },
         "balance": {
           "anyOf": [
             {
@@ -18,38 +30,6 @@
           ],
           "default": null,
           "title": "Balance"
-        },
-        "date": {
-          "title": "Date",
-          "type": "string"
-        },
-        "description": {
-          "title": "Description",
-          "type": "string"
-        },
-        "fees": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Fees"
-        },
-        "interest": {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Interest"
         },
         "principal": {
           "anyOf": [
@@ -63,9 +43,29 @@
           "default": null,
           "title": "Principal"
         },
-        "total": {
-          "title": "Total",
-          "type": "string"
+        "interest": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Interest"
+        },
+        "fees": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fees"
         }
       },
       "required": [
@@ -80,6 +80,34 @@
   },
   "additionalProperties": false,
   "properties": {
+    "schema_version": {
+      "const": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "parser_id": {
+      "pattern": "^[a-z][a-z0-9_-]{2,79}$",
+      "title": "Parser Id",
+      "type": "string"
+    },
+    "revision": {
+      "pattern": "^[1-9][0-9]{0,8}$",
+      "title": "Revision",
+      "type": "string"
+    },
+    "suffix": {
+      "enum": [
+        ".csv",
+        ".xlsx"
+      ],
+      "title": "Suffix",
+      "type": "string"
+    },
+    "kind": {
+      "const": "activity_export",
+      "title": "Kind",
+      "type": "string"
+    },
     "capabilities": {
       "items": {
         "enum": [
@@ -89,6 +117,15 @@
         "type": "string"
       },
       "title": "Capabilities",
+      "type": "array"
+    },
+    "header": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "title": "Header",
       "type": "array"
     },
     "columns": {
@@ -102,46 +139,9 @@
       "title": "Date Format",
       "type": "string"
     },
-    "header": {
-      "items": {
-        "type": "string"
-      },
-      "maxItems": 64,
-      "minItems": 1,
-      "title": "Header",
-      "type": "array"
-    },
-    "kind": {
-      "const": "activity_export",
-      "title": "Kind",
-      "type": "string"
-    },
     "money_format": {
       "const": "usd_symbol_2dp",
       "title": "Money Format",
-      "type": "string"
-    },
-    "parser_id": {
-      "pattern": "^[a-z][a-z0-9_-]{2,79}$",
-      "title": "Parser Id",
-      "type": "string"
-    },
-    "revision": {
-      "pattern": "^[1-9][0-9]{0,8}$",
-      "title": "Revision",
-      "type": "string"
-    },
-    "schema_version": {
-      "const": 1,
-      "title": "Schema Version",
-      "type": "integer"
-    },
-    "suffix": {
-      "enum": [
-        ".csv",
-        ".xlsx"
-      ],
-      "title": "Suffix",
       "type": "string"
     },
     "unknown_balance_literals": {
@@ -151,6 +151,29 @@
       },
       "title": "Unknown Balance Literals",
       "type": "array"
+    },
+    "first_header_cell": {
+      "default": "exact",
+      "enum": [
+        "exact",
+        "after_last_gt"
+      ],
+      "title": "First Header Cell",
+      "type": "string"
+    },
+    "empty_trailing_column": {
+      "default": false,
+      "title": "Empty Trailing Column",
+      "type": "boolean"
+    },
+    "account_key": {
+      "default": "observed",
+      "enum": [
+        "observed",
+        "loan_id_dash_v1"
+      ],
+      "title": "Account Key",
+      "type": "string"
     }
   },
   "required": [

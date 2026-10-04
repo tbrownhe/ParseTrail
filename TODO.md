@@ -120,8 +120,9 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   repeated extraction/normalization/checks, source provenance, developer tools and
   release coupling. Produce a family/fixture matrix and explicit custom-operation needs.
 - [~] **P2-2–3 — Declaration/evidence pilot:** a bounded synthetic table prototype is
-  in [the parser engine pilot](devtools/parser_engine_pilot/README.md). Continue with
-  real-source P2-3 comparisons before choosing final schema and operations.
+  in [the parser engine pilot](devtools/parser_engine_pilot/README.md). The first
+  read-only detailed CSV comparison matched the accepted reader. Continue with
+  PDF and bounded XLSX P2-3 comparisons before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and
   continuation/layout PDFs, plus synthetic
   XLSX. Compare against corrected archive evidence, retain unknown balances and

@@ -2,8 +2,9 @@
 
 Started October 4, 2026 on `feature/client-financial-insights`. This records
 source-code and synthetic-test coverage for the [declarative parser plan](client-v2-parsing.md).
-No private archive was opened. Archive parity, installed signed-catalog
-availability and precise exception costs remain P2-1 work.
+An authorized closed-copy replay and installed signed-catalog verification have
+since been completed. Declarative parity, fixture gaps and precise exception
+costs remain P2-1 work.
 
 ## Shipped parser and fixture matrix
 
@@ -112,13 +113,13 @@ must label rather than promote to observed balances or activity:
 
 ## P2-1 gaps before schema or conversion work
 
-1. On an authorized private copy, count archived sources by referenced plugin
-   ID/version, suffix, layout generation, and `SUCCESS`/`FAIL`/`DUPLICATE`/root
-   location. Bind installed signed artifact availability and record any missing
-   or incompatible parser. Keep names, paths and financial examples private.
+1. Resolve legacy plugin-ID aliases against the verified installed catalog and
+   checkout source, then repeat source/package binding on the frozen cutover
+   snapshot. Keep names, paths and financial examples private.
 2. Select representative corrected archive fixtures for detailed MOHELA CSV,
    a simple bank/card PDF, HealthEquity continuation and a layout/table PDF.
-   Add a synthetic XLSX mapping. For each, record independent printed checks,
+   Add a synthetic XLSX mapping. The first read-only detailed CSV comparison
+   matched the accepted reader row for row. For each remaining fixture, record independent printed checks,
    every candidate/ignored/unresolved activity row and source locations.
 3. Compare proposed finite operations against the difficult parsers above.
    Record any explicit client-built exception with its fixture, reason and
