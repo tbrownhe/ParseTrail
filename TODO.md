@@ -245,6 +245,29 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   declarations remain review-only; previews bind the retained declaration, and old
   decisions retain their original meaning. Migration leaves old statements undeclared.
   **Next: extend evidence representations where archive evidence supports them.**
+  **MOHELA is deferred pending CSV/export-history design discussion.** The owner
+  reports missing prior-servicer transfer activity and incremental balance changes
+  without corresponding visible records. Treat those exports as unverified source
+  claims; a zero opening and balance reconstructed from listed rows cannot establish
+  the actual obligation. Resolve the following design before enabling its posting:
+  - Distinguish immutable statements with asserted periods/endpoints from mutable
+    activity exports. File hashes prove retained bytes, not source completeness.
+    First/last transaction dates and adjacent requested export ranges do not certify
+    coverage; backdated, revised or omitted activity can escape incremental imports.
+  - Propose retaining every export snapshot, import/retrieval-time provenance and
+    any explicit requested/as-of range separately from transaction dates. Compare
+    repeated full-history exports where available; a rolling overlap alone provides
+    no guarantee against arbitrarily late changes. Even full-history exports remain
+    source claims, not proof of completeness.
+  - Design stable-ID or conservative occurrence-aware matching across snapshots,
+    with added/changed/missing/ambiguous evidence review. Do not silently delete
+    previously observed rows, double-count duplicates, or overwrite verified
+    categories and posted interpretations when source history changes.
+  - Keep reported balances, reconstructed activity and unexplained differences
+    separate. Missing transfer history must not become invented income, interest,
+    spending or a balancing entry. Consider separately reviewed prior-servicer
+    evidence and opening positions; incomplete debt history must remain visible.
+  These are design requirements/proposals, not approval for a broad import rewrite.
   Review the remaining loan formats before adding declarations; principal-only
   payments, disbursements and capitalized interest need distinct, tested accounting
   semantics rather than a guessed mapping to total-payment-plus-interest. Per-row
