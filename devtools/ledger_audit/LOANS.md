@@ -60,3 +60,7 @@ then filter movements for interest and synthetic origination. Verify the descrip
 and limitations are understandable and that clearing/changing filters clears old details.
 Close/reopen the report. There are no financial approval or posting controls in this view.
 All private reports, identifiers, amounts and screenshots remain in ignored storage.
+
+The owner accepted all three tabs, the evidence hints and reopening on Windows on
+October 3, 2026. No financial decisions were changed in this read-only view. The next
+bounded workflow is [Capital One payment and interest confirmation](LOAN_PAYMENTS.md).

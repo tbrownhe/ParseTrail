@@ -6,6 +6,47 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## Capital One loan payment and interest workflow — October 3, 2026
+
+Following owner acceptance of the read-only loan view, the
+[bounded payment service and UI](../devtools/ledger_audit/LOAN_PAYMENTS.md) admit
+only explicitly selected Capital One Auto payment/interest bundles. A matched
+bank payment transfers its full amount to the loan; the separate source interest
+component adds expense once. Net principal reduction is payment minus interest.
+Different source dates use clearing, including receipts preceding bank outflows.
+All journal entries, new observations, mappings and the immutable decision save
+atomically. No opening balance or loan reconciliation is inferred.
+
+Versioned parser contracts, exact amounts, eligible source memberships and a
+single unshared interest component are required. Missing interest is not zero;
+an explicitly zero component remains evidence without a zero posting. Pending
+ordinary expense/refund interpretations require explicit rejection, and allocated
+movements block confirmation. Category annotations and original evidence survive.
+Read-only previews, optional notes with a standard reason, cancel-safe confirmation,
+stale-input refusal and idempotent retries are covered. Confirmed payments have
+a persistent status tab independent of the candidate date window. Other loan
+parsers, financing, synthetic origination, openings and corrections remain separate.
+
+Windows verification passed **1,003 tests, 3 skipped** in 214.30 seconds with
+offscreen Qt and process-only `RemoteSigned`. The **29 new focused tests** cover
+payment/interest accounting, cross-month clearing in both date orders, source
+contract refusal, ambiguous/missing/shared/zero components, category validation,
+competing allocations, tampered previews, rollback after partial insertion,
+overlapping statements, multiple bank matches, exact retries, unchanged evidence,
+cash-reconciliation invalidation and GUI cancel/edit/filter/status/reopen behavior.
+Ruff lint/format passed across **243 files**.
+
+The archive-sized smoke exercised preview, window-close cancellation, final
+confirmation cancellation, posting and reopening; screenshots were inspected.
+A separate disposable audit previewed and posted the supported unambiguous
+bundles, checked account totals against source payment/interest arithmetic,
+balanced entries, exact retries, SQLite integrity and reopen persistence. Source
+tables/categories and accepted candidate/fresh/legacy file hashes stayed unchanged.
+Private values, identifiers, reports and screenshots remain ignored. A separate
+owner workspace starts with no sample decisions. **Native Windows acceptance is
+pending** at this checkpoint. The active database, parsers, server, dependencies
+and report cutover are unchanged.
+
 ## Read-only loan evidence readiness — October 3, 2026
 
 After the owner accepted the cash-income workflow, the next L1 checkpoint inventoried
@@ -29,8 +70,9 @@ accepted plan/fresh/legacy input hashes remained unchanged. The offscreen view p
 selection, text filtering, detail clearing and close across all three tabs. Screenshots
 were inspected. Archive inspection exposed an interest-description/purchase-hint overlap;
 the final rules prioritize interest and have a regression for “Interest Charge on Purchases.”
-Private account details, amounts and screenshots remain ignored. The owner view is a
-read-only artifact, with native Windows navigation/evidence-clarity acceptance pending.
+Private account details, amounts and screenshots remain ignored. The owner accepted
+all three tabs, clear hints and reopening on Windows on October 3. No states were
+changed because this view intentionally has no decision or posting controls.
 
 Windows full-suite verification passed **973 tests, 3 skipped** in 199.21 seconds with
 offscreen Qt and process-only `RemoteSigned`. After the final hint-ordering and detail-view

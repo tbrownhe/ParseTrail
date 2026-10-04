@@ -135,8 +135,9 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   inventory fresh loan source periods, exact balance equations, distinct movements
   and parser/component limits. Synthetic origination, capitalized interest and asset
   funding remain explicit review hints; no loan observation is admitted or posted.
-  Next: owner Windows navigation/evidence-clarity check, then a bounded loan posting
-  design using these source contracts. Keep Wells Fargo origination uncertainty deferred.
+  The owner accepted all three read-only tabs, evidence hints and reopening on October 3;
+  no financial decisions were changed. The next bounded scope uses Capital One Auto's
+  payment/interest contract. Keep Wells Fargo origination uncertainty deferred.
 - [~] **L4 — Fresh-ledger posting and reconciliation:** the
   [shadow converter](devtools/ledger_audit/SHADOW.md) established kernel/replay checks;
   the approved breaking transition now uses freshly parsed evidence from L4R.
@@ -209,7 +210,16 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   income receipts and category corrections, preserving the deposited amount without
   inferring gross pay/deductions. Its [service and UI](devtools/ledger_audit/INCOME.md)
   passed owner Windows workflow and persistence acceptance on October 3.
-  The next accounting scope is the read-only loan-readiness checkpoint under L1.
+  The read-only loan-readiness checkpoint under L1 passed owner acceptance. The
+  [Capital One loan-payment service and review](devtools/ledger_audit/LOAN_PAYMENTS.md)
+  now preview and atomically post an explicitly selected bank payment, loan payment
+  and separately evidenced interest component. Only the interest adds expense; both
+  payment dates survive through clearing when needed. Pending expense conflicts,
+  missing/ambiguous components and allocated movements block posting. No loan opening,
+  financing, synthetic origination or reconciliation is inferred.
+  **[USER]** Windows preview/cancel/post/reopen acceptance is next on a fresh disposable
+  copy. After that, loan bundle corrections and other parser contracts need separate
+  bounded chunks before complete loan reconciliation or report cutover.
   Negative income adjustments, transfer/clearing, loan, asset, opening and source
   corrections remain separate scopes.
 - [ ] **CF2 — Ledger-backed cash-flow contract:** after L1–L5, define account scope, income,
