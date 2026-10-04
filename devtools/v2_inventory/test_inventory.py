@@ -27,10 +27,15 @@ def _source(tmp_path: Path) -> tuple[Path, Path, Path]:
     (archive / "FAIL" / "failed.txt").write_text("synthetic", encoding="utf-8")
     profile = tmp_path / "profile"
     profile.mkdir()
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    (reports / "historical.csv").write_bytes(b"synthetic historical report")
     (profile / "config.json").write_text(
-        json.dumps({"db_path": str(source), "email": "private@example.test"}), encoding="utf-8"
+        json.dumps({"db_path": str(source), "report_dir": str(reports), "email": "private@example.test"}),
+        encoding="utf-8",
     )
     (profile / "accounts.json").write_text("{}", encoding="utf-8")
+    (profile / ".legacy-credential.key").write_bytes(b"synthetic secret")
     with sqlite3.connect(source) as connection:
         connection.executescript(
             "CREATE TABLE alembic_version(version_num TEXT NOT NULL);"
@@ -74,8 +79,10 @@ def test_inventory_preserves_all_known_fields_and_source_refs(tmp_path: Path) ->
     assert hashlib.sha256(source.read_bytes()).hexdigest() == before
     assert not any(Path(str(source) + suffix).exists() for suffix in ("-wal", "-shm", "-journal"))
     assert result["source"]["state_counts"]["verified_expense"] == 1
+    assert result["source"]["state_counts"]["verified_by_category_type"] == {"Expense": 1}
     assert result["source"]["state_counts"]["unlinked_transactions"] == 1
     assert result["source"]["state_counts"]["manual_closure_markers"] == 1
+    assert result["source"]["state_counts"]["unlinked_nonclosure_transactions"] == 0
     assert result["source"]["state_counts"]["budget_targets"] == 1
     assert result["source"]["plugin_references"] == [
         {"plugin_id": 1, "name": "synthetic", "version": "1", "statement_count": 1}
@@ -86,7 +93,14 @@ def test_inventory_preserves_all_known_fields_and_source_refs(tmp_path: Path) ->
     ]
     assert not result["issues"]
     assert result["activation_ready"] is False
+    assert result["configured_database"] == {"status": "same_source_path"}
     assert "private@example.test" not in json.dumps(result)
+    assert result["profile"]["external_resources"]["report_dir"]["files"][0]["path"] == "historical.csv"
+    assert next(f for f in result["profile"]["files"] if f["path"] == ".legacy-credential.key") == {
+        "path": ".legacy-credential.key",
+        "policy": "credential_presence_only",
+    }
+    assert "synthetic secret" not in json.dumps(result)
 
 
 def test_unknown_user_state_and_missing_source_remain_unresolved(tmp_path: Path) -> None:
@@ -136,3 +150,18 @@ def test_missing_contract_field_on_0004_is_unresolved(tmp_path: Path) -> None:
     result = create_inventory(source, archive, profile)
     assert {"kind": "missing_field", "table": "Statements", "field": "AccountingContract"} in result["issues"]
     assert result["archive"]["references"][0]["status"] == "matched"
+
+
+def test_configured_database_is_bound_to_closed_copy_and_detects_staleness(tmp_path: Path) -> None:
+    source, archive, profile = _source(tmp_path)
+    copy = tmp_path / "closed-copy.db"
+    copy.write_bytes(source.read_bytes())
+    assert create_inventory(copy, archive, profile)["configured_database"] == {"status": "byte_equal_closed_copy"}
+    with sqlite3.connect(source) as connection:
+        connection.execute(
+            "INSERT INTO Categories(CategoryID,Name,Type,Active,BudgetCurrencyCode) "
+            "VALUES(2,'Synthetic extra','Expense',1,'USD')"
+        )
+    result = create_inventory(copy, archive, profile)
+    assert result["configured_database"] == {"status": "different_bytes"}
+    assert {"kind": "configured_database_differs_from_source_copy"} in result["issues"]

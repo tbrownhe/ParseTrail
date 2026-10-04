@@ -27,6 +27,8 @@ SETTINGS = {
     "report_dir",
 }
 LEGACY_SECRET_SETTINGS = {"access_token", "encrypted_access_token", "token_expires_at"}
+MAX_EXTERNAL_FILES = 10_000
+MAX_EXTERNAL_BYTES = 2 * 1024**3
 
 # A policy for every column in the current 1.x ORM. Unknown fields are never ignored.
 FIELDS = {
@@ -120,6 +122,7 @@ def database_inventory(source: Path) -> dict:
             "Select a consistent closed snapshot without SQLite sidecars; this inventory never opens a live WAL database."
         )
     before = _source_markers(source)
+    source_hash_before = _hash(source)
     with closing(sqlite3.connect(source.as_uri() + "?mode=ro&immutable=1", uri=True, timeout=5)) as connection:
         connection.execute("PRAGMA query_only=ON")
         connection.execute("BEGIN")
@@ -169,7 +172,16 @@ def database_inventory(source: Path) -> dict:
             i["kind"] == "missing_field" and i["table"] in {"Transactions", "Categories", "StatementTransactions"}
             for i in issues
         ):
+            verified_types = {
+                row[0]: row[1]
+                for row in connection.execute(
+                    "SELECT coalesce(c.Type,'__no_category__'),count(*) FROM Transactions t "
+                    "LEFT JOIN Categories c ON c.CategoryID=t.CategoryID WHERE t.Verified=1 "
+                    "GROUP BY coalesce(c.Type,'__no_category__')"
+                )
+            }
             state = {
+                "verified_by_category_type": verified_types,
                 "verified_expense": connection.execute(
                     "SELECT count(*) FROM Transactions t JOIN Categories c ON c.CategoryID=t.CategoryID "
                     "WHERE t.Verified=1 AND c.Type='Expense'"
@@ -192,11 +204,29 @@ def database_inventory(source: Path) -> dict:
                 "manual_closure_markers": connection.execute(
                     "SELECT count(*) FROM Transactions WHERE Description='Manual Entry: Account Closed Manually'"
                 ).fetchone()[0],
+                "unlinked_nonclosure_transactions": connection.execute(
+                    "SELECT count(*) FROM Transactions t WHERE "
+                    "t.Description<>'Manual Entry: Account Closed Manually' AND NOT EXISTS "
+                    "(SELECT 1 FROM StatementTransactions st WHERE st.TransactionID=t.TransactionID)"
+                ).fetchone()[0],
+                "confidence_scores": connection.execute(
+                    "SELECT count(*) FROM Transactions WHERE ConfidenceScore IS NOT NULL"
+                ).fetchone()[0],
                 "custom_or_builtin_undetermined": tables["Categories"]["count"],
                 "budget_targets": connection.execute(
                     "SELECT count(*) FROM Categories WHERE BudgetMinor IS NOT NULL"
                 ).fetchone()[0],
+                "inactive_categories": connection.execute("SELECT count(*) FROM Categories WHERE Active=0").fetchone()[
+                    0
+                ],
+                "child_categories": connection.execute(
+                    "SELECT count(*) FROM Categories WHERE ParentID IS NOT NULL"
+                ).fetchone()[0],
             }
+            if "Accounts" in tables and "AppreciationRate" in tables["Accounts"]["fields"]:
+                state["appreciation_assumptions"] = connection.execute(
+                    "SELECT count(*) FROM Accounts WHERE AppreciationRate<>0"
+                ).fetchone()[0]
         references = []
         reference_fields = {"StatementID", "Filename", "ContentHashAlgorithm", "ContentHash"}
         if "Statements" in tables and reference_fields.issubset(tables["Statements"]["fields"]):
@@ -233,8 +263,11 @@ def database_inventory(source: Path) -> dict:
             ]
         connection.rollback()
     after = _source_markers(source)
+    source_hash_after = _hash(source)
     if before != after:
         issues.append({"kind": "source_changed_during_inventory"})
+    if source_hash_before != source_hash_after:
+        issues.append({"kind": "source_bytes_changed_during_inventory"})
     if integrity != "ok":
         issues.append({"kind": "integrity_failure"})
     if foreign_key_violations:
@@ -248,6 +281,7 @@ def database_inventory(source: Path) -> dict:
         "plugin_references": plugin_references,
         "source_markers_before": before,
         "source_markers_after": after,
+        "source_sha256": source_hash_before,
         "issues": issues,
     }
 
@@ -271,7 +305,12 @@ def archive_inventory(archive: Path, references: list[dict]) -> dict:
         policy = "preserve_original_bytes" if path.suffix.lower() in ARCHIVE_SUFFIXES else "unresolved_file_type"
         if policy == "unresolved_file_type":
             issues.append({"kind": "unknown_archive_file", "path": relative})
-        files.append({"path": relative, "size": path.stat().st_size, "sha256": _hash(path), "policy": policy})
+        stat = path.stat()
+        sha256 = _hash(path)
+        after_stat = path.stat()
+        if (stat.st_size, stat.st_mtime_ns) != (after_stat.st_size, after_stat.st_mtime_ns):
+            issues.append({"kind": "archive_file_changed", "path": relative})
+        files.append({"path": relative, "size": stat.st_size, "sha256": sha256, "policy": policy})
     by_path = {item["path"]: item for item in files}
     checked = []
     for ref in references:
@@ -292,11 +331,86 @@ def archive_inventory(archive: Path, references: list[dict]) -> dict:
     return {"files": files, "references": checked, "issues": issues}
 
 
+def _external_resource_inventory(profile: Path, settings: dict, issues: list[dict]) -> dict:
+    """Record configured paths outside the profile without following links."""
+    resources = {}
+    profile_root = profile.resolve()
+    for key in sorted(PATH_SETTINGS):
+        setting = settings.get(key, {})
+        raw_path = setting.get("path")
+        if not isinstance(raw_path, str):
+            continue
+        candidate = Path(raw_path).expanduser()
+        if not candidate.is_absolute():
+            issues.append({"kind": "relative_configured_path", "key": key})
+            continue
+        if candidate.is_symlink() or candidate.is_junction():
+            issues.append({"kind": "configured_path_link", "key": key})
+            continue
+        target = candidate.resolve()
+        if target.is_relative_to(profile_root):
+            continue
+        if key == "db_path":
+            resources[key] = {
+                "path": raw_path,
+                "policy": "bind_to_consistent_source_snapshot",
+                "exists": target.is_file(),
+            }
+            continue
+        files = []
+        if target.is_file():
+            candidates = [(target.name, target)]
+        elif target.is_dir():
+            candidates = ((path.relative_to(target).as_posix(), path) for path in target.rglob("*"))
+        else:
+            resources[key] = {"path": raw_path, "policy": "unresolved", "files": []}
+            continue
+        total_bytes = 0
+        for relative, path in candidates:
+            if path.is_symlink() or path.is_junction():
+                issues.append({"kind": "external_resource_link", "key": key, "path": relative})
+                continue
+            if not path.is_file():
+                continue
+            stat = path.stat()
+            total_bytes += stat.st_size
+            if len(files) >= MAX_EXTERNAL_FILES or total_bytes > MAX_EXTERNAL_BYTES:
+                issues.append({"kind": "external_resource_limit", "key": key})
+                break
+            before = (stat.st_size, stat.st_mtime_ns)
+            sha256 = _hash(path)
+            after_stat = path.stat()
+            if before != (after_stat.st_size, after_stat.st_mtime_ns):
+                issues.append({"kind": "external_resource_changed", "key": key, "path": relative})
+            files.append({"path": relative, "size": stat.st_size, "sha256": sha256})
+        files.sort(key=lambda item: item["path"])
+        resources[key] = {
+            "path": raw_path,
+            "policy": "retain_historical_files_and_map_new_output"
+            if key == "report_dir"
+            else "retain_resource_and_map_path",
+            "files": files,
+        }
+    return resources
+
+
 def profile_inventory(profile: Path | None) -> dict:
     if profile is None:
-        return {"status": "not_selected", "files": [], "settings": {}, "issues": [{"kind": "profile_not_selected"}]}
+        return {
+            "status": "not_selected",
+            "files": [],
+            "settings": {},
+            "external_resources": {},
+            "issues": [{"kind": "profile_not_selected"}],
+        }
     if not profile.is_dir():
-        return {"status": "missing", "files": [], "settings": {}, "issues": [{"kind": "missing_profile"}]}
+        return {
+            "status": "missing",
+            "files": [],
+            "settings": {},
+            "external_resources": {},
+            "issues": [{"kind": "missing_profile"}],
+        }
     files, issues = [], []
     for path in sorted(profile.rglob("*")):
         relative = path.relative_to(profile).as_posix()
@@ -306,6 +420,9 @@ def profile_inventory(profile: Path | None) -> dict:
         if not path.is_file():
             continue
         top = relative.split("/")[0]
+        if top == ".legacy-credential.key":
+            files.append({"path": relative, "policy": "credential_presence_only"})
+            continue
         if top in {"config.json", "accounts.json"} or top in {"backup", "models", "plugins", "logs", "downloads"}:
             policy = "retain_private_original_and_map_or_rebuild"
         elif top == "server_public_key.pem":
@@ -313,7 +430,12 @@ def profile_inventory(profile: Path | None) -> dict:
         else:
             policy = "unresolved"
             issues.append({"kind": "unknown_profile_file", "path": relative})
-        files.append({"path": relative, "size": path.stat().st_size, "sha256": _hash(path), "policy": policy})
+        stat = path.stat()
+        sha256 = _hash(path)
+        after_stat = path.stat()
+        if (stat.st_size, stat.st_mtime_ns) != (after_stat.st_size, after_stat.st_mtime_ns):
+            issues.append({"kind": "profile_file_changed", "path": relative})
+        files.append({"path": relative, "size": stat.st_size, "sha256": sha256, "policy": policy})
     config = profile / "config.json"
     settings = {}
     if config.is_file() and not config.is_symlink():
@@ -339,7 +461,46 @@ def profile_inventory(profile: Path | None) -> dict:
             issues.append({"kind": "unreadable_settings"})
     else:
         issues.append({"kind": "missing_settings"})
-    return {"status": "inventoried", "files": files, "settings": settings, "issues": issues}
+    saved_config = next((item for item in files if item["path"] == "config.json"), None)
+    if saved_config is not None and _hash(config) != saved_config["sha256"]:
+        issues.append({"kind": "settings_changed_during_inventory"})
+    external_resources = _external_resource_inventory(profile, settings, issues)
+    return {
+        "status": "inventoried",
+        "files": files,
+        "settings": settings,
+        "external_resources": external_resources,
+        "issues": issues,
+    }
+
+
+def _configured_database_binding(source: Path, source_hash: str, profile: dict, issues: list[dict]) -> dict:
+    setting = profile["settings"].get("db_path", {})
+    raw = setting.get("path")
+    if not isinstance(raw, str):
+        return {"status": "not_configured_or_unreadable"}
+    configured = Path(raw).expanduser()
+    if not configured.is_absolute() or configured.is_symlink() or configured.is_junction():
+        return {"status": "unresolved_path"}
+    configured = configured.resolve()
+    if configured == source:
+        return {"status": "same_source_path"}
+    if not configured.is_file():
+        issues.append({"kind": "configured_database_missing"})
+        return {"status": "missing"}
+    if any(Path(str(configured) + suffix).exists() for suffix in ("-wal", "-shm", "-journal")):
+        issues.append({"kind": "configured_database_has_sidecars"})
+        return {"status": "live_or_uncheckpointed"}
+    before = _source_markers(configured)
+    configured_hash = _hash(configured)
+    after = _source_markers(configured)
+    if before != after:
+        issues.append({"kind": "configured_database_changed_during_inventory"})
+        return {"status": "changed_during_inventory"}
+    if configured_hash != source_hash:
+        issues.append({"kind": "configured_database_differs_from_source_copy"})
+        return {"status": "different_bytes"}
+    return {"status": "byte_equal_closed_copy"}
 
 
 def create_inventory(source: Path, archive: Path, profile: Path | None = None) -> dict:
@@ -351,11 +512,13 @@ def create_inventory(source: Path, archive: Path, profile: Path | None = None) -
     archive_result = archive_inventory(archive, db.pop("references"))
     profile_result = profile_inventory(profile)
     issues = [*db.pop("issues"), *archive_result.pop("issues"), *profile_result.pop("issues")]
+    configured_database = _configured_database_binding(source, db["source_sha256"], profile_result, issues)
     return {
         "format_version": FORMAT_VERSION,
         "source": {"path": str(source), **db},
         "archive": {"path": str(archive), **archive_result},
         "profile": {"path": str(profile) if profile else None, **profile_result},
+        "configured_database": configured_database,
         "issue_counts": dict(sorted(Counter(item["kind"] for item in issues).items())),
         "issues": issues,
         "activation_ready": False,

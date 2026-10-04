@@ -42,6 +42,16 @@ family. A signed installed catalog can differ from this checkout's parser
 versions. P2-1 must join actual legacy `Plugins`/`Statements` references to
 verified installed artifacts and archived source families before conversion.
 
+An authorized closed-copy replay subsequently parsed every referenced archive
+source with current checkout code; all resulting account statements retained
+their expected source membership. One shipped parser had no referenced fixture
+in that archive, so synthetic coverage remains its only available check. The
+source database remained byte-identical and no SQLite sidecars were created.
+The active installed bytecode catalog also passed signature and artifact
+verification in a separate read-only check. These checks do not establish
+declarative-engine parity or treat old parser IDs as one-to-one names for the
+current implementations. Private source counts and identifiers remain outside Git.
+
 ## Shared engine and repeated behavior
 
 | Current path | Reusable operation or change needed |
@@ -60,6 +70,17 @@ raw row, row number, duplicate occurrence and `Unavailable` principal as null.
 Its activity span is not statement coverage. It should be the CSV pilot's
 comparison baseline; the older CSV plugin is retained as legacy provenance.
 
+The source review found specific synthetic/derived behavior that declarations
+must label rather than promote to observed balances or activity:
+
+| Parser | Current behavior | P2 evidence rule |
+| --- | --- | --- |
+| `csv_mohela_202411` | Uses zero as opening, builds running balances from export rows and uses the last row as closing; splits interest into a second legacy transaction. | Treat these endpoints and split rows as legacy adaptation, not printed statement evidence. Detailed export components and unknown principal belong in one source row. |
+| `pdf_capitaloneauto_202402` | Reads a printed closing principal but derives opening principal from parsed components because no opening is printed. | Retain closing as printed, opening as derived, and component equations separately. |
+| `pdf_wfloanper_202306` | For an empty activity section, emits a loan-origination row and sets opening to zero. | Retain the source boundary and inferred origination separately; do not silently post it as cash or certified history. |
+| `pdf_occucc_201904` | Creates an interest transaction from a printed header amount rather than an activity-line row. | Keep header location and evidence role; verify that it is included once. |
+| Shared balance filling | Recomputes all row balances when any row lacks one. | Preserve every printed balance independently and store calculations in a separate field. |
+
 ## Archive layouts and developer/release coupling
 
 - The managed archive is derived from the database stem. Root files are a drop
@@ -73,6 +94,11 @@ comparison baseline; the older CSV plugin is retained as legacy provenance.
   output uses short digests. The ledger audit/rebuild tools compare historical
   sources, category annotations and MOHELA replacements. Developer previews
   need source-location and declaration-revision diagnostics under P2-4.
+- `devtools/v2_inventory/replay_probe.py` loads checkout parser classes without
+  the writable application settings module, replays referenced archive files
+  against a closed database copy and reports aggregate parse/category-match
+  counts. It produces no evidence database and does not validate installed
+  release trust. Use the separate signed-release verifier for that check.
 - `build_plugins.py`, `scripts/plugin_release.py`, `core/plugin_manifest.py`,
   `plugin_store.py`, `plugin_manager.py` and `plugin_loader.py` compile/load
   `.pyc` under a signed whole-catalog manifest. Artifact metadata includes

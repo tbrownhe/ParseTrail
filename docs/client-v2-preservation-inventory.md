@@ -85,7 +85,10 @@ the likely owner of that decision without approving a deferral.
 JSON report **outside the repository**. It records actual table/field policies,
 ordered table content fingerprints, row and preservation-class counts, legacy
 parser references, archive file hashes/reference status, profile file hashes,
-known setting keys/path availability, and unresolved items. It
+known setting keys/path availability, bounded hashes of configured external
+resources such as historical reports, and unresolved items. Legacy credential
+key files are recorded by presence only. The configured database path is bound
+to the selected closed source copy by byte identity when they differ. It
 does not write to the source, import application settings, parse statements,
 copy a profile or assert activation readiness.
 
@@ -104,6 +107,12 @@ an atomic snapshot or a no-change proof while another process is writing.
 V2-6 must freeze a consistent source/package, verify restore and
 recheck database, WAL, archive and configuration before activation. Do not
 put private report content in Git or attach it to a public issue.
+
+An authorized closed-copy run found no structural inventory exceptions: known
+legacy schema, source references, profile files/settings and configured report
+resources were all accounted for, and the configured database matched the copy
+byte-for-byte. This is structural coverage, not approval of accounting meaning
+or a cutover-ready manifest. The exact private report stays outside Git.
 
 ## Remaining V2-1 decisions and evidence
 
