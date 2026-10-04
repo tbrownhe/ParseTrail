@@ -224,9 +224,15 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   financing, synthetic origination or reconciliation is inferred.
   The owner accepted the Windows workflow on October 3 and requested fixed categories.
   Interest now enforces the shared Loan interest built-in; ordinary expense workflows
-  retain built-in/custom category choices and splits. Loan bundle corrections and other
-  parser contracts need separate
-  bounded chunks before complete loan reconciliation or report cutover.
+  retain built-in/custom category choices and splits. The
+  [loan bank-match correction workflow](devtools/ledger_audit/LOAN_PAYMENTS.md#correcting-a-bank-match)
+  now previews and atomically reverses/replaces an entire payment/interest bundle,
+  preserving loan components, fixed interest classification and both source dates.
+  The previous bank movement returns to review; current and superseded matches remain
+  visible. **[USER]** Windows correction preview/cancel/apply/history/reopen acceptance
+  is next on a fresh disposable workspace. Other parser contracts and loan/source
+  component corrections need separate bounded chunks before full loan reconciliation
+  or report cutover.
   Negative income adjustments, transfer/clearing, loan, asset, opening and source
   corrections remain separate scopes.
 - [ ] **CF2 — Ledger-backed cash-flow contract:** after L1–L5, define account scope, income,

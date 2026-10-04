@@ -6,6 +6,50 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## Loan bank-match correction — October 3, 2026
+
+The owner authorized correcting confirmed loan-payment matches. The
+[service and review UI](../devtools/ledger_audit/LOAN_PAYMENTS.md#correcting-a-bank-match)
+replace only the bank movement of an active fixed-category Capital One payment.
+Loan payment/interest source components, principal, dates and the Loan interest
+built-in remain fixed. The previous bank movement becomes unallocated evidence
+requiring review; it is not deleted or refunded. A correction reason is required.
+
+The kernel now supports whole-event reversal/replacement when the number of
+journal entries changes between same-day and different-date matches. It checks
+the entire active event, validates collective evidence release and replacements,
+preserves event identity and original reversal dates, then writes everything
+atomically. Optional append-only bundle tables supplement single-entry corrections.
+Consumption, entry status and reconciliation recognize both forms of supersession.
+New account mappings and correction history share the same transaction. Exact retries
+remain no-ops, including after another correction; stale/competing requests fail.
+
+The UI previews previous/replacement bank dates and unchanged loan/expense totals.
+Input changes invalidate previews and confirmation defaults to Cancel. Confirmed
+payments show the current match; Previous bank matches retains superseded choices
+and reasons. Earlier category-choice workspaces remain readable, but these corrections
+require a fixed-category workspace. Source-component correction remains a separate scope.
+
+Fourteen new service tests cover chained corrections, immutable history, unchanged
+evidence, reopen, reconciliation invalidation, competing allocations, stale/tampered
+plans, pending expense rejection, partial-event refusal, rollback after inserted
+reversals/replacements, and transitions in both directions across month boundaries
+with zero and nonzero interest. Six new UI tests cover cancel/apply/reopen, history,
+selection/filter/date-window/note invalidation and stale allocation refusal.
+The complete Windows suite passed **1,032 tests, 3 skipped** in 205.49 seconds
+with offscreen Qt and process-only `RemoteSigned`. Ruff lint/format passed across
+**249 files**.
+
+The archive-sized offscreen exercise passed initial posting, correction preview,
+window-close/final-confirmation cancellation, apply and reopen. Its screenshots
+were inspected. A separate read-only audit compared final balances with the active
+replacement, verified unchanged source/category tables against accepted candidates,
+confirmed release of the previous bank movement and passed SQLite integrity/foreign
+keys. Private source details, amounts, reports and screenshots remain ignored.
+A fresh owner workspace contains no previous sample decisions. **Windows native
+correction acceptance is pending.** No live database, parser, dependency or server
+changes occurred, and report cutover remains closed.
+
 ## Built-in ledger categories and enforced loan interest — October 3, 2026
 
 The owner accepted the loan-payment workflow and requested fixed built-in categories

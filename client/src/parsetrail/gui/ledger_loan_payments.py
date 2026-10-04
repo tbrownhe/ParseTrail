@@ -22,7 +22,10 @@ from PySide6.QtWidgets import (
 
 from parsetrail.core.ledger import LedgerError
 from parsetrail.core.ledger_categories import LOAN_INTEREST
+from parsetrail.core.ledger_loan_corrections import LoanPaymentCorrections
+from parsetrail.core.ledger_loan_payments import RULE as PAYMENT_RULE
 from parsetrail.core.ledger_loan_payments import LoanPayments
+from parsetrail.gui.ledger_loan_corrections import LoanCorrectionDialog
 from parsetrail.gui.ledger_preview import PreviewPage, money
 from parsetrail.gui.ledger_proposal_review import ProposalReviewWindow
 
@@ -149,6 +152,7 @@ class LoanPaymentWindow(QMainWindow):
     def __init__(self, review):
         super().__init__()
         self.review, self.service = review, LoanPayments(review)
+        self.corrections = LoanPaymentCorrections(review)
         self.setWindowTitle("ParseTrail — Loan payment workflow test (disposable copy)")
         self.resize(1380, 900)
         body = QWidget()
@@ -156,7 +160,7 @@ class LoanPaymentWindow(QMainWindow):
         notice = QLabel(
             "Workflow test copy — sample decisions do not change or approve live financial history.\n"
             "Capital One Auto payments only. Review the full bank outflow, separate interest expense and principal reduction together.\n"
-            "Other loans, financing, openings and corrections remain outside this posting workflow."
+            "Confirmed payments support bank-match corrections. Other loans, financing and openings remain outside this workflow."
         )
         notice.setWordWrap(True)
         layout.addWidget(notice)
@@ -185,15 +189,21 @@ class LoanPaymentWindow(QMainWindow):
         self.tabs.addTab(self.confirmed, "Confirmed payments")
         self.tabs.addTab(self.unmatched, "No bank match")
         self.tabs.addTab(self.ordinary, "Expense/refund interpretations")
+        self.history = PreviewPage(self.confirmed.model.headers, [])
+        self.tabs.addTab(self.history, "Previous bank matches")
         layout.addWidget(self.tabs)
         self.edit = QPushButton("Review payment and interest…")
         layout.addWidget(self.edit)
+        self.correct = QPushButton("Correct bank match…")
+        layout.addWidget(self.correct)
         self.setCentralWidget(body)
         self.page.table.selectionModel().selectionChanged.connect(self.update_actions)
+        self.confirmed.table.selectionModel().selectionChanged.connect(self.update_actions)
         self.days.valueChanged.connect(self.refresh)
         self.status.currentIndexChanged.connect(self.refresh)
         self.tabs.currentChanged.connect(self.refresh)
         self.edit.clicked.connect(self.open_review)
+        self.correct.clicked.connect(self.open_correction)
         self.refresh()
 
     def selected(self):
@@ -203,6 +213,14 @@ class LoanPaymentWindow(QMainWindow):
     def update_actions(self, *_):
         row = self.selected()
         self.edit.setEnabled(self.tabs.currentIndex() == 0 and bool(row) and not row["pair"]["blockers"])
+        confirmed = self.selected_confirmed()
+        self.correct.setEnabled(
+            self.tabs.currentIndex() == 1 and bool(confirmed) and confirmed["plan"]["rule"] == PAYMENT_RULE
+        )
+
+    def selected_confirmed(self):
+        rows = self.confirmed.table.selectionModel().selectedRows()
+        return self.confirmed.model.records[self.confirmed.proxy.mapToSource(rows[0]).row()] if rows else None
 
     def refresh(self, *_):
         snapshot = self.service.snapshot(self.days.value())
@@ -257,14 +275,22 @@ class LoanPaymentWindow(QMainWindow):
                 }
             )
         set_records(self.page, records)
-        confirmed = []
-        for p in snapshot["decisions"].values():
+        confirmed, history = [], []
+        histories = self.corrections.histories()
+        for p in [p for versions in histories.values() for p in versions]:
+            versions = histories[p["payment_id"]]
+            active = p == versions[-1]
+            status = (
+                ("Corrected and posted" if len(versions) > 1 else "Confirmed and posted")
+                if active
+                else "Superseded bank match"
+            )
             o = observations[p["outgoing_id"]]
             incoming = observations["source:" + p["payment_id"]]
             # Earlier disposable decisions keep their actual category; never relabel history.
             interest_account_id = p.get("interest_account_id") or f"category:{p.get('category_id')}"
             category = accounts[interest_account_id].name if p["interest_minor"] else "Explicit zero interest"
-            confirmed.append(
+            (confirmed if active else history).append(
                 {
                     "plan": p,
                     "cells": [
@@ -275,15 +301,18 @@ class LoanPaymentWindow(QMainWindow):
                         money(incoming.amount_minor),
                         money(p["interest_minor"]),
                         money(p["principal_reduction_minor"]),
-                        "Confirmed and posted",
+                        status,
                     ],
                     "details": "\n".join(
                         [
-                            "Confirmed and posted together",
+                            status,
                             f"Interest category: {category}",
                             f"Reason: {p['reason']}",
                             "Date provenance: " + ", ".join(p["date_provenance"]),
-                            "Source balances remain uncertified. Corrections require a future loan correction workflow.",
+                            "Source balances remain uncertified. Loan components are fixed; only the bank match can be corrected.",
+                            "Previous bank movements remain evidence and return to review after correction."
+                            if len(versions) > 1
+                            else "",
                             "",
                             source_details(p["source_basis"]["sources"]),
                         ]
@@ -291,6 +320,7 @@ class LoanPaymentWindow(QMainWindow):
                 }
             )
         set_records(self.confirmed, confirmed)
+        set_records(self.history, history)
         unmatched = []
         for tid in snapshot["unmatched_payment_ids"]:
             b = snapshot["components"][tid]
@@ -326,3 +356,18 @@ class LoanPaymentWindow(QMainWindow):
                         self.confirmed.proxy.mapFromSource(self.confirmed.model.index(i, 0)).row()
                     )
                     break
+
+    def open_correction(self):
+        row = self.selected_confirmed()
+        if not row or self.tabs.currentIndex() != 1 or row["plan"]["rule"] != PAYMENT_RULE:
+            return
+        payment_id = row["plan"]["payment_id"]
+        dialog = LoanCorrectionDialog(self.corrections, payment_id, self.days.value(), self)
+        dialog.exec()
+        self.refresh()
+        for i, record in enumerate(self.confirmed.model.records):
+            if record["plan"]["payment_id"] == payment_id:
+                self.confirmed.table.selectRow(
+                    self.confirmed.proxy.mapFromSource(self.confirmed.model.index(i, 0)).row()
+                )
+                break

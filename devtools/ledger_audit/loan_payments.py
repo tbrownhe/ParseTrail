@@ -14,6 +14,11 @@ def main():
     parser.add_argument("--candidates", type=Path, help="Accepted unposted candidates; creates a new review folder.")
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--smoke", action="store_true")
+    parser.add_argument(
+        "--corrections",
+        action="store_true",
+        help="Start with a 31-day candidate window; smoke also exercises match correction.",
+    )
     args = parser.parse_args()
     if args.smoke and (not args.candidates or args.prepare_only):
         parser.error("--smoke requires a new --candidates copy and cannot use --prepare-only")
@@ -41,6 +46,8 @@ def main():
             app.setFont(QFont(families[0], 10))
     with ProposalReview(args.folder) as review:
         window = LoanPaymentWindow(review)
+        if args.corrections:
+            window.days.setValue(31)
         window.show()
         if not args.smoke:
             return app.exec()
@@ -73,6 +80,37 @@ def main():
         window.edit.click()
         assert window.tabs.currentIndex() == 1 and payment_id in window.service.decisions()
         assert "Confirmed and posted" in window.confirmed.details.toPlainText()
+        if args.corrections:
+            from parsetrail.gui.ledger_loan_corrections import LoanCorrectionDialog
+
+            posted = list(review.store.connection.iterdump())
+
+            def exercise_correction(save):
+                dialog = app.activeModalWidget()
+                assert isinstance(dialog, LoanCorrectionDialog)
+                index = next(i for i, r in enumerate(dialog.page.model.records) if not r["candidate"]["blockers"])
+                dialog.page.table.selectRow(index)
+                assert not dialog.preview.isEnabled()
+                dialog.reason.setText("Disposable bank-match correction exercise; not financial approval")
+                dialog.preview.click()
+                assert dialog.apply.isEnabled()
+                if not save:
+                    dialog.close()
+                    return
+                dialog.grab().save(str(args.folder / "loan-correction-preview-smoke.png"))
+                dialog.confirm = lambda: False
+                dialog.apply.click()
+                assert list(review.store.connection.iterdump()) == posted
+                dialog.confirm = lambda: True
+                dialog.apply.click()
+
+            QTimer.singleShot(0, lambda: exercise_correction(False))
+            window.correct.click()
+            assert list(review.store.connection.iterdump()) == posted
+            QTimer.singleShot(0, lambda: exercise_correction(True))
+            window.correct.click()
+            assert window.selected_confirmed()["cells"][-1] == "Corrected and posted"
+            assert len(window.history.model.records) == 1
         app.processEvents()
         window.grab().save(str(args.folder / "loan-review-smoke.png"))
         window.close()
@@ -80,6 +118,9 @@ def main():
         window = LoanPaymentWindow(review)
         assert payment_id in window.service.decisions()
         assert len(window.confirmed.model.records) == 1
+        if args.corrections:
+            assert window.confirmed.model.records[0]["cells"][-1] == "Corrected and posted"
+            assert len(window.history.model.records) == 1
         window.close()
     print("Disposable loan-payment preview/cancel/post/reopen smoke passed.")
     return 0

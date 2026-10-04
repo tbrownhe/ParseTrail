@@ -59,6 +59,23 @@ Posted records, mappings, evidence and audit rows reject SQL updates/deletes via
 triggers. All mutation must use the service API; this is not a security boundary
 against a process that can replace the database or drop its triggers.
 
+`_correct_bundle` is the transaction-owned primitive for replacing a whole event
+whose journal count can change, such as correcting a same-day loan payment into a
+payment spanning two dates. It requires every active entry of one economic event,
+new reviewed replacements and a reason. All replacements are validated against
+the collectively released allocations before writing reversals or replacements.
+Reversals keep the originals' dates. The optional append-only
+`LedgerBundleCorrections` and `LedgerBundleOriginals` tables are created with the
+first successful correction, inside the same transaction; preview never migrates
+the file. These tables supplement ordinary one-entry corrections without inventing
+dummy journals to force one-to-one links.
+
+`superseded_keys()` combines both correction forms. Allocation consumption, entry
+status and reconciliation use that combined state; account balances still sum
+the complete original/reversal/replacement history. A prior individual correction
+cannot be applied again to an original superseded by a bundle correction. Exact
+bundle retries are no-ops, including after a later correction of its replacements.
+
 Creation times for entries, corrections, reviews and reconciliation runs are UTC
 timestamps, distinct from calendar posting dates. `review` appends a separate
 interpretation decision and reason; it does not claim statement reconciliation.

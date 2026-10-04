@@ -174,13 +174,24 @@ class LedgerStore:
             )
 
     def consumed(self) -> dict[str, int]:
+        extra = (
+            " UNION SELECT original_key FROM LedgerBundleOriginals"
+            if self.connection.execute("SELECT 1 FROM sqlite_master WHERE name='LedgerBundleOriginals'").fetchone()
+            else ""
+        )
         return dict(
-            self.connection.execute("""
+            self.connection.execute(f"""
             SELECT observation_id,sum(amount) FROM LedgerAllocations
-            WHERE entry_key NOT IN (SELECT original_key FROM LedgerCorrections)
+            WHERE entry_key NOT IN (SELECT original_key FROM LedgerCorrections{extra})
             GROUP BY observation_id
         """)
         )
+
+    def superseded_keys(self):
+        result = {r[0] for r in self.connection.execute("SELECT original_key FROM LedgerCorrections")}
+        if self.connection.execute("SELECT 1 FROM sqlite_master WHERE name='LedgerBundleOriginals'").fetchone():
+            result.update(r[0] for r in self.connection.execute("SELECT original_key FROM LedgerBundleOriginals"))
+        return result
 
     def _existing(self, entry: JournalEntry) -> bool:
         row = self.connection.execute("SELECT payload FROM LedgerEntries WHERE key=?", (entry.key,)).fetchone()
@@ -290,6 +301,8 @@ class LedgerStore:
         if row is None:
             raise LedgerError("Original entry does not exist.")
         original = decode_entry(row[0])
+        if original_key in self.superseded_keys():
+            raise LedgerError("Entry already has a different correction.")
         if original.origin == "reversal" or replacement.key == original.key or self._existing(replacement):
             raise LedgerError("Correction requires an active original and a new replacement.")
         if replacement.event_id != original.event_id:
@@ -317,6 +330,94 @@ class LedgerStore:
             (original_key, reversal.key, replacement.key, reason),
         )
         return replacement.key
+
+    def _correct_bundle(self, correction_id, original_keys, replacements, *, reason):
+        """Atomically replace a whole event, including changes in journal count.
+
+        The caller owns the transaction and any additional account mappings.
+        Reversals retain original dates; only active replacements consume evidence.
+        """
+        if not self.connection.in_transaction:
+            raise LedgerError("Bundle correction requires an enclosing transaction.")
+        identifier(correction_id)
+        identifier(reason)
+        if not original_keys or len(set(original_keys)) != len(original_keys) or not replacements:
+            raise LedgerError("A bundle correction requires distinct originals and replacements.")
+        c = self.connection
+        data = {
+            "original_keys": sorted(original_keys),
+            "replacements": [e.payload() for e in replacements],
+            "reason": reason,
+        }
+        payload = encoded(data)
+        if c.execute("SELECT 1 FROM sqlite_master WHERE name='LedgerBundleCorrections'").fetchone():
+            saved = c.execute("SELECT payload FROM LedgerBundleCorrections WHERE id=?", (correction_id,)).fetchone()
+            if saved:
+                if saved[0] == payload and all(self._existing(e) for e in replacements):
+                    return [e.key for e in replacements]
+                raise LedgerError("Bundle correction identity already has different contents.")
+        superseded = self.superseded_keys()
+        originals = []
+        used = self.consumed()
+        for original_key in original_keys:
+            row = c.execute("SELECT payload FROM LedgerEntries WHERE key=?", (original_key,)).fetchone()
+            if not row or original_key in superseded:
+                raise LedgerError("Bundle original is missing or already corrected.")
+            original = decode_entry(row[0])
+            if original.origin == "reversal":
+                raise LedgerError("A reversal cannot be corrected.")
+            originals.append(original)
+            for oid, amount in c.execute(
+                "SELECT observation_id,amount FROM LedgerAllocations WHERE entry_key=?", (original_key,)
+            ):
+                used[oid] -= amount
+        events = {e.event_id for e in [*originals, *replacements]}
+        if len(events) != 1:
+            raise LedgerError("A bundle correction must preserve one economic event identity.")
+        event = next(iter(events))
+        active_event_keys = {
+            e.key
+            for (p,) in c.execute("SELECT payload FROM LedgerEntries")
+            if (e := decode_entry(p)).event_id == event and e.origin != "reversal" and e.key not in superseded
+        }
+        if active_event_keys != set(original_keys):
+            raise LedgerError("Correct the entire active event together.")
+        if len({e.key for e in replacements}) != len(replacements):
+            raise LedgerError("Replacement keys must be distinct.")
+        accounts, observations = self.accounts(), self.observations()
+        usages = []
+        for entry in replacements:
+            if self._existing(entry) or entry.origin == "reversal" or not entry.reviewed or entry.reason != reason:
+                raise LedgerError("Replacement must be new and explicitly reviewed with the correction reason.")
+            usage = validate_entry(entry, accounts, observations, used)
+            usages.append(usage)
+            for oid, amount in usage.items():
+                used[oid] = used.get(oid, 0) + amount
+        c.execute("CREATE TABLE IF NOT EXISTS LedgerBundleCorrections(id TEXT PRIMARY KEY,payload TEXT NOT NULL)")
+        c.execute("""CREATE TABLE IF NOT EXISTS LedgerBundleOriginals(original_key TEXT PRIMARY KEY REFERENCES LedgerEntries(key),
+            reversal_key TEXT UNIQUE NOT NULL REFERENCES LedgerEntries(key), correction_id TEXT NOT NULL REFERENCES LedgerBundleCorrections(id))""")
+        for table in ("LedgerBundleCorrections", "LedgerBundleOriginals"):
+            for action in ("UPDATE", "DELETE"):
+                c.execute(
+                    f"CREATE TRIGGER IF NOT EXISTS {table}_{action} BEFORE {action} ON {table} BEGIN SELECT RAISE(ABORT,'Posted ledger history is immutable'); END"
+                )
+        c.execute("INSERT INTO LedgerBundleCorrections VALUES(?,?)", (correction_id, payload))
+        for original in originals:
+            reversal = JournalEntry(
+                "reversal:" + hashlib.sha256(original.key.encode()).hexdigest(),
+                event,
+                original.posting_date,
+                "Reversal: " + original.description,
+                tuple(Posting(p.account_id, -p.amount_minor) for p in original.postings),
+                origin="reversal",
+                reviewed=True,
+                reason=reason,
+            )
+            self._insert(reversal, {})
+            c.execute("INSERT INTO LedgerBundleOriginals VALUES(?,?,?)", (original.key, reversal.key, correction_id))
+        for entry, usage in zip(replacements, usages, strict=True):
+            self._insert(entry, usage)
+        return [e.key for e in replacements]
 
     def review(self, key: str, *, reviewed: bool, reason: str) -> None:
         identifier(reason)
@@ -355,7 +456,7 @@ class LedgerStore:
         review = self.connection.execute(
             "SELECT reviewed FROM LedgerReviews WHERE entry_key=? ORDER BY sequence DESC LIMIT 1", (key,)
         ).fetchone()
-        corrected = self.connection.execute("SELECT 1 FROM LedgerCorrections WHERE original_key=?", (key,)).fetchone()
+        corrected = key in self.superseded_keys()
         return {
             "posted": True,
             "reviewed": bool(review[0]) if review else entry.reviewed,
@@ -393,7 +494,7 @@ class LedgerStore:
             data["observation_ids"] = tuple(data["observation_ids"])
             statement = StatementEvidence(**data)
             entries = [decode_entry(row[0]) for row in self.connection.execute("SELECT payload FROM LedgerEntries")]
-            superseded = {row[0] for row in self.connection.execute("SELECT original_key FROM LedgerCorrections")}
+            superseded = self.superseded_keys()
             result = evaluate_statement(
                 statement, self.accounts(), self.observations(), entries, superseded, self.evidence_remaining()
             )

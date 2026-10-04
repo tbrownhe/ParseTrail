@@ -60,7 +60,7 @@ Zero interest creates no expense account or posting. Old disposable decisions ke
 their actual category in history; version-one previews must be regenerated.
 
 Other loan parsers, fees without this component contract, financing, asset
-purchases, disbursements, synthetic origination, openings and loan corrections
+purchases, disbursements, synthetic origination, openings and loan-component corrections
 are separate scopes. The Wells Fargo parser-change deferral remains in force.
 No server, dependency, parser or active-profile changes are required.
 
@@ -94,3 +94,48 @@ coverage. A targeted visual check can use this walkthrough:
 
 This acceptance gate tests the UI, not actual financial classifications. Do not
 carry its sample decisions into rebuilt books.
+
+## Correcting a bank match
+
+The correction service accepts only the latest active fixed-category loan bundle.
+Choose another exact opposite cash movement within the selected 0–31-day window
+and supply a reason. Already allocated or pending expense/refund interpretations
+block the replacement. Equal amounts remain suggestions; the user confirms the
+relationship. A 31-day window is useful for this disposable workflow exercise,
+but adjacent monthly payments are not thereby established as interchangeable.
+
+The preview shows the previous and replacement bank/date, unchanged loan payment,
+principal and Loan interest, and the return of the previous bank movement to review.
+The original withdrawal remains source evidence; releasing its allocation is not
+a refund or deletion. Source component/amount/date changes and category changes
+are outside this workflow. Explicit zero interest remains zero with no expense.
+
+The kernel reverses every active entry of the original event and posts the whole
+replacement in one transaction, preserving economic-event identity. Same-day and
+different-date matches can have different journal counts. Clearing is canceled for
+the old match and installed for the new dates as needed. New mappings, reversal/
+replacement journals, allocation release and `LoanPaymentCorrections` history all
+roll back on failure. Repeated identical requests do not repost; stale previews or
+competing decisions fail. Subsequent corrections append another history version.
+Loan components and source tables remain unchanged. Reconciliation becomes stale.
+
+**Confirmed payments** shows the current match, with **Corrected and posted** after
+a correction. **Previous bank matches** shows superseded choices and their reasons.
+Earlier category-choice test workspaces stay readable, but correction requires a
+fresh fixed-category workspace; sample decisions are never migrated into real books.
+
+For a new workflow-test folder, use the commands above, then launch with
+`--corrections` to start at a 31-day candidate window. Add `--corrections` to a fresh
+`--smoke` run to exercise cancellation, correction, history and reopen automatically.
+
+Windows correction acceptance is pending:
+
+1. Confirm one sample payment in the fresh disposable copy.
+2. In **Confirmed payments**, select it and click **Correct bank match**. Choose
+   another available movement, enter a test reason and preview the before/after effects.
+3. Cancel once. Reopen the correction, preview, and apply it. Loan interest and
+   principal should stay unchanged; the selected bank/date should change.
+4. Check **Previous bank matches**, then close/reopen the same folder. Both the
+   current match and prior choice should remain visible with their reasons.
+
+Only sample workflow decisions belong in this test; the live database is untouched.

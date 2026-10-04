@@ -53,10 +53,14 @@ class ReviewedReconciliation:
 
     def _version(self):
         c = self.store.connection
+        tables = list(VERSION_TABLES)
+        for table in ("LedgerBundleCorrections", "LedgerBundleOriginals"):
+            if c.execute("SELECT 1 FROM sqlite_master WHERE name=?", (table,)).fetchone():
+                tables.append(table)
         return key(
             {
                 "rule": RULE,
-                "tables": {table: sorted(c.execute(f"SELECT * FROM {table}").fetchall()) for table in VERSION_TABLES},
+                "tables": {table: sorted(c.execute(f"SELECT * FROM {table}").fetchall()) for table in tables},
             }
         )
 
@@ -77,7 +81,7 @@ class ReviewedReconciliation:
         remaining = store.evidence_remaining()
         dates = observation_date_provenance(store)
         entries = [decode_entry(payload) for (payload,) in c.execute("SELECT payload FROM LedgerEntries ORDER BY key")]
-        superseded = {row[0] for row in c.execute("SELECT original_key FROM LedgerCorrections")}
+        superseded = store.superseded_keys()
         reviews = dict(c.execute("SELECT entry_key,reviewed FROM LedgerReviews ORDER BY sequence"))
         active = [e for e in entries if e.key not in superseded and e.origin != "reversal"]
         opening_states = {aid: openings.status(aid) for aid in openings.anchors}

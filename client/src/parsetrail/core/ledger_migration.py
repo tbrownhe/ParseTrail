@@ -402,7 +402,7 @@ def reconcile_plan(plan: dict, store: LedgerStore) -> dict:
     entries = [
         decode_entry(row[0]) for row in store.connection.execute("SELECT payload FROM LedgerEntries ORDER BY key")
     ]
-    superseded = {row[0] for row in store.connection.execute("SELECT original_key FROM LedgerCorrections")}
+    superseded = store.superseded_keys()
     results = {}
     for row in plan["statements"]:
         statement = StatementEvidence(

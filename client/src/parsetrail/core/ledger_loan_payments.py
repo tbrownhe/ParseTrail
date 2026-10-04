@@ -195,7 +195,7 @@ class LoanPayments:
         with self._snapshot():
             return self._build(outgoing_id, payment_id, reason, window_days)
 
-    def _build(self, outgoing_id, payment_id, reason, window_days):
+    def _build(self, outgoing_id, payment_id, reason, window_days, *, correcting=None):
         validate_window(window_days)
         reason = reason.strip() or DEFAULT_REASON if isinstance(reason, str) else reason
         identifier(reason)
@@ -207,9 +207,15 @@ class LoanPayments:
             raise LedgerError("; ".join(bundle["blockers"]))
         if outgoing_id in pending:
             raise LedgerError("Reject the pending ordinary expense/refund proposal before loan confirmation.")
-        if payment_id in self.decisions():
+        if payment_id in self.decisions() and correcting is None:
             raise LedgerError("Loan payment already confirmed; changes require a correction workflow.")
         accounts, observations, used = self.store.accounts(), self.store.observations(), self.store.consumed()
+        if correcting is not None:
+            for entry in correcting["entries"]:
+                for oid, amount in self.store.connection.execute(
+                    "SELECT observation_id,amount FROM LedgerAllocations WHERE entry_key=?", (entry["key"],)
+                ):
+                    used[oid] -= amount
         outgoing = observations[outgoing_id]
         payment, interest = bundle["payment"], bundle["interest"][0]
         incoming = Observation(
@@ -256,17 +262,20 @@ class LoanPayments:
             "reason": reason,
             "window_days": window_days,
         }
-        event = "loan-payment:" + key(request)
+        if correcting is not None:
+            request["previous_hash"] = correcting["preview_hash"]
+        revision = "loan-payment:" + key(request)
+        event = correcting["entries"][0]["event_id"] if correcting is not None else revision
         transfers, clearing = TransferReview.entries(outgoing, incoming, "card_payment", reason)
         entries = [
-            replace(e, key=f"{event}:payment:{i}", event_id=event, description="Confirmed loan payment")
+            replace(e, key=f"{revision}:payment:{i}", event_id=event, description="Confirmed loan payment")
             for i, e in enumerate(transfers)
         ]
         if interest_postings:
             o = new_observations[1]
             entries.append(
                 JournalEntry(
-                    event + ":interest",
+                    revision + ":interest",
                     event,
                     o.posting_date,
                     "Confirmed loan interest component",
