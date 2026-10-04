@@ -23,8 +23,7 @@ from PySide6.QtWidgets import (
 from parsetrail.core.ledger import LedgerError
 from parsetrail.core.ledger_categories import LOAN_INTEREST
 from parsetrail.core.ledger_loan_corrections import LoanPaymentCorrections
-from parsetrail.core.ledger_loan_payments import RULE as PAYMENT_RULE
-from parsetrail.core.ledger_loan_payments import LoanPayments
+from parsetrail.core.ledger_loan_payments import SUPPORTED_RULES, LoanPayments, payment_contract
 from parsetrail.gui.ledger_loan_corrections import LoanCorrectionDialog
 from parsetrail.gui.ledger_preview import PreviewPage, money
 from parsetrail.gui.ledger_proposal_review import ProposalReviewWindow
@@ -55,7 +54,7 @@ class LoanPaymentDialog(QDialog):
             f"{pair['bank']} → {pair['loan']}\nBank date: {pair['bank_date']} · Loan date: {pair['loan_date']}\n"
             "Confirm that these movements represent the same payment. Amount matching alone is not proof.\n"
             "The full payment reduces bank cash; only the separately recorded interest counts as expense.\n"
-            "Capital One's derived opening balance is not independent reconciliation. Loan dates remain unverified."
+            f"{pair['source_contract']['balance_basis']}\n{pair['source_contract']['period_basis']} Loan dates remain unverified."
         )
         notice.setWordWrap(True)
         layout.addWidget(notice)
@@ -116,6 +115,7 @@ class LoanPaymentDialog(QDialog):
                     "",
                     "Loan source statements:",
                     source_details(p["source_basis"]["sources"]),
+                    payment_contract(p["source_basis"])["component_basis"],
                 ]
             )
         )
@@ -159,7 +159,7 @@ class LoanPaymentWindow(QMainWindow):
         layout = QVBoxLayout(body)
         notice = QLabel(
             "Workflow test copy — sample decisions do not change or approve live financial history.\n"
-            "Capital One Auto payments only. Review the full bank outflow, separate interest expense and principal reduction together.\n"
+            "Capital One Auto and Wells Fargo Personal Loan payments. Review bank outflow, interest expense and principal reduction together.\n"
             "Confirmed payments support bank-match corrections. Other loans, financing and openings remain outside this workflow."
         )
         notice.setWordWrap(True)
@@ -178,7 +178,9 @@ class LoanPaymentWindow(QMainWindow):
         controls.addStretch()
         layout.addLayout(controls)
         self.tabs = QTabWidget()
-        self.page = PreviewPage(["Bank", "Bank date", "Loan", "Loan date", "Payment", "Interest", "Review status"], [])
+        self.page = PreviewPage(
+            ["Bank", "Bank date", "Loan", "Loan date", "Payment", "Interest", "Review status", "Source contract"], []
+        )
         self.confirmed = PreviewPage(
             ["Bank", "Bank date", "Loan", "Loan date", "Payment", "Interest", "Principal reduction", "Review status"],
             [],
@@ -215,7 +217,7 @@ class LoanPaymentWindow(QMainWindow):
         self.edit.setEnabled(self.tabs.currentIndex() == 0 and bool(row) and not row["pair"]["blockers"])
         confirmed = self.selected_confirmed()
         self.correct.setEnabled(
-            self.tabs.currentIndex() == 1 and bool(confirmed) and confirmed["plan"]["rule"] == PAYMENT_RULE
+            self.tabs.currentIndex() == 1 and bool(confirmed) and confirmed["plan"]["rule"] in SUPPORTED_RULES
         )
 
     def selected_confirmed(self):
@@ -250,7 +252,9 @@ class LoanPaymentWindow(QMainWindow):
                     f"Possible counterparts (bank / loan): {p['alternatives']}",
                     f"Posting-date provenance (bank / loan): {', '.join(p['date_provenance'])}",
                     "The full payment reduces bank cash. Only the interest component adds expense.",
-                    "Loan opening is derived; matching these movements does not certify balances.",
+                    p["source_contract"]["balance_basis"],
+                    p["source_contract"]["period_basis"],
+                    p["source_contract"]["component_basis"],
                     "",
                     "Bank source statements:",
                     *bank_files,
@@ -270,6 +274,7 @@ class LoanPaymentWindow(QMainWindow):
                         money(p["amount_minor"]),
                         money(p["interest_minor"]) if p["interest_minor"] is not None else "Unknown",
                         status,
+                        p["source_contract"]["name"],
                     ],
                     "details": details,
                 }
@@ -310,6 +315,8 @@ class LoanPaymentWindow(QMainWindow):
                             f"Reason: {p['reason']}",
                             "Date provenance: " + ", ".join(p["date_provenance"]),
                             "Source balances remain uncertified. Loan components are fixed; only the bank match can be corrected.",
+                            payment_contract(p["source_basis"])["balance_basis"],
+                            payment_contract(p["source_basis"])["period_basis"],
                             "Previous bank movements remain evidence and return to review after correction."
                             if len(versions) > 1
                             else "",
@@ -359,7 +366,7 @@ class LoanPaymentWindow(QMainWindow):
 
     def open_correction(self):
         row = self.selected_confirmed()
-        if not row or self.tabs.currentIndex() != 1 or row["plan"]["rule"] != PAYMENT_RULE:
+        if not row or self.tabs.currentIndex() != 1 or row["plan"]["rule"] not in SUPPORTED_RULES:
             return
         payment_id = row["plan"]["payment_id"]
         dialog = LoanCorrectionDialog(self.corrections, payment_id, self.days.value(), self)

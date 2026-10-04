@@ -63,4 +63,4 @@ All private reports, identifiers, amounts and screenshots remain in ignored stor
 
 The owner accepted all three tabs, the evidence hints and reopening on Windows on
 October 3, 2026. No financial decisions were changed in this read-only view. The next
-bounded workflow is [Capital One payment and interest confirmation](LOAN_PAYMENTS.md).
+posting workflow supports [Capital One and ordinary Wells Fargo payment and interest confirmation](LOAN_PAYMENTS.md).

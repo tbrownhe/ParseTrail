@@ -1,4 +1,4 @@
-"""Prepare or open the bounded Capital One loan-payment workflow test."""
+"""Prepare or open the bounded loan-payment workflow test."""
 
 import argparse
 import os
@@ -14,6 +14,11 @@ def main():
     parser.add_argument("--candidates", type=Path, help="Accepted unposted candidates; creates a new review folder.")
     parser.add_argument("--prepare-only", action="store_true")
     parser.add_argument("--smoke", action="store_true")
+    parser.add_argument(
+        "--source-contract",
+        choices=["capital-one", "wells-fargo"],
+        help="Filter initial payment candidates by supported loan source contract.",
+    )
     parser.add_argument(
         "--corrections",
         action="store_true",
@@ -48,6 +53,10 @@ def main():
         window = LoanPaymentWindow(review)
         if args.corrections:
             window.days.setValue(31)
+        if args.source_contract:
+            window.page.search.setText(
+                {"capital-one": "Capital One Auto", "wells-fargo": "Wells Fargo Personal Loan"}[args.source_contract]
+            )
         window.show()
         if not args.smoke:
             return app.exec()

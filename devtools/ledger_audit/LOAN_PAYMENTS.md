@@ -1,20 +1,30 @@
-# Capital One loan payments and interest
+# Loan payments and interest
 
 This disposable workflow follows the accepted [loan-readiness audit](LOANS.md).
 The active application still uses its legacy database. Sample review decisions
 exercise the workflow; they do not approve the owner's real financial history.
 
-## Bounded source contract
+## Bounded source contracts
 
-Only USD Loan/Debt accounts parsed by `pdf_capitaloneauto_202402` version `0.2.1`
-are supported here. That parser validates printed principal, interest and total
-payment components. Its reconstructed opening is still derived, so a matching
-source balance equation is not independent reconciliation.
+USD Loan/Debt accounts use one shared review, posting and correction workflow
+with these explicitly supported source representations:
 
-Each positive `Payment Received` row needs exactly one nonpositive `Interest Fee`
-row on the same loan/date with a shared statement. Every source membership must
+| Parser/version | Total payment / separate interest | Balance and period basis |
+| --- | --- | --- |
+| `pdf_capitaloneauto_202402` / `0.2.1` | `Payment Received` / `Interest Fee` | Printed component totals; opening reconstructed from closing and activity. Printed transaction-history range remains unreviewed. |
+| `pdf_wfloanper_202306` / `0.2.0` | `PAYMENT` / `INTEREST PAYMENT` | Payment combines printed same-date principal and interest. Ordinary prior/ending principal is printed; the parser assumes a 31-day period. |
+
+An exact source equation does not certify balances or coverage. Wells Fargo
+statements containing synthetic `LOAN ORIGINATION` are excluded. Separate
+extra-principal rows remain unposted, even when an ordinary payment from the
+same statement is eligible. The source-specific limitations appear in review
+and confirmation details; the candidate table identifies the source contract.
+
+Each positive total-payment row needs exactly one nonpositive interest row
+on the same loan/date with a shared statement. Every source membership must
 belong to an eligible parsed statement with an exact balance equation and
-in-period, USD movements. Missing, multiple or shared interest components block
+in-period, USD movements, and all memberships must use the same supported contract.
+Missing, multiple or shared interest components block
 posting; no missing interest is assumed to be zero. An explicitly zero component
 remains source evidence without a zero observation or journal posting. Interest
 greater than the payment needs a different interpretation.
@@ -64,6 +74,10 @@ purchases, disbursements, synthetic origination, openings and loan-component cor
 are separate scopes. The Wells Fargo parser-change deferral remains in force.
 No server, dependency, parser or active-profile changes are required.
 
+Parser-owned, versioned accounting declarations captured with each imported
+statement are the next roadmap step. The current explicit parser/version registry
+is a bounded adapter, not the intended long-term home for source semantics.
+
 ## Run and Windows acceptance
 
 Use accepted unposted candidates, never a previous workflow's sample decisions:
@@ -74,6 +88,8 @@ client/.venv/Scripts/python.exe devtools/ledger_audit/loan_payments.py --folder 
 ```
 
 The first command refuses an existing destination. Resume with only `--folder`.
+Add `--source-contract wells-fargo` to initially filter ordinary Wells Fargo
+payments, or `--source-contract capital-one` for Capital One.
 An automated offscreen exercise uses a separate new folder with `--candidates`
 and `--smoke`; it tests preview, window-close cancellation, final-confirmation
 cancellation, posting and reopening. Interest always uses its built-in category.

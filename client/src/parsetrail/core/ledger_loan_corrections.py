@@ -3,8 +3,7 @@
 import json
 
 from parsetrail.core.ledger import LedgerError, identifier
-from parsetrail.core.ledger_loan_payments import RULE as PAYMENT_RULE
-from parsetrail.core.ledger_loan_payments import LoanPayments
+from parsetrail.core.ledger_loan_payments import SUPPORTED_RULES, LoanPayments
 from parsetrail.core.ledger_opening_review import observation_date_provenance
 from parsetrail.core.ledger_rebuild import key
 from parsetrail.core.ledger_store import decode_entry, encoded
@@ -50,7 +49,7 @@ class LoanPaymentCorrections:
 
     def _active(self, payment_id):
         previous = self._history(payment_id)[-1]
-        if previous["rule"] != PAYMENT_RULE:
+        if previous["rule"] not in SUPPORTED_RULES:
             raise LedgerError("Earlier category-choice test decisions require a fresh fixed-category workspace.")
         if any(
             not self.store._existing(decode_entry(encoded(e))) or self.store.entry_status(e["key"])["superseded"]

@@ -6,6 +6,47 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## Ordinary Wells Fargo loan payments — October 3, 2026
+
+The existing [payment and correction workflow](../devtools/ledger_audit/LOAN_PAYMENTS.md)
+now also supports ordinary `pdf_wfloanper_202306` version `0.2.0` evidence. The
+parser combines same-date printed principal and interest into a total payment,
+with a separate interest row. The shared ledger service transfers the full
+payment and recognizes interest once through the fixed Loan interest category.
+It preserves both payment dates and uses clearing when needed. Existing Capital
+One version-two plans and correction histories retain their exact identities.
+
+The adapter requires an exact source balance equation, USD in-period rows, one
+unambiguous interest component and consistent supported parser/version membership.
+Statements containing synthetic origination are excluded; standalone extra-principal
+rows remain unposted. Review details distinguish printed ordinary principal
+balances from the assumed 31-day period, without certifying either balances or
+coverage. Opening positions, synthetic origination and full loan reconciliation
+remain deferred. No parser, server, dependency or active-profile changes occurred.
+
+The private archive audit verified source hashes before and after replay,
+compared every accepted Wells Fargo source's normalized rows with retained
+evidence, checked exact balance equations, and independently reconstructed payment
+components from the printed dated rows. The offscreen archive-copy exercise passed
+preview, close/final-confirmation cancellation, posting, whole-event bank-match
+correction, history and reopening. Screenshots were inspected. A separate read-only
+audit reproduced a prior Capital One plan exactly and verified both formats'
+correction histories, database integrity and unchanged source/category tables.
+Reports, amounts, source identifiers and screenshots remain in ignored scratch folders.
+
+Eleven new tests cover ordinary and zero-interest posting/correction, extra-principal
+exclusion, synthetic/mixed-contract/unknown-version rejection, invalid balance/date/
+currency evidence, missing/shared interest, and source-specific UI notices with the
+fixed interest category. The full client suite passed **1050 tests, 3 skipped**
+in 217.38 seconds. Ruff lint and format checks passed across all 250 client/test
+and ledger/recovery/recurring devtool Python files. Targeted Windows acceptance is pending in a fresh copy;
+sample decisions are not financial approvals.
+
+The owner requested parser-owned declarative accounting metadata. The next bounded
+roadmap step will snapshot a validated versioned declaration with imported statements
+and dispatch to reusable workflows. Broader declarative parser extraction is deferred
+to a separate run.
+
 ## Ledger review column sorting — October 3, 2026
 
 After accepting the loan correction workflow, the owner requested sorting on every
@@ -24,6 +65,7 @@ candidates. Ruff lint/format passed for changed Python files. An archive-sized r
 exercise sorted every column in both directions across loan review/correction tables
 and checked selected details against source records; the database hash stayed unchanged.
 No accounting, dependency, parser, server or live-database changes occurred.
+The owner accepted the Windows sorting behavior on October 3, 2026.
 
 ## Loan bank-match correction — October 3, 2026
 

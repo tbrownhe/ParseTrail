@@ -1,4 +1,4 @@
-"""Explicit Capital One Auto payment/interest bundles; no inferred loan openings."""
+"""Explicit source-contracted loan payment/interest bundles; no inferred openings."""
 
 import json
 from collections import Counter, defaultdict
@@ -24,7 +24,34 @@ from parsetrail.core.ledger_store import decode_entry, encoded
 from parsetrail.core.ledger_transfers import TransferReview, validate_window
 
 RULE = "capital-one-loan-payments-2"
+WF_RULE = "wells-fargo-loan-payments-1"
+PAYMENT_CONTRACTS = {
+    ("pdf_capitaloneauto_202402", "0.2.1"): {
+        "rule": RULE,
+        "name": "Capital One Auto",
+        "payment": "Payment Received",
+        "interest": "Interest Fee",
+        "balance_basis": "Opening principal is derived from closing principal and activity; not independent reconciliation.",
+        "period_basis": "Printed transaction-history range; boundary timing remains unreviewed.",
+        "component_basis": "Payment total and separate interest component; interest is recognized once.",
+    },
+    ("pdf_wfloanper_202306", "0.2.0"): {
+        "rule": WF_RULE,
+        "name": "Wells Fargo Personal Loan",
+        "payment": "PAYMENT",
+        "interest": "INTEREST PAYMENT",
+        "balance_basis": "Printed prior/ending principal for ordinary statements; balances remain unreviewed.",
+        "period_basis": "Parser assumes a 31-day statement period; coverage is not established.",
+        "component_basis": "Payment combines same-date principal and interest. Separate extra-principal rows and synthetic origination stay outside this workflow.",
+    },
+}
+SUPPORTED_RULES = frozenset(c["rule"] for c in PAYMENT_CONTRACTS.values())
 DEFAULT_REASON = "Confirmed loan payment and separately evidenced interest"
+
+
+def payment_contract(bundle):
+    source = bundle["sources"][0]["file"]
+    return PAYMENT_CONTRACTS[(source["plugin"], source["version"])]
 
 
 class LoanPayments:
@@ -73,35 +100,43 @@ class LoanPayments:
                 raise LedgerError("Loan evidence has inconsistent source ownership.")
             members[sid].append(tid)
             sources[tid].add(sid)
-        eligible = set()
+        eligible = {}
         for sid, s in statements.items():
             f = files[s["source"]]
             ids = members[sid]
+            contract_key = (f.get("plugin"), f.get("version"))
             if (
                 s["account_id"] in loan_ids
-                and f.get("plugin") == "pdf_capitaloneauto_202402"
-                and f.get("version") == "0.2.1"
+                and contract_key in PAYMENT_CONTRACTS
                 and f["status"] == s["status"] == "parsed"
+                and not any(rows[t]["Description"] == "LOAN ORIGINATION" for t in ids)
                 and len(ids) == len(set(ids))
                 and all(
                     rows[t]["CurrencyCode"] == "USD" and s["start"] <= rows[t]["PostingDate"] <= s["end"] for t in ids
                 )
                 and s["closing_minor"] - s["opening_minor"] == sum(rows[t]["AmountMinor"] for t in ids)
             ):
-                eligible.add(sid)
-        admitted = {tid for tid in rows if sources[tid] and sources[tid] <= eligible}
+                eligible[sid] = contract_key
+        admitted = {
+            tid
+            for tid in rows
+            if sources[tid] and sources[tid] <= eligible.keys() and len({eligible[sid] for sid in sources[tid]}) == 1
+        }
         bundles = {}
         interest_usage = Counter()
         for tid in sorted(admitted):
             p = rows[tid]
-            if p["Description"] != "Payment Received" or p["AmountMinor"] <= 0:
+            contract_key = eligible[next(iter(sources[tid]))]
+            contract = PAYMENT_CONTRACTS[contract_key]
+            if p["Description"] != contract["payment"] or p["AmountMinor"] <= 0:
                 continue
             interest = sorted(
                 t
                 for t in admitted
                 if rows[t]["AccountID"] == p["AccountID"]
                 and rows[t]["PostingDate"] == p["PostingDate"]
-                and rows[t]["Description"] == "Interest Fee"
+                and rows[t]["Description"] == contract["interest"]
+                and eligible[next(iter(sources[t]))] == contract_key
                 and sources[t] & sources[tid]
             )
             blockers = []
@@ -180,6 +215,7 @@ class LoanPayments:
                             "bank_description": rows[oid.removeprefix("source:")]["Description"],
                             "date_provenance": [dates.get(oid, "unknown"), dates.get("source:" + tid, "unknown")],
                             "sources": b["sources"],
+                            "source_contract": payment_contract(b),
                         }
                     )
             for pair in pairs:
@@ -201,7 +237,7 @@ class LoanPayments:
         identifier(reason)
         bundles, cash_ids, pending, _ = self._context()
         if outgoing_id not in cash_ids or payment_id not in bundles:
-            raise LedgerError("Choose eligible cash evidence and a supported Capital One payment.")
+            raise LedgerError("Choose eligible cash evidence and a supported loan payment.")
         bundle = bundles[payment_id]
         if bundle["blockers"]:
             raise LedgerError("; ".join(bundle["blockers"]))
@@ -255,7 +291,7 @@ class LoanPayments:
             mappings = [asdict(LOAN_INTEREST)]
             interest_postings = [Posting(LOAN_INTEREST.id, -interest["AmountMinor"])]
         request = {
-            "rule": RULE,
+            "rule": payment_contract(bundle)["rule"],
             "outgoing_id": outgoing_id,
             "payment_id": payment_id,
             "interest_account_id": LOAN_INTEREST.id if interest_postings else None,
@@ -313,7 +349,7 @@ class LoanPayments:
 
     def apply(self, plan):
         if (
-            plan.get("rule") != RULE
+            plan.get("rule") not in SUPPORTED_RULES
             or plan.get("candidate_hash") != key(self.review.plan)
             or plan.get("preview_hash") != key({k: v for k, v in plan.items() if k != "preview_hash"})
         ):

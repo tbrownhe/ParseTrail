@@ -232,7 +232,23 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   visible. The owner accepted the Windows correction workflow on October 3 and
   requested sorting on every column. Shared ledger review tables now support
   ascending/descending sorting with exact numeric money/count ordering.
-  Other parser contracts and loan/source
+  The owner accepted sorting on October 3. Ordinary Wells Fargo Personal Loan
+  payments now reuse the same payment/interest and bank-match correction workflow
+  after archive replay and printed-component checks. Review exposes printed
+  principal balances and the assumed 31-day period; synthetic origination and
+  separate extra-principal rows remain unposted. Targeted Windows acceptance is pending.
+  **Next: declarative accounting contracts.** As requested by the owner, define a
+  small versioned vocabulary for statement accounting representations in parser
+  metadata, capture the validated declaration in each imported statement row, and
+  dispatch to shared workflows from that retained evidence. Separate representation
+  (total payment, principal, interest), component association, balance/period/date
+  provenance and synthetic/estimated evidence from human descriptions. Unknown or
+  unsupported declarations remain review-only; declarations never confirm a match
+  or certify balances. Bind previews to the retained version so parser updates cannot
+  reinterpret old imports silently. Start with the two supported loan formats,
+  preserving existing decisions and testing round-trip persistence, invalid metadata,
+  overlap and version changes. Keep broader declarative extraction/parser cleanup
+  for a separate run. Other parser contracts and loan/source
   component corrections need separate bounded chunks before full loan reconciliation
   or report cutover.
   Negative income adjustments, transfer/clearing, loan, asset, opening and source
