@@ -166,6 +166,11 @@ inventory findings can split or reorder bounded work without expanding the relea
 promise. Loan posting extensions needed for useful daily coverage receive their
 own service/UI chunks under V2-4; do not require full loan-history reconstruction.
 
+The first-pass [V2-1 preservation inventory](client-v2-preservation-inventory.md)
+records the current schema, profile resources, menu actions and a private read-only
+inventory command. Its unresolved items remain open until checked on an authorized
+consistent source copy.
+
 ## Rebuild, activation and rollback sequence
 
 1. Inspect the selected source read-only. Freeze a consistent database/archive and

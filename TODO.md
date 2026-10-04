@@ -106,11 +106,15 @@ The owner also included [engine simplification and declarative parsers](docs/cli
 in 2.0. Target a built-in engine plus signed versioned JSON definitions, with rare
 explicit client-built extraction handlers instead of downloaded Python bytecode.
 
-- [ ] **V2-1 — Preservation manifest:** next alongside P2-1. Read-only inventory of
+- [~] **V2-1 — Preservation manifest:** first-pass code/schema inventory and
+  read-only private report tool are in [the preservation inventory](docs/client-v2-preservation-inventory.md).
+  Continue alongside P2-1 with an authorized private snapshot. Read-only inventory of
   database fields, manual/category/budget state, profile resources, parser availability
   and legacy UI actions. Assign every item a preservation/rebuild/disposition rule;
   stop for uncovered user-data policy. No live writes or schema changes.
-- [ ] **P2-1 — Parser/engine review:** inventory all current parsers, archive layouts,
+- [~] **P2-1 — Parser/engine review:** first-pass 22-parser source/fixture matrix is in
+  [the parser inventory](docs/client-v2-parser-inventory.md). Continue with authorized
+  archive and installed-catalog comparison. Inventory all current parsers, archive layouts,
   repeated extraction/normalization/checks, source provenance, developer tools and
   release coupling. Produce a family/fixture matrix and explicit custom-operation needs.
 - [ ] **P2-2–3 — Declaration/evidence pilot:** define strict schemas and a bounded

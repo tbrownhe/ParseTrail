@@ -121,6 +121,10 @@ public 2.0 release. Local prototypes need no server deployment. At the server bo
 merge accepted client work first, then use a short-lived server branch; server P0
 remains closed outside this interface change.
 
+The first-pass [P2-1 parser inventory](client-v2-parser-inventory.md) lists all
+shipped parser IDs, source-level fixture coverage, repeated operations and likely
+client-built exceptions. Private archive and installed-catalog comparison remains open.
+
 The release gate is a reviewed engine and declarative catalog, archive-preserving
 coverage of needed formats, explicit client-built exceptions and signed offline
 distribution. If a family becomes more complicated as declarations, stop with a
