@@ -245,8 +245,8 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   declarations remain review-only; previews bind the retained declaration, and old
   decisions retain their original meaning. Migration leaves old statements undeclared.
   **Next: extend evidence representations where archive evidence supports them.**
-  **MOHELA: one-time detailed-export replacement is implemented; Windows review
-  is pending.** The owner selected MOHELA alone; StudentAid/ECSI are not required
+  **MOHELA: one-time detailed-export replacement passed owner Windows review
+  on October 4.** The owner selected MOHELA alone; StudentAid/ECSI are not required
   inputs. The [replacement tool](devtools/ledger_audit/MOHELA_REPLACEMENT.md) creates
   a disposable unposted rebuild, retaining the accepted original and source bytes.
   Old aggregate movements are superseded only when detailed components match
@@ -254,8 +254,10 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   evidence remains unchanged. Separate loan identities, principal/interest/fees,
   zero rows and unknown reported balances are retained without fake endpoints or
   balancing entries. The read-only review covers balances/differences, retained
-  categories, possible bank matches and source activity. Native review is the next
-  gate; loan posting and live-profile cutover are separate work.
+  categories, possible bank matches and source activity. The owner accepted leaving
+  the differences unexplained for now; suspected capitalized interest is not a
+  supported dated accounting entry. Loan posting and live-profile cutover remain
+  separate work.
   The owner reports missing prior-servicer transfer activity and incremental balance
   changes without corresponding records. The new history remains an unverified
   source claim, not proof of the actual obligation. General recurring export

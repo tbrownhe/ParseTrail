@@ -50,7 +50,10 @@ without required inputs was also checked to fail before creating output.
 The four-tab read-only review covers balance observations/differences, retained
 categories, possible bank counterparts and raw loan activity. Offscreen row selection,
 details, closing/reopening and unchanged database hashes passed; all four screenshots
-were inspected. Native Windows owner acceptance remains pending. Loan posting,
+were inspected. The owner accepted the Windows UI on October 4 and accepted leaving
+the unexplained differences unresolved for now. Capitalized interest was suggested
+as a possible explanation, not verified source evidence or authorization to invent
+dated entries. Loan posting,
 general repeated-export replacement and live-profile/report cutover remain separate
 work. No dependencies, server changes or live financial writes occurred.
 
