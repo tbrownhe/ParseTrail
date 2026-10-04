@@ -196,6 +196,12 @@ breaking transition through local archive replay, preserved verified expense
 categories, and a separate read-only category-preservation checkpoint. It creates
 a disposable new database; active imports and reports have not switched formats.
 
+The [client 2.0 cutover plan](../docs/client-v2-cutover.md) makes this a required
+local rebuild into a separate profile for the next major release. It specifies
+preservation of user decisions/configuration, everyday ledger integration and
+explicit activation/rollback gates. Version numbers and current database behavior
+remain unchanged until implementation and release acceptance are complete.
+
 ### Statement coverage and freshness
 
 `CoverageService` reads immutable per-account statement evidence, including

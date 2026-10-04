@@ -188,6 +188,13 @@ it cannot establish accounting correctness by itself.
 
 ## Migration and rollout
 
+The owner approved a required rebuild for client 2.0 on October 4, 2026. The
+[2.0 cutover plan](client-v2-cutover.md) defines the release boundary, preservation
+inventory, application integration and activation/rollback sequence. The application
+version remains unchanged during development. The old model is a bounded read-only
+rebuild input, not a permanent runtime compatibility layer; released 2.x databases
+return to versioned migrations. No live cutover has occurred.
+
 ### Verified expense categories during a fresh rebuild
 
 The owner approved a breaking database rebuild through local statement
@@ -222,7 +229,10 @@ The first [fresh-replay checkpoint](../devtools/ledger_audit/REBUILD.md) impleme
 source evidence and category preservation in a disposable new format. Historical
 rows commonly lack a transaction date; exact posting date remains required, and
 known transaction dates must agree. No journal is posted by annotation restoration.
-Parser failures and ambiguous matches remain visible cutover blockers.
+Parser failures and ambiguous matches block automatic carry-forward. They remain
+cutover blockers until resolved or given an explicit owner-reviewed retained/excluded
+disposition under the 2.0 plan; never silently omit them or call partial restoration
+complete. Accounting invariants cannot be waived by accepting an exception.
 
 The second checkpoint permits a running balance to distinguish repeated exact
 transaction details only when the complete, unique balance inventory is unchanged

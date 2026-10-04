@@ -74,10 +74,11 @@ routine client development or automated tests.
   A payment is not necessarily the card's current total balance. Later allow
   dated checking/card balance observations without rewriting transaction history;
   these refresh the forecast starting point but do not fill missing spending.
-- SQLite can evolve incrementally with migration/recovery checks. Preserve exact
-  money and original transactions; store confirmed interpretations/provenance
-  separately and keep derived insights reproducible. Prepare full backup/restore
-  support before substantial schema expansion.
+- The next major client targets 2.0 with a required local database rebuild; do not
+  incrementally migrate the legacy financial model into the ledger. Keep the version
+  unchanged during development. Resume versioned migrations within released 2.x.
+  Preserve exact money, original evidence and user-authored state; store confirmed
+  interpretations separately and keep derived insights reproducible.
 - On September 27, the owner approved a genuine double-entry ledger as the
   authoritative financial model before new cash-flow totals. Preserve imported
   evidence separately from journal entries and postings. Categories are migration
@@ -94,7 +95,41 @@ routine client development or automated tests.
   confirmation, or treat category verification as statement reconciliation. Retain
   the old database/archive throughout; see the [carry-forward contract](docs/client-ledger-contract.md#verified-expense-categories-during-a-fresh-rebuild).
 
-### Approved implementation sequence
+### 2.0 cutover plan
+
+The owner approved the major-version rebuild strategy on October 4. The
+[2.0 cutover plan](docs/client-v2-cutover.md) defines preservation, launch behavior,
+blocking failures versus retained uncertainty, and activation/rollback gates.
+The existing L/CF items below provide implementation history and remaining service
+work; V2 organizes their integration into the everyday application.
+
+- [ ] **V2-1 — Preservation manifest:** next bounded chunk. Read-only inventory of
+  database fields, manual/category/budget state, profile resources, parser availability
+  and legacy UI actions. Assign every item a preservation/rebuild/disposition rule;
+  stop for uncovered user-data policy. No live writes or schema changes.
+- [ ] **V2-2 — Format boundary:** identify legacy/new/unknown databases before writable
+  initialization; create clean 2.x profiles and establish their migration lifecycle.
+- [ ] **V2-3a–c — Import integration:** common replay/ongoing ingestion, bounded export
+  evidence policy, then main-window import/cancellation/archive recovery and Windows
+  acceptance. Keep each service/UI chunk separately testable.
+- [ ] **V2-4a–b — Daily review:** preserve/edit accounts, categories and budgets; connect
+  accepted ledger workflows to the application in small increments. Manual values,
+  closures and unsupported accounting remain explicit. Owner Windows integration gate.
+- [ ] **V2-5a–b — Report cutover:** shared ledger spending/cash/balance/budget queries,
+  then dashboard and export integration. Inventory every legacy menu action; approve
+  concrete deferrals rather than silently removing functionality. Owner Windows gate.
+- [ ] **V2-6a–b — Activation:** complete recovery/profile package and atomic activation
+  service, then rebuild assistant and Windows rollback rehearsal. Detect source edits
+  made after preparation. Live activation requires explicit approval of the candidate.
+- [ ] **V2-7 — Release:** remove obsolete runtime paths after integration, set the major
+  version when ready, then packaged Windows/targeted Intel acceptance and a separately
+  approved publication. Server contracts and Apple Silicon support remain unchanged.
+
+Unexplained source history can remain visible with an explicit disposition; lost
+user state, invalid journals and misleading totals block activation. Forecasting,
+new ML insights and complete historical loan reconstruction are not 2.0 launch gates.
+
+### Existing ledger and insight implementation sequence
 
 Each service/calculation chunk precedes its GUI chunk. Windows x64 owner GUI
 acceptance is sufficient for routine client features; do not require a separate
@@ -244,7 +279,8 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   Balance/period/date provenance and excluded components are explicit. Unknown
   declarations remain review-only; previews bind the retained declaration, and old
   decisions retain their original meaning. Migration leaves old statements undeclared.
-  **Next: extend evidence representations where archive evidence supports them.**
+  **Next: V2-1 preservation inventory, followed by the integration plan above.**
+  Extend evidence representations only in bounded chunks needed for that scope.
   **MOHELA: one-time detailed-export replacement passed owner Windows review
   on October 4.** The owner selected MOHELA alone; StudentAid/ECSI are not required
   inputs. The [replacement tool](devtools/ledger_audit/MOHELA_REPLACEMENT.md) creates
@@ -286,11 +322,11 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   semantic tags and mixed representations within multi-account statements remain
   future extensions. Keep broader declarative extraction/parser cleanup for a
   separate run. Other parser contracts and loan/source
-  component corrections need separate bounded chunks before full loan reconciliation
-  or report cutover.
+  component corrections need separate bounded chunks before claiming full loan
+  reconciliation. Cutover may retain explicit unresolved scope under the V2 plan.
   Negative income adjustments, transfer/clearing, loan, asset, opening and source
   corrections remain separate scopes.
-- [ ] **CF2 — Ledger-backed cash-flow contract:** after L1–L5, define account scope, income,
+- [ ] **CF2 — Ledger-backed cash-flow contract:** under V2-5a, define account scope, income,
   purchases, refunds, internal transfers, card payments, and loan treatment.
   Synthetic transfers/card payments cannot double-count consolidated spending;
   unresolved matches stay visible. Establish reviewed transfer interpretations
