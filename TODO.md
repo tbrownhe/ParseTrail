@@ -229,8 +229,10 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   now previews and atomically reverses/replaces an entire payment/interest bundle,
   preserving loan components, fixed interest classification and both source dates.
   The previous bank movement returns to review; current and superseded matches remain
-  visible. **[USER]** Windows correction preview/cancel/apply/history/reopen acceptance
-  is next on a fresh disposable workspace. Other parser contracts and loan/source
+  visible. The owner accepted the Windows correction workflow on October 3 and
+  requested sorting on every column. Shared ledger review tables now support
+  ascending/descending sorting with exact numeric money/count ordering.
+  Other parser contracts and loan/source
   component corrections need separate bounded chunks before full loan reconciliation
   or report cutover.
   Negative income adjustments, transfer/clearing, loan, asset, opening and source

@@ -128,7 +128,7 @@ For a new workflow-test folder, use the commands above, then launch with
 `--corrections` to start at a 31-day candidate window. Add `--corrections` to a fresh
 `--smoke` run to exercise cancellation, correction, history and reopen automatically.
 
-Windows correction acceptance is pending:
+The owner accepted the Windows correction workflow on October 3, 2026. The walkthrough is:
 
 1. Confirm one sample payment in the fresh disposable copy.
 2. In **Confirmed payments**, select it and click **Correct bank match**. Choose
@@ -139,3 +139,10 @@ Windows correction acceptance is pending:
    current match and prior choice should remain visible with their reasons.
 
 Only sample workflow decisions belong in this test; the live database is untouched.
+
+All shared ledger review tables, including correction candidates and prior matches,
+support sorting by clicking any column header; click again to reverse the order.
+Amounts/counts sort numerically with exact precision, ISO dates chronologically,
+and text case-insensitively. Initial workflow ordering remains until a column is
+chosen, and the chosen sort survives filtering and table refreshes. Selection and
+posting actions continue to use the underlying record identity.

@@ -3,7 +3,7 @@ from parsetrail.core.ledger_proposal_review import ProposalReview
 from parsetrail.core.ledger_transfers import TransferReview
 from parsetrail.gui.ledger_loan_corrections import LoanCorrectionDialog
 from parsetrail.gui.ledger_loan_payments import LoanPaymentWindow
-from PySide6.QtCore import QTimer
+from PySide6.QtCore import Qt, QTimer
 
 from .test_ledger_candidates import rebuild as rebuild
 from .test_ledger_loan_corrections import correction_rebuild as correction_rebuild
@@ -110,4 +110,23 @@ def test_stale_correction_cannot_post_after_competing_allocation(correction_work
         dialog.refresh()
         assert all(r["candidate"]["blockers"] for r in dialog.page.model.records)
         dialog.close()
+        window.close()
+
+
+@pytest.mark.usefixtures("app")
+def test_sorted_correction_posts_the_visible_bank_movement(correction_workspace):
+    with ProposalReview(correction_workspace[0]) as review:
+        post_original(review)
+        window = LoanPaymentWindow(review)
+        dialog = LoanCorrectionDialog(window.corrections, "loan")
+        dialog.page.table.sortByColumn(1, Qt.SortOrder.DescendingOrder)
+        dialog.page.table.selectRow(0)
+        assert dialog.selected()["outgoing_id"] == "source:bank_other"
+        dialog.reason.setText("Correct the match after sorting")
+        dialog.preview.click()
+        assert dialog.plan["replacement"]["outgoing_id"] == "source:bank_other"
+        dialog.confirm = lambda: True
+        dialog.apply.click()
+        assert review.store.consumed()["source:bank_other"] == -1000
+        assert "source:bank_payment" not in review.store.consumed()
         window.close()

@@ -2,6 +2,8 @@
 
 import hashlib
 import json
+import re
+from decimal import Decimal
 from pathlib import Path
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, QSortFilterProxyModel, Qt
@@ -234,6 +236,20 @@ class PreviewModel(QAbstractTableModel):
         return None
 
 
+class PreviewSortProxy(QSortFilterProxyModel):
+    """Sort displayed amounts/counts exactly, ISO dates chronologically, and text case-insensitively."""
+
+    def lessThan(self, left, right):
+        def value(index):
+            raw = index.data()
+            text = "" if raw is None else str(raw).strip()
+            if re.fullmatch(r"-?\$?\d[\d,]*(?:\.\d+)?", text):
+                return (0, Decimal(text.replace("$", "").replace(",", "")))
+            return (1, text.casefold())
+
+        return value(left) < value(right)
+
+
 class PreviewPage(QWidget):
     def __init__(self, headers, records, parent=None):
         super().__init__(parent)
@@ -246,12 +262,15 @@ class PreviewPage(QWidget):
         search_row.addWidget(self.count)
         layout.addLayout(search_row)
         self.model = PreviewModel(headers, records, self)
-        self.proxy = QSortFilterProxyModel(self)
+        self.proxy = PreviewSortProxy(self)
         self.proxy.setSourceModel(self.model)
         self.proxy.setFilterKeyColumn(-1)
         self.proxy.setFilterCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
         self.table = QTableView()
         self.table.setModel(self.proxy)
+        # Preserve each workflow's initial order until the user chooses a column.
+        self.table.horizontalHeader().setSortIndicator(-1, Qt.SortOrder.AscendingOrder)
+        self.table.setSortingEnabled(True)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)

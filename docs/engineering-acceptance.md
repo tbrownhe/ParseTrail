@@ -6,6 +6,25 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## Ledger review column sorting — October 3, 2026
+
+After accepting the loan correction workflow, the owner requested sorting on every
+column. Shared ledger review tables now enable ascending/descending header sorting,
+including payment/correction candidates, confirmed and previous matches, ordinary
+proposals, source evidence and read-only reports. Initial workflow order is retained
+until a column is chosen. The chosen sort survives filtering and table refreshes.
+Displayed USD amounts and counts compare numerically without float conversion,
+including negative values, separators and one-cent differences beyond float precision;
+ISO dates compare chronologically and text case-insensitively.
+
+The focused ledger review suites passed **128 tests**, including seven new cases for
+money/count/date/text ordering, stable source rows, selection/details through sorting,
+filter/reset behavior and posting the visible bank movement after sorting correction
+candidates. Ruff lint/format passed for changed Python files. An archive-sized read-only
+exercise sorted every column in both directions across loan review/correction tables
+and checked selected details against source records; the database hash stayed unchanged.
+No accounting, dependency, parser, server or live-database changes occurred.
+
 ## Loan bank-match correction — October 3, 2026
 
 The owner authorized correcting confirmed loan-payment matches. The
@@ -46,8 +65,9 @@ were inspected. A separate read-only audit compared final balances with the acti
 replacement, verified unchanged source/category tables against accepted candidates,
 confirmed release of the previous bank movement and passed SQLite integrity/foreign
 keys. Private source details, amounts, reports and screenshots remain ignored.
-A fresh owner workspace contains no previous sample decisions. **Windows native
-correction acceptance is pending.** No live database, parser, dependency or server
+A fresh owner workspace contained no previous sample decisions. The owner accepted
+the Windows correction workflow on October 3 and requested sorting on all columns.
+No live database, parser, dependency or server
 changes occurred, and report cutover remains closed.
 
 ## Built-in ledger categories and enforced loan interest — October 3, 2026
