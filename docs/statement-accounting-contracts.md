@@ -86,4 +86,7 @@ The optional declaration is authenticated as part of the existing signed parser 
 There are no new dependencies. Other loan representations, per-row semantic tags,
 multi-account statements with different accounting representations, source-component
 corrections, openings and loan reconciliation remain separate chunks. General
-declarative extraction/parser cleanup is deferred to a separate run.
+declarative extraction/parser cleanup was outside this implemented chunk. On
+October 4 the owner included it in 2.0 under the
+[parsing-engine and catalog plan](client-v2-parsing.md). The current accounting
+declarations remain implemented as described above until that redesign is built.

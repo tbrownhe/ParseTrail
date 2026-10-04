@@ -201,6 +201,9 @@ local rebuild into a separate profile for the next major release. It specifies
 preservation of user decisions/configuration, everyday ledger integration and
 explicit activation/rollback gates. Version numbers and current database behavior
 remain unchanged until implementation and release acceptance are complete.
+The [2.0 parsing plan](../docs/client-v2-parsing.md) also includes engine review
+and a signed declarative catalog, replacing normal downloaded bytecode execution.
+This is a planned distribution/interface change, not the current plugin behavior.
 
 ### Statement coverage and freshness
 

@@ -6,6 +6,12 @@ The application version stays unchanged during development. This document define
 the cutover target and implementation order, not completed migration or release
 acceptance. Work stays on `feature/client-financial-insights`; server P0 stays closed.
 
+The owner subsequently included parsing-engine review, simplification and a
+declarative data catalog in 2.0. The [parser redesign](client-v2-parsing.md) replaces
+the earlier deferral of general parser cleanup. Its client pilot precedes final
+evidence-schema/import integration; the catalog server interface is a separate
+short-lived branch after accepted client work is merged.
+
 ## Release boundary
 
 Client 2.0 uses the double-entry ledger as its only accounting model. Opening a
@@ -29,6 +35,9 @@ cash movement, account balances, budgets and exports from the new model. It need
 not finish forecasting, new ML insights, securities cost basis, every loan format,
 or reconstruction of missing servicer history. Unsupported evidence stays accessible
 with explicit scope limits; it cannot silently disappear from a financial total.
+The release also targets a built-in parsing engine with signed JSON definitions,
+instead of downloaded Python bytecode. Complex extraction may use explicitly
+inventoried client-built handlers; archive coverage must survive the transition.
 
 ## Starting point and remaining integration
 
@@ -66,7 +75,7 @@ does not establish that the new application can still use it.
 | Manual values and entries | Preserve owner-confirmed asset values and closure intent. Inventory all remaining manual-only rows separately from source-derived transactions. | Values and provenance remain accessible; no invented purchase funding, expense or balancing transaction. |
 | Genuine accounting decisions | Carry only explicitly authorized decisions whose source identity and interpretation still agree. Revalidate against the final rebuild. | Stale decisions return to review; no disposable UI exercise is promoted into the owner's books. |
 | Settings and local resources | Preserve nonsecret preferences, account configuration, report locations, update preferences, and model/plugin inventories. Map database/archive/output paths to the new profile deliberately. | New writes cannot target the retained source archive/profile. Keep OS credentials in the existing credential store; no secrets in the financial manifest. |
-| Plugins and ML artifacts | Retain compatible signed parser artifacts and trust/version provenance for offline replay. Preserve old model files for recovery; retrain locally when category/feature compatibility changes. | Installed replay works offline with verified parsers. An incompatible/missing model cannot block manual use or change verified categories. |
+| Plugins and ML artifacts | Retain legacy signed parser artifacts for 1.x recovery and verified definition catalogs for 2.x replay, with engine/library and trust/version provenance. Preserve old model files for recovery; retrain locally when category/feature compatibility changes. | Installed replay works offline with verified definitions and required built-in operations. An incompatible/missing model cannot block manual use or change verified categories. |
 | Derived caches and reports | Recompute balances, charts, proposal caches and model predictions. Preserve existing exported files as historical artifacts. | No cache becomes an accounting fact; old/new differences are explained rather than forced to match. |
 
 The first implementation inventory must confirm this list against actual data; do
@@ -136,8 +145,9 @@ Each row is a scope boundary, not a promise of a single commit.
 | Order | Chunk and deliverable | Focused acceptance |
 | --- | --- | --- |
 | V2-1 | Preservation inventory and cutover manifest service, read-only. Classify source tables/fields, external files, parser availability and legacy UI actions. Reuse recovery/rebuild audits. | Synthetic missing-source/unknown-field/manual-state cases; private inventory from an authorized read-only snapshot; complete disposition totals. Stop for any uncovered user-data policy. |
+| P2-1–3 | Review engine/parser families, define evidence/declaration schemas, and pilot representative CSV/PDF/XLSX cases under the [parser plan](client-v2-parsing.md). | Archive comparison, independent checks, explicit unknowns, bounded operations, no downloaded-code escape hatch; inform V2-2/V2-3 before freezing their interfaces. |
 | V2-2 | Explicit database format detection and 2.x schema lifecycle, before legacy ORM initialization. Retain a bounded read-only 1.x adapter. | New empty profile, supported legacy input, unknown/newer/corrupt files; no mutation on refusal; supported 2.x migration/backup failure recovery. |
-| V2-3a | Single replay/import service for fresh reconstruction and ongoing evidence ingestion. First integrate ordinary statement sources and provenance. | Exact parser replay, duplicate/overlap/multi-account import, immutable source retention; no automatic posting or derived endpoint certification. |
+| V2-3a | Single replay/import service using the new evidence boundary for fresh reconstruction and ongoing ingestion; convert parser families under P2-4 in small batches. | Exact parser replay, duplicate/overlap/multi-account import, immutable source retention; no automatic posting or derived endpoint certification. |
 | V2-3b | Bounded export ingestion policy using the accepted MOHELA reader and explicit review for uncertain overlap/revisions. Adapt other needed CSV/XLSX sources only after inventory. | Repeated identical file is idempotent; added/changed/missing/indistinguishable rows never silently overwrite decisions or imply complete coverage. |
 | V2-3c | Main application import UI, archive recovery and cancellation integration. Reuse existing file-action contracts. | Cancel before/after commit, archive-write failure, restart/retry, unchanged original archive. Owner Windows import walkthrough. Keep any required C2b worker change separately reviewable. |
 | V2-4a | Account/category/budget metadata services plus bounded manual-value/closure handling. | Preservation parity, built-in enforcement, exact budgets, unsupported manual cases retained without fabricated postings. |
@@ -146,10 +156,12 @@ Each row is a scope boundary, not a promise of a single commit.
 | V2-5b | Replace dashboard/budget queries and report exports in small view-specific chunks. Inventory remaining menu actions and remove live legacy query paths. | UI/export/service agreement, explained old/new differences, scope/freshness warnings, owner Windows daily-use walkthrough. Decide any proposed feature deferral before removing it. |
 | V2-6a | Verified cutover package and activation service. Add profile/resource preservation beyond today's database/archive bundle; stage and validate a separate profile. | Independent restore; source-change detection; interrupted build/activation and config-write failures; atomic profile switch/recovery; source database/archive unchanged. |
 | V2-6b | Rebuild assistant: source selection, preflight, preparation, preservation/exception review, explicit activation and rollback instructions. | Owner Windows cancel/retry/failure/reopen/activation/rollback rehearsal on copies before a live switch. Live activation is a separate explicit approval. |
+| P2-5 / P2-S | Finish signed definition distribution and release tooling locally, then merge accepted client work before the separate server catalog branch. | Verified offline replay, contract/staging checks, preserved 1.4 rollback catalog and explicit deployment/publication approval. |
 | V2-7 | Remove obsolete runtime compatibility paths after integration gates, freeze the 2.0 release candidate, and run installed-client/release acceptance. | Full relevant suite; packaged resources/signed parser replay; fresh and upgraded offline profiles; Windows x64 and targeted Intel Mac install/startup/rebuild/rollback checks. No public publication without release approval. |
 
-V2-1 is next. It creates a reviewable inventory, not a schema rewrite, version bump,
-live rebuild or new feature implementation. V2-2 through V2-7 are the planned order;
+V2-1 and the P2-1 parser review are next. They create reviewable inventories, not a
+schema rewrite, version bump or live rebuild. The P2 pilot informs the V2-2 evidence
+schema and precedes V2-3 import integration. V2-2 through V2-7 otherwise retain their order;
 inventory findings can split or reorder bounded work without expanding the release
 promise. Loan posting extensions needed for useful daily coverage receive their
 own service/UI chunks under V2-4; do not require full loan-history reconstruction.
@@ -162,7 +174,7 @@ own service/UI chunks under V2-4; do not require full loan-history reconstructio
 2. Build the candidate under a distinct database path and separate writable archive,
    settings and output locations. Current archive paths derive from the database
    stem, so a database-pointer change alone is insufficient. Retain verified local
-   parser resources; development-only unsigned source replay is not the installed
+   definition/engine resources; development-only unsigned source replay is not the installed
    release's trust policy.
 3. Compare preserved user state and new source evidence. Present exact accounting
    differences, exception dispositions and the proposed reporting scope. Bind real
@@ -186,9 +198,10 @@ own service/UI chunks under V2-4; do not require full loan-history reconstructio
 No version bump, live activation, installer build or publication is authorized by
 this planning document alone. Use 2.0.0 when the integrated release candidate is
 ready; keep app version, database format and signed manifest schema independent.
-Retain existing installer targets and signed distribution contracts unless an actual
-interface problem is found. If server work is necessary, stop, merge accepted client
-work first and use a short-lived server branch. The server is not a development
+Retain existing installer targets and installer distribution contracts. Parser
+distribution gets a separately versioned signed declaration-catalog contract under
+P2. At that server boundary, stop, merge accepted client work first and use a
+short-lived server branch. The server is not a development
 dependency for rebuilding financial history.
 
 Routine native feature acceptance remains Windows-only. Profile paths, packaging,
@@ -205,6 +218,6 @@ separate final approval after the exact artifacts are reviewable.
 CF3 richer historical comparisons, CF4 confirmed recurring obligations, CF5 forecasts
 and local AI insights follow the ledger cutover. Existing requested priorities remain
 in [TODO](../TODO.md); making the new model usable does not authorize every proposed
-feature. General parser declarative cleanup, automatic mutable-history merging,
+feature. Automatic mutable-history merging,
 investment performance/cost basis and speculative MOHELA history repair remain
 separate scopes.

@@ -102,11 +102,29 @@ The owner approved the major-version rebuild strategy on October 4. The
 blocking failures versus retained uncertainty, and activation/rollback gates.
 The existing L/CF items below provide implementation history and remaining service
 work; V2 organizes their integration into the everyday application.
+The owner also included [engine simplification and declarative parsers](docs/client-v2-parsing.md)
+in 2.0. Target a built-in engine plus signed versioned JSON definitions, with rare
+explicit client-built extraction handlers instead of downloaded Python bytecode.
 
-- [ ] **V2-1 — Preservation manifest:** next bounded chunk. Read-only inventory of
+- [ ] **V2-1 — Preservation manifest:** next alongside P2-1. Read-only inventory of
   database fields, manual/category/budget state, profile resources, parser availability
   and legacy UI actions. Assign every item a preservation/rebuild/disposition rule;
   stop for uncovered user-data policy. No live writes or schema changes.
+- [ ] **P2-1 — Parser/engine review:** inventory all current parsers, archive layouts,
+  repeated extraction/normalization/checks, source provenance, developer tools and
+  release coupling. Produce a family/fixture matrix and explicit custom-operation needs.
+- [ ] **P2-2–3 — Declaration/evidence pilot:** define strict schemas and a bounded
+  engine; exercise MOHELA CSV, simple and continuation/layout PDFs, plus synthetic
+  XLSX. Compare against corrected archive evidence, retain unknown balances and
+  source locations, and prove validation/cancellation. Inform V2-2 before schema freeze.
+- [ ] **P2-4–5 — Conversion and catalog client:** convert parser families in small
+  archive-tested batches; add signed data-catalog loading, caching and publication
+  tooling with offline/compatibility checks. No Python/SQL/eval in definitions;
+  explicit client-built exceptions require engine support, not downloaded handlers.
+- [ ] **P2-S — Declaration catalog server:** after accepted client work is merged,
+  use a short-lived server branch for the reviewed snapshot API/storage/publication
+  contract. A table may hold JSON definitions; clients consume immutable signed
+  releases. Keep 1.4 artifacts available for rollback. No server deployment yet.
 - [ ] **V2-2 — Format boundary:** identify legacy/new/unknown databases before writable
   initialization; create clean 2.x profiles and establish their migration lifecycle.
 - [ ] **V2-3a–c — Import integration:** common replay/ongoing ingestion, bounded export
@@ -123,7 +141,8 @@ work; V2 organizes their integration into the everyday application.
   made after preparation. Live activation requires explicit approval of the candidate.
 - [ ] **V2-7 — Release:** remove obsolete runtime paths after integration, set the major
   version when ready, then packaged Windows/targeted Intel acceptance and a separately
-  approved publication. Server contracts and Apple Silicon support remain unchanged.
+  approved publication. Include the P2 declaration-catalog release gate; installer
+  contracts and Apple Silicon support remain unchanged.
 
 Unexplained source history can remain visible with an explicit disposition; lost
 user state, invalid journals and misleading totals block activation. Forecasting,
@@ -279,7 +298,7 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   Balance/period/date provenance and excluded components are explicit. Unknown
   declarations remain review-only; previews bind the retained declaration, and old
   decisions retain their original meaning. Migration leaves old statements undeclared.
-  **Next: V2-1 preservation inventory, followed by the integration plan above.**
+  **Next: V2-1 preservation inventory and P2-1 engine/parser review.**
   Extend evidence representations only in bounded chunks needed for that scope.
   **MOHELA: one-time detailed-export replacement passed owner Windows review
   on October 4.** The owner selected MOHELA alone; StudentAid/ECSI are not required
@@ -320,8 +339,8 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   payments, disbursements and capitalized interest need distinct, tested accounting
   semantics rather than a guessed mapping to total-payment-plus-interest. Per-row
   semantic tags and mixed representations within multi-account statements remain
-  future extensions. Keep broader declarative extraction/parser cleanup for a
-  separate run. Other parser contracts and loan/source
+  extensions in the P2 evidence design where needed. Broader declarative extraction
+  and parser simplification are now included in 2.0 under P2. Other loan/source
   component corrections need separate bounded chunks before claiming full loan
   reconciliation. Cutover may retain explicit unresolved scope under the V2 plan.
   Negative income adjustments, transfer/clearing, loan, asset, opening and source
