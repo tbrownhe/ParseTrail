@@ -10,7 +10,10 @@ reviewed rebuild is explicitly activated.
 
 The current ORM and Alembic head contain nine business/reference tables plus
 `alembic_version`. The inventory command enumerates actual tables and fields and
-marks any unexpected or missing field unresolved. These are proposed dispositions
+marks any unexpected or missing field unresolved. The known `0003` legacy revision
+predates `Statements.AccountingContract`; the command records that absence without
+blocking source-reference checks. The same absence on the `0004` head remains an
+issue. These are proposed dispositions
 for fields currently known in code; every value remains in the retained original.
 
 | Source fields | Proposed 2.x treatment | Required check |

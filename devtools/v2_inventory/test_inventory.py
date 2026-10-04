@@ -113,3 +113,26 @@ def test_live_wal_sidecar_is_refused_without_mutation(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="closed snapshot"):
         create_inventory(source, archive, profile)
     assert (source.read_bytes(), wal.read_bytes()) == before
+
+
+def test_supported_0003_schema_still_checks_archive_references(tmp_path: Path) -> None:
+    source, archive, profile = _source(tmp_path)
+    with sqlite3.connect(source) as connection:
+        connection.execute("ALTER TABLE Statements DROP COLUMN AccountingContract")
+        connection.execute("UPDATE alembic_version SET version_num='0003_precise_financial_schema'")
+    result = create_inventory(source, archive, profile)
+    assert result["source"]["schema_revisions"] == ["0003_precise_financial_schema"]
+    assert result["source"]["legacy_absent_fields"] == [
+        {"kind": "missing_field", "table": "Statements", "field": "AccountingContract"}
+    ]
+    assert result["archive"]["references"][0]["status"] == "matched"
+    assert result["issues"] == []
+
+
+def test_missing_contract_field_on_0004_is_unresolved(tmp_path: Path) -> None:
+    source, archive, profile = _source(tmp_path)
+    with sqlite3.connect(source) as connection:
+        connection.execute("ALTER TABLE Statements DROP COLUMN AccountingContract")
+    result = create_inventory(source, archive, profile)
+    assert {"kind": "missing_field", "table": "Statements", "field": "AccountingContract"} in result["issues"]
+    assert result["archive"]["references"][0]["status"] == "matched"

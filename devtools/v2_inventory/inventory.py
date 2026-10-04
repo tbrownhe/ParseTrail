@@ -198,7 +198,8 @@ def database_inventory(source: Path) -> dict:
                 ).fetchone()[0],
             }
         references = []
-        if "Statements" in tables and FIELDS["Statements"].issubset(tables["Statements"]["fields"]):
+        reference_fields = {"StatementID", "Filename", "ContentHashAlgorithm", "ContentHash"}
+        if "Statements" in tables and reference_fields.issubset(tables["Statements"]["fields"]):
             references = [
                 {"statement_id": row[0], "filename": row[1], "algorithm": row[2], "digest": row[3]}
                 for row in connection.execute(
@@ -208,6 +209,14 @@ def database_inventory(source: Path) -> dict:
         revisions = []
         if "alembic_version" in tables and "version_num" in tables["alembic_version"]["fields"]:
             revisions = [row[0] for row in connection.execute("SELECT version_num FROM alembic_version")]
+        legacy_absent_fields = []
+        if revisions == ["0003_precise_financial_schema"]:
+            legacy_absent_fields = [
+                issue
+                for issue in issues
+                if issue == {"kind": "missing_field", "table": "Statements", "field": "AccountingContract"}
+            ]
+            issues = [issue for issue in issues if issue not in legacy_absent_fields]
         plugin_references = []
         if (
             {"Plugins", "Statements"}.issubset(tables)
@@ -235,6 +244,7 @@ def database_inventory(source: Path) -> dict:
         "state_counts": state,
         "references": references,
         "schema_revisions": revisions,
+        "legacy_absent_fields": legacy_absent_fields,
         "plugin_references": plugin_references,
         "source_markers_before": before,
         "source_markers_after": after,
