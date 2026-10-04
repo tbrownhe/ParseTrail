@@ -47,3 +47,6 @@ immediately ordered, day-adjacent statement ranges; they are not a full overlapp
 statement reconciliation. No historical data or bookkeeping exception is repaired.
 
 The L1 contract is in [client-ledger-contract.md](../../docs/client-ledger-contract.md).
+
+The bounded [MOHELA replacement review](MOHELA_REPLACEMENT.md) preserves detailed
+loan-export evidence in a disposable rebuild without inventing statement endpoints.

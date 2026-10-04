@@ -10,7 +10,7 @@ from parsetrail.core.validation import Account, Statement, Transaction
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "csv_mohela_202411"
-    VERSION = "0.2.0"
+    VERSION = "0.2.1"
     MIN_CLIENT_VERSION = "1.3.0"
     SUFFIX = ".csv"
     COMPANY = "MOHELA Student Loan Servicing"
@@ -38,6 +38,11 @@ class Parser(IParser):
         logger.trace(f"Parsing {self.STATEMENT_TYPE} statement")
 
         try:
+            if array and any(c in array[0] for c in ("LoanName", "UnpaidPrincipalBalanceValue")):
+                raise ValueError(
+                    "Detailed MOHELA exports require the loan-evidence replacement review; "
+                    "ordinary statement import cannot preserve their balance evidence."
+                )
             # Correct Date column
             # '<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">Date'
             array[0][0] = array[0][0].split(">")[-1]

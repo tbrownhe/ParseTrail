@@ -6,6 +6,54 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## MOHELA detailed-export replacement — October 4, 2026
+
+The owner selected MOHELA-only evidence and authorized replacing the old aggregate
+import in a disposable rebuild while preserving verified categories. The
+[replacement tool](../devtools/ledger_audit/MOHELA_REPLACEMENT.md) verifies accepted
+input hashes and unposted database identity, copies the original artifacts, and
+retains both export generations. It refuses ambiguous source ownership, shared
+movements, unmatched aggregate amounts and ambiguous verified-category mappings.
+
+The detailed CSV reader retains per-loan identities, original fields, exact signed
+components, zero rows, duplicate occurrences and unknown balances. Every row's
+principal/interest/fee equation must hold. Reported principal and net listed
+activity remain separate, with differences visible and no invented opening or
+balancing entry. All loan histories remain unreconciled, including zero-difference
+cases. No StudentAid/ECSI parser or reconciliation dependency was introduced.
+
+The replacement supersedes aggregate derived source rows and endpoints while
+retaining their full prior evidence. Verified categories attach to exact new
+component groups as historical annotations, not accounting approvals. Immutable
+export, row, category-binding and superseded-source tables are optional additions
+to new rebuilds; existing active databases receive no migration. The legacy MOHELA
+plugin 0.2.1 rejects the detailed export in ordinary statement import, whose
+interface cannot retain unknown endpoints. Legacy aggregate replay is unchanged.
+The plugin has not been published.
+
+The private archive replacement passed SQLite integrity/foreign-key checks. All
+target verified annotations were independently compared against the current live
+database through a read-only connection. Existing bank observations, statements
+and cash/card proposals compared exactly before/after. Candidate generation from
+the replacement retained all new immutable evidence and posted no journal entries.
+Original source hashes stayed unchanged. Private files, counts, identifiers and
+amounts remain in ignored scratch storage.
+
+Twenty new tests cover lossless rows, malformed money/date/identity/component
+rejection, real download header shape, unknown/conflicting balances, category
+conservation, unchanged bank proposals, immutable persistence, ambiguous replacement
+refusal, read-only UI details and changed-input refusal. The full client suite
+passed **1094 tests, 3 skipped** in 242.56 seconds. Ruff lint/format passed across
+257 client/test and ledger/recovery/recurring devtool Python files. CLI preparation
+without required inputs was also checked to fail before creating output.
+
+The four-tab read-only review covers balance observations/differences, retained
+categories, possible bank counterparts and raw loan activity. Offscreen row selection,
+details, closing/reopening and unchanged database hashes passed; all four screenshots
+were inspected. Native Windows owner acceptance remains pending. Loan posting,
+general repeated-export replacement and live-profile/report cutover remain separate
+work. No dependencies, server changes or live financial writes occurred.
+
 ## Retained declarative accounting metadata — October 3, 2026
 
 After accepting the Wells Fargo workflow, the owner authorized the next client

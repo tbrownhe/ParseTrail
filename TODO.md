@@ -245,11 +245,21 @@ shadow migration, retaining printed-balance gaps as explicit exceptions.
   declarations remain review-only; previews bind the retained declaration, and old
   decisions retain their original meaning. Migration leaves old statements undeclared.
   **Next: extend evidence representations where archive evidence supports them.**
-  **MOHELA is deferred pending CSV/export-history design discussion.** The owner
-  reports missing prior-servicer transfer activity and incremental balance changes
-  without corresponding visible records. Treat those exports as unverified source
-  claims; a zero opening and balance reconstructed from listed rows cannot establish
-  the actual obligation. Resolve the following design before enabling its posting:
+  **MOHELA: one-time detailed-export replacement is implemented; Windows review
+  is pending.** The owner selected MOHELA alone; StudentAid/ECSI are not required
+  inputs. The [replacement tool](devtools/ledger_audit/MOHELA_REPLACEMENT.md) creates
+  a disposable unposted rebuild, retaining the accepted original and source bytes.
+  Old aggregate movements are superseded only when detailed components match
+  exactly. Verified categories survive as historical group annotations; bank
+  evidence remains unchanged. Separate loan identities, principal/interest/fees,
+  zero rows and unknown reported balances are retained without fake endpoints or
+  balancing entries. The read-only review covers balances/differences, retained
+  categories, possible bank matches and source activity. Native review is the next
+  gate; loan posting and live-profile cutover are separate work.
+  The owner reports missing prior-servicer transfer activity and incremental balance
+  changes without corresponding records. The new history remains an unverified
+  source claim, not proof of the actual obligation. General recurring export
+  replacement remains a separate design proposal:
   - Distinguish immutable statements with asserted periods/endpoints from mutable
     activity exports. File hashes prove retained bytes, not source completeness.
     First/last transaction dates and adjacent requested export ranges do not certify

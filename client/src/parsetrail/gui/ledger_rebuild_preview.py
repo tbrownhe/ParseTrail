@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 
+from parsetrail.core.ledger import LedgerError
 from parsetrail.core.recovery_bundle import digest
 from parsetrail.gui.ledger_preview import money
 
@@ -17,6 +18,8 @@ def load_rebuild_preview(folder: Path) -> dict:
         if digest(folder / filename) != expected:
             raise ValueError("Rebuild artifact changed after verification.")
     plan = json.loads((folder / "plan.json").read_text(encoding="utf-8"))
+    if plan.get("activity_exports"):
+        raise LedgerError("Use the MOHELA replacement review for retained export annotations and balance evidence.")
     accounts = {a["AccountID"]: a["AccountName"] for a in plan["legacy_metadata"]["Accounts"]}
     categories = {c["CategoryID"]: c["Name"] for c in plan["legacy_metadata"]["Categories"]}
     evidence = plan["evidence"]

@@ -17,6 +17,7 @@ from parsetrail.core.accounting_contracts import snapshot as accounting_snapshot
 from parsetrail.core.ledger import AccountKind, LedgerAccount
 from parsetrail.core.ledger_migration import read_legacy
 from parsetrail.core.ledger_store import LedgerStore, encoded
+from parsetrail.core.mohela_export import store_export_evidence
 from parsetrail.core.money import to_minor_units
 from parsetrail.core.parse import parse_any
 from parsetrail.core.parser_routing import ParseError
@@ -434,6 +435,7 @@ def write_rebuild(path: Path, plan: dict) -> None:
                     for v in plan.get("asset_valuations", [])
                 ],
             )
+            export_tables = store_export_evidence(c, plan)
             for table in (
                 "RebuildMeta",
                 "SourceFiles",
@@ -445,6 +447,7 @@ def write_rebuild(path: Path, plan: dict) -> None:
                 "CategoryAnnotations",
                 "RetainedMetadata",
                 "AssetValuations",
+                *export_tables,
             ):
                 for action in ("UPDATE", "DELETE"):
                     c.execute(
