@@ -82,6 +82,27 @@ must label rather than promote to observed balances or activity:
 | `pdf_occucc_201904` | Creates an interest transaction from a printed header amount rather than an activity-line row. | Keep header location and evidence role; verify that it is included once. |
 | Shared balance filling | Recomputes all row balances when any row lacks one. | Preserve every printed balance independently and store calculations in a separate field. |
 
+## Representative PDF operation cost review
+
+These are source-code cost estimates, not accepted declaration designs. A
+corrected archive comparison must check every extracted, ignored and unresolved
+row, page/line location and independently printed value before any operation is
+frozen. A new engine operation requires a client release; changing values in an
+already supported declaration can use a signed catalog release.
+
+| Family and source behavior | Minimum reusable operation and evidence rule | Cost or exception gate |
+| --- | --- | --- |
+| Chase card: whole-page line matches, printed range/account/endpoints, two-digit transaction dates and a posting-date proxy clamped to the statement range | Unique printed header fields, bounded candidate lines, explicit year resolution and liability sign; label the clamped posting date derived. Require a disposition for every transaction-shaped line and refuse ambiguous printed labels. | Medium engine work. The current parser takes the first matching balance label and scans all page text, so parity alone cannot prove complete capture. |
+| HealthEquity HSA: unique beginning/ending cash balances around continuation pages, dated lines amid rate tables, printed running balances and a later investment section | Ordered unique cash boundary anchors, bounded cross-page line window, dated cash candidates and independent running/closing equations. Keep the portfolio outside cash scope and record ignored rate/continuation lines. | Medium engine work. Existing synthetic tests prove that missing or duplicate boundaries, truncated cash rows and running-balance mismatches must fail. |
+| Wells Fargo business bank: per-page word-header anchors define crop/column coordinates, then a text-strategy table yields wrapped descriptions and optional row balances | Page-local anchored geometry with bounded coordinate offsets, row cells and continuation, plus a required table-end disposition. Printed row balances stay separate from later calculations. | High engine/adapter work. No direct targeted fixture test was found; the current parser stops at the first empty/ending row, so archived final-row coverage is a gate. |
+| Citi 2025 card: partial word-header recovery, dynamic geometry, table rows, simple-text recovery, multiline fee section and occurrence subtraction | Compare table/text candidates with source locations and occurrence counts; require exact section/end checks before merging. Preserve which channel observed each row. | High complexity and candidate client-built handler. Date/amount-only recovery keys are insufficient to certify identity; prove duplicate and fee behavior on archived fixtures before generalizing it into engine operations. |
+
+The Chase and HSA shapes appear suitable for a small finite line/section pilot.
+Wells Fargo needs a bounded PDF table adapter before declarations can express its
+layout. Citi combines extraction channels and is the clearest exception
+candidate. None of these cost estimates authorizes a transaction, inferred
+posting date or statement reconciliation.
+
 ## Archive layouts and developer/release coupling
 
 - The managed archive is derived from the database stem. Root files are a drop
