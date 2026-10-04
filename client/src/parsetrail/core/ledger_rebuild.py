@@ -12,6 +12,8 @@ import shutil
 from collections import Counter, defaultdict
 from pathlib import Path
 
+from parsetrail.core.accounting_contracts import encode as encode_accounting_contract
+from parsetrail.core.accounting_contracts import snapshot as accounting_snapshot
 from parsetrail.core.ledger import AccountKind, LedgerAccount
 from parsetrail.core.ledger_migration import read_legacy
 from parsetrail.core.ledger_store import LedgerStore, encoded
@@ -114,6 +116,7 @@ def replay_sources(legacy: dict, archive: Path, registry, progress=None) -> dict
                 "opening_minor": to_minor_units(account.start_balance),
                 "closing_minor": to_minor_units(account.end_balance),
                 "balance_provenance": "parser output; independent endpoint provenance requires review",
+                "accounting_contract": accounting_snapshot(parsed.accounting_contract),
                 "status": record["status"],
             }
             occurrences = Counter()
@@ -358,7 +361,8 @@ def write_rebuild(path: Path, plan: dict) -> None:
             BEGIN IMMEDIATE;
             CREATE TABLE RebuildMeta(version INTEGER PRIMARY KEY, plan_hash TEXT NOT NULL);
             CREATE TABLE SourceFiles(id TEXT PRIMARY KEY, payload TEXT NOT NULL);
-            CREATE TABLE SourceStatements(id TEXT PRIMARY KEY, source_id TEXT NOT NULL REFERENCES SourceFiles(id), payload TEXT NOT NULL);
+            CREATE TABLE SourceStatements(id TEXT PRIMARY KEY, source_id TEXT NOT NULL REFERENCES SourceFiles(id), payload TEXT NOT NULL,
+                accounting_contract TEXT);
             CREATE TABLE SourceTransactions(id TEXT PRIMARY KEY, payload TEXT NOT NULL);
             CREATE TABLE SourceMemberships(statement_id TEXT REFERENCES SourceStatements(id), row_number INTEGER,
                 transaction_id TEXT NOT NULL REFERENCES SourceTransactions(id), PRIMARY KEY(statement_id,row_number));
@@ -380,8 +384,11 @@ def write_rebuild(path: Path, plan: dict) -> None:
                 "INSERT INTO SourceFiles VALUES(?,?)", [(k, encoded(v)) for k, v in sorted(evidence["files"].items())]
             )
             c.executemany(
-                "INSERT INTO SourceStatements VALUES(?,?,?)",
-                [(k, v["source"], encoded(v)) for k, v in sorted(evidence["statements"].items())],
+                "INSERT INTO SourceStatements VALUES(?,?,?,?)",
+                [
+                    (k, v["source"], encoded(v), encode_accounting_contract(v.get("accounting_contract")))
+                    for k, v in sorted(evidence["statements"].items())
+                ],
             )
             c.executemany(
                 "INSERT INTO SourceTransactions VALUES(?,?)",

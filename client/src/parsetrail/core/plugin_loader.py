@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 from typing import Any
 
+from parsetrail.core.accounting_contracts import FIELD as ACCOUNTING_FIELD
+from parsetrail.core.accounting_contracts import snapshot as accounting_snapshot
 from parsetrail.core.interfaces import IParser, class_variables, validate_parser
 from parsetrail.core.parser_classification import ROUTING_RULE_FIELD, validate_routing_metadata
 
@@ -31,6 +33,9 @@ def load_plugin(
     required_variables = class_variables(IParser)
     validate_parser(parser_class, required_variables)
     metadata = {var: getattr(parser_class, var) for var in required_variables}
+    declaration = getattr(parser_class, ACCOUNTING_FIELD, None)
+    if declaration is not None:
+        metadata[ACCOUNTING_FIELD] = accounting_snapshot(declaration)
     routing_rule = getattr(parser_class, ROUTING_RULE_FIELD, None)
     if routing_rule is not None:
         metadata[ROUTING_RULE_FIELD] = routing_rule

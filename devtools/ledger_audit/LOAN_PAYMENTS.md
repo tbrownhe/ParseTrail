@@ -11,8 +11,13 @@ with these explicitly supported source representations:
 
 | Parser/version | Total payment / separate interest | Balance and period basis |
 | --- | --- | --- |
-| `pdf_capitaloneauto_202402` / `0.2.1` | `Payment Received` / `Interest Fee` | Printed component totals; opening reconstructed from closing and activity. Printed transaction-history range remains unreviewed. |
-| `pdf_wfloanper_202306` / `0.2.0` | `PAYMENT` / `INTEREST PAYMENT` | Payment combines printed same-date principal and interest. Ordinary prior/ending principal is printed; the parser assumes a 31-day period. |
+| `pdf_capitaloneauto_202402` / `0.2.2` | `Payment Received` / `Interest Fee` | Printed component totals; opening reconstructed from closing and activity. Printed transaction-history range remains unreviewed. |
+| `pdf_wfloanper_202306` / `0.2.1` | `PAYMENT` / `INTEREST PAYMENT` | Payment combines printed same-date principal and interest. Ordinary prior/ending principal is printed; the parser assumes a 31-day period. |
+
+These parser versions declare the same versioned accounting representation, retained
+with each statement. Dispatch uses that saved declaration rather than parser names.
+Old undeclared test evidence retains its frozen Capital One 0.2.1 / Wells Fargo 0.2.0
+compatibility behavior; installing new parsers does not reinterpret it.
 
 An exact source equation does not certify balances or coverage. Wells Fargo
 statements containing synthetic `LOAN ORIGINATION` are excluded. Separate
@@ -71,12 +76,12 @@ their actual category in history; version-one previews must be regenerated.
 
 Other loan parsers, fees without this component contract, financing, asset
 purchases, disbursements, synthetic origination, openings and loan-component corrections
-are separate scopes. The Wells Fargo parser-change deferral remains in force.
-No server, dependency, parser or active-profile changes are required.
+are separate scopes. The Wells Fargo synthetic-origination behavior remains deferred.
+No server or dependency changes are required. New ordinary imports retain declarations
+after the nullable statement-column migration; existing statements stay undeclared.
 
-Parser-owned, versioned accounting declarations captured with each imported
-statement are the next roadmap step. The current explicit parser/version registry
-is a bounded adapter, not the intended long-term home for source semantics.
+See the [accounting declaration contract](../../docs/statement-accounting-contracts.md)
+for schema validation, immutable evidence, unknown-format handling and compatibility.
 
 ## Run and Windows acceptance
 

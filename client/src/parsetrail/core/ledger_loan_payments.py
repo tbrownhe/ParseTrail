@@ -6,6 +6,9 @@ from contextlib import contextmanager
 from dataclasses import asdict, replace
 from datetime import date
 
+from parsetrail.core.accounting_contracts import RULE as DECLARED_RULE
+from parsetrail.core.accounting_contracts import encode as encode_accounting_contract
+from parsetrail.core.accounting_contracts import loan_workflow
 from parsetrail.core.ledger import (
     AccountKind,
     Allocation,
@@ -25,7 +28,9 @@ from parsetrail.core.ledger_transfers import TransferReview, validate_window
 
 RULE = "capital-one-loan-payments-2"
 WF_RULE = "wells-fargo-loan-payments-1"
-PAYMENT_CONTRACTS = {
+# Frozen compatibility for pre-declaration evidence and existing immutable plans.
+# New parser versions use retained statement declarations, never this allowlist.
+LEGACY_PAYMENT_CONTRACTS = {
     ("pdf_capitaloneauto_202402", "0.2.1"): {
         "rule": RULE,
         "name": "Capital One Auto",
@@ -45,13 +50,22 @@ PAYMENT_CONTRACTS = {
         "component_basis": "Payment combines same-date principal and interest. Separate extra-principal rows and synthetic origination stay outside this workflow.",
     },
 }
-SUPPORTED_RULES = frozenset(c["rule"] for c in PAYMENT_CONTRACTS.values())
+SUPPORTED_RULES = frozenset([DECLARED_RULE, *(c["rule"] for c in LEGACY_PAYMENT_CONTRACTS.values())])
 DEFAULT_REASON = "Confirmed loan payment and separately evidenced interest"
 
 
 def payment_contract(bundle):
-    source = bundle["sources"][0]["file"]
-    return PAYMENT_CONTRACTS[(source["plugin"], source["version"])]
+    source = bundle["sources"][0]
+    contract = statement_contract(source["statement"], source["file"])
+    if contract is None:
+        raise LedgerError("Statement accounting declaration is missing or unsupported.")
+    return contract
+
+
+def statement_contract(statement, source):
+    if "accounting_contract" in statement:
+        return loan_workflow(statement["accounting_contract"])
+    return LEGACY_PAYMENT_CONTRACTS.get((source.get("plugin"), source.get("version")))
 
 
 class LoanPayments:
@@ -93,6 +107,14 @@ class LoanPayments:
         }
         rows = {tid: json.loads(payload) for tid, payload in c.execute("SELECT id,payload FROM SourceTransactions")}
         statements = {sid: json.loads(payload) for sid, payload in c.execute("SELECT id,payload FROM SourceStatements")}
+        if "accounting_contract" in {r[1] for r in c.execute("PRAGMA table_info(SourceStatements)")}:
+            for sid, retained in c.execute("SELECT id,accounting_contract FROM SourceStatements"):
+                try:
+                    expected = encode_accounting_contract(statements[sid].get("accounting_contract"))
+                except (TypeError, ValueError) as exc:
+                    raise LedgerError("Invalid retained statement accounting declaration.") from exc
+                if retained != expected:
+                    raise LedgerError("Statement accounting column conflicts with retained source evidence.")
         files = {fid: json.loads(payload) for fid, payload in c.execute("SELECT id,payload FROM SourceFiles")}
         members, sources = defaultdict(list), defaultdict(set)
         for sid, tid in c.execute("SELECT statement_id,transaction_id FROM SourceMemberships"):
@@ -100,16 +122,17 @@ class LoanPayments:
                 raise LedgerError("Loan evidence has inconsistent source ownership.")
             members[sid].append(tid)
             sources[tid].add(sid)
-        eligible = {}
+        eligible, contracts = {}, {}
         for sid, s in statements.items():
             f = files[s["source"]]
             ids = members[sid]
-            contract_key = (f.get("plugin"), f.get("version"))
+            contract = statement_contract(s, f)
+            contract_key = key([f.get("plugin"), f.get("version"), s.get("accounting_contract")])
             if (
                 s["account_id"] in loan_ids
-                and contract_key in PAYMENT_CONTRACTS
+                and contract is not None
                 and f["status"] == s["status"] == "parsed"
-                and not any(rows[t]["Description"] == "LOAN ORIGINATION" for t in ids)
+                and not any(rows[t]["Description"] in contract.get("excluded", ["LOAN ORIGINATION"]) for t in ids)
                 and len(ids) == len(set(ids))
                 and all(
                     rows[t]["CurrencyCode"] == "USD" and s["start"] <= rows[t]["PostingDate"] <= s["end"] for t in ids
@@ -117,6 +140,7 @@ class LoanPayments:
                 and s["closing_minor"] - s["opening_minor"] == sum(rows[t]["AmountMinor"] for t in ids)
             ):
                 eligible[sid] = contract_key
+                contracts[contract_key] = contract
         admitted = {
             tid
             for tid in rows
@@ -127,7 +151,7 @@ class LoanPayments:
         for tid in sorted(admitted):
             p = rows[tid]
             contract_key = eligible[next(iter(sources[tid]))]
-            contract = PAYMENT_CONTRACTS[contract_key]
+            contract = contracts[contract_key]
             if p["Description"] != contract["payment"] or p["AmountMinor"] <= 0:
                 continue
             interest = sorted(

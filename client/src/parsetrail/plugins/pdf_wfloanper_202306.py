@@ -12,7 +12,7 @@ from parsetrail.core.validation import Account, Statement, Transaction
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_wfloanper_202306"
-    VERSION = "0.2.0"
+    VERSION = "0.2.1"
     MIN_CLIENT_VERSION = "1.3.0"
     SUFFIX = ".pdf"
     COMPANY = "Wells Fargo"
@@ -24,6 +24,21 @@ class Parser(IParser):
         " Select your personal loan account, then click the link for"
         " a statement. Click the Save icon to save the PDF."
     )
+
+    # Describes normalized output; synthetic origination is not ordinary evidence.
+    ACCOUNTING_CONTRACT = {
+        "schema_version": 1,
+        "representation": "loan-total-and-interest",
+        "label": "Wells Fargo Personal Loan",
+        "payment_description": "PAYMENT",
+        "interest_description": "INTEREST PAYMENT",
+        "association": "same-account-date-statement",
+        "balance_basis": "printed-principal",
+        "period_basis": "assumed-31-days",
+        "date_basis": "unverified",
+        "excluded_descriptions": ["LOAN ORIGINATION"],
+        "unposted_descriptions": ["PRINCIPAL PAYMENT"],
+    }
 
     # Parsing constants
     HEADER_DATE = r"%m/%d/%y"

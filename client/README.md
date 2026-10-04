@@ -705,6 +705,9 @@ without shipping a new application:
 - Parsing is headless: the core returns typed results, warnings, and redacted
   failures. GUI and batch adapters independently decide how to present or accept
   warnings.
+- Optional [accounting declarations](../docs/statement-accounting-contracts.md)
+  describe normalized evidence and select shared ledger workflows. New imports
+  retain a validated copy per statement; parser updates never rewrite old declarations.
 - Routing walks suffix, optional PDF metadata, normalized page-header markers,
   and body-text expressions, then refuses zero or multiple matches.
 - Expressions use parentheses, then `&&`, then `||` precedence, with quoted

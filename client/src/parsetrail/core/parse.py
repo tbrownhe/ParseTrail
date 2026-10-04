@@ -8,6 +8,8 @@ from typing import Any, Generic, Protocol, TypeVar
 import openpyxl
 from loguru import logger
 
+from parsetrail.core.accounting_contracts import FIELD as ACCOUNTING_FIELD
+from parsetrail.core.accounting_contracts import snapshot as accounting_snapshot
 from parsetrail.core.interfaces import IParser
 from parsetrail.core.parser_classification import (
     DocumentFeatures,
@@ -107,6 +109,7 @@ class BaseRouter(Generic[T]):
         try:
             parser_class = self.plugin_manager.get_parser(plugin_name)
             statement = self.run_parser(plugin_name, parser_class, input_data)
+            statement.accounting_contract = accounting_snapshot(getattr(parser_class, ACCOUNTING_FIELD, None))
         except ParserOutputError:
             raise
         except Exception as exc:

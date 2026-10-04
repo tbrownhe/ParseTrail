@@ -199,6 +199,7 @@ class Statements(Base):
     Filename = Column(String, nullable=False)
     ContentHashAlgorithm = Column(String(8), nullable=False)
     ContentHash = Column(String(64), nullable=False)
+    AccountingContract = Column(Text, nullable=True)
     __table_args__ = (
         CheckConstraint("EndDate >= StartDate", name="ck_statements_date_order"),
         CheckConstraint("TransactionCount >= 0", name="ck_statements_transaction_count"),

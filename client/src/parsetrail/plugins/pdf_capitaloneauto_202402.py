@@ -12,7 +12,7 @@ from parsetrail.core.validation import Account, Statement, Transaction
 class Parser(IParser):
     # Plugin metadata required by IParser
     PLUGIN_NAME = "pdf_capitaloneauto_202402"
-    VERSION = "0.2.1"
+    VERSION = "0.2.2"
     MIN_CLIENT_VERSION = "1.3.0"
     SUFFIX = ".pdf"
     COMPANY = "Capital One"
@@ -24,6 +24,21 @@ class Parser(IParser):
         " Click View Statements, then in the window that appears,"
         " select the statement date you want and click Download."
     )
+
+    # Describes normalized output; never confirms a bank match or source balance.
+    ACCOUNTING_CONTRACT = {
+        "schema_version": 1,
+        "representation": "loan-total-and-interest",
+        "label": "Capital One Auto",
+        "payment_description": "Payment Received",
+        "interest_description": "Interest Fee",
+        "association": "same-account-date-statement",
+        "balance_basis": "derived-opening-principal",
+        "period_basis": "printed-activity-range",
+        "date_basis": "unverified",
+        "excluded_descriptions": [],
+        "unposted_descriptions": [],
+    }
 
     # Parsing constants
     HEADER_DATE = r"%m/%d/%Y"

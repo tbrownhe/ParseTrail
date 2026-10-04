@@ -6,6 +6,52 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## Retained declarative accounting metadata — October 3, 2026
+
+After accepting the Wells Fargo workflow, the owner authorized the next client
+chunk. The [accounting declaration contract](statement-accounting-contracts.md)
+introduces optional parser-owned JSON metadata, detached at parse time and retained
+in ordinary `Statements.AccountingContract` and rebuilt
+`SourceStatements.accounting_contract` rows. The rebuilt column and immutable source
+payload must agree. Preview identity binds the full declaration.
+
+Capital One Auto 0.2.2 and Wells Fargo Personal Loan 0.2.1 declare the same schema-one
+total-payment/separate-interest representation. The shared posting/correction service
+dispatches from retained evidence without consulting installed parsers. Versioned
+selectors, association and provenance are validated; unsupported formats are retained
+without posting permission. Frozen compatibility handles old undeclared test evidence
+without changing existing decisions. No parsing/extraction logic changed. Synthetic
+origination, standalone principal rows, loan openings and reconciliation remain outside
+the payment workflow.
+
+Migration `0004_statement_accounting` adds a nullable column without backfilling old
+declarations. A read-only SQLite backup of the live database was migrated in ignored
+scratch storage. Integrity and foreign-key checks passed; every pre-existing table's
+original columns and rows compared exactly, and all old declaration values were NULL.
+An initial audit-script attempt retained a SQLite handle and hit Windows file locking;
+the corrected copy test explicitly closed handles before shadow migration and passed.
+The live database was never opened writable.
+
+Both supported loan archives replayed with unchanged financial rows and memberships.
+Their new retained declarations produced equivalent postings, interest, principal and
+date provenance. Earlier fixed-category Capital One and Wells Fargo correction histories
+remained usable and their database hashes unchanged. Separate archive-copy UI exercises
+passed preview/cancel/post/correction/history/reopen for both declared formats; the
+Wells Fargo preview screenshot was inspected. All private evidence stays in scratch.
+
+The **24 new tests** cover loader snapshots, malformed/future declarations, parser
+error handling, ordinary-import persistence, replay identity, generic dispatch with
+unfamiliar parser names and selectors, source-column immutability/mismatch, changed
+parser declarations, preview tampering, mixed source versions/contracts, posting,
+correction, reopening and synthetic exclusion. The full client suite passed
+**1074 tests, 3 skipped** in 216.54 seconds. Ruff lint/format passed across 253
+client/test, migration and ledger/recovery/recurring devtool Python files.
+
+No new dependencies, server changes or parser publication occurred. This preserves
+the accepted native payment workflow; no repeat owner walkthrough is required for
+the metadata implementation. General declarative extraction and other accounting
+representations remain separate roadmap work.
+
 ## Ordinary Wells Fargo loan payments — October 3, 2026
 
 The existing [payment and correction workflow](../devtools/ledger_audit/LOAN_PAYMENTS.md)
@@ -39,8 +85,8 @@ exclusion, synthetic/mixed-contract/unknown-version rejection, invalid balance/d
 currency evidence, missing/shared interest, and source-specific UI notices with the
 fixed interest category. The full client suite passed **1050 tests, 3 skipped**
 in 217.38 seconds. Ruff lint and format checks passed across all 250 client/test
-and ledger/recovery/recurring devtool Python files. Targeted Windows acceptance is pending in a fresh copy;
-sample decisions are not financial approvals.
+and ledger/recovery/recurring devtool Python files. The owner accepted the Windows
+Wells Fargo workflow on October 3; sample decisions are not financial approvals.
 
 The owner requested parser-owned declarative accounting metadata. The next bounded
 roadmap step will snapshot a validated versioned declaration with imported statements

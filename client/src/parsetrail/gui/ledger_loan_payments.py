@@ -159,7 +159,7 @@ class LoanPaymentWindow(QMainWindow):
         layout = QVBoxLayout(body)
         notice = QLabel(
             "Workflow test copy — sample decisions do not change or approve live financial history.\n"
-            "Capital One Auto and Wells Fargo Personal Loan payments. Review bank outflow, interest expense and principal reduction together.\n"
+            "Supported loan payment formats. Review bank outflow, interest expense and principal reduction together.\n"
             "Confirmed payments support bank-match corrections. Other loans, financing and openings remain outside this workflow."
         )
         notice.setWordWrap(True)

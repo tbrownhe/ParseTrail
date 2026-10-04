@@ -82,7 +82,7 @@ def test_new_database_is_created_at_head_without_backup(tmp_path: Path) -> None:
     connection = sqlite3.connect(db_path)
     try:
         assert connection.execute("SELECT version_num FROM alembic_version").fetchone()[0] == (
-            "0003_precise_financial_schema"
+            "0004_statement_accounting"
         )
         assert connection.execute("SELECT MinorUnit FROM Currencies WHERE CurrencyCode='USD'").fetchone()[0] == 2
     finally:
@@ -106,6 +106,7 @@ def test_legacy_database_migrates_exact_values_dates_membership_and_constraints(
         assert statement.ImportedAt.tzinfo == timezone.utc
         assert statement.ContentHashAlgorithm == "md5"
         assert statement.TransactionCount == 1
+        assert statement.AccountingContract is None
 
         transactions = session.scalars(select(Transactions).order_by(Transactions.TransactionID)).all()
         assert [transaction.Amount for transaction in transactions] == [Decimal("12.34"), Decimal("-2.34")]

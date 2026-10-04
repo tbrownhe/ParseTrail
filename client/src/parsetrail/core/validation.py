@@ -314,6 +314,7 @@ class Statement:
     dpath: Path | None = None
     content_hash: str | None = None
     content_hash_algorithm: str = "sha256"
+    accounting_contract: dict | None = None
 
     def __post_init__(self):
         """Validate all inputs immediately after instantiation.
@@ -374,6 +375,8 @@ class Statement:
         self.dpath = success_dir / dname
 
     def to_db_row(self, account: Account):
+        from parsetrail.core.accounting_contracts import encode
+
         metadata = {
             "AccountID": account.account_id,
             "ImportedAt": datetime.now(timezone.utc),
@@ -386,6 +389,7 @@ class Statement:
             "Filename": self.dpath.name,
             "ContentHash": self.content_hash,
             "ContentHashAlgorithm": self.content_hash_algorithm,
+            "AccountingContract": encode(self.accounting_contract),
         }
         return metadata
 
