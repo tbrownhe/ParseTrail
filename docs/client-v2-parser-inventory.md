@@ -120,6 +120,14 @@ candidate counts matched the current parsers' rows. This is a location and
 legacy-parser comparison, not proof that the parsers captured every financial
 row or that printed balances were independently preserved by the pilot.
 
+The isolated [card-line pilot](../devtools/parser_engine_pilot/README.md)
+subsequently matched every Chase-referenced source in the authorized closed
+archive on account, period, printed balances and rows. It retained the
+date-prefixed three-letter detail lines as uninterpreted auxiliary evidence;
+the current parser omits them from its transactions. This is deliberate source
+retention, not a currency conversion or a claim of complete activity coverage.
+The PDF decoder and final section/row disposition rules remain open.
+
 ## Archive layouts and developer/release coupling
 
 - The managed archive is derived from the database stem. Root files are a drop

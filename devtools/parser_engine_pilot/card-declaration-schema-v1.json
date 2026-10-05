@@ -1,0 +1,105 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "parser_id": {
+      "pattern": "^[a-z][a-z0-9_-]{2,79}$",
+      "title": "Parser Id",
+      "type": "string"
+    },
+    "revision": {
+      "pattern": "^[1-9][0-9]{0,8}$",
+      "title": "Revision",
+      "type": "string"
+    },
+    "suffix": {
+      "const": ".pdf",
+      "title": "Suffix",
+      "type": "string"
+    },
+    "kind": {
+      "const": "statement",
+      "title": "Kind",
+      "type": "string"
+    },
+    "capabilities": {
+      "items": {
+        "enum": [
+          "pdf_lines_v1",
+          "card_mmdd_amount_v1",
+          "printed_card_boundaries_v1",
+          "clamped_posting_proxy_v1"
+        ],
+        "type": "string"
+      },
+      "title": "Capabilities",
+      "type": "array"
+    },
+    "period_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Period Label",
+      "type": "string"
+    },
+    "account_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Account Label",
+      "type": "string"
+    },
+    "opening_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Opening Label",
+      "type": "string"
+    },
+    "closing_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Closing Label",
+      "type": "string"
+    },
+    "date_format": {
+      "const": "MM/DD/YY",
+      "title": "Date Format",
+      "type": "string"
+    },
+    "money_format": {
+      "const": "card_usd_2dp",
+      "title": "Money Format",
+      "type": "string"
+    },
+    "amount_direction": {
+      "const": "invert_for_liability",
+      "title": "Amount Direction",
+      "type": "string"
+    },
+    "dated_auxiliary": {
+      "const": "three_uppercase_letters",
+      "title": "Dated Auxiliary",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "parser_id",
+    "revision",
+    "suffix",
+    "kind",
+    "capabilities",
+    "period_label",
+    "account_label",
+    "opening_label",
+    "closing_label",
+    "date_format",
+    "money_format",
+    "amount_direction",
+    "dated_auxiliary"
+  ],
+  "title": "CardDefinition",
+  "type": "object"
+}

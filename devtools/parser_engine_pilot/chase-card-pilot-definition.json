@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "parser_id": "chase_card_line_pilot",
+  "revision": "1",
+  "suffix": ".pdf",
+  "kind": "statement",
+  "capabilities": [
+    "pdf_lines_v1",
+    "card_mmdd_amount_v1",
+    "printed_card_boundaries_v1",
+    "clamped_posting_proxy_v1"
+  ],
+  "period_label": "Opening/Closing Date",
+  "account_label": "Account Number:",
+  "opening_label": "Previous Balance",
+  "closing_label": "New Balance",
+  "date_format": "MM/DD/YY",
+  "money_format": "card_usd_2dp",
+  "amount_direction": "invert_for_liability",
+  "dated_auxiliary": "three_uppercase_letters"
+}

@@ -42,11 +42,39 @@ reader, and each compared transaction-shaped candidate has a unique page/line
 location. Source bytes stayed unchanged. These checks do not establish complete
 capture or declarative parity.
 
+`card_lines.py` adds a finite statement-line experiment under the strict
+[`card-declaration-schema-v1.json`](card-declaration-schema-v1.json), using
+[`chase-card-pilot-definition.json`](chase-card-pilot-definition.json). It
+requires unique printed period, masked account and opening/closing balances;
+keeps their page/line locations; records the source sign before liability
+normalization; and labels transaction year and clamped posting date as derived.
+Dated three-letter detail lines are retained as uninterpreted auxiliary evidence.
+Any other unmatched dated line, duplicate printed field or oversized candidate
+fails the whole parse. Parsing checks cancellation per line. Coverage and balance
+reconciliation remain false; the auxiliary details authorize no conversion or
+posting.
+
+Every Chase-referenced fixture in the authorized closed-copy archive matched
+the accepted reader's account, period, printed balances and rows in a read-only
+comparison. The comparison also accounted for every date-prefixed line as a
+transaction or uninterpreted detail. This is parity with the current reader,
+not independent proof of complete capture. Run the comparison on an authorized
+source with:
+
+```powershell
+client/.venv/Scripts/python.exe -m devtools.parser_engine_pilot.compare_chase C:\private\card-statement.pdf
+```
+
+The comparison uses the existing PDF decoder outside the pilot's bounds. A
+bounded decoder and section/row coverage checks are still required before
+runtime use or a final declaration schema.
+
 Run the synthetic tests from the repository root:
 
 ```powershell
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_engine.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_pdf_lines.py
+client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_card_lines.py
 ```
 
 `mohela-pilot-definition.json` exercises those three finite layout/identity

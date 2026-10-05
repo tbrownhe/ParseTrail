@@ -127,8 +127,9 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   in [the parser engine pilot](devtools/parser_engine_pilot/README.md). The first
   read-only detailed CSV comparison matched the accepted reader; a separate
   PDF line pilot retained page/line locations on Chase and cross-page HSA
-  fixtures. Continue declarative PDF and bounded XLSX P2-3 comparisons before
-  choosing final schema and operations.
+  fixtures, and a finite Chase statement pilot matched the authorized archive
+  while retaining uninterpreted dated detail lines. Continue HSA/layout PDF
+  and bounded XLSX P2-3 comparisons before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and
   continuation/layout PDFs, plus synthetic
   XLSX. Compare against corrected archive evidence, retain unknown balances and
