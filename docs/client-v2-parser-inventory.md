@@ -121,6 +121,11 @@ row or that printed balances were independently preserved by the pilot.
   archived source can be linked to multiple accounts/statements; a ledger row
   can appear in overlapping statement memberships. P2 must replay all referenced
   `SUCCESS` bytes and retain other files as opaque history.
+- The authorized closed-copy database has no referenced XLSX statement. An
+  unreferenced workbook remains part of the archive and must be retained as
+  opaque history. The synthetic XLSX mapping proves only the evidence shape;
+  a bounded workbook decoder is still needed before accepting future XLSX
+  imports.
 - `devtools/local_statements/batch_plugin_tester.py` compiles checkout parsers
   into a temporary directory and runs headless local fixtures. Its default
   output uses short digests. The ledger audit/rebuild tools compare historical
