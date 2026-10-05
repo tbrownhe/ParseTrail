@@ -138,9 +138,11 @@ The PDF decoder and final section/row disposition rules remain open.
   `SUCCESS` bytes and retain other files as opaque history.
 - The authorized closed-copy database has no referenced XLSX statement. An
   unreferenced workbook remains part of the archive and must be retained as
-  opaque history. The synthetic XLSX mapping proves only the evidence shape;
-  a bounded workbook decoder is still needed before accepting future XLSX
-  imports.
+  opaque history. A read-only adapter now decodes synthetic XLSX workbooks
+  under ZIP expansion and sheet limits, retaining sheet/cell locations. There
+  is no archive parity fixture; formula and typed numeric/date cells are
+  refused, and XML decoder time/cancellation limits remain open before future
+  XLSX imports.
 - `devtools/local_statements/batch_plugin_tester.py` compiles checkout parsers
   into a temporary directory and runs headless local fixtures. Its default
   output uses short digests. The ledger audit/rebuild tools compare historical
@@ -170,11 +172,12 @@ The PDF decoder and final section/row disposition rules remain open.
    ambiguous historical Citi revision. Keep original parser references and
    source bytes; do not substitute parser names. Keep source names, paths and
    financial examples private.
-2. Select representative corrected archive fixtures for detailed MOHELA CSV,
-   a simple bank/card PDF, HealthEquity continuation and a layout/table PDF.
-   Add a synthetic XLSX mapping. The first read-only detailed CSV comparison
-   matched the accepted reader row for row. For each remaining fixture, record independent printed checks,
-   every candidate/ignored/unresolved activity row and source locations.
+2. Select representative corrected archive fixtures for a layout/table PDF.
+   Detailed MOHELA CSV, Chase card and HealthEquity cash comparisons now match
+   their accepted readers on the tested fields; synthetic XLSX decoding is
+   exercised separately. For each remaining fixture, record independent
+   printed checks, every candidate/ignored/unresolved activity row and source
+   locations.
 3. Compare proposed finite operations against the difficult parsers above.
    Record any explicit client-built exception with its fixture, reason and
    engine release cost. Do not silently drop a parser or encode Python/SQL/eval

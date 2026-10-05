@@ -131,8 +131,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   while retaining uninterpreted dated detail lines. A finite HealthEquity cash
   pilot now matches the authorized archive's printed cash fields and running
   balances across continuation pages, with descriptionless and non-dated lines
-  explicitly unresolved. Continue dynamic layout PDF and bounded XLSX P2-3
-  comparisons before choosing final schema and operations.
+  explicitly unresolved. A read-only XLSX adapter passes synthetic workbook
+  checks with ZIP/sheet limits, but has no referenced archive fixture or XML
+  time bound. Continue dynamic layout PDF and decoder hardening before choosing
+  final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and
   continuation/layout PDFs, plus synthetic
   XLSX. Compare against corrected archive evidence, retain unknown balances and

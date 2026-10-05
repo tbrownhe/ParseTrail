@@ -26,10 +26,18 @@ versions, so a reparse under changed code cannot silently reuse an old row ID.
 
 CSV bytes are bounded before decode, rows/cells/field lengths are bounded during
 parsing, and cancellation is checked for each row. Errors expose a code and row
-number without source values. The XLSX test supplies already decoded synthetic
-rows; real workbook ZIP/XML expansion still needs a bounded adapter before
-untrusted XLSX input. PDF page/section extraction and observed statement
+number without source values. PDF page/section extraction and observed statement
 endpoints are outside this table pilot.
+
+`xlsx_adapter.py` exercises the same table engine on a real, synthetic `.xlsx`
+workbook. It limits compressed and expanded ZIP bytes, member count and member
+size, checks every member before `openpyxl` decoding, and selects one explicit
+sheet with bounded dimensions. It accepts string/blank cells only, rejecting
+formulas and typed numeric/date cells until their exact-value and display
+semantics are specified. Sheet/cell locations and extractor version remain in
+the evidence. This is a pilot decoder: XML parsing inside `openpyxl` has no
+time budget or cancellation hook, and no archived statement exercises XLSX
+parity. Do not use it for runtime admission without those gates.
 
 `pdf_lines.py` is a separate P2-3 provenance experiment for text already
 extracted by a trusted PDF reader. It binds each raw/normalized line to the
@@ -102,6 +110,7 @@ client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_e
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_pdf_lines.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_card_lines.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_hsa_cash_lines.py
+client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_xlsx_adapter.py
 ```
 
 `mohela-pilot-definition.json` exercises those three finite layout/identity
@@ -119,6 +128,5 @@ occurrences and activity span. The source file was unchanged. This is one
 fixture comparison, not a declaration-schema freeze or accounting acceptance.
 The accepted reader's more permissive money syntax still needs a disposition
 for other exports, and revised/ambiguous exports must never overwrite previous
-evidence. Other representative pilots are a dynamic table PDF and a bounded
-real XLSX adapter.
+evidence. The remaining representative pilot is a dynamic table PDF.
 These results should inform V2-2 storage before its schema is frozen.

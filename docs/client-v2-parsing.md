@@ -135,14 +135,18 @@ page/line pilot matched source locations on representative Chase and cross-page
 HealthEquity PDFs. A finite Chase statement-line pilot now matches the accepted
 reader across the authorized Chase fixtures while retaining uninterpreted dated
 details and derived-date labels. Bounded PDF decoding, independent capture
-checks, continuation/layout parsing and real XLSX decoding remain open before
+checks and other continuation/layout parsing remain open before
 the interface decision gate. A separate finite HealthEquity cash-section pilot
 matches the accepted reader on account, period and printed cash values across
 the authorized closed archive, including continuation pages. It verifies each
 printed running-balance equation, retains non-dated section lines unresolved
 and leaves descriptionless rows unknown. This establishes cash evidence parity
 with the accepted reader, not investment coverage, full capture or account
-reconciliation. The dynamic table case and bounded PDF decoding remain open.
+reconciliation. A synthetic workbook now passes a read-only XLSX decoder pilot
+with ZIP expansion, member and sheet limits; formula and typed numeric/date
+cells are explicitly refused. No referenced archive XLSX source exists, and
+`openpyxl` XML parsing is not time bounded or cancellable. The dynamic table
+case and bounded PDF decoding remain open.
 
 The release gate is a reviewed engine and declarative catalog, archive-preserving
 coverage of needed formats, explicit client-built exceptions and signed offline
