@@ -31,10 +31,22 @@ rows; real workbook ZIP/XML expansion still needs a bounded adapter before
 untrusted XLSX input. PDF page/section extraction and observed statement
 endpoints are outside this table pilot.
 
+`pdf_lines.py` is a separate P2-3 provenance experiment for text already
+extracted by a trusted PDF reader. It binds each raw/normalized line to the
+source hash, extractor version, page and line, with in-memory page/text/line
+limits and cancellation. It does not open or decode a PDF, select transaction
+lines, assign account identities, or prove printed balance checks. A bounded
+PDF decoder remains open. Read-only checks on an authorized Chase PDF and a
+cross-page HealthEquity PDF found that its flattened lines match the accepted
+reader, and each compared transaction-shaped candidate has a unique page/line
+location. Source bytes stayed unchanged. These checks do not establish complete
+capture or declarative parity.
+
 Run the synthetic tests from the repository root:
 
 ```powershell
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_engine.py
+client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_pdf_lines.py
 ```
 
 `mohela-pilot-definition.json` exercises those three finite layout/identity

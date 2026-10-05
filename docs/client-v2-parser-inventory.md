@@ -103,6 +103,16 @@ layout. Citi combines extraction channels and is the clearest exception
 candidate. None of these cost estimates authorizes a transaction, inferred
 posting date or statement reconciliation.
 
+A read-only archive check selected representative sources for all four families;
+each routed and parsed with checkout code, and source bytes were unchanged. A
+cross-page HealthEquity source and a Chase source were then compared with the
+[page/line provenance pilot](../devtools/parser_engine_pilot/README.md). For
+those two fixtures, the pilot's flattened text matched the accepted PDF reader
+and each transaction-shaped candidate had a unique page/line location. The
+candidate counts matched the current parsers' rows. This is a location and
+legacy-parser comparison, not proof that the parsers captured every financial
+row or that printed balances were independently preserved by the pilot.
+
 ## Archive layouts and developer/release coupling
 
 - The managed archive is derived from the database stem. Root files are a drop
