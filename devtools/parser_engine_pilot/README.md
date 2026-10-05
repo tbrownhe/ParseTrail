@@ -103,6 +103,30 @@ This comparison uses the existing unbounded PDF decoder. A bounded decoder,
 candidate-row disposition and separate investment evidence remain open before
 runtime use or schema freeze.
 
+`wells_table.py` pilots one named, finite page-local geometry operation under
+[`wells-table-declaration-schema-v1.json`](wells-table-declaration-schema-v1.json).
+It finds the printed five-word header on each table page, derives column lines
+from those words, and retains raw six-cell rows with page/region references.
+Every extracted row is labeled as a dated candidate, wrapped-description
+continuation, terminator or unresolved row after the first table stop. An
+unexpected retained row or a date-looking first-column row after the stop
+fails. The operation does not normalize amounts, fill missing printed balances,
+establish complete page capture or reconcile the account.
+
+The pilot's retained raw cells and dated-candidate counts matched the accepted
+Wells Fargo business reader for every referenced source in the authorized
+closed-copy archive. The source files stayed unchanged. Reproduce on an
+authorized source with:
+
+```powershell
+client/.venv/Scripts/python.exe -m devtools.parser_engine_pilot.compare_wells C:\private\business-statement.pdf
+```
+
+`pdfplumber` PDF decoding, word extraction and table finding remain outside a
+strict execution budget. The operation is an experiment, not an accepted
+declaration shape or a runtime parser. Citi's cross-channel text/fee recovery
+is still a separate design and fixture gate.
+
 Run the synthetic tests from the repository root:
 
 ```powershell
@@ -111,6 +135,7 @@ client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_p
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_card_lines.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_hsa_cash_lines.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_xlsx_adapter.py
+client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_wells_table.py
 ```
 
 `mohela-pilot-definition.json` exercises those three finite layout/identity
@@ -128,5 +153,5 @@ occurrences and activity span. The source file was unchanged. This is one
 fixture comparison, not a declaration-schema freeze or accounting acceptance.
 The accepted reader's more permissive money syntax still needs a disposition
 for other exports, and revised/ambiguous exports must never overwrite previous
-evidence. The remaining representative pilot is a dynamic table PDF.
+evidence. Citi's combined table/text recovery remains an exception candidate.
 These results should inform V2-2 storage before its schema is frozen.

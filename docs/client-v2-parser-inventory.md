@@ -118,7 +118,13 @@ that absence must remain unknown evidence even if the accepted reader later
 calculates a balance. These observations make a finite page-local geometry
 pilot plausible, but do not prove complete capture, justify discarding other
 post-stop content or settle how the client should bound PDF word/table work.
-The referenced source files remained unchanged.
+The referenced source files remained unchanged. A subsequent isolated
+[geometry pilot](../devtools/parser_engine_pilot/README.md) emitted raw table
+cells and page/row regions, with explicit dated, continuation, terminator and
+post-stop dispositions. Its retained cells and dated-candidate counts matched
+the accepted reader on every referenced Wells Fargo business source. This is
+extractor parity only: PDF decoding/table-finding budgets, independent capture
+checks and optional printed-balance evidence still need work.
 
 A read-only archive check selected representative sources for all four families;
 each routed and parsed with checkout code, and source bytes were unchanged. A
@@ -182,12 +188,12 @@ The PDF decoder and final section/row disposition rules remain open.
    ambiguous historical Citi revision. Keep original parser references and
    source bytes; do not substitute parser names. Keep source names, paths and
    financial examples private.
-2. Select representative corrected archive fixtures for a layout/table PDF.
-   Detailed MOHELA CSV, Chase card and HealthEquity cash comparisons now match
-   their accepted readers on the tested fields; synthetic XLSX decoding is
-   exercised separately. For each remaining fixture, record independent
-   printed checks, every candidate/ignored/unresolved activity row and source
-   locations.
+2. Detailed MOHELA CSV, Chase card, HealthEquity cash and Wells Fargo business
+   table pilots now match their accepted readers on the tested fields;
+   synthetic XLSX decoding is exercised separately. For the remaining Citi
+   multi-channel case, record independent printed checks, every candidate,
+   ignored or unresolved activity row and source location before settling a
+   built-in exception.
 3. Compare proposed finite operations against the difficult parsers above.
    Record any explicit client-built exception with its fixture, reason and
    engine release cost. Do not silently drop a parser or encode Python/SQL/eval

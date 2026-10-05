@@ -151,7 +151,11 @@ archive pass found retained rows classifiable as dated activity or wrapped
 description, with no date-looking first-column row after the existing table
 stop. It also confirmed that missing printed row balances are common. A
 page-local geometry operation remains a prototype candidate, not an accepted
-schema or license to derive those balances.
+schema or license to derive those balances. An isolated geometry pilot now
+retains each Wells table row's raw cells and region with an explicit disposition;
+all referenced Wells Fargo business sources matched the accepted reader on
+retained cells and dated-candidate count. The PDF decoder/table-finder remains
+unbounded, and neither match proves full page capture.
 
 The release gate is a reviewed engine and declarative catalog, archive-preserving
 coverage of needed formats, explicit client-built exceptions and signed offline
