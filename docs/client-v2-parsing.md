@@ -136,7 +136,13 @@ HealthEquity PDFs. A finite Chase statement-line pilot now matches the accepted
 reader across the authorized Chase fixtures while retaining uninterpreted dated
 details and derived-date labels. Bounded PDF decoding, independent capture
 checks, continuation/layout parsing and real XLSX decoding remain open before
-the interface decision gate.
+the interface decision gate. A separate finite HealthEquity cash-section pilot
+matches the accepted reader on account, period and printed cash values across
+the authorized closed archive, including continuation pages. It verifies each
+printed running-balance equation, retains non-dated section lines unresolved
+and leaves descriptionless rows unknown. This establishes cash evidence parity
+with the accepted reader, not investment coverage, full capture or account
+reconciliation. The dynamic table case and bounded PDF decoding remain open.
 
 The release gate is a reviewed engine and declarative catalog, archive-preserving
 coverage of needed formats, explicit client-built exceptions and signed offline

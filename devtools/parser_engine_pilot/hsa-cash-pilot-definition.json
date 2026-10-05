@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "parser_id": "hsa_cash_line_pilot",
+  "revision": "1",
+  "suffix": ".pdf",
+  "kind": "cash_statement_section",
+  "capabilities": [
+    "pdf_lines_v1",
+    "ordered_cash_boundaries_v1",
+    "dated_cash_rows_v1",
+    "printed_cash_chain_v1"
+  ],
+  "period_label": "Period:",
+  "account_label": "AccountNumber:",
+  "opening_label": "BeginningBalance",
+  "closing_label": "EndingBalance",
+  "period_date_format": "MM/DD/YY",
+  "row_date_format": "MM/DD/YYYY",
+  "money_format": "signed_decimal_2dp",
+  "line_prefix": "strip_underscore_space"
+}

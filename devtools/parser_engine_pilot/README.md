@@ -69,12 +69,39 @@ The comparison uses the existing PDF decoder outside the pilot's bounds. A
 bounded decoder and section/row coverage checks are still required before
 runtime use or a final declaration schema.
 
+`hsa_cash_lines.py` adds a finite HealthEquity cash-section pilot under the
+strict [`hsa-cash-declaration-schema-v1.json`](hsa-cash-declaration-schema-v1.json)
+and [`hsa-cash-pilot-definition.json`](hsa-cash-pilot-definition.json). It finds
+unique printed account, period and cash boundaries across pages, retains each
+cash row's page/line and printed amount/running balance, and checks the full
+printed cash chain. Non-dated lines inside the cash window remain unresolved.
+Rows without a printed description keep an unknown description; the accepted
+reader's fallback label is not carried into source evidence. Investment content
+after the printed cash closing boundary is outside this check. The result does
+not claim complete capture or whole-account reconciliation.
+
+Every HealthEquity-referenced fixture in the authorized closed-copy archive
+matched the accepted reader on account, period, printed cash balances, dates,
+amounts and running balances. Printed descriptions also matched. The comparison
+is parity with the accepted reader, not independent proof that every cash row
+was captured. The inputs and closed-copy database were unchanged. Reproduce on
+an authorized source with:
+
+```powershell
+client/.venv/Scripts/python.exe -m devtools.parser_engine_pilot.compare_hsa C:\private\hsa-statement.pdf
+```
+
+This comparison uses the existing unbounded PDF decoder. A bounded decoder,
+candidate-row disposition and separate investment evidence remain open before
+runtime use or schema freeze.
+
 Run the synthetic tests from the repository root:
 
 ```powershell
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_engine.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_pdf_lines.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_card_lines.py
+client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_hsa_cash_lines.py
 ```
 
 `mohela-pilot-definition.json` exercises those three finite layout/identity
@@ -92,6 +119,6 @@ occurrences and activity span. The source file was unchanged. This is one
 fixture comparison, not a declaration-schema freeze or accounting acceptance.
 The accepted reader's more permissive money syntax still needs a disposition
 for other exports, and revised/ambiguous exports must never overwrite previous
-evidence. Other representative pilots are a simple card/bank PDF, a
-continuation-heavy HSA PDF, a dynamic table PDF and a bounded real XLSX adapter.
+evidence. Other representative pilots are a dynamic table PDF and a bounded
+real XLSX adapter.
 These results should inform V2-2 storage before its schema is frozen.

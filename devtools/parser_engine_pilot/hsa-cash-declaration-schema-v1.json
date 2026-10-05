@@ -1,0 +1,105 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "parser_id": {
+      "pattern": "^[a-z][a-z0-9_-]{2,79}$",
+      "title": "Parser Id",
+      "type": "string"
+    },
+    "revision": {
+      "pattern": "^[1-9][0-9]{0,8}$",
+      "title": "Revision",
+      "type": "string"
+    },
+    "suffix": {
+      "const": ".pdf",
+      "title": "Suffix",
+      "type": "string"
+    },
+    "kind": {
+      "const": "cash_statement_section",
+      "title": "Kind",
+      "type": "string"
+    },
+    "capabilities": {
+      "items": {
+        "enum": [
+          "pdf_lines_v1",
+          "ordered_cash_boundaries_v1",
+          "dated_cash_rows_v1",
+          "printed_cash_chain_v1"
+        ],
+        "type": "string"
+      },
+      "title": "Capabilities",
+      "type": "array"
+    },
+    "period_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Period Label",
+      "type": "string"
+    },
+    "account_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Account Label",
+      "type": "string"
+    },
+    "opening_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Opening Label",
+      "type": "string"
+    },
+    "closing_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Closing Label",
+      "type": "string"
+    },
+    "period_date_format": {
+      "const": "MM/DD/YY",
+      "title": "Period Date Format",
+      "type": "string"
+    },
+    "row_date_format": {
+      "const": "MM/DD/YYYY",
+      "title": "Row Date Format",
+      "type": "string"
+    },
+    "money_format": {
+      "const": "signed_decimal_2dp",
+      "title": "Money Format",
+      "type": "string"
+    },
+    "line_prefix": {
+      "const": "strip_underscore_space",
+      "title": "Line Prefix",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "parser_id",
+    "revision",
+    "suffix",
+    "kind",
+    "capabilities",
+    "period_label",
+    "account_label",
+    "opening_label",
+    "closing_label",
+    "period_date_format",
+    "row_date_format",
+    "money_format",
+    "line_prefix"
+  ],
+  "title": "HsaCashDefinition",
+  "type": "object"
+}

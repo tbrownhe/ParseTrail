@@ -128,8 +128,11 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   read-only detailed CSV comparison matched the accepted reader; a separate
   PDF line pilot retained page/line locations on Chase and cross-page HSA
   fixtures, and a finite Chase statement pilot matched the authorized archive
-  while retaining uninterpreted dated detail lines. Continue HSA/layout PDF
-  and bounded XLSX P2-3 comparisons before choosing final schema and operations.
+  while retaining uninterpreted dated detail lines. A finite HealthEquity cash
+  pilot now matches the authorized archive's printed cash fields and running
+  balances across continuation pages, with descriptionless and non-dated lines
+  explicitly unresolved. Continue dynamic layout PDF and bounded XLSX P2-3
+  comparisons before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and
   continuation/layout PDFs, plus synthetic
   XLSX. Compare against corrected archive evidence, retain unknown balances and
