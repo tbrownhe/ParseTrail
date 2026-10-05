@@ -116,8 +116,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   stop for uncovered user-data policy. No live writes or schema changes.
 - [~] **P2-1 — Parser/engine review:** first-pass 22-parser source/fixture matrix is in
   [the parser inventory](docs/client-v2-parser-inventory.md). Read-only archive replay
-  and installed-catalog checks passed; four representative PDF operation costs
-  are reviewed. Continue fixture gaps and remaining operation-cost review.
+  and installed-catalog checks passed; historical parser revisions were bound
+  source by source, including an ambiguous Citi layout split. Four representative
+  PDF operation costs are reviewed. Continue fixture gaps and remaining
+  operation-cost review.
   Inventory all current parsers, archive layouts,
   repeated extraction/normalization/checks, source provenance, developer tools and
   release coupling. Produce a family/fixture matrix and explicit custom-operation needs.

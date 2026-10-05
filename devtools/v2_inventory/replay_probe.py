@@ -95,6 +95,43 @@ def summarize(legacy: dict, evidence: dict, categories: dict) -> dict:
     }
 
 
+def parser_bindings(legacy: dict, evidence: dict) -> dict:
+    """Bind historical parser revisions to observed checkout replay results."""
+    plugins = {row["PluginID"]: row for row in legacy["Plugins"]}
+    pairs = Counter()
+    targets = {}
+    unresolved = 0
+    for statement in legacy["Statements"]:
+        old = plugins.get(statement["PluginID"])
+        source = evidence["legacy_sources"].get(str(statement["StatementID"]))
+        current = evidence["files"].get(source, {}) if source else {}
+        if old is None or current.get("status") != "parsed" or not current.get("plugin"):
+            unresolved += 1
+            continue
+        old_revision = (old["PluginName"], old["Version"])
+        new_revision = (current["plugin"], current["version"])
+        pairs[(*old_revision, *new_revision)] += 1
+        targets.setdefault(old_revision, set()).add(current["plugin"])
+    return {
+        "bindings": [
+            {
+                "legacy_parser": old_name,
+                "legacy_version": old_version,
+                "checkout_parser": new_name,
+                "checkout_version": new_version,
+                "statement_count": count,
+            }
+            for (old_name, old_version, new_name, new_version), count in sorted(pairs.items())
+        ],
+        "ambiguous_legacy_revisions": [
+            {"legacy_parser": name, "legacy_version": version}
+            for (name, version), revisions in sorted(targets.items())
+            if len(revisions) > 1
+        ],
+        "unresolved_statement_count": unresolved,
+    }
+
+
 def probe(source: Path, archive: Path, *, progress=None) -> dict:
     source = source.resolve(strict=True)
     archive = archive.resolve(strict=True)
@@ -116,6 +153,7 @@ def probe(source: Path, archive: Path, *, progress=None) -> dict:
     if _hash(source) != before or any(Path(str(source) + suffix).exists() for suffix in ("-wal", "-shm", "-journal")):
         raise ValueError("Source changed or gained SQLite sidecars during replay.")
     result = summarize(legacy, evidence, categories)
+    result["legacy_parser_bindings"] = parser_bindings(legacy, evidence)
     result["checkout_parser_count"] = len(registry.classes)
     result["source_unchanged"] = True
     return result

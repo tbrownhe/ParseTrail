@@ -52,6 +52,13 @@ The active installed bytecode catalog also passed signature and artifact
 verification in a separate read-only check. These checks do not establish
 declarative-engine parity or treat old parser IDs as one-to-one names for the
 current implementations. Private source counts and identifiers remain outside Git.
+The verified installed catalog and checkout contain the same 22 parser names.
+An authorized source-by-source binding check found no unresolved historical
+statement, but one historical Citi name **and version** routes to two current
+layout parsers. Therefore a historical name/version is not a safe replacement
+key: retain the original reference and bind each source through its hashed
+bytes, recognized layout, current parser version and replay result. The
+read-only replay probe now reports these bindings and ambiguous revisions.
 
 ## Shared engine and repeated behavior
 
@@ -134,8 +141,10 @@ row or that printed balances were independently preserved by the pilot.
 - `devtools/v2_inventory/replay_probe.py` loads checkout parser classes without
   the writable application settings module, replays referenced archive files
   against a closed database copy and reports aggregate parse/category-match
-  counts. It produces no evidence database and does not validate installed
-  release trust. Use the separate signed-release verifier for that check.
+  counts plus historical-to-current parser revision bindings. It flags a
+  historical revision that routes to multiple current layouts and produces no
+  evidence database. It does not validate installed release trust; use the
+  separate signed-release verifier for that check.
 - `build_plugins.py`, `scripts/plugin_release.py`, `core/plugin_manifest.py`,
   `plugin_store.py`, `plugin_manager.py` and `plugin_loader.py` compile/load
   `.pyc` under a signed whole-catalog manifest. Artifact metadata includes
@@ -149,9 +158,10 @@ row or that printed balances were independently preserved by the pilot.
 
 ## P2-1 gaps before schema or conversion work
 
-1. Resolve legacy plugin-ID aliases against the verified installed catalog and
-   checkout source, then repeat source/package binding on the frozen cutover
-   snapshot. Keep names, paths and financial examples private.
+1. Repeat source/package binding on the frozen cutover snapshot, including the
+   ambiguous historical Citi revision. Keep original parser references and
+   source bytes; do not substitute parser names. Keep source names, paths and
+   financial examples private.
 2. Select representative corrected archive fixtures for detailed MOHELA CSV,
    a simple bank/card PDF, HealthEquity continuation and a layout/table PDF.
    Add a synthetic XLSX mapping. The first read-only detailed CSV comparison
