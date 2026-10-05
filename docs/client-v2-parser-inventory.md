@@ -110,6 +110,16 @@ layout. Citi combines extraction channels and is the clearest exception
 candidate. None of these cost estimates authorizes a transaction, inferred
 posting date or statement reconciliation.
 
+A later read-only pass over all referenced Wells Fargo business sources found
+that each retained table row was either a dated row or a wrapped description
+row. The current first-empty/`Ending` stop left no date-looking first-column
+row after the stop in this archive. Many dated rows have no printed row balance;
+that absence must remain unknown evidence even if the accepted reader later
+calculates a balance. These observations make a finite page-local geometry
+pilot plausible, but do not prove complete capture, justify discarding other
+post-stop content or settle how the client should bound PDF word/table work.
+The referenced source files remained unchanged.
+
 A read-only archive check selected representative sources for all four families;
 each routed and parsed with checkout code, and source bytes were unchanged. A
 cross-page HealthEquity source and a Chase source were then compared with the

@@ -133,7 +133,9 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   balances across continuation pages, with descriptionless and non-dated lines
   explicitly unresolved. A read-only XLSX adapter passes synthetic workbook
   checks with ZIP/sheet limits, but has no referenced archive fixture or XML
-  time bound. Continue dynamic layout PDF and decoder hardening before choosing
+  time bound. A read-only Wells Fargo business table pass supports a finite
+  page-local geometry pilot but does not establish capture or decoder bounds.
+  Continue the dynamic layout PDF pilot and decoder hardening before choosing
   final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and
   continuation/layout PDFs, plus synthetic

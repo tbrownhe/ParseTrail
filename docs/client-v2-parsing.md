@@ -146,7 +146,12 @@ reconciliation. A synthetic workbook now passes a read-only XLSX decoder pilot
 with ZIP expansion, member and sheet limits; formula and typed numeric/date
 cells are explicitly refused. No referenced archive XLSX source exists, and
 `openpyxl` XML parsing is not time bounded or cancellable. The dynamic table
-case and bounded PDF decoding remain open.
+case and bounded PDF decoding remain open. A read-only Wells Fargo business
+archive pass found retained rows classifiable as dated activity or wrapped
+description, with no date-looking first-column row after the existing table
+stop. It also confirmed that missing printed row balances are common. A
+page-local geometry operation remains a prototype candidate, not an accepted
+schema or license to derive those balances.
 
 The release gate is a reviewed engine and declarative catalog, archive-preserving
 coverage of needed formats, explicit client-built exceptions and signed offline
