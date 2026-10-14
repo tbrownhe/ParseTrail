@@ -75,17 +75,23 @@ text candidates: 330 exact occurrences, 11 unresolved overlaps and nine
 text-only candidates. The accepted reader recovered 10 text rows and one fee;
 these counts alone do not establish which unmatched candidates are new financial
 activity. A page-level follow-up classified nine overlaps as incomplete text
-copies containing only a date, one as a text copy missing the first character
-of the table description, and one as an additional identical occurrence at a
+copies containing only a date, one as a table copy missing the first character
+of the text description, and one as an additional identical occurrence at a
 distinct source line. The nine text-only rows comprise three payments, two
-interest charges and four purchases. All eight accepted statements satisfy
-their printed opening-to-closing movement equation. These particular conflicts
-do not show a foreign-transaction multiline pattern. This supports the current
-reader's row count on these sources but does not prove universal capture or
-authorize 2.0 import. Use a named, client-built Citi handler if this layout is admitted.
-It must retain each channel and source location, match duplicate occurrences
-with stronger evidence, and send conflicting candidates to review. Do not add
-a general declaration language just for this case.
+interest charges and four purchases. A finite, read-only channel resolver now
+retains table/text/fee locations, accepts only those explained candidate shapes,
+and reproduces all 421 accepted date/amount row occurrences and all eight printed
+balance equations. It makes two explicit description corrections: the fuller
+one-character text copy and a fee description with its amount removed.
+
+These particular overlap conflicts do not show a foreign-transaction multiline
+pattern. A separate dated-line scan found 71 lines outside the simple text-row
+matcher, including foreign transactions split across lines and rows interleaved
+with legal text. Their source dispositions are not yet complete. The pilot uses
+the old unbounded PDF extractor, so neither row parity nor balancing authorizes
+2.0 import. Complete a named, client-built Citi handler with full dated-line
+dispositions and bounded decoding if this layout is admitted; do not add a
+general declaration language just for this case.
 
 All unbounded PDF decode, word extraction and table finding must run behind a
 separate worker boundary with source/output size, page and row limits, a wall
@@ -120,7 +126,7 @@ a signed catalog or native acceptance.
 synthetic slice keeps the source and parser evidence, leaves rows unposted,
 posts one explicitly reviewed expense exactly once, and leaves a credit
 pending. **No go** for 2.0 activation or release yet: the PDF/XLSX decoder
-limits, a provenance-preserving Citi handler, durable evidence across engine updates,
+limits, complete Citi dated-line dispositions, durable evidence across engine updates,
 ongoing import/recovery, common reports and native GUI acceptance remain open.
 
 A proposed 2.0 profile is separate from 1.x. If the owner returns to 1.4.2,

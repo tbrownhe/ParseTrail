@@ -141,13 +141,24 @@ unmatched candidate is automatically admitted. Inputs were hash-verified and
 unchanged.
 
 A second read-only page-level check found that nine overlaps are incomplete
-date-only text copies on the same page as their table row, one text copy has
-lost the table description's first character, and one is an additional exact
+date-only text copies on the same page as their table row, one table copy has
+lost the text description's first character, and one is an additional exact
 occurrence on a distinct source line. The nine text-only rows are three payments,
-two interest charges and four purchases. The current accepted rows balance to
-the printed endpoints on all eight sources. These findings narrow the fixture
-cases for a future named handler; the audit command below still reports the
-conservative unresolved categories and changes no financial row.
+two interest charges and four purchases. The finite
+[`citi_channels.py`](citi_channels.py) pilot retains each table/text/fee candidate
+location, pairs only explained occurrences and refuses other overlaps or a
+failed printed balance equation. On the eight authorized sources it reproduces
+all 421 accepted date/amount row occurrences and all eight printed balance
+equations. Two descriptions intentionally differ from the old reader: the
+fuller text version of a truncated table description and a fee description
+without its trailing amount. No journal posting or category decision is made.
+
+The audit also counts 36 dated lines with money and 35 without money that the
+simple text-row matcher does not accept. Some are foreign transactions split
+across lines; others mix transaction text with legal copy. This is a separate
+complete-capture gate: each such line needs a source disposition before the
+handler may be used for normal imports. The pilot still uses the old unbounded
+PDF decoder and table extractor.
 
 Run one authorized source with:
 
@@ -155,8 +166,8 @@ Run one authorized source with:
 client/.venv/Scripts/python.exe -m devtools.parser_engine_pilot.audit_citi_channels C:\private\recent-citi.pdf
 ```
 
-The audit uses the existing unbounded PDF decoder. A named client-built handler
-with provenance and conflict review remains a design and fixture gate.
+The audit uses the existing unbounded PDF decoder. The pilot's finite candidate
+resolver is not a runtime parser or a complete source-line inventory.
 
 Run the synthetic tests from the repository root:
 
@@ -168,6 +179,7 @@ client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_h
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_xlsx_adapter.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_wells_table.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_audit_citi_channels.py
+client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_citi_channels.py
 ```
 
 `mohela-pilot-definition.json` exercises those three finite layout/identity

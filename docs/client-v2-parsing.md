@@ -166,15 +166,19 @@ occurrence subtraction can also overlap text and table candidates with different
 descriptions. The exact-description comparison leaves additional candidates
 whose financial meaning cannot be inferred from counts alone. Page-level review
 of the eight referenced sources found nine date-only incomplete text copies,
-one missing-first-character copy, and one additional identical occurrence on
-two distinct lines. The nine text-only rows comprise three payments, two interest
-charges and four purchases. The accepted rows balance to the printed endpoints
-on all eight sources. None of these particular conflicts showed a nearby foreign
-or exchange marker; this does not rule out foreign multiline behavior in other
-sources. A named client-built Citi handler may combine bounded table, text and
-fee channels while retaining each location, testing duplicate occurrences and
-refusing any still-ambiguous match. Do not grow a general JSON expression
-language for this case.
+one table copy missing the text description's first character, and one
+additional identical occurrence on two distinct lines. The nine text-only rows
+comprise three payments, two interest charges and four purchases. A finite
+[Citi channel resolver pilot](../devtools/parser_engine_pilot/citi_channels.py)
+now reproduces all 421 accepted date/amount row occurrences and balances on
+the eight sources; it preserves source locations and refuses other overlaps.
+Two descriptions intentionally differ: the fuller text copy and a fee label
+without its trailing amount. The 20 overlap/text-only candidates are not the
+foreign multiline pattern. A separate scan found 71 other dated lines outside
+the simple text-row matcher, including foreign multiline rows and legal-text
+interleaving. They still need explicit dispositions before complete-capture
+claims. Keep this behavior in a named handler rather than a general JSON
+expression language.
 
 Before any PDF or XLSX pilot is used for normal import, run library decoding in
 a separate worker with input/output, page/row, wall-clock and OS memory limits.

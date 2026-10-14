@@ -8,7 +8,6 @@ import json
 import re
 from collections import Counter
 from dataclasses import dataclass
-from datetime import date
 from pathlib import Path
 from typing import Literal
 
@@ -20,16 +19,7 @@ from parsetrail.core.utils import PDFReader, get_absolute_date
 from parsetrail.plugins.pdf_citicc_202506 import Parser as OlderCiti
 from parsetrail.plugins.pdf_citicc_202511 import Parser as RecentCiti
 
-
-@dataclass(frozen=True, slots=True)
-class Candidate:
-    transaction_date: date
-    posting_date: date
-    amount_minor: int
-    description: str
-    channel: Literal["table", "text"]
-    page: int | None = None
-    line: int | None = None
+from devtools.parser_engine_pilot.citi_channels import Candidate, resolve
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +69,61 @@ def overlap_shape(candidate: Candidate, table: list[Candidate]) -> str:
     return "unclassified_overlap"
 
 
+def fee_candidates(parser: RecentCiti, pages: list[str]) -> list[Candidate]:
+    """Locate multiline fee rows in the printed fee section."""
+    result = []
+    for page_number, page in enumerate(pages, 1):
+        in_fees = False
+        pending: tuple[str, list[str], int] | None = None
+        for line_number, raw in enumerate(page.splitlines(), 1):
+            line = " ".join(raw.split())
+            if line == "Fees Charged":
+                in_fees = True
+                continue
+            if not in_fees:
+                continue
+            if "TOTAL FEES FOR THIS PERIOD" in line:
+                break
+            date_match = parser.DATE_PREFIX.match(line)
+            if date_match:
+                pending = (date_match.group("date"), [date_match.group("description")], line_number)
+            elif pending:
+                pending[1].append(line)
+            if pending is None:
+                continue
+            amount_match = parser.AMOUNT.search(line)
+            if amount_match is None:
+                continue
+            transaction_date = get_absolute_date(pending[0], parser.start_date, parser.end_date).date()
+            description = " ".join(" ".join(pending[1]).replace(amount_match.group(), "").split())
+            result.append(
+                Candidate(
+                    transaction_date,
+                    transaction_date,
+                    -to_minor_units(parse_money(amount_match.group())),
+                    description,
+                    "fee",
+                    page_number,
+                    pending[2],
+                    line_number,
+                )
+            )
+            pending = None
+    return result
+
+
+def unmatched_dated_line_counts(parser: RecentCiti, pages: list[str]) -> Counter[str]:
+    """Count dated source lines outside the finite text-row matcher."""
+    counts: Counter[str] = Counter()
+    for page in pages:
+        for line in page.splitlines():
+            if parser.DATE_PREFIX.match(line) is None or parser.TEXT_TRANSACTION.match(line):
+                continue
+            kind = "with_money" if parser.AMOUNT.search(line) else "without_money"
+            counts[kind] += 1
+    return counts
+
+
 def audit(source: bytes) -> dict[str, int | bool]:
     """Audit only the recognized 2025-11 layout and report aggregate counts."""
     logger.remove()
@@ -111,14 +156,16 @@ def audit(source: bytes) -> dict[str, int | bool]:
                 parser.get_vertical_lines(page)
             if parser.vertical_lines:
                 page_rows.extend(
-                    (page_number, row)
-                    for row in parser.parse_transaction_array(parser.get_transactions_from_page(page))
+                    (page_number, row_number, row)
+                    for row_number, row in enumerate(
+                        parser.parse_transaction_array(parser.get_transactions_from_page(page)), 1
+                    )
                 )
 
         def row_key(row):
             return (row.transaction_date, row.posting_date, row.amount, row.desc)
 
-        if Counter(map(row_key, table_transactions)) != Counter(row_key(row) for _, row in page_rows):
+        if Counter(map(row_key, table_transactions)) != Counter(row_key(row) for _, _, row in page_rows):
             raise ValueError("page_table_rows_changed")
         table = [
             Candidate(
@@ -128,8 +175,9 @@ def audit(source: bytes) -> dict[str, int | bool]:
                 " ".join(row.desc.split()),
                 "table",
                 page_number,
+                row_number,
             )
-            for page_number, row in page_rows
+            for page_number, row_number, row in page_rows
         ]
         text = []
         for page_number, page in enumerate(reader.pages_simple or [], 1):
@@ -163,6 +211,45 @@ def audit(source: bytes) -> dict[str, int | bool]:
             raise ValueError("accepted_row_count_changed")
         account = accepted.accounts[0]
         reconciles = account.start_balance + sum(row.amount for row in account.transactions) == account.end_balance
+        located_fees = fee_candidates(parser, reader.pages_simple or [])
+        dated_auxiliary = unmatched_dated_line_counts(parser, reader.pages_simple or [])
+        resolution = resolve(
+            table,
+            text,
+            located_fees,
+            opening_minor=to_minor_units(account.start_balance),
+            closing_minor=to_minor_units(account.end_balance),
+        )
+        resolved_rows = Counter(
+            (row.representative.transaction_date, row.representative.posting_date, row.representative.amount_minor)
+            for row in resolution.rows
+        )
+        accepted_rows = Counter(
+            (row.transaction_date, row.posting_date, to_minor_units(row.amount)) for row in account.transactions
+        )
+        if resolved_rows != accepted_rows:
+            raise ValueError("resolved_row_parity")
+        resolved_descriptions = Counter(
+            (
+                row.representative.transaction_date,
+                row.representative.posting_date,
+                row.representative.amount_minor,
+                row.representative.description,
+            )
+            for row in resolution.rows
+        )
+        accepted_descriptions = Counter(
+            (
+                row.transaction_date,
+                row.posting_date,
+                to_minor_units(row.amount),
+                " ".join(row.desc.split()),
+            )
+            for row in account.transactions
+        )
+        description_differences = sum((resolved_descriptions - accepted_descriptions).values())
+        if description_differences > resolution.first_character_corrections + len(located_fees):
+            raise ValueError("unexpected_description_difference")
     return {
         "table_candidates": len(table),
         "text_candidates": len(text),
@@ -176,6 +263,12 @@ def audit(source: bytes) -> dict[str, int | bool]:
         "additional_exact_occurrences": shapes["additional_exact_occurrence"],
         "unclassified_overlaps": shapes["unclassified_overlap"],
         "accepted_balance_reconciles": reconciles,
+        "resolved_row_count": len(resolution.rows),
+        "resolved_row_parity": True,
+        "resolved_description_differences": description_differences,
+        "located_fee_count": len(located_fees),
+        "dated_unmatched_with_money": dated_auxiliary["with_money"],
+        "dated_unmatched_without_money": dated_auxiliary["without_money"],
     }
 
 

@@ -134,8 +134,11 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   referenced archive sources but do not establish capture or decoder bounds.
   Citi multi-channel recovery has conflicting date/amount-only matches. A
   read-only page-level follow-up classified the eight referenced sources'
-  candidate shapes and confirmed their accepted rows balance; implement a
-  named provenance-preserving handler before runtime admission.
+  candidate shapes. A finite channel resolver reproduces all 421 accepted
+  date/amount row occurrences and printed balance equations, while refusing
+  unexplained overlaps. The simple text matcher also leaves 71 dated source
+  lines for explicit disposition, including foreign multiline activity.
+  Complete this named handler and decoder limits before runtime admission.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and
   continuation/layout PDFs, plus synthetic
