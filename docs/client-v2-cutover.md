@@ -113,6 +113,9 @@ Windows native tests exercised memory refusal and deadline termination; its
 output matched the existing decoder on nine recent-layout Citi archive PDFs
 with unchanged source hashes. Word/table finding and Intel Mac native checks
 remain open, so this does not admit Citi or other PDFs to runtime imports.
+The XLSX adapter also runs in a fixed, bounded worker and matches the
+in-process synthetic evidence. It has no referenced archive workbook and
+still needs Intel Mac native checks before runtime admission.
 
 ## Implementation chunks
 

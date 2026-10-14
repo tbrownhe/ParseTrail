@@ -8,12 +8,8 @@ import sys
 import pytest
 from parsetrail.core.runtime_smoke import _sample_pdf
 
-from devtools.parser_engine_pilot.bounded_pdf_text import (
-    DecodeLimits,
-    DecoderError,
-    _WindowsJob,
-    decode_text,
-)
+from devtools.parser_engine_pilot.bounded_pdf_text import decode_text
+from devtools.parser_engine_pilot.worker_limits import WorkerError, WorkerLimits, _WindowsJob
 
 
 def test_decodes_synthetic_pdf_in_bounded_worker() -> None:
@@ -21,16 +17,16 @@ def test_decodes_synthetic_pdf_in_bounded_worker() -> None:
 
 
 def test_refuses_oversized_or_invalid_pdf_without_source_in_error() -> None:
-    with pytest.raises(DecoderError, match="source_size"):
+    with pytest.raises(WorkerError, match="source_size"):
         decode_text(b"")
-    with pytest.raises(DecoderError, match="worker_failed") as error:
+    with pytest.raises(WorkerError, match="worker_failed") as error:
         decode_text(b"private statement text")
     assert "private" not in str(error.value)
 
 
 def test_deadline_terminates_worker() -> None:
-    with pytest.raises(DecoderError, match="timeout"):
-        decode_text(_sample_pdf(), DecodeLimits(wall_seconds=0.01))
+    with pytest.raises(WorkerError, match="timeout"):
+        decode_text(_sample_pdf(), WorkerLimits(wall_seconds=0.01))
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows Job Object check")

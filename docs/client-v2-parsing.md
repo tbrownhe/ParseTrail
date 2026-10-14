@@ -149,9 +149,10 @@ and leaves descriptionless rows unknown. This establishes cash evidence parity
 with the accepted reader, not investment coverage, full capture or account
 reconciliation. A synthetic workbook now passes a read-only XLSX decoder pilot
 with ZIP expansion, member and sheet limits; formula and typed numeric/date
-cells are explicitly refused. No referenced archive XLSX source exists, and
-`openpyxl` XML parsing is not time bounded or cancellable. The dynamic table
-case and bounded PDF decoding remain open. A read-only Wells Fargo business
+cells are explicitly refused. A bounded XLSX worker now runs that adapter under
+Windows process memory and time limits with exact synthetic evidence parity.
+No referenced archive XLSX source exists and Intel Mac limits need native
+checks. The dynamic PDF table case remains open. A read-only Wells Fargo business
 archive pass found retained rows classifiable as dated activity or wrapped
 description, with no date-looking first-column row after the existing table
 stop. It also confirmed that missing printed row balances are common. A
@@ -197,9 +198,10 @@ An isolated [PDF simple-text worker pilot](../devtools/parser_engine_pilot/bound
 now covers that path: on Windows its Job Object memory cap and deadline passed
 native synthetic checks, and its text matched the existing decoder on nine
 recent-layout Citi PDFs without changing source hashes. Word/table extraction
-and XLSX XML decoding remain outside this boundary; Intel Mac memory and timeout
-behavior still need native checks. Existing in-memory limits after other decode
-paths do not provide the required boundary.
+remains outside this boundary. The [XLSX worker pilot](../devtools/parser_engine_pilot/bounded_xlsx.py)
+uses the same fixed process limiter and matches synthetic in-process evidence;
+it still lacks an archived workbook fixture. Intel Mac memory and timeout
+behavior still need native checks.
 The [fresh-profile service slice](../devtools/v2_fresh_slice/README.md) uses a
 synthetic CSV with an explicit posting-date role, so it can exercise
 evidence-to-ledger review without making a PDF-decoder or Citi claim.

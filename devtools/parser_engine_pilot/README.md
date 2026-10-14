@@ -38,9 +38,11 @@ size, checks every member before `openpyxl` decoding, and selects one explicit
 sheet with bounded dimensions. It accepts string/blank cells only, rejecting
 formulas and typed numeric/date cells until their exact-value and display
 semantics are specified. Sheet/cell locations and extractor version remain in
-the evidence. This is a pilot decoder: XML parsing inside `openpyxl` has no
-time budget or cancellation hook, and no archived statement exercises XLSX
-parity. Do not use it for runtime admission without those gates.
+the evidence. [`bounded_xlsx.py`](bounded_xlsx.py) now runs that adapter in the
+same fixed-worker resource boundary used for PDF text. It matched the
+in-process evidence on a synthetic workbook, refused formulas and terminated
+at its deadline on Windows. No archived statement exercises XLSX parity, and
+Intel Mac native limits remain untested. This is not a runtime import path.
 
 `pdf_lines.py` is a separate P2-3 provenance experiment for text already
 extracted by a trusted PDF reader. It binds each raw/normalized line to the
@@ -189,8 +191,9 @@ resolver is not a runtime parser or a complete source-line inventory.
 
 [`bounded_pdf_text.py`](bounded_pdf_text.py) starts a separate PDF text worker
 with source, output, page, line and extracted-text limits plus a wall-clock
-deadline. Windows uses a Job Object committed-memory limit; POSIX workers set
-`RLIMIT_AS` before importing `pdfplumber`. The Windows synthetic test exercised
+deadline. Both workers use [`worker_limits.py`](worker_limits.py): Windows uses
+a Job Object committed-memory limit; POSIX workers set
+`RLIMIT_AS` before importing decoder libraries. The Windows synthetic test exercised
 actual memory refusal and deadline termination. Isolated text extraction exactly
 matched the existing decoder on nine recent-layout archive PDFs, and source
 hashes remained unchanged. This pilot covers simple text only: PDF word/table
@@ -211,6 +214,7 @@ client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_c
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_table_continuations.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_channel_occurrences.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_bounded_pdf_text.py
+client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_bounded_xlsx.py
 ```
 
 `mohela-pilot-definition.json` exercises those three finite layout/identity

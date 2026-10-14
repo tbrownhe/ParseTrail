@@ -6,6 +6,8 @@ import json
 import sys
 from io import BytesIO
 
+from devtools.parser_engine_pilot.worker_limits import enforce_child_memory_limit
+
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_PAGES = 100
 MAX_PAGE_TEXT_BYTES = 512 * 1024
@@ -45,13 +47,7 @@ def extract(source: bytes) -> tuple[str, ...]:
 
 def main() -> int:
     try:
-        memory_bytes = int(sys.argv[1])
-        if not 128 * 1024 * 1024 <= memory_bytes <= 2 * 1024 * 1024 * 1024:
-            return 1
-        if sys.platform != "win32":
-            import resource
-
-            resource.setrlimit(resource.RLIMIT_AS, (memory_bytes, memory_bytes))
+        enforce_child_memory_limit(sys.argv[1])
         source = sys.stdin.buffer.read(MAX_SOURCE_BYTES + 1)
         pages = extract(source)
         payload = json.dumps({"pages": pages}, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
