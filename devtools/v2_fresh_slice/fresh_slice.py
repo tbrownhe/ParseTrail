@@ -23,10 +23,19 @@ from parsetrail.core.ledger import (
     Posting,
 )
 from parsetrail.core.ledger_store import LedgerStore, encoded
+from pydantic import ValidationError
 
-from devtools.parser_engine_pilot.engine import Evidence, load_definition, parse_csv
+from devtools.parser_engine_pilot.engine import (
+    MAX_DEFINITION_BYTES,
+    MAX_SOURCE_BYTES,
+    Evidence,
+    load_definition,
+    parse_csv,
+)
+from devtools.v2_fresh_slice.stored_evidence import MAX_EVIDENCE_BYTES, StoredEvidenceV1
 
 PROFILE_VERSION = 1
+MANIFEST_KEYS = frozenset({"profile_version", "source_sha256", "definition_sha256", "evidence_sha256", "account_id"})
 
 
 class FreshSliceError(ValueError):
@@ -101,16 +110,33 @@ def create_disposable_profile(
     return output
 
 
-def _open_verified(profile: Path) -> tuple[dict, Evidence]:
-    profile = profile.resolve(strict=True)
+def _open_verified(profile: Path) -> tuple[dict, StoredEvidenceV1]:
     try:
+        profile = profile.resolve(strict=True)
+        if (profile / "manifest.json").stat().st_size > 4096:
+            raise FreshSliceError("profile_contents")
         manifest = json.loads((profile / "manifest.json").read_text(encoding="utf-8"))
+        if (
+            (profile / "source.csv").stat().st_size > MAX_SOURCE_BYTES
+            or (profile / "definition.json").stat().st_size > MAX_DEFINITION_BYTES
+            or (profile / "evidence.json").stat().st_size > MAX_EVIDENCE_BYTES
+        ):
+            raise FreshSliceError("profile_contents")
         source = (profile / "source.csv").read_bytes()
         definition = (profile / "definition.json").read_bytes()
         saved_evidence = (profile / "evidence.json").read_bytes()
     except (OSError, ValueError):
         raise FreshSliceError("profile_contents") from None
-    if manifest.get("profile_version") != PROFILE_VERSION or any(
+    if (
+        not isinstance(manifest, dict)
+        or set(manifest) != MANIFEST_KEYS
+        or type(manifest["profile_version"]) is not int
+        or manifest["profile_version"] != PROFILE_VERSION
+        or not isinstance(manifest["account_id"], str)
+        or not manifest["account_id"]
+    ):
+        raise FreshSliceError("unsupported_profile_format")
+    if any(
         manifest.get(key) != _hash(content)
         for key, content in (
             ("source_sha256", source),
@@ -119,9 +145,12 @@ def _open_verified(profile: Path) -> tuple[dict, Evidence]:
         )
     ):
         raise FreshSliceError("profile_hash_mismatch")
-    evidence = _evidence(source, definition)
-    if encoded(asdict(evidence)).encode() != saved_evidence:
-        raise FreshSliceError("evidence_replay_changed")
+    try:
+        evidence = StoredEvidenceV1.model_validate_json(saved_evidence)
+    except ValidationError:
+        raise FreshSliceError("invalid_saved_evidence") from None
+    if evidence.source_sha256 != _hash(source) or evidence.definition_sha256 != _hash(definition):
+        raise FreshSliceError("evidence_source_mismatch")
     return manifest, evidence
 
 

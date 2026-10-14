@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
@@ -78,3 +79,48 @@ def test_rejects_tampered_source_and_nonexpense_decisions(tmp_path: Path) -> Non
     (profile / "source.csv").write_bytes(SOURCE + b"10/03/2026,Checking A,Tamper,-$1.00,$995.00\n")
     with pytest.raises(FreshSliceError, match="profile_hash_mismatch"):
         review_items(profile)
+
+
+def test_saved_evidence_reopens_without_reparsing_and_rejects_unknown_schema(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    profile = create(tmp_path / "fresh-profile")
+
+    def forbidden_reparse(*_args, **_kwargs):
+        raise AssertionError("reparse must not run on reopen")
+
+    monkeypatch.setattr("devtools.v2_fresh_slice.fresh_slice._evidence", forbidden_reparse)
+    rows = review_items(profile)
+    assert [row["status"] for row in rows] == ["pending", "pending"]
+    assert accept_expense(profile, rows[0]["row_id"], "expense:food", reason="Synthetic review")
+
+    saved = json.loads((profile / "evidence.json").read_bytes())
+    saved["output_schema_version"] = 2
+    changed = json.dumps(saved).encode()
+    (profile / "evidence.json").write_bytes(changed)
+    manifest_path = profile / "manifest.json"
+    manifest = json.loads(manifest_path.read_bytes())
+    manifest["evidence_sha256"] = sha256(changed).hexdigest()
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(FreshSliceError, match="invalid_saved_evidence"):
+        review_items(profile)
+
+
+def test_refuses_legacy_and_newer_profile_targets_before_writes(tmp_path: Path) -> None:
+    legacy = tmp_path / "legacy.db"
+    legacy.write_bytes(b"old profile marker")
+    with pytest.raises(FreshSliceError, match="profile_contents"):
+        review_items(legacy)
+    assert legacy.read_bytes() == b"old profile marker"
+
+    profile = create(tmp_path / "fresh-profile")
+    manifest_path = profile / "manifest.json"
+    manifest = json.loads(manifest_path.read_bytes())
+    manifest["profile_version"] = 2
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    with pytest.raises(FreshSliceError, match="unsupported_profile_format"):
+        accept_expense(profile, "absent", "expense:food", reason="No write")
+    from parsetrail.core.ledger_store import LedgerStore
+
+    with LedgerStore(profile / "ledger.db", read_only=True) as store:
+        assert store.connection.execute("SELECT count(*) FROM LedgerEntries").fetchone()[0] == 0

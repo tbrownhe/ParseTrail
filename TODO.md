@@ -162,7 +162,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   releases. Keep 1.4 artifacts available for rollback. No server deployment yet.
 - [ ] **V2-2 — Format boundary:** create a clean 2.x profile and refuse 1.x,
   unknown, corrupt and newer databases before writes. Migrate only between
-  released 2.x schema revisions.
+  released 2.x schema revisions. The isolated fresh-profile slice now reopens
+  stored, hash-checked evidence without reparsing and refuses synthetic legacy,
+  unknown and newer profile shapes before ledger writes; production integration
+  and a released snapshot schema remain open.
 - [ ] **V2-3a–c — Import integration:** common replay/ongoing ingestion, bounded export
   evidence policy, then main-window import/cancellation/archive recovery and Windows
   acceptance. Keep each service/UI chunk separately testable.

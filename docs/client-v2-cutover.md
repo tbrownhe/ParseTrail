@@ -132,16 +132,19 @@ The isolated [fresh-profile stop/go slice](../devtools/v2_fresh_slice/README.md)
 exercises one synthetic CSV from parsed evidence to a disposable ledger and
 explicit expense review. It proves a useful service boundary without a 1.x
 database updater. It is not the application import UI, a production 2.x schema,
-a signed catalog or native acceptance.
+a signed catalog or native acceptance. Its saved evidence snapshot now reopens
+without reparsing, and strict format checks refuse legacy, unknown and newer
+profile shapes before ledger writes in synthetic tests.
 
 ## Current stop/go decision
 
 **Go** for fresh-profile service integration and finite parser work. The
 synthetic slice keeps the source and parser evidence, leaves rows unposted,
 posts one explicitly reviewed expense exactly once, and leaves a credit
-pending. **No go** for 2.0 activation or release yet: the PDF/XLSX decoder
-limits, complete Citi dated-line dispositions, durable evidence across engine updates,
-ongoing import/recovery, common reports and native GUI acceptance remain open.
+pending. **No go** for 2.0 activation or release yet: the remaining PDF/XLSX
+decoder limits, complete Citi dated-line dispositions, production snapshot
+integration, ongoing import/recovery, common reports and native GUI acceptance
+remain open.
 
 A proposed 2.0 profile is separate from 1.x. If the owner returns to 1.4.2,
 it opens only the retained 1.x profile; it never reads a 2.x database. Work done
