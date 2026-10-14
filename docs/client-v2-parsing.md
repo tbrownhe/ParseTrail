@@ -183,9 +183,13 @@ claims. The repeated row-continuation behavior belongs in a bounded engine
 operation: Citi, Synchrony, LendingClub and Wells all use it. A strict
 [table-continuation pilot](../devtools/parser_engine_pilot/table_continuations.py)
 now covers two finite shapes with column selectors and source-row references.
-Exact occurrence reconciliation across channels is likewise an engine-operation
-candidate. Leave only genuinely Citi-specific geometry or fee-section selection
-in a named built-in extractor if the shared operations cannot express it simply.
+The [shared occurrence pilot](../devtools/parser_engine_pilot/channel_occurrences.py)
+now pairs exact table/text copies one to one under a strict same-page rule and
+leaves all other occurrences for explicit disposition. The refactored Citi
+audit passed on nine recent-layout archive files with 428 resolved occurrences
+and nine printed balance equations; each source hash was unchanged. Leave only
+genuinely Citi-specific geometry or fee-section selection in a named built-in
+extractor if the shared operations cannot express it simply.
 
 Before any PDF or XLSX pilot is used for normal import, run library decoding in
 a separate worker with input/output, page/row, wall-clock and OS memory limits.

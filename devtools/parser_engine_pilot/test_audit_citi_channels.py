@@ -15,18 +15,18 @@ from devtools.parser_engine_pilot.audit_citi_channels import (
 )
 
 
-def candidate(description: str, channel: str, amount: int = -100) -> Candidate:
-    return Candidate(date(2026, 8, 1), date(2026, 8, 2), amount, description, channel)
+def candidate(description: str, channel: str, line: int, amount: int = -100) -> Candidate:
+    return Candidate(date(2026, 8, 1), date(2026, 8, 2), amount, description, channel, 3, line)
 
 
 def test_exact_occurrences_match_but_conflicts_remain_unresolved() -> None:
-    table = [candidate("Same", "table"), candidate("Same", "table"), candidate("Other", "table")]
+    table = [candidate("Same", "table", 1), candidate("Same", "table", 2), candidate("Other", "table", 3)]
     text = [
-        candidate("Same", "text"),
-        candidate("Same", "text"),
-        candidate("Same", "text"),
-        candidate("Different", "text"),
-        candidate("Only in text", "text", -200),
+        candidate("Same", "text", 10),
+        candidate("Same", "text", 11),
+        candidate("Same", "text", 12),
+        candidate("Different", "text", 13),
+        candidate("Only in text", "text", 14, -200),
     ]
     assert [item.status for item in dispositions(table, text)] == [
         "exact_table_occurrence",

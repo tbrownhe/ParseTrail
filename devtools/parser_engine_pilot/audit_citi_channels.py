@@ -19,7 +19,8 @@ from parsetrail.core.utils import PDFReader, get_absolute_date
 from parsetrail.plugins.pdf_citicc_202506 import Parser as OlderCiti
 from parsetrail.plugins.pdf_citicc_202511 import Parser as RecentCiti
 
-from devtools.parser_engine_pilot.citi_channels import Candidate, resolve
+from devtools.parser_engine_pilot.channel_occurrences import Candidate, match_occurrences
+from devtools.parser_engine_pilot.citi_channels import CITI_OCCURRENCE_RULE, resolve
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,20 +31,15 @@ class TextDisposition:
 
 def dispositions(table: list[Candidate], text: list[Candidate]) -> tuple[TextDisposition, ...]:
     """Match exact occurrences; never infer that a coarse-key conflict is a new row."""
-    available = Counter((row.transaction_date, row.posting_date, row.amount_minor, row.description) for row in table)
-    coarse = {(row.transaction_date, row.posting_date, row.amount_minor) for row in table}
     result = []
-    for row in text:
-        exact = (row.transaction_date, row.posting_date, row.amount_minor, row.description)
-        broad = exact[:3]
-        if available[exact]:
-            available[exact] -= 1
+    for match in match_occurrences(CITI_OCCURRENCE_RULE, table, text):
+        if match.status == "exact_copy":
             status = "exact_table_occurrence"
-        elif broad in coarse:
-            status = "unresolved_overlap"
-        else:
+        elif match.status == "secondary_only":
             status = "text_only_candidate"
-        result.append(TextDisposition(row, status))
+        else:
+            status = "unresolved_overlap"
+        result.append(TextDisposition(match.secondary, status))
     return tuple(result)
 
 

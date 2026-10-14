@@ -68,9 +68,9 @@ built-in exceptions. The 1.4 bytecode catalog belongs to the old application;
 2.0 does not need a compatibility loader for it.
 
 Bounded table-row continuation is shared by Citi, Synchrony, LendingClub and
-Wells parsers, so it belongs in the declarative engine. Exact occurrence
-matching across extraction channels is also a finite engine-operation
-candidate. The current Citi resolver pilots that rule; it is not a commitment
+Wells parsers, so it belongs in the declarative engine. A shared finite pilot
+now pairs exact occurrences across extraction channels while leaving financial
+disposition to the caller. The Citi resolver uses it; this is not a commitment
 to a permanent institution-specific subsystem. Reserve a Citi-specific
 extractor for page geometry or fee-section shapes that the shared operations
 cannot express clearly.
@@ -97,9 +97,8 @@ pattern. A separate dated-line scan found 71 lines outside the simple text-row
 matcher, including foreign transactions split across lines and rows interleaved
 with legal text. Their source dispositions are not yet complete. The pilot uses
 the old unbounded PDF extractor, so neither row parity nor balancing authorizes
-2.0 import. Complete shared continuation/channel operations and dated-line
-dispositions under bounded decoding if this layout is admitted; do not add a
-general declaration language just for this case.
+2.0 import. Complete dated-line dispositions and bound decoding before admitting
+this layout; do not add a general declaration language just for this case.
 
 All unbounded PDF decode, word extraction and table finding must run behind a
 separate worker boundary with source/output size, page and row limits, a wall

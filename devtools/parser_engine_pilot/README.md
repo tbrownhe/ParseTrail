@@ -168,7 +168,15 @@ every raw page/row reference and refuses orphan, truncated or undeclared
 continuations. Synthetic fixtures cover the amount-on-last-row shape used by
 Citi/Synchrony and the following-description shape used by Wells/LendingClub.
 This is the proposed engine boundary; the Citi candidate resolver remains a
-pilot whose common occurrence-matching logic should move into the engine.
+pilot. Its common occurrence-matching logic now lives in
+[`channel_occurrences.py`](channel_occurrences.py): a strict same-page rule pairs
+exact table/text copies one to one and labels additional exact, coarse overlap
+and text-only occurrences without admitting a financial row. Citi-specific
+artifact rules and the printed balance equation remain in `citi_channels.py`.
+The refactored read-only audit passed on nine recent-layout archive files,
+reproducing 428 accepted date/amount occurrences and nine printed balance
+equations; each input's hash was unchanged. These checks do not resolve the
+unmatched dated-line capture gate or bound PDF decoding.
 
 Run one authorized source with:
 
@@ -191,6 +199,7 @@ client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_w
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_audit_citi_channels.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_citi_channels.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_table_continuations.py
+client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_channel_occurrences.py
 ```
 
 `mohela-pilot-definition.json` exercises those three finite layout/identity
@@ -208,5 +217,5 @@ occurrences and activity span. The source file was unchanged. This is one
 fixture comparison, not a declaration-schema freeze or accounting acceptance.
 The accepted reader's more permissive money syntax still needs a disposition
 for other exports, and revised/ambiguous exports must never overwrite previous
-evidence. Citi's combined table/text recovery remains an exception candidate.
+evidence. Citi's layout-specific extraction remains an exception candidate.
 These results should inform V2-2 storage before its schema is frozen.

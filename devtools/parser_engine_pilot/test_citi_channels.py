@@ -6,7 +6,8 @@ from datetime import date
 
 import pytest
 
-from devtools.parser_engine_pilot.citi_channels import Candidate, CitiChannelError, resolve
+from devtools.parser_engine_pilot.channel_occurrences import Candidate, OccurrenceError
+from devtools.parser_engine_pilot.citi_channels import resolve
 
 DAY = date(2026, 8, 2)
 
@@ -41,17 +42,25 @@ def test_pairs_copies_and_keeps_a_real_duplicate_and_text_only_rows() -> None:
 
 def test_refuses_unexplained_overlap_or_unbalanced_candidate_set() -> None:
     table = [row("STORE A", -100, "table", 1)]
-    with pytest.raises(CitiChannelError, match="unresolved_text_overlap"):
+    with pytest.raises(OccurrenceError, match="unresolved_text_overlap"):
         resolve(table, [row("STORE B", -100, "text", 2)], [], opening_minor=0, closing_minor=-100)
-    with pytest.raises(CitiChannelError, match="balance_mismatch"):
+    with pytest.raises(OccurrenceError, match="balance_mismatch"):
         resolve(table, [row("STORE A", -100, "text", 2)], [], opening_minor=0, closing_minor=-200)
-    with pytest.raises(CitiChannelError, match="unresolved_text_overlap"):
+    with pytest.raises(OccurrenceError, match="unresolved_text_overlap"):
         resolve([], [row("08/02", -100, "text", 2)], [], opening_minor=0, closing_minor=0)
+    with pytest.raises(OccurrenceError, match="unresolved_text_overlap"):
+        resolve(
+            [row("STORE A", -100, "table", 1)],
+            [row("XSTORE A", -100, "text", 2), row("STORE A", -100, "text", 3)],
+            [],
+            opening_minor=0,
+            closing_minor=-100,
+        )
 
 
 def test_refuses_duplicate_location_and_fee_overlap() -> None:
     table = [row("STORE", -100, "table", 1)]
-    with pytest.raises(CitiChannelError, match="duplicate_source_location"):
+    with pytest.raises(OccurrenceError, match="duplicate_source_location"):
         resolve(table, [row("STORE", -100, "text", 2)] * 2, [], opening_minor=0, closing_minor=-100)
-    with pytest.raises(CitiChannelError, match="fee_overlap"):
+    with pytest.raises(OccurrenceError, match="fee_overlap"):
         resolve(table, [], [row("FEE", -100, "fee", 3)], opening_minor=0, closing_minor=-200)
