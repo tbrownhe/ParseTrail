@@ -143,6 +143,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   archive files with 428 resolved occurrences and unchanged source hashes.
   Resolve remaining Citi-only extraction, dated-line capture and decoder limits
   before runtime admission.
+  A separate simple-text PDF worker now has byte/page/line/output, deadline and
+  OS memory limits. Windows native memory and timeout tests pass; its text
+  exactly matches nine recent-layout Citi archive PDFs without source changes.
+  Word/table finding, Intel Mac native checks and XLSX XML isolation remain open.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and
   continuation/layout PDFs, plus synthetic

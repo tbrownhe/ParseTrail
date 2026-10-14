@@ -103,9 +103,16 @@ this layout; do not add a general declaration language just for this case.
 All unbounded PDF decode, word extraction and table finding must run behind a
 separate worker boundary with source/output size, page and row limits, a wall
 clock timeout and an operating-system memory limit. Windows x64 and Intel Mac
-need native limit/termination checks. Until then, the current PDF pilots are
-development comparisons, not runtime import admission. The same rule applies
-to XML decoding in the XLSX pilot before runtime use.
+need native limit/termination checks for each admitted operation. Until then,
+the current PDF pilots are development comparisons, not runtime import
+admission. The same rule applies to XML decoding in the XLSX pilot before
+runtime use.
+
+The isolated simple-text PDF worker now has those limits for text extraction.
+Windows native tests exercised memory refusal and deadline termination; its
+output matched the existing decoder on nine recent-layout Citi archive PDFs
+with unchanged source hashes. Word/table finding and Intel Mac native checks
+remain open, so this does not admit Citi or other PDFs to runtime imports.
 
 ## Implementation chunks
 

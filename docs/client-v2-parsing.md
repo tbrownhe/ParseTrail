@@ -193,8 +193,13 @@ extractor if the shared operations cannot express it simply.
 
 Before any PDF or XLSX pilot is used for normal import, run library decoding in
 a separate worker with input/output, page/row, wall-clock and OS memory limits.
-The current in-memory limits apply after decoding and do not provide that
-boundary. Windows and Intel Mac need native timeout/memory termination checks.
+An isolated [PDF simple-text worker pilot](../devtools/parser_engine_pilot/bounded_pdf_text.py)
+now covers that path: on Windows its Job Object memory cap and deadline passed
+native synthetic checks, and its text matched the existing decoder on nine
+recent-layout Citi PDFs without changing source hashes. Word/table extraction
+and XLSX XML decoding remain outside this boundary; Intel Mac memory and timeout
+behavior still need native checks. Existing in-memory limits after other decode
+paths do not provide the required boundary.
 The [fresh-profile service slice](../devtools/v2_fresh_slice/README.md) uses a
 synthetic CSV with an explicit posting-date role, so it can exercise
 evidence-to-ledger review without making a PDF-decoder or Citi claim.

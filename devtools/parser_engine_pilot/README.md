@@ -187,6 +187,16 @@ client/.venv/Scripts/python.exe -m devtools.parser_engine_pilot.audit_citi_chann
 The audit uses the existing unbounded PDF decoder. The pilot's finite candidate
 resolver is not a runtime parser or a complete source-line inventory.
 
+[`bounded_pdf_text.py`](bounded_pdf_text.py) starts a separate PDF text worker
+with source, output, page, line and extracted-text limits plus a wall-clock
+deadline. Windows uses a Job Object committed-memory limit; POSIX workers set
+`RLIMIT_AS` before importing `pdfplumber`. The Windows synthetic test exercised
+actual memory refusal and deadline termination. Isolated text extraction exactly
+matched the existing decoder on nine recent-layout archive PDFs, and source
+hashes remained unchanged. This pilot covers simple text only: PDF word/table
+finding remains outside the worker, and Intel Mac native limits still need a
+target-machine test. No runtime import calls this pilot.
+
 Run the synthetic tests from the repository root:
 
 ```powershell
@@ -200,6 +210,7 @@ client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_a
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_citi_channels.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_table_continuations.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_channel_occurrences.py
+client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_bounded_pdf_text.py
 ```
 
 `mohela-pilot-definition.json` exercises those three finite layout/identity
