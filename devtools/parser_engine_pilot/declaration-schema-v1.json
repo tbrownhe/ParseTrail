@@ -139,6 +139,15 @@
       "title": "Date Format",
       "type": "string"
     },
+    "date_role": {
+      "default": "activity_date",
+      "enum": [
+        "activity_date",
+        "posting_date"
+      ],
+      "title": "Date Role",
+      "type": "string"
+    },
     "money_format": {
       "const": "usd_symbol_2dp",
       "title": "Money Format",

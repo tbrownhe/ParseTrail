@@ -63,6 +63,7 @@ class Definition(BaseModel):
     header: tuple[str, ...] = Field(min_length=1, max_length=MAX_COLUMNS)
     columns: Columns
     date_format: Literal["MM/DD/YYYY", "YYYY-MM-DD"]
+    date_role: Literal["activity_date", "posting_date"] = "activity_date"
     money_format: Literal["usd_symbol_2dp"]
     unknown_balance_literals: tuple[str, ...] = ()
     first_header_cell: Literal["exact", "after_last_gt"] = "exact"
@@ -154,6 +155,7 @@ class Evidence:
     definition_revision: str
     account_key: str
     date_format: str
+    date_role: Literal["activity_date", "posting_date"]
     money_format: str
     kind: Literal["activity_export"]
     rows: tuple[ActivityRow, ...]
@@ -329,6 +331,7 @@ def parse_table(
         definition_revision=definition.revision,
         account_key=definition.account_key,
         date_format=definition.date_format,
+        date_role=definition.date_role,
         money_format=definition.money_format,
         kind="activity_export",
         rows=tuple(parsed),

@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "parser_id": "synthetic_posted_cash_csv",
+  "revision": "1",
+  "suffix": ".csv",
+  "kind": "activity_export",
+  "capabilities": ["table_rows_v1"],
+  "header": ["Date", "Account", "Description", "Amount", "ReportedBalance"],
+  "columns": {
+    "account": "Account",
+    "date": "Date",
+    "description": "Description",
+    "total": "Amount",
+    "balance": "ReportedBalance"
+  },
+  "date_format": "MM/DD/YYYY",
+  "date_role": "posting_date",
+  "money_format": "usd_symbol_2dp",
+  "unknown_balance_literals": ["Unavailable"]
+}

@@ -65,6 +65,7 @@ def test_csv_evidence_preserves_components_unknown_balance_locations_and_occurre
     assert evidence.source_sha256 == hashlib.sha256(source).hexdigest()
     assert evidence.definition_sha256 == hashlib.sha256(declaration).hexdigest()
     assert evidence.output_schema_version == 1
+    assert evidence.date_role == "activity_date"
     assert evidence.extraction_adapter.startswith("python-csv-")
     assert evidence.account_identities == ("Loan A", "Loan B")
     assert (evidence.activity_start, evidence.activity_end) == ("2026-10-01", "2026-10-02")
