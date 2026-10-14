@@ -133,7 +133,9 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   Intel Mac native limit check exists. A read-only Wells Fargo business table
   pass supports a finite page-local geometry pilot; its raw cells and dated
   candidate count match all referenced archive sources but do not establish
-  capture or decoder bounds.
+  capture. A bounded worker now reproduces the in-process cells/regions on 21
+  archive PDFs (1,029 rows), but Intel Mac native limits and runtime integration
+  remain open.
   Citi multi-channel recovery has conflicting date/amount-only matches. A
   read-only page-level follow-up classified the eight referenced sources'
   candidate shapes. A finite channel resolver reproduces all 421 accepted
@@ -148,8 +150,9 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   A separate simple-text PDF worker now has byte/page/line/output, deadline and
   OS memory limits. Windows native memory and timeout tests pass; its text
   exactly matches nine recent-layout Citi archive PDFs without source changes.
-  Word/table finding and Intel Mac native checks remain open. XLSX XML decoding
-  now runs in the same bounded process pilot with synthetic parity only.
+  Wells word/table finding and XLSX XML decoding now run in the same bounded
+  process pilot. Citi word/table finding and Intel Mac native checks remain open;
+  XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and
   continuation/layout PDFs, plus synthetic

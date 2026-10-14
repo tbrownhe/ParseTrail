@@ -127,9 +127,12 @@ authorized source with:
 client/.venv/Scripts/python.exe -m devtools.parser_engine_pilot.compare_wells C:\private\business-statement.pdf
 ```
 
-`pdfplumber` PDF decoding, word extraction and table finding remain outside a
-strict execution budget. The operation is an experiment, not an accepted
-declaration shape or a runtime parser.
+[`bounded_wells.py`](bounded_wells.py) now runs PDF decoding, word extraction and
+table finding inside the fixed worker boundary. Its returned cells, regions and
+dispositions exactly matched the in-process pilot on 21 authorized archive PDFs
+(1,029 extracted table rows); every source hash remained unchanged. A synthetic
+PDF also passes the worker test. Complete page capture, Intel Mac native limits
+and runtime integration remain open; this is not an accepted declaration shape.
 
 `audit_citi_channels.py` is a read-only recent-Citi channel probe. It compares
 table and text candidates by transaction date, posting date, amount, normalized
@@ -215,6 +218,7 @@ client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_t
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_channel_occurrences.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_bounded_pdf_text.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_bounded_xlsx.py
+client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_bounded_wells.py
 ```
 
 `mohela-pilot-definition.json` exercises those three finite layout/identity

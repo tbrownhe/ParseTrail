@@ -111,8 +111,10 @@ runtime use.
 The isolated simple-text PDF worker now has those limits for text extraction.
 Windows native tests exercised memory refusal and deadline termination; its
 output matched the existing decoder on nine recent-layout Citi archive PDFs
-with unchanged source hashes. Word/table finding and Intel Mac native checks
-remain open, so this does not admit Citi or other PDFs to runtime imports.
+with unchanged source hashes. The Wells word/table pilot now uses the same
+worker: 21 archive PDFs returned exactly the in-process cells and regions, with
+unchanged source hashes. Citi word/table work, complete source capture and Intel
+Mac native checks remain open, so this does not admit PDFs to runtime imports.
 The XLSX adapter also runs in a fixed, bounded worker and matches the
 in-process synthetic evidence. It has no referenced archive workbook and
 still needs Intel Mac native checks before runtime admission.

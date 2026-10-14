@@ -13,7 +13,11 @@ MAX_MEMORY_BYTES = 2 * 1024 * 1024 * 1024
 DEFAULT_MEMORY_BYTES = 512 * 1024 * 1024
 MAX_INPUT_BYTES = 17 * 1024 * 1024
 MAX_OUTPUT_BYTES = 32 * 1024 * 1024
-WorkerModule = Literal["devtools.parser_engine_pilot.pdf_text_worker", "devtools.parser_engine_pilot.xlsx_worker"]
+WorkerModule = Literal[
+    "devtools.parser_engine_pilot.pdf_text_worker",
+    "devtools.parser_engine_pilot.xlsx_worker",
+    "devtools.parser_engine_pilot.wells_worker",
+]
 
 
 class WorkerError(ValueError):
@@ -142,7 +146,11 @@ def run_worker(
     limits: WorkerLimits = WorkerLimits(),
 ) -> bytes:
     """Run only a fixed local decoder module behind native resource limits."""
-    if module not in {"devtools.parser_engine_pilot.pdf_text_worker", "devtools.parser_engine_pilot.xlsx_worker"}:
+    if module not in {
+        "devtools.parser_engine_pilot.pdf_text_worker",
+        "devtools.parser_engine_pilot.xlsx_worker",
+        "devtools.parser_engine_pilot.wells_worker",
+    }:
         raise WorkerError("unsupported_worker")
     if not isinstance(payload, bytes) or not payload or len(payload) > MAX_INPUT_BYTES:
         raise WorkerError("input_size")

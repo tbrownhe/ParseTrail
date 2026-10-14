@@ -152,7 +152,7 @@ with ZIP expansion, member and sheet limits; formula and typed numeric/date
 cells are explicitly refused. A bounded XLSX worker now runs that adapter under
 Windows process memory and time limits with exact synthetic evidence parity.
 No referenced archive XLSX source exists and Intel Mac limits need native
-checks. The dynamic PDF table case remains open. A read-only Wells Fargo business
+checks. A read-only Wells Fargo business
 archive pass found retained rows classifiable as dated activity or wrapped
 description, with no date-looking first-column row after the existing table
 stop. It also confirmed that missing printed row balances are common. A
@@ -160,8 +160,11 @@ page-local geometry operation remains a prototype candidate, not an accepted
 schema or license to derive those balances. An isolated geometry pilot now
 retains each Wells table row's raw cells and region with an explicit disposition;
 all referenced Wells Fargo business sources matched the accepted reader on
-retained cells and dated-candidate count. The PDF decoder/table-finder remains
-unbounded, and neither match proves full page capture.
+retained cells and dated-candidate count. A [bounded Wells worker pilot](../devtools/parser_engine_pilot/bounded_wells.py)
+now moves word extraction and table finding out of process. Its evidence exactly
+matched the in-process pilot on 21 archive PDFs (1,029 extracted rows) without
+changing source hashes. Neither comparison proves full page capture; Intel Mac
+native limits and runtime integration remain open.
 
 The October 13 read-only Citi channel audit found that the current recent-layout
 reader needs text and fee recovery in addition to tables. Its date/amount-only
@@ -197,8 +200,9 @@ a separate worker with input/output, page/row, wall-clock and OS memory limits.
 An isolated [PDF simple-text worker pilot](../devtools/parser_engine_pilot/bounded_pdf_text.py)
 now covers that path: on Windows its Job Object memory cap and deadline passed
 native synthetic checks, and its text matched the existing decoder on nine
-recent-layout Citi PDFs without changing source hashes. Word/table extraction
-remains outside this boundary. The [XLSX worker pilot](../devtools/parser_engine_pilot/bounded_xlsx.py)
+recent-layout Citi PDFs without changing source hashes. Wells word/table
+extraction uses the same boundary, while Citi word/table extraction does not yet.
+The [XLSX worker pilot](../devtools/parser_engine_pilot/bounded_xlsx.py)
 uses the same fixed process limiter and matches synthetic in-process evidence;
 it still lacks an archived workbook fixture. Intel Mac memory and timeout
 behavior still need native checks.
