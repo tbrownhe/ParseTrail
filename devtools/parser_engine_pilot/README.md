@@ -165,6 +165,14 @@ complete-capture gate: each such line needs a source disposition before the
 layout may be used for normal imports. The pilot still uses the old unbounded
 PDF decoder and table extractor.
 
+A later nine-file read-only sample found 67 such dated lines. Sixty-three had
+money on that line or the next; 62 had same-page table candidates with the same
+date and amount (51 unique, 11 multiple). One matched a statement row without
+a same-page table counterpart. Four had no amount in that two-line window,
+including a multiline fee start. The eight-file counts above and this nine-file
+sample are different cohorts. None of these structural matches certifies that
+all source activity was captured or resolves duplicate occurrence ordering.
+
 [`table_continuations.py`](table_continuations.py) is a shared finite operation
 pilot over already decoded table cells. Its strict declaration selects start
 and break columns, description and optional amount columns, one of two

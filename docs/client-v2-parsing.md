@@ -195,6 +195,17 @@ and nine printed balance equations; each source hash was unchanged. Leave only
 genuinely Citi-specific geometry or fee-section selection in a named built-in
 extractor if the shared operations cannot express it simply.
 
+A separate read-only scan of a nine-file recent-layout sample found 67 dated
+lines outside the simple matcher. Sixty-three show a money value on that line
+or the next. Of those, 62 have same-page table candidates with the same
+transaction date and amount: 51 have one candidate and 11 have multiple
+candidates. The remaining amount-bearing line matches a statement row but
+has no same-page table counterpart. Four dated lines have no amount in that
+two-line window, including a known multiline fee start. These are structural
+links, not complete source dispositions: duplicate ordering, foreign
+continuations, page geometry and legal-text interleaving still need explicit
+source-region checks before Citi import admission.
+
 Before any PDF or XLSX pilot is used for normal import, run library decoding in
 a separate worker with input/output, page/row, wall-clock and OS memory limits.
 An isolated [PDF simple-text worker pilot](../devtools/parser_engine_pilot/bounded_pdf_text.py)

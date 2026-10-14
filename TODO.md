@@ -145,6 +145,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   Shared continuation and exact channel-occurrence matching now have finite
   pilot operations. The refactored Citi audit passed on nine recent-layout
   archive files with 428 resolved occurrences and unchanged source hashes.
+  A further nine-file source scan found 67 unmatched dated lines; 62 of 63
+  amount-bearing lines have same-page table date/amount candidates, including
+  11 with multiple candidates. Four dated lines lack a nearby amount. These
+  still need explicit source-region dispositions.
   Resolve remaining Citi-only extraction, dated-line capture and decoder limits
   before runtime admission.
   A separate simple-text PDF worker now has byte/page/line/output, deadline and
