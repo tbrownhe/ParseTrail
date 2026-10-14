@@ -73,8 +73,16 @@ only. Citi's recent layout combines table, text and fee channels. Across eight
 hash-verified recent-layout sources, a read-only audit found 410 table and 350
 text candidates: 330 exact occurrences, 11 unresolved overlaps and nine
 text-only candidates. The accepted reader recovered 10 text rows and one fee;
-these counts do not establish which unmatched candidates are new financial
-activity. Use a named, client-built Citi handler if this layout is admitted.
+these counts alone do not establish which unmatched candidates are new financial
+activity. A page-level follow-up classified nine overlaps as incomplete text
+copies containing only a date, one as a text copy missing the first character
+of the table description, and one as an additional identical occurrence at a
+distinct source line. The nine text-only rows comprise three payments, two
+interest charges and four purchases. All eight accepted statements satisfy
+their printed opening-to-closing movement equation. These particular conflicts
+do not show a foreign-transaction multiline pattern. This supports the current
+reader's row count on these sources but does not prove universal capture or
+authorize 2.0 import. Use a named, client-built Citi handler if this layout is admitted.
 It must retain each channel and source location, match duplicate occurrences
 with stronger evidence, and send conflicting candidates to review. Do not add
 a general declaration language just for this case.
@@ -112,7 +120,7 @@ a signed catalog or native acceptance.
 synthetic slice keeps the source and parser evidence, leaves rows unposted,
 posts one explicitly reviewed expense exactly once, and leaves a credit
 pending. **No go** for 2.0 activation or release yet: the PDF/XLSX decoder
-limits, Citi candidate conflicts, durable evidence across engine updates,
+limits, a provenance-preserving Citi handler, durable evidence across engine updates,
 ongoing import/recovery, common reports and native GUI acceptance remain open.
 
 A proposed 2.0 profile is separate from 1.x. If the owner returns to 1.4.2,

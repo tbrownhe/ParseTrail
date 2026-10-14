@@ -132,8 +132,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   time bound. A read-only Wells Fargo business table pass supports a finite
   page-local geometry pilot; its raw cells and dated-candidate count match all
   referenced archive sources but do not establish capture or decoder bounds.
-  Citi multi-channel recovery has conflicting date/amount-only matches; keep
-  candidates unresolved and use a named client-built handler if admitted.
+  Citi multi-channel recovery has conflicting date/amount-only matches. A
+  read-only page-level follow-up classified the eight referenced sources'
+  candidate shapes and confirmed their accepted rows balance; implement a
+  named provenance-preserving handler before runtime admission.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and
   continuation/layout PDFs, plus synthetic

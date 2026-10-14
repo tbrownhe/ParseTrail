@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 from collections import Counter
 from dataclasses import dataclass
 from datetime import date
@@ -56,6 +57,28 @@ def dispositions(table: list[Candidate], text: list[Candidate]) -> tuple[TextDis
     return tuple(result)
 
 
+def overlap_shape(candidate: Candidate, table: list[Candidate]) -> str:
+    """Describe a same-page overlap for investigation, without accepting a row."""
+    peers = [
+        row
+        for row in table
+        if row.page == candidate.page
+        and (row.transaction_date, row.posting_date, row.amount_minor)
+        == (candidate.transaction_date, candidate.posting_date, candidate.amount_minor)
+    ]
+    if len(peers) != 1:
+        return "unclassified_overlap"
+    description = candidate.description
+    peer = peers[0].description
+    if re.fullmatch(r"\d{2}/\d{2}", description):
+        return "date_only_text_copy"
+    if description == peer:
+        return "additional_exact_occurrence"
+    if description[1:] == peer or peer[1:] == description:
+        return "one_character_description_difference"
+    return "unclassified_overlap"
+
+
 def audit(source: bytes) -> dict[str, int | bool]:
     """Audit only the recognized 2025-11 layout and report aggregate counts."""
     logger.remove()
@@ -77,6 +100,26 @@ def audit(source: bytes) -> dict[str, int | bool]:
         parser.crop_settings = None
         parser.stop = False
         table_transactions = parser.parse_transaction_array(parser.get_transaction_array())
+        parser.vertical_lines = None
+        parser.crop_settings = None
+        parser.stop = False
+        page_rows = []
+        for page_number, page in enumerate(reader.PDF.pages, 1):
+            if parser.stop:
+                break
+            if not parser.vertical_lines:
+                parser.get_vertical_lines(page)
+            if parser.vertical_lines:
+                page_rows.extend(
+                    (page_number, row)
+                    for row in parser.parse_transaction_array(parser.get_transactions_from_page(page))
+                )
+
+        def row_key(row):
+            return (row.transaction_date, row.posting_date, row.amount, row.desc)
+
+        if Counter(map(row_key, table_transactions)) != Counter(row_key(row) for _, row in page_rows):
+            raise ValueError("page_table_rows_changed")
         table = [
             Candidate(
                 row.transaction_date,
@@ -84,8 +127,9 @@ def audit(source: bytes) -> dict[str, int | bool]:
                 to_minor_units(row.amount),
                 " ".join(row.desc.split()),
                 "table",
+                page_number,
             )
-            for row in table_transactions
+            for page_number, row in page_rows
         ]
         text = []
         for page_number, page in enumerate(reader.pages_simple or [], 1):
@@ -108,10 +152,17 @@ def audit(source: bytes) -> dict[str, int | bool]:
                 )
         classified = dispositions(table, text)
         counts = Counter(item.status for item in classified)
+        shapes = Counter(
+            overlap_shape(item.candidate, table) for item in classified if item.status == "unresolved_overlap"
+        )
         recovered = parser.extract_missing_text_transactions(table_transactions)
         fees = parser.extract_missing_fees([*table_transactions, *recovered])
-        if len(table) + len(recovered) + len(fees) != len(accepted.accounts[0].transactions):
+        if len(accepted.accounts) != 1 or len(table) + len(recovered) + len(fees) != len(
+            accepted.accounts[0].transactions
+        ):
             raise ValueError("accepted_row_count_changed")
+        account = accepted.accounts[0]
+        reconciles = account.start_balance + sum(row.amount for row in account.transactions) == account.end_balance
     return {
         "table_candidates": len(table),
         "text_candidates": len(text),
@@ -120,6 +171,11 @@ def audit(source: bytes) -> dict[str, int | bool]:
         "text_only_candidates": counts["text_only_candidate"],
         "accepted_text_recoveries": len(recovered),
         "accepted_fee_recoveries": len(fees),
+        "date_only_text_copies": shapes["date_only_text_copy"],
+        "one_character_description_differences": shapes["one_character_description_difference"],
+        "additional_exact_occurrences": shapes["additional_exact_occurrence"],
+        "unclassified_overlaps": shapes["unclassified_overlap"],
+        "accepted_balance_reconciles": reconciles,
     }
 
 

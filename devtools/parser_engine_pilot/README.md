@@ -138,7 +138,18 @@ recent-layout sources in the authorized archive produced 410 table candidates,
 nine text-only candidates. The accepted reader recovered 10 text rows and one
 fee. These are different classification methods, not a parity claim; no
 unmatched candidate is automatically admitted. Inputs were hash-verified and
-unchanged. Run one authorized source with:
+unchanged.
+
+A second read-only page-level check found that nine overlaps are incomplete
+date-only text copies on the same page as their table row, one text copy has
+lost the table description's first character, and one is an additional exact
+occurrence on a distinct source line. The nine text-only rows are three payments,
+two interest charges and four purchases. The current accepted rows balance to
+the printed endpoints on all eight sources. These findings narrow the fixture
+cases for a future named handler; the audit command below still reports the
+conservative unresolved categories and changes no financial row.
+
+Run one authorized source with:
 
 ```powershell
 client/.venv/Scripts/python.exe -m devtools.parser_engine_pilot.audit_citi_channels C:\private\recent-citi.pdf

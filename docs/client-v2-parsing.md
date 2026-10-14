@@ -164,10 +164,17 @@ The October 13 read-only Citi channel audit found that the current recent-layout
 reader needs text and fee recovery in addition to tables. Its date/amount-only
 occurrence subtraction can also overlap text and table candidates with different
 descriptions. The exact-description comparison leaves additional candidates
-whose financial meaning cannot be inferred from counts alone. Keep those
-sources unresolved for review. A named client-built Citi handler may combine
-bounded table, text and fee channels while retaining each location and refusing
-ambiguous matches; do not grow a general JSON expression language for this case.
+whose financial meaning cannot be inferred from counts alone. Page-level review
+of the eight referenced sources found nine date-only incomplete text copies,
+one missing-first-character copy, and one additional identical occurrence on
+two distinct lines. The nine text-only rows comprise three payments, two interest
+charges and four purchases. The accepted rows balance to the printed endpoints
+on all eight sources. None of these particular conflicts showed a nearby foreign
+or exchange marker; this does not rule out foreign multiline behavior in other
+sources. A named client-built Citi handler may combine bounded table, text and
+fee channels while retaining each location, testing duplicate occurrences and
+refusing any still-ambiguous match. Do not grow a general JSON expression
+language for this case.
 
 Before any PDF or XLSX pilot is used for normal import, run library decoding in
 a separate worker with input/output, page/row, wall-clock and OS memory limits.
