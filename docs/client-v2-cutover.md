@@ -67,6 +67,14 @@ execute Python, SQL, shell commands or arbitrary expressions. Keep only needed
 built-in exceptions. The 1.4 bytecode catalog belongs to the old application;
 2.0 does not need a compatibility loader for it.
 
+Bounded table-row continuation is shared by Citi, Synchrony, LendingClub and
+Wells parsers, so it belongs in the declarative engine. Exact occurrence
+matching across extraction channels is also a finite engine-operation
+candidate. The current Citi resolver pilots that rule; it is not a commitment
+to a permanent institution-specific subsystem. Reserve a Citi-specific
+extractor for page geometry or fee-section shapes that the shared operations
+cannot express clearly.
+
 The representative CSV, Chase, HealthEquity and Wells pilots match the accepted
 reader on their tested archive fields. The XLSX decoder has synthetic coverage
 only. Citi's recent layout combines table, text and fee channels. Across eight
@@ -89,8 +97,8 @@ pattern. A separate dated-line scan found 71 lines outside the simple text-row
 matcher, including foreign transactions split across lines and rows interleaved
 with legal text. Their source dispositions are not yet complete. The pilot uses
 the old unbounded PDF extractor, so neither row parity nor balancing authorizes
-2.0 import. Complete a named, client-built Citi handler with full dated-line
-dispositions and bounded decoding if this layout is admitted; do not add a
+2.0 import. Complete shared continuation/channel operations and dated-line
+dispositions under bounded decoding if this layout is admitted; do not add a
 general declaration language just for this case.
 
 All unbounded PDF decode, word extraction and table finding must run behind a
@@ -105,7 +113,7 @@ to XML decoding in the XLSX pilot before runtime use.
 | Order | Deliverable | Gate |
 | --- | --- | --- |
 | V2-1 | Freeze the fresh-profile contract and identify old-profile fallback. Keep the completed 1.x inventory for reference only. | No automatic old-DB import or aliases in the 2.x target. |
-| P2-1 to P2-3 | Finish finite evidence/declaration pilots, Citi conflict handling and decoder worker limits. | Exact source provenance, explicit unresolved candidates, bounded execution and representative fixture checks. |
+| P2-1 to P2-3 | Finish finite evidence/declaration pilots, shared continuation/channel rules, Citi source dispositions and decoder worker limits. | Exact source provenance, explicit unresolved candidates, bounded execution and representative fixture checks. |
 | V2-2 | Create an explicit 2.x format and fresh-profile lifecycle. | New empty profile opens; 1.x, unknown, corrupt and newer databases fail before writes. |
 | V2-3 | Integrate a single source import path, then add supported families. | Immutable source/evidence, account mapping, idempotent retry, overlap review and cancellation recovery. |
 | V2-4 | Connect account/category/budget editing and accepted ledger review/correction services to the application. | Ordinary import-to-review workflow, manual values and pending decisions survive restart; owner Windows GUI acceptance. |

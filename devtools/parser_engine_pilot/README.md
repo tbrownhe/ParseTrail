@@ -157,8 +157,18 @@ The audit also counts 36 dated lines with money and 35 without money that the
 simple text-row matcher does not accept. Some are foreign transactions split
 across lines; others mix transaction text with legal copy. This is a separate
 complete-capture gate: each such line needs a source disposition before the
-handler may be used for normal imports. The pilot still uses the old unbounded
+layout may be used for normal imports. The pilot still uses the old unbounded
 PDF decoder and table extractor.
+
+[`table_continuations.py`](table_continuations.py) is a shared finite operation
+pilot over already decoded table cells. Its strict declaration selects start
+and break columns, description and optional amount columns, one of two
+continuation modes, a maximum group size and cross-page behavior. It retains
+every raw page/row reference and refuses orphan, truncated or undeclared
+continuations. Synthetic fixtures cover the amount-on-last-row shape used by
+Citi/Synchrony and the following-description shape used by Wells/LendingClub.
+This is the proposed engine boundary; the Citi candidate resolver remains a
+pilot whose common occurrence-matching logic should move into the engine.
 
 Run one authorized source with:
 
@@ -180,6 +190,7 @@ client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_x
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_wells_table.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_audit_citi_channels.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_citi_channels.py
+client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_table_continuations.py
 ```
 
 `mohela-pilot-definition.json` exercises those three finite layout/identity

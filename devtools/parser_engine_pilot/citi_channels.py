@@ -1,6 +1,8 @@
-"""Finite, read-only recent-Citi channel reconciliation over extracted candidates.
+"""Finite, read-only recent-Citi channel reconciliation pilot over extracted candidates.
 
-PDF decoding and channel extraction are separate pilot boundaries. No row is posted.
+The occurrence-matching core is a candidate shared engine operation. Citi-specific
+artifact handling is provisional. PDF decoding/extraction are separate boundaries;
+no row is posted.
 """
 
 from __future__ import annotations

@@ -59,7 +59,7 @@ under P2-1 through P2-4 below.
 | --- | --- |
 | Identity | Stable parser ID, revision, institution/document label, suffix, schema version and required engine capabilities. |
 | Recognition | Required headers, text/metadata predicates, layout variants, explicit ambiguity rules. |
-| Extraction | Page/section/table selectors, account groups, column maps/named captures, continuation and section-boundary rules. |
+| Extraction | Page/section/table selectors, account groups, column maps/named captures, bounded table-row continuation and section-boundary rules. |
 | Normalization | Exact money formats, explicit signs, date formats/year rollover, bounded inherited-date rules and text normalization. |
 | Evidence | Statement/export/observation kind, original fields and locations, printed/derived/assumed/unknown provenance, principal/interest/fee roles. |
 | Validation | Required/unique fields, row/component equations, independent balance checks where available, allowed absences and diagnostics. |
@@ -73,10 +73,12 @@ execution; regex length limits alone do not bound matching time. Prove cancellat
 and failure behavior before choosing a regex/execution mechanism.
 
 Do not create a general programming language merely to express every PDF quirk.
-For an exceptional layout, prefer a small named handler shipped and tested with
-the client, selected from a fixed registry. Inventory each exception and its client
-release cost; declarations cannot load downloaded handlers. Measure complexity
-across engine, definitions, tests and publication, not simply Python line count.
+For an exceptional layout, first test whether shared finite operations cover
+the behavior. Keep a small named handler shipped with the client only for the
+remaining layout-specific extraction, selected from a fixed registry. Inventory
+each exception and its client release cost; declarations cannot load downloaded
+handlers. Measure complexity across engine, definitions, tests and publication,
+not simply Python line count.
 
 ## Evidence and validation
 
@@ -177,8 +179,13 @@ without its trailing amount. The 20 overlap/text-only candidates are not the
 foreign multiline pattern. A separate scan found 71 other dated lines outside
 the simple text-row matcher, including foreign multiline rows and legal-text
 interleaving. They still need explicit dispositions before complete-capture
-claims. Keep this behavior in a named handler rather than a general JSON
-expression language.
+claims. The repeated row-continuation behavior belongs in a bounded engine
+operation: Citi, Synchrony, LendingClub and Wells all use it. A strict
+[table-continuation pilot](../devtools/parser_engine_pilot/table_continuations.py)
+now covers two finite shapes with column selectors and source-row references.
+Exact occurrence reconciliation across channels is likewise an engine-operation
+candidate. Leave only genuinely Citi-specific geometry or fee-section selection
+in a named built-in extractor if the shared operations cannot express it simply.
 
 Before any PDF or XLSX pilot is used for normal import, run library decoding in
 a separate worker with input/output, page/row, wall-clock and OS memory limits.

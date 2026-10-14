@@ -138,7 +138,9 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   date/amount row occurrences and printed balance equations, while refusing
   unexplained overlaps. The simple text matcher also leaves 71 dated source
   lines for explicit disposition, including foreign multiline activity.
-  Complete this named handler and decoder limits before runtime admission.
+  Promote shared continuation and exact channel-occurrence matching into finite
+  engine operations, then resolve any remaining Citi-only extraction and decoder
+  limits before runtime admission.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and
   continuation/layout PDFs, plus synthetic
