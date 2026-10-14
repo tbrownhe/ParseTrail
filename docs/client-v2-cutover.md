@@ -1,228 +1,124 @@
-# Client 2.0 rebuild and cutover plan
+# Client 2.0 clean-profile cutover plan
 
-Planning baseline: October 4, 2026, after owner acceptance of the MOHELA replacement
-review. The owner approved a required rebuild for the next major client version.
-The application version stays unchanged during development. This document defines
-the cutover target and implementation order, not completed migration or release
-acceptance. Work stays on `feature/client-financial-insights`; server P0 stays closed.
-
-The owner subsequently included parsing-engine review, simplification and a
-declarative data catalog in 2.0. The [parser redesign](client-v2-parsing.md) replaces
-the earlier deferral of general parser cleanup. Its client pilot precedes final
-evidence-schema/import integration; the catalog server interface is a separate
-short-lived branch after accepted client work is merged.
+Planning update: October 13, 2026. The owner chose a fresh 2.0 profile and will
+re-enter authored data. This supersedes the October 4 required-rebuild and
+automatic preservation plan. Keep development on
+`feature/client-financial-insights`; do not change the application version,
+server or live financial data during these pilots.
 
 ## Release boundary
 
-Client 2.0 uses the double-entry ledger as its only accounting model. Opening a
-supported 1.x database offers a local rebuild into a separate 2.x profile; it never
-upgrades that database in place. Source documents are replayed locally, without
-uploading them to the server. A new user can create an empty 2.x profile directly.
-An unknown, damaged or newer database format must fail before any writable schema
-initialization. Database format identity and schema revision are separate from the
-application's release version.
+Client 2.0 uses the double-entry ledger as its only accounting model. It creates
+a new 2.x database and profile. It does not open a 1.x database for writable
+initialization, migrate it, import its transaction/category decisions, or retain
+aliases and compatibility layers for old IDs. Unknown, corrupt and newer formats
+fail before writable schema initialization. Ordinary migrations are supported
+only between released 2.x schema revisions.
 
-There will be no permanent legacy reporting engine, dual writes, or obligation to
-migrate every intermediate development database. Retain only the bounded legacy
-reader/rebuild path needed for the owner's inventoried source and recovery. Keep
-the published 1.4.2 application and untouched source profile available for rollback.
-Within released 2.x versions, resume ordinary versioned schema migrations with
-backup and recovery checks. User decisions made in an activated 2.x profile are
-durable data, not disposable development fixtures.
+The existing 1.4.2 application, database, archive, exports and recovery material
+remain independent and untouched. They are the reference for old history and the
+fallback if 2.0 is not ready. The owner may choose original documents to import
+into 2.0 and review them there from scratch. There is no promise that every
+historical document must be re-imported before first use. Any comparison against
+the old database is read-only development evidence, not a runtime migration
+contract.
 
-The first 2.0 release should support daily imports, review/correction, spending,
-cash movement, account balances, budgets and exports from the new model. It need
-not finish forecasting, new ML insights, securities cost basis, every loan format,
-or reconstruction of missing servicer history. Unsupported evidence stays accessible
-with explicit scope limits; it cannot silently disappear from a financial total.
-The release also targets a built-in parsing engine with signed JSON definitions,
-instead of downloaded Python bytecode. Complex extraction may use explicitly
-inventoried client-built handlers; archive coverage must survive the transition.
+Accounts, custom categories, budgets, manual values and transaction verification
+are entered afresh in 2.0. Verified categories in 1.x are not automatically
+promoted. A later one-time export/import convenience feature would need its own
+review and would not become a permanent compatibility path. No 2.0 report may
+label missing re-imported history as zero activity or claim complete coverage.
 
-## Starting point and remaining integration
+The first 2.0 release still needs usable daily imports, explicit review and
+correction, spending, cash movement, account balances, budgets and exports from
+one ledger model. Unsupported evidence remains visible and unposted. Forecasts,
+securities cost basis, complete loan history and new ML insights are later work.
 
-The [ledger contract](client-ledger-contract.md), recovery bundle, fresh replay,
-category preservation, exact posting kernel and staged Windows review workflows
-are implemented. Accepted workflows cover ordinary expenses/refunds, income,
-transfers/card payments, reviewed cash/card openings, source review/reconciliation,
-expense/income corrections and supported loan payment/match corrections. The
-MOHELA replacement preserves detailed evidence without posting it. These are
-development workspaces; their sample decisions are not financial approvals.
+The [ledger contract](client-ledger-contract.md) and
+[parser design](client-v2-parsing.md) remain the technical boundaries. The
+prior [preservation inventory](client-v2-preservation-inventory.md) is a
+read-only record of the 1.x data and parser archive. It is no longer an
+activation checklist or a reason to build a database updater.
 
-The normal application still uses the legacy transaction model. Its import service,
-dashboard, transaction review, budget queries, reports and account/category editors
-must be connected to ledger services. The standalone review windows are reusable
-components, not a finished everyday application. The current archive recovery tool
-also excludes profile settings, plugins and models, so it is not yet the complete
-cutover package.
+## Evidence and accounting rules
 
-## Preservation contract
+- Retain original imported bytes, source digest, exact parser definition and
+  engine/extractor versions, raw values and source locations in the new profile.
+  A parser emits evidence, not journal postings or category verification.
+- Distinguish statement coverage from CSV/XLSX activity spans. Unknown printed
+  balances remain unknown. Calculated balances never overwrite printed ones.
+- An imported financial movement becomes a balanced journal entry only through
+  a reviewed interpretation. Expense, refund, income, transfer, card payment,
+  loan components and openings have distinct rules. Do not invent a balancing
+  transaction for a source gap.
+- An identical source import is idempotent. Revised, overlapping or ambiguous
+  sources require evidence review; they cannot silently replace prior decisions.
+- Reports and exports share ledger scope rules and show pending/uncovered work.
+  A card purchase contributes to spending once; repayment moves cash and
+  liability without a second expense.
+- Keep source evidence and 2.x decisions durable across parser/catalog updates.
+  Reparse is a comparison, not an overwrite of old evidence or reviewed entries.
 
-Build a versioned, read-only preservation manifest before designing the activation
-UI. Inventory the actual source schema, profile files and referenced external paths.
-Every source item receives a destination, a retained-history disposition, a
-rebuildable designation or an explicit unresolved reason. Unsupported user-authored
-state is a blocker until its handling is agreed; a whole-database backup alone
-does not establish that the new application can still use it.
+## Parser and decoder direction
 
-| Data | Required treatment | Evidence for acceptance |
+The target remains a locally shipped finite engine with signed versioned JSON
+definitions. New operations require a client release. Declarations cannot
+execute Python, SQL, shell commands or arbitrary expressions. Keep only needed
+built-in exceptions. The 1.4 bytecode catalog belongs to the old application;
+2.0 does not need a compatibility loader for it.
+
+The representative CSV, Chase, HealthEquity and Wells pilots match the accepted
+reader on their tested archive fields. The XLSX decoder has synthetic coverage
+only. Citi's recent layout combines table, text and fee channels. Across eight
+hash-verified recent-layout sources, a read-only audit found 410 table and 350
+text candidates: 330 exact occurrences, 11 unresolved overlaps and nine
+text-only candidates. The accepted reader recovered 10 text rows and one fee;
+these counts do not establish which unmatched candidates are new financial
+activity. Use a named, client-built Citi handler if this layout is admitted.
+It must retain each channel and source location, match duplicate occurrences
+with stronger evidence, and send conflicting candidates to review. Do not add
+a general declaration language just for this case.
+
+All unbounded PDF decode, word extraction and table finding must run behind a
+separate worker boundary with source/output size, page and row limits, a wall
+clock timeout and an operating-system memory limit. Windows x64 and Intel Mac
+need native limit/termination checks. Until then, the current PDF pilots are
+development comparisons, not runtime import admission. The same rule applies
+to XML decoding in the XLSX pilot before runtime use.
+
+## Implementation chunks
+
+| Order | Deliverable | Gate |
 | --- | --- | --- |
-| Original database and documents | Preserve a consistent database snapshot and complete archive, including failed/duplicate/pending files and relevant companion exports. Keep original inputs untouched. | Independent restore, file hashes, table/content inventories, source-membership checks. |
-| Accounts | Preserve identities, names, numbers/aliases, institutions, descriptions, currencies, types and saved appreciation assumptions. Map closed/tracking status explicitly. | Every original account mapped once or blocked with a reason; closing an account creates no money movement. |
-| Categories and budgets | Preserve custom definitions, hierarchy, active state, type, exact budget targets and currencies. Keep built-in semantic identities distinct from matching custom names. | Definition/mapping parity, exact budget comparison and usable budget editing in 2.0. |
-| Verified categorization | Restore category-level verification on exact, unambiguous matches; retain original assertions for split/grouped or unmatched evidence. Preserve refunds and signed amounts. | Conservation by account/category/currency; every assertion restored or retained with its reason and source. No automatic ML overwrite or inferred transfer confirmation. |
-| Other transaction edits and labels | Inventory unverified categories, edited descriptions/dates/amounts and any state actually present. Preserve legacy values and explain differences from fresh parser output. | No silent loss of manual work; each non-reproducible change has a reviewed disposition. |
-| Manual values and entries | Preserve owner-confirmed asset values and closure intent. Inventory all remaining manual-only rows separately from source-derived transactions. | Values and provenance remain accessible; no invented purchase funding, expense or balancing transaction. |
-| Genuine accounting decisions | Carry only explicitly authorized decisions whose source identity and interpretation still agree. Revalidate against the final rebuild. | Stale decisions return to review; no disposable UI exercise is promoted into the owner's books. |
-| Settings and local resources | Preserve nonsecret preferences, account configuration, report locations, update preferences, and model/plugin inventories. Map database/archive/output paths to the new profile deliberately. | New writes cannot target the retained source archive/profile. Keep OS credentials in the existing credential store; no secrets in the financial manifest. |
-| Plugins and ML artifacts | Retain legacy signed parser artifacts for 1.x recovery and verified definition catalogs for 2.x replay, with engine/library and trust/version provenance. Preserve old model files for recovery; retrain locally when category/feature compatibility changes. | Installed replay works offline with verified definitions and required built-in operations. An incompatible/missing model cannot block manual use or change verified categories. |
-| Derived caches and reports | Recompute balances, charts, proposal caches and model predictions. Preserve existing exported files as historical artifacts. | No cache becomes an accounting fact; old/new differences are explained rather than forced to match. |
+| V2-1 | Freeze the fresh-profile contract and identify old-profile fallback. Keep the completed 1.x inventory for reference only. | No automatic old-DB import or aliases in the 2.x target. |
+| P2-1 to P2-3 | Finish finite evidence/declaration pilots, Citi conflict handling and decoder worker limits. | Exact source provenance, explicit unresolved candidates, bounded execution and representative fixture checks. |
+| V2-2 | Create an explicit 2.x format and fresh-profile lifecycle. | New empty profile opens; 1.x, unknown, corrupt and newer databases fail before writes. |
+| V2-3 | Integrate a single source import path, then add supported families. | Immutable source/evidence, account mapping, idempotent retry, overlap review and cancellation recovery. |
+| V2-4 | Connect account/category/budget editing and accepted ledger review/correction services to the application. | Ordinary import-to-review workflow, manual values and pending decisions survive restart; owner Windows GUI acceptance. |
+| V2-5 | Replace legacy dashboard, budget and export queries with common ledger reads. | Spending/cash/balance totals agree across services, UI and exports with visible incomplete scope. |
+| V2-6 | Add new-profile backup/restore and deliberate profile selection. | Independent restore, failed-switch recovery and native reopening. No old-database activation or migration assistant. |
+| P2-5 / P2-S | Finish signed offline JSON catalog locally; handle server publication later on its own reviewed branch. | Tamper, rollback and offline checks; no server change during client pilots. |
+| V2-7 | Remove obsolete runtime financial paths, set 2.0 version when ready, package and accept. | Relevant automated suite and owner Windows/targeted Intel Mac native walkthrough. Publication remains separately approved. |
 
-The first implementation inventory must confirm this list against actual data; do
-not infer that all user state is covered because known tables were copied. Retain
-private manifests, counts, identifiers and financial examples outside Git.
+The isolated [fresh-profile stop/go slice](../devtools/v2_fresh_slice/README.md)
+exercises one synthetic CSV from parsed evidence to a disposable ledger and
+explicit expense review. It proves a useful service boundary without a 1.x
+database updater. It is not the application import UI, a production 2.x schema,
+a signed catalog or native acceptance.
 
-## Everyday behavior required at cutover
+## Current stop/go decision
 
-- Import supported PDFs/CSVs/XLSX into immutable evidence with account mapping,
-  exact values, parser provenance and duplicate/multi-account membership handling.
-  A duplicate import must not create another journal. Import retries and archive
-  recovery must remain safe across cancellation and restart.
-- Distinguish statement coverage from export activity spans. CSV/XLSX without
-  independent endpoints cannot become reconciled statements through fabricated
-  balances. Retain complete export snapshots. Until conservative changed-history
-  comparison exists for a format, refuse automatic replacement/combination of
-  ambiguous exports and present them for evidence review. Reimporting MOHELA must
-  not silently erase a prior snapshot or compound its history.
-- Offer the accepted review/correction workflows inside the application, with
-  efficient batch acceptance for ordinary items. A retained verified category
-  needs no new categorization; separate accounting confirmation can use the
-  existing batch workflow. Ordinary acceptance needs no per-expense explanation.
-- Manage accounts, categories and budget targets in the new model. Manual entries
-  require explicit origin and a balanced interpretation; uncertain values remain
-  observations. Reversal/replacement preserves posted history. Unsupported changes
-  must be clearly unavailable rather than falling back to legacy writes.
-- Show posted spending/income separately from cash movement. A card purchase adds
-  spending once; repayment affects funding-account liquidity and liability, not a
-  second expense. Loan principal is distinct from evidenced interest. Drill-down
-  explains source evidence, postings, categories, dates and unresolved allocations.
-- Show every tracked account, including closed or unsupported ones. Separate
-  reported balance observations, ledger balances and valuation estimates, with
-  their dates and provenance. An account without usable postings is unknown, not
-  zero. A net-worth total must expose incomplete scope and cannot blend source
-  balances into a ledger total without an explicit, labeled presentation rule.
-- Drive budget actuals, charts and exported reports from the same ledger queries
-  and scope rules. Budget targets survive the transition. Report metadata includes
-  cutoff, account scope, coverage/freshness and unresolved items. Preserve useful
-  basic balance/spending views; richer CF3 comparisons can follow in small chunks.
-- Keep local category suggestions/training and recurring analysis separate from
-  posted facts. Adapt existing tools to new read services or visibly defer them;
-  every old menu action must have an explicit implemented/replaced/deferred
-  disposition before activation. No stale legacy query may supply an unlabeled total.
+**Go** for fresh-profile service integration and finite parser work. The
+synthetic slice keeps the source and parser evidence, leaves rows unposted,
+posts one explicitly reviewed expense exactly once, and leaves a credit
+pending. **No go** for 2.0 activation or release yet: the PDF/XLSX decoder
+limits, Citi candidate conflicts, durable evidence across engine updates,
+ongoing import/recovery, common reports and native GUI acceptance remain open.
 
-## Activation blockers and permitted uncertainty
+A proposed 2.0 profile is separate from 1.x. If the owner returns to 1.4.2,
+it opens only the retained 1.x profile; it never reads a 2.x database. Work done
+in either profile is not synchronized or backported. Do not switch the owner's
+daily workflow until the exact 2.0 build and new profile pass native acceptance.
 
-| Condition | Cutover policy |
-| --- | --- |
-| Missing/corrupt source, failed restore, unexplained lost user state, inconsistent mappings, unsupported source format needed for replay | Block activation until repaired or the owner explicitly reviews a concrete retained/excluded disposition. Never silently fall back to old financial rows. |
-| Imbalanced journals, duplicate allocations, broken correction history, misleading totals, accidental writes to the source profile | Always block activation. A disclaimer cannot waive accounting/storage invariants. |
-| Ambiguous category match | Block automatic restoration of that verified assertion. Retain its original category/history and candidates; activation requires resolving it or explicit acceptance of the visible pending item. Never call a partial restoration complete. |
-| MOHELA unexplained differences, HSA boundary gaps, uncertain loan origination, missing historical coverage | May remain visible and unresolved. No invented income, interest, equity adjustment or verified coverage. MOHELA uncertainty was accepted on October 4. Other retained exceptions need their own disposition. |
-| Unreviewed accounting/openings, unsupported investment or loan interpretations | Keep evidence and review queues. Affected account balances/period totals cannot be labeled complete or reconciled. Owner acceptance must identify the usable reporting scope and visible limitations. |
-| Stale data | Allowed for historical reporting with explicit dates. Never present it as current disposable cash or proof that a recurring bill stopped. |
-
-Passing cutover means preservation and functional correctness, with a reviewed
-exception inventory. It does not mean every historical bank or servicer record has
-been reconciled. No forecast or complete net-worth claim is a 2.0 launch gate.
-
-## Small implementation chunks
-
-These chunks organize the existing L/CF roadmap; they do not restart accepted work.
-Complete each service before its UI integration. Keep commits focused and stop for
-owner involvement at native acceptance or a concrete unresolved product decision.
-Each row is a scope boundary, not a promise of a single commit.
-
-| Order | Chunk and deliverable | Focused acceptance |
-| --- | --- | --- |
-| V2-1 | Preservation inventory and cutover manifest service, read-only. Classify source tables/fields, external files, parser availability and legacy UI actions. Reuse recovery/rebuild audits. | Synthetic missing-source/unknown-field/manual-state cases; private inventory from an authorized read-only snapshot; complete disposition totals. Stop for any uncovered user-data policy. |
-| P2-1–3 | Review engine/parser families, define evidence/declaration schemas, and pilot representative CSV/PDF/XLSX cases under the [parser plan](client-v2-parsing.md). | Archive comparison, independent checks, explicit unknowns, bounded operations, no downloaded-code escape hatch; inform V2-2/V2-3 before freezing their interfaces. |
-| V2-2 | Explicit database format detection and 2.x schema lifecycle, before legacy ORM initialization. Retain a bounded read-only 1.x adapter. | New empty profile, supported legacy input, unknown/newer/corrupt files; no mutation on refusal; supported 2.x migration/backup failure recovery. |
-| V2-3a | Single replay/import service using the new evidence boundary for fresh reconstruction and ongoing ingestion; convert parser families under P2-4 in small batches. | Exact parser replay, duplicate/overlap/multi-account import, immutable source retention; no automatic posting or derived endpoint certification. |
-| V2-3b | Bounded export ingestion policy using the accepted MOHELA reader and explicit review for uncertain overlap/revisions. Adapt other needed CSV/XLSX sources only after inventory. | Repeated identical file is idempotent; added/changed/missing/indistinguishable rows never silently overwrite decisions or imply complete coverage. |
-| V2-3c | Main application import UI, archive recovery and cancellation integration. Reuse existing file-action contracts. | Cancel before/after commit, archive-write failure, restart/retry, unchanged original archive. Owner Windows import walkthrough. Keep any required C2b worker change separately reviewable. |
-| V2-4a | Account/category/budget metadata services plus bounded manual-value/closure handling. | Preservation parity, built-in enforcement, exact budgets, unsupported manual cases retained without fabricated postings. |
-| V2-4b | Integrate accepted ordinary/income/transfer/opening/source/loan review and correction services into the application, one workflow at a time. Include associated editors. | Owner Windows combined workflow, persistence, efficient ordinary batch review, reversal/correction and visible pending work. Do not ask to retest unchanged standalone behavior without reason. |
-| V2-5a | Common ledger read services for spending, cash movement, balances and budget actuals; define remaining CF2 scope semantics. | Purchases/payments counted once; month-crossing clearing; loan interest/principal; refunds/splits/reversals; incomplete/unposted/unsupported accounts visible; exact totals with drill-down parity. |
-| V2-5b | Replace dashboard/budget queries and report exports in small view-specific chunks. Inventory remaining menu actions and remove live legacy query paths. | UI/export/service agreement, explained old/new differences, scope/freshness warnings, owner Windows daily-use walkthrough. Decide any proposed feature deferral before removing it. |
-| V2-6a | Verified cutover package and activation service. Add profile/resource preservation beyond today's database/archive bundle; stage and validate a separate profile. | Independent restore; source-change detection; interrupted build/activation and config-write failures; atomic profile switch/recovery; source database/archive unchanged. |
-| V2-6b | Rebuild assistant: source selection, preflight, preparation, preservation/exception review, explicit activation and rollback instructions. | Owner Windows cancel/retry/failure/reopen/activation/rollback rehearsal on copies before a live switch. Live activation is a separate explicit approval. |
-| P2-5 / P2-S | Finish signed definition distribution and release tooling locally, then merge accepted client work before the separate server catalog branch. | Verified offline replay, contract/staging checks, preserved 1.4 rollback catalog and explicit deployment/publication approval. |
-| V2-7 | Remove obsolete runtime compatibility paths after integration gates, freeze the 2.0 release candidate, and run installed-client/release acceptance. | Full relevant suite; packaged resources/signed parser replay; fresh and upgraded offline profiles; Windows x64 and targeted Intel Mac install/startup/rebuild/rollback checks. No public publication without release approval. |
-
-V2-1 and the P2-1 parser review are next. They create reviewable inventories, not a
-schema rewrite, version bump or live rebuild. The P2 pilot informs the V2-2 evidence
-schema and precedes V2-3 import integration. V2-2 through V2-7 otherwise retain their order;
-inventory findings can split or reorder bounded work without expanding the release
-promise. Loan posting extensions needed for useful daily coverage receive their
-own service/UI chunks under V2-4; do not require full loan-history reconstruction.
-
-The first-pass [V2-1 preservation inventory](client-v2-preservation-inventory.md)
-records the current schema, profile resources, menu actions and a private read-only
-inventory command. Its unresolved items remain open until checked on an authorized
-consistent source copy.
-
-## Rebuild, activation and rollback sequence
-
-1. Inspect the selected source read-only. Freeze a consistent database/archive and
-   profile-resource inventory; bind parser artifacts and explicit owner decisions.
-   Preserve an independently restorable package before activation work.
-2. Build the candidate under a distinct database path and separate writable archive,
-   settings and output locations. Current archive paths derive from the database
-   stem, so a database-pointer change alone is insufficient. Retain verified local
-   definition/engine resources; development-only unsigned source replay is not the installed
-   release's trust policy.
-3. Compare preserved user state and new source evidence. Present exact accounting
-   differences, exception dispositions and the proposed reporting scope. Bind real
-   owner decisions to this input set; ignore earlier disposable walkthrough choices.
-4. Before activation, close sessions and quiesce old writes. Recheck source database,
-   archive and relevant configuration against the reviewed inventory. New imports or
-   category edits invalidate the candidate; rebuild from a fresh snapshot and
-   revalidate carried decisions. Do not activate a stale candidate.
-5. After explicit owner approval, switch the complete profile reference atomically
-   and verify reopening. Failure must leave a usable old or new profile with a clear
-   recovery state, never a mixture. Do not overwrite or rename the legacy database
-   into the new schema. Preserve the old application's independent configuration.
-6. Rehearse returning to the retained 1.4.2 profile. Never give the 2.x database to
-   the old application. If new 2.x imports/reviews exist, retain that profile too;
-   rollback does not backport its decisions. Explain which post-cutover work would
-   require re-entry before switching back. Returning later to 2.x reuses its retained
-   profile only after checking for divergent 1.x edits.
-
-## Release scope and gates
-
-No version bump, live activation, installer build or publication is authorized by
-this planning document alone. Use 2.0.0 when the integrated release candidate is
-ready; keep app version, database format and signed manifest schema independent.
-Retain existing installer targets and installer distribution contracts. Parser
-distribution gets a separately versioned signed declaration-catalog contract under
-P2. At that server boundary, stop, merge accepted client work first and use a
-short-lived server branch. The server is not a development
-dependency for rebuilding financial history.
-
-Routine native feature acceptance remains Windows-only. Profile paths, packaging,
-installation and rollback warrant a targeted Intel Mac release walkthrough; do not
-repeat every accounting feature there. Apple Silicon native support remains deferred.
-Experimental ARM CI feasibility is optional and cannot block this cutover.
-
-Release evidence must include preservation/restore parity, accounting invariants,
-read-service/UI/export agreement, a usable ongoing import/review cycle, explicit
-exception dispositions, a stale-candidate refusal test, native activation/rollback
-acceptance and traceable signed release artifacts. Public activation remains a
-separate final approval after the exact artifacts are reviewable.
-
-CF3 richer historical comparisons, CF4 confirmed recurring obligations, CF5 forecasts
-and local AI insights follow the ledger cutover. Existing requested priorities remain
-in [TODO](../TODO.md); making the new model usable does not authorize every proposed
-feature. Automatic mutable-history merging,
-investment performance/cost basis and speculative MOHELA history repair remain
-separate scopes.
+No version bump, live activation, installer build, server deployment or public
+publication is authorized by this planning document.

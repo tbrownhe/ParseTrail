@@ -45,7 +45,7 @@ routine client development or automated tests.
 - Fixed built-in categories coexist with user-defined categories. Built-ins have
   stable semantic identities and fixed account types; workflows enforce the relevant
   built-in when the evidence establishes the expense type. Start with Loan interest.
-  Preserve custom definitions and verified history; matching names do not imply
+  Preserve definitions and reviewed history created in 2.x; matching names do not imply
   matching accounting semantics. Add further built-ins as their workflows are scoped.
 - Present spending separately from account cash movement. A card purchase counts
   as spending once; its repayment transfers money to the card account and still
@@ -74,11 +74,12 @@ routine client development or automated tests.
   A payment is not necessarily the card's current total balance. Later allow
   dated checking/card balance observations without rewriting transaction history;
   these refresh the forecast starting point but do not fill missing spending.
-- The next major client targets 2.0 with a required local database rebuild; do not
-  incrementally migrate the legacy financial model into the ledger. Keep the version
-  unchanged during development. Resume versioned migrations within released 2.x.
-  Preserve exact money, original evidence and user-authored state; store confirmed
-  interpretations separately and keep derived insights reproducible.
+- The next major client targets 2.0 with a fresh local profile. The owner will
+  re-enter accounts, categories, budgets, manual values and verification; there
+  is no 1.x database updater or compatibility layer. Keep the 1.x profile
+  independent and unchanged by development. Keep the version unchanged during
+  development; resume versioned migrations only within released 2.x. Preserve
+  exact money and evidence imported into 2.x, and keep derived insights reproducible.
 - On September 27, the owner approved a genuine double-entry ledger as the
   authoritative financial model before new cash-flow totals. Preserve imported
   evidence separately from journal entries and postings. Categories are migration
@@ -87,33 +88,28 @@ routine client development or automated tests.
   ML suggestions separate from posted facts. The owner authorized testing against
   a disposable snapshot of the live database; private paths/data/reports stay out
   of Git. See the [ledger contract](docs/client-ledger-contract.md).
-- A fresh database rebuilt by local archive replay is the approved simpler breaking
-  transition. Preserving the owner's verified expense categorizations is an
-  acceptance requirement: restore the category and category-level verification on
-  unambiguous matches, retain category definitions, and report every unmatched or
-  ambiguous annotation. Do not silently discard completed review work, infer transfer
-  confirmation, or treat category verification as statement reconciliation. Retain
-  the old database/archive throughout; see the [carry-forward contract](docs/client-ledger-contract.md#verified-expense-categories-during-a-fresh-rebuild).
+- The October 13 clean-start decision supersedes the earlier archive-rebuild
+  acceptance requirement. Existing verified categories and other 1.x authored
+  state need not be imported into 2.x. Keep the old database/archive available
+  in 1.4.2; selected original documents can be imported and reviewed afresh
+  in 2.x. See the [current cutover plan](docs/client-v2-cutover.md).
 
 ### 2.0 cutover plan
 
-The owner approved the major-version rebuild strategy on October 4. The
-[2.0 cutover plan](docs/client-v2-cutover.md) defines preservation, launch behavior,
-blocking failures versus retained uncertainty, and activation/rollback gates.
+The owner chose a clean new 2.0 profile on October 13. The
+[2.0 cutover plan](docs/client-v2-cutover.md) defines launch behavior,
+blocking failures and the independent 1.x fallback.
 The existing L/CF items below provide implementation history and remaining service
 work; V2 organizes their integration into the everyday application.
 The owner also included [engine simplification and declarative parsers](docs/client-v2-parsing.md)
 in 2.0. Target a built-in engine plus signed versioned JSON definitions, with rare
 explicit client-built extraction handlers instead of downloaded Python bytecode.
 
-- [~] **V2-1 — Preservation manifest:** first-pass code/schema inventory and
-  read-only private report tool are in [the preservation inventory](docs/client-v2-preservation-inventory.md).
-  The authorized closed-copy inventory is structurally covered, including
-  per-item authored-state fingerprints; continue user-state dispositions and
-  package parity. Read-only inventory of
-  database fields, manual/category/budget state, profile resources, parser availability
-  and legacy UI actions. Assign every item a preservation/rebuild/disposition rule;
-  stop for uncovered user-data policy. No live writes or schema changes.
+- [x] **V2-1 — Fresh-profile boundary:** the completed
+  [1.x preservation inventory](docs/client-v2-preservation-inventory.md) remains
+  read-only development evidence. The 2.x contract uses a clean profile with no 1.x
+  database migration, aliases or automatic authored-state carry-forward. Keep
+  the old application/profile independent; no live writes or schema changes.
 - [~] **P2-1 — Parser/engine review:** first-pass 22-parser source/fixture matrix is in
   [the parser inventory](docs/client-v2-parser-inventory.md). Read-only archive replay
   and installed-catalog checks passed; historical parser revisions were bound
@@ -136,8 +132,9 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   time bound. A read-only Wells Fargo business table pass supports a finite
   page-local geometry pilot; its raw cells and dated-candidate count match all
   referenced archive sources but do not establish capture or decoder bounds.
-  Continue Citi multi-channel recovery and decoder hardening before choosing
-  final schema and operations.
+  Citi multi-channel recovery has conflicting date/amount-only matches; keep
+  candidates unresolved and use a named client-built handler if admitted.
+  Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and
   continuation/layout PDFs, plus synthetic
   XLSX. Compare against corrected archive evidence, retain unknown balances and
@@ -150,27 +147,28 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   use a short-lived server branch for the reviewed snapshot API/storage/publication
   contract. A table may hold JSON definitions; clients consume immutable signed
   releases. Keep 1.4 artifacts available for rollback. No server deployment yet.
-- [ ] **V2-2 — Format boundary:** identify legacy/new/unknown databases before writable
-  initialization; create clean 2.x profiles and establish their migration lifecycle.
+- [ ] **V2-2 — Format boundary:** create a clean 2.x profile and refuse 1.x,
+  unknown, corrupt and newer databases before writes. Migrate only between
+  released 2.x schema revisions.
 - [ ] **V2-3a–c — Import integration:** common replay/ongoing ingestion, bounded export
   evidence policy, then main-window import/cancellation/archive recovery and Windows
   acceptance. Keep each service/UI chunk separately testable.
-- [ ] **V2-4a–b — Daily review:** preserve/edit accounts, categories and budgets; connect
+- [ ] **V2-4a–b — Daily review:** create/edit accounts, categories and budgets; connect
   accepted ledger workflows to the application in small increments. Manual values,
   closures and unsupported accounting remain explicit. Owner Windows integration gate.
 - [ ] **V2-5a–b — Report cutover:** shared ledger spending/cash/balance/budget queries,
   then dashboard and export integration. Inventory every legacy menu action; approve
   concrete deferrals rather than silently removing functionality. Owner Windows gate.
-- [ ] **V2-6a–b — Activation:** complete recovery/profile package and atomic activation
-  service, then rebuild assistant and Windows rollback rehearsal. Detect source edits
-  made after preparation. Live activation requires explicit approval of the candidate.
+- [ ] **V2-6a–b — Profile selection:** backup/restore the new profile and make
+  1.x/2.x profile selection explicit. No old-database activation or rebuild
+  assistant. Owner Windows reopen/fallback rehearsal is required.
 - [ ] **V2-7 — Release:** remove obsolete runtime paths after integration, set the major
   version when ready, then packaged Windows/targeted Intel acceptance and a separately
   approved publication. Include the P2 declaration-catalog release gate; installer
   contracts and Apple Silicon support remain unchanged.
 
-Unexplained source history can remain visible with an explicit disposition; lost
-user state, invalid journals and misleading totals block activation. Forecasting,
+Unexplained imported history can remain visible with an explicit disposition;
+invalid journals and misleading totals block release. Forecasting,
 new ML insights and complete historical loan reconstruction are not 2.0 launch gates.
 
 ### Existing ledger and insight implementation sequence

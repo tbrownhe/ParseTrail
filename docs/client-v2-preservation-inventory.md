@@ -1,11 +1,12 @@
 # V2-1 preservation inventory: first pass
 
 Started October 4, 2026 on `feature/client-financial-insights`. This is a code/schema
-inventory and a read-only private-inventory tool, not an accepted cutover manifest.
-The authorized profile was inspected read-only; no profile file was written.
-The [cutover contract](client-v2-cutover.md)
-controls activation; the old database and archive remain authoritative until a
-reviewed rebuild is explicitly activated.
+inventory and a read-only private-inventory tool. The authorized profile was
+inspected read-only; no profile file was written. On October 13 the owner chose
+a fresh 2.0 profile with no automatic authored-state carry-forward. This
+inventory is retained as a historical reference, not a migration checklist or
+activation gate. The [current cutover plan](client-v2-cutover.md) governs 2.0;
+the 1.x database and archive remain independent in the old application.
 
 ## Source database field disposition
 

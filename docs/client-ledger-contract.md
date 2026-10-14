@@ -2,7 +2,11 @@
 
 Status: authorized September 27, 2026; recovery rehearsal and an isolated kernel
 are implemented. The first approved shadow conversion is complete; unresolved
-interpretations remain open before posting them or changing reports.
+interpretations remain open before posting them or changing reports. The
+[October 13 clean-profile decision](client-v2-cutover.md) supersedes every
+legacy database migration and category carry-forward instruction below: 2.0
+starts with a new profile and the owner re-enters authored state. Legacy audits
+and disposable conversions remain historical development evidence only.
 This is the implementation target, not a claim that the current database is a ledger. The
 active sequence and acceptance gates are in [TODO](../TODO.md). All work remains
 local and client-only on `feature/client-financial-insights`.
@@ -42,10 +46,10 @@ journals. Other historical balance endpoints remain unverified until source revi
 Keep three separate layers:
 
 1. Imported evidence: statements, their declared intervals/balances, normalized
-   transaction observations, and source membership. Existing IDs, hashes, money,
-   dates, descriptions, and category/verification values survive migration.
-   Existing normalized rows are not guaranteed to be verbatim bank records:
-   parser-computed balances and historical edits may lack separate provenance.
+   transaction observations, and source membership. New 2.x imports retain source
+   bytes, hashes, exact money, dates, descriptions and locations. The historical
+   1.x rows are not guaranteed to be verbatim bank records: parser-computed
+   balances and edits may lack separate provenance.
 2. Accounting interpretation: ledger accounts, economic-event groups, journal
    entries, postings, evidence allocations, and review/correction history.
 3. Derived views: spending, account cash movement, net worth, coverage, and
@@ -60,13 +64,13 @@ principal plus interest). Importing evidence twice must not book an event twice.
 ## Account and journal invariants
 
 - Ledger account classes are Asset, Liability, Equity, Income, and Expense.
-  Existing financial accounts map to ledger accounts through explicit identity
-  mappings. Existing category names may map to income/expense accounts; a Transfer
+  Imported financial accounts map to ledger accounts through explicit identity
+  mappings. Category names may map to income/expense accounts; a Transfer
   category does not become an expense account or establish a destination.
 - Represent postings with exact signed amounts: debit positive, credit negative.
   Assets/expenses normally have debit balances; liabilities/equity/income normally
   have credit balances. UI display conventions do not alter stored signs.
-  Verify legacy financial-account sign conventions in migration; do not infer
+  Verify source financial-account sign conventions on import; do not infer
   them solely from whether an observed balance is positive or negative.
 - Every posted journal entry has at least two nonzero postings and debits equal
   credits exactly. Accounts exist and accept the relevant denomination. All
@@ -108,7 +112,7 @@ posting. A match never overwrites imported dates or amounts.
 
 Unknown purpose can remain a draft; where representing a known account movement
 requires a posted entry, use an explicitly identified suspense account with an
-unresolved review state. Approved migration policy must specify its account class
+unresolved review state. The 2.x accounting policy must specify its account class
 and presentation. Suspense must not disappear from reports, stand in for income
 or expense without qualification, or mark history reconciled/classified by fiat.
 Do not infer whether a missing counterpart is an owned account, an external
@@ -186,86 +190,30 @@ shown separately in liquidity views. Incomplete classifications, scope, currenci
 coverage, and stale inputs must remain visible. CF1 supplies statement coverage;
 it cannot establish accounting correctness by itself.
 
-## Migration and rollout
+## Fresh-profile rollout
 
-The owner approved a required rebuild for client 2.0 on October 4, 2026. The
-[2.0 cutover plan](client-v2-cutover.md) defines the release boundary, preservation
-inventory, application integration and activation/rollback sequence. The application
-version remains unchanged during development. The old model is a bounded read-only
-rebuild input, not a permanent runtime compatibility layer; released 2.x databases
-return to versioned migrations. No live cutover has occurred.
+Client 2.0 creates a new ledger profile. It does not migrate or open the 1.x
+database for writable initialization, restore old category verification, or
+retain old identity aliases. The owner re-enters accounts, categories, budgets,
+manual values and transaction decisions. Original documents chosen for 2.0
+are imported as new evidence and reviewed under the accounting rules above.
+The 1.4.2 database, archive and application remain separate and untouched.
 
-### Verified expense categories during a fresh rebuild
+The [current 2.0 cutover plan](client-v2-cutover.md) governs format detection,
+import integration, reports, backup/restore and native acceptance. The
+[disposable rebuild guide](../devtools/ledger_audit/REBUILD.md) and earlier
+shadow conversion document an abandoned migration approach; they are read-only
+research records, not 2.0 implementation requirements.
 
-The owner approved a breaking database rebuild through local statement
-archive replay to simplify legacy conversion. Preservation of verified expense
-categorization is required for that path; the original database/archive remain
-retained throughout. Fresh parsing must not erase the owner's completed review work.
-
-Carry category definitions and hierarchy through an explicit identity mapping.
-On an unambiguous canonical transaction match, restore both the expense category
-and its category-level verified assertion, recording the legacy decision and match
-evidence. The user should not have to reconfirm that category merely because the
-transaction was reparsed. Ledger interpretation, transfer confirmation and statement
-reconciliation remain separate assertions; preserving category verification cannot
-silently certify them. Automatic categorization must not replace restored verified
-decisions.
-
-Match using established account identity, source-file/statement membership and
-exact transaction evidence. Dates and amounts alone are insufficient; positional
-row IDs can shift after parser fixes. Repeated/overlapping statements must converge
-on one canonical transaction. Changed descriptions, duplicate indistinguishable
-rows, split/merged parser output and other ambiguous matches require explicit
-review; fuzzy matching may suggest candidates but may not restore a verified flag.
-Manual-only records and verified expenses with no reimported counterpart remain
-visible exceptions, with their old annotations intact in retained evidence.
-
-Before cutover, the carry-forward report must account for every legacy verified
-expense as restored or pending with a reason. Check counts and exact amounts by
-account/category, preserve refunds, reject conflicting annotations and prove rerun
-idempotency. A partial transfer of annotations must never be reported as complete.
-
-The first [fresh-replay checkpoint](../devtools/ledger_audit/REBUILD.md) implements
-source evidence and category preservation in a disposable new format. Historical
-rows commonly lack a transaction date; exact posting date remains required, and
-known transaction dates must agree. No journal is posted by annotation restoration.
-Parser failures and ambiguous matches block automatic carry-forward. They remain
-cutover blockers until resolved or given an explicit owner-reviewed retained/excluded
-disposition under the 2.0 plan; never silently omit them or call partial restoration
-complete. Accounting invariants cannot be waived by accepting an exception.
-
-The second checkpoint permits a running balance to distinguish repeated exact
-transaction details only when the complete, unique balance inventory is unchanged
-in every contributing source group. Changed/added/removed or indistinguishable
-evidence still requires review. Confirmed manual asset-value observations retain
-their original category verification as history, separately from cash evidence or
-expense postings. Rounded asset values must not create balancing adjustments to
-purchase funding. Category accounting includes these retained observations explicitly.
-
-### Existing staged rollout
-
-1. L1 audits a consistent read-only snapshot. Inventory schema, exact amounts,
-   category review, source links, balance equations, coverage, and candidate
-   transfers. Preserve private diagnostics locally. Resolve material exceptions
-   with the owner; do not reinterpret actual history automatically.
-2. L2 proves complete backup and disposable restore, including referenced archive
-   coverage. A SQLite snapshot alone is not the complete backup gate.
-3. L3 implements and tests the kernel on synthetic data before any migration.
-4. L4 builds shadow books beside retained legacy data. A deterministic conversion
-   manifest records source identity, rule versions, mappings, unresolved cases,
-   and output identities. Repeated runs/imports create no duplicate postings.
-5. L5 provides review/reconciliation UI and Windows acceptance before report
-   cutover. Preserve old reports during comparison; explain intentional differences.
-
-Kernel tests must cover atomic rollback, imbalance rejection, exact splits,
-duplicate evidence/imports, correction history, month-crossing transfers, partial
-settlements, fees, unknown counterparts, currency rejection, opening equity, and
-statement reconciliation with overlapping/missing history. Source/restore bytes
-and semantic contents must be checked in recovery rehearsals. Routine development
-must never migrate the live database in place.
+Kernel tests cover atomic rollback, imbalance rejection, exact splits,
+duplicate evidence/imports, correction history, month-crossing transfers,
+partial settlements, fees, unknown counterparts, currency rejection, opening
+equity and statement reconciliation with overlapping/missing history. New
+profile recovery checks source and restore bytes. Routine development never
+migrates the live database in place.
 
 References informing the design: [GnuCash entry concepts](https://www.gnucash.org/docs/v5/C/gnucash-guide/basics-entry1.html),
 [accounts](https://www.gnucash.org/docs/v5/C/gnucash-guide/chapter_accts.html),
 [opening balances](https://www.gnucash.org/docs/v5/C/gnucash-guide/cbook-accounts1.html),
 and [Actual's transfer/date treatment](https://actualbudget.org/docs/transactions/transfers/).
-The migration and provenance rules above are ParseTrail design decisions.
+The accounting and provenance rules above are ParseTrail design decisions.

@@ -191,16 +191,16 @@ evidence allocation, corrections and reconciliation on a separate SQLite file.
 It is not wired into current imports, reports or the active application database.
 The [shadow conversion and review guide](../devtools/ledger_audit/SHADOW.md) describes
 the first disposable legacy conversion and its read-only Windows acceptance window.
-The [fresh rebuild guide](../devtools/ledger_audit/REBUILD.md) describes the approved
-breaking transition through local archive replay, preserved verified expense
-categories, and a separate read-only category-preservation checkpoint. It creates
-a disposable new database; active imports and reports have not switched formats.
+The [fresh rebuild guide](../devtools/ledger_audit/REBUILD.md) records an earlier
+disposable archive replay and category-preservation experiment. It does not
+define the current 2.0 release path; active imports and reports have not
+switched formats.
 
-The [client 2.0 cutover plan](../docs/client-v2-cutover.md) makes this a required
-local rebuild into a separate profile for the next major release. It specifies
-preservation of user decisions/configuration, everyday ledger integration and
-explicit activation/rollback gates. Version numbers and current database behavior
-remain unchanged until implementation and release acceptance are complete.
+The [client 2.0 cutover plan](../docs/client-v2-cutover.md) creates a clean new
+profile. The owner will re-enter authored state; no 1.x database updater or
+automatic category carry-forward is planned. The old profile remains independent.
+Version numbers and current database behavior remain unchanged until
+implementation and release acceptance are complete.
 The [2.0 parsing plan](../docs/client-v2-parsing.md) also includes engine review
 and a signed declarative catalog, replacing normal downloaded bytecode execution.
 This is a planned distribution/interface change, not the current plugin behavior.

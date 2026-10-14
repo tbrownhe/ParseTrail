@@ -4,6 +4,8 @@ Scope added by the owner on October 4, 2026. Engine review, simplification and a
 declarative catalog are part of [2.0 cutover](client-v2-cutover.md), before finalizing
 evidence storage and ongoing imports. This is an initial architecture proposal,
 not an implemented engine or proof that every parser fits one declaration.
+The October 13 clean-profile decision removes automatic 1.x database replay
+from the 2.0 release contract; archive checks remain read-only parser evidence.
 
 ## Target and distribution
 
@@ -28,7 +30,7 @@ UI, per-parser downloads and delta synchronization are not prerequisites.
 
 Validate a complete catalog before activation, retain the last good release, reject
 unsupported required capabilities and prevent silent downgrade/mixed-release use.
-Cache verified definitions for offline parsing/rebuilds. Preserve key rotation and
+Cache verified definitions for offline parsing of 2.x sources. Preserve key rotation and
 explicit rollback semantics. Consider a verified starter catalog at packaging time.
 The server holds definitions/signatures, not statements or the private signing key.
 Keep the 1.4 bytecode catalog separate for rollback; do not repurpose its manifest
@@ -108,16 +110,17 @@ cannot be replayed; distinguish restoration from reproducible parsing.
 
 | Chunk | Deliverable | Acceptance |
 | --- | --- | --- |
-| P2-1 | Inventory every shipped parser, needed archive layout, authoring/debug/release tool and relevant dependency alongside V2-1. Group common operations and custom behavior. | Family matrix, fixture coverage, synthetic/derived behavior, explicit unsupported cases; no parser silently dropped. |
+| P2-1 | Inventory every shipped parser, needed archive layout, authoring/debug/release tool and relevant dependency alongside V2-1. Group common operations and custom behavior. | Family matrix, fixture coverage, synthetic/derived behavior and explicit unsupported cases. |
 | P2-2 | Design evidence output and minimal declaration schemas; prototype a local engine on synthetic fixtures. | Exact values, nullable/provenanced endpoints, location references, multiple accounts, schema/capability refusal and no executable escape hatch; inform V2 storage before schema freeze. |
 | P2-3 | Pilot detailed MOHELA CSV, a simple bank/card PDF, a continuation-heavy PDF and a layout/table case; include synthetic XLSX mappings. | Corrected archive evidence comparison, account identity stability, malformed/truncated/ambiguous inputs, duplicate occurrences, bounded work and cancellation. Review intentional corrections rather than reproduce old bugs. |
-| P2-4 | Convert needed families in small batches, centralize validation and expose definition/source diagnostics in the developer preview. | Archive replay and category-preservation parity per family, explicit built-in exceptions, maintainability comparison; owner walkthrough for changed troubleshooting UI. |
+| P2-4 | Convert supported daily-use families in small batches, centralize validation and expose definition/source diagnostics in the developer preview. | Archive comparison for converted families, explicit built-in exceptions, maintainability comparison; owner walkthrough for changed troubleshooting UI. No automatic 1.x category carry-forward. |
 | P2-5 | Signed data-catalog client/cache/update and publication tooling against local fixtures; evaluate starter-catalog packaging. | Signature/tamper/rollback/incompatibility/cancel checks, atomic activation, installed offline replay on supported targets, no catalog bytecode compilation. |
 | P2-S | Separate server catalog storage/serving/publication after merging accepted client work. Choose table/file storage from the reviewed contract. | Contract/staging checks on exact reviewed bytes, retained 1.4 catalog, no financial uploads, explicit deployment/publication acceptance. |
 
-P2-1 and V2-1 are next. P2-2/P2-3 inform V2-2 evidence storage and precede V2-3 import
-integration; P2-4 proceeds by family alongside integration. Complete P2-5/P2-S before
-public 2.0 release. Local prototypes need no server deployment. At the server boundary,
+P2-1 through P2-3 have isolated pilot evidence; the next gate is decoder
+isolation and a fresh-profile import/review integration. P2-4 proceeds by
+supported family alongside integration. Complete P2-5/P2-S before public 2.0
+release. Local prototypes need no server deployment. At the server boundary,
 merge accepted client work first, then use a short-lived server branch; server P0
 remains closed outside this interface change.
 
@@ -157,8 +160,25 @@ all referenced Wells Fargo business sources matched the accepted reader on
 retained cells and dated-candidate count. The PDF decoder/table-finder remains
 unbounded, and neither match proves full page capture.
 
-The release gate is a reviewed engine and declarative catalog, archive-preserving
-coverage of needed formats, explicit client-built exceptions and signed offline
+The October 13 read-only Citi channel audit found that the current recent-layout
+reader needs text and fee recovery in addition to tables. Its date/amount-only
+occurrence subtraction can also overlap text and table candidates with different
+descriptions. The exact-description comparison leaves additional candidates
+whose financial meaning cannot be inferred from counts alone. Keep those
+sources unresolved for review. A named client-built Citi handler may combine
+bounded table, text and fee channels while retaining each location and refusing
+ambiguous matches; do not grow a general JSON expression language for this case.
+
+Before any PDF or XLSX pilot is used for normal import, run library decoding in
+a separate worker with input/output, page/row, wall-clock and OS memory limits.
+The current in-memory limits apply after decoding and do not provide that
+boundary. Windows and Intel Mac need native timeout/memory termination checks.
+The [fresh-profile service slice](../devtools/v2_fresh_slice/README.md) uses a
+synthetic CSV with an explicit posting-date role, so it can exercise
+evidence-to-ledger review without making a PDF-decoder or Citi claim.
+
+The release gate is a reviewed engine and declarative catalog, coverage of
+supported daily-use formats, explicit client-built exceptions and signed offline
 distribution. If a family becomes more complicated as declarations, stop with a
 concrete comparison and propose a smaller built-in operation. Do not quietly defer
 the redesign or disguise arbitrary Python as JSON. This plan changes no runtime,

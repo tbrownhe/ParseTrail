@@ -10,6 +10,9 @@ rejects extra fields and unsupported schema versions, suffixes, evidence kinds
 or required capabilities. The pilot operations are controlled table-header mapping,
 fixed date/money formats, account grouping by an observed column or a fixed
 loan-ID operation, and an optional principal + interest + fees = total check.
+The declaration now labels the date as an activity date or posting date; the
+default for existing export pilots is activity date. A ledger observation can
+use it as a posting date only when the source contract says so explicitly.
 The detailed CSV comparison also exercises a first-header-cell download prefix
 and an exact empty trailing column. Definitions contain no code,
 user-supplied regex, module reference, SQL or general expression language.
@@ -124,8 +127,25 @@ client/.venv/Scripts/python.exe -m devtools.parser_engine_pilot.compare_wells C:
 
 `pdfplumber` PDF decoding, word extraction and table finding remain outside a
 strict execution budget. The operation is an experiment, not an accepted
-declaration shape or a runtime parser. Citi's cross-channel text/fee recovery
-is still a separate design and fixture gate.
+declaration shape or a runtime parser.
+
+`audit_citi_channels.py` is a read-only recent-Citi channel probe. It compares
+table and text candidates by transaction date, posting date, amount, normalized
+description and duplicate occurrence. Text with only a date/amount overlap is
+unresolved, not automatically a new transaction. The eight referenced
+recent-layout sources in the authorized archive produced 410 table candidates,
+350 text candidates, 330 exact table occurrences, 11 unresolved overlaps and
+nine text-only candidates. The accepted reader recovered 10 text rows and one
+fee. These are different classification methods, not a parity claim; no
+unmatched candidate is automatically admitted. Inputs were hash-verified and
+unchanged. Run one authorized source with:
+
+```powershell
+client/.venv/Scripts/python.exe -m devtools.parser_engine_pilot.audit_citi_channels C:\private\recent-citi.pdf
+```
+
+The audit uses the existing unbounded PDF decoder. A named client-built handler
+with provenance and conflict review remains a design and fixture gate.
 
 Run the synthetic tests from the repository root:
 
@@ -136,6 +156,7 @@ client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_c
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_hsa_cash_lines.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_xlsx_adapter.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_wells_table.py
+client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_audit_citi_channels.py
 ```
 
 `mohela-pilot-definition.json` exercises those three finite layout/identity

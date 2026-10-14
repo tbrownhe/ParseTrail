@@ -1,5 +1,10 @@
 # P2-1 parser and engine review: first pass
 
+The October 13, 2026 clean-profile decision makes this a read-only research
+inventory. It does not require 2.0 to replay every 1.x archive source or carry
+old parser IDs. Supported daily-use formats need explicit coverage; other old
+documents remain accessible through the retained 1.4.2 profile.
+
 Started October 4, 2026 on `feature/client-financial-insights`. This records
 source-code and synthetic-test coverage for the [declarative parser plan](client-v2-parsing.md).
 An authorized closed-copy replay and installed signed-catalog verification have
