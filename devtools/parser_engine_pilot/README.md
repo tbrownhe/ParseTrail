@@ -225,6 +225,14 @@ with one printed dated start per resolved row and unchanged source hashes. A
 synthetic non-Citi PDF is refused before Citi table extraction. This remains a
 pilot and does not post to a profile or prove full-page capture.
 
+The [money-line ledger](citi_money_lines.py) also accounts for every dollar
+line outside dated transaction spans after page one in the ten sources: 88
+lines are printed totals, annual summaries, cardholder subtotals, APR tables,
+fee notices or legal disclosure, with zero unresolved. An unfamiliar monetary
+line now refuses the standalone evidence path. These labels retain source
+locations and do not create transactions or claim that every non-money item on
+a page is understood.
+
 The Citi worker also retains a capped first-page character stream; the shared
 PDF text worker returns capped metadata for routing. The
 [statement-header adapter](citi_statement_header.py) reads the
@@ -258,6 +266,7 @@ client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_a
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_citi_channels.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_citi_source_dispositions.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_citi_evidence.py
+client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_citi_money_lines.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_table_continuations.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_channel_occurrences.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_bounded_pdf_text.py

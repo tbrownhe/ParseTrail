@@ -20,6 +20,7 @@ from devtools.parser_engine_pilot.bounded_citi import extract_bounded_citi
 from devtools.parser_engine_pilot.bounded_pdf_text import decode_pdf
 from devtools.parser_engine_pilot.channel_occurrences import Candidate
 from devtools.parser_engine_pilot.citi_channels import CitiResolution, resolve
+from devtools.parser_engine_pilot.citi_money_lines import MoneyLineDisposition, dispose_unlinked_money_lines
 from devtools.parser_engine_pilot.citi_source_dispositions import (
     DatedLineDisposition,
     dispose_dated_lines,
@@ -44,6 +45,7 @@ class CitiEvidence:
     fee_candidates: tuple[Candidate, ...]
     resolution: CitiResolution
     dated_lines: tuple[DatedLineDisposition, ...]
+    money_lines: tuple[MoneyLineDisposition, ...]
     dated_start_row_bijection: bool
 
 
@@ -202,6 +204,9 @@ def read_recent_citi(source: bytes) -> CitiEvidence:
     bijection = _dated_start_bijection(resolution, dated_lines)
     if not bijection:
         raise CitiEvidenceError("unresolved_dated_start")
+    money_lines = dispose_unlinked_money_lines(decoded.pages, dated_lines)
+    if any(item.status == "unresolved" for item in money_lines):
+        raise CitiEvidenceError("unresolved_money_line")
     return CitiEvidence(
         hashlib.sha256(source).hexdigest(),
         decoded.pages,
@@ -212,5 +217,6 @@ def read_recent_citi(source: bytes) -> CitiEvidence:
         fees,
         resolution,
         dated_lines,
+        money_lines,
         bijection,
     )

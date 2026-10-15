@@ -230,6 +230,13 @@ old reader on ten archive statements. The standalone
 builds source-linked candidates without the legacy reader; the audit invokes
 that reader afterward for comparison. Runtime integration and Intel Mac native
 limits remain open.
+An additional [money-line ledger](../devtools/parser_engine_pilot/citi_money_lines.py)
+disposes all 88 dollar-bearing lines outside dated transaction spans after page
+one across the ten recent statements. They are printed totals, annual
+summaries, cardholder subtotals, APR information, fee notices or legal
+disclosure; none becomes a transaction. Unknown monetary lines refuse the
+standalone path. This is stronger transaction-region capture evidence, while
+non-money text and native import acceptance remain open.
 The [XLSX worker pilot](../devtools/parser_engine_pilot/bounded_xlsx.py)
 uses the same fixed process limiter and matches synthetic in-process evidence;
 it still lacks an archived workbook fixture. Intel Mac memory and timeout

@@ -76,6 +76,7 @@ def audit(source: bytes) -> dict[str, int | bool]:
     counts = Counter(item.status for item in classified)
     shapes = Counter(overlap_shape(item.candidate, table) for item in classified if item.status == "unresolved_overlap")
     source_counts = Counter(item.status for item in evidence.dated_lines)
+    money_counts = Counter(item.status for item in evidence.money_lines)
     resolution = evidence.resolution
     with PDFReader(source, "in-memory.pdf") as reader:
         metadata = {
@@ -177,6 +178,8 @@ def audit(source: bytes) -> dict[str, int | bool]:
         ),
         "dated_start_dispositions_complete": source_counts["unresolved"] == 0,
         "dated_start_row_bijection": evidence.dated_start_row_bijection,
+        "nontransaction_money_lines": len(evidence.money_lines),
+        "unresolved_money_lines": money_counts["unresolved"],
     }
 
 
