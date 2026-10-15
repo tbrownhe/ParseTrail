@@ -5,11 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from parsetrail.core.money import parse_money, to_minor_units
-
 from devtools.parser_engine_pilot.channel_occurrences import Candidate, validate_candidates
 from devtools.parser_engine_pilot.citi_layout import AMOUNT, DEFINITION, TRANSACTION_DATE
 from devtools.parser_engine_pilot.citi_table import CitiTableEvidence
+from devtools.parser_engine_pilot.money_operations import usd_symbol_minor_v1
 from devtools.parser_engine_pilot.partial_dates import resolve_month_day
 from devtools.parser_engine_pilot.table_continuations import (
     JoinedTableRow,
@@ -47,7 +46,7 @@ def candidates_from_table(evidence: CitiTableEvidence, start_date: datetime, end
             Candidate(
                 resolve_month_day(transaction_raw, start_date, end_date),
                 resolve_month_day(posting_raw, start_date, end_date),
-                -to_minor_units(parse_money(group.amount_raw)),
+                -usd_symbol_minor_v1(group.amount_raw),
                 " ".join(group.description.split()),
                 "table",
                 first.page,

@@ -6,11 +6,11 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime
 
-from parsetrail.core.money import parse_money, to_minor_units
+from devtools.parser_engine_pilot.money_operations import USD_SYMBOL, usd_symbol_minor_v1
 
 PERIOD = re.compile(r"Billing Period:\s{0,4}(\d{2}/\d{2}/\d{2})-(\d{2}/\d{2}/\d{2})")
 ACCOUNT = re.compile(r"Account number ending in:?\s*(\d{4})")
-MONEY = r"-?\$\d{1,3}(?:,\d{3})*(?:\.\d{2})?"
+MONEY = USD_SYMBOL.pattern
 PREVIOUS = re.compile(rf"\bPrevious balance\s+(?P<amount>{MONEY})")
 NEW = re.compile(rf"\bNew balance\s+(?P<amount>{MONEY})")
 
@@ -65,7 +65,7 @@ def parse_header(first_page_chars: str, pages: tuple[str, ...]) -> CitiStatement
                             page_number,
                             line_number,
                             raw,
-                            -to_minor_units(parse_money(raw)),
+                            -usd_symbol_minor_v1(raw),
                         )
                     )
     if not accounts or len({account for account, _, _ in accounts}) != 1:

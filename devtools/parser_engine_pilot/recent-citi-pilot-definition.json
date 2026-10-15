@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "parser_id": "pdf_citicc_202511",
-  "revision": "pilot-1",
+  "revision": "pilot-2",
   "kind": "statement",
   "suffix": ".pdf",
   "routing": {
@@ -11,7 +11,7 @@
   },
   "geometry_operation": "citi_header_geometry_v1",
   "date_operation": "partial_month_day_v1",
-  "money_operation": "citi_usd_amount_v1",
+  "money_operation": "usd_symbol_minor_v1",
   "account_effect": "negate_printed_amount_v1",
   "table_continuation": {
     "operation": "table_continuation_v1",

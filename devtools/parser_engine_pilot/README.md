@@ -263,6 +263,9 @@ changed definition bytes are refused. A temporary fresh 2.0 SQLite profile
 saved and reopened all ten recent Citi archive files through this path without
 writing the originals. This remains a pilot, pending full page capture and
 native import acceptance.
+The Citi definition's `usd_symbol_minor_v1` operation now rejects undeclared
+money spellings and computes integer cents directly. All ten recent-layout
+archive PDFs retain 486 rows and 803 dispositions under pilot revision 2.
 
 [`bounded_pdf_text.py`](bounded_pdf_text.py) starts a separate PDF text worker
 with source, output, page, line and extracted-text limits plus a wall-clock

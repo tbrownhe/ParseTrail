@@ -80,3 +80,7 @@ source, definition, strict output and an unposted observation index. A temporary
 profile imported and reopened ten recent Citi archive PDFs through this path:
 486 rows and 803 source dispositions; every source hash stayed unchanged.
 Ledger account mapping and reviewed posting remain subsequent work.
+The Citi pilot's money operation now uses a finite, exact integer minor-unit
+parser for its declared USD symbol syntax. The revised pilot definition and
+engine version still produce 486 rows and 803 dispositions on the ten read-only
+archive PDFs. Broad 1.x money coercion is no longer on this path.

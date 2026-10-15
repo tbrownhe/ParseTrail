@@ -10,7 +10,6 @@ from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime
 
-from parsetrail.core.money import parse_money, to_minor_units
 from parsetrail.core.parser_classification import DocumentFeatures, matching_plugins, normalize_pdf_metadata
 
 from devtools.parser_engine_pilot.bounded_citi import extract_bounded_citi
@@ -34,6 +33,7 @@ from devtools.parser_engine_pilot.citi_source_dispositions import (
 from devtools.parser_engine_pilot.citi_statement_header import CitiStatementHeader, parse_header
 from devtools.parser_engine_pilot.citi_table import CitiTableEvidence
 from devtools.parser_engine_pilot.citi_table_candidates import CitiTableCandidates, candidates_from_table
+from devtools.parser_engine_pilot.money_operations import usd_symbol_minor_v1
 from devtools.parser_engine_pilot.partial_dates import resolve_month_day
 
 
@@ -85,7 +85,7 @@ def _text_candidates(pages: tuple[str, ...], start: datetime, end: datetime) -> 
                 Candidate(
                     resolve_month_day(transaction_raw, start, end),
                     resolve_month_day(posting_raw, start, end),
-                    -to_minor_units(parse_money(match.group("amount"))),
+                    -usd_symbol_minor_v1(match.group("amount")),
                     " ".join(match.group("description").split()),
                     "text",
                     page_number,
@@ -126,7 +126,7 @@ def fee_candidates(pages: tuple[str, ...] | list[str], start: datetime, end: dat
                 Candidate(
                     transaction_date,
                     transaction_date,
-                    -to_minor_units(parse_money(amount_match.group())),
+                    -usd_symbol_minor_v1(amount_match.group()),
                     description,
                     "fee",
                     page_number,

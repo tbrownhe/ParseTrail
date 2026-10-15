@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 from collections import Counter
 
-from parsetrail.core.money import parse_money, to_minor_units
 from parsetrail.core.source_evidence import (
     DateValue,
     MoneyValue,
@@ -30,6 +29,7 @@ from devtools.parser_engine_pilot.citi_layout import (
     TEXT_TRANSACTION,
 )
 from devtools.parser_engine_pilot.citi_table import CitiTableRow
+from devtools.parser_engine_pilot.money_operations import usd_symbol_minor_v1
 
 
 class CitiOutputError(ValueError):
@@ -116,7 +116,7 @@ def from_citi(evidence: CitiEvidence) -> SourceEvidence:
                 raise CitiOutputError("unknown_candidate_channel")
         if not fragments or amount_raw is None or amount_location is None:
             raise CitiOutputError("amount_source_missing")
-        if -to_minor_units(parse_money(amount_raw)) != representative.amount_minor:
+        if -usd_symbol_minor_v1(amount_raw) != representative.amount_minor:
             raise CitiOutputError("source_amount_mismatch")
         key = (
             representative.transaction_date,

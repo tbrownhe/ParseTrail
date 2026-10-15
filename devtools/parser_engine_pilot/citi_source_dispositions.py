@@ -11,10 +11,9 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Literal
 
-from parsetrail.core.money import parse_money, to_minor_units
-
 from devtools.parser_engine_pilot.channel_occurrences import Candidate, validate_candidates
 from devtools.parser_engine_pilot.citi_layout import AMOUNT, DATE_PREFIX, TEXT_TRANSACTION
+from devtools.parser_engine_pilot.money_operations import usd_symbol_minor_v1
 
 DATE_ONLY = re.compile(r"^\s*(?:\d+\s+)*(?P<date>\d{2}/\d{2})\s*$")
 
@@ -78,9 +77,7 @@ def _starts(pages: list[str]) -> list[_Start]:
                     end,
                 )
             amounts = {
-                -to_minor_units(parse_money(found.group()))
-                for raw in lines[index:end]
-                for found in AMOUNT.finditer(raw)
+                -usd_symbol_minor_v1(found.group()) for raw in lines[index:end] for found in AMOUNT.finditer(raw)
             }
             # A description may precede a date-only line in this layout. Do not
             # reach back past another dated start or beyond two nearby lines.

@@ -17,6 +17,7 @@ from parsetrail.core.parser_classification import validate_routing_metadata
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from devtools.parser_engine_pilot.channel_occurrences import OccurrenceRule
+from devtools.parser_engine_pilot.money_operations import USD_SYMBOL
 from devtools.parser_engine_pilot.table_continuations import ContinuationRule
 
 
@@ -43,7 +44,7 @@ class CitiDefinition(_DefinitionModel):
     routing: RoutingDefinition
     geometry_operation: Literal["citi_header_geometry_v1"]
     date_operation: Literal["partial_month_day_v1"]
-    money_operation: Literal["citi_usd_amount_v1"]
+    money_operation: Literal["usd_symbol_minor_v1"]
     account_effect: Literal["negate_printed_amount_v1"]
     table_continuation: ContinuationRule
     channel_occurrences: OccurrenceRule
@@ -80,7 +81,7 @@ def load_definition(data: bytes) -> tuple[CitiDefinition, str]:
 
 DEFINITION_BYTES = Path(__file__).with_name("recent-citi-pilot-definition.json").read_bytes()
 DEFINITION, DEFINITION_SHA256 = load_definition(DEFINITION_BYTES)
-EVIDENCE_ENGINE_VERSION = "recent-citi-evidence-pilot-2"
+EVIDENCE_ENGINE_VERSION = "recent-citi-evidence-pilot-3"
 
 RECENT_CITI_ID = DEFINITION.parser_id
 ROUTING_METADATA = {
@@ -103,7 +104,7 @@ ROUTING_METADATA = {
 }
 
 TRANSACTION_DATE = re.compile(r"\d{2}/\d{2}")
-AMOUNT = re.compile(r"-?\$\d{1,3}(?:,\d{3})*(?:\.\d{2})?")
+AMOUNT = USD_SYMBOL
 TEXT_TRANSACTION = re.compile(
     r"^\s*(?:\d+\s+)*(?:(?P<transaction_date>\d{2}/\d{2})\s+"
     r"(?P<posting_date>\d{2}/\d{2})|(?P<single_date>\d{2}/\d{2}))\s+"
