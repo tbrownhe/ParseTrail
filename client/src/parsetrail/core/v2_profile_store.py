@@ -142,7 +142,7 @@ class V2ProfileStore:
                     row_id TEXT PRIMARY KEY, source_sha256 TEXT NOT NULL REFERENCES Sources(sha256),
                     source_account TEXT NOT NULL,
                     source_account_form TEXT NOT NULL CHECK(source_account_form IN ('full','last_four','opaque')),
-                    row_role TEXT NOT NULL CHECK(row_role IN ('activity','period_summary')),
+                    row_role TEXT NOT NULL CHECK(row_role IN ('activity','period_summary','header_charge')),
                     date_role TEXT NOT NULL CHECK(date_role IN ('posting_date','activity_date','statement_period_end')),
                     observed_date TEXT NOT NULL, amount_minor INTEGER NOT NULL
                 );

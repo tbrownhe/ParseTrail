@@ -182,7 +182,7 @@ class ComponentEvidence(EvidenceModel):
 class ObservationEvidence(EvidenceModel):
     row_id: str = Field(pattern=SHA256)
     occurrence: int = Field(ge=0, le=100_000)
-    row_role: Literal["activity", "period_summary"]
+    row_role: Literal["activity", "period_summary", "header_charge"]
     source_account: str = Field(min_length=1, max_length=4096)
     source_account_form: Literal["full", "last_four", "opaque"]
     date_role: Literal["posting_date", "activity_date", "statement_period_end"]
@@ -196,8 +196,8 @@ class ObservationEvidence(EvidenceModel):
 
     @model_validator(mode="after")
     def consistent(self) -> ObservationEvidence:
-        if (self.row_role == "period_summary") != (self.date_role == "statement_period_end"):
-            raise ValueError("summary row date role")
+        if (self.row_role in {"period_summary", "header_charge"}) != (self.date_role == "statement_period_end"):
+            raise ValueError("period-end row date role")
         if self.source_account_form == "last_four" and (
             len(self.source_account) != 4 or not self.source_account.isdigit()
         ):

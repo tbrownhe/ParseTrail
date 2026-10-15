@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import sys
 from io import BytesIO
+from typing import Literal
 
 from devtools.parser_engine_pilot.worker_limits import enforce_child_memory_limit
 
@@ -20,7 +21,9 @@ MAX_METADATA_KEY_CHARS = 128
 MAX_METADATA_VALUE_CHARS = 1024
 
 
-def extract(source: bytes, *, layout: bool = False) -> tuple[tuple[str, ...], dict[str, str]]:
+def extract(
+    source: bytes, *, layout: Literal["simple", "fixed", "default"] = "simple"
+) -> tuple[tuple[str, ...], dict[str, str]]:
     import pdfplumber
 
     if not source or len(source) > MAX_SOURCE_BYTES:
@@ -41,11 +44,12 @@ def extract(source: bytes, *, layout: bool = False) -> tuple[tuple[str, ...], di
         ):
             raise ValueError("metadata_limit")
         for page in pdf.pages:
-            value = (
-                page.extract_text(layout=True, x_tolerance=0.5, y_tolerance=0.5)
-                if layout
-                else page.extract_text_simple()
-            ) or ""
+            if layout == "fixed":
+                value = page.extract_text(layout=True, x_tolerance=0.5, y_tolerance=0.5) or ""
+            elif layout == "default":
+                value = page.extract_text(layout=True) or ""
+            else:
+                value = page.extract_text_simple() or ""
             size = len(value.encode("utf-8"))
             total += size
             lines = len(value.splitlines())
@@ -61,7 +65,7 @@ def extract(source: bytes, *, layout: bool = False) -> tuple[tuple[str, ...], di
     return tuple(pages), metadata
 
 
-def main(*, layout: bool = False) -> int:
+def main(*, layout: Literal["simple", "fixed", "default"] = "simple") -> int:
     try:
         enforce_child_memory_limit(sys.argv[1])
         source = sys.stdin.buffer.read(MAX_SOURCE_BYTES + 1)

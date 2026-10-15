@@ -8,13 +8,14 @@ import sys
 import pytest
 from parsetrail.core.runtime_smoke import _sample_pdf
 
-from devtools.parser_engine_pilot.bounded_pdf_text import decode_pdf, decode_pdf_layout
+from devtools.parser_engine_pilot.bounded_pdf_text import decode_pdf, decode_pdf_default_layout, decode_pdf_layout
 from devtools.parser_engine_pilot.worker_limits import WorkerError, WorkerLimits, _WindowsJob
 
 
 def test_decodes_synthetic_pdf_in_bounded_worker() -> None:
     assert decode_pdf(_sample_pdf()).pages == ("ParseTrail smoke",)
     assert any("ParseTrail smoke" in page for page in decode_pdf_layout(_sample_pdf()).pages)
+    assert any("ParseTrail smoke" in page for page in decode_pdf_default_layout(_sample_pdf()).pages)
 
 
 def test_retains_pdf_author_for_bounded_layout_routing() -> None:
@@ -53,6 +54,9 @@ def test_refuses_oversized_or_invalid_pdf_without_source_in_error() -> None:
     with pytest.raises(WorkerError, match="worker_failed") as layout_error:
         decode_pdf_layout(b"private statement text")
     assert "private" not in str(layout_error.value)
+    with pytest.raises(WorkerError, match="worker_failed") as default_layout_error:
+        decode_pdf_default_layout(b"private statement text")
+    assert "private" not in str(default_layout_error.value)
 
 
 def test_deadline_terminates_worker() -> None:

@@ -16,6 +16,7 @@ MAX_OUTPUT_BYTES = 32 * 1024 * 1024
 WorkerModule = Literal[
     "devtools.parser_engine_pilot.pdf_text_worker",
     "devtools.parser_engine_pilot.pdf_layout_text_worker",
+    "devtools.parser_engine_pilot.pdf_default_layout_worker",
     "devtools.parser_engine_pilot.xlsx_worker",
     "devtools.parser_engine_pilot.wells_worker",
     "devtools.parser_engine_pilot.citi_worker",
@@ -151,6 +152,7 @@ def run_worker(
     if module not in {
         "devtools.parser_engine_pilot.pdf_text_worker",
         "devtools.parser_engine_pilot.pdf_layout_text_worker",
+        "devtools.parser_engine_pilot.pdf_default_layout_worker",
         "devtools.parser_engine_pilot.xlsx_worker",
         "devtools.parser_engine_pilot.wells_worker",
         "devtools.parser_engine_pilot.citi_worker",

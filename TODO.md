@@ -249,6 +249,13 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   Temporary V2 storage reopened 107 sources, 194 period-summary rows and 55
   blank-line dispositions with unchanged hashes. Later fund-section capture,
   accounting review and native acceptance remain open.
+  OCCU NICE card now has a finite default-layout operation. All 32 archived
+  PDFs matched the accepted reader on account, period, balances and 219 rows:
+  187 dated activity observations and 32 separately tagged header charges.
+  Every printed equation passed. Temporary V2 storage reopened all sources,
+  219 observations and 96 located dispositions with unchanged hashes. The
+  rewards `PreviousBalance` is separately labeled as points evidence. Full
+  page capture, signed routing and native acceptance remain open.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and

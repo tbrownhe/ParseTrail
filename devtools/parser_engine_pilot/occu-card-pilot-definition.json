@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "parser_id": "pdf_occucc_201904",
+  "revision": "1",
+  "suffix": ".pdf",
+  "kind": "statement",
+  "operation": "card_header_charge_v1",
+  "text_channel": "pdf_default_layout_v1",
+  "date_format": "MM/DD+MM/DD/YY",
+  "money_format": "signed_usd_2dp",
+  "amount_direction": "invert_for_liability",
+  "account_label": "AccountNumber",
+  "closing_date_label": "StatementClosingDate",
+  "cycle_days_label": "DaysinBillingCycle",
+  "opening_label": "PreviousBalance",
+  "closing_label": "NewBalance",
+  "interest_label": "InterestCharged"
+}

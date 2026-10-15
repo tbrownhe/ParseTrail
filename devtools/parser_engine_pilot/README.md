@@ -172,6 +172,21 @@ summary lines with unchanged source hashes. Later fund sections remain outside
 the current summary capture; full-page capture, accounting review and native
 acceptance remain open.
 
+`occu_card_lines.py` uses a bounded default-layout text worker because the
+accepted OCCU NICE card reader uses `pdfplumber` layout extraction at its
+default tolerances. Its normalized text matched the accepted decoder on all
+32 archived PDFs. The finite operation separates 187 dated activity rows from
+32 printed header interest charges, labeling the latter `header_charge` with
+a derived statement-end date and its own header location. The masked account
+is labeled `last_four`. All 32 PDFs matched the accepted reader on account,
+period, balances and 219 row dates/amounts in order; every printed balance
+equation passed. A temporary V2 profile reopened 32 sources, 219 observations
+and 96 located dispositions with unchanged source hashes. The second
+`PreviousBalance` belongs to the rewards points section and is explicitly
+located as a nonfinancial disposition. Synthetic tests
+refuse missing interest, conflicting balances and unresolved dated lines.
+Complete page capture, signed routing and native acceptance remain open.
+
 Every Chase-referenced fixture in the authorized closed-copy archive matched
 the accepted reader's account, period, printed balances and rows in a read-only
 comparison. The comparison also accounted for every date-prefixed line as a

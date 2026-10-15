@@ -74,3 +74,8 @@ def decode_pdf(source: bytes, limits: WorkerLimits = WorkerLimits()) -> DecodedP
 def decode_pdf_layout(source: bytes, limits: WorkerLimits = WorkerLimits()) -> DecodedPDFText:
     """Return capped fixed-tolerance layout pages through the same OS boundary."""
     return _decode_pdf(source, "devtools.parser_engine_pilot.pdf_layout_text_worker", limits)
+
+
+def decode_pdf_default_layout(source: bytes, limits: WorkerLimits = WorkerLimits()) -> DecodedPDFText:
+    """Return capped default-layout pages through the same OS boundary."""
+    return _decode_pdf(source, "devtools.parser_engine_pilot.pdf_default_layout_worker", limits)

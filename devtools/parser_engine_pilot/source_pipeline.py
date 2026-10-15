@@ -11,7 +11,7 @@ from typing import Literal
 
 from parsetrail.core.source_evidence import SourceEvidence
 
-from devtools.parser_engine_pilot.bounded_pdf_text import decode_pdf, decode_pdf_layout
+from devtools.parser_engine_pilot.bounded_pdf_text import decode_pdf, decode_pdf_default_layout, decode_pdf_layout
 from devtools.parser_engine_pilot.bounded_wells import extract_bounded_wells
 from devtools.parser_engine_pilot.card_lines import parse_card_lines
 from devtools.parser_engine_pilot.card_source_output import from_card
@@ -23,6 +23,7 @@ from devtools.parser_engine_pilot.dual_text_card_lines import parse_dual_text_ca
 from devtools.parser_engine_pilot.engine import parse_csv
 from devtools.parser_engine_pilot.investment_summary_lines import parse_investment_summary
 from devtools.parser_engine_pilot.loan_history_lines import parse_loan_history
+from devtools.parser_engine_pilot.occu_card_lines import parse_occu_card
 from devtools.parser_engine_pilot.pdf_lines import page_lines
 from devtools.parser_engine_pilot.savings_lines import parse_savings_lines, parse_summary_savings_lines
 from devtools.parser_engine_pilot.single_column_summary import parse_plan_label_summary, parse_single_column_summary
@@ -62,6 +63,9 @@ VANGUARD_DEFINITION_SHA256 = hashlib.sha256(
 ).hexdigest()
 FIDELITY_401K_DEFINITION_SHA256 = hashlib.sha256(
     Path(__file__).with_name("fidelity-401k-summary-pilot-definition.json").read_bytes()
+).hexdigest()
+OCCU_CARD_DEFINITION_SHA256 = hashlib.sha256(
+    Path(__file__).with_name("occu-card-pilot-definition.json").read_bytes()
 ).hexdigest()
 
 
@@ -123,6 +127,10 @@ def build_source_evidence(source: bytes, definition: bytes, *, suffix: Literal["
                 simple = page_lines(source, simple_pages, extraction_library="pdfplumber-bounded-simple-v1")
                 layout = page_lines(source, layout_pages, extraction_library="pdfplumber-bounded-layout-fixed-v1")
                 output = parse_dual_text_card(definition, layout, simple)
+            elif digest == OCCU_CARD_DEFINITION_SHA256:
+                pages = decode_pdf_default_layout(source).pages
+                lines = page_lines(source, pages, extraction_library="pdfplumber-bounded-layout-default-v1")
+                output = parse_occu_card(definition, lines)
             else:
                 raise SourcePipelineError("unsupported_definition_revision")
         if (
