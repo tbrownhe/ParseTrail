@@ -23,6 +23,8 @@ from devtools.parser_engine_pilot.citi_layout import load_definition as load_cit
 from devtools.parser_engine_pilot.citi_source_output import from_citi
 from devtools.parser_engine_pilot.dual_text_card_lines import parse_dual_text_card
 from devtools.parser_engine_pilot.engine import parse_csv
+from devtools.parser_engine_pilot.hsa_cash_lines import parse_cash_section
+from devtools.parser_engine_pilot.hsa_cash_source_output import from_hsa_cash
 from devtools.parser_engine_pilot.investment_summary_lines import parse_investment_summary
 from devtools.parser_engine_pilot.legacy_citi_lines import parse_legacy_citi
 from devtools.parser_engine_pilot.loan_history_lines import parse_loan_history
@@ -97,6 +99,9 @@ TRANSAMERICA_DEFINITION_SHA256 = hashlib.sha256(
 WELLS_LOAN_DEFINITION_SHA256 = hashlib.sha256(
     Path(__file__).with_name("wells-loan-pilot-definition.json").read_bytes()
 ).hexdigest()
+HSA_CASH_DEFINITION_SHA256 = hashlib.sha256(
+    Path(__file__).with_name("hsa-cash-pilot-definition.json").read_bytes()
+).hexdigest()
 
 
 class SourcePipelineError(ValueError):
@@ -130,6 +135,7 @@ def build_source_evidence(source: bytes, definition: bytes, *, suffix: Literal["
                 FIDELITY_401K_DEFINITION_SHA256,
                 TRANSAMERICA_DEFINITION_SHA256,
                 WELLS_LOAN_DEFINITION_SHA256,
+                HSA_CASH_DEFINITION_SHA256,
             }:
                 decoded = decode_pdf(source)
                 lines = page_lines(source, decoded.pages, extraction_library="pdfplumber-bounded-simple-v1")
@@ -151,6 +157,11 @@ def build_source_evidence(source: bytes, definition: bytes, *, suffix: Literal["
                     output = parse_retirement_summary(definition, lines)
                 elif digest == WELLS_LOAN_DEFINITION_SHA256:
                     output = parse_wells_loan(definition, lines)
+                elif digest == HSA_CASH_DEFINITION_SHA256:
+                    cash = parse_cash_section(definition, lines)
+                    if any(item.reason == "cash_window_unclassified" for item in cash.unresolved_section_lines):
+                        raise SourcePipelineError("unclassified_cash_window_line")
+                    output = from_hsa_cash(cash, lines)
                 else:
                     output = parse_summary_savings_lines(definition, lines)
             elif digest == WELLS_DEFINITION_SHA256:

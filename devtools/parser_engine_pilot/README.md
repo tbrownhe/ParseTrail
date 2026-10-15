@@ -540,3 +540,18 @@ The accepted reader's more permissive money syntax still needs a disposition
 for other exports, and revised/ambiguous exports must never overwrite previous
 evidence. Citi's layout-specific extraction remains an exception candidate.
 These results should inform V2-2 storage before its schema is frozen.
+
+The detailed MOHELA export now uses the `mohela_detailed_export` identity in the
+strict source pipeline. The one authorized detailed export matched the accepted
+reader across 299 rows and ten loan identities. Its source, declaration and
+evidence reopened from a temporary 2.0 profile; 208 unknown printed principal
+balances remained unknown. The older life-of-loan CSV has no loan identity
+column, so it remains a separate unresolved accounting format.
+
+The HealthEquity cash operation now classifies all 489 non-dated lines inside
+the printed cash boundaries as headings, rate tables, fee summaries or interest
+disclosures. A new shape remains explicitly unclassified and the bounded source
+pipeline refuses it. All 60 authorized PDFs passed the pipeline, with 236 cash
+rows and 489 located dispositions, and reopened from a temporary 2.0 profile.
+The evidence remains scoped to cash and does not claim full-page capture or
+whole-account value.

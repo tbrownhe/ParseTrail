@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "parser_id": "mohela_detailed_pilot",
+  "parser_id": "mohela_detailed_export",
   "revision": "1",
   "suffix": ".csv",
   "kind": "activity_export",

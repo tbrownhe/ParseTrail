@@ -26,7 +26,11 @@ def test_cash_scope_unknown_description_and_unclassified_lines_round_trip(tmp_pa
     assert len(account.rows) == 3
     assert account.rows[-1].description.provenance == "unknown"
     assert account.rows[-1].description.text is None
-    assert all(item.code == "cash_window_unclassified" for item in output.payload.dispositions)
+    assert [item.code for item in output.payload.dispositions] == [
+        "cash_window_rate_table",
+        "cash_window_heading",
+        "cash_window_heading",
+    ]
     assert len(output.payload.dispositions) == 3
     assert output.payload.independent_balance_verified is True
     assert output.payload.capture_verified is False

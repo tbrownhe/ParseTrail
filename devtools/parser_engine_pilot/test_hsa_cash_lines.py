@@ -79,6 +79,13 @@ def test_truncated_or_inconsistent_cash_activity_fails_printed_checks() -> None:
         parse(duplicate)
 
 
+def test_unfamiliar_monetary_cash_window_line_stays_unclassified() -> None:
+    changed = pages()
+    changed[0] = changed[0].replace("InterestRateScheduleEffective:", "Unknown $1.00 InterestRateScheduleEffective:")
+    evidence = parse(changed)
+    assert evidence.unresolved_section_lines[0].reason == "cash_window_unclassified"
+
+
 def test_hsa_declaration_and_dated_line_work_are_bounded() -> None:
     saved = json.loads(Path(__file__).with_name("hsa-cash-declaration-schema-v1.json").read_text(encoding="utf-8"))
     assert saved == HsaCashDefinition.model_json_schema()

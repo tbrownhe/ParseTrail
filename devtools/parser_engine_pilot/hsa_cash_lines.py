@@ -93,7 +93,13 @@ class UnresolvedSectionLine:
     page: int
     line: int
     raw: str
-    reason: Literal["non_dated_cash_window_line"]
+    reason: Literal[
+        "cash_window_heading",
+        "cash_window_rate_table",
+        "cash_window_fee_summary",
+        "cash_window_interest_disclosure",
+        "cash_window_unclassified",
+    ]
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,6 +159,42 @@ def _money(raw: str, line: PageLine) -> int:
     if minor > MAX_MONEY_MINOR:
         raise HsaCashError("money_range", line)
     return -minor if negative else minor
+
+
+def _non_dated_disposition(raw: str) -> str:
+    """Classify printed non-activity lines inside the cash balance boundaries."""
+    line = raw.lstrip("_ ")
+    if line in {
+        "",
+        "Interest AverageDaily Interest",
+        "BalanceTier",
+        "Rate Balance Earned YeartoDate",
+        "Period",
+        "AccountStatement(Continued)",
+        ". Depositor Account",
+        "Date DescriptionofTransaction (Withdrawal) Balance",
+    } or re.fullmatch(r"[1-9][0-9]*of[1-9][0-9]*", line):
+        return "cash_window_heading"
+    if line.startswith(("TotalNon-SufficientFundsFees ", "TotalReturnDepositItemFees ", "TotalOverdraftFees ")):
+        return "cash_window_fee_summary"
+    if re.fullmatch(r"\$[0-9][0-9,]*\.[0-9]{2}\)", line):
+        return "cash_window_interest_disclosure"
+    if line.startswith(("$", "Over$", "Total ", "Fundsarecurrentlyheldat", "InterestRateScheduleEffective:")):
+        return "cash_window_rate_table"
+    if line.startswith(
+        (
+            "Interestfor",
+            "forperiodis",
+            "yieldearnedforperiodis",
+            "percentageyieldearnedforperiodis",
+            "averagecollectedbalanceof",
+            "balanceof",
+            "investedbalanceof",
+            "of$",
+        )
+    ):
+        return "cash_window_interest_disclosure"
+    return "cash_window_unclassified"
 
 
 def parse_cash_section(
@@ -218,7 +260,7 @@ def parse_cash_section(
         normalized = line.normalized.lstrip("_ ")
         if DATED_ROW.match(normalized) is None:
             unresolved.append(
-                UnresolvedSectionLine(line.line_id, line.page, line.line, line.raw, "non_dated_cash_window_line")
+                UnresolvedSectionLine(line.line_id, line.page, line.line, line.raw, _non_dated_disposition(line.raw))
             )
             continue
         if len(normalized) > MAX_DATED_LINE_CHARS:

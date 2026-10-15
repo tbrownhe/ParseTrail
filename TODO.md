@@ -308,6 +308,14 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   storage reopened all 45 sources and 45 identity-copy dispositions with
   unchanged hashes. Ledger treatment, full-page capture and native acceptance
   remain open.
+  Detailed MOHELA now round-trips 299 rows and ten loan identities through the
+  strict source pipeline and temporary 2.0 profile, retaining 208 unknown
+  principal balances. The older CSV's missing loan identity remains an
+  accounting decision. HealthEquity now classifies all 489 non-dated cash-window
+  lines and round-trips 60 PDFs, 236 cash rows and 489 dispositions through the
+  bounded pipeline and temporary profile. Cash scope and full-page capture
+  remain explicit limits. Ten authorized Synchrony PDFs were found outside the
+  imported archive; their old parser reads 97 rows, and 2.0 comparison is next.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and

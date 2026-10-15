@@ -115,7 +115,7 @@ def from_hsa_cash(evidence: HsaCashEvidence, lines: PDFLineEvidence) -> SourceEv
             raise ValueError("hsa_unclassified_line_mismatch")
         dispositions.append(
             SourceDisposition(
-                code="cash_window_unclassified",
+                code=item.reason,
                 location=PdfLine(kind="pdf_line", page=item.page, line=item.line),
                 raw_values=(raw,),
             )
