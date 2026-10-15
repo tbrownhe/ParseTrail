@@ -89,6 +89,16 @@ from a temporary profile with 11 dispositions and unchanged source hashes.
 Full-page capture, signed catalog routing and native worker acceptance remain
 open.
 
+The same `savings_lines.py` engine now has a second finite operation for the
+older LendingClub LevelUp layout, under
+[`summary-savings-declaration-schema-v1.json`](summary-savings-declaration-schema-v1.json).
+It checks the printed six-value summary and balance forward, carries inherited
+row dates and the period-end interest date as derived, and verifies every
+printed running balance. All five referenced archive PDFs matched the accepted
+reader on account, period, printed endpoints and 24 rows. Their strict evidence
+reopened from a temporary profile with 20 located dispositions; source hashes
+were unchanged. Complete page capture and native admission remain open.
+
 Every Chase-referenced fixture in the authorized closed-copy archive matched
 the accepted reader's account, period, printed balances and rows in a read-only
 comparison. The comparison also accounted for every date-prefixed line as a

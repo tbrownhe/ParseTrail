@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "parser_id": "lendingclub_savings_line_pilot",
+  "revision": "1",
+  "suffix": ".pdf",
+  "kind": "statement",
+  "operation": "summary_inherited_savings_v1",
+  "capabilities": [
+    "pdf_lines_v1",
+    "summary_equation_v1",
+    "inherited_row_date_v1",
+    "printed_running_chain_v1"
+  ],
+  "period_label": "Statement from",
+  "period_separator": "thru",
+  "account_label": "LevelUp Savings",
+  "summary_heading": "Beginning Interest Service Ending",
+  "summary_header": "Balance + Deposits + Paid - Deductions- Charge = Balance",
+  "activity_end": "Previous Statement Date:",
+  "balance_forward_label": "Balance Forward",
+  "interest_date_override_label": "Interest Paid",
+  "period_date_format": "MM/DD/YY",
+  "row_date_format": "MM/DD",
+  "money_format": "trailing_minus_2dp"
+}

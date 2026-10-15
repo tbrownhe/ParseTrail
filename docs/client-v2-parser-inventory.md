@@ -159,6 +159,12 @@ referenced Happen PDFs. It matched the accepted reader's account, period,
 printed endpoints and eight located rows with running balances. The 11
 dispositions include repeated headers, balance-line tails and activity markers;
 full-page capture is still unverified.
+Its second finite operation covers the older LendingClub savings line layout.
+All five referenced archive PDFs matched the accepted reader on account,
+period, printed endpoints and 24 rows; their 20 located dispositions preserve
+balance-forward and section headers. The printed six-value summary and running
+chain check independently. The inherited date and period-end interest date
+remain derived, and complete page capture is still unverified.
 
 ## Remaining family operation costs
 

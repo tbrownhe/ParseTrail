@@ -198,6 +198,11 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   balances. Bounded strict evidence reopened in a temporary profile with 11
   located dispositions and unchanged source hashes. Full-page capture remains
   open for this family too.
+  The shared savings engine's older LendingClub operation now matches all five
+  referenced archive statements, including 24 inherited-date/running-balance
+  rows and the independently printed summary equation. Their strict evidence
+  reopened from a temporary profile with 20 located dispositions and unchanged
+  source hashes; full-page capture and native admission remain open.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and
