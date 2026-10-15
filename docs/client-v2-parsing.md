@@ -220,7 +220,13 @@ table transactions. The [Citi date/money adapter](../devtools/parser_engine_pilo
 matches the current table rows in order without promoting those details to
 financial activity. The Citi audit now feeds its candidate resolver from both
 bounded text and table workers; the old reader remains its accepted-result
-baseline. Runtime integration and Intel Mac native limits remain open.
+baseline. The Citi worker now also returns a capped first-page character stream,
+and the PDF text worker returns capped metadata for routing. A
+[finite header adapter](../devtools/parser_engine_pilot/citi_statement_header.py)
+reads the billing period, account suffix and printed balances with source
+locations. Bounded layout classification and all header fields matched the
+old reader on ten archive statements. Runtime integration and Intel Mac native
+limits remain open.
 The [XLSX worker pilot](../devtools/parser_engine_pilot/bounded_xlsx.py)
 uses the same fixed process limiter and matches synthetic in-process evidence;
 it still lacks an archived workbook fixture. Intel Mac memory and timeout

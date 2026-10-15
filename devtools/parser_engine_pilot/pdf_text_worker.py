@@ -15,9 +15,12 @@ MAX_TEXT_BYTES = 4 * 1024 * 1024
 MAX_OUTPUT_BYTES = 8 * 1024 * 1024
 MAX_LINES_PER_PAGE = 10_000
 MAX_TOTAL_LINES = 50_000
+MAX_METADATA_KEYS = 32
+MAX_METADATA_KEY_CHARS = 128
+MAX_METADATA_VALUE_CHARS = 1024
 
 
-def extract(source: bytes) -> tuple[str, ...]:
+def extract(source: bytes) -> tuple[tuple[str, ...], dict[str, str]]:
     import pdfplumber
 
     if not source or len(source) > MAX_SOURCE_BYTES:
@@ -28,6 +31,15 @@ def extract(source: bytes) -> tuple[str, ...]:
     with pdfplumber.open(BytesIO(source)) as pdf:
         if not 1 <= len(pdf.pages) <= MAX_PAGES:
             raise ValueError("page_limit")
+        raw_metadata = pdf.metadata or {}
+        if len(raw_metadata) > MAX_METADATA_KEYS:
+            raise ValueError("metadata_limit")
+        metadata = {str(key): str(value) for key, value in raw_metadata.items() if value is not None}
+        if any(
+            not key or len(key) > MAX_METADATA_KEY_CHARS or len(value) > MAX_METADATA_VALUE_CHARS
+            for key, value in metadata.items()
+        ):
+            raise ValueError("metadata_limit")
         for page in pdf.pages:
             value = page.extract_text_simple() or ""
             size = len(value.encode("utf-8"))
@@ -42,15 +54,17 @@ def extract(source: bytes) -> tuple[str, ...]:
             ):
                 raise ValueError("text_limit")
             pages.append(value)
-    return tuple(pages)
+    return tuple(pages), metadata
 
 
 def main() -> int:
     try:
         enforce_child_memory_limit(sys.argv[1])
         source = sys.stdin.buffer.read(MAX_SOURCE_BYTES + 1)
-        pages = extract(source)
-        payload = json.dumps({"pages": pages}, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        pages, metadata = extract(source)
+        payload = json.dumps({"pages": pages, "metadata": metadata}, ensure_ascii=False, separators=(",", ":")).encode(
+            "utf-8"
+        )
         if len(payload) > MAX_OUTPUT_BYTES:
             raise ValueError("output_limit")
     except Exception:

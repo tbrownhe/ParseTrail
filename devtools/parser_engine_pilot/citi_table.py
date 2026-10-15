@@ -47,6 +47,7 @@ class CitiTableEvidence:
     source_sha256: str
     engine_version: str
     extraction_library: str
+    first_page_chars: str
     pages: tuple[CitiTablePage, ...]
     rows: tuple[CitiTableRow, ...]
     coverage_verified: Literal[False]
@@ -71,9 +72,14 @@ def extract_citi_table(source: bytes, pages, *, extraction_library: str) -> Citi
     parser = RecentCiti()
     page_evidence = []
     rows = []
+    first_page_chars = ""
     for page_number, page in enumerate(pages, 1):
         if page_number > MAX_PAGES or len(page.chars) > MAX_CHARS_PER_PAGE:
             raise CitiTableError("page_limit")
+        if page_number == 1:
+            first_page_chars = "".join(char["text"] for char in page.chars)
+            if not first_page_chars or len(first_page_chars) > MAX_CHARS_PER_PAGE:
+                raise CitiTableError("first_page_chars_limit")
         if parser.stop:
             page_evidence.append(CitiTablePage(page_number, "after_stop", None, (), True))
             continue
@@ -139,6 +145,7 @@ def extract_citi_table(source: bytes, pages, *, extraction_library: str) -> Citi
         hashlib.sha256(source).hexdigest(),
         ENGINE_VERSION,
         extraction_library,
+        first_page_chars,
         tuple(page_evidence),
         tuple(rows),
         False,

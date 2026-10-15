@@ -125,6 +125,10 @@ and table workers. The shared continuation operation forms 471 table rows and
 retains 36 post-amount travel/lodging detail rows as source evidence; no detail
 line becomes a financial row. Its legacy parser remains the accepted-result
 baseline.
+The bounded text worker supplies metadata to classify the recent layout, while
+the bounded candidate path reads the
+statement period, account suffix and printed balances from capped worker
+evidence. Those fields matched the old reader on all ten archive statements.
 The XLSX adapter also runs in a fixed, bounded worker and matches the
 in-process synthetic evidence. It has no referenced archive workbook and
 still needs Intel Mac native checks before runtime admission.

@@ -12,7 +12,15 @@ from devtools.parser_engine_pilot.table_continuations import ContinuationError
 def evidence(*cells: tuple[str, str, str, str]) -> CitiTableEvidence:
     rows = tuple(CitiTableRow(1, index, (0, 0, 1, 1), None, raw, "table") for index, raw in enumerate(cells, 1))
     return CitiTableEvidence(
-        1, "0" * 64, "test", "test", (CitiTablePage(1, "table", (0, 0, 1, 1), (0, 1), False),), rows, False, False
+        1,
+        "0" * 64,
+        "test",
+        "test",
+        "unused",
+        (CitiTablePage(1, "table", (0, 0, 1, 1), (0, 1), False),),
+        rows,
+        False,
+        False,
     )
 
 

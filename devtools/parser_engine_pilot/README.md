@@ -216,10 +216,20 @@ Run one authorized source with:
 client/.venv/Scripts/python.exe -m devtools.parser_engine_pilot.audit_citi_channels C:\private\recent-citi.pdf
 ```
 
-The audit's legacy baseline and layout classification remain in process; its
-candidate text and table evidence comes from the bounded workers. The pilot's
+The audit's legacy baseline, including its layout classification, remains in
+process for comparison; candidate text and table evidence comes from the
+bounded workers. The pilot's
 finite resolver and dated-start inventory are not runtime parsers or full-page
 capture proof.
+
+The Citi worker also retains a capped first-page character stream; the shared
+PDF text worker returns capped metadata for routing. The
+[statement-header adapter](citi_statement_header.py) reads the
+billing period from that stream and finds the account suffix and printed
+balances at bounded text line locations. The audit now independently routes
+and builds candidate fields from bounded evidence, then compares them to the
+old reader. All ten archive statements passed header, routing, row and balance
+parity. The old reader remains only the audit's comparison baseline.
 
 [`bounded_pdf_text.py`](bounded_pdf_text.py) starts a separate PDF text worker
 with source, output, page, line and extracted-text limits plus a wall-clock

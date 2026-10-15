@@ -10,6 +10,7 @@ from pydantic import TypeAdapter, ValidationError
 from devtools.parser_engine_pilot.citi_table import (
     ENGINE_VERSION,
     MAX_CELL_CHARS,
+    MAX_CHARS_PER_PAGE,
     MAX_TABLE_ROWS,
     CitiTableEvidence,
 )
@@ -36,6 +37,8 @@ def extract_bounded_citi(source: bytes, *, limits: WorkerLimits = WorkerLimits()
         or evidence.engine_version != ENGINE_VERSION
         or evidence.coverage_verified is not False
         or evidence.account_balance_reconciled is not False
+        or not evidence.first_page_chars
+        or len(evidence.first_page_chars) > MAX_CHARS_PER_PAGE
         or not evidence.pages
         or len(evidence.rows) > MAX_TABLE_ROWS
         or any(page.page != index for index, page in enumerate(evidence.pages, 1))

@@ -159,6 +159,8 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   recent-layout archive PDFs without changing source hashes. The shared
   continuation operation forms 471 table transactions and retains 36
   supplemental detail lines separately, with accepted-row order parity.
+  Bounded evidence now also reproduces layout classification, statement
+  dates, account suffix and printed balances on those ten sources.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and

@@ -8,22 +8,24 @@ import json
 import re
 from collections import Counter
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
 from loguru import logger
 from parsetrail.core.money import parse_money, to_minor_units
 from parsetrail.core.parse import extract_pdf_features
-from parsetrail.core.parser_classification import matching_plugins
+from parsetrail.core.parser_classification import DocumentFeatures, matching_plugins, normalize_pdf_metadata
 from parsetrail.core.utils import PDFReader, get_absolute_date
 from parsetrail.plugins.pdf_citicc_202506 import Parser as OlderCiti
 from parsetrail.plugins.pdf_citicc_202511 import Parser as RecentCiti
 
 from devtools.parser_engine_pilot.bounded_citi import extract_bounded_citi
-from devtools.parser_engine_pilot.bounded_pdf_text import decode_text
+from devtools.parser_engine_pilot.bounded_pdf_text import decode_pdf
 from devtools.parser_engine_pilot.channel_occurrences import Candidate, match_occurrences
 from devtools.parser_engine_pilot.citi_channels import CITI_OCCURRENCE_RULE, resolve
 from devtools.parser_engine_pilot.citi_source_dispositions import dispose_dated_lines
+from devtools.parser_engine_pilot.citi_statement_header import parse_header
 from devtools.parser_engine_pilot.citi_table_candidates import candidates_from_table
 
 
@@ -69,7 +71,7 @@ def overlap_shape(candidate: Candidate, table: list[Candidate]) -> str:
     return "unclassified_overlap"
 
 
-def fee_candidates(parser: RecentCiti, pages: list[str]) -> list[Candidate]:
+def fee_candidates(parser: RecentCiti, pages: list[str], start_date: datetime, end_date: datetime) -> list[Candidate]:
     """Locate multiline fee rows in the printed fee section."""
     result = []
     for page_number, page in enumerate(pages, 1):
@@ -94,7 +96,7 @@ def fee_candidates(parser: RecentCiti, pages: list[str]) -> list[Candidate]:
             amount_match = parser.AMOUNT.search(line)
             if amount_match is None:
                 continue
-            transaction_date = get_absolute_date(pending[0], parser.start_date, parser.end_date).date()
+            transaction_date = get_absolute_date(pending[0], start_date, end_date).date()
             description = " ".join(" ".join(pending[1]).replace(amount_match.group(), "").split())
             result.append(
                 Candidate(
@@ -129,13 +131,35 @@ def audit(source: bytes) -> dict[str, int | bool]:
             raise ValueError("wrong_or_ambiguous_citi_layout")
         parser = RecentCiti()
         accepted = parser.parse(reader)
-        bounded_text = decode_text(source)
+        decoded = decode_pdf(source)
+        bounded_text = decoded.pages
         if tuple(reader.pages_simple or []) != bounded_text:
             raise ValueError("bounded_simple_text_changed")
         bounded_pages = list(bounded_text)
         bounded_table = extract_bounded_citi(source)
+        bounded_features = DocumentFeatures(
+            suffix=".pdf",
+            body_text="\n".join(" ".join(line.split()) for page in bounded_text for line in page.splitlines()),
+            header_text="\n".join(" ".join(line.split()) for page in bounded_text for line in page.splitlines()[:40]),
+            pdf_metadata=normalize_pdf_metadata(dict(decoded.metadata)),
+            page_count=len(bounded_text),
+        )
+        if matching_plugins(bounded_features, metadata) != (RecentCiti.PLUGIN_NAME,):
+            raise ValueError("bounded_layout_classification_changed")
+        header = parse_header(bounded_table.first_page_chars, bounded_text)
+        accepted_account = accepted.accounts[0]
+        if (
+            header.start_date != accepted.start_date
+            or header.end_date != accepted.end_date
+            or header.account_suffix != accepted_account.account_num
+            or header.previous_balance.ledger_minor != to_minor_units(accepted_account.start_balance)
+            or header.new_balance.ledger_minor != to_minor_units(accepted_account.end_balance)
+        ):
+            raise ValueError("bounded_statement_header_changed")
+        statement_start = datetime.combine(header.start_date, datetime.min.time())
+        statement_end = datetime.combine(header.end_date, datetime.min.time())
         table_transactions = parser.parse_transaction_array([list(row.raw_cells) for row in bounded_table.rows])
-        grouped_table = candidates_from_table(bounded_table, parser.start_date, parser.end_date)
+        grouped_table = candidates_from_table(bounded_table, statement_start, statement_end)
         table = list(grouped_table.rows)
         if [
             (row.transaction_date, row.posting_date, to_minor_units(row.amount), " ".join(row.desc.split()))
@@ -152,8 +176,8 @@ def audit(source: bytes) -> dict[str, int | bool]:
                 posting_raw = match.group("posting_date") or match.group("single_date")
                 text.append(
                     Candidate(
-                        get_absolute_date(transaction_raw, parser.start_date, parser.end_date).date(),
-                        get_absolute_date(posting_raw, parser.start_date, parser.end_date).date(),
+                        get_absolute_date(transaction_raw, statement_start, statement_end).date(),
+                        get_absolute_date(posting_raw, statement_start, statement_end).date(),
                         -to_minor_units(parse_money(match.group("amount"))),
                         " ".join(match.group("description").split()),
                         "text",
@@ -174,15 +198,15 @@ def audit(source: bytes) -> dict[str, int | bool]:
             raise ValueError("accepted_row_count_changed")
         account = accepted.accounts[0]
         reconciles = account.start_balance + sum(row.amount for row in account.transactions) == account.end_balance
-        located_fees = fee_candidates(parser, bounded_pages)
+        located_fees = fee_candidates(parser, bounded_pages, statement_start, statement_end)
         source_dispositions = dispose_dated_lines(parser, bounded_pages, table, located_fees)
         source_counts = Counter(item.status for item in source_dispositions)
         resolution = resolve(
             table,
             text,
             located_fees,
-            opening_minor=to_minor_units(account.start_balance),
-            closing_minor=to_minor_units(account.end_balance),
+            opening_minor=header.previous_balance.ledger_minor,
+            closing_minor=header.new_balance.ledger_minor,
         )
         resolved_by_source = {
             (candidate.channel, candidate.page, candidate.line): index
@@ -261,6 +285,8 @@ def audit(source: bytes) -> dict[str, int | bool]:
         "bounded_raw_table_rows": len(bounded_table.rows),
         "supplemental_table_detail_rows": sum(len(group.detail_rows) for group in grouped_table.groups),
         "bounded_simple_text_pages": len(bounded_text),
+        "bounded_statement_header_parity": True,
+        "bounded_layout_parity": True,
         "text_candidates": len(text),
         "exact_table_occurrences": counts["exact_table_occurrence"],
         "unresolved_overlaps": counts["unresolved_overlap"],
