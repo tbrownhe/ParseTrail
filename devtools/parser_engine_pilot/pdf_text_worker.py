@@ -20,7 +20,7 @@ MAX_METADATA_KEY_CHARS = 128
 MAX_METADATA_VALUE_CHARS = 1024
 
 
-def extract(source: bytes) -> tuple[tuple[str, ...], dict[str, str]]:
+def extract(source: bytes, *, layout: bool = False) -> tuple[tuple[str, ...], dict[str, str]]:
     import pdfplumber
 
     if not source or len(source) > MAX_SOURCE_BYTES:
@@ -41,7 +41,11 @@ def extract(source: bytes) -> tuple[tuple[str, ...], dict[str, str]]:
         ):
             raise ValueError("metadata_limit")
         for page in pdf.pages:
-            value = page.extract_text_simple() or ""
+            value = (
+                page.extract_text(layout=True, x_tolerance=0.5, y_tolerance=0.5)
+                if layout
+                else page.extract_text_simple()
+            ) or ""
             size = len(value.encode("utf-8"))
             total += size
             lines = len(value.splitlines())
@@ -57,11 +61,11 @@ def extract(source: bytes) -> tuple[tuple[str, ...], dict[str, str]]:
     return tuple(pages), metadata
 
 
-def main() -> int:
+def main(*, layout: bool = False) -> int:
     try:
         enforce_child_memory_limit(sys.argv[1])
         source = sys.stdin.buffer.read(MAX_SOURCE_BYTES + 1)
-        pages, metadata = extract(source)
+        pages, metadata = extract(source, layout=layout)
         payload = json.dumps({"pages": pages, "metadata": metadata}, ensure_ascii=False, separators=(",", ":")).encode(
             "utf-8"
         )

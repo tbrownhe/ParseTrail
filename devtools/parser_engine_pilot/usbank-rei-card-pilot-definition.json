@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "parser_id": "pdf_usbankreicc_201405",
+  "revision": "1",
+  "suffix": ".pdf",
+  "kind": "statement",
+  "operation": "dual_text_card_activity_v1",
+  "metadata_channel": "pdf_layout_fixed_tolerance_v1",
+  "activity_channel": "pdf_simple_text_v1",
+  "date_format": "MM/DD+MM/DD/YYYY",
+  "money_format": "usd_2dp_trailing_cr",
+  "amount_direction": "invert_for_liability",
+  "period_open_label": "Open Date:",
+  "period_close_label": "Closing Date:",
+  "account_label": "Account:",
+  "opening_label": "Previous Balance",
+  "closing_label": "New Balance"
+}

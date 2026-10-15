@@ -136,6 +136,19 @@ reopened all 26 sources, 26 rows and 104 history dispositions with unchanged
 hashes. Full-page capture, accounting review and native acceptance remain
 open.
 
+`dual_text_card_lines.py` uses bounded fixed-tolerance layout text for US Bank
+REI's printed period/account/balances and bounded simple text for dated rows.
+The same exact checked-in definition declares both channels, an optional
+printed transaction date and the `CR` source sign. All 97 referenced PDFs
+matched the accepted reader on account, period, balances and 2,137 posted rows;
+all printed balance equations passed. The 9 dated-looking interest-period
+headers remain located dispositions. A temporary V2 profile reopened all 97
+sources, 2,137 rows and 150 dispositions with unchanged source hashes.
+Seventy-seven activity rows have no printed transaction date and retain it as
+unknown. Complete page capture, signed routing and native acceptance remain
+open. The fixed layout worker shares the simple decoder's input, output,
+deadline and native memory limits.
+
 Every Chase-referenced fixture in the authorized closed-copy archive matched
 the accepted reader's account, period, printed balances and rows in a read-only
 comparison. The comparison also accounted for every date-prefixed line as a

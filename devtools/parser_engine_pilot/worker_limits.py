@@ -15,6 +15,7 @@ MAX_INPUT_BYTES = 17 * 1024 * 1024
 MAX_OUTPUT_BYTES = 32 * 1024 * 1024
 WorkerModule = Literal[
     "devtools.parser_engine_pilot.pdf_text_worker",
+    "devtools.parser_engine_pilot.pdf_layout_text_worker",
     "devtools.parser_engine_pilot.xlsx_worker",
     "devtools.parser_engine_pilot.wells_worker",
     "devtools.parser_engine_pilot.citi_worker",
@@ -149,6 +150,7 @@ def run_worker(
     """Run only a fixed local decoder module behind native resource limits."""
     if module not in {
         "devtools.parser_engine_pilot.pdf_text_worker",
+        "devtools.parser_engine_pilot.pdf_layout_text_worker",
         "devtools.parser_engine_pilot.xlsx_worker",
         "devtools.parser_engine_pilot.wells_worker",
         "devtools.parser_engine_pilot.citi_worker",

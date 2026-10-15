@@ -17,7 +17,7 @@ from devtools.parser_engine_pilot.pdf_text_worker import (
     MAX_TEXT_BYTES,
     MAX_TOTAL_LINES,
 )
-from devtools.parser_engine_pilot.worker_limits import WorkerError, WorkerLimits, run_worker
+from devtools.parser_engine_pilot.worker_limits import WorkerError, WorkerLimits, WorkerModule, run_worker
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,13 +26,10 @@ class DecodedPDFText:
     metadata: tuple[tuple[str, str], ...]
 
 
-def decode_pdf(source: bytes, limits: WorkerLimits = WorkerLimits()) -> DecodedPDFText:
-    """Return capped simple pages and metadata without opening a PDF here."""
+def _decode_pdf(source: bytes, module: WorkerModule, limits: WorkerLimits) -> DecodedPDFText:
     if not isinstance(source, bytes) or not source or len(source) > MAX_SOURCE_BYTES:
         raise WorkerError("source_size")
-    output = run_worker(
-        "devtools.parser_engine_pilot.pdf_text_worker", source, output_limit=MAX_OUTPUT_BYTES, limits=limits
-    )
+    output = run_worker(module, source, output_limit=MAX_OUTPUT_BYTES, limits=limits)
     try:
         decoded = json.loads(output)
     except (ValueError, UnicodeDecodeError):
@@ -67,3 +64,13 @@ def decode_pdf(source: bytes, limits: WorkerLimits = WorkerLimits()) -> DecodedP
     ):
         raise WorkerError("invalid_output")
     return DecodedPDFText(tuple(pages), tuple(sorted(metadata.items())))
+
+
+def decode_pdf(source: bytes, limits: WorkerLimits = WorkerLimits()) -> DecodedPDFText:
+    """Return capped simple pages and metadata without opening a PDF here."""
+    return _decode_pdf(source, "devtools.parser_engine_pilot.pdf_text_worker", limits)
+
+
+def decode_pdf_layout(source: bytes, limits: WorkerLimits = WorkerLimits()) -> DecodedPDFText:
+    """Return capped fixed-tolerance layout pages through the same OS boundary."""
+    return _decode_pdf(source, "devtools.parser_engine_pilot.pdf_layout_text_worker", limits)

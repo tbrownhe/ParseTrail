@@ -1,0 +1,110 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "parser_id": {
+      "pattern": "^[a-z][a-z0-9_-]{2,79}$",
+      "title": "Parser Id",
+      "type": "string"
+    },
+    "revision": {
+      "pattern": "^[1-9][0-9]{0,8}$",
+      "title": "Revision",
+      "type": "string"
+    },
+    "suffix": {
+      "const": ".pdf",
+      "title": "Suffix",
+      "type": "string"
+    },
+    "kind": {
+      "const": "statement",
+      "title": "Kind",
+      "type": "string"
+    },
+    "operation": {
+      "const": "dual_text_card_activity_v1",
+      "title": "Operation",
+      "type": "string"
+    },
+    "metadata_channel": {
+      "const": "pdf_layout_fixed_tolerance_v1",
+      "title": "Metadata Channel",
+      "type": "string"
+    },
+    "activity_channel": {
+      "const": "pdf_simple_text_v1",
+      "title": "Activity Channel",
+      "type": "string"
+    },
+    "date_format": {
+      "const": "MM/DD+MM/DD/YYYY",
+      "title": "Date Format",
+      "type": "string"
+    },
+    "money_format": {
+      "const": "usd_2dp_trailing_cr",
+      "title": "Money Format",
+      "type": "string"
+    },
+    "amount_direction": {
+      "const": "invert_for_liability",
+      "title": "Amount Direction",
+      "type": "string"
+    },
+    "period_open_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Period Open Label",
+      "type": "string"
+    },
+    "period_close_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Period Close Label",
+      "type": "string"
+    },
+    "account_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Account Label",
+      "type": "string"
+    },
+    "opening_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Opening Label",
+      "type": "string"
+    },
+    "closing_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Closing Label",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "parser_id",
+    "revision",
+    "suffix",
+    "kind",
+    "operation",
+    "metadata_channel",
+    "activity_channel",
+    "date_format",
+    "money_format",
+    "amount_direction",
+    "period_open_label",
+    "period_close_label",
+    "account_label",
+    "opening_label",
+    "closing_label"
+  ],
+  "title": "DualTextCardDefinition",
+  "type": "object"
+}

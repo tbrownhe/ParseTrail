@@ -11,7 +11,7 @@ from typing import Literal
 
 from parsetrail.core.source_evidence import SourceEvidence
 
-from devtools.parser_engine_pilot.bounded_pdf_text import decode_pdf
+from devtools.parser_engine_pilot.bounded_pdf_text import decode_pdf, decode_pdf_layout
 from devtools.parser_engine_pilot.bounded_wells import extract_bounded_wells
 from devtools.parser_engine_pilot.card_lines import parse_card_lines
 from devtools.parser_engine_pilot.card_source_output import from_card
@@ -19,6 +19,7 @@ from devtools.parser_engine_pilot.citi_evidence import read_recent_citi
 from devtools.parser_engine_pilot.citi_layout import DEFINITION_SHA256
 from devtools.parser_engine_pilot.citi_layout import load_definition as load_citi_definition
 from devtools.parser_engine_pilot.citi_source_output import from_citi
+from devtools.parser_engine_pilot.dual_text_card_lines import parse_dual_text_card
 from devtools.parser_engine_pilot.engine import parse_csv
 from devtools.parser_engine_pilot.investment_summary_lines import parse_investment_summary
 from devtools.parser_engine_pilot.loan_history_lines import parse_loan_history
@@ -51,6 +52,9 @@ YAMAHA_DEFINITION_SHA256 = hashlib.sha256(
 ).hexdigest()
 CAPITAL_ONE_DEFINITION_SHA256 = hashlib.sha256(
     Path(__file__).with_name("capital-one-loan-pilot-definition.json").read_bytes()
+).hexdigest()
+USBANK_DEFINITION_SHA256 = hashlib.sha256(
+    Path(__file__).with_name("usbank-rei-card-pilot-definition.json").read_bytes()
 ).hexdigest()
 
 
@@ -100,6 +104,12 @@ def build_source_evidence(source: bytes, definition: bytes, *, suffix: Literal["
                 decoded = decode_pdf(source)
                 lines = page_lines(source, decoded.pages, extraction_library="pdfplumber-bounded-simple-v1")
                 output = from_wells_business(definition, extract_bounded_wells(definition, source), lines)
+            elif digest == USBANK_DEFINITION_SHA256:
+                simple_pages = decode_pdf(source).pages
+                layout_pages = decode_pdf_layout(source).pages
+                simple = page_lines(source, simple_pages, extraction_library="pdfplumber-bounded-simple-v1")
+                layout = page_lines(source, layout_pages, extraction_library="pdfplumber-bounded-layout-fixed-v1")
+                output = parse_dual_text_card(definition, layout, simple)
             else:
                 raise SourcePipelineError("unsupported_definition_revision")
         if (

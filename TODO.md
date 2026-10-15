@@ -231,6 +231,12 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   reopened all 26 sources, 26 rows and 104 dispositions with unchanged hashes.
   The unprinted opening principal stays unknown; full-page capture and
   accounting review remain open.
+  US Bank REI now has a bounded dual-text card operation. All 97 referenced
+  PDFs matched the accepted reader on account, period, printed balances and
+  2,137 rows; all printed equations passed. Nine interest-period headers have
+  explicit dispositions. Temporary V2 storage reopened 97 sources, 2,137
+  rows and 150 dispositions with unchanged hashes. Complete capture, signed
+  routing and native acceptance remain open.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and

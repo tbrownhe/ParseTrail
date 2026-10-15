@@ -213,6 +213,16 @@ and the closing principal stay in source-native form. Temporary V2 storage
 reopened all 26 sources, 26 rows and 104 located history dispositions with
 unchanged source hashes. Full-page capture and accounting review remain open.
 
+The US Bank REI card pilot now joins bounded fixed-tolerance layout text with
+bounded simple text under one finite definition. On all 97 referenced PDFs,
+account, period, printed balances and 2,137 posting-date rows matched the
+accepted reader; all printed balance equations passed. Nine interest-period
+headers that resemble dated rows have explicit located dispositions. A
+temporary V2 profile reopened 97 sources, 2,137 rows and 150 dispositions
+with unchanged source hashes. Seventy-seven rows without a printed transaction
+date retain that date as unknown. Full-page capture, signed routing and native
+worker acceptance remain open.
+
 ## Remaining family operation costs
 
 These estimates complete the source-code review for the other 18 modules in
