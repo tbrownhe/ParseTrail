@@ -173,6 +173,12 @@ now saves exact source, definition, strict evidence and unposted observation IDs
 atomically. A temporary profile reopened ten recent Citi PDFs with 486 rows and
 803 dispositions; the originals were read-only and their hashes unchanged.
 This does not yet connect ledger account mapping or native import UI.
+The global abbreviated-account matching preference now defaults off and appears
+under File > Preferences. A unique same-institution, same-class suffix match can
+bind automatically only when enabled; ambiguity always requires review. The
+2.0 account review UI must show the candidate and an inline option to enable
+this preference while it is off. Source and ledger persistence will converge
+into one user-database service before activation.
 
 ## Current stop/go decision
 

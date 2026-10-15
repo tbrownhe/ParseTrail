@@ -55,7 +55,7 @@ snapshot into the released 2.0 database. It does not require replaying old
 profiles or carrying compatibility aliases.
 
 The first upstream proof is now in [`source_evidence.py`](../client/src/parsetrail/core/source_evidence.py):
-a strict, immutable version-1 envelope with distinct statement and activity
+a strict, immutable version-2 pilot envelope with distinct statement and activity
 export payloads, typed PDF/CSV/XLSX locations, observed/derived/unknown value
 provenance, source fragments and dispositions. It rejects accounting fields,
 duplicate row IDs and unsupported versions. Statement balances use exact
@@ -84,3 +84,8 @@ The Citi pilot's money operation now uses a finite, exact integer minor-unit
 parser for its declared USD symbol syntax. The revised pilot definition and
 engine version still produce 486 rows and 803 dispositions on the ten read-only
 archive PDFs. Broad 1.x money coercion is no longer on this path.
+Source account identifiers now declare `full`, `last_four` or `opaque` form.
+The global abbreviated-match preference defaults off; the matching policy
+returns a review suggestion and an inline enable cue when a unique Citi suffix
+candidate is found while the preference is off. The actual inline control will
+be connected in the 2.0 import review UI.

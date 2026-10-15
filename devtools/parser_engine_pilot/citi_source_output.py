@@ -135,6 +135,7 @@ def from_citi(evidence: CitiEvidence) -> SourceEvidence:
                 row_id=row_id,
                 occurrence=index,
                 source_account=evidence.header.account_suffix,
+                source_account_form="last_four",
                 date_role="posting_date",
                 date=DateValue(
                     raw=None,
@@ -213,6 +214,10 @@ def from_citi(evidence: CitiEvidence) -> SourceEvidence:
         accounts=(
             StatementAccount(
                 source_identity=header.account_suffix,
+                source_identity_form="last_four",
+                identity_locations=tuple(
+                    PdfLine(kind="pdf_line", page=page, line=line) for page, line in header.account_locations
+                ),
                 opening=MoneyValue(
                     raw=header.previous_balance.raw,
                     minor=header.previous_balance.ledger_minor,
@@ -235,7 +240,7 @@ def from_citi(evidence: CitiEvidence) -> SourceEvidence:
         independent_balance_verified=evidence.resolution.balance_reconciled,
     )
     return SourceEvidence(
-        schema_version=1,
+        schema_version=2,
         source_sha256=evidence.source_sha256,
         definition_sha256=evidence.definition_sha256,
         parser_id=DEFINITION.parser_id,

@@ -186,6 +186,14 @@ class AppSettings(BaseSettings):
         True,
         description="Check for Client and Plugin Updates After Startup",
     )
+    allow_abbreviated_account_matching: bool = Field(
+        False,
+        description="Allow abbreviated account numbers to automatically match to ledger",
+        json_schema_extra={
+            "help": "When enabled, a unique account-number suffix may select an existing ledger account "
+            "only within the same institution and account type. Ambiguous matches still require review."
+        },
+    )
 
     # Reports
     report_dir: Path = Field(

@@ -17,7 +17,7 @@ from pydantic import ValidationError
 from parsetrail.core.source_evidence import SourceEvidence, StatementPayload
 
 APPLICATION_ID = 0x50543230  # PT20
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_DEFINITION_BYTES = 64 * 1024
 MAX_EVIDENCE_BYTES = 32 * 1024 * 1024
@@ -94,7 +94,9 @@ class V2ProfileStore:
                 );
                 CREATE TABLE SourceObservations (
                     row_id TEXT PRIMARY KEY, source_sha256 TEXT NOT NULL REFERENCES Sources(sha256),
-                    source_account TEXT NOT NULL, date_role TEXT NOT NULL,
+                    source_account TEXT NOT NULL,
+                    source_account_form TEXT NOT NULL CHECK(source_account_form IN ('full','last_four','opaque')),
+                    date_role TEXT NOT NULL,
                     observed_date TEXT NOT NULL, amount_minor INTEGER NOT NULL
                 );
                 COMMIT;
@@ -191,9 +193,17 @@ class V2ProfileStore:
                 (source_hash, definition_hash, len(saved), _digest(saved), saved),
             )
             c.executemany(
-                "INSERT INTO SourceObservations VALUES (?,?,?,?,?,?)",
+                "INSERT INTO SourceObservations VALUES (?,?,?,?,?,?,?)",
                 (
-                    (row.row_id, source_hash, row.source_account, row.date_role, row.date.iso, row.amount.minor)
+                    (
+                        row.row_id,
+                        source_hash,
+                        row.source_account,
+                        row.source_account_form,
+                        row.date_role,
+                        row.date.iso,
+                        row.amount.minor,
+                    )
                     for row in _rows(evidence)
                 ),
             )
@@ -231,12 +241,19 @@ class V2ProfileStore:
         if evidence.source_sha256 != source_sha256 or evidence.definition_sha256 != _digest(definition):
             raise ProfileFormatError("saved_evidence_mismatch")
         expected = {
-            (item.row_id, item.source_account, item.date_role, item.date.iso, item.amount.minor)
+            (
+                item.row_id,
+                item.source_account,
+                item.source_account_form,
+                item.date_role,
+                item.date.iso,
+                item.amount.minor,
+            )
             for item in _rows(evidence)
         }
         actual = set(
             self.connection.execute(
-                "SELECT row_id,source_account,date_role,observed_date,amount_minor "
+                "SELECT row_id,source_account,source_account_form,date_role,observed_date,amount_minor "
                 "FROM SourceObservations WHERE source_sha256=?",
                 (source_sha256,),
             )

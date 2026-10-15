@@ -68,7 +68,7 @@ class PreferencesDialog(QDialog):
 
     def add_fields(self):
         """Dynamically generate input fields for AppSettings attributes."""
-        for field_name, field_info in settings.model_fields.items():
+        for field_name, field_info in AppSettings.model_fields.items():
             # field_type = field_info.annotation
             description = field_info.description or field_name
             current_value = getattr(settings, field_name)
@@ -84,6 +84,10 @@ class PreferencesDialog(QDialog):
                 # Add a checkbox for boolean fields
                 checkbox = QCheckBox()
                 checkbox.setChecked(current_value)
+                help_text = (field_info.json_schema_extra or {}).get("help")
+                if help_text:
+                    checkbox.setToolTip(help_text)
+                    label.setToolTip(help_text)
                 self.grid_layout.addWidget(checkbox, self.row, 1)
                 self.fields[field_name] = checkbox
             elif isinstance(current_value, Path):
@@ -156,15 +160,15 @@ class PreferencesDialog(QDialog):
 
         try:
             # Validate new settings against type model
-            validated_settings = AppSettings(**updated_settings)
+            validated_settings = AppSettings(
+                **{**settings.model_dump(mode="python"), **updated_settings, "access_token": settings.access_token}
+            )
+            validated_settings._config_path = settings.config_path
 
-            # Update the global settings object in place using validated and typed data
-            # Note this leaves _hidden_fields completely untouched
-            for field in validated_settings.model_fields.keys():
+            # A failed save must not enable automatic account binding in memory.
+            save_settings(validated_settings)
+            for field in updated_settings:
                 setattr(settings, field, getattr(validated_settings, field))
-
-            # Save the config.json
-            save_settings(settings)
 
             QMessageBox.information(self, "Preferences Saved", "Preferences saved successfully.")
             self.accept()

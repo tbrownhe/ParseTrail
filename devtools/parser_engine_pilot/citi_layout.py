@@ -81,7 +81,7 @@ def load_definition(data: bytes) -> tuple[CitiDefinition, str]:
 
 DEFINITION_BYTES = Path(__file__).with_name("recent-citi-pilot-definition.json").read_bytes()
 DEFINITION, DEFINITION_SHA256 = load_definition(DEFINITION_BYTES)
-EVIDENCE_ENGINE_VERSION = "recent-citi-evidence-pilot-3"
+EVIDENCE_ENGINE_VERSION = "recent-citi-evidence-pilot-4"
 
 RECENT_CITI_ID = DEFINITION.parser_id
 ROUTING_METADATA = {

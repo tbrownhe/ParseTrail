@@ -55,6 +55,17 @@ fee, refund or expense interpretation is inferred from the PDF. Later review
 posts through the existing ledger kernel and preserves all authored decisions
 separately from immutable source evidence.
 
+The owner approved a global **Allow abbreviated account numbers to automatically
+match to ledger** preference, off by default under File > Preferences. Evidence
+now identifies Citi's account suffix as `last_four`; table exports remain `opaque`
+until their account-number form is established. With the preference on, a suffix
+can select a ledger account only when exactly one verified full account number
+matches within the same institution and asset/liability class. With it off, the
+same candidate is suggested for review and the review flow must offer to turn
+the preference on. Ambiguous matches always require review. Full observed
+numbers may match exactly without this preference. The isolated matching policy
+is implemented; the inline review control awaits the 2.0 import UI.
+
 The first runtime importer can support one source at a time. Parsing and
 bounded extraction finish before the database transaction; the transaction
 adds the source, definition, saved evidence and any admitted unposted
@@ -77,3 +88,6 @@ rows, 803 dispositions), with unchanged source hashes. Identical source bytes
 are detectable before parsing and a retry leaves saved evidence intact. This is
 source storage only; account mapping, reviewed ledger posting, full page capture,
 signed catalog admission, native GUI and Intel Mac worker limits remain gates.
+The separate source-store module is temporary. Before 2.0 activation, move its
+schema and methods into the application's single user-database service so source
+snapshots and ledger methods have one owner.

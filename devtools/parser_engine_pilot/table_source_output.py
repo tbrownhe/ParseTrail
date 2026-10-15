@@ -85,6 +85,7 @@ def from_table(evidence: Evidence) -> SourceEvidence:
                 row_id=row.row_id,
                 occurrence=row.occurrence,
                 source_account=row.account.normalized,
+                source_account_form="opaque",
                 date_role=evidence.date_role,
                 date=_date(row.date),
                 transaction_date=None,
@@ -117,7 +118,7 @@ def from_table(evidence: Evidence) -> SourceEvidence:
         for item in evidence.ignored_rows
     )
     return SourceEvidence(
-        schema_version=1,
+        schema_version=2,
         source_sha256=evidence.source_sha256,
         definition_sha256=evidence.definition_sha256,
         parser_id=evidence.parser_id,

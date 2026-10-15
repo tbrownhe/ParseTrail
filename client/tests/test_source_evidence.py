@@ -28,7 +28,7 @@ def printed_date(raw: str, iso: str, number: int) -> DateValue:
 
 def statement(*, closing: int, verified: bool) -> SourceEvidence:
     return SourceEvidence(
-        schema_version=1,
+        schema_version=2,
         source_sha256="a" * 64,
         definition_sha256="b" * 64,
         parser_id="synthetic_statement",
@@ -41,7 +41,12 @@ def statement(*, closing: int, verified: bool) -> SourceEvidence:
             end=printed_date("01/31/26", "2026-01-31", 1),
             accounts=(
                 StatementAccount(
-                    source_identity="card ending 1234", opening=money(100, 2), closing=money(closing, 3), rows=()
+                    source_identity="card ending 1234",
+                    source_identity_form="opaque",
+                    identity_locations=(line(2),),
+                    opening=money(100, 2),
+                    closing=money(closing, 3),
+                    rows=(),
                 ),
             ),
             dispositions=(),
@@ -69,6 +74,18 @@ def test_unknown_value_is_distinct_from_zero_and_derived_value() -> None:
         MoneyValue(raw="$1.00", minor=True, provenance="observed", locations=(line(4),))
 
 
+def test_abbreviated_source_identity_requires_exactly_four_digits() -> None:
+    with pytest.raises(ValidationError, match="invalid abbreviated account identifier"):
+        StatementAccount(
+            source_identity="card ending 1234",
+            source_identity_form="last_four",
+            identity_locations=(line(2),),
+            opening=money(100, 2),
+            closing=money(100, 3),
+            rows=(),
+        )
+
+
 def test_saved_schema_refuses_accounting_fields_and_unknown_versions() -> None:
     saved = statement(closing=100, verified=True)
     assert SourceEvidence.model_validate_json(saved.model_dump_json()).payload.kind == "statement"
@@ -77,6 +94,6 @@ def test_saved_schema_refuses_accounting_fields_and_unknown_versions() -> None:
     with pytest.raises(ValidationError, match="extra_forbidden"):
         SourceEvidence.model_validate_json(json.dumps(raw))
     raw.pop("category")
-    raw["schema_version"] = 2
+    raw["schema_version"] = 3
     with pytest.raises(ValidationError):
         SourceEvidence.model_validate_json(json.dumps(raw))

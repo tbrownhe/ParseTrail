@@ -66,6 +66,8 @@ def test_statement_output_roundtrip_preserves_source_copies() -> None:
     output = from_citi(sample())
     assert SourceEvidence.model_validate_json(output.model_dump_json()) == output
     account = output.payload.accounts[0]
+    assert account.source_identity_form == "last_four"
+    assert account.identity_locations[0].page == 1
     assert output.payload.capture_verified is False
     assert output.payload.independent_balance_verified is True
     assert account.opening.minor == -10000 and account.closing.minor == -11000

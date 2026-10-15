@@ -178,7 +178,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   A synthetic CSV and ten recent Citi statements round-trip through it. The
   Citi path now uses a finite pilot definition without importing 1.x parser
   methods; 486 rows and 803 located dispositions are retained, including 36
-  supplemental details. Bounded admission remains open before the store.
+  supplemental details. The bounded two-family source pipeline and fresh 2.0
+  SQLite source store now save exact source, definition and strict evidence in
+  one transaction; ten Citi PDFs reopened in a temporary profile with unchanged
+  source hashes. Full capture and native admission remain open.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and
@@ -201,7 +204,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   and a released snapshot schema remain open.
 - [ ] **V2-3a–c — Import integration:** common replay/ongoing ingestion, bounded export
   evidence policy, then main-window import/cancellation/archive recovery and Windows
-  acceptance. Keep each service/UI chunk separately testable.
+  acceptance. Keep each service/UI chunk separately testable. The global
+  abbreviated-account matching setting defaults off; the 2.0 review flow must
+  suggest a unique suffix match and offer to enable it inline. Consolidate the
+  temporary V2 source store with the user-database service before activation.
 - [ ] **V2-4a–b — Daily review:** create/edit accounts, categories and budgets; connect
   accepted ledger workflows to the application in small increments. Manual values,
   closures and unsupported accounting remain explicit. Owner Windows integration gate.

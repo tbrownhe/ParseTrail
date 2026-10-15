@@ -183,6 +183,7 @@ class ObservationEvidence(EvidenceModel):
     row_id: str = Field(pattern=SHA256)
     occurrence: int = Field(ge=0, le=100_000)
     source_account: str = Field(min_length=1, max_length=4096)
+    source_account_form: Literal["full", "last_four", "opaque"]
     date_role: Literal["posting_date", "activity_date"]
     date: DateValue
     transaction_date: DateValue | None = None
@@ -194,6 +195,10 @@ class ObservationEvidence(EvidenceModel):
 
     @model_validator(mode="after")
     def consistent(self) -> ObservationEvidence:
+        if self.source_account_form == "last_four" and (
+            len(self.source_account) != 4 or not self.source_account.isdigit()
+        ):
+            raise ValueError("invalid abbreviated account identifier")
         if self.amount.minor is None or self.date.iso is None:
             raise ValueError("observation needs a date and amount")
         roles = [item.role for item in self.components]
@@ -208,14 +213,25 @@ class ObservationEvidence(EvidenceModel):
 
 class StatementAccount(EvidenceModel):
     source_identity: str = Field(min_length=1, max_length=4096)
+    source_identity_form: Literal["full", "last_four", "opaque"]
+    identity_locations: tuple[SourceLocation, ...] = Field(min_length=1, max_length=16)
     opening: MoneyValue | None
     closing: MoneyValue | None
     rows: tuple[ObservationEvidence, ...] = Field(max_length=100_000)
 
     @model_validator(mode="after")
     def rows_belong_to_account(self) -> StatementAccount:
-        if any(row.source_account != self.source_identity or row.date_role != "posting_date" for row in self.rows):
+        if any(
+            row.source_account != self.source_identity
+            or row.source_account_form != self.source_identity_form
+            or row.date_role != "posting_date"
+            for row in self.rows
+        ):
             raise ValueError("statement row account or date role")
+        if self.source_identity_form == "last_four" and (
+            len(self.source_identity) != 4 or not self.source_identity.isdigit()
+        ):
+            raise ValueError("invalid abbreviated account identifier")
         return self
 
 
@@ -278,7 +294,7 @@ SourcePayload = Annotated[StatementPayload | ActivityExportPayload, Field(discri
 
 
 class SourceEvidence(EvidenceModel):
-    schema_version: Literal[1]
+    schema_version: Literal[2]
     source_sha256: str = Field(pattern=SHA256)
     definition_sha256: str = Field(pattern=SHA256)
     parser_id: str = Field(pattern=IDENTIFIER)

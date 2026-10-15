@@ -18,6 +18,17 @@ def test_save_settings_writes_serialized_configuration(tmp_path) -> None:
     assert "access_token" not in saved
 
 
+def test_abbreviated_account_matching_is_global_and_persists(tmp_path) -> None:
+    current = AppSettings(allow_abbreviated_account_matching=True)
+    current._config_path = tmp_path / "config.json"
+    save_settings(current)
+
+    saved = json.loads(current.config_path.read_text(encoding="utf-8"))
+    assert saved["allow_abbreviated_account_matching"] is True
+    assert AppSettings.from_saved(saved).allow_abbreviated_account_matching is True
+    assert AppSettings.from_saved({}).allow_abbreviated_account_matching is False
+
+
 def test_save_settings_preserves_io_error_as_cause(monkeypatch, tmp_path) -> None:
     current = AppSettings()
     current._config_path = tmp_path / "config.json"
