@@ -113,6 +113,16 @@ not ledger transactions: investment value change is not cash activity, and
 the period-end date is a derived label. Complete page capture, accounting
 review, signed routing and native acceptance remain open.
 
+`two_date_card_lines.py` adds a finite card statement operation with separate
+printed transaction and post date columns, an exact trailing-minus credit
+format, and a source-to-liability sign rule. All 37 referenced Yamaha PDFs
+matched the accepted reader on masked account, derived period, printed
+balances and 74 posted rows. Every printed balance equation passed. The archive
+prints equal values in both date columns; a synthetic fixture tests distinct
+dates. A temporary V2 profile reopened all 37 sources, 74 rows and 74 header
+dispositions with unchanged source hashes. Complete section/page capture,
+signed routing and native acceptance remain open.
+
 Every Chase-referenced fixture in the authorized closed-copy archive matched
 the accepted reader's account, period, printed balances and rows in a read-only
 comparison. The comparison also accounted for every date-prefixed line as a

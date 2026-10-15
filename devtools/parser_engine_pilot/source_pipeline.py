@@ -24,6 +24,7 @@ from devtools.parser_engine_pilot.investment_summary_lines import parse_investme
 from devtools.parser_engine_pilot.pdf_lines import page_lines
 from devtools.parser_engine_pilot.savings_lines import parse_savings_lines, parse_summary_savings_lines
 from devtools.parser_engine_pilot.table_source_output import from_table
+from devtools.parser_engine_pilot.two_date_card_lines import parse_two_date_card
 from devtools.parser_engine_pilot.wells_statement_output import from_wells_business
 
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
@@ -43,6 +44,9 @@ WELLS_DEFINITION_SHA256 = hashlib.sha256(
 ).hexdigest()
 FIDELITY_HSA_DEFINITION_SHA256 = hashlib.sha256(
     Path(__file__).with_name("fidelity-hsa-summary-pilot-definition.json").read_bytes()
+).hexdigest()
+YAMAHA_DEFINITION_SHA256 = hashlib.sha256(
+    Path(__file__).with_name("yamaha-card-pilot-definition.json").read_bytes()
 ).hexdigest()
 
 
@@ -71,6 +75,7 @@ def build_source_evidence(source: bytes, definition: bytes, *, suffix: Literal["
                 HAPPEN_DEFINITION_SHA256,
                 LENDINGCLUB_DEFINITION_SHA256,
                 FIDELITY_HSA_DEFINITION_SHA256,
+                YAMAHA_DEFINITION_SHA256,
             }:
                 decoded = decode_pdf(source)
                 lines = page_lines(source, decoded.pages, extraction_library="pdfplumber-bounded-simple-v1")
@@ -80,6 +85,8 @@ def build_source_evidence(source: bytes, definition: bytes, *, suffix: Literal["
                     output = parse_savings_lines(definition, lines)
                 elif digest == FIDELITY_HSA_DEFINITION_SHA256:
                     output = parse_investment_summary(definition, lines)
+                elif digest == YAMAHA_DEFINITION_SHA256:
+                    output = parse_two_date_card(definition, lines)
                 else:
                     output = parse_summary_savings_lines(definition, lines)
             elif digest == WELLS_DEFINITION_SHA256:

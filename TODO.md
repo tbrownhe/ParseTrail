@@ -220,6 +220,11 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   Temporary V2 storage reopened them with 133 explicitly tagged period-summary
   rows and 472 dispositions, and the source hashes remained unchanged.
   Full-page capture and accounting review remain open.
+  Yamaha now has a finite two-date card operation. All 37 referenced PDFs
+  matched masked account, derived period, printed balances and 74 rows against
+  the accepted reader; every printed balance equation passed. Temporary V2
+  storage reopened the 37 sources with 74 rows and 74 header dispositions,
+  and source hashes remained unchanged. Complete capture remains open.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and

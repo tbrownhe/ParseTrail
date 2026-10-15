@@ -6,6 +6,7 @@ import re
 
 USD_SYMBOL = re.compile(r"-?\$\d{1,3}(?:,\d{3})*(?:\.\d{2})?")
 USD_OR_DECIMAL_2DP = re.compile(r"-?\$?(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)\.[0-9]{2}")
+USD_TRAILING_CREDIT_2DP = re.compile(r"\$(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)\.[0-9]{2}-?")
 MAX_MINOR = 9_000_000_000_000_000
 
 
@@ -31,4 +32,16 @@ def usd_or_decimal_2dp_minor_v1(raw: str) -> int:
     amount = int(major) * 100 + int(cents)
     if amount > MAX_MINOR:
         raise ValueError("usd_or_decimal_amount_range")
+    return -amount if negative else amount
+
+
+def usd_trailing_credit_2dp_minor_v1(raw: str) -> int:
+    """Read a printed dollar amount whose trailing minus marks a credit."""
+    if type(raw) is not str or len(raw) > 40 or USD_TRAILING_CREDIT_2DP.fullmatch(raw) is None:
+        raise ValueError("invalid_usd_trailing_credit_amount")
+    negative = raw.endswith("-")
+    major, cents = raw.removesuffix("-").removeprefix("$").replace(",", "").split(".")
+    amount = int(major) * 100 + int(cents)
+    if amount > MAX_MINOR:
+        raise ValueError("usd_trailing_credit_amount_range")
     return -amount if negative else amount

@@ -2,7 +2,11 @@
 
 import pytest
 
-from devtools.parser_engine_pilot.money_operations import usd_or_decimal_2dp_minor_v1, usd_symbol_minor_v1
+from devtools.parser_engine_pilot.money_operations import (
+    usd_or_decimal_2dp_minor_v1,
+    usd_symbol_minor_v1,
+    usd_trailing_credit_2dp_minor_v1,
+)
 
 
 @pytest.mark.parametrize(
@@ -28,3 +32,14 @@ def test_signed_dollar_or_bare_decimal_amount(raw: str, minor: int) -> None:
 def test_signed_decimal_operation_refuses_other_syntax(raw: str) -> None:
     with pytest.raises(ValueError, match="invalid_usd_or_decimal_amount"):
         usd_or_decimal_2dp_minor_v1(raw)
+
+
+@pytest.mark.parametrize(("raw", "minor"), [("$0.00", 0), ("$1,234.56", 123456), ("$42.01-", -4201)])
+def test_trailing_credit_sign_is_exact(raw: str, minor: int) -> None:
+    assert usd_trailing_credit_2dp_minor_v1(raw) == minor
+
+
+@pytest.mark.parametrize("raw", ["$1.0", "-$1.00", "$1.00CR", "1.00", "$1,23.00"])
+def test_trailing_credit_operation_refuses_other_syntax(raw: str) -> None:
+    with pytest.raises(ValueError, match="invalid_usd_trailing_credit_amount"):
+        usd_trailing_credit_2dp_minor_v1(raw)

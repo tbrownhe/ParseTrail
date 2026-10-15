@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "parser_id": "pdf_yamahafin_202306",
+  "revision": "1",
+  "suffix": ".pdf",
+  "kind": "statement",
+  "operation": "two_date_card_activity_v1",
+  "date_format": "MM/DD+MM/DD/YY",
+  "money_format": "usd_2dp_trailing_credit",
+  "amount_direction": "invert_for_liability",
+  "account_label": "Account Number:",
+  "closing_date_label": "Closing Date",
+  "cycle_days_label": "Days in Billing Cycle",
+  "opening_label": "Previous Balance",
+  "closing_label": "New Balance:",
+  "section_start": "ACCOUNT ACTIVITY SINCE YOUR LAST STATEMENT",
+  "transaction_post_header": "Transaction Post",
+  "description_amount_header": "Reference Number Transaction Description Amount"
+}

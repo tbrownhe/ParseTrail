@@ -193,6 +193,16 @@ unchanged. The date assigned to each component is explicitly derived from the
 statement end. Investment-value change remains a summary component.
 Full-page capture and accounting review remain gates.
 
+The finite two-date card operation also covers the Yamaha layout. All 37
+referenced PDFs matched the accepted reader's masked account, derived period,
+printed endpoints, and 74 rows; every printed liability equation passed.
+The operation preserves transaction and post dates separately and applies the
+declared trailing-minus credit sign. The archive happens to print equal dates
+in both columns; a synthetic fixture tests the distinct-date case. A temporary
+V2 profile reopened all 37 sources, 74 rows and 74 located header
+dispositions with unchanged source hashes. Complete capture and native
+admission remain open.
+
 ## Remaining family operation costs
 
 These estimates complete the source-code review for the other 18 modules in
