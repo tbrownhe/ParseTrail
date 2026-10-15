@@ -243,6 +243,12 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   Temporary V2 storage reopened ten sources, 45 period-summary rows and 65
   dispositions with unchanged hashes. Full-page capture and accounting review
   remain open.
+  Fidelity 401(k) now has a finite plan-label summary operation. All 107
+  referenced PDFs matched plan label, period, printed balances and 194 summary
+  components against the accepted reader; all 107 printed equations passed.
+  Temporary V2 storage reopened 107 sources, 194 period-summary rows and 55
+  blank-line dispositions with unchanged hashes. Later fund-section capture,
+  accounting review and native acceptance remain open.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and

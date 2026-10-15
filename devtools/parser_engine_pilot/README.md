@@ -161,6 +161,17 @@ Market gain/loss remains a period summary component with a derived period-end
 date; accounting review, complete page capture and native acceptance remain
 open.
 
+The same summary module now has a finite Fidelity 401(k) plan-label operation
+with printed, browser-print and headerless plan header variants. It limits
+identity text to the recognized header-to-title region and checks that
+repeated statement periods agree. All 107 referenced PDFs matched the
+accepted reader on plan label, period, printed balances and 194 account-value
+components; all 107 printed equations passed. A temporary V2 profile reopened
+107 sources, 194 explicitly tagged period-summary rows and 55 located blank
+summary lines with unchanged source hashes. Later fund sections remain outside
+the current summary capture; full-page capture, accounting review and native
+acceptance remain open.
+
 Every Chase-referenced fixture in the authorized closed-copy archive matched
 the accepted reader's account, period, printed balances and rows in a read-only
 comparison. The comparison also accounted for every date-prefixed line as a

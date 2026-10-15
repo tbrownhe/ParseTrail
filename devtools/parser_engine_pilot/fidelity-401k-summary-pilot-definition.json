@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "parser_id": "pdf_fidelity401k_201810",
+  "revision": "1",
+  "suffix": ".pdf",
+  "kind": "statement",
+  "operation": "plan_label_value_summary_v1",
+  "period_format": "MM/DD/YYYY to MM/DD/YYYY",
+  "money_format": "signed_usd_2dp",
+  "title": "Retirement Savings Statement",
+  "printed_header": "Statement Details",
+  "browser_header": "Fidelity NetBenefits - SOD detail page",
+  "summary_section_label": "Your Account Summary",
+  "period_label": "Statement Period:",
+  "opening_label": "Beginning Balance",
+  "closing_label": "Ending Balance",
+  "row_labels": ["Your Contributions", "Your Rollover Contributions", "Change in Market Value", "Fees/Credits", "Exchange In", "Exchange Out", "Employer Contributions", "Balance Forward", "Employee Contributions", "Fees", "Forfeitures"],
+  "summary_window_lines": 12
+}

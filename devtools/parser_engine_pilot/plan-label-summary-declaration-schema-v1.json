@@ -1,0 +1,123 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "parser_id": {
+      "pattern": "^[a-z][a-z0-9_-]{2,79}$",
+      "title": "Parser Id",
+      "type": "string"
+    },
+    "revision": {
+      "pattern": "^[1-9][0-9]{0,8}$",
+      "title": "Revision",
+      "type": "string"
+    },
+    "suffix": {
+      "const": ".pdf",
+      "title": "Suffix",
+      "type": "string"
+    },
+    "kind": {
+      "const": "statement",
+      "title": "Kind",
+      "type": "string"
+    },
+    "operation": {
+      "const": "plan_label_value_summary_v1",
+      "title": "Operation",
+      "type": "string"
+    },
+    "period_format": {
+      "const": "MM/DD/YYYY to MM/DD/YYYY",
+      "title": "Period Format",
+      "type": "string"
+    },
+    "money_format": {
+      "const": "signed_usd_2dp",
+      "title": "Money Format",
+      "type": "string"
+    },
+    "title": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Title",
+      "type": "string"
+    },
+    "printed_header": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Printed Header",
+      "type": "string"
+    },
+    "browser_header": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Browser Header",
+      "type": "string"
+    },
+    "summary_section_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Summary Section Label",
+      "type": "string"
+    },
+    "period_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Period Label",
+      "type": "string"
+    },
+    "opening_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Opening Label",
+      "type": "string"
+    },
+    "closing_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Closing Label",
+      "type": "string"
+    },
+    "row_labels": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 20,
+      "minItems": 1,
+      "title": "Row Labels",
+      "type": "array"
+    },
+    "summary_window_lines": {
+      "maximum": 20,
+      "minimum": 3,
+      "title": "Summary Window Lines",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "parser_id",
+    "revision",
+    "suffix",
+    "kind",
+    "operation",
+    "period_format",
+    "money_format",
+    "title",
+    "printed_header",
+    "browser_header",
+    "summary_section_label",
+    "period_label",
+    "opening_label",
+    "closing_label",
+    "row_labels",
+    "summary_window_lines"
+  ],
+  "title": "PlanLabelSummaryDefinition",
+  "type": "object"
+}

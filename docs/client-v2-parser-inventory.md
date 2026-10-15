@@ -232,6 +232,15 @@ tagged period-summary rows with unchanged hashes. Market gain/loss has a
 derived period-end date and requires accounting review before any posting.
 Full-page capture and native acceptance remain open.
 
+Fidelity 401(k) now uses a finite plan-label account-value summary operation
+with recognized printed, browser and headerless variants. On all 107
+referenced PDFs, plan label, period, printed balances and 194 summary
+components matched the accepted reader; all 107 printed equations passed.
+Temporary V2 storage reopened the 107 sources, 194 tagged period-summary rows
+and 55 located blank summary lines with unchanged hashes. The plan label is an
+opaque source identity. Later fund sections, complete page capture,
+accounting review and native acceptance remain open.
+
 ## Remaining family operation costs
 
 These estimates complete the source-code review for the other 18 modules in

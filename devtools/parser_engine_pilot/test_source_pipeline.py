@@ -19,6 +19,7 @@ YAMAHA_DEFINITION = Path(__file__).with_name("yamaha-card-pilot-definition.json"
 CAPITAL_ONE_DEFINITION = Path(__file__).with_name("capital-one-loan-pilot-definition.json").read_bytes()
 USBANK_DEFINITION = Path(__file__).with_name("usbank-rei-card-pilot-definition.json").read_bytes()
 VANGUARD_DEFINITION = Path(__file__).with_name("vanguard-summary-pilot-definition.json").read_bytes()
+FIDELITY_401K_DEFINITION = Path(__file__).with_name("fidelity-401k-summary-pilot-definition.json").read_bytes()
 
 
 def test_csv_build_is_strict_and_keeps_raw_cells() -> None:
@@ -70,6 +71,10 @@ def test_pdf_requires_exact_pilot_definition_and_recent_layout() -> None:
         build_source_evidence(sample_table_pdf(), VANGUARD_DEFINITION + b" ", suffix=".pdf")
     with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
         build_source_evidence(sample_table_pdf(), VANGUARD_DEFINITION, suffix=".pdf")
+    with pytest.raises(SourcePipelineError, match="unsupported_definition_revision"):
+        build_source_evidence(sample_table_pdf(), FIDELITY_401K_DEFINITION + b" ", suffix=".pdf")
+    with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
+        build_source_evidence(sample_table_pdf(), FIDELITY_401K_DEFINITION, suffix=".pdf")
 
 
 def test_source_or_definition_failure_has_no_output_or_profile_write(tmp_path: Path) -> None:
