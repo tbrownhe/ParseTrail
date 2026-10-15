@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 from parsetrail.core.v2_profile_store import V2ProfileStore
-from parsetrail.core.v2_source_import import ImportCancelled, import_source
+from parsetrail.core.v2_source_import import ImportCancelled, compare_reparse, import_source
 
 from devtools.parser_engine_pilot.source_pipeline import build_source_evidence
 
@@ -57,3 +57,27 @@ def test_revised_source_is_a_second_pending_snapshot(tmp_path: Path) -> None:
         assert first.source_sha256 != second.source_sha256
         assert store.connection.execute("SELECT count(*) FROM Sources").fetchone() == (2,)
         assert store.connection.execute("SELECT count(*) FROM SourceObservations").fetchone() == (2,)
+
+
+def test_reparse_compares_new_definition_without_replacing_saved_evidence(tmp_path: Path) -> None:
+    import json
+
+    first_definition = DEFINITION.read_bytes()
+    changed = json.loads(first_definition)
+    changed["revision"] = "2"
+    second_definition = json.dumps(changed).encode()
+    profile = tmp_path / "v2.db"
+    with V2ProfileStore.create(profile) as store:
+        imported = import_source(store, SOURCE, first_definition, suffix=".csv", parse=parse)
+        same = compare_reparse(store, imported.source_sha256, first_definition, parse=parse)
+        assert same.identical_output
+        comparison = compare_reparse(store, imported.source_sha256, second_definition, parse=parse)
+        assert not comparison.identical_output
+        assert comparison.saved == imported.evidence
+        assert comparison.candidate.definition_sha256 != imported.evidence.definition_sha256
+        with pytest.raises(ValueError, match="reparse_source_or_definition_mismatch"):
+            compare_reparse(store, imported.source_sha256, second_definition, parse=lambda _s, _d: imported.evidence)
+        assert store.load_import(imported.source_sha256).evidence == imported.evidence
+        assert store.connection.execute("SELECT count(*) FROM EvidenceSnapshots").fetchone() == (1,)
+    with V2ProfileStore.open(profile, read_only=True) as store:
+        assert store.load_import(imported.source_sha256).evidence == imported.evidence

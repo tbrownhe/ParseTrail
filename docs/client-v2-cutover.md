@@ -179,6 +179,10 @@ snapshot. Revised bytes remain a separate pending import. Parser failure and
 post-parse cancellation leave the new profile unchanged. This is a service
 boundary only; parser execution cancellation, catalog admission, archive
 recovery and main-window integration remain open.
+An explicit reparse comparison can read the saved source and test a candidate
+definition without replacing the original evidence snapshot or decisions. A
+changed definition revision changes the candidate output while the stored
+snapshot survives reopening unchanged.
 The global abbreviated-account matching preference now defaults off and appears
 under File > Preferences. A unique same-institution, same-class suffix match can
 bind automatically only when enabled; ambiguity always requires review. The
