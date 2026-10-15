@@ -76,6 +76,19 @@ produced 139 rows and 99 auxiliary dispositions; source hashes stayed unchanged.
 Capture remains false, and this is still a development pilot without signed
 catalog routing or Intel Mac native worker acceptance.
 
+`savings_lines.py` adds a strict finite PDF line operation for the Happen Bank
+LevelUp savings layout, under
+[`savings-declaration-schema-v1.json`](savings-declaration-schema-v1.json).
+It accepts exact printed period, masked account and balance fields; bounds the
+transaction section; keeps each printed running balance; and refuses a broken
+chain or unrecognized dated/money line. Repeated page headers, balance markers
+and other summary values sharing a balance line have located dispositions.
+Both referenced Happen statements matched the accepted reader on account,
+period, endpoints and all eight activity rows. Their strict V2 evidence reopened
+from a temporary profile with 11 dispositions and unchanged source hashes.
+Full-page capture, signed catalog routing and native worker acceptance remain
+open.
+
 Every Chase-referenced fixture in the authorized closed-copy archive matched
 the accepted reader's account, period, printed balances and rows in a read-only
 comparison. The comparison also accounted for every date-prefixed line as a

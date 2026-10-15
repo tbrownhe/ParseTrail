@@ -193,6 +193,11 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   the exact checked-in definition passed the bounded path on five archive PDFs
   (139 rows, 99 dated auxiliary dispositions) with unchanged hashes. Capture,
   signed routing and Intel Mac worker acceptance remain open.
+  The finite Happen savings line operation now matches both referenced archive
+  statements on printed endpoints and all eight rows, including running
+  balances. Bounded strict evidence reopened in a temporary profile with 11
+  located dispositions and unchanged source hashes. Full-page capture remains
+  open for this family too.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and

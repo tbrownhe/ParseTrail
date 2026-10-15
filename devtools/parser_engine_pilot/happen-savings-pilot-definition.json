@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "parser_id": "happen_savings_line_pilot",
+  "revision": "1",
+  "suffix": ".pdf",
+  "kind": "statement",
+  "operation": "dated_running_savings_v1",
+  "capabilities": [
+    "pdf_lines_v1",
+    "unique_printed_fields_v1",
+    "bounded_activity_v1",
+    "printed_running_chain_v1"
+  ],
+  "period_label": "Statement Period:",
+  "account_label": "LevelUp Savings Account Number:",
+  "opening_label": "Beginning Balance as of",
+  "closing_label": "Ending Balance as of",
+  "opening_row_label": "Beginning Balance",
+  "closing_row_label": "Ending Balance",
+  "section_start": "Transactional Detail",
+  "section_end": "Overdraft/Return Item Summary",
+  "period_date_format": "MM/DD/YYYY",
+  "row_date_format": "MM/DD",
+  "money_format": "trailing_minus_2dp"
+}

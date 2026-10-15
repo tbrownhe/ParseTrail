@@ -154,6 +154,11 @@ The bounded Chase path now emits the strict V2 envelope from its finite line
 pilot on all five authorized Chase archive PDFs: 139 rows and 99 dated
 auxiliary dispositions with unchanged source hashes. Full capture and native
 release acceptance remain separate gates.
+The finite savings-line operation also emits strict V2 evidence for both
+referenced Happen PDFs. It matched the accepted reader's account, period,
+printed endpoints and eight located rows with running balances. The 11
+dispositions include repeated headers, balance-line tails and activity markers;
+full-page capture is still unverified.
 
 ## Remaining family operation costs
 
