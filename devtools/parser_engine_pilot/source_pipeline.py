@@ -1,0 +1,57 @@
+"""Read-only two-family proof of the 2.0 source-to-evidence boundary.
+
+This pilot does not activate a catalog, write a profile or approve accounting.
+"""
+
+from __future__ import annotations
+
+import hashlib
+from typing import Literal
+
+from parsetrail.core.source_evidence import SourceEvidence
+
+from devtools.parser_engine_pilot.citi_evidence import read_recent_citi
+from devtools.parser_engine_pilot.citi_layout import DEFINITION_SHA256
+from devtools.parser_engine_pilot.citi_layout import load_definition as load_citi_definition
+from devtools.parser_engine_pilot.citi_source_output import from_citi
+from devtools.parser_engine_pilot.engine import parse_csv
+from devtools.parser_engine_pilot.table_source_output import from_table
+
+MAX_SOURCE_BYTES = 16 * 1024 * 1024
+MAX_DEFINITION_BYTES = 64 * 1024
+MAX_EVIDENCE_BYTES = 32 * 1024 * 1024
+
+
+class SourcePipelineError(ValueError):
+    """Redacted refusal before source evidence can be stored."""
+
+
+def build_source_evidence(source: bytes, definition: bytes, *, suffix: Literal[".csv", ".pdf"]) -> SourceEvidence:
+    """Build strict, hash-bound evidence without source/profile writes."""
+    if type(source) is not bytes or not 0 < len(source) <= MAX_SOURCE_BYTES:
+        raise SourcePipelineError("source_size")
+    if type(definition) is not bytes or not 0 < len(definition) <= MAX_DEFINITION_BYTES:
+        raise SourcePipelineError("definition_size")
+    if suffix not in {".csv", ".pdf"}:
+        raise SourcePipelineError("unsupported_source_kind")
+    try:
+        if suffix == ".csv":
+            output = from_table(parse_csv(definition, source))
+        else:
+            _, digest = load_citi_definition(definition)
+            if digest != DEFINITION_SHA256:
+                raise SourcePipelineError("unsupported_definition_revision")
+            output = from_citi(read_recent_citi(source))
+        if (
+            output.source_sha256 != hashlib.sha256(source).hexdigest()
+            or output.definition_sha256 != hashlib.sha256(definition).hexdigest()
+        ):
+            raise SourcePipelineError("source_or_definition_mismatch")
+        saved = output.model_dump_json().encode("utf-8")
+        if len(saved) > MAX_EVIDENCE_BYTES:
+            raise SourcePipelineError("evidence_size")
+        return SourceEvidence.model_validate_json(saved)
+    except SourcePipelineError:
+        raise
+    except Exception:
+        raise SourcePipelineError("source_evidence_failed") from None

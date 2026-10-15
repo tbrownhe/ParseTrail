@@ -168,6 +168,11 @@ The owner approved the [released evidence storage boundary](client-v2-evidence-s
 The [upstream boundary review](client-v2-upstream-boundary-review.md) identifies
 the parser-output and admission changes to make before V2-2/V2-3 storage work.
 Recent Citi remains in the 2.0 import contract without a 1.x database migration.
+The first [fresh 2.0 SQLite source store](../client/src/parsetrail/core/v2_profile_store.py)
+now saves exact source, definition, strict evidence and unposted observation IDs
+atomically. A temporary profile reopened ten recent Citi PDFs with 486 rows and
+803 dispositions; the originals were read-only and their hashes unchanged.
+This does not yet connect ledger account mapping or native import UI.
 
 ## Current stop/go decision
 

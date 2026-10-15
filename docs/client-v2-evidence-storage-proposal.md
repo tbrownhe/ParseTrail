@@ -67,10 +67,13 @@ rewrite old snapshots silently.
 ## Next proof
 
 The **single-database, immutable versioned evidence snapshot** boundary is
-approved. The next proof will
-create a fresh disposable 2.0 profile, import one synthetic CSV and one recent
-Citi PDF through the same source transaction, reopen both from saved evidence,
-reject unknown formats before writes, and leave all Citi observations unposted.
-The Citi pilot rules must first be moved out of the 1.x parser module.
-The archive remains read-only. Native Windows GUI and Intel Mac decoder-limit
-acceptance remain later gates.
+approved. The [2.0 source store](../client/src/parsetrail/core/v2_profile_store.py)
+now implements the first proof: a fresh SQLite format marker is checked read-only
+before reopening for writes; source bytes, definition bytes, strict evidence and
+an unposted observation index save in one transaction. A synthetic CSV and Citi
+statement shape reopen without reparsing. A temporary 2.0 profile also imported
+and reopened ten recent Citi archive PDFs through the bounded pilot path (486
+rows, 803 dispositions), with unchanged source hashes. Identical source bytes
+are detectable before parsing and a retry leaves saved evidence intact. This is
+source storage only; account mapping, reviewed ledger posting, full page capture,
+signed catalog admission, native GUI and Intel Mac worker limits remain gates.

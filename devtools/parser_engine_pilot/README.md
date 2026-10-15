@@ -256,6 +256,14 @@ strict JSON with 486 observations and 803 located source dispositions,
 including 36 supplemental detail rows. It leaves capture verification false
 and creates no accounting postings or profile writes.
 
+The [source pipeline](source_pipeline.py) binds input and definition bytes to
+that strict output under explicit size limits. The same entry point builds
+synthetic CSV evidence and recent Citi PDF evidence; unknown Citi layouts and
+changed definition bytes are refused. A temporary fresh 2.0 SQLite profile
+saved and reopened all ten recent Citi archive files through this path without
+writing the originals. This remains a pilot, pending full page capture and
+native import acceptance.
+
 [`bounded_pdf_text.py`](bounded_pdf_text.py) starts a separate PDF text worker
 with source, output, page, line and extracted-text limits plus a wall-clock
 deadline. The decoder workers use [`worker_limits.py`](worker_limits.py): Windows uses

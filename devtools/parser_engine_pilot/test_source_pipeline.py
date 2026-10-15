@@ -1,0 +1,37 @@
+"""One read-only entry point builds strict CSV and Citi evidence."""
+
+from pathlib import Path
+
+import pytest
+
+from devtools.parser_engine_pilot.citi_layout import DEFINITION_BYTES
+from devtools.parser_engine_pilot.source_pipeline import SourcePipelineError, build_source_evidence
+from devtools.parser_engine_pilot.test_bounded_citi import sample_table_pdf
+
+CSV_DEFINITION = Path(__file__).parents[1] / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
+CSV = b"Date,Account,Description,Amount,ReportedBalance\n10/01/2026,Checking A,Coffee,-$4.00,$996.00\n"
+
+
+def test_csv_build_is_strict_and_keeps_raw_cells() -> None:
+    output = build_source_evidence(CSV, CSV_DEFINITION.read_bytes(), suffix=".csv")
+    assert output.payload.kind == "activity_export"
+    assert output.payload.rows[0].amount.raw == "-$4.00"
+    assert output.payload.rows[0].fragments[0].location.kind == "csv_row"
+    assert output.payload.coverage_verified is False
+
+
+def test_pdf_requires_exact_pilot_definition_and_recent_layout() -> None:
+    with pytest.raises(SourcePipelineError, match="unsupported_definition_revision"):
+        build_source_evidence(sample_table_pdf(), DEFINITION_BYTES + b" ", suffix=".pdf")
+    with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
+        build_source_evidence(sample_table_pdf(), DEFINITION_BYTES, suffix=".pdf")
+
+
+def test_source_or_definition_failure_has_no_output_or_profile_write(tmp_path: Path) -> None:
+    with pytest.raises(SourcePipelineError, match="unsupported_source_kind"):
+        build_source_evidence(CSV, CSV_DEFINITION.read_bytes(), suffix=".xlsx")
+    with pytest.raises(SourcePipelineError, match="definition_size"):
+        build_source_evidence(CSV, b"", suffix=".csv")
+    with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
+        build_source_evidence(CSV + b"garbled", CSV_DEFINITION.read_bytes(), suffix=".csv")
+    assert list(tmp_path.iterdir()) == []

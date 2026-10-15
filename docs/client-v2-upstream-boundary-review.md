@@ -70,5 +70,13 @@ that parser remains in the separate read-only comparison audit. Ten archived
 recent-layout PDFs produced 486 observations and 803 located dispositions,
 including 36 supplemental detail rows, and reopened from strict JSON without
 changing source hashes. `capture_verified` remains false pending final
-non-monetary section capture and native decoder acceptance. Bounded admission
-and the released stored snapshot remain the next proof.
+non-monetary section capture and native decoder acceptance. The
+[two-family source pipeline](../devtools/parser_engine_pilot/source_pipeline.py)
+now checks source/definition sizes and hashes, strict output shape and serialized
+output size. It refuses unknown Citi layouts and changed definition bytes. The
+[fresh 2.0 source store](../client/src/parsetrail/core/v2_profile_store.py)
+checks its format read-only before opening for writes. One transaction retains
+source, definition, strict output and an unposted observation index. A temporary
+profile imported and reopened ten recent Citi archive PDFs through this path:
+486 rows and 803 source dispositions; every source hash stayed unchanged.
+Ledger account mapping and reviewed posting remain subsequent work.
