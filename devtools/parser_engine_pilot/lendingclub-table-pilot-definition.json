@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "parser_id": "pdf_lendingclublus_202506",
+  "revision": "1",
+  "suffix": ".pdf",
+  "kind": "statement",
+  "operation": "anchored_columns_table_v1",
+  "headers": ["Date", "Description", "Withdrawal", "(-)", "Deposit", "(+)", "Balance"],
+  "partial_suffix_min": 3,
+  "header_line_tolerance": 2.0,
+  "crop_top_anchor": 0,
+  "crop_top_offset": 0.1,
+  "boundaries": [
+    {"kind": "anchor_edge", "anchor": 0, "edge": "x0", "offset": -3.0},
+    {"kind": "anchor_edge", "anchor": 1, "edge": "x0", "offset": -2.0},
+    {"kind": "anchor_edge", "anchor": 2, "edge": "x0", "offset": -3.0},
+    {"kind": "anchor_edge", "anchor": 3, "edge": "x1", "offset": 2.0},
+    {"kind": "anchor_edge", "anchor": 5, "edge": "x1", "offset": 2.0},
+    {"kind": "anchor_edge", "anchor": 6, "edge": "x1", "offset": 2.0}
+  ],
+  "horizontal_strategy": "text",
+  "snap_y_tolerance": 0.0,
+  "statement": {
+    "operation": "table_bank_activity_v1",
+    "date_format": "MM/DD/YYYY+MM/DD",
+    "money_format": "usd_trailing_credit_2dp",
+    "start_label": "Statement Begin Date:",
+    "end_label": "Statement End Date:",
+    "account_label": "Account Number:",
+    "summary_label": "Balance + Deposits + Paid - Withdrawals - Charge = Balance",
+    "opening_row_label": "Balance Forward"
+  }
+}

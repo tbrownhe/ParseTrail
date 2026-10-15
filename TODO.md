@@ -278,6 +278,13 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   header across a foreign-transaction page break. Temporary V2 storage
   reopened all eight sources with unchanged hashes. Monetary table tails,
   complete page capture, signed routing and native acceptance remain open.
+  Older LendingClub savings now reuses the header-anchor worker with seven
+  header words locating five data columns. All seven routed archived PDFs
+  matched 18 accepted rows, printed running balances and six-value summary
+  equations. Temporary V2 storage reopened seven sources, 18 observations
+  and 225 located dispositions with unchanged hashes. The 28 money-bearing
+  summary/disclosure rows remain unclassified; full-page capture and native
+  acceptance remain open.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and

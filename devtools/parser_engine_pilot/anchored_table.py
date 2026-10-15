@@ -76,6 +76,32 @@ class TableCardStatementRule(BaseModel):
         return self
 
 
+class TableBankStatementRule(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    operation: Literal["table_bank_activity_v1"]
+    date_format: Literal["MM/DD/YYYY+MM/DD"]
+    money_format: Literal["usd_trailing_credit_2dp"]
+    start_label: str = Field(min_length=1, max_length=80)
+    end_label: str = Field(min_length=1, max_length=80)
+    account_label: str = Field(min_length=1, max_length=80)
+    summary_label: str = Field(min_length=1, max_length=100)
+    opening_row_label: str = Field(min_length=1, max_length=80)
+
+    @model_validator(mode="after")
+    def valid_bank_rule(self) -> TableBankStatementRule:
+        labels = (
+            self.start_label,
+            self.end_label,
+            self.account_label,
+            self.summary_label,
+            self.opening_row_label,
+        )
+        if len(set(labels)) != len(labels) or any(label != label.strip() or "\n" in label for label in labels):
+            raise ValueError("invalid table bank operation")
+        return self
+
+
 class AnchoredTableDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
@@ -93,7 +119,9 @@ class AnchoredTableDefinition(BaseModel):
     boundaries: tuple[Boundary, ...] = Field(min_length=3, max_length=9)
     horizontal_strategy: Literal["text", "lines"]
     snap_y_tolerance: float = Field(ge=0, le=3)
-    statement: TableCardStatementRule | None = None
+    statement: Annotated[TableCardStatementRule | TableBankStatementRule, Field(discriminator="operation")] | None = (
+        None
+    )
 
     @model_validator(mode="after")
     def valid_geometry(self) -> AnchoredTableDefinition:
@@ -101,7 +129,8 @@ class AnchoredTableDefinition(BaseModel):
             len(set(self.headers)) != len(self.headers)
             or any(not item or item != item.strip() or len(item) > 40 or "\n" in item for item in self.headers)
             or self.crop_top_anchor >= len(self.headers)
-            or len(self.boundaries) != len(self.headers) + 1
+            or (isinstance(self.statement, TableCardStatementRule) and len(self.boundaries) != 5)
+            or (isinstance(self.statement, TableBankStatementRule) and len(self.boundaries) != 6)
         ):
             raise ValueError("invalid header geometry")
         for boundary in self.boundaries:
@@ -267,7 +296,7 @@ def extract_anchored_table(
             values = tuple(value or "" for value in row)
             bbox = tuple(region.bbox)
             if (
-                len(values) != len(definition.headers)
+                len(values) != len(definition.boundaries) - 1
                 or any(len(value) > MAX_CELL_CHARS for value in values)
                 or not _region(bbox, page)
             ):

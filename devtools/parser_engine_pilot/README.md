@@ -230,6 +230,15 @@ signed routing and native acceptance remain open. The shared Citi header
 reader now resolves a single embedded closing balance or a matching anchored
 copy, and refuses conflicting copies.
 
+`table_bank_source_output.py` reuses the bounded anchored-table worker for
+older LendingClub savings. Its seven header words locate five data columns;
+the bank operation checks the printed six-value summary and every dated
+running balance. All seven routed archive PDFs matched 18 accepted rows,
+account, period and endpoints. Temporary V2 storage reopened seven sources,
+18 observations and 225 located dispositions with unchanged hashes. Twenty-
+eight money-bearing summary/disclosure table rows remain unclassified, so
+full-page capture and native acceptance remain open.
+
 Every Chase-referenced fixture in the authorized closed-copy archive matched
 the accepted reader's account, period, printed balances and rows in a read-only
 comparison. The comparison also accounted for every date-prefixed line as a

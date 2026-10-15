@@ -170,6 +170,68 @@
       "title": "ContinuationRule",
       "type": "object"
     },
+    "TableBankStatementRule": {
+      "additionalProperties": false,
+      "properties": {
+        "operation": {
+          "const": "table_bank_activity_v1",
+          "title": "Operation",
+          "type": "string"
+        },
+        "date_format": {
+          "const": "MM/DD/YYYY+MM/DD",
+          "title": "Date Format",
+          "type": "string"
+        },
+        "money_format": {
+          "const": "usd_trailing_credit_2dp",
+          "title": "Money Format",
+          "type": "string"
+        },
+        "start_label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Start Label",
+          "type": "string"
+        },
+        "end_label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "End Label",
+          "type": "string"
+        },
+        "account_label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Account Label",
+          "type": "string"
+        },
+        "summary_label": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Summary Label",
+          "type": "string"
+        },
+        "opening_row_label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Opening Row Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "operation",
+        "date_format",
+        "money_format",
+        "start_label",
+        "end_label",
+        "account_label",
+        "summary_label",
+        "opening_row_label"
+      ],
+      "title": "TableBankStatementRule",
+      "type": "object"
+    },
     "TableCardStatementRule": {
       "additionalProperties": false,
       "properties": {
@@ -356,13 +418,28 @@
     "statement": {
       "anyOf": [
         {
-          "$ref": "#/$defs/TableCardStatementRule"
+          "discriminator": {
+            "mapping": {
+              "table_bank_activity_v1": "#/$defs/TableBankStatementRule",
+              "table_card_activity_v1": "#/$defs/TableCardStatementRule"
+            },
+            "propertyName": "operation"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/TableCardStatementRule"
+            },
+            {
+              "$ref": "#/$defs/TableBankStatementRule"
+            }
+          ]
         },
         {
           "type": "null"
         }
       ],
-      "default": null
+      "default": null,
+      "title": "Statement"
     }
   },
   "required": [

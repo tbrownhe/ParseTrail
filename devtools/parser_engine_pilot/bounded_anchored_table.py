@@ -54,7 +54,7 @@ def extract_bounded_anchored_table(
             row.page < 1
             or row.page > len(evidence.pages)
             or row.ordinal < 1
-            or len(row.raw_cells) != len(parsed.headers)
+            or len(row.raw_cells) != len(parsed.boundaries) - 1
             or any(len(cell) > MAX_CELL_CHARS for cell in row.raw_cells)
             or not all(math.isfinite(value) for value in row.region)
             for row in evidence.rows

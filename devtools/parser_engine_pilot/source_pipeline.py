@@ -31,6 +31,7 @@ from devtools.parser_engine_pilot.occu_card_lines import parse_occu_card
 from devtools.parser_engine_pilot.pdf_lines import page_lines
 from devtools.parser_engine_pilot.savings_lines import parse_savings_lines, parse_summary_savings_lines
 from devtools.parser_engine_pilot.single_column_summary import parse_plan_label_summary, parse_single_column_summary
+from devtools.parser_engine_pilot.table_bank_source_output import from_anchored_bank
 from devtools.parser_engine_pilot.table_card_source_output import from_anchored_card
 from devtools.parser_engine_pilot.table_source_output import from_table
 from devtools.parser_engine_pilot.two_date_card_lines import parse_two_date_card
@@ -80,6 +81,9 @@ LEGACY_CITI_DEFINITION_SHA256 = hashlib.sha256(
 ).hexdigest()
 MIDDLE_CITI_DEFINITION_SHA256 = hashlib.sha256(
     Path(__file__).with_name("middle-citi-table-pilot-definition.json").read_bytes()
+).hexdigest()
+LENDINGCLUB_TABLE_DEFINITION_SHA256 = hashlib.sha256(
+    Path(__file__).with_name("lendingclub-table-pilot-definition.json").read_bytes()
 ).hexdigest()
 
 
@@ -162,6 +166,10 @@ def build_source_evidence(source: bytes, definition: bytes, *, suffix: Literal["
                 pages = decode_pdf_default_layout(source).pages
                 lines = page_lines(source, pages, extraction_library="pdfplumber-bounded-layout-default-v1")
                 output = from_anchored_card(definition, extract_bounded_anchored_table(definition, source), lines)
+            elif digest == LENDINGCLUB_TABLE_DEFINITION_SHA256:
+                pages = decode_pdf(source).pages
+                lines = page_lines(source, pages, extraction_library="pdfplumber-bounded-simple-v1")
+                output = from_anchored_bank(definition, extract_bounded_anchored_table(definition, source), lines)
             else:
                 raise SourcePipelineError("unsupported_definition_revision")
         if (
