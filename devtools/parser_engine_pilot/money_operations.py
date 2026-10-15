@@ -8,6 +8,10 @@ USD_SYMBOL = re.compile(r"-?\$\d{1,3}(?:,\d{3})*(?:\.\d{2})?")
 USD_OR_DECIMAL_2DP = re.compile(r"-?\$?(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)\.[0-9]{2}")
 USD_TRAILING_CREDIT_2DP = re.compile(r"\$(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)\.[0-9]{2}-?")
 USD_TRAILING_CR_2DP = re.compile(r"\$(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)\.[0-9]{2}(?:CR)?")
+USD_PARENTHETICAL_2DP = re.compile(
+    r"(?:\(\$(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)\.[0-9]{2}\)"
+    r"|\$(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)\.[0-9]{2})"
+)
 MAX_MINOR = 9_000_000_000_000_000
 
 
@@ -57,4 +61,16 @@ def usd_trailing_cr_2dp_minor_v1(raw: str) -> int:
     amount = int(major) * 100 + int(cents)
     if amount > MAX_MINOR:
         raise ValueError("usd_trailing_cr_amount_range")
+    return -amount if negative else amount
+
+
+def usd_parenthetical_2dp_minor_v1(raw: str) -> int:
+    """Read an OCCU bank debit in parentheses or a plain dollar credit."""
+    if type(raw) is not str or len(raw) > 40 or USD_PARENTHETICAL_2DP.fullmatch(raw) is None:
+        raise ValueError("invalid_usd_parenthetical_amount")
+    negative = raw.startswith("(")
+    major, cents = raw.strip("()").removeprefix("$").replace(",", "").split(".")
+    amount = int(major) * 100 + int(cents)
+    if amount > MAX_MINOR:
+        raise ValueError("usd_parenthetical_amount_range")
     return -amount if negative else amount

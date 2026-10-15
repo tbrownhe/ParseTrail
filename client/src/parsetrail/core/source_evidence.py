@@ -62,6 +62,12 @@ class PdfChars(EvidenceModel):
         return self
 
 
+class PdfAnnotation(EvidenceModel):
+    kind: Literal["pdf_annotation"]
+    page: int = Field(ge=1, le=100)
+    ordinal: int = Field(ge=1, le=1000)
+
+
 class CsvCell(EvidenceModel):
     kind: Literal["csv_cell"]
     row: int = Field(ge=1, le=100_000)
@@ -87,7 +93,8 @@ class XlsxRow(EvidenceModel):
 
 
 SourceLocation = Annotated[
-    PdfLine | PdfTableRow | PdfChars | CsvCell | CsvRow | XlsxCell | XlsxRow, Field(discriminator="kind")
+    PdfLine | PdfTableRow | PdfChars | PdfAnnotation | CsvCell | CsvRow | XlsxCell | XlsxRow,
+    Field(discriminator="kind"),
 ]
 
 

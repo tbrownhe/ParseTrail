@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "parser_id": "pdf_occubank_201409",
+  "revision": "1",
+  "suffix": ".pdf",
+  "kind": "statement",
+  "operation": "two_account_running_bank_v1",
+  "text_channel": "pdf_simple_text_v1",
+  "annotation_fallback": "first_page_from_to_v1",
+  "date_format": "MM/DD/YY+MM/DD",
+  "money_format": "usd_2dp_parenthetical_debit",
+  "account_labels": ["PRIMARY SAVINGS", "REMARKABLE CHECKING"],
+  "opening_label": "Previous Balance",
+  "closing_label": "Ending Balance",
+  "other_account_label": "PERSONAL CREDIT LINE"
+}

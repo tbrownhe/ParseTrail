@@ -256,6 +256,14 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   219 observations and 96 located dispositions with unchanged hashes. The
   rewards `PreviousBalance` is separately labeled as points evidence. Full
   page capture, signed routing and native acceptance remain open.
+  OCCU bank now has a bounded two-account operation. All 113 archived PDFs
+  matched the accepted reader on 226 savings/checking accounts, 6,427 rows,
+  printed running balances and closing equations. The 78 statements without
+  text dates use a bounded first-page annotation decoder with exact ordinals;
+  six dated ATM inquiries are nonfinancial dispositions. Temporary V2 storage
+  reopened all 113 sources, 6,427 observations and 295 dispositions without
+  changing source bytes. Other account sections, complete page capture,
+  signed routing and native acceptance remain open.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and

@@ -34,7 +34,7 @@ output/behavior; it does not imply full private-archive regression coverage.
 | `pdf_hehsa_201810` | 0.2.1 | HealthEquity cash and continuation PDF | Continuation, boundary and running-balance tests | Continuation pilot and independent printed cash checks; retain unresolved investment scope. |
 | `pdf_lendingclublus_202506` | 0.2.0 | Older savings table PDF | No parser-specific test found | Layout variant, archived fixture and table row coverage required. |
 | `pdf_lendingclubsavings_202601` | 0.1.1 | Savings line PDF | Savings/balance-evidence tests | Printed summary and row balances; reject truncated tail. |
-| `pdf_occubank_201409` | 0.2.0 | Multi-account bank PDF | No parser-specific test found | Separate checking/savings sections; date fallback from PDF annotations needs an explicit operation or built-in handler. |
+| `pdf_occubank_201409` | 0.2.0 | Multi-account bank PDF | Finite V2 pilot and synthetic refusal tests | All 113 archived sources pass two-account row and running-balance parity; 78 periods use bounded first-page annotations. Other account sections remain outside capture. |
 | `pdf_occucc_201904` | 0.2.0 | Credit-card line PDF | Finite V2 pilot and synthetic refusal tests | All 32 archived sources pass accepted-row and printed-balance parity; header interest is a separate located charge. Complete page capture remains open. |
 | `pdf_synchrony-amzncc_202501` | 0.3.0 | Store-card table PDF | No parser-specific test found | Word-header matching, dynamic table geometry and continuation. |
 | `pdf_transamerica_202104` | 0.2.0 | Retirement line PDF | No parser-specific test found | Quarterly period and noncash/account sections need archive comparison. |
@@ -252,6 +252,18 @@ observations and 96 located rewards, repeated-balance or interest-heading dispos
 with unchanged source hashes. Complete page capture, signed routing and native
 worker acceptance remain open.
 
+OCCU checking and savings now use bounded simple text plus an explicit
+first-page annotation date fallback. The 35 text-dated sources retain printed
+line locations; the other 78 retain `pdf_annotation` ordinals, raw dates and
+field names. Across all 113 archived PDFs, 226 account balances and 6,427
+dated rows matched the accepted reader, including printed running balances;
+every account's balance chain passed. Six dated ATM balance inquiries contain
+only a displayed balance, so they remain nonfinancial dispositions. A
+temporary V2 profile reopened 113 sources, 6,427 observations and 295 located
+dispositions without altering the PDFs. An optional personal credit line
+section is recorded as a boundary, outside this two-account pilot. Complete
+page capture, signed routing and native acceptance remain open.
+
 ## Remaining family operation costs
 
 These estimates complete the source-code review for the other 18 modules in
@@ -267,7 +279,7 @@ conversion priority signal, not permission to embed Python in a declaration.
 | `pdf_fidelity401k_201810`, `pdf_fidelityhsa_202001`, `pdf_transamerica_202104`, `pdf_vanguard_202210` | Unique period/plan or account anchors, bounded balance sections, amount-bearing lines, explicit cash versus investment scope and a source-labeled date role. | Medium. The old readers often assign period-end dates to undated rows; retain those as derived, and do not turn investment valuation changes into cash activity without printed evidence. Fidelity 401(k) headerless/browser-print plan labels need a finite recognized variant. |
 | `pdf_happenbank_202606`, `pdf_lendingclubsavings_202601` | Bounded text sections, exact dates and amounts, optional inherited transaction date, printed running balances and independent closing equation. | Low to medium. LendingClub's `Interest Paid` date substitution is derived; require explicit row and tail dispositions and preserve printed source date. |
 | `pdf_lendingclublus_202506`, `pdf_wfbankper_202105` | Page-local anchored table geometry, debit/credit cells, continuation descriptions, optional printed running balance and exact partial-date resolution. | Medium to high. Reuse the Wells geometry operation only after per-layout crop/header checks; do not fill missing row balances. |
-| `pdf_occubank_201409` | Multiple account sections; ordered text-date then annotation-date source selection and located row balances. | Medium. Annotation decoding may need a finite shipped decoder field operation. Its precedence and location must be explicit. |
+| `pdf_occubank_201409` | Bounded simple lines, text dates before first-page annotation fallback, two located account sections and running balance chains. | Finite pilot passed 113 archived sources; personal credit line and full page capture remain open. |
 | `pdf_occucc_201904` | Bounded default-layout lines, dated card activity and a separately tagged header charge. | Finite pilot passed 32 archived sources; full page capture and native acceptance remain open. |
 | `pdf_synchrony-amzncc_202501` | Bounded partial-word table header recognition, page-local geometry, dated row continuation and liability sign. | High. Existing parser silently skips unmatched rows and pages; require full candidate and post-table dispositions before acceptance. |
 | `pdf_usbankreicc_201405` | Use one bounded simple-text representation for both routing and extraction; optional second date and explicit `CR` sign, with unique printed account/period/balance anchors. | Medium. Current reader deliberately selects simple text because layout text breaks credit indicators; archive fixtures must cover that difference. |

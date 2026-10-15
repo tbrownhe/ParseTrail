@@ -187,6 +187,21 @@ located as a nonfinancial disposition. Synthetic tests
 refuse missing interest, conflicting balances and unresolved dated lines.
 Complete page capture, signed routing and native acceptance remain open.
 
+`pdf_annotation_worker.py` decodes only OCCU bank's first-page `FROM_DATE` and
+`TO_DATE` fields under the same source, output, memory and deadline limits as
+the other fixed workers. `occu_bank_lines.py` first checks printed text dates,
+then uses those bounded annotations only when both text dates are absent.
+The dates keep a `pdf_annotation` page and ordinal location. The operation
+separates savings and checking by their printed account headings, preserves
+each dated row's amount and running balance, and verifies both account chains.
+All 113 archived PDFs matched the accepted reader on period, 226 accounts,
+6,427 rows and printed endpoints; 78 used annotation dates. Six ATM balance
+inquiries without transaction amounts remain nonfinancial dispositions. A
+temporary V2 profile reopened all 113 sources, 6,427 observations and 295
+located dispositions with unchanged source hashes. Optional personal credit
+line sections stay outside this two-account pilot; complete capture, signed
+routing and native acceptance remain open.
+
 Every Chase-referenced fixture in the authorized closed-copy archive matched
 the accepted reader's account, period, printed balances and rows in a read-only
 comparison. The comparison also accounted for every date-prefixed line as a
