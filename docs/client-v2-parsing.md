@@ -182,8 +182,7 @@ Two descriptions intentionally differ: the fuller text copy and a fee label
 without its trailing amount. The 20 overlap/text-only candidates are not the
 foreign multiline pattern. A separate scan found 71 other dated lines outside
 the simple text-row matcher, including foreign multiline rows and legal-text
-interleaving. They still need explicit dispositions before complete-capture
-claims. The repeated row-continuation behavior belongs in a bounded engine
+interleaving. The repeated row-continuation behavior belongs in a bounded engine
 operation: Citi, Synchrony, LendingClub and Wells all use it. A strict
 [table-continuation pilot](../devtools/parser_engine_pilot/table_continuations.py)
 now covers two finite shapes with column selectors and source-row references.
@@ -195,24 +194,27 @@ and nine printed balance equations; each source hash was unchanged. Leave only
 genuinely Citi-specific geometry or fee-section selection in a named built-in
 extractor if the shared operations cannot express it simply.
 
-A separate read-only scan of a nine-file recent-layout sample found 67 dated
-lines outside the simple matcher. Sixty-three show a money value on that line
-or the next. Of those, 62 have same-page table candidates with the same
-transaction date and amount: 51 have one candidate and 11 have multiple
-candidates. The remaining amount-bearing line matches a statement row but
-has no same-page table counterpart. Four dated lines have no amount in that
-two-line window, including a known multiline fee start. These are structural
-links, not complete source dispositions: duplicate ordering, foreign
-continuations, page geometry and legal-text interleaving still need explicit
-source-region checks before Citi import admission.
+A [Citi dated-line ledger](../devtools/parser_engine_pilot/citi_source_dispositions.py)
+now checks page, date, signed amount, occurrence order and ordered description
+words against table rows; it also checks the printed fee-section span. In the
+nine-file sample, it accounts for all 67 extra dated starts as 66 table copies
+and one fee. Three table descriptions lost their first character, so the
+ledger records the fuller printed word. Adding the first recent-layout
+statement gives ten archive PDFs: 486 dated starts map one to one to 486
+resolved rows, including 72 table copies and one fee. There are no unresolved
+dated starts, and all ten printed balance equations pass. This is a dated-start
+capture result, not a claim about every non-dated item elsewhere on a page.
 
 Before any PDF or XLSX pilot is used for normal import, run library decoding in
 a separate worker with input/output, page/row, wall-clock and OS memory limits.
 An isolated [PDF simple-text worker pilot](../devtools/parser_engine_pilot/bounded_pdf_text.py)
 now covers that path: on Windows its Job Object memory cap and deadline passed
 native synthetic checks, and its text matched the existing decoder on nine
-recent-layout Citi PDFs without changing source hashes. Wells word/table
-extraction uses the same boundary, while Citi word/table extraction does not yet.
+recent-layout Citi PDFs without changing source hashes. Wells and Citi word/table
+extraction now use the same boundary. The [bounded Citi table pilot](../devtools/parser_engine_pilot/bounded_citi.py)
+returned exactly the current reader's 543 raw table/interest rows and retained
+page, row and table-region locations on those ten archive PDFs. Their hashes
+were unchanged. Runtime integration and Intel Mac native limits remain open.
 The [XLSX worker pilot](../devtools/parser_engine_pilot/bounded_xlsx.py)
 uses the same fixed process limiter and matches synthetic in-process evidence;
 it still lacks an archived workbook fixture. Intel Mac memory and timeout

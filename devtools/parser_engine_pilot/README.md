@@ -165,13 +165,25 @@ complete-capture gate: each such line needs a source disposition before the
 layout may be used for normal imports. The pilot still uses the old unbounded
 PDF decoder and table extractor.
 
-A later nine-file read-only sample found 67 such dated lines. Sixty-three had
-money on that line or the next; 62 had same-page table candidates with the same
-date and amount (51 unique, 11 multiple). One matched a statement row without
-a same-page table counterpart. Four had no amount in that two-line window,
-including a multiline fee start. The eight-file counts above and this nine-file
-sample are different cohorts. None of these structural matches certifies that
-all source activity was captured or resolves duplicate occurrence ordering.
+A later nine-file read-only sample found 67 such dated starts. The finite
+[`citi_source_dispositions.py`](citi_source_dispositions.py) ledger now accounts
+for all of them: 66 are table copies linked by page, date, signed amount,
+occurrence order and ordered description words; one is in the printed fee
+section. Three table descriptions lost their first character, so the ledger
+records that extraction artifact. The eight-file counts above and the
+nine-file sample are different cohorts.
+
+Including the first recent-layout statement, all ten archive PDFs have 486
+dated starts, each linked to exactly one of 486 resolved rows. The ledger reports
+72 table copies, one fee and zero unresolved dated starts. Ten printed balance
+equations pass; source hashes were unchanged. This check covers dated starts,
+not every non-dated item on every page. The read-only audit still uses the old
+in-process reader for comparison. [`bounded_citi.py`](bounded_citi.py) now moves
+Citi word/table extraction to the shared resource-limited worker. It returned
+the same 543 raw table/interest rows as the accepted reader across those ten
+sources and retained page, row and table-region locations. Synthetic PDF parity
+and redacted invalid-source refusal also pass. Runtime integration and Intel
+Mac native limits remain open.
 
 [`table_continuations.py`](table_continuations.py) is a shared finite operation
 pilot over already decoded table cells. Its strict declaration selects start
@@ -186,10 +198,10 @@ pilot. Its common occurrence-matching logic now lives in
 exact table/text copies one to one and labels additional exact, coarse overlap
 and text-only occurrences without admitting a financial row. Citi-specific
 artifact rules and the printed balance equation remain in `citi_channels.py`.
-The refactored read-only audit passed on nine recent-layout archive files,
-reproducing 428 accepted date/amount occurrences and nine printed balance
-equations; each input's hash was unchanged. These checks do not resolve the
-unmatched dated-line capture gate or bound PDF decoding.
+The refactored read-only audit passed on ten recent-layout archive files,
+reproducing 486 accepted date/amount occurrences and ten printed balance
+equations; each input's hash was unchanged. The dated-start ledger and bounded
+table worker results above extend that comparison without posting rows.
 
 Run one authorized source with:
 
@@ -197,19 +209,20 @@ Run one authorized source with:
 client/.venv/Scripts/python.exe -m devtools.parser_engine_pilot.audit_citi_channels C:\private\recent-citi.pdf
 ```
 
-The audit uses the existing unbounded PDF decoder. The pilot's finite candidate
-resolver is not a runtime parser or a complete source-line inventory.
+The audit uses the existing unbounded PDF decoder for comparison. The pilot's
+finite resolver and dated-start inventory are not runtime parsers or full-page
+capture proof.
 
 [`bounded_pdf_text.py`](bounded_pdf_text.py) starts a separate PDF text worker
 with source, output, page, line and extracted-text limits plus a wall-clock
-deadline. Both workers use [`worker_limits.py`](worker_limits.py): Windows uses
+deadline. The decoder workers use [`worker_limits.py`](worker_limits.py): Windows uses
 a Job Object committed-memory limit; POSIX workers set
 `RLIMIT_AS` before importing decoder libraries. The Windows synthetic test exercised
 actual memory refusal and deadline termination. Isolated text extraction exactly
 matched the existing decoder on nine recent-layout archive PDFs, and source
-hashes remained unchanged. This pilot covers simple text only: PDF word/table
-finding remains outside the worker, and Intel Mac native limits still need a
-target-machine test. No runtime import calls this pilot.
+hashes remained unchanged. The Wells and Citi workers separately cover their
+word/table extraction. Intel Mac native limits still need a target-machine
+test. No runtime import calls these pilots.
 
 Run the synthetic tests from the repository root:
 
@@ -222,11 +235,13 @@ client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_x
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_wells_table.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_audit_citi_channels.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_citi_channels.py
+client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_citi_source_dispositions.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_table_continuations.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_channel_occurrences.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_bounded_pdf_text.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_bounded_xlsx.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_bounded_wells.py
+client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_bounded_citi.py
 ```
 
 `mohela-pilot-definition.json` exercises those three finite layout/identity

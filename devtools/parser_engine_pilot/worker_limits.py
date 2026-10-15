@@ -17,6 +17,7 @@ WorkerModule = Literal[
     "devtools.parser_engine_pilot.pdf_text_worker",
     "devtools.parser_engine_pilot.xlsx_worker",
     "devtools.parser_engine_pilot.wells_worker",
+    "devtools.parser_engine_pilot.citi_worker",
 ]
 
 
@@ -150,6 +151,7 @@ def run_worker(
         "devtools.parser_engine_pilot.pdf_text_worker",
         "devtools.parser_engine_pilot.xlsx_worker",
         "devtools.parser_engine_pilot.wells_worker",
+        "devtools.parser_engine_pilot.citi_worker",
     }:
         raise WorkerError("unsupported_worker")
     if not isinstance(payload, bytes) or not payload or len(payload) > MAX_INPUT_BYTES:

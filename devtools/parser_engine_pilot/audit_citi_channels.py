@@ -21,6 +21,7 @@ from parsetrail.plugins.pdf_citicc_202511 import Parser as RecentCiti
 
 from devtools.parser_engine_pilot.channel_occurrences import Candidate, match_occurrences
 from devtools.parser_engine_pilot.citi_channels import CITI_OCCURRENCE_RULE, resolve
+from devtools.parser_engine_pilot.citi_source_dispositions import dispose_dated_lines
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,18 +107,6 @@ def fee_candidates(parser: RecentCiti, pages: list[str]) -> list[Candidate]:
             )
             pending = None
     return result
-
-
-def unmatched_dated_line_counts(parser: RecentCiti, pages: list[str]) -> Counter[str]:
-    """Count dated source lines outside the finite text-row matcher."""
-    counts: Counter[str] = Counter()
-    for page in pages:
-        for line in page.splitlines():
-            if parser.DATE_PREFIX.match(line) is None or parser.TEXT_TRANSACTION.match(line):
-                continue
-            kind = "with_money" if parser.AMOUNT.search(line) else "without_money"
-            counts[kind] += 1
-    return counts
 
 
 def audit(source: bytes) -> dict[str, int | bool]:
@@ -208,13 +197,56 @@ def audit(source: bytes) -> dict[str, int | bool]:
         account = accepted.accounts[0]
         reconciles = account.start_balance + sum(row.amount for row in account.transactions) == account.end_balance
         located_fees = fee_candidates(parser, reader.pages_simple or [])
-        dated_auxiliary = unmatched_dated_line_counts(parser, reader.pages_simple or [])
+        source_dispositions = dispose_dated_lines(parser, reader.pages_simple or [], table, located_fees)
+        source_counts = Counter(item.status for item in source_dispositions)
         resolution = resolve(
             table,
             text,
             located_fees,
             opening_minor=to_minor_units(account.start_balance),
             closing_minor=to_minor_units(account.end_balance),
+        )
+        resolved_by_source = {
+            (candidate.channel, candidate.page, candidate.line): index
+            for index, row in enumerate(resolution.rows)
+            for candidate in row.sources
+        }
+        incomplete_by_location = {
+            (candidate.page, candidate.line): candidate for candidate in resolution.incomplete_text_copies
+        }
+        dated_row_occurrences: Counter[int] = Counter()
+        for item in source_dispositions:
+            if item.status == "simple_text":
+                key = ("text", item.page, item.line)
+            elif item.status == "table_copy":
+                key = ("table", item.page, item.table_row)
+            elif item.status == "fee":
+                key = ("fee", item.page, item.line)
+            else:
+                continue
+            row_index = resolved_by_source.get(key)
+            if row_index is None and item.status == "simple_text":
+                incomplete = incomplete_by_location.get((item.page, item.line))
+                if incomplete is not None:
+                    peers = [
+                        index
+                        for index, row in enumerate(resolution.rows)
+                        if row.disposition == "table"
+                        and row.representative.page == incomplete.page
+                        and (
+                            row.representative.transaction_date,
+                            row.representative.posting_date,
+                            row.representative.amount_minor,
+                        )
+                        == (incomplete.transaction_date, incomplete.posting_date, incomplete.amount_minor)
+                    ]
+                    if len(peers) == 1:
+                        row_index = peers[0]
+            if row_index is None:
+                raise ValueError("dated_source_without_resolved_row")
+            dated_row_occurrences[row_index] += 1
+        dated_start_row_bijection = source_counts["unresolved"] == 0 and all(
+            dated_row_occurrences[index] == 1 for index in range(len(resolution.rows))
         )
         resolved_rows = Counter(
             (row.representative.transaction_date, row.representative.posting_date, row.representative.amount_minor)
@@ -263,8 +295,16 @@ def audit(source: bytes) -> dict[str, int | bool]:
         "resolved_row_parity": True,
         "resolved_description_differences": description_differences,
         "located_fee_count": len(located_fees),
-        "dated_unmatched_with_money": dated_auxiliary["with_money"],
-        "dated_unmatched_without_money": dated_auxiliary["without_money"],
+        "dated_source_lines": len(source_dispositions),
+        "simple_text_lines": source_counts["simple_text"],
+        "table_source_copies": source_counts["table_copy"],
+        "fee_source_lines": source_counts["fee"],
+        "unresolved_source_lines": source_counts["unresolved"],
+        "source_first_character_losses": sum(
+            item.description_evidence == "first_character_loss" for item in source_dispositions
+        ),
+        "dated_start_dispositions_complete": source_counts["unresolved"] == 0,
+        "dated_start_row_bijection": dated_start_row_bijection,
     }
 
 

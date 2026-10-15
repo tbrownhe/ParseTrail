@@ -11,8 +11,8 @@ from devtools.parser_engine_pilot.audit_citi_channels import (
     dispositions,
     fee_candidates,
     overlap_shape,
-    unmatched_dated_line_counts,
 )
+from devtools.parser_engine_pilot.citi_source_dispositions import dispose_dated_lines
 
 
 def candidate(description: str, channel: str, line: int, amount: int = -100) -> Candidate:
@@ -51,7 +51,7 @@ def test_overlap_shapes_only_describe_same_page_candidates() -> None:
     assert overlap_shape(text("MERCHANT", 4), table) == "unclassified_overlap"
 
 
-def test_fee_and_unmatched_dated_lines_keep_distinct_source_locations() -> None:
+def test_fee_and_extra_dated_lines_keep_distinct_source_locations() -> None:
     parser = Parser()
     parser.start_date = datetime(2026, 7, 4)
     parser.end_date = datetime(2026, 8, 5)
@@ -73,4 +73,14 @@ def test_fee_and_unmatched_dated_lines_keep_distinct_source_locations() -> None:
     assert [(fee.page, fee.line, fee.end_line, fee.description, fee.amount_minor) for fee in fees] == [
         (1, 6, 7, "MEMBERSHIP FEE SEE REVERSE", -4000)
     ]
-    assert unmatched_dated_line_counts(parser, pages) == {"without_money": 2, "with_money": 1}
+    table = [
+        Candidate(date(2026, 7, 22), date(2026, 7, 22), -2000, "FOREIGN MERCHANT CURRENCY DETAIL", "table", 1, 1),
+        Candidate(date(2026, 7, 23), date(2026, 7, 24), -3000, "MERCHANT", "table", 1, 2),
+    ]
+    ledger = dispose_dated_lines(parser, pages, table, fees)
+    assert [(row.line, row.status, row.table_row) for row in ledger] == [
+        (1, "simple_text", None),
+        (2, "table_copy", 1),
+        (4, "table_copy", 2),
+        (6, "fee", None),
+    ]

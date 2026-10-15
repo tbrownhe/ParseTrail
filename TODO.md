@@ -145,18 +145,19 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   Shared continuation and exact channel-occurrence matching now have finite
   pilot operations. The refactored Citi audit passed on nine recent-layout
   archive files with 428 resolved occurrences and unchanged source hashes.
-  A further nine-file source scan found 67 unmatched dated lines; 62 of 63
-  amount-bearing lines have same-page table date/amount candidates, including
-  11 with multiple candidates. Four dated lines lack a nearby amount. These
-  still need explicit source-region dispositions.
-  Resolve remaining Citi-only extraction, dated-line capture and decoder limits
-  before runtime admission.
+  A dated-start ledger now accounts for all 67 extra starts in the nine-file
+  sample as 66 table copies and one fee. Including the first recent-layout
+  statement, ten archive PDFs have 486 dated starts linked one to one to 486
+  resolved rows, 72 table copies, one fee, zero unresolved starts and ten
+  passing printed balance equations. It records three first-character losses
+  in table descriptions. Full-page capture and runtime integration remain open.
   A separate simple-text PDF worker now has byte/page/line/output, deadline and
   OS memory limits. Windows native memory and timeout tests pass; its text
   exactly matches nine recent-layout Citi archive PDFs without source changes.
-  Wells word/table finding and XLSX XML decoding now run in the same bounded
-  process pilot. Citi word/table finding and Intel Mac native checks remain open;
-  XLSX has synthetic parity only.
+  Wells and Citi word/table finding and XLSX XML decoding now run in bounded
+  workers. The Citi worker matched 543 raw table/interest rows across ten
+  recent-layout archive PDFs without changing source hashes. Intel Mac native
+  checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and
   continuation/layout PDFs, plus synthetic

@@ -92,13 +92,16 @@ and reproduces all 421 accepted date/amount row occurrences and all eight printe
 balance equations. It makes two explicit description corrections: the fuller
 one-character text copy and a fee description with its amount removed.
 
-These particular overlap conflicts do not show a foreign-transaction multiline
-pattern. A separate dated-line scan found 71 lines outside the simple text-row
-matcher, including foreign transactions split across lines and rows interleaved
-with legal text. Their source dispositions are not yet complete. The pilot uses
-the old unbounded PDF extractor, so neither row parity nor balancing authorizes
-2.0 import. Complete dated-line dispositions and bound decoding before admitting
-this layout; do not add a general declaration language just for this case.
+The recent Citi PDF layout is in scope for the 2.0 release. Its overlap conflicts
+are separate from the foreign-transaction multiline pattern. A dated-line scan
+found 71 lines outside the simple text-row matcher in the earlier eight-source
+cohort. The [source-line ledger](../devtools/parser_engine_pilot/citi_source_dispositions.py)
+now checks the ten recent-layout archive PDFs: all 486 dated starts map one to
+one to resolved rows, including 72 table copies and one fee; all ten printed
+balance equations pass. This accounts for dated starts in the tested sources,
+while other source regions still need the normal capture review. Keep the shared
+continuation and occurrence operations finite; do not add a general declaration
+language just for this case.
 
 All unbounded PDF decode, word extraction and table finding must run behind a
 separate worker boundary with source/output size, page and row limits, a wall
@@ -113,8 +116,10 @@ Windows native tests exercised memory refusal and deadline termination; its
 output matched the existing decoder on nine recent-layout Citi archive PDFs
 with unchanged source hashes. The Wells word/table pilot now uses the same
 worker: 21 archive PDFs returned exactly the in-process cells and regions, with
-unchanged source hashes. Citi word/table work, complete source capture and Intel
-Mac native checks remain open, so this does not admit PDFs to runtime imports.
+unchanged source hashes. The Citi word/table pilot now also uses that worker
+boundary: 543 raw rows matched the current extractor across ten recent-layout
+archive PDFs, with unchanged hashes. Full page capture, runtime integration and
+Intel Mac native checks remain open, so this does not admit PDFs to runtime imports.
 The XLSX adapter also runs in a fixed, bounded worker and matches the
 in-process synthetic evidence. It has no referenced archive workbook and
 still needs Intel Mac native checks before runtime admission.
@@ -146,10 +151,11 @@ profile shapes before ledger writes in synthetic tests.
 **Go** for fresh-profile service integration and finite parser work. The
 synthetic slice keeps the source and parser evidence, leaves rows unposted,
 posts one explicitly reviewed expense exactly once, and leaves a credit
-pending. **No go** for 2.0 activation or release yet: the remaining PDF/XLSX
-decoder limits, complete Citi dated-line dispositions, production snapshot
-integration, ongoing import/recovery, common reports and native GUI acceptance
-remain open.
+pending. **No go** for 2.0 activation or release yet: full-page capture review,
+Intel Mac decoder-limit checks, production snapshot integration, ongoing
+import/recovery, common reports and native GUI acceptance remain open. The
+recent Citi layout is a required 2.0 format and has passed its dated-start
+and bounded table-extraction pilots on the ten archived statements.
 
 A proposed 2.0 profile is separate from 1.x. If the owner returns to 1.4.2,
 it opens only the retained 1.x profile; it never reads a 2.x database. Work done
