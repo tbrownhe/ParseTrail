@@ -575,4 +575,7 @@ account mapping, ledger posting and native GUI acceptance remain open.
 An independent date-leading text scan now links all 97 short dated text lines
 one to one to those table rows and retains 20 full-date statement-summary lines
 as located dispositions. Any new unmatched dated line fails the pilot. The 118
-undated monetary table rows still need their broader source-capture review.
+undated monetary table rows are now explicitly classified as rewards, balance,
+activity-section, interest/fee or APR summaries. An unknown monetary table line
+fails the pilot. Other page regions still need their broader source-capture
+review.

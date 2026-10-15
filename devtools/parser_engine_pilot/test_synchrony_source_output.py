@@ -29,7 +29,7 @@ SOURCE = b"%PDF-synthetic"
 RAW_ROWS = (
     AnchoredRow(1, 1, (10.0, 50.0, 90.0, 60.0), ("12/31", "REF", "Prior purchase", "$10.00")),
     AnchoredRow(1, 2, (10.0, 60.0, 90.0, 70.0), ("", "", "Item detail", "")),
-    AnchoredRow(1, 3, (10.0, 70.0, 90.0, 80.0), ("", "", "Total interest", "$0.00")),
+    AnchoredRow(1, 3, (10.0, 70.0, 90.0, 80.0), ("", "", "Total Interest Charged", "$0.00")),
 )
 
 
@@ -73,6 +73,7 @@ def test_single_date_card_keeps_earlier_date_without_posting_claim(tmp_path: Pat
     assert account.rows[0].transaction_date is None
     assert account.rows[0].amount.minor == -1000
     assert len(output.payload.dispositions) == 4
+    assert any(item.code == "interest_fee_summary_row" for item in output.payload.dispositions)
     assert len(account.rows[0].fragments) == 2
     assert account.rows[0].fragments[-1].channel == "simple_text_line"
     assert len(account.rows[0].fragments) + len(output.payload.dispositions) == len(RAW_ROWS) + 3
@@ -120,6 +121,12 @@ def test_single_date_card_refuses_missing_or_changed_text_copy() -> None:
     )
     with pytest.raises(SynchronySourceError, match="dated_text_description_mismatch"):
         from_synchrony_table(DEFINITION, table, changed)
+
+
+def test_unknown_monetary_table_line_refuses() -> None:
+    changed = replace(RAW_ROWS[2], raw_cells=("", "", "Unfamiliar charge", "$1.00"))
+    with pytest.raises(SynchronySourceError, match="unclassified_monetary_table_row"):
+        from_synchrony_table(DEFINITION, *channels((*RAW_ROWS[:2], changed)))
 
 
 def test_synchrony_declaration_schema_is_closed() -> None:

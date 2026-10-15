@@ -52,6 +52,41 @@ def _row(item: AnchoredRow) -> PdfTableRow:
     return PdfTableRow(kind="pdf_table_row", page=item.page, row=item.ordinal, region=item.region)
 
 
+def _nonactivity_code(row: AnchoredRow, header_top: float) -> str:
+    cells = tuple(cell.strip() for cell in row.raw_cells)
+    if not any(MONEY.search(cell) for cell in cells):
+        return "undated_table_row"
+    first_two = "".join(cells[:2]).replace(" ", "")
+    if row.region[1] < header_top:
+        if first_two == "+BonusRewardsEarned" and cells[3] == "" and MONEY.fullmatch(cells[2]):
+            return "rewards_summary_row"
+        if first_two in {"Regular-", "Total"} and MONEY.fullmatch(cells[3]):
+            return "balance_summary_row"
+    else:
+        if (
+            first_two
+            in {
+                "Payments",
+                "OtherCredits",
+                "PurchasesandOtherDebits",
+                "TotalFeesChargedThisPeriod",
+                "TotalInterestChargedThisPeriod",
+            }
+            and cells[2] == ""
+            and MONEY.fullmatch(cells[3])
+        ):
+            return "activity_section_total"
+        if (
+            not first_two
+            and cells[2] in {"Total Fees Charged", "Total Interest Charged", "Total Interest Paid"}
+            and MONEY.fullmatch(cells[3])
+        ):
+            return "interest_fee_summary_row"
+        if first_two == "Purchases" and cells[2].startswith("N/A ") and "%" in cells[2] and MONEY.fullmatch(cells[3]):
+            return "apr_disclosure_row"
+    raise SynchronySourceError("unclassified_monetary_table_row")
+
+
 def _header(rule: TableSingleDateCardRule, text: PDFLineEvidence):
     accounts = []
     balances = {}
@@ -110,6 +145,7 @@ def from_synchrony_table(
     end: date = balances["closing"][2]
     selected = []
     dispositions = []
+    header_tops = {page.page: page.header_region[1] for page in table.pages if page.header_region is not None}
     text_copies: dict[tuple[int, str, str], deque[PageLine]] = defaultdict(deque)
     for line in text.lines:
         normalized = line.normalized
@@ -146,11 +182,7 @@ def from_synchrony_table(
         else:
             if any(DATE_PREFIX.match(cell) for cell in row.raw_cells):
                 raise SynchronySourceError("unresolved_dated_table_row")
-            code = (
-                "undated_monetary_table_row"
-                if any(MONEY.search(cell) for cell in row.raw_cells)
-                else "undated_table_row"
-            )
+            code = _nonactivity_code(row, header_tops[row.page])
             dispositions.append(SourceDisposition(code=code, location=_row(row), raw_values=row.raw_cells))
             continue
         if len(pending) > rule.continuation.max_group_rows:

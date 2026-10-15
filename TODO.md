@@ -324,8 +324,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   dates precede their printed periods, so no posting date is invented. Full-page
   capture, routing, ledger treatment and native GUI acceptance remain open.
   A second-channel Synchrony scan now links 97 dated text copies to the table
-  rows and locates 20 dated summary lines; unmatched dated lines fail. The 118
-  undated monetary table dispositions remain a capture-review item.
+  rows and locates 20 dated summary lines; unmatched dated lines fail. All 118
+  undated monetary table rows now have finite summary/disclosure dispositions;
+  unfamiliar monetary table lines fail. Other page regions remain a capture
+  review item.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and
