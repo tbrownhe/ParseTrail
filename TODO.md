@@ -269,6 +269,13 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   balances and all 65 dated rows; both printed equations passed. Their exact
   source evidence reopened from a temporary V2 profile with unchanged hashes.
   Complete monetary-line dispositions and page capture remain open.
+  Middle Citi now uses a generic declaration-driven header-anchor table worker.
+  All eight routed archive PDFs matched the accepted reader on account,
+  period, printed balances and 323 rows. The 1,311 raw table rows divide into
+  382 admitted source rows and 929 located dispositions, including a repeated
+  header across a foreign-transaction page break. Temporary V2 storage
+  reopened all eight sources with unchanged hashes. Monetary table tails,
+  complete page capture, signed routing and native acceptance remain open.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and

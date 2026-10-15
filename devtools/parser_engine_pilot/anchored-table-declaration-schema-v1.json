@@ -1,0 +1,386 @@
+{
+  "$defs": {
+    "AnchorEdge": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "anchor_edge",
+          "title": "Kind",
+          "type": "string"
+        },
+        "anchor": {
+          "maximum": 15,
+          "minimum": 0,
+          "title": "Anchor",
+          "type": "integer"
+        },
+        "edge": {
+          "enum": [
+            "x0",
+            "x1"
+          ],
+          "title": "Edge",
+          "type": "string"
+        },
+        "offset": {
+          "maximum": 30,
+          "minimum": -30,
+          "title": "Offset",
+          "type": "number"
+        }
+      },
+      "required": [
+        "kind",
+        "anchor",
+        "edge",
+        "offset"
+      ],
+      "title": "AnchorEdge",
+      "type": "object"
+    },
+    "AnchorMidpoint": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "anchor_midpoint",
+          "title": "Kind",
+          "type": "string"
+        },
+        "left_anchor": {
+          "maximum": 15,
+          "minimum": 0,
+          "title": "Left Anchor",
+          "type": "integer"
+        },
+        "left_edge": {
+          "enum": [
+            "x0",
+            "x1"
+          ],
+          "title": "Left Edge",
+          "type": "string"
+        },
+        "right_anchor": {
+          "maximum": 15,
+          "minimum": 0,
+          "title": "Right Anchor",
+          "type": "integer"
+        },
+        "right_edge": {
+          "enum": [
+            "x0",
+            "x1"
+          ],
+          "title": "Right Edge",
+          "type": "string"
+        },
+        "offset": {
+          "maximum": 30,
+          "minimum": -30,
+          "title": "Offset",
+          "type": "number"
+        }
+      },
+      "required": [
+        "kind",
+        "left_anchor",
+        "left_edge",
+        "right_anchor",
+        "right_edge",
+        "offset"
+      ],
+      "title": "AnchorMidpoint",
+      "type": "object"
+    },
+    "ContinuationRule": {
+      "additionalProperties": false,
+      "properties": {
+        "operation": {
+          "const": "table_continuation_v1",
+          "title": "Operation",
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "amount_on_last_row",
+            "description_after_start",
+            "amount_with_details"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "start_columns": {
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 1,
+          "title": "Start Columns",
+          "type": "array"
+        },
+        "break_columns": {
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 1,
+          "title": "Break Columns",
+          "type": "array"
+        },
+        "description_column": {
+          "exclusiveMaximum": 16,
+          "minimum": 0,
+          "title": "Description Column",
+          "type": "integer"
+        },
+        "amount_column": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 16,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Amount Column"
+        },
+        "max_group_rows": {
+          "maximum": 8,
+          "minimum": 1,
+          "title": "Max Group Rows",
+          "type": "integer"
+        },
+        "allow_cross_page": {
+          "default": false,
+          "title": "Allow Cross Page",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "operation",
+        "mode",
+        "start_columns",
+        "break_columns",
+        "description_column",
+        "max_group_rows"
+      ],
+      "title": "ContinuationRule",
+      "type": "object"
+    },
+    "TableCardStatementRule": {
+      "additionalProperties": false,
+      "properties": {
+        "operation": {
+          "const": "table_card_activity_v1",
+          "title": "Operation",
+          "type": "string"
+        },
+        "date_format": {
+          "const": "MM/DD+MM/DD/YY",
+          "title": "Date Format",
+          "type": "string"
+        },
+        "money_format": {
+          "const": "usd_symbol_2dp",
+          "title": "Money Format",
+          "type": "string"
+        },
+        "amount_direction": {
+          "const": "invert_for_liability",
+          "title": "Amount Direction",
+          "type": "string"
+        },
+        "period_label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Period Label",
+          "type": "string"
+        },
+        "account_label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Account Label",
+          "type": "string"
+        },
+        "opening_label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Opening Label",
+          "type": "string"
+        },
+        "closing_label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Closing Label",
+          "type": "string"
+        },
+        "repeated_header_date_cells": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Repeated Header Date Cells",
+          "type": "array"
+        },
+        "continuation": {
+          "$ref": "#/$defs/ContinuationRule"
+        }
+      },
+      "required": [
+        "operation",
+        "date_format",
+        "money_format",
+        "amount_direction",
+        "period_label",
+        "account_label",
+        "opening_label",
+        "closing_label",
+        "repeated_header_date_cells",
+        "continuation"
+      ],
+      "title": "TableCardStatementRule",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "parser_id": {
+      "pattern": "^[a-z][a-z0-9_-]{2,79}$",
+      "title": "Parser Id",
+      "type": "string"
+    },
+    "revision": {
+      "pattern": "^[1-9][0-9]{0,8}$",
+      "title": "Revision",
+      "type": "string"
+    },
+    "suffix": {
+      "const": ".pdf",
+      "title": "Suffix",
+      "type": "string"
+    },
+    "kind": {
+      "const": "statement",
+      "title": "Kind",
+      "type": "string"
+    },
+    "operation": {
+      "const": "anchored_columns_table_v1",
+      "title": "Operation",
+      "type": "string"
+    },
+    "headers": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 8,
+      "minItems": 2,
+      "title": "Headers",
+      "type": "array"
+    },
+    "partial_suffix_min": {
+      "maximum": 8,
+      "minimum": 3,
+      "title": "Partial Suffix Min",
+      "type": "integer"
+    },
+    "header_line_tolerance": {
+      "maximum": 20,
+      "minimum": 0,
+      "title": "Header Line Tolerance",
+      "type": "number"
+    },
+    "crop_top_anchor": {
+      "maximum": 7,
+      "minimum": 0,
+      "title": "Crop Top Anchor",
+      "type": "integer"
+    },
+    "crop_top_offset": {
+      "maximum": 20,
+      "minimum": 0,
+      "title": "Crop Top Offset",
+      "type": "number"
+    },
+    "boundaries": {
+      "items": {
+        "discriminator": {
+          "mapping": {
+            "anchor_edge": "#/$defs/AnchorEdge",
+            "anchor_midpoint": "#/$defs/AnchorMidpoint"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/$defs/AnchorEdge"
+          },
+          {
+            "$ref": "#/$defs/AnchorMidpoint"
+          }
+        ]
+      },
+      "maxItems": 9,
+      "minItems": 3,
+      "title": "Boundaries",
+      "type": "array"
+    },
+    "horizontal_strategy": {
+      "enum": [
+        "text",
+        "lines"
+      ],
+      "title": "Horizontal Strategy",
+      "type": "string"
+    },
+    "snap_y_tolerance": {
+      "maximum": 3,
+      "minimum": 0,
+      "title": "Snap Y Tolerance",
+      "type": "number"
+    },
+    "statement": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/TableCardStatementRule"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    }
+  },
+  "required": [
+    "schema_version",
+    "parser_id",
+    "revision",
+    "suffix",
+    "kind",
+    "operation",
+    "headers",
+    "partial_suffix_min",
+    "header_line_tolerance",
+    "crop_top_anchor",
+    "crop_top_offset",
+    "boundaries",
+    "horizontal_strategy",
+    "snap_y_tolerance"
+  ],
+  "title": "AnchoredTableDefinition",
+  "type": "object"
+}

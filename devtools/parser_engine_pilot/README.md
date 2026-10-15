@@ -212,6 +212,21 @@ both snapshots with unchanged source hashes. This is a small parity sample;
 complete monetary-line dispositions, full page capture, signed routing and
 native acceptance remain open.
 
+`anchored_table.py` and its bounded worker implement a reusable PDF table
+operation: strict declarations name header words and finite column edge or
+midpoint rules, with capped row cells, page regions, source hashes and worker
+limits. The middle Citi definition matched the accepted parser's selected
+cells on all eight routed archive PDFs. `table_card_source_output.py` forms
+323 dated card observations from 382 located table rows and retains the other
+929 of 1,311 raw rows as dispositions. A repeated header in a cross-page
+foreign transaction is dispositioned while the amount continuation is kept.
+All eight archive statements matched account, period, printed balances and
+row order; each printed equation passed. Temporary V2 storage reopened all
+eight with unchanged source hashes. Monetary table tails, full page capture,
+signed routing and native acceptance remain open. The shared Citi header
+reader now resolves a single embedded closing balance or a matching anchored
+copy, and refuses conflicting copies.
+
 Every Chase-referenced fixture in the authorized closed-copy archive matched
 the accepted reader's account, period, printed balances and rows in a read-only
 comparison. The comparison also accounted for every date-prefixed line as a

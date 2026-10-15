@@ -26,7 +26,7 @@ output/behavior; it does not imply full private-archive regression coverage.
 | `pdf_capitaloneauto_202402` | 0.2.2 | Auto loan PDF with payment components | Accounting and balance-evidence tests | Preserve principal/interest and printed principal; distinguish origination and missing activity. |
 | `pdf_chasecc_202602` | 0.1.0 | Section/line credit-card PDF | Chase synthetic tests | Simple card pilot, section boundaries, fee/payment rows and date handling. |
 | `pdf_citicc_201505` | 0.3.1 | Older Citi line credit-card PDF | Finite V2 pilot and synthetic continuation tests | Both archived sources pass 65-row and printed-balance parity; complete page capture remains open. |
-| `pdf_citicc_202506` | 0.3.1 | Citi table credit-card PDF | Thin-glyph table test | Table boundaries and final-row retention. |
+| `pdf_citicc_202506` | 0.3.1 | Citi table credit-card PDF | Generic anchored-table pilot and synthetic refusal tests | Eight routed archive PDFs pass 323-row and printed-balance parity; all 1,311 raw table rows are used or located as dispositions. Full page capture remains open. |
 | `pdf_citicc_202511` | 0.4.0 | Citi table plus text/fee recovery PDF | Missing-table-row and multiline-fee tests | Dynamic headers; compare table/text occurrences without double counting. |
 | `pdf_fidelity401k_201810` | 0.2.1 | Retirement PDF, wrapped account labels | Fidelity synthetic test | Multiple account identity/section handling and noncash activity scope. |
 | `pdf_fidelityhsa_202001` | 0.2.0 | HSA line PDF | No parser-specific test found | Archive fixture and identity/balance evidence required. |
@@ -274,6 +274,19 @@ temporary V2 profile with unchanged hashes. This small sample is a parity
 pilot; complete monetary-line dispositions, page capture, signed routing and
 native acceptance remain open.
 
+The middle Citi layout now uses a generic declaration-driven header-anchor
+table worker with finite column edge and midpoint rules. On all eight routed
+archive PDFs its 1,311 located raw rows exactly reproduced the accepted
+table cells. The card operation admitted 323 dated observations using 382
+table source rows; it retained the other 929 as located dispositions, including
+empty extraction rows, post-amount detail and nonactivity table material.
+A foreign transaction crossing a page break keeps its continuation while the
+repeated table header is separately dispositioned. All eight account, period,
+row and printed-balance comparisons passed. A temporary V2 profile reopened
+all eight sources and snapshots with unchanged source hashes. Table tails
+with monetary text remain unclassified, so complete page capture, signed
+routing and native acceptance remain open.
+
 ## Remaining family operation costs
 
 These estimates complete the source-code review for the other 18 modules in
@@ -286,7 +299,7 @@ conversion priority signal, not permission to embed Python in a declaration.
 | `csv_mohela_202411` | Strict CSV header/column mapping, account-group key, component equation, located duplicate occurrences; emit an activity export with unknown principal where printed `Unavailable`. | Low engine cost; high accounting review. Never carry the legacy invented zero opening or split interest rows into observed evidence. |
 | `pdf_capitaloneauto_202402`, `pdf_yamahafin_202306`, `pdf_wfloanper_202306` | Bounded loan history section, row components, exact principal and interest signs, printed principal endpoint, full versus partial transaction dates. | Medium. Capital One has no printed opening; Wells invents origination and groups interest/principal into a payment; Yamaha's date extraction must be checked against located source text. Preserve raw components before any posting decision. |
 | `pdf_citicc_201505` | Bounded default-layout column edge and up to five same-page continuation lines; exact dated-start and liability-sign checks. | Both archived PDFs pass finite evidence parity; complete page capture remains open. |
-| `pdf_citicc_202506` | Page word anchors, table cells and inherited continuation; exact dated-start dispositions and liability sign. | Medium to high. Run separate archive fixtures; the recent-Citi resolver cannot be presumed equivalent. Refuse a candidate that reaches a new dated start without an amount. |
+| `pdf_citicc_202506` | Generic declared header-anchor geometry, table-cell continuation and liability sign with located tail dispositions. | Eight routed archive PDFs pass finite evidence parity; monetary tails and full page capture remain open. |
 | `pdf_fidelity401k_201810`, `pdf_fidelityhsa_202001`, `pdf_transamerica_202104`, `pdf_vanguard_202210` | Unique period/plan or account anchors, bounded balance sections, amount-bearing lines, explicit cash versus investment scope and a source-labeled date role. | Medium. The old readers often assign period-end dates to undated rows; retain those as derived, and do not turn investment valuation changes into cash activity without printed evidence. Fidelity 401(k) headerless/browser-print plan labels need a finite recognized variant. |
 | `pdf_happenbank_202606`, `pdf_lendingclubsavings_202601` | Bounded text sections, exact dates and amounts, optional inherited transaction date, printed running balances and independent closing equation. | Low to medium. LendingClub's `Interest Paid` date substitution is derived; require explicit row and tail dispositions and preserve printed source date. |
 | `pdf_lendingclublus_202506`, `pdf_wfbankper_202105` | Page-local anchored table geometry, debit/credit cells, continuation descriptions, optional printed running balance and exact partial-date resolution. | Medium to high. Reuse the Wells geometry operation only after per-layout crop/header checks; do not fill missing row balances. |

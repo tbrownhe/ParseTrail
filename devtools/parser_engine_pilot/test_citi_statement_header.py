@@ -34,3 +34,17 @@ def test_refuses_conflicting_account_and_duplicate_balance() -> None:
             chars,
             ("Account number ending in 1234\nPrevious balance $1.00\nPrevious balance $2.00\nNew balance $3.00",),
         )
+
+
+def test_single_embedded_closing_or_matching_anchored_copy() -> None:
+    chars = "Billing Period: 12/04/25-01/05/26"
+    base = "Account number ending in 1234\nPrevious balance $1.00\n"
+    embedded = parse_header(chars, (base + "Sioux Falls, SD 00000 New balance $3.00",))
+    assert embedded.new_balance.ledger_minor == -300
+    anchored = parse_header(
+        chars,
+        (base + "New balance $3.00\nSioux Falls, SD 00000 New balance $3.00",),
+    )
+    assert anchored.new_balance.line == 3
+    with pytest.raises(CitiHeaderError, match="statement_balances"):
+        parse_header(chars, (base + "New balance $3.00\nSioux Falls, SD 00000 New balance $4.00",))

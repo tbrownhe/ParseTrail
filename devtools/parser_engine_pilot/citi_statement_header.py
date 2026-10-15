@@ -8,11 +8,7 @@ from datetime import date, datetime
 
 from devtools.parser_engine_pilot.money_operations import USD_SYMBOL, usd_symbol_minor_v1
 
-PERIOD = re.compile(r"Billing Period:\s{0,4}(\d{2}/\d{2}/\d{2})-(\d{2}/\d{2}/\d{2})")
-ACCOUNT = re.compile(r"Account number ending in:?\s*(\d{4})")
 MONEY = USD_SYMBOL.pattern
-PREVIOUS = re.compile(rf"\bPrevious balance\s+(?P<amount>{MONEY})")
-NEW = re.compile(rf"\bNew balance\s+(?P<amount>{MONEY})")
 
 
 class CitiHeaderError(ValueError):
@@ -38,9 +34,25 @@ class CitiStatementHeader:
     new_balance: PrintedBalance
 
 
-def parse_header(first_page_chars: str, pages: tuple[str, ...]) -> CitiStatementHeader:
+def parse_header(
+    first_page_chars: str,
+    pages: tuple[str, ...],
+    *,
+    period_label: str = "Billing Period:",
+    account_label: str = "Account number ending in",
+    opening_label: str = "Previous balance",
+    closing_label: str = "New balance",
+) -> CitiStatementHeader:
     """Read only observed fields; reject missing, conflicting or duplicate values."""
-    periods = list(PERIOD.finditer(first_page_chars))
+    if any(not label or len(label) > 80 for label in (period_label, account_label, opening_label, closing_label)):
+        raise CitiHeaderError("invalid_labels")
+    period_pattern = re.compile(
+        rf"{re.escape(period_label)}\s{{0,4}}(\d{{2}}/\d{{2}}/\d{{2}})-(\d{{2}}/\d{{2}}/\d{{2}})"
+    )
+    account_pattern = re.compile(rf"{re.escape(account_label)}:?\s*(\d{{4}})")
+    opening_pattern = re.compile(rf"\b{re.escape(opening_label)}\s+(?P<amount>{MONEY})(?:\s|$)")
+    closing_pattern = re.compile(rf"\b{re.escape(closing_label)}\s+(?P<amount>{MONEY})(?:\s|$)")
+    periods = list(period_pattern.finditer(first_page_chars))
     if len(periods) != 1:
         raise CitiHeaderError("statement_period")
     try:
@@ -54,23 +66,27 @@ def parse_header(first_page_chars: str, pages: tuple[str, ...]) -> CitiStatement
     accounts: list[tuple[str, int, int]] = []
     previous: list[PrintedBalance] = []
     new: list[PrintedBalance] = []
+    anchored_new: list[PrintedBalance] = []
     for page_number, page in enumerate(pages, 1):
         for line_number, line in enumerate(page.splitlines(), 1):
-            accounts.extend((match[1], page_number, line_number) for match in ACCOUNT.finditer(line))
-            for pattern, found in ((PREVIOUS, previous), (NEW, new)):
-                for match in pattern.finditer(line):
+            accounts.extend((match[1], page_number, line_number) for match in account_pattern.finditer(line))
+            normalized = " ".join(line.split())
+            for pattern, found in ((opening_pattern, previous), (closing_pattern, new)):
+                if match := pattern.search(normalized):
                     raw = match["amount"]
-                    found.append(
-                        PrintedBalance(
-                            page_number,
-                            line_number,
-                            raw,
-                            -usd_symbol_minor_v1(raw),
-                        )
-                    )
+                    value = PrintedBalance(page_number, line_number, raw, -usd_symbol_minor_v1(raw))
+                    found.append(value)
+                    if found is new and match.start() == 0:
+                        anchored_new.append(value)
     if not accounts or len({account for account, _, _ in accounts}) != 1:
         raise CitiHeaderError("account_suffix")
-    if len(previous) != 1 or len(new) != 1:
+    if len(previous) != 1 or not new:
+        raise CitiHeaderError("statement_balances")
+    if len(new) == 1:
+        selected_new = new[0]
+    elif len(anchored_new) == 1 and all(item.ledger_minor == anchored_new[0].ledger_minor for item in new):
+        selected_new = anchored_new[0]
+    else:
         raise CitiHeaderError("statement_balances")
     return CitiStatementHeader(
         start,
@@ -79,5 +95,5 @@ def parse_header(first_page_chars: str, pages: tuple[str, ...]) -> CitiStatement
         accounts[0][0],
         tuple((page, line) for _, page, line in accounts),
         previous[0],
-        new[0],
+        selected_new,
     )
