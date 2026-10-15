@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "parser_id": "pdf_capitaloneauto_202402",
+  "revision": "1",
+  "suffix": ".pdf",
+  "kind": "statement",
+  "operation": "printed_loan_history_components_v1",
+  "date_format": "MM/DD/YYYY",
+  "money_format": "signed_usd_2dp",
+  "balance_scope": "principal_component",
+  "account_label": "Account Number:",
+  "closing_label": "Principal Balance:",
+  "history_label": "Transactions between",
+  "history_end": "Please detach and return the portion below with your payment.",
+  "header_without_interest": "Date Description Principal Total",
+  "header_with_interest": "Date Description Principal Interest Total"
+}

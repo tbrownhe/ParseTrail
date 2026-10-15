@@ -226,12 +226,10 @@ class StatementAccount(EvidenceModel):
     @model_validator(mode="after")
     def rows_belong_to_account(self) -> StatementAccount:
         if any(
-            row.source_account != self.source_identity
-            or row.source_account_form != self.source_identity_form
-            or row.date_role not in {"posting_date", "statement_period_end"}
+            row.source_account != self.source_identity or row.source_account_form != self.source_identity_form
             for row in self.rows
         ):
-            raise ValueError("statement row account or date role")
+            raise ValueError("statement row account")
         if self.source_identity_form == "last_four" and (
             len(self.source_identity) != 4 or not self.source_identity.isdigit()
         ):
@@ -259,7 +257,7 @@ class StatementPayload(EvidenceModel):
             for account in self.accounts
             for row in account.rows
         ):
-            raise ValueError("posting date outside statement")
+            raise ValueError("statement row date outside period")
         if self.independent_balance_verified:
             for account in self.accounts:
                 if (

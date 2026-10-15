@@ -129,3 +129,32 @@ def test_period_summary_cannot_masquerade_as_posted_activity() -> None:
         ObservationEvidence(**(values | {"date_role": "posting_date"}))
     with pytest.raises(ValidationError, match="summary row date role"):
         ObservationEvidence(**(values | {"row_role": "activity"}))
+
+
+def test_statement_allows_observed_activity_date_without_posting_claim() -> None:
+    values = {
+        "row_id": "d" * 64,
+        "occurrence": 0,
+        "row_role": "activity",
+        "source_account": "loan account",
+        "source_account_form": "opaque",
+        "date_role": "activity_date",
+        "date": printed_date("01/15/2026", "2026-01-15", 2),
+        "transaction_date": None,
+        "description": TextValue(raw="Payment", text="Payment", provenance="observed", locations=(line(2),)),
+        "amount": money(-100, 2),
+        "running_balance": None,
+        "components": (),
+        "fragments": (SourceFragment(channel="history", location=line(2), raw_values=("Payment",)),),
+    }
+    row = ObservationEvidence(**values)
+    account = StatementAccount(
+        source_identity="loan account",
+        source_identity_form="opaque",
+        balance_scope="principal_component",
+        identity_locations=(line(1),),
+        opening=None,
+        closing=money(100, 3),
+        rows=(row,),
+    )
+    assert account.rows[0].date_role == "activity_date"

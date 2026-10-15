@@ -35,6 +35,10 @@ Rows also distinguish dated activity from printed period summary components.
 The latter carry a derived `statement_period_end` date role. The temporary
 source-observation index retains both roles so review queries can select
 activity explicitly.
+Capital One loan history uses `activity_date` for its source-labeled generic
+date and leaves the unprinted opening principal absent. Its printed closing
+principal has `principal_component` scope; later ledger direction and posting
+require separate review.
 
 For recent Citi, the statement payload must retain the printed period,
 account suffix, previous/new balances and their locations; each resolved row

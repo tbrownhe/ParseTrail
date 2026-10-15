@@ -225,6 +225,12 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   the accepted reader; every printed balance equation passed. Temporary V2
   storage reopened the 37 sources with 74 rows and 74 header dispositions,
   and source hashes remained unchanged. Complete capture remains open.
+  Capital One auto now has a bounded history operation. All 26 referenced PDFs
+  matched account, printed activity range and closing principal; 26 printed
+  rows retain 51 principal or interest components. Temporary V2 storage
+  reopened all 26 sources, 26 rows and 104 dispositions with unchanged hashes.
+  The unprinted opening principal stays unknown; full-page capture and
+  accounting review remain open.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and

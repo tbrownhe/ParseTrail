@@ -123,6 +123,19 @@ dates. A temporary V2 profile reopened all 37 sources, 74 rows and 74 header
 dispositions with unchanged source hashes. Complete section/page capture,
 signed routing and native acceptance remain open.
 
+`loan_history_lines.py` adds a bounded Capital One auto history operation with
+one located row per printed history line and exact principal/interest/total
+component checks. All 26 referenced PDFs matched the accepted reader on full
+account, printed activity range and closing principal. Their 26 source rows
+carry 51 printed components; the accepted reader's 51 split ledger-shaped rows
+can be reconstructed for comparison without storing those splits as source
+facts. The opening principal remains unknown because it is not printed. The
+closing principal and signed row components remain in source-native form, and
+the generic printed `Date` has an `activity_date` role. A temporary V2 profile
+reopened all 26 sources, 26 rows and 104 history dispositions with unchanged
+hashes. Full-page capture, accounting review and native acceptance remain
+open.
+
 Every Chase-referenced fixture in the authorized closed-copy archive matched
 the accepted reader's account, period, printed balances and rows in a read-only
 comparison. The comparison also accounted for every date-prefixed line as a

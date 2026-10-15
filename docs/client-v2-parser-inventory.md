@@ -203,6 +203,16 @@ V2 profile reopened all 37 sources, 74 rows and 74 located header
 dispositions with unchanged source hashes. Complete capture and native
 admission remain open.
 
+Capital One auto now has a finite bounded history operation. All 26 referenced
+PDFs matched the accepted reader on full account, printed activity range and
+closing principal; their 26 printed rows contain 51 principal or interest
+components. The legacy 51 split ledger-shaped rows were reproduced for
+comparison, while V2 retains the single printed source row and an unknown
+opening principal. The printed date is labeled `activity_date`; signed amounts
+and the closing principal stay in source-native form. Temporary V2 storage
+reopened all 26 sources, 26 rows and 104 located history dispositions with
+unchanged source hashes. Full-page capture and accounting review remain open.
+
 ## Remaining family operation costs
 
 These estimates complete the source-code review for the other 18 modules in
