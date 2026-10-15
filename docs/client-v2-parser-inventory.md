@@ -150,6 +150,10 @@ date-prefixed three-letter detail lines as uninterpreted auxiliary evidence;
 the current parser omits them from its transactions. This is deliberate source
 retention, not a currency conversion or a claim of complete activity coverage.
 The PDF decoder and final section/row disposition rules remain open.
+The bounded Chase path now emits the strict V2 envelope from its finite line
+pilot on all five authorized Chase archive PDFs: 139 rows and 99 dated
+auxiliary dispositions with unchanged source hashes. Full capture and native
+release acceptance remain separate gates.
 
 ## Remaining family operation costs
 

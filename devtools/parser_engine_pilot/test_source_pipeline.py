@@ -1,4 +1,4 @@
-"""One read-only entry point builds strict CSV and Citi evidence."""
+"""One read-only entry point builds strict CSV and bounded PDF evidence."""
 
 from pathlib import Path
 
@@ -10,6 +10,7 @@ from devtools.parser_engine_pilot.test_bounded_citi import sample_table_pdf
 
 CSV_DEFINITION = Path(__file__).parents[1] / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
 CSV = b"Date,Account,Description,Amount,ReportedBalance\n10/01/2026,Checking A,Coffee,-$4.00,$996.00\n"
+CHASE_DEFINITION = Path(__file__).with_name("chase-card-pilot-definition.json").read_bytes()
 
 
 def test_csv_build_is_strict_and_keeps_raw_cells() -> None:
@@ -25,6 +26,10 @@ def test_pdf_requires_exact_pilot_definition_and_recent_layout() -> None:
         build_source_evidence(sample_table_pdf(), DEFINITION_BYTES + b" ", suffix=".pdf")
     with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
         build_source_evidence(sample_table_pdf(), DEFINITION_BYTES, suffix=".pdf")
+    with pytest.raises(SourcePipelineError, match="unsupported_definition_revision"):
+        build_source_evidence(sample_table_pdf(), CHASE_DEFINITION + b" ", suffix=".pdf")
+    with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
+        build_source_evidence(sample_table_pdf(), CHASE_DEFINITION, suffix=".pdf")
 
 
 def test_source_or_definition_failure_has_no_output_or_profile_write(tmp_path: Path) -> None:

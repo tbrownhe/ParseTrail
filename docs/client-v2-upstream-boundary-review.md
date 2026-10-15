@@ -71,7 +71,7 @@ recent-layout PDFs produced 486 observations and 803 located dispositions,
 including 36 supplemental detail rows, and reopened from strict JSON without
 changing source hashes. `capture_verified` remains false pending final
 non-monetary section capture and native decoder acceptance. The
-[two-family source pipeline](../devtools/parser_engine_pilot/source_pipeline.py)
+[bounded source pipeline](../devtools/parser_engine_pilot/source_pipeline.py)
 now checks source/definition sizes and hashes, strict output shape and serialized
 output size. It refuses unknown Citi layouts and changed definition bytes. The
 [fresh 2.0 source store](../client/src/parsetrail/core/v2_profile_store.py)
@@ -79,6 +79,9 @@ checks its format read-only before opening for writes. One transaction retains
 source, definition, strict output and an unposted observation index. A temporary
 profile imported and reopened ten recent Citi archive PDFs through this path:
 486 rows and 803 source dispositions; every source hash stayed unchanged.
+An exact checked-in Chase definition now uses the same strict output: five
+read-only archive PDFs produced 139 rows and 99 located dated auxiliary
+dispositions through the bounded text worker, with unchanged source hashes.
 Ledger account mapping and reviewed posting remain subsequent work.
 The Citi pilot's money operation now uses a finite, exact integer minor-unit
 parser for its declared USD symbol syntax. The revised pilot definition and

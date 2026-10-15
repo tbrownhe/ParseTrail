@@ -1,4 +1,4 @@
-"""Read-only two-family proof of the 2.0 source-to-evidence boundary.
+"""Read-only bounded proof of the 2.0 source-to-evidence boundary.
 
 This pilot does not activate a catalog, write a profile or approve accounting.
 """
@@ -6,20 +6,28 @@ This pilot does not activate a catalog, write a profile or approve accounting.
 from __future__ import annotations
 
 import hashlib
+from pathlib import Path
 from typing import Literal
 
 from parsetrail.core.source_evidence import SourceEvidence
 
+from devtools.parser_engine_pilot.bounded_pdf_text import decode_pdf
+from devtools.parser_engine_pilot.card_lines import parse_card_lines
+from devtools.parser_engine_pilot.card_source_output import from_card
 from devtools.parser_engine_pilot.citi_evidence import read_recent_citi
 from devtools.parser_engine_pilot.citi_layout import DEFINITION_SHA256
 from devtools.parser_engine_pilot.citi_layout import load_definition as load_citi_definition
 from devtools.parser_engine_pilot.citi_source_output import from_citi
 from devtools.parser_engine_pilot.engine import parse_csv
+from devtools.parser_engine_pilot.pdf_lines import page_lines
 from devtools.parser_engine_pilot.table_source_output import from_table
 
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_DEFINITION_BYTES = 64 * 1024
 MAX_EVIDENCE_BYTES = 32 * 1024 * 1024
+CHASE_DEFINITION_SHA256 = hashlib.sha256(
+    Path(__file__).with_name("chase-card-pilot-definition.json").read_bytes()
+).hexdigest()
 
 
 class SourcePipelineError(ValueError):
@@ -38,10 +46,16 @@ def build_source_evidence(source: bytes, definition: bytes, *, suffix: Literal["
         if suffix == ".csv":
             output = from_table(parse_csv(definition, source))
         else:
-            _, digest = load_citi_definition(definition)
-            if digest != DEFINITION_SHA256:
+            digest = hashlib.sha256(definition).hexdigest()
+            if digest == DEFINITION_SHA256:
+                load_citi_definition(definition)
+                output = from_citi(read_recent_citi(source))
+            elif digest == CHASE_DEFINITION_SHA256:
+                decoded = decode_pdf(source)
+                lines = page_lines(source, decoded.pages, extraction_library="pdfplumber-bounded-simple-v1")
+                output = from_card(parse_card_lines(definition, lines), lines)
+            else:
                 raise SourcePipelineError("unsupported_definition_revision")
-            output = from_citi(read_recent_citi(source))
         if (
             output.source_sha256 != hashlib.sha256(source).hexdigest()
             or output.definition_sha256 != hashlib.sha256(definition).hexdigest()

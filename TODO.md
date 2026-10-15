@@ -185,10 +185,14 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   A synthetic CSV and ten recent Citi statements round-trip through it. The
   Citi path now uses a finite pilot definition without importing 1.x parser
   methods; 486 rows and 803 located dispositions are retained, including 36
-  supplemental details. The bounded two-family source pipeline and fresh 2.0
+  supplemental details. The bounded source pipeline and fresh 2.0
   SQLite source store now save exact source, definition and strict evidence in
   one transaction; ten Citi PDFs reopened in a temporary profile with unchanged
   source hashes. Full capture and native admission remain open.
+  The finite Chase line pilot now maps into the shared V2 evidence envelope;
+  the exact checked-in definition passed the bounded path on five archive PDFs
+  (139 rows, 99 dated auxiliary dispositions) with unchanged hashes. Capture,
+  signed routing and Intel Mac worker acceptance remain open.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and

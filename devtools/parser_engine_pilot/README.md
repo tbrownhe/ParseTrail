@@ -67,6 +67,15 @@ fails the whole parse. Parsing checks cancellation per line. Coverage and balanc
 reconciliation remain false; the auxiliary details authorize no conversion or
 posting.
 
+`card_source_output.py` now maps that finite Chase result into the shared strict
+V2 statement envelope. The bounded source pipeline admits only the exact checked
+in Chase pilot definition, retains each printed balance and row line, marks
+year/posting proxies as derived, and carries dated auxiliary lines as located
+dispositions. In a read-only pass, all five authorized Chase archive PDFs
+produced 139 rows and 99 auxiliary dispositions; source hashes stayed unchanged.
+Capture remains false, and this is still a development pilot without signed
+catalog routing or Intel Mac native worker acceptance.
+
 Every Chase-referenced fixture in the authorized closed-copy archive matched
 the accepted reader's account, period, printed balances and rows in a read-only
 comparison. The comparison also accounted for every date-prefixed line as a
