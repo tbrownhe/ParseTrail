@@ -188,11 +188,17 @@ Mac native limits remain open.
 
 [`table_continuations.py`](table_continuations.py) is a shared finite operation
 pilot over already decoded table cells. Its strict declaration selects start
-and break columns, description and optional amount columns, one of two
+and break columns, description and optional amount columns, one of three
 continuation modes, a maximum group size and cross-page behavior. It retains
 every raw page/row reference and refuses orphan, truncated or undeclared
 continuations. Synthetic fixtures cover the amount-on-last-row shape used by
 Citi/Synchrony and the following-description shape used by Wells/LendingClub.
+The third mode retains detail lines printed after an amount separately from
+the transaction description. The [Citi table adapter](citi_table_candidates.py)
+uses that shared mode over bounded cells: ten archive PDFs produced 471 table
+transactions from 543 raw rows, preserving 36 supplemental travel/lodging
+detail rows. The transaction descriptions and amounts matched the accepted
+reader in order. No supplemental line was promoted to a financial row.
 This is the proposed engine boundary; the Citi candidate resolver remains a
 pilot. Its common occurrence-matching logic now lives in
 [`channel_occurrences.py`](channel_occurrences.py): a strict same-page rule pairs

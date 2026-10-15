@@ -214,7 +214,11 @@ recent-layout Citi PDFs without changing source hashes. Wells and Citi word/tabl
 extraction now use the same boundary. The [bounded Citi table pilot](../devtools/parser_engine_pilot/bounded_citi.py)
 returned exactly the current reader's 543 raw table/interest rows and retained
 page, row and table-region locations on those ten archive PDFs. Their hashes
-were unchanged. The Citi audit now feeds its candidate resolver from both
+were unchanged. The [shared continuation operation](../devtools/parser_engine_pilot/table_continuations.py)
+now retains 36 post-amount travel/lodging detail rows separately from 471
+table transactions. The [Citi date/money adapter](../devtools/parser_engine_pilot/citi_table_candidates.py)
+matches the current table rows in order without promoting those details to
+financial activity. The Citi audit now feeds its candidate resolver from both
 bounded text and table workers; the old reader remains its accepted-result
 baseline. Runtime integration and Intel Mac native limits remain open.
 The [XLSX worker pilot](../devtools/parser_engine_pilot/bounded_xlsx.py)

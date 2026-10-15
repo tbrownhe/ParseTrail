@@ -24,6 +24,7 @@ from devtools.parser_engine_pilot.bounded_pdf_text import decode_text
 from devtools.parser_engine_pilot.channel_occurrences import Candidate, match_occurrences
 from devtools.parser_engine_pilot.citi_channels import CITI_OCCURRENCE_RULE, resolve
 from devtools.parser_engine_pilot.citi_source_dispositions import dispose_dated_lines
+from devtools.parser_engine_pilot.citi_table_candidates import candidates_from_table
 
 
 @dataclass(frozen=True, slots=True)
@@ -134,35 +135,13 @@ def audit(source: bytes) -> dict[str, int | bool]:
         bounded_pages = list(bounded_text)
         bounded_table = extract_bounded_citi(source)
         table_transactions = parser.parse_transaction_array([list(row.raw_cells) for row in bounded_table.rows])
-        page_rows = []
-        for page in bounded_table.pages:
-            page_rows.extend(
-                (page.page, row_number, row)
-                for row_number, row in enumerate(
-                    parser.parse_transaction_array(
-                        [list(item.raw_cells) for item in bounded_table.rows if item.page == page.page]
-                    ),
-                    1,
-                )
-            )
-
-        def row_key(row):
-            return (row.transaction_date, row.posting_date, row.amount, row.desc)
-
-        if Counter(map(row_key, table_transactions)) != Counter(row_key(row) for _, _, row in page_rows):
-            raise ValueError("page_table_rows_changed")
-        table = [
-            Candidate(
-                row.transaction_date,
-                row.posting_date,
-                to_minor_units(row.amount),
-                " ".join(row.desc.split()),
-                "table",
-                page_number,
-                row_number,
-            )
-            for page_number, row_number, row in page_rows
-        ]
+        grouped_table = candidates_from_table(bounded_table, parser.start_date, parser.end_date)
+        table = list(grouped_table.rows)
+        if [
+            (row.transaction_date, row.posting_date, to_minor_units(row.amount), " ".join(row.desc.split()))
+            for row in table_transactions
+        ] != [(row.transaction_date, row.posting_date, row.amount_minor, row.description) for row in table]:
+            raise ValueError("shared_table_group_parity")
         text = []
         for page_number, page in enumerate(bounded_pages, 1):
             for line_number, line in enumerate(page.splitlines(), 1):
@@ -280,6 +259,7 @@ def audit(source: bytes) -> dict[str, int | bool]:
     return {
         "table_candidates": len(table),
         "bounded_raw_table_rows": len(bounded_table.rows),
+        "supplemental_table_detail_rows": sum(len(group.detail_rows) for group in grouped_table.groups),
         "bounded_simple_text_pages": len(bounded_text),
         "text_candidates": len(text),
         "exact_table_occurrences": counts["exact_table_occurrence"],

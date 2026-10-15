@@ -21,7 +21,7 @@ class ContinuationRule(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     operation: Literal["table_continuation_v1"]
-    mode: Literal["amount_on_last_row", "description_after_start"]
+    mode: Literal["amount_on_last_row", "description_after_start", "amount_with_details"]
     start_columns: tuple[int, ...] = Field(min_length=1, max_length=2)
     break_columns: tuple[int, ...] = Field(min_length=1, max_length=2)
     description_column: int = Field(ge=0, lt=MAX_COLUMNS)
@@ -38,7 +38,7 @@ class ContinuationRule(BaseModel):
             or any(column < 0 or column >= MAX_COLUMNS for column in columns)
             or not set(self.break_columns).issubset(self.start_columns)
             or self.description_column in self.start_columns
-            or (self.mode == "amount_on_last_row" and self.amount_column is None)
+            or (self.mode in {"amount_on_last_row", "amount_with_details"} and self.amount_column is None)
             or (self.amount_column is not None and self.amount_column in {*self.start_columns, self.description_column})
         ):
             raise ValueError("invalid continuation columns")
@@ -57,6 +57,7 @@ class JoinedTableRow:
     sources: tuple[RawTableRow, ...]
     description: str
     amount_raw: str | None
+    detail_rows: tuple[RawTableRow, ...] = ()
 
 
 def assemble(rule: ContinuationRule, rows: tuple[RawTableRow, ...]) -> tuple[JoinedTableRow, ...]:
@@ -73,14 +74,26 @@ def assemble(rule: ContinuationRule, rows: tuple[RawTableRow, ...]) -> tuple[Joi
     def finish() -> None:
         if not pending:
             return
-        parts = [row.cells[rule.description_column].strip() for row in pending]
+        if rule.mode == "amount_with_details":
+            assert rule.amount_column is not None
+            amount_positions = [index for index, row in enumerate(pending) if row.cells[rule.amount_column].strip()]
+            if len(amount_positions) != 1:
+                raise ContinuationError("missing_or_multiple_amounts")
+            amount_position = amount_positions[0]
+            value_rows = pending[: amount_position + 1]
+            detail_rows = tuple(pending[amount_position + 1 :])
+            amount_row = pending[amount_position]
+        else:
+            value_rows = pending
+            detail_rows = ()
+            amount_row = pending[-1] if rule.mode == "amount_on_last_row" else pending[0]
+        parts = [row.cells[rule.description_column].strip() for row in value_rows]
         if any(not part for part in parts):
             raise ContinuationError("empty_description")
-        amount_row = pending[-1] if rule.mode == "amount_on_last_row" else pending[0]
         amount = amount_row.cells[rule.amount_column].strip() if rule.amount_column is not None else None
         if rule.mode == "amount_on_last_row" and not amount:
             raise ContinuationError("missing_terminal_amount")
-        groups.append(JoinedTableRow(tuple(pending), " ".join(parts), amount))
+        groups.append(JoinedTableRow(tuple(pending), " ".join(parts), amount, detail_rows))
         pending.clear()
 
     for row in rows:

@@ -57,6 +57,35 @@ def test_wells_and_lendingclub_description_after_start_shape() -> None:
     assert len(joined[0].sources) == 2
 
 
+def test_amount_with_details_keeps_posted_description_separate_from_supplemental_lines() -> None:
+    rule = ContinuationRule.model_validate(
+        {
+            "operation": "table_continuation_v1",
+            "mode": "amount_with_details",
+            "start_columns": [0, 1],
+            "break_columns": [0, 1],
+            "description_column": 2,
+            "amount_column": 3,
+            "max_group_rows": 5,
+        }
+    )
+    rows = (
+        RawTableRow(1, 1, ("08/01", "08/01", "AIRLINE", "$50.00")),
+        RawTableRow(1, 2, ("", "", "DEPART: 08/10", "")),
+        RawTableRow(1, 3, ("08/02", "08/02", "FOREIGN MERCHANT", "")),
+        RawTableRow(1, 4, ("", "", "CURRENCY DETAIL", "$12.34")),
+    )
+    joined = assemble(rule, rows)
+    assert [(row.description, row.amount_raw) for row in joined] == [
+        ("AIRLINE", "$50.00"),
+        ("FOREIGN MERCHANT CURRENCY DETAIL", "$12.34"),
+    ]
+    assert [row.cells[2] for row in joined[0].detail_rows] == ["DEPART: 08/10"]
+    assert joined[1].detail_rows == ()
+    with pytest.raises(ContinuationError, match="missing_or_multiple_amounts"):
+        assemble(rule, (RawTableRow(1, 1, ("08/01", "08/01", "INCOMPLETE", "")),))
+
+
 def test_refuses_incomplete_or_undeclared_continuations() -> None:
     rule = ContinuationRule.model_validate(
         {

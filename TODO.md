@@ -156,8 +156,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   exactly matches nine recent-layout Citi archive PDFs without source changes.
   Wells and Citi word/table finding and XLSX XML decoding now run in bounded
   workers. The Citi worker matched 543 raw table/interest rows across ten
-  recent-layout archive PDFs without changing source hashes. Intel Mac native
-  checks remain open; XLSX has synthetic parity only.
+  recent-layout archive PDFs without changing source hashes. The shared
+  continuation operation forms 471 table transactions and retains 36
+  supplemental detail lines separately, with accepted-row order parity.
+  Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and
   continuation/layout PDFs, plus synthetic

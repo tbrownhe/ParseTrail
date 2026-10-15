@@ -121,7 +121,10 @@ boundary: 543 raw rows matched the current extractor across ten recent-layout
 archive PDFs, with unchanged hashes. Full page capture, runtime integration and
 Intel Mac native checks remain open, so this does not admit PDFs to runtime imports.
 The read-only Citi audit now feeds its candidate resolver from the bounded text
-and table workers; its legacy parser remains only the accepted-result baseline.
+and table workers. The shared continuation operation forms 471 table rows and
+retains 36 post-amount travel/lodging detail rows as source evidence; no detail
+line becomes a financial row. Its legacy parser remains the accepted-result
+baseline.
 The XLSX adapter also runs in a fixed, bounded worker and matches the
 in-process synthetic evidence. It has no referenced archive workbook and
 still needs Intel Mac native checks before runtime admission.
