@@ -349,6 +349,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   abbreviated-account matching setting defaults off; the 2.0 review flow must
   suggest a unique suffix match and offer to enable it inline. Consolidate the
   temporary V2 source store with the user-database service before activation.
+  The first isolated import service now skips parsing on exact-source retry,
+  retains revised bytes as a second pending snapshot, and leaves no source or
+  observation write after parser failure or post-parse cancellation. Parser
+  execution cancellation, admission/routing, archive recovery and UI remain open.
 - [ ] **V2-4a–b — Daily review:** create/edit accounts, categories and budgets; connect
   accepted ledger workflows to the application in small increments. Manual values,
   closures and unsupported accounting remain explicit. Owner Windows integration gate.

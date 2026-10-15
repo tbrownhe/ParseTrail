@@ -173,6 +173,12 @@ now saves exact source, definition, strict evidence and unposted observation IDs
 atomically. A temporary profile reopened ten recent Citi PDFs with 486 rows and
 803 dispositions; the originals were read-only and their hashes unchanged.
 This does not yet connect ledger account mapping or native import UI.
+The isolated [V2 source import service](../client/src/parsetrail/core/v2_source_import.py)
+now checks an exact-source retry before invoking a parser and returns the saved
+snapshot. Revised bytes remain a separate pending import. Parser failure and
+post-parse cancellation leave the new profile unchanged. This is a service
+boundary only; parser execution cancellation, catalog admission, archive
+recovery and main-window integration remain open.
 The global abbreviated-account matching preference now defaults off and appears
 under File > Preferences. A unique same-institution, same-class suffix match can
 bind automatically only when enabled; ambiguity always requires review. The
