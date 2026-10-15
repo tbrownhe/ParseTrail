@@ -133,6 +133,16 @@ the accepted reader on every referenced Wells Fargo business source. This is
 extractor parity only: PDF decoding/table-finding budgets, independent capture
 checks and optional printed-balance evidence still need work.
 
+The bounded business-statement operation now combines those table cells with
+bounded page lines. It declares account, period, summary labels, partial-date
+and exact-money formats, and the shared description continuation rule. On all
+29 business PDFs referenced by the authorized closed-copy profile, account,
+period, printed balances and all 225 transaction rows matched the accepted
+reader. A temporary V2 profile reopened all 225 rows and 1,073 table terminator
+or after-stop dispositions; source hashes were unchanged. This is still pilot
+evidence: after-stop dispositions and full-page capture need review before
+normal admission, and native Mac acceptance remains open.
+
 A read-only archive check selected representative sources for all four families;
 each routed and parsed with checkout code, and source bytes were unchanged. A
 cross-page HealthEquity source and a Chase source were then compared with the

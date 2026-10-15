@@ -6,6 +6,7 @@ import re
 from datetime import date, datetime
 
 MONTH_DAY = re.compile(r"(?P<month>0[1-9]|1[0-2])/(?P<day>0[1-9]|[12][0-9]|3[01])\Z")
+SLASH_MONTH_DAY = re.compile(r"(?P<month>0?[1-9]|1[0-2])/(?P<day>0?[1-9]|[12][0-9]|3[01])\Z")
 MAX_PERIOD_DAYS = 366
 
 
@@ -46,3 +47,12 @@ def resolve_month_day(raw: str, start: date, end: date) -> date:
     if len(best) != 1:
         raise PartialDateError("ambiguous_year")
     return best[0]
+
+
+def resolve_slash_month_day(raw: str, start: date, end: date) -> date:
+    """Resolve a printed M/D or MM/DD token using the same finite year rule."""
+    match = SLASH_MONTH_DAY.fullmatch(raw) if isinstance(raw, str) else None
+    if match is None:
+        raise PartialDateError("invalid_slash_month_day")
+    normalized = f"{int(match['month']):02d}/{int(match['day']):02d}"
+    return resolve_month_day(normalized, start, end)

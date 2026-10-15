@@ -176,6 +176,17 @@ dispositions exactly matched the in-process pilot on 21 authorized archive PDFs
 PDF also passes the worker test. Complete page capture, Intel Mac native limits
 and runtime integration remain open; this is not an accepted declaration shape.
 
+`wells_statement_output.py` now joins declared description continuations and
+maps the bounded cells plus bounded page lines into the strict V2 statement
+envelope. The same checked-in definition declares summary anchors, exact money,
+partial dates and the shared continuation rule. All 29 business PDFs referenced
+by the authorized closed-copy profile matched the accepted reader on account,
+period, printed balances and all 225 rows. Their temporary V2 profile reopened
+225 rows and 1,073 located terminator/post-stop dispositions with unchanged
+source hashes. Printed row balances remain optional; absent values stay null.
+`capture_verified` is false, and the after-stop rows and full page still need
+capture review before normal admission.
+
 `audit_citi_channels.py` is a read-only recent-Citi channel probe. It compares
 table and text candidates by transaction date, posting date, amount, normalized
 description and duplicate occurrence. Text with only a date/amount overlap is

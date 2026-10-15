@@ -4,7 +4,7 @@ from datetime import date
 
 import pytest
 
-from devtools.parser_engine_pilot.partial_dates import PartialDateError, resolve_month_day
+from devtools.parser_engine_pilot.partial_dates import PartialDateError, resolve_month_day, resolve_slash_month_day
 
 
 def test_rollover_and_just_before_period() -> None:
@@ -23,3 +23,9 @@ def test_refuses_unrelated_or_ambiguous_date() -> None:
         resolve_month_day("08/01", date(2026, 1, 1), date(2026, 1, 31))
     with pytest.raises(PartialDateError, match="ambiguous_year"):
         resolve_month_day("01/01", date(2026, 1, 1), date(2027, 1, 1))
+
+
+def test_bounded_single_digit_slash_date_uses_same_year_rule() -> None:
+    assert resolve_slash_month_day("10/1", date(2026, 10, 1), date(2026, 10, 31)) == date(2026, 10, 1)
+    with pytest.raises(PartialDateError, match="invalid_slash_month_day"):
+        resolve_slash_month_day("10/01 extra", date(2026, 10, 1), date(2026, 10, 31))

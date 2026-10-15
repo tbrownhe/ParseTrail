@@ -143,6 +143,12 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   capture. A bounded worker now reproduces the in-process cells/regions on 21
   archive PDFs (1,029 rows), but Intel Mac native limits and runtime integration
   remain open.
+  A finite Wells business statement operation now joins declared description
+  continuations and exact printed summary fields. All 29 business PDFs in the
+  authorized closed-copy profile matched the accepted reader on account,
+  period, balances and all 225 rows. Temporary V2 storage reopened those rows
+  and 1,073 table terminator/after-stop dispositions without source changes.
+  Full-page capture, after-stop review and native acceptance remain open.
   Citi multi-channel recovery has conflicting date/amount-only matches. A
   read-only page-level follow-up classified the eight referenced sources'
   candidate shapes. A finite channel resolver reproduces all 421 accepted

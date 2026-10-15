@@ -3,6 +3,24 @@
   "parser_id": "wells_business_table_pilot",
   "revision": "1",
   "suffix": ".pdf",
-  "kind": "table_region_evidence",
-  "capability": "wells_business_geometry_v1"
+  "kind": "statement",
+  "capability": "wells_business_geometry_v1",
+  "statement_operation": "bounded_business_table_statement_v1",
+  "summary_label": "Statement period activity summary",
+  "account_label": "Account number:",
+  "opening_label": "Beginning balance on",
+  "closing_labels": ["Ending balance on", "Closing balance on"],
+  "balance_window_lines": 10,
+  "date_format": "M/D_or_MM/DD",
+  "money_format": "usd_or_decimal_2dp",
+  "continuation": {
+    "operation": "table_continuation_v1",
+    "mode": "description_after_start",
+    "start_columns": [0],
+    "break_columns": [0],
+    "description_column": 2,
+    "amount_column": null,
+    "max_group_rows": 8,
+    "allow_cross_page": true
+  }
 }

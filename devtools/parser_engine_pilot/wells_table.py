@@ -11,9 +11,10 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from devtools.parser_engine_pilot.pdf_lines import MAX_PAGES, MAX_PDF_BYTES
+from devtools.parser_engine_pilot.table_continuations import ContinuationRule
 
 ENGINE_VERSION = "wells-table-pilot-1"
 MAX_DEFINITION_BYTES = 64 * 1024
@@ -41,8 +42,32 @@ class WellsTableDefinition(BaseModel):
     parser_id: str = Field(pattern=r"^[a-z][a-z0-9_-]{2,79}$")
     revision: str = Field(pattern=r"^[1-9][0-9]{0,8}$")
     suffix: Literal[".pdf"]
-    kind: Literal["table_region_evidence"]
+    kind: Literal["statement"]
     capability: Literal["wells_business_geometry_v1"]
+    statement_operation: Literal["bounded_business_table_statement_v1"]
+    summary_label: str = Field(min_length=1, max_length=80)
+    account_label: str = Field(min_length=1, max_length=80)
+    opening_label: str = Field(min_length=1, max_length=80)
+    closing_labels: tuple[str, ...] = Field(min_length=1, max_length=2)
+    balance_window_lines: int = Field(ge=4, le=20)
+    date_format: Literal["M/D_or_MM/DD"]
+    money_format: Literal["usd_or_decimal_2dp"]
+    continuation: ContinuationRule
+
+    @model_validator(mode="after")
+    def finite_statement(self) -> WellsTableDefinition:
+        labels = (self.summary_label, self.account_label, self.opening_label, *self.closing_labels)
+        if (
+            len(set(labels)) != len(labels)
+            or any(label != label.strip() or "\n" in label or "\r" in label for label in labels)
+            or self.continuation.mode != "description_after_start"
+            or self.continuation.start_columns != (0,)
+            or self.continuation.break_columns != (0,)
+            or self.continuation.description_column != 2
+            or self.continuation.amount_column is not None
+        ):
+            raise ValueError("invalid business statement operation")
+        return self
 
 
 @dataclass(frozen=True, slots=True)

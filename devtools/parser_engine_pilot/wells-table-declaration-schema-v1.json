@@ -1,4 +1,84 @@
 {
+  "$defs": {
+    "ContinuationRule": {
+      "additionalProperties": false,
+      "properties": {
+        "operation": {
+          "const": "table_continuation_v1",
+          "title": "Operation",
+          "type": "string"
+        },
+        "mode": {
+          "enum": [
+            "amount_on_last_row",
+            "description_after_start",
+            "amount_with_details"
+          ],
+          "title": "Mode",
+          "type": "string"
+        },
+        "start_columns": {
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 1,
+          "title": "Start Columns",
+          "type": "array"
+        },
+        "break_columns": {
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 2,
+          "minItems": 1,
+          "title": "Break Columns",
+          "type": "array"
+        },
+        "description_column": {
+          "exclusiveMaximum": 16,
+          "minimum": 0,
+          "title": "Description Column",
+          "type": "integer"
+        },
+        "amount_column": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 16,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Amount Column"
+        },
+        "max_group_rows": {
+          "maximum": 8,
+          "minimum": 1,
+          "title": "Max Group Rows",
+          "type": "integer"
+        },
+        "allow_cross_page": {
+          "default": false,
+          "title": "Allow Cross Page",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "operation",
+        "mode",
+        "start_columns",
+        "break_columns",
+        "description_column",
+        "max_group_rows"
+      ],
+      "title": "ContinuationRule",
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
   "properties": {
     "schema_version": {
@@ -22,7 +102,7 @@
       "type": "string"
     },
     "kind": {
-      "const": "table_region_evidence",
+      "const": "statement",
       "title": "Kind",
       "type": "string"
     },
@@ -30,6 +110,57 @@
       "const": "wells_business_geometry_v1",
       "title": "Capability",
       "type": "string"
+    },
+    "statement_operation": {
+      "const": "bounded_business_table_statement_v1",
+      "title": "Statement Operation",
+      "type": "string"
+    },
+    "summary_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Summary Label",
+      "type": "string"
+    },
+    "account_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Account Label",
+      "type": "string"
+    },
+    "opening_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Opening Label",
+      "type": "string"
+    },
+    "closing_labels": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 2,
+      "minItems": 1,
+      "title": "Closing Labels",
+      "type": "array"
+    },
+    "balance_window_lines": {
+      "maximum": 20,
+      "minimum": 4,
+      "title": "Balance Window Lines",
+      "type": "integer"
+    },
+    "date_format": {
+      "const": "M/D_or_MM/DD",
+      "title": "Date Format",
+      "type": "string"
+    },
+    "money_format": {
+      "const": "usd_or_decimal_2dp",
+      "title": "Money Format",
+      "type": "string"
+    },
+    "continuation": {
+      "$ref": "#/$defs/ContinuationRule"
     }
   },
   "required": [
@@ -38,7 +169,16 @@
     "revision",
     "suffix",
     "kind",
-    "capability"
+    "capability",
+    "statement_operation",
+    "summary_label",
+    "account_label",
+    "opening_label",
+    "closing_labels",
+    "balance_window_lines",
+    "date_format",
+    "money_format",
+    "continuation"
   ],
   "title": "WellsTableDefinition",
   "type": "object"
