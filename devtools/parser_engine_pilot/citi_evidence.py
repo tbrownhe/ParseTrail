@@ -12,7 +12,6 @@ from datetime import datetime
 
 from parsetrail.core.money import parse_money, to_minor_units
 from parsetrail.core.parser_classification import DocumentFeatures, matching_plugins, normalize_pdf_metadata
-from parsetrail.core.utils import get_absolute_date
 from parsetrail.plugins.pdf_citicc_202506 import Parser as OlderCiti
 from parsetrail.plugins.pdf_citicc_202511 import Parser as RecentCiti
 
@@ -28,6 +27,7 @@ from devtools.parser_engine_pilot.citi_source_dispositions import (
 from devtools.parser_engine_pilot.citi_statement_header import CitiStatementHeader, parse_header
 from devtools.parser_engine_pilot.citi_table import CitiTableEvidence
 from devtools.parser_engine_pilot.citi_table_candidates import CitiTableCandidates, candidates_from_table
+from devtools.parser_engine_pilot.partial_dates import resolve_month_day
 
 
 class CitiEvidenceError(ValueError):
@@ -81,8 +81,8 @@ def _text_candidates(pages: tuple[str, ...], start: datetime, end: datetime) -> 
             posting_raw = match.group("posting_date") or match.group("single_date")
             result.append(
                 Candidate(
-                    get_absolute_date(transaction_raw, start, end).date(),
-                    get_absolute_date(posting_raw, start, end).date(),
+                    resolve_month_day(transaction_raw, start, end),
+                    resolve_month_day(posting_raw, start, end),
                     -to_minor_units(parse_money(match.group("amount"))),
                     " ".join(match.group("description").split()),
                     "text",
@@ -118,7 +118,7 @@ def fee_candidates(pages: tuple[str, ...] | list[str], start: datetime, end: dat
             amount_match = RecentCiti.AMOUNT.search(line)
             if amount_match is None:
                 continue
-            transaction_date = get_absolute_date(pending[0], start, end).date()
+            transaction_date = resolve_month_day(pending[0], start, end)
             description = " ".join(" ".join(pending[1]).replace(amount_match.group(), "").split())
             result.append(
                 Candidate(
@@ -200,6 +200,8 @@ def read_recent_citi(source: bytes) -> CitiEvidence:
         opening_minor=header.previous_balance.ledger_minor,
         closing_minor=header.new_balance.ledger_minor,
     )
+    if any(not header.start_date <= row.representative.posting_date <= header.end_date for row in resolution.rows):
+        raise CitiEvidenceError("posting_date_outside_statement")
     dated_lines = dispose_dated_lines(RecentCiti(), list(decoded.pages), list(table.rows), list(fees))
     bijection = _dated_start_bijection(resolution, dated_lines)
     if not bijection:

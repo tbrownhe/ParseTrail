@@ -164,9 +164,10 @@ database updater. It is not the application import UI, a production 2.x schema,
 a signed catalog or native acceptance. Its saved evidence snapshot now reopens
 without reparsing, and strict format checks refuse legacy, unknown and newer
 profile shapes before ledger writes in synthetic tests.
-The proposed [released evidence storage boundary](client-v2-evidence-storage-proposal.md)
-awaits review before V2-2/V2-3 implementation; it includes recent Citi in the
-2.0 import contract without a 1.x database migration path.
+The owner approved the [released evidence storage boundary](client-v2-evidence-storage-proposal.md).
+The [upstream boundary review](client-v2-upstream-boundary-review.md) identifies
+the parser-output and admission changes to make before V2-2/V2-3 storage work.
+Recent Citi remains in the 2.0 import contract without a 1.x database migration.
 
 ## Current stop/go decision
 

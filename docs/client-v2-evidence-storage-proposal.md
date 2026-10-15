@@ -1,9 +1,10 @@
-# Proposed 2.0 source and evidence storage boundary
+# 2.0 source and evidence storage boundary
 
-Status: **review needed before implementation**. This is the V2-2/V2-3 format
-decision, not a migration plan. The recent Citi PDF layout is a required 2.0
-source family. The disposable CSV-only `StoredEvidenceV1` is a proof of saved
-review, not the released schema.
+Status: **approved by the owner**. This is the V2-2/V2-3 format decision, not a
+migration plan. The recent Citi PDF layout is a required 2.0 source family.
+The disposable CSV-only `StoredEvidenceV1` is a proof of saved review, not the
+released schema. Complete the [upstream boundary review](client-v2-upstream-boundary-review.md)
+before implementing this store.
 
 ## Proposed smallest durable shape
 
@@ -63,10 +64,10 @@ reparsing. A later explicit reparse compares new evidence against the saved
 snapshot before any affected decision can be reused; catalog updates never
 rewrite old snapshots silently.
 
-## Decision and next proof
+## Next proof
 
-Approve or revise the **single-database, immutable versioned evidence snapshot**
-boundary before implementing the released profile schema. The next proof would
+The **single-database, immutable versioned evidence snapshot** boundary is
+approved. The next proof will
 create a fresh disposable 2.0 profile, import one synthetic CSV and one recent
 Citi PDF through the same source transaction, reopen both from saved evidence,
 reject unknown formats before writes, and leave all Citi observations unposted.

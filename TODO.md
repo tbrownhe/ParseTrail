@@ -168,6 +168,11 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   Five garbled first-page summary lines and ten garbled later-page cardholder
   subtotals are retained as extraction artifacts, never as transaction or
   balance evidence.
+  A deterministic partial-date operation now refuses invalid, distant and
+  ambiguous `MM/DD` years while retaining ten-statement Citi parity. The
+  [upstream boundary review](docs/client-v2-upstream-boundary-review.md) orders
+  typed evidence, Citi's exit from 1.x parser methods and bounded admission
+  ahead of the approved 2.0 storage implementation.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and

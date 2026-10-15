@@ -231,12 +231,15 @@ builds source-linked candidates without the legacy reader; the audit invokes
 that reader afterward for comparison. Runtime integration and Intel Mac native
 limits remain open.
 An additional [money-line ledger](../devtools/parser_engine_pilot/citi_money_lines.py)
-disposes all 88 dollar-bearing lines outside dated transaction spans after page
-one across the ten recent statements. They are printed totals, annual
-summaries, cardholder subtotals, APR information, fee notices or legal
-disclosure; none becomes a transaction. Unknown monetary lines refuse the
-standalone path. This is stronger transaction-region capture evidence, while
-non-money text and native import acceptance remain open.
+disposes all 281 dollar-sign lines outside dated transaction spans across the
+ten recent statements. They include printed summaries, payment information,
+credit terms, APR information, fee notices, disclosure and unreadable
+extraction artifacts; none becomes a transaction. Unknown dollar-sign lines
+refuse the standalone path. A deterministic
+[partial-date operation](../devtools/parser_engine_pilot/partial_dates.py)
+now refuses invalid, distant or ambiguous year resolution and retains row
+parity on all ten statements. Non-money text and native import acceptance
+remain open.
 The [XLSX worker pilot](../devtools/parser_engine_pilot/bounded_xlsx.py)
 uses the same fixed process limiter and matches synthetic in-process evidence;
 it still lacks an archived workbook fixture. Intel Mac memory and timeout

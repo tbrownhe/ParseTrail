@@ -244,6 +244,9 @@ balances at bounded text line locations. The audit now independently routes
 and builds candidate fields from bounded evidence, then compares them to the
 old reader. All ten archive statements passed header, routing, row and balance
 parity. The old reader remains only the audit's comparison baseline.
+The [partial-date operation](partial_dates.py) now resolves printed `MM/DD`
+dates with a finite year window and explicit refusal for invalid, distant or
+ambiguous results; the ten-source Citi comparison remains unchanged.
 
 [`bounded_pdf_text.py`](bounded_pdf_text.py) starts a separate PDF text worker
 with source, output, page, line and extracted-text limits plus a wall-clock

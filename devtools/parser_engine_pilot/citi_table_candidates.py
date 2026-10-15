@@ -6,11 +6,11 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from parsetrail.core.money import parse_money, to_minor_units
-from parsetrail.core.utils import get_absolute_date
 from parsetrail.plugins.pdf_citicc_202511 import Parser as RecentCiti
 
 from devtools.parser_engine_pilot.channel_occurrences import Candidate, validate_candidates
 from devtools.parser_engine_pilot.citi_table import CitiTableEvidence
+from devtools.parser_engine_pilot.partial_dates import resolve_month_day
 from devtools.parser_engine_pilot.table_continuations import (
     ContinuationRule,
     JoinedTableRow,
@@ -57,8 +57,8 @@ def candidates_from_table(evidence: CitiTableEvidence, start_date: datetime, end
         posting_raw = (posting_match or transaction_match).group()
         candidates.append(
             Candidate(
-                get_absolute_date(transaction_raw, start_date, end_date).date(),
-                get_absolute_date(posting_raw, start_date, end_date).date(),
+                resolve_month_day(transaction_raw, start_date, end_date),
+                resolve_month_day(posting_raw, start_date, end_date),
                 -to_minor_units(parse_money(group.amount_raw)),
                 " ".join(group.description.split()),
                 "table",
