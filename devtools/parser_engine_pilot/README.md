@@ -223,15 +223,18 @@ The audit calls that path before opening the old reader for comparison. All ten
 archive statements still match 486 accepted rows and ten balance equations,
 with one printed dated start per resolved row and unchanged source hashes. A
 synthetic non-Citi PDF is refused before Citi table extraction. This remains a
-pilot and does not post to a profile or prove full-page capture.
+pilot and does not post to a profile or prove capture of non-monetary content.
 
-The [money-line ledger](citi_money_lines.py) also accounts for every dollar
-line outside dated transaction spans after page one in the ten sources: 88
-lines are printed totals, annual summaries, cardholder subtotals, APR tables,
-fee notices or legal disclosure, with zero unresolved. An unfamiliar monetary
-line now refuses the standalone evidence path. These labels retain source
-locations and do not create transactions or claim that every non-money item on
-a page is understood.
+The [money-line ledger](citi_money_lines.py) also accounts for every dollar-sign
+line outside dated transaction spans in the ten sources: 183 first-page lines
+cover payment information, account summaries, credit terms and repayment
+examples; 98 later-page lines cover printed totals, annual summaries,
+cardholder subtotals, APR tables, fee notices and legal disclosure. Five
+first-page summary lines and ten later-page cardholder subtotals have visibly
+garbled simple-text extraction and are retained as artifacts. Zero lines
+remain unresolved. An unfamiliar dollar-sign line refuses the standalone
+evidence path. These labels retain source locations and do not create
+transactions or claim that every non-money item on a page is understood.
 
 The Citi worker also retains a capped first-page character stream; the shared
 PDF text worker returns capped metadata for routing. The

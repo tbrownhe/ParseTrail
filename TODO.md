@@ -163,8 +163,11 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   dates, account suffix and printed balances on those ten sources.
   A standalone recent-Citi evidence path now runs without the old reader; the
   comparison audit still matches all ten statements and source hashes.
-  A monetary-line ledger accounts for 88 additional dollar-bearing text lines
-  after page one as nontransaction printed information; zero remain unresolved.
+  A monetary-line ledger accounts for 183 first-page and 98 later-page
+  dollar-sign lines outside dated transactions; zero remain unresolved.
+  Five garbled first-page summary lines and ten garbled later-page cardholder
+  subtotals are retained as extraction artifacts, never as transaction or
+  balance evidence.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and

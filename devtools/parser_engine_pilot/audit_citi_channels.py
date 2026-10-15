@@ -179,6 +179,8 @@ def audit(source: bytes) -> dict[str, int | bool]:
         "dated_start_dispositions_complete": source_counts["unresolved"] == 0,
         "dated_start_row_bijection": evidence.dated_start_row_bijection,
         "nontransaction_money_lines": len(evidence.money_lines),
+        "first_page_money_lines": sum(item.page == 1 for item in evidence.money_lines),
+        "summary_extraction_artifacts": money_counts["summary_extraction_artifact"],
         "unresolved_money_lines": money_counts["unresolved"],
     }
 

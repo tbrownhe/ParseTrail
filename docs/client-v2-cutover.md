@@ -132,9 +132,13 @@ evidence. Those fields matched the old reader on all ten archive statements.
 The standalone [recent Citi evidence path](../devtools/parser_engine_pilot/citi_evidence.py)
 now runs without the old reader or any profile writes. The old reader remains
 only in the separate comparison audit.
-It also labels 88 dollar-bearing lines outside dated transaction spans after
-page one as printed summaries, APR information, notices or disclosure; no
-unresolved monetary line is silently discarded in the ten-source sample.
+It also labels every dollar-sign line outside dated transaction spans:
+183 first-page payment, summary, credit-term, repayment-example and visible
+text-extraction artifact lines, plus 98 later-page summaries, APR information,
+notices and disclosure lines. No dollar-sign line is unresolved in the
+ten-source sample. Five first-page summary lines and ten later-page cardholder
+subtotals are visibly garbled by simple-text extraction; their amounts are not
+used as transaction or balance evidence.
 The XLSX adapter also runs in a fixed, bounded worker and matches the
 in-process synthetic evidence. It has no referenced archive workbook and
 still needs Intel Mac native checks before runtime admission.
