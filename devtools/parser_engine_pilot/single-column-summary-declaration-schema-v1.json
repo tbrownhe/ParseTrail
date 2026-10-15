@@ -1,0 +1,108 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "parser_id": {
+      "pattern": "^[a-z][a-z0-9_-]{2,79}$",
+      "title": "Parser Id",
+      "type": "string"
+    },
+    "revision": {
+      "pattern": "^[1-9][0-9]{0,8}$",
+      "title": "Revision",
+      "type": "string"
+    },
+    "suffix": {
+      "const": ".pdf",
+      "title": "Suffix",
+      "type": "string"
+    },
+    "kind": {
+      "const": "statement",
+      "title": "Kind",
+      "type": "string"
+    },
+    "operation": {
+      "const": "single_column_value_summary_v1",
+      "title": "Operation",
+      "type": "string"
+    },
+    "period_format": {
+      "const": "MM/DD/YYYY - MM/DD/YYYY",
+      "title": "Period Format",
+      "type": "string"
+    },
+    "money_format": {
+      "const": "signed_usd_2dp",
+      "title": "Money Format",
+      "type": "string"
+    },
+    "identity_format": {
+      "const": "six_digit_plan_id",
+      "title": "Identity Format",
+      "type": "string"
+    },
+    "period_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Period Label",
+      "type": "string"
+    },
+    "identity_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Identity Label",
+      "type": "string"
+    },
+    "opening_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Opening Label",
+      "type": "string"
+    },
+    "closing_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Closing Label",
+      "type": "string"
+    },
+    "row_labels": {
+      "items": {
+        "type": "string"
+      },
+      "maxItems": 8,
+      "minItems": 1,
+      "title": "Row Labels",
+      "type": "array"
+    },
+    "summary_window_lines": {
+      "maximum": 20,
+      "minimum": 4,
+      "title": "Summary Window Lines",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "parser_id",
+    "revision",
+    "suffix",
+    "kind",
+    "operation",
+    "period_format",
+    "money_format",
+    "identity_format",
+    "period_label",
+    "identity_label",
+    "opening_label",
+    "closing_label",
+    "row_labels",
+    "summary_window_lines"
+  ],
+  "title": "SingleColumnSummaryDefinition",
+  "type": "object"
+}

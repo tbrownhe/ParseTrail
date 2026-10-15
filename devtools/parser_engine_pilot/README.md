@@ -149,6 +149,18 @@ unknown. Complete page capture, signed routing and native acceptance remain
 open. The fixed layout worker shares the simple decoder's input, output,
 deadline and native memory limits.
 
+`single_column_summary.py` adds a finite Vanguard account-value summary
+operation. It extracts the first printed period amount from each declared
+component label, retains extra columns and unlabeled summary lines as located
+dispositions, and checks the printed opening-to-closing equation. The six-digit
+plan identifier stays opaque. All ten referenced PDFs matched the accepted
+reader on identifier, period, printed balances and 45 summary components;
+all ten equations passed. A temporary V2 profile reopened ten sources, 45
+period-summary rows and 65 dispositions with unchanged source hashes.
+Market gain/loss remains a period summary component with a derived period-end
+date; accounting review, complete page capture and native acceptance remain
+open.
+
 Every Chase-referenced fixture in the authorized closed-copy archive matched
 the accepted reader's account, period, printed balances and rows in a read-only
 comparison. The comparison also accounted for every date-prefixed line as a

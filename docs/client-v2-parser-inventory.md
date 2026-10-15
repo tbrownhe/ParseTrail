@@ -223,6 +223,15 @@ with unchanged source hashes. Seventy-seven rows without a printed transaction
 date retain that date as unknown. Full-page capture, signed routing and native
 worker acceptance remain open.
 
+Vanguard now has a finite single-column account-value summary operation. All
+ten referenced PDFs matched the accepted reader on opaque plan identifier,
+period, printed balances and 45 summary components; all ten printed equations
+passed. Extra column values and unlabeled summary lines remain in 65 located
+dispositions. Temporary V2 storage reopened all ten sources and 45 explicitly
+tagged period-summary rows with unchanged hashes. Market gain/loss has a
+derived period-end date and requires accounting review before any posting.
+Full-page capture and native acceptance remain open.
+
 ## Remaining family operation costs
 
 These estimates complete the source-code review for the other 18 modules in

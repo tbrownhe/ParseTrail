@@ -25,6 +25,7 @@ from devtools.parser_engine_pilot.investment_summary_lines import parse_investme
 from devtools.parser_engine_pilot.loan_history_lines import parse_loan_history
 from devtools.parser_engine_pilot.pdf_lines import page_lines
 from devtools.parser_engine_pilot.savings_lines import parse_savings_lines, parse_summary_savings_lines
+from devtools.parser_engine_pilot.single_column_summary import parse_single_column_summary
 from devtools.parser_engine_pilot.table_source_output import from_table
 from devtools.parser_engine_pilot.two_date_card_lines import parse_two_date_card
 from devtools.parser_engine_pilot.wells_statement_output import from_wells_business
@@ -56,6 +57,9 @@ CAPITAL_ONE_DEFINITION_SHA256 = hashlib.sha256(
 USBANK_DEFINITION_SHA256 = hashlib.sha256(
     Path(__file__).with_name("usbank-rei-card-pilot-definition.json").read_bytes()
 ).hexdigest()
+VANGUARD_DEFINITION_SHA256 = hashlib.sha256(
+    Path(__file__).with_name("vanguard-summary-pilot-definition.json").read_bytes()
+).hexdigest()
 
 
 class SourcePipelineError(ValueError):
@@ -85,6 +89,7 @@ def build_source_evidence(source: bytes, definition: bytes, *, suffix: Literal["
                 FIDELITY_HSA_DEFINITION_SHA256,
                 YAMAHA_DEFINITION_SHA256,
                 CAPITAL_ONE_DEFINITION_SHA256,
+                VANGUARD_DEFINITION_SHA256,
             }:
                 decoded = decode_pdf(source)
                 lines = page_lines(source, decoded.pages, extraction_library="pdfplumber-bounded-simple-v1")
@@ -98,6 +103,8 @@ def build_source_evidence(source: bytes, definition: bytes, *, suffix: Literal["
                     output = parse_two_date_card(definition, lines)
                 elif digest == CAPITAL_ONE_DEFINITION_SHA256:
                     output = parse_loan_history(definition, lines)
+                elif digest == VANGUARD_DEFINITION_SHA256:
+                    output = parse_single_column_summary(definition, lines)
                 else:
                     output = parse_summary_savings_lines(definition, lines)
             elif digest == WELLS_DEFINITION_SHA256:

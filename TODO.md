@@ -237,6 +237,12 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   explicit dispositions. Temporary V2 storage reopened 97 sources, 2,137
   rows and 150 dispositions with unchanged hashes. Complete capture, signed
   routing and native acceptance remain open.
+  Vanguard now has a finite account-value summary operation. All ten
+  referenced PDFs matched identifier, period, printed balances and 45 summary
+  components against the accepted reader; all ten printed equations passed.
+  Temporary V2 storage reopened ten sources, 45 period-summary rows and 65
+  dispositions with unchanged hashes. Full-page capture and accounting review
+  remain open.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and
