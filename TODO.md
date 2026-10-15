@@ -314,8 +314,13 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   accounting decision. HealthEquity now classifies all 489 non-dated cash-window
   lines and round-trips 60 PDFs, 236 cash rows and 489 dispositions through the
   bounded pipeline and temporary profile. Cash scope and full-page capture
-  remain explicit limits. Ten authorized Synchrony PDFs were found outside the
-  imported archive; their old parser reads 97 rows, and 2.0 comparison is next.
+  remain explicit limits. Ten authorized Synchrony PDFs outside the imported
+  archive now match account, period, printed balances and all 97 accepted rows
+  through the bounded 2.0 path. Another 891 located table rows are retained as
+  dispositions; all ten printed balance equations pass, and temporary storage
+  reopens all ten snapshots with unchanged source hashes. Four source activity
+  dates precede their printed periods, so no posting date is invented. Full-page
+  capture, routing, ledger treatment and native GUI acceptance remain open.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and

@@ -33,6 +33,7 @@ from devtools.parser_engine_pilot.occu_card_lines import parse_occu_card
 from devtools.parser_engine_pilot.pdf_lines import page_lines
 from devtools.parser_engine_pilot.savings_lines import parse_savings_lines, parse_summary_savings_lines
 from devtools.parser_engine_pilot.single_column_summary import parse_plan_label_summary, parse_single_column_summary
+from devtools.parser_engine_pilot.synchrony_source_output import from_synchrony_table
 from devtools.parser_engine_pilot.table_bank_source_output import from_anchored_bank
 from devtools.parser_engine_pilot.table_card_source_output import from_anchored_card
 from devtools.parser_engine_pilot.table_source_output import from_table
@@ -102,6 +103,9 @@ WELLS_LOAN_DEFINITION_SHA256 = hashlib.sha256(
 HSA_CASH_DEFINITION_SHA256 = hashlib.sha256(
     Path(__file__).with_name("hsa-cash-pilot-definition.json").read_bytes()
 ).hexdigest()
+SYNCHRONY_DEFINITION_SHA256 = hashlib.sha256(
+    Path(__file__).with_name("synchrony-table-pilot-definition.json").read_bytes()
+).hexdigest()
 
 
 class SourcePipelineError(ValueError):
@@ -136,6 +140,7 @@ def build_source_evidence(source: bytes, definition: bytes, *, suffix: Literal["
                 TRANSAMERICA_DEFINITION_SHA256,
                 WELLS_LOAN_DEFINITION_SHA256,
                 HSA_CASH_DEFINITION_SHA256,
+                SYNCHRONY_DEFINITION_SHA256,
             }:
                 decoded = decode_pdf(source)
                 lines = page_lines(source, decoded.pages, extraction_library="pdfplumber-bounded-simple-v1")
@@ -162,6 +167,8 @@ def build_source_evidence(source: bytes, definition: bytes, *, suffix: Literal["
                     if any(item.reason == "cash_window_unclassified" for item in cash.unresolved_section_lines):
                         raise SourcePipelineError("unclassified_cash_window_line")
                     output = from_hsa_cash(cash, lines)
+                elif digest == SYNCHRONY_DEFINITION_SHA256:
+                    output = from_synchrony_table(definition, extract_bounded_anchored_table(definition, source), lines)
                 else:
                     output = parse_summary_savings_lines(definition, lines)
             elif digest == WELLS_DEFINITION_SHA256:

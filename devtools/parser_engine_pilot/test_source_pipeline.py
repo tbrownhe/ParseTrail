@@ -27,6 +27,7 @@ VANGUARD_DEFINITION = Path(__file__).with_name("vanguard-summary-pilot-definitio
 FIDELITY_401K_DEFINITION = Path(__file__).with_name("fidelity-401k-summary-pilot-definition.json").read_bytes()
 MOHELA_DEFINITION = Path(__file__).with_name("mohela-pilot-definition.json").read_bytes()
 HSA_CASH_DEFINITION = Path(__file__).with_name("hsa-cash-pilot-definition.json").read_bytes()
+SYNCHRONY_DEFINITION = Path(__file__).with_name("synchrony-table-pilot-definition.json").read_bytes()
 
 
 def test_csv_build_is_strict_and_keeps_raw_cells() -> None:
@@ -109,6 +110,10 @@ def test_pdf_requires_exact_pilot_definition_and_recent_layout() -> None:
         build_source_evidence(sample_table_pdf(), HSA_CASH_DEFINITION + b" ", suffix=".pdf")
     with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
         build_source_evidence(sample_table_pdf(), HSA_CASH_DEFINITION, suffix=".pdf")
+    with pytest.raises(SourcePipelineError, match="unsupported_definition_revision"):
+        build_source_evidence(sample_table_pdf(), SYNCHRONY_DEFINITION + b" ", suffix=".pdf")
+    with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
+        build_source_evidence(sample_table_pdf(), SYNCHRONY_DEFINITION, suffix=".pdf")
     with pytest.raises(SourcePipelineError, match="unsupported_definition_revision"):
         build_source_evidence(sample_table_pdf(), YAMAHA_DEFINITION + b" ", suffix=".pdf")
     with pytest.raises(SourcePipelineError, match="source_evidence_failed"):

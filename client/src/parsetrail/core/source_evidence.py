@@ -260,7 +260,8 @@ class StatementPayload(EvidenceModel):
         if len({account.source_identity for account in self.accounts}) != len(self.accounts):
             raise ValueError("duplicate source account")
         if any(
-            (self.start.iso is not None and row.date.iso < self.start.iso) or row.date.iso > self.end.iso
+            row.date_role != "activity_date"
+            and ((self.start.iso is not None and row.date.iso < self.start.iso) or row.date.iso > self.end.iso)
             for account in self.accounts
             for row in account.rows
         ):

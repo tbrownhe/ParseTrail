@@ -75,6 +75,36 @@ class TableCardStatementRule(BaseModel):
         return self
 
 
+class TableSingleDateCardRule(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    operation: Literal["table_single_date_card_activity_v1"]
+    date_format: Literal["MM/DD"]
+    period_date_format: Literal["MM/DD/YYYY"]
+    money_format: Literal["usd_symbol_2dp"]
+    amount_direction: Literal["invert_for_liability"]
+    account_label: str = Field(min_length=1, max_length=80)
+    opening_label: str = Field(min_length=1, max_length=80)
+    closing_label: str = Field(min_length=1, max_length=80)
+    continuation: ContinuationRule
+
+    @model_validator(mode="after")
+    def valid_card_rule(self) -> TableSingleDateCardRule:
+        labels = (self.account_label, self.opening_label, self.closing_label)
+        rule = self.continuation
+        if (
+            len(set(labels)) != len(labels)
+            or any(label != label.strip() or "\n" in label for label in labels)
+            or rule.mode != "amount_on_last_row"
+            or rule.start_columns != (0,)
+            or rule.break_columns != (0,)
+            or rule.description_column != 2
+            or rule.amount_column != 3
+        ):
+            raise ValueError("invalid single-date card operation")
+        return self
+
+
 class TableBankStatementRule(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
@@ -144,6 +174,7 @@ class AnchoredTableDefinition(BaseModel):
     headers: tuple[str, ...] = Field(min_length=2, max_length=8)
     partial_suffix_min: int = Field(ge=3, le=8)
     header_line_tolerance: float = Field(ge=0, le=20)
+    crop_top_mode: Literal["header_bottom", "page_top"] = "header_bottom"
     crop_top_anchor: int = Field(ge=0, le=7)
     crop_top_offset: float = Field(ge=0, le=20)
     boundaries: tuple[Boundary, ...] = Field(min_length=3, max_length=9)
@@ -151,7 +182,8 @@ class AnchoredTableDefinition(BaseModel):
     snap_y_tolerance: float = Field(ge=0, le=3)
     statement: (
         Annotated[
-            TableCardStatementRule | TableBankStatementRule | TableWellsPersonalRule, Field(discriminator="operation")
+            TableCardStatementRule | TableSingleDateCardRule | TableBankStatementRule | TableWellsPersonalRule,
+            Field(discriminator="operation"),
         ]
         | None
     ) = None
@@ -162,7 +194,10 @@ class AnchoredTableDefinition(BaseModel):
             len(set(self.headers)) != len(self.headers)
             or any(not item or item != item.strip() or len(item) > 40 or "\n" in item for item in self.headers)
             or self.crop_top_anchor >= len(self.headers)
-            or (isinstance(self.statement, TableCardStatementRule) and len(self.boundaries) != 5)
+            or (
+                isinstance(self.statement, (TableCardStatementRule, TableSingleDateCardRule))
+                and len(self.boundaries) != 5
+            )
             or (isinstance(self.statement, TableBankStatementRule) and len(self.boundaries) != 6)
             or (isinstance(self.statement, TableWellsPersonalRule) and len(self.boundaries) != 7)
         ):
@@ -300,7 +335,9 @@ def extract_anchored_table(
         vertical = tuple(_boundary(item, selected) for item in definition.boundaries)
         crop = (
             vertical[0],
-            selected[definition.crop_top_anchor]["bottom"] + definition.crop_top_offset,
+            selected[definition.crop_top_anchor]["bottom"] + definition.crop_top_offset
+            if definition.crop_top_mode == "header_bottom"
+            else 0,
             vertical[-1],
             page.height,
         )

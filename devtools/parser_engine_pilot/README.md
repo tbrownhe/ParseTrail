@@ -555,3 +555,17 @@ pipeline refuses it. All 60 authorized PDFs passed the pipeline, with 236 cash
 rows and 489 located dispositions, and reopened from a temporary 2.0 profile.
 The evidence remains scoped to cash and does not claim full-page capture or
 whole-account value.
+
+`synchrony-table-pilot-definition.json` declares the shared anchored-table
+extractor's page-top mode. That mode is needed for Synchrony's amount column on
+one page layout; it does not add a second table decoder. A finite single-date
+card operation then reads the printed account suffix, period balances and table
+rows, while the shared continuation operation handles any amount-on-last-row
+group. Ten authorized Amazon Store Card PDFs outside the imported archive
+matched the accepted parser on account, period, balances and all 97 rows. The
+bounded path retained another 891 located table rows (118 monetary) as
+dispositions, and all ten printed balance equations passed. Four printed
+activity dates precede their statement periods; 2.0 preserves those dates as
+activity evidence without claiming a posting date. All ten snapshots reopened
+from temporary 2.0 storage with unchanged source hashes. Full-page capture,
+account mapping, ledger posting and native GUI acceptance remain open.

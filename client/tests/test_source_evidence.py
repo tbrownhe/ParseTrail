@@ -210,3 +210,20 @@ def test_statement_allows_observed_activity_date_without_posting_claim() -> None
         rows=(row,),
     )
     assert account.rows[0].date_role == "activity_date"
+
+    outside = row.model_copy(update={"date": printed_date("12/31/2025", "2025-12-31", 2)})
+    statement_payload = StatementPayload(
+        kind="statement",
+        start=printed_date("01/01/2026", "2026-01-01", 1),
+        end=printed_date("01/31/2026", "2026-01-31", 1),
+        accounts=(account.model_copy(update={"rows": (outside,)}),),
+        dispositions=(),
+        capture_verified=False,
+        independent_balance_verified=False,
+    )
+    assert statement_payload.accounts[0].rows[0].date.iso == "2025-12-31"
+    posted = outside.model_copy(update={"date_role": "posting_date"})
+    with pytest.raises(ValidationError, match="statement row date outside period"):
+        StatementPayload.model_validate(
+            statement_payload.model_dump() | {"accounts": (account.model_copy(update={"rows": (posted,)}),)}
+        )

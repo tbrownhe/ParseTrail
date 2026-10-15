@@ -312,6 +312,70 @@
       "title": "TableCardStatementRule",
       "type": "object"
     },
+    "TableSingleDateCardRule": {
+      "additionalProperties": false,
+      "properties": {
+        "operation": {
+          "const": "table_single_date_card_activity_v1",
+          "title": "Operation",
+          "type": "string"
+        },
+        "date_format": {
+          "const": "MM/DD",
+          "title": "Date Format",
+          "type": "string"
+        },
+        "period_date_format": {
+          "const": "MM/DD/YYYY",
+          "title": "Period Date Format",
+          "type": "string"
+        },
+        "money_format": {
+          "const": "usd_symbol_2dp",
+          "title": "Money Format",
+          "type": "string"
+        },
+        "amount_direction": {
+          "const": "invert_for_liability",
+          "title": "Amount Direction",
+          "type": "string"
+        },
+        "account_label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Account Label",
+          "type": "string"
+        },
+        "opening_label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Opening Label",
+          "type": "string"
+        },
+        "closing_label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Closing Label",
+          "type": "string"
+        },
+        "continuation": {
+          "$ref": "#/$defs/ContinuationRule"
+        }
+      },
+      "required": [
+        "operation",
+        "date_format",
+        "period_date_format",
+        "money_format",
+        "amount_direction",
+        "account_label",
+        "opening_label",
+        "closing_label",
+        "continuation"
+      ],
+      "title": "TableSingleDateCardRule",
+      "type": "object"
+    },
     "TableWellsPersonalRule": {
       "additionalProperties": false,
       "properties": {
@@ -447,6 +511,15 @@
       "title": "Header Line Tolerance",
       "type": "number"
     },
+    "crop_top_mode": {
+      "default": "header_bottom",
+      "enum": [
+        "header_bottom",
+        "page_top"
+      ],
+      "title": "Crop Top Mode",
+      "type": "string"
+    },
     "crop_top_anchor": {
       "maximum": 7,
       "minimum": 0,
@@ -503,6 +576,7 @@
             "mapping": {
               "table_bank_activity_v1": "#/$defs/TableBankStatementRule",
               "table_card_activity_v1": "#/$defs/TableCardStatementRule",
+              "table_single_date_card_activity_v1": "#/$defs/TableSingleDateCardRule",
               "table_wells_personal_activity_v1": "#/$defs/TableWellsPersonalRule"
             },
             "propertyName": "operation"
@@ -510,6 +584,9 @@
           "oneOf": [
             {
               "$ref": "#/$defs/TableCardStatementRule"
+            },
+            {
+              "$ref": "#/$defs/TableSingleDateCardRule"
             },
             {
               "$ref": "#/$defs/TableBankStatementRule"

@@ -36,7 +36,7 @@ output/behavior; it does not imply full private-archive regression coverage.
 | `pdf_lendingclubsavings_202601` | 0.1.1 | Savings line PDF | Savings/balance-evidence tests | Printed summary and row balances; reject truncated tail. |
 | `pdf_occubank_201409` | 0.2.0 | Multi-account bank PDF | Finite V2 pilot and synthetic refusal tests | All 113 archived sources pass two-account row and running-balance parity; 78 periods use bounded first-page annotations. Other account sections remain outside capture. |
 | `pdf_occucc_201904` | 0.2.0 | Credit-card line PDF | Finite V2 pilot and synthetic refusal tests | All 32 archived sources pass accepted-row and printed-balance parity; header interest is a separate located charge. Complete page capture remains open. |
-| `pdf_synchrony-amzncc_202501` | 0.3.0 | Store-card table PDF | No parser-specific test found | Word-header matching, dynamic table geometry and continuation. |
+| `pdf_synchrony-amzncc_202501` | 0.3.0 | Store-card table PDF | Ten authorized PDFs outside the imported archive; 97 accepted rows | Declared page-top anchored geometry, single-date card evidence and shared continuation; four pre-period activity dates stay unposted. |
 | `pdf_transamerica_202104` | 0.2.0 | Retirement line PDF | Finite V2 period-summary pilot and synthetic refusal tests | All 12 routed archive PDFs pass 49-component printed-value parity; full page capture remains open. |
 | `pdf_usbankreicc_201405` | 0.2.0 | Credit-card line PDF | No parser-specific test found | Metadata/line extraction and row-boundary coverage. |
 | `pdf_vanguard_202210` | 0.2.0 | Retirement line PDF | No parser-specific test found | Quarterly period, account identity and activity semantics. |

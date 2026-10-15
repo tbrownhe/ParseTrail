@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "parser_id": "synchrony_amazon_store_card",
+  "revision": "1",
+  "suffix": ".pdf",
+  "kind": "statement",
+  "operation": "anchored_columns_table_v1",
+  "headers": ["Date", "Reference", "Description", "Amount"],
+  "partial_suffix_min": 3,
+  "header_line_tolerance": 10.0,
+  "crop_top_mode": "page_top",
+  "crop_top_anchor": 3,
+  "crop_top_offset": 0.0,
+  "boundaries": [
+    {"kind": "anchor_edge", "anchor": 0, "edge": "x0", "offset": -3.0},
+    {"kind": "anchor_edge", "anchor": 1, "edge": "x0", "offset": -8.0},
+    {"kind": "anchor_edge", "anchor": 2, "edge": "x0", "offset": -8.0},
+    {"kind": "anchor_edge", "anchor": 3, "edge": "x0", "offset": -20.0},
+    {"kind": "anchor_edge", "anchor": 3, "edge": "x1", "offset": 3.0}
+  ],
+  "horizontal_strategy": "text",
+  "snap_y_tolerance": 3.0,
+  "statement": {
+    "operation": "table_single_date_card_activity_v1",
+    "date_format": "MM/DD",
+    "period_date_format": "MM/DD/YYYY",
+    "money_format": "usd_symbol_2dp",
+    "amount_direction": "invert_for_liability",
+    "account_label": "Account Number ending in",
+    "opening_label": "Previous Balance as of",
+    "closing_label": "New Balance as of",
+    "continuation": {
+      "operation": "table_continuation_v1",
+      "mode": "amount_on_last_row",
+      "start_columns": [0],
+      "break_columns": [0],
+      "description_column": 2,
+      "amount_column": 3,
+      "max_group_rows": 5,
+      "allow_cross_page": false
+    }
+  }
+}
