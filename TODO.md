@@ -264,6 +264,11 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   reopened all 113 sources, 6,427 observations and 295 dispositions without
   changing source bytes. Other account sections, complete page capture,
   signed routing and native acceptance remain open.
+  Older Citi now has a finite default-layout continuation operation. Both
+  archived PDFs matched the accepted reader on account, period, printed
+  balances and all 65 dated rows; both printed equations passed. Their exact
+  source evidence reopened from a temporary V2 profile with unchanged hashes.
+  Complete monetary-line dispositions and page capture remain open.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and

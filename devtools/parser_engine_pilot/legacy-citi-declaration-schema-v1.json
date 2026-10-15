@@ -1,0 +1,110 @@
+{
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "const": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "parser_id": {
+      "pattern": "^[a-z][a-z0-9_-]{2,79}$",
+      "title": "Parser Id",
+      "type": "string"
+    },
+    "revision": {
+      "pattern": "^[1-9][0-9]{0,8}$",
+      "title": "Revision",
+      "type": "string"
+    },
+    "suffix": {
+      "const": ".pdf",
+      "title": "Suffix",
+      "type": "string"
+    },
+    "kind": {
+      "const": "statement",
+      "title": "Kind",
+      "type": "string"
+    },
+    "operation": {
+      "const": "layout_date_start_continuation_v1",
+      "title": "Operation",
+      "type": "string"
+    },
+    "text_channel": {
+      "const": "pdf_default_layout_v1",
+      "title": "Text Channel",
+      "type": "string"
+    },
+    "date_format": {
+      "const": "MM/DD/YY+MM/DD",
+      "title": "Date Format",
+      "type": "string"
+    },
+    "money_format": {
+      "const": "usd_symbol_2dp",
+      "title": "Money Format",
+      "type": "string"
+    },
+    "amount_direction": {
+      "const": "invert_for_liability",
+      "title": "Amount Direction",
+      "type": "string"
+    },
+    "period_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Period Label",
+      "type": "string"
+    },
+    "account_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Account Label",
+      "type": "string"
+    },
+    "opening_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Opening Label",
+      "type": "string"
+    },
+    "closing_label": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Closing Label",
+      "type": "string"
+    },
+    "table_header": {
+      "maxLength": 80,
+      "minLength": 1,
+      "title": "Table Header",
+      "type": "string"
+    },
+    "max_continuation_lines": {
+      "const": 5,
+      "title": "Max Continuation Lines",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "schema_version",
+    "parser_id",
+    "revision",
+    "suffix",
+    "kind",
+    "operation",
+    "text_channel",
+    "date_format",
+    "money_format",
+    "amount_direction",
+    "period_label",
+    "account_label",
+    "opening_label",
+    "closing_label",
+    "table_header",
+    "max_continuation_lines"
+  ],
+  "title": "LegacyCitiDefinition",
+  "type": "object"
+}

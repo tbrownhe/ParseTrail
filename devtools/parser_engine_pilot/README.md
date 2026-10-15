@@ -202,6 +202,16 @@ located dispositions with unchanged source hashes. Optional personal credit
 line sections stay outside this two-account pilot; complete capture, signed
 routing and native acceptance remain open.
 
+`legacy_citi_lines.py` adds a finite older-Citi text-column operation over
+the bounded default-layout decoder. It uses the printed `Amount` header edge
+and up to five same-page continuation lines; an unresolved dated start refuses
+the statement. Both archived PDFs matched the accepted reader on period,
+account, printed balances and 65 dated rows, including foreign multi-line
+detail, and both printed equations passed. A temporary V2 profile reopened
+both snapshots with unchanged source hashes. This is a small parity sample;
+complete monetary-line dispositions, full page capture, signed routing and
+native acceptance remain open.
+
 Every Chase-referenced fixture in the authorized closed-copy archive matched
 the accepted reader's account, period, printed balances and rows in a read-only
 comparison. The comparison also accounted for every date-prefixed line as a

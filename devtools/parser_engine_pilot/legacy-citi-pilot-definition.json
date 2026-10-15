@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "parser_id": "pdf_citicc_201505",
+  "revision": "1",
+  "suffix": ".pdf",
+  "kind": "statement",
+  "operation": "layout_date_start_continuation_v1",
+  "text_channel": "pdf_default_layout_v1",
+  "date_format": "MM/DD/YY+MM/DD",
+  "money_format": "usd_symbol_2dp",
+  "amount_direction": "invert_for_liability",
+  "period_label": "Billing Period:",
+  "account_label": "Account number ending in:",
+  "opening_label": "Previous balance",
+  "closing_label": "New balance",
+  "table_header": "Date Description Amount",
+  "max_continuation_lines": 5
+}

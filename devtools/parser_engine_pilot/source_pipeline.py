@@ -23,6 +23,7 @@ from devtools.parser_engine_pilot.citi_source_output import from_citi
 from devtools.parser_engine_pilot.dual_text_card_lines import parse_dual_text_card
 from devtools.parser_engine_pilot.engine import parse_csv
 from devtools.parser_engine_pilot.investment_summary_lines import parse_investment_summary
+from devtools.parser_engine_pilot.legacy_citi_lines import parse_legacy_citi
 from devtools.parser_engine_pilot.loan_history_lines import parse_loan_history
 from devtools.parser_engine_pilot.occu_bank_lines import OccuBankError, parse_occu_bank
 from devtools.parser_engine_pilot.occu_card_lines import parse_occu_card
@@ -71,6 +72,9 @@ OCCU_CARD_DEFINITION_SHA256 = hashlib.sha256(
 ).hexdigest()
 OCCU_BANK_DEFINITION_SHA256 = hashlib.sha256(
     Path(__file__).with_name("occu-bank-pilot-definition.json").read_bytes()
+).hexdigest()
+LEGACY_CITI_DEFINITION_SHA256 = hashlib.sha256(
+    Path(__file__).with_name("legacy-citi-pilot-definition.json").read_bytes()
 ).hexdigest()
 
 
@@ -145,6 +149,10 @@ def build_source_evidence(source: bytes, definition: bytes, *, suffix: Literal["
                     if str(error) != "missing_annotation_period":
                         raise
                     output = parse_occu_bank(definition, lines, decode_pdf_period_annotations(source))
+            elif digest == LEGACY_CITI_DEFINITION_SHA256:
+                pages = decode_pdf_default_layout(source).pages
+                lines = page_lines(source, pages, extraction_library="pdfplumber-bounded-layout-default-v1")
+                output = parse_legacy_citi(definition, lines)
             else:
                 raise SourcePipelineError("unsupported_definition_revision")
         if (
