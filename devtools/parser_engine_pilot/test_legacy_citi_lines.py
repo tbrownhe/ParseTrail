@@ -18,7 +18,7 @@ from devtools.parser_engine_pilot.pdf_lines import page_lines
 DEFINITION = Path(__file__).with_name("legacy-citi-pilot-definition.json").read_bytes()
 
 
-def lines(changes: dict[int, str] | None = None):
+def lines(changes: dict[int, str] | None = None, extra: tuple[str, ...] = ()):
     source = [
         "www.citicards.com",
         "Account number ending in: 1234",
@@ -32,6 +32,7 @@ def lines(changes: dict[int, str] | None = None):
     ]
     for index, replacement in (changes or {}).items():
         source[index] = replacement
+    source.extend(extra)
     return page_lines(
         b"%PDF-synthetic",
         ["\n".join(source)],
@@ -39,8 +40,8 @@ def lines(changes: dict[int, str] | None = None):
     )
 
 
-def parse(changes: dict[int, str] | None = None):
-    return parse_legacy_citi(DEFINITION, lines(changes))
+def parse(changes: dict[int, str] | None = None, extra: tuple[str, ...] = ()):
+    return parse_legacy_citi(DEFINITION, lines(changes, extra))
 
 
 def test_bounded_continuation_and_liability_equation() -> None:
@@ -68,6 +69,32 @@ def test_missing_amount_or_changed_balance_refuses() -> None:
         parse({4: "New balance $91.00"})
     with pytest.raises(LegacyCitiError, match="missing_or_ambiguous_account"):
         parse({1: "Account number absent"})
+
+
+def test_parallel_column_and_repeated_balance_are_located() -> None:
+    output = parse(
+        {
+            2: "Billing Period:01/01/26-01/31/26 01/05-01/31",
+            6: "01/05 AUTOPAY AUTO-PMT -$20.00 No Late Fee: $10.00",
+        },
+        ("Please pay New balance $90.00 promptly",),
+    )
+    assert [row.amount.minor for row in output.payload.accounts[0].rows] == [2000, -1000]
+    assert [item.code for item in output.payload.dispositions] == [
+        "parallel_no_late_fee",
+        "repeated_closing_balance",
+    ]
+    with pytest.raises(LegacyCitiError, match="ambiguous_parallel_money"):
+        parse({6: "01/05 AUTOPAY AUTO-PMT -$20.00 Unknown $10.00"})
+
+
+def test_zero_activity_requires_printed_equal_balances_and_table_header() -> None:
+    output = parse({4: "New balance $100.00", 6: "", 7: "", 8: ""})
+    assert output.payload.accounts[0].rows == ()
+    with pytest.raises(LegacyCitiError, match="printed_card_balance_equation"):
+        parse({6: "", 7: "", 8: ""})
+    with pytest.raises(LegacyCitiError, match="missing_activity_rows"):
+        parse({4: "New balance $100.00", 5: "", 6: "", 7: "", 8: ""})
 
 
 def test_definition_schema_and_unknown_field() -> None:

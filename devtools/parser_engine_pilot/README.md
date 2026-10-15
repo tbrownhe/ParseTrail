@@ -205,12 +205,15 @@ routing and native acceptance remain open.
 `legacy_citi_lines.py` adds a finite older-Citi text-column operation over
 the bounded default-layout decoder. It uses the printed `Amount` header edge
 and up to five same-page continuation lines; an unresolved dated start refuses
-the statement. Both archived PDFs matched the accepted reader on period,
-account, printed balances and 65 dated rows, including foreign multi-line
-detail, and both printed equations passed. A temporary V2 profile reopened
-both snapshots with unchanged source hashes. This is a small parity sample;
-complete monetary-line dispositions, full page capture, signed routing and
-native acceptance remain open.
+the statement. All 135 routed archive PDFs (including two direct fixtures)
+matched the accepted reader on period, account, printed balances and 1,740
+dated rows, including foreign multi-line detail. Every printed equation
+passed. Five zero-activity statements retain zero rows only with matching
+printed balances. Repeated headers/balances and parallel column text are
+547 located dispositions include four `No Late Fee` amounts excluded from
+activity. All 135 snapshots reopened from a temporary V2 profile with
+unchanged source hashes. Complete monetary-line dispositions, full page
+capture, signed routing and native acceptance remain open.
 
 `anchored_table.py` and its bounded worker implement a reusable PDF table
 operation: strict declarations name header words and finite column edge or

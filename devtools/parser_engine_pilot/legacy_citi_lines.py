@@ -13,6 +13,7 @@ from parsetrail.core.source_evidence import (
     MoneyValue,
     ObservationEvidence,
     PdfLine,
+    SourceDisposition,
     SourceEvidence,
     SourceFragment,
     StatementAccount,
@@ -32,7 +33,7 @@ MONEY_TOKEN = re.compile(MONEY)
 DATE_START = re.compile(r"^\d{2}/\d{2}\s")
 ROW = re.compile(
     rf"^(?P<transaction>\d{{2}}/\d{{2}})\s+(?:(?P<posting>\d{{2}}/\d{{2}})\s+)?"
-    rf"(?P<description>.+?)\s+(?P<amount>{MONEY})$"
+    rf"(?P<description>.+?)\s+(?P<amount>{MONEY})(?:\s+(?P<trailing>.+))?$"
 )
 
 
@@ -113,12 +114,16 @@ def _truncate_words(raw: str, max_index: int) -> str:
     return " ".join(words)
 
 
-def _rows(definition: LegacyCitiDefinition, lines: PDFLineEvidence) -> list[tuple[str, tuple[PageLine, ...]]]:
+def _rows(
+    definition: LegacyCitiDefinition, lines: PDFLineEvidence
+) -> tuple[list[tuple[str, tuple[PageLine, ...]]], list[SourceDisposition]]:
     pages: dict[int, list[PageLine]] = {}
     for line in lines.lines:
         if line.normalized:
             pages.setdefault(line.page, []).append(line)
     found = []
+    dispositions = []
+    saw_header = False
     for page_lines in pages.values():
         headers = [
             line
@@ -127,9 +132,12 @@ def _rows(definition: LegacyCitiDefinition, lines: PDFLineEvidence) -> list[tupl
         ]
         if not headers:
             continue
-        if len(headers) != 1:
-            raise LegacyCitiError("ambiguous_table_header")
+        saw_header = True
         header = headers[0]
+        dispositions.extend(
+            SourceDisposition(code="repeated_table_header", location=_location(line), raw_values=(line.raw,))
+            for line in headers[1:]
+        )
         max_index = header.raw.lower().index("amount") + len("amount")
         starts = [i for i, line in enumerate(page_lines) if DATE_START.match(line.normalized)]
         for index in starts:
@@ -145,12 +153,12 @@ def _rows(definition: LegacyCitiDefinition, lines: PDFLineEvidence) -> list[tupl
                 text += " " + _truncate_words(page_lines[next_index].raw, max_index)
             if not MONEY_TOKEN.search(text):
                 raise LegacyCitiError("unresolved_dated_start")
-            if len(text) > 1024 or len(MONEY_TOKEN.findall(text)) != 1:
+            if len(text) > 1024 or len(MONEY_TOKEN.findall(text)) > 2:
                 raise LegacyCitiError("ambiguous_row_amount")
             found.append((text, tuple(fragments)))
-    if not found:
+    if not found and (not saw_header or any(DATE_START.match(line.normalized) for line in lines.lines)):
         raise LegacyCitiError("missing_activity_rows")
-    return found
+    return found, dispositions
 
 
 def parse_legacy_citi(definition_bytes: bytes, lines: PDFLineEvidence) -> SourceEvidence:
@@ -159,13 +167,13 @@ def parse_legacy_citi(definition_bytes: bytes, lines: PDFLineEvidence) -> Source
     if lines.adapter_version != ADAPTER_VERSION or lines.extraction_library != "pdfplumber-bounded-layout-default-v1":
         raise LegacyCitiError("source_channel_mismatch")
     period_pattern = re.compile(
-        rf"^{re.escape(definition.period_label)}\s+(?P<start>\d{{2}}/\d{{2}}/\d{{2}})-(?P<end>\d{{2}}/\d{{2}}/\d{{2}})$"
+        rf"^{re.escape(definition.period_label)}\s*(?P<start>\d{{2}}/\d{{2}}/\d{{2}})-(?P<end>\d{{2}}/\d{{2}}/\d{{2}})(?:\s|$)"
     )
     account_pattern = re.compile(rf"{re.escape(definition.account_label)}\s+(?P<suffix>\d{{4}})\b")
     opening_pattern = re.compile(rf"^{re.escape(definition.opening_label)}\s+(?P<amount>{MONEY})$")
-    closing_pattern = re.compile(rf"^{re.escape(definition.closing_label)}\s+(?P<amount>{MONEY})$")
+    closing_pattern = re.compile(rf"\b{re.escape(definition.closing_label)}\s+(?P<amount>{MONEY})(?:\s|$)")
     period_line, period_match = _one(
-        [(line, match) for line in lines.lines if (match := period_pattern.fullmatch(line.normalized))],
+        [(line, match) for line in lines.lines if (match := period_pattern.match(line.normalized))],
         "missing_or_ambiguous_period",
     )
     start, end = _date(period_match["start"]), _date(period_match["end"])
@@ -180,14 +188,18 @@ def parse_legacy_citi(definition_bytes: bytes, lines: PDFLineEvidence) -> Source
         [(line, match) for line in lines.lines if (match := opening_pattern.fullmatch(line.normalized))],
         "missing_or_ambiguous_opening",
     )
-    closing_line, closing_match = _one(
-        [(line, match) for line in lines.lines if (match := closing_pattern.fullmatch(line.normalized))],
-        "missing_or_ambiguous_closing",
-    )
+    closings = [(line, match) for line in lines.lines if (match := closing_pattern.search(line.normalized))]
+    if not closings:
+        raise LegacyCitiError("missing_or_ambiguous_closing")
+    closing_line, closing_match = closings[0]
+    if any(_money(match["amount"]) != _money(closing_match["amount"]) for _, match in closings[1:]):
+        raise LegacyCitiError("conflicting_printed_closing")
     opening, closing = -_money(opening_match["amount"]), -_money(closing_match["amount"])
     rows = []
     occurrences: Counter[tuple[str, str | None, int, str]] = Counter()
-    for text, fragments in _rows(definition, lines):
+    candidates, table_dispositions = _rows(definition, lines)
+    tail_dispositions = []
+    for text, fragments in candidates:
         match = ROW.fullmatch(text)
         if match is None:
             raise LegacyCitiError("unresolved_dated_row")
@@ -199,8 +211,18 @@ def parse_legacy_citi(definition_bytes: bytes, lines: PDFLineEvidence) -> Source
         if not start <= posting <= end:
             raise LegacyCitiError("posting_outside_period")
         amount = -_money(match["amount"])
-        description = match["description"]
+        description_raw = match["description"]
+        description = " ".join(description_raw.split())
         span = _location(fragments[0], fragments[-1]) if len(fragments) > 1 else _location(fragments[0])
+        if match["trailing"]:
+            trailing = match["trailing"]
+            if MONEY_TOKEN.search(trailing):
+                if re.fullmatch(rf"No Late Fee:\s+{MONEY}", trailing) is None:
+                    raise LegacyCitiError("ambiguous_parallel_money")
+                tail_code = "parallel_no_late_fee"
+            else:
+                tail_code = "parallel_column_tail"
+            tail_dispositions.append(SourceDisposition(code=tail_code, location=span, raw_values=(trailing,)))
         key = (posting.isoformat(), transaction.isoformat() if match["posting"] else None, amount, description)
         occurrence = occurrences[key]
         occurrences[key] += 1
@@ -227,7 +249,7 @@ def parse_legacy_citi(definition_bytes: bytes, lines: PDFLineEvidence) -> Source
                     if match["posting"]
                     else None
                 ),
-                description=TextValue(raw=description, text=description, provenance="observed", locations=(span,)),
+                description=TextValue(raw=description_raw, text=description, provenance="observed", locations=(span,)),
                 amount=MoneyValue(raw=match["amount"], minor=amount, provenance="observed", locations=(span,)),
                 running_balance=None,
                 components=(),
@@ -279,7 +301,12 @@ def parse_legacy_citi(definition_bytes: bytes, lines: PDFLineEvidence) -> Source
                     rows=tuple(rows),
                 ),
             ),
-            dispositions=(),
+            dispositions=tuple(table_dispositions)
+            + tuple(tail_dispositions)
+            + tuple(
+                SourceDisposition(code="repeated_closing_balance", location=_location(line), raw_values=(line.raw,))
+                for line, _ in closings[1:]
+            ),
             capture_verified=False,
             independent_balance_verified=True,
         ),

@@ -264,11 +264,13 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   reopened all 113 sources, 6,427 observations and 295 dispositions without
   changing source bytes. Other account sections, complete page capture,
   signed routing and native acceptance remain open.
-  Older Citi now has a finite default-layout continuation operation. Both
-  archived PDFs matched the accepted reader on account, period, printed
-  balances and all 65 dated rows; both printed equations passed. Their exact
-  source evidence reopened from a temporary V2 profile with unchanged hashes.
-  Complete monetary-line dispositions and page capture remain open.
+  Older Citi now has a finite default-layout continuation operation. All 135
+  routed archived PDFs matched the accepted reader on account, period, printed
+  balances and all 1,740 dated rows; every printed equation passed. Five
+  zero-activity statements keep zero rows only with matching printed balances.
+  Temporary V2 storage reopened all 135 sources, 1,740 rows and 547 located
+  dispositions with unchanged hashes. Complete monetary-line dispositions
+  and page capture remain open.
   Middle Citi now uses a generic declaration-driven header-anchor table worker.
   All eight routed archive PDFs matched the accepted reader on account,
   period, printed balances and 323 rows. The 1,311 raw table rows divide into
