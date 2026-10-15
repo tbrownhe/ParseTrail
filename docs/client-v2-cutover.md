@@ -120,6 +120,8 @@ unchanged source hashes. The Citi word/table pilot now also uses that worker
 boundary: 543 raw rows matched the current extractor across ten recent-layout
 archive PDFs, with unchanged hashes. Full page capture, runtime integration and
 Intel Mac native checks remain open, so this does not admit PDFs to runtime imports.
+The read-only Citi audit now feeds its candidate resolver from the bounded text
+and table workers; its legacy parser remains only the accepted-result baseline.
 The XLSX adapter also runs in a fixed, bounded worker and matches the
 in-process synthetic evidence. It has no referenced archive workbook and
 still needs Intel Mac native checks before runtime admission.

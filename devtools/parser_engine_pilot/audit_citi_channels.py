@@ -19,6 +19,8 @@ from parsetrail.core.utils import PDFReader, get_absolute_date
 from parsetrail.plugins.pdf_citicc_202506 import Parser as OlderCiti
 from parsetrail.plugins.pdf_citicc_202511 import Parser as RecentCiti
 
+from devtools.parser_engine_pilot.bounded_citi import extract_bounded_citi
+from devtools.parser_engine_pilot.bounded_pdf_text import decode_text
 from devtools.parser_engine_pilot.channel_occurrences import Candidate, match_occurrences
 from devtools.parser_engine_pilot.citi_channels import CITI_OCCURRENCE_RULE, resolve
 from devtools.parser_engine_pilot.citi_source_dispositions import dispose_dated_lines
@@ -126,26 +128,23 @@ def audit(source: bytes) -> dict[str, int | bool]:
             raise ValueError("wrong_or_ambiguous_citi_layout")
         parser = RecentCiti()
         accepted = parser.parse(reader)
-        parser.vertical_lines = None
-        parser.crop_settings = None
-        parser.stop = False
-        table_transactions = parser.parse_transaction_array(parser.get_transaction_array())
-        parser.vertical_lines = None
-        parser.crop_settings = None
-        parser.stop = False
+        bounded_text = decode_text(source)
+        if tuple(reader.pages_simple or []) != bounded_text:
+            raise ValueError("bounded_simple_text_changed")
+        bounded_pages = list(bounded_text)
+        bounded_table = extract_bounded_citi(source)
+        table_transactions = parser.parse_transaction_array([list(row.raw_cells) for row in bounded_table.rows])
         page_rows = []
-        for page_number, page in enumerate(reader.PDF.pages, 1):
-            if parser.stop:
-                break
-            if not parser.vertical_lines:
-                parser.get_vertical_lines(page)
-            if parser.vertical_lines:
-                page_rows.extend(
-                    (page_number, row_number, row)
-                    for row_number, row in enumerate(
-                        parser.parse_transaction_array(parser.get_transactions_from_page(page)), 1
-                    )
+        for page in bounded_table.pages:
+            page_rows.extend(
+                (page.page, row_number, row)
+                for row_number, row in enumerate(
+                    parser.parse_transaction_array(
+                        [list(item.raw_cells) for item in bounded_table.rows if item.page == page.page]
+                    ),
+                    1,
                 )
+            )
 
         def row_key(row):
             return (row.transaction_date, row.posting_date, row.amount, row.desc)
@@ -165,7 +164,7 @@ def audit(source: bytes) -> dict[str, int | bool]:
             for page_number, row_number, row in page_rows
         ]
         text = []
-        for page_number, page in enumerate(reader.pages_simple or [], 1):
+        for page_number, page in enumerate(bounded_pages, 1):
             for line_number, line in enumerate(page.splitlines(), 1):
                 match = parser.TEXT_TRANSACTION.match(line)
                 if match is None:
@@ -196,8 +195,8 @@ def audit(source: bytes) -> dict[str, int | bool]:
             raise ValueError("accepted_row_count_changed")
         account = accepted.accounts[0]
         reconciles = account.start_balance + sum(row.amount for row in account.transactions) == account.end_balance
-        located_fees = fee_candidates(parser, reader.pages_simple or [])
-        source_dispositions = dispose_dated_lines(parser, reader.pages_simple or [], table, located_fees)
+        located_fees = fee_candidates(parser, bounded_pages)
+        source_dispositions = dispose_dated_lines(parser, bounded_pages, table, located_fees)
         source_counts = Counter(item.status for item in source_dispositions)
         resolution = resolve(
             table,
@@ -280,6 +279,8 @@ def audit(source: bytes) -> dict[str, int | bool]:
             raise ValueError("unexpected_description_difference")
     return {
         "table_candidates": len(table),
+        "bounded_raw_table_rows": len(bounded_table.rows),
+        "bounded_simple_text_pages": len(bounded_text),
         "text_candidates": len(text),
         "exact_table_occurrences": counts["exact_table_occurrence"],
         "unresolved_overlaps": counts["unresolved_overlap"],

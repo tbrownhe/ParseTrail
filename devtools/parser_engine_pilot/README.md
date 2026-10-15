@@ -178,7 +178,8 @@ dated starts, each linked to exactly one of 486 resolved rows. The ledger report
 72 table copies, one fee and zero unresolved dated starts. Ten printed balance
 equations pass; source hashes were unchanged. This check covers dated starts,
 not every non-dated item on every page. The read-only audit still uses the old
-in-process reader for comparison. [`bounded_citi.py`](bounded_citi.py) now moves
+in-process reader as its accepted-result baseline. Its candidate path now uses
+the bounded text and table workers. [`bounded_citi.py`](bounded_citi.py) moves
 Citi word/table extraction to the shared resource-limited worker. It returned
 the same 543 raw table/interest rows as the accepted reader across those ten
 sources and retained page, row and table-region locations. Synthetic PDF parity
@@ -209,7 +210,8 @@ Run one authorized source with:
 client/.venv/Scripts/python.exe -m devtools.parser_engine_pilot.audit_citi_channels C:\private\recent-citi.pdf
 ```
 
-The audit uses the existing unbounded PDF decoder for comparison. The pilot's
+The audit's legacy baseline and layout classification remain in process; its
+candidate text and table evidence comes from the bounded workers. The pilot's
 finite resolver and dated-start inventory are not runtime parsers or full-page
 capture proof.
 
