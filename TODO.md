@@ -173,6 +173,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   [upstream boundary review](docs/client-v2-upstream-boundary-review.md) orders
   typed evidence, Citi's exit from 1.x parser methods and bounded admission
   ahead of the approved 2.0 storage implementation.
+  A strict shared source-evidence model now represents statement and activity
+  export payloads, typed locations, raw values and unknown/derived provenance.
+  A synthetic CSV adapter round-trips through it; Citi conversion and bounded
+  admission are still open before the released store.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and

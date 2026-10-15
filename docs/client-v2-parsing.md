@@ -130,6 +130,11 @@ The [P2-1 parser inventory](client-v2-parser-inventory.md) lists all shipped
 parser IDs, source-level fixture coverage, repeated operations and likely
 client-built exceptions. Read-only archive replay and installed-catalog checks
 have been performed; declarative parity and fixture gaps remain open.
+The [2.0 upstream review](client-v2-upstream-boundary-review.md) now documents
+the router/model changes before storage. A strict shared evidence contract
+accepts statement and activity-export payloads; a synthetic CSV adapter
+round-trips raw cells and an unknown balance. Citi conversion and bounded
+admission into that contract are still open.
 
 The isolated [P2-2 table pilot](../devtools/parser_engine_pilot/README.md)
 demonstrates strict JSON validation, exact components, source locations,

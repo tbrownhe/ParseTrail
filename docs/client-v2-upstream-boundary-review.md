@@ -53,3 +53,14 @@ after evidence is admitted and an explicit source account is mapped.
 This sequence avoids baking the 1.x `Statement` shape or the CSV-only pilot
 snapshot into the released 2.0 database. It does not require replaying old
 profiles or carrying compatibility aliases.
+
+The first upstream proof is now in [`source_evidence.py`](../client/src/parsetrail/core/source_evidence.py):
+a strict, immutable version-1 envelope with distinct statement and activity
+export payloads, typed PDF/CSV/XLSX locations, observed/derived/unknown value
+provenance, source fragments and dispositions. It rejects accounting fields,
+duplicate row IDs and unsupported versions. Statement balances use exact
+minor-unit equations only when both endpoints and row amounts are observed.
+The [table adapter](../devtools/parser_engine_pilot/table_source_output.py)
+round-trips a synthetic CSV with an unknown balance through this contract.
+The recent Citi adapter and bounded admission function remain the next proof;
+this schema is not yet the released stored snapshot.
