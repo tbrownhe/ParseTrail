@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "parser_id": "pdf_wfloanper_202306",
+  "revision": "1",
+  "suffix": ".pdf",
+  "kind": "statement",
+  "operation": "printed_principal_allocations_v1",
+  "date_format": "MM/DD/YY",
+  "money_format": "usd_symbol_2dp",
+  "balance_scope": "principal_component",
+  "account_label": "Account Number",
+  "statement_date_label": "Statement Date",
+  "opening_label": "Prior Principal Balance",
+  "closing_label": "Ending Principal Balance",
+  "interest_label": "INTEREST PAYMENT",
+  "principal_label": "PRINCIPAL PAYMENT",
+  "max_activity_rows": 50
+}

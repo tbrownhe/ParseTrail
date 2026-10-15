@@ -255,25 +255,40 @@ class StatementPayload(EvidenceModel):
 
     @model_validator(mode="after")
     def consistent(self) -> StatementPayload:
-        if self.start.iso is None or self.end.iso is None or self.start.iso >= self.end.iso:
+        if self.end.iso is None or (self.start.iso is not None and self.start.iso >= self.end.iso):
             raise ValueError("statement period")
         if len({account.source_identity for account in self.accounts}) != len(self.accounts):
             raise ValueError("duplicate source account")
         if any(
-            row.date.iso < self.start.iso or row.date.iso > self.end.iso
+            (self.start.iso is not None and row.date.iso < self.start.iso) or row.date.iso > self.end.iso
             for account in self.accounts
             for row in account.rows
         ):
             raise ValueError("statement row date outside period")
         if self.independent_balance_verified:
             for account in self.accounts:
+                if account.balance_scope == "principal_component":
+                    if any(
+                        not row.components
+                        or any(component.amount.provenance != "observed" for component in row.components)
+                        for row in account.rows
+                    ):
+                        raise ValueError("independent principal balance needs printed components")
+                    balance_change = sum(
+                        component.amount.minor
+                        for row in account.rows
+                        for component in row.components
+                        if component.role == "principal"
+                    )
+                else:
+                    balance_change = sum(row.amount.minor for row in account.rows)
                 if (
                     account.opening is None
                     or account.closing is None
                     or account.opening.provenance != "observed"
                     or account.closing.provenance != "observed"
                     or any(row.amount.provenance != "observed" for row in account.rows)
-                    or account.opening.minor + sum(row.amount.minor for row in account.rows) != account.closing.minor
+                    or account.opening.minor + balance_change != account.closing.minor
                 ):
                     raise ValueError("independent statement balance equation")
         return self

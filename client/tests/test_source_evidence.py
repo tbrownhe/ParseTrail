@@ -4,6 +4,7 @@ import json
 
 import pytest
 from parsetrail.core.source_evidence import (
+    ComponentEvidence,
     DateValue,
     MoneyValue,
     ObservationEvidence,
@@ -67,6 +68,57 @@ def test_printed_balances_need_exact_independent_equation() -> None:
     assert statement(closing=101, verified=False).payload.independent_balance_verified is False
 
 
+def test_unknown_statement_start_does_not_invent_a_period() -> None:
+    raw = statement(closing=100, verified=True).model_dump(mode="json")
+    raw["payload"]["start"] = {"raw": None, "iso": None, "provenance": "unknown", "locations": []}
+    assert SourceEvidence.model_validate_json(json.dumps(raw)).payload.start.iso is None
+    raw["payload"]["end"] = {"raw": None, "iso": None, "provenance": "unknown", "locations": []}
+    with pytest.raises(ValidationError, match="statement period"):
+        SourceEvidence.model_validate_json(json.dumps(raw))
+
+
+def test_principal_balance_checks_only_printed_principal_components() -> None:
+    rows = tuple(
+        ObservationEvidence(
+            row_id=character * 64,
+            occurrence=0,
+            row_role="activity",
+            source_account="loan account",
+            source_account_form="opaque",
+            date_role="activity_date",
+            date=printed_date("01/15/2026", "2026-01-15", number),
+            description=TextValue(raw=role, text=role, provenance="observed", locations=(line(number),)),
+            amount=money(amount, number),
+            components=(ComponentEvidence(role=role, amount=money(amount, number)),),
+            fragments=(SourceFragment(channel="loan_line", location=line(number), raw_values=(role,)),),
+        )
+        for character, number, role, amount in (("e", 2, "interest", 100), ("f", 3, "principal", 200))
+    )
+    account = StatementAccount(
+        source_identity="loan account",
+        source_identity_form="opaque",
+        balance_scope="principal_component",
+        identity_locations=(line(1),),
+        opening=money(-1000, 1),
+        closing=money(-800, 4),
+        rows=rows,
+    )
+    payload = StatementPayload(
+        kind="statement",
+        start=DateValue(raw=None, iso=None, provenance="unknown", locations=()),
+        end=printed_date("01/31/2026", "2026-01-31", 1),
+        accounts=(account,),
+        dispositions=(),
+        capture_verified=False,
+        independent_balance_verified=True,
+    )
+    assert payload.independent_balance_verified
+    with pytest.raises(ValidationError, match="independent statement balance equation"):
+        StatementPayload.model_validate(
+            payload.model_dump() | {"accounts": (account.model_copy(update={"closing": money(-700, 4)}),)}
+        )
+
+
 def test_unknown_value_is_distinct_from_zero_and_derived_value() -> None:
     unknown = MoneyValue(raw="Unavailable", minor=None, provenance="unknown", locations=(line(4),))
     assert unknown.minor is None
@@ -125,9 +177,9 @@ def test_period_summary_cannot_masquerade_as_posted_activity() -> None:
         "fragments": (SourceFragment(channel="summary", location=line(2), raw_values=("Additions $1.00 $1.00",)),),
     }
     assert ObservationEvidence(**values).row_role == "period_summary"
-    with pytest.raises(ValidationError, match="summary row date role"):
+    with pytest.raises(ValidationError, match="period-end row date role"):
         ObservationEvidence(**(values | {"date_role": "posting_date"}))
-    with pytest.raises(ValidationError, match="summary row date role"):
+    with pytest.raises(ValidationError, match="period-end row date role"):
         ObservationEvidence(**(values | {"row_role": "activity"}))
 
 

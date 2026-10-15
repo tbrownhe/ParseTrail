@@ -258,6 +258,17 @@ identity. Temporary V2 storage reopened 12 sources, 49 observations and 92
 located interleaved-text dispositions with unchanged hashes. Full-page
 capture, account-identity review and native acceptance remain open.
 
+`wells_loan_lines.py` retains printed Wells personal-loan interest and
+principal allocations separately. The statement start stays unknown, and a
+scope-aware source-evidence check verifies prior-to-ending principal using
+principal components only. All 45 archive PDFs matched the accepted reader on
+account, printed statement end and closing principal; 41 also matched its
+opening. Four zero-activity PDFs expose the old reader's synthetic origination,
+and two extra principal allocations remain separate instead of being grouped
+into a synthetic payment. Temporary V2 storage reopened 45 sources, 84 source
+rows and 45 located identity-copy dispositions with unchanged hashes. Posting
+treatment, full-page capture and native acceptance remain open.
+
 Every Chase-referenced fixture in the authorized closed-copy archive matched
 the accepted reader's account, period, printed balances and rows in a read-only
 comparison. The comparison also accounted for every date-prefixed line as a

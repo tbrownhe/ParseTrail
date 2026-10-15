@@ -299,6 +299,15 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   cash activity. Temporary V2 storage reopened 12 sources, 49 observations
   and 92 located dispositions with unchanged hashes. Full-page capture,
   account-identity review, signed routing and native acceptance remain open.
+  Wells personal loan now preserves printed principal and interest allocations
+  separately, with an unknown period start. All 45 routed archive PDFs matched
+  account, printed statement end and closing principal; 41 matched the old
+  opening, while four expose its synthetic zero opening and origination row.
+  The 84 printed allocation rows differ intentionally from 86 legacy
+  transformed rows. Each principal balance equation passed. Temporary V2
+  storage reopened all 45 sources and 45 identity-copy dispositions with
+  unchanged hashes. Ledger treatment, full-page capture and native acceptance
+  remain open.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and

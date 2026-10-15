@@ -42,7 +42,7 @@ output/behavior; it does not imply full private-archive regression coverage.
 | `pdf_vanguard_202210` | 0.2.0 | Retirement line PDF | No parser-specific test found | Quarterly period, account identity and activity semantics. |
 | `pdf_wfbankbus_202110` | 0.2.0 | Business bank dynamic table PDF | No parser-specific test found | Layout/table pilot: word coordinates create per-page table boundaries. |
 | `pdf_wfbankper_202105` | 0.2.0 | Personal bank table PDF | Finite V2 table pilot and synthetic refusal tests | All 148 routed archive PDFs pass 6,618-row and printed-balance parity; full page capture remains open. |
-| `pdf_wfloanper_202306` | 0.2.1 | Personal-loan line PDF | Accounting/loan tests reference it | Preserve legacy synthetic-loan uncertainty; no speculative history repair. |
+| `pdf_wfloanper_202306` | 0.2.1 | Personal-loan line PDF | Finite V2 source-allocation pilot and synthetic refusal tests | All 45 routed archive PDFs pass printed-principal parity; the 1.x 31-day period and synthetic origination rows are absent from V2 evidence. |
 | `pdf_yamahafin_202306` | 0.2.0 | Auto-loan line PDF | Loan-readiness tests reference it | Interest/principal evidence and printed endpoint checks. |
 
 The matrix is a coverage map, not a claim that every source instance fits its
@@ -320,6 +320,20 @@ Temporary V2 storage reopened all 12 sources, 49 observations and 92 located
 interleaved-text dispositions with unchanged hashes. Full page capture,
 account-identity review, signed routing and native acceptance remain open.
 
+Wells personal loan evidence now leaves the period start unknown because the
+PDF prints only a statement date. It retains each printed interest or principal
+allocation separately and checks prior-to-ending principal using only the
+principal components. All 45 routed archive PDFs matched the accepted reader
+on account, statement end and printed closing principal; 41 also matched its
+opening principal. The other four have no printed activity and the 1.x reader
+replaced their printed opening with zero to invent a loan-origination row.
+The pilot retains 84 source rows (41 interest, 43 principal); 1.x emits 86
+transformed rows after its synthetic origination and payment grouping. A
+temporary V2 profile reopened all 45 sources, 84 observations and 45 located
+repeated-account dispositions with unchanged hashes. Ledger treatment of
+interest and principal remains an accounting review decision; source evidence
+does not post either allocation.
+
 ## Remaining family operation costs
 
 These estimates complete the source-code review for the other 18 modules in
@@ -330,7 +344,7 @@ conversion priority signal, not permission to embed Python in a declaration.
 | Parser families | Candidate finite operations and source-evidence rule | Cost and conversion gate |
 | --- | --- | --- |
 | `csv_mohela_202411` | Strict CSV header/column mapping, account-group key, component equation, located duplicate occurrences; emit an activity export with unknown principal where printed `Unavailable`. | Low engine cost; high accounting review. Never carry the legacy invented zero opening or split interest rows into observed evidence. |
-| `pdf_capitaloneauto_202402`, `pdf_yamahafin_202306`, `pdf_wfloanper_202306` | Bounded loan history section, row components, exact principal and interest signs, printed principal endpoint, full versus partial transaction dates. | Medium. Capital One has no printed opening; Wells invents origination and groups interest/principal into a payment; Yamaha's date extraction must be checked against located source text. Preserve raw components before any posting decision. |
+| `pdf_capitaloneauto_202402`, `pdf_yamahafin_202306`, `pdf_wfloanper_202306` | Bounded loan history section, row components, exact principal and interest signs, printed principal endpoint, full versus partial transaction dates. | Wells loan now passes 45-source printed-allocation parity while leaving its period start unknown and omitting 1.x synthetic rows. Ledger treatment remains open. Preserve raw components before posting. |
 | `pdf_citicc_201505` | Bounded default-layout column edge and up to five same-page continuation lines; exact dated-start and liability-sign checks. | All 135 routed archive PDFs pass finite evidence parity; complete page capture remains open. |
 | `pdf_citicc_202506` | Generic declared header-anchor geometry, table-cell continuation and liability sign with located tail dispositions. | Eight routed archive PDFs pass finite evidence parity; monetary tails and full page capture remain open. |
 | `pdf_fidelity401k_201810`, `pdf_fidelityhsa_202001`, `pdf_transamerica_202104`, `pdf_vanguard_202210` | Unique period/plan or account anchors, bounded balance sections, amount-bearing lines, explicit cash versus investment scope and a source-labeled date role. | Transamerica passes 12-source account-value parity; its plan prefix remains opaque. Preserve derived period-end dates and keep investment valuation changes separate from cash activity. |
