@@ -333,6 +333,12 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   archive-tested batches; add signed data-catalog loading, caching and publication
   tooling with offline/compatibility checks. No Python/SQL/eval in definitions;
   explicit client-built exceptions require engine support, not downloaded handlers.
+  A local 2.0 catalog verifier/cache now authenticates exact Ed25519-signed
+  snapshots, checks embedded definition hashes and a caller-supplied strict
+  admission rule, and atomically selects a verified offline release. Synthetic
+  tamper, rollback, cancellation and reopen tests pass. Production declaration
+  admission, trusted release key, publication tooling and native installed
+  offline acceptance remain open.
 - [ ] **P2-S — Declaration catalog server:** after accepted client work is merged,
   use a short-lived server branch for the reviewed snapshot API/storage/publication
   contract. A table may hold JSON definitions; clients consume immutable signed

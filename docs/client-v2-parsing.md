@@ -36,6 +36,15 @@ The server holds definitions/signatures, not statements or the private signing k
 Keep the 1.4 bytecode catalog separate for rollback; do not repurpose its manifest
 contract. Installer manifests need not change because parser distribution changes.
 
+The isolated [2.0 data-catalog verifier and cache](../client/src/parsetrail/core/v2_data_catalog.py)
+now signs/verifies exact snapshot bytes, authenticates embedded definition bytes,
+requires a strict declaration-admission callback and switches one offline release
+with an atomic pointer write. Synthetic tests cover tampering, incompatible
+declarations, offline reopen, rollback refusal, explicit rollback and cancellation
+before activation. It does not yet contain a production trusted key, an admission
+registry for all built-in definitions or publication tooling. No 1.4 bytecode
+catalog or server contract was changed.
+
 ## Initial code findings
 
 | Inspected code | Redesign implication |
