@@ -190,8 +190,8 @@ class ObservationEvidence(EvidenceModel):
     row_id: str = Field(pattern=SHA256)
     occurrence: int = Field(ge=0, le=100_000)
     row_role: Literal["activity", "period_summary", "header_charge"]
-    source_account: str = Field(min_length=1, max_length=4096)
-    source_account_form: Literal["full", "last_four", "opaque"]
+    source_account: str | None = Field(min_length=1, max_length=4096)
+    source_account_form: Literal["full", "last_four", "opaque"] | None
     date_role: Literal["posting_date", "activity_date", "statement_period_end"]
     date: DateValue
     transaction_date: DateValue | None = None
@@ -205,6 +205,8 @@ class ObservationEvidence(EvidenceModel):
     def consistent(self) -> ObservationEvidence:
         if (self.row_role in {"period_summary", "header_charge"}) != (self.date_role == "statement_period_end"):
             raise ValueError("period-end row date role")
+        if (self.source_account is None) != (self.source_account_form is None):
+            raise ValueError("source account identity pair")
         if self.source_account_form == "last_four" and (
             len(self.source_account) != 4 or not self.source_account.isdigit()
         ):

@@ -76,7 +76,9 @@ def from_table(evidence: Evidence) -> SourceEvidence:
         raise ValueError("unsupported table evidence")
     rows = []
     for row in evidence.rows:
-        fields = [row.account, row.date, row.description, row.total]
+        fields = [row.date, row.description, row.total]
+        if row.account is not None:
+            fields.insert(0, row.account)
         fields.extend(field for _, field in row.components)
         if row.balance is not None:
             fields.append(row.balance)
@@ -85,8 +87,8 @@ def from_table(evidence: Evidence) -> SourceEvidence:
                 row_role="activity",
                 row_id=row.row_id,
                 occurrence=row.occurrence,
-                source_account=row.account.normalized,
-                source_account_form="opaque",
+                source_account=row.account.normalized if row.account is not None else None,
+                source_account_form="opaque" if row.account is not None else None,
                 date_role=evidence.date_role,
                 date=_date(row.date),
                 transaction_date=None,

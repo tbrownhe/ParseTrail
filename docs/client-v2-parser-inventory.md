@@ -22,7 +22,7 @@ output/behavior; it does not imply full private-archive regression coverage.
 
 | Parser ID (source filename without `.py`) | Source version | Family/layout | Current targeted evidence | Pilot operation or gap |
 | --- | --- | --- | --- | --- |
-| `csv_mohela_202411` | 0.2.1 | Legacy life-of-loan CSV | Loan readiness/replacement tests reference it | Its ordinary `Statement` adaptation is distinct from `core/mohela_export.py` detailed evidence; pilot the detailed reader and compare old history without invented endpoints. |
+| `csv_mohela_202411` | 0.2.1 | Life-of-loan account-history CSV | Two authorized account-history files, 78 source rows; one detailed export, 299 rows | Separate 2.0 definitions retain detailed loan identities or explicitly unknown account identity; neither invents statement endpoints. |
 | `pdf_capitaloneauto_202402` | 0.2.2 | Auto loan PDF with payment components | Accounting and balance-evidence tests | Preserve principal/interest and printed principal; distinguish origination and missing activity. |
 | `pdf_chasecc_202602` | 0.1.0 | Section/line credit-card PDF | Chase synthetic tests | Simple card pilot, section boundaries, fee/payment rows and date handling. |
 | `pdf_citicc_201505` | 0.3.1 | Older Citi line credit-card PDF | Finite V2 pilot and synthetic continuation tests | All 135 routed archive sources pass 1,740-row and printed-balance parity; complete page capture remains open. |

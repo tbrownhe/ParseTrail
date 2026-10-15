@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "parser_id": "mohela_account_history_export",
+  "revision": "1",
+  "suffix": ".csv",
+  "kind": "activity_export",
+  "capabilities": ["table_rows_v1", "components_v1"],
+  "header": ["Date", "Description", "Principal", "Interest", "Fees", "Total"],
+  "columns": {
+    "date": "Date",
+    "description": "Description",
+    "total": "Total",
+    "principal": "Principal",
+    "interest": "Interest",
+    "fees": "Fees"
+  },
+  "date_format": "MM/DD/YYYY",
+  "money_format": "usd_symbol_2dp",
+  "first_header_cell": "after_last_gt",
+  "empty_trailing_column": true,
+  "account_key": "unknown"
+}

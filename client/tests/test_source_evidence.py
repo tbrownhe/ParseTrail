@@ -143,6 +143,25 @@ def test_abbreviated_source_identity_requires_exactly_four_digits() -> None:
         )
 
 
+def test_activity_export_may_have_no_printed_account_identity() -> None:
+    row = ObservationEvidence(
+        row_id="c" * 64,
+        occurrence=0,
+        row_role="activity",
+        source_account=None,
+        source_account_form=None,
+        date_role="activity_date",
+        date=printed_date("01/15/2026", "2026-01-15", 2),
+        description=TextValue(raw="Payment", text="Payment", provenance="observed", locations=(line(2),)),
+        amount=money(-100, 2),
+        components=(),
+        fragments=(SourceFragment(channel="table", location=line(2), raw_values=("Payment",)),),
+    )
+    assert row.source_account is None
+    with pytest.raises(ValidationError, match="source account identity pair"):
+        ObservationEvidence.model_validate(row.model_dump() | {"source_account_form": "opaque"})
+
+
 def test_saved_schema_refuses_accounting_fields_and_unknown_versions() -> None:
     saved = statement(closing=100, verified=True)
     assert SourceEvidence.model_validate_json(saved.model_dump_json()).payload.kind == "statement"

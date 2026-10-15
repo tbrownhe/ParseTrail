@@ -26,6 +26,7 @@ USBANK_DEFINITION = Path(__file__).with_name("usbank-rei-card-pilot-definition.j
 VANGUARD_DEFINITION = Path(__file__).with_name("vanguard-summary-pilot-definition.json").read_bytes()
 FIDELITY_401K_DEFINITION = Path(__file__).with_name("fidelity-401k-summary-pilot-definition.json").read_bytes()
 MOHELA_DEFINITION = Path(__file__).with_name("mohela-pilot-definition.json").read_bytes()
+MOHELA_ACCOUNT_HISTORY_DEFINITION = Path(__file__).with_name("mohela-account-history-definition.json").read_bytes()
 HSA_CASH_DEFINITION = Path(__file__).with_name("hsa-cash-pilot-definition.json").read_bytes()
 SYNCHRONY_DEFINITION = Path(__file__).with_name("synchrony-table-pilot-definition.json").read_bytes()
 
@@ -61,6 +62,32 @@ def test_detailed_mohela_export_keeps_loan_components_and_unknown_principal(tmp_
     profile = tmp_path / "mohela.db"
     with V2ProfileStore.create(profile) as store:
         assert store.import_source(source, MOHELA_DEFINITION, output, suffix=".csv")
+    with V2ProfileStore.open(profile, read_only=True) as store:
+        assert store.load_import(output.source_sha256).evidence == output
+
+
+def test_mohela_account_history_keeps_components_without_inventing_loan_identity(tmp_path: Path) -> None:
+    source = (
+        b'<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">'
+        b"Date,Description,Principal,Interest,Fees,Total,\n"
+        b"10/01/2026,Payment,-$80.00,-$20.00,$0.00,-$100.00,\n"
+    )
+    output = build_source_evidence(source, MOHELA_ACCOUNT_HISTORY_DEFINITION, suffix=".csv")
+    assert output.payload.kind == "activity_export"
+    assert output.payload.coverage_verified is False
+    assert len(output.payload.rows) == 1
+    row = output.payload.rows[0]
+    assert row.source_account is None and row.source_account_form is None
+    assert row.running_balance is None
+    assert row.amount.minor == -10000
+    assert [(part.role, part.amount.minor) for part in row.components] == [
+        ("principal", -8000),
+        ("interest", -2000),
+        ("fee", 0),
+    ]
+    profile = tmp_path / "mohela-history.db"
+    with V2ProfileStore.create(profile) as store:
+        assert store.import_source(source, MOHELA_ACCOUNT_HISTORY_DEFINITION, output, suffix=".csv")
     with V2ProfileStore.open(profile, read_only=True) as store:
         assert store.load_import(output.source_sha256).evidence == output
 

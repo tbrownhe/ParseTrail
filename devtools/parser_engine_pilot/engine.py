@@ -41,7 +41,7 @@ class EngineError(ValueError):
 class Columns(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    account: str
+    account: str | None = None
     date: str
     description: str
     total: str
@@ -68,7 +68,7 @@ class Definition(BaseModel):
     unknown_balance_literals: tuple[str, ...] = ()
     first_header_cell: Literal["exact", "after_last_gt"] = "exact"
     empty_trailing_column: bool = False
-    account_key: Literal["observed", "loan_id_dash_v1"] = "observed"
+    account_key: Literal["observed", "loan_id_dash_v1", "unknown"] = "observed"
 
     @model_validator(mode="after")
     def valid_layout(self) -> Definition:
@@ -88,6 +88,8 @@ class Definition(BaseModel):
             raise ValueError("incomplete component operation")
         if self.columns.balance is None and self.unknown_balance_literals:
             raise ValueError("unknown balance literals require a balance column")
+        if (self.columns.account is None) != (self.account_key == "unknown"):
+            raise ValueError("account identity declaration")
         if len(self.unknown_balance_literals) > 16 or len(set(self.unknown_balance_literals)) != len(
             self.unknown_balance_literals
         ):
@@ -130,7 +132,7 @@ class FieldEvidence:
 class ActivityRow:
     row_id: str
     occurrence: int
-    account: FieldEvidence
+    account: FieldEvidence | None
     date: FieldEvidence
     description: FieldEvidence
     total: FieldEvidence
@@ -277,12 +279,13 @@ def parse_table(
                 location=CellLocation(suffix, row_number, column_number, sheet),
             )
 
-        account_raw = values[index[definition.columns.account]]
+        account_raw = values[index[definition.columns.account]] if definition.columns.account is not None else None
         description_raw = values[index[definition.columns.description]]
-        if not account_raw.strip() or not description_raw.strip():
+        if (account_raw is not None and not account_raw.strip()) or not description_raw.strip():
             raise EngineError("missing_identity_or_description", row_number)
         account_key = account_raw
         if definition.account_key == "loan_id_dash_v1":
+            assert account_raw is not None
             match = LOAN_ID_PATTERN.fullmatch(account_raw)
             if match is None:
                 raise EngineError("account_identity", row_number)
@@ -290,7 +293,7 @@ def parse_table(
             if account_key in account_names and account_names[account_key] != account_raw:
                 raise EngineError("account_name_conflict", row_number)
             account_names[account_key] = account_raw
-        account = field(definition.columns.account, account_key)
+        account = field(definition.columns.account, account_key) if definition.columns.account is not None else None
         date_column = definition.columns.date
         date = field(date_column, _date(values[index[date_column]], definition.date_format, row_number))
         description = field(definition.columns.description, description_raw)
@@ -336,7 +339,7 @@ def parse_table(
         kind="activity_export",
         rows=tuple(parsed),
         ignored_rows=tuple(ignored),
-        account_identities=tuple(sorted({row.account.normalized for row in parsed})),
+        account_identities=tuple(sorted({row.account.normalized for row in parsed if row.account is not None})),
         activity_start=min(dates),
         activity_end=max(dates),
         statement_opening_minor=None,

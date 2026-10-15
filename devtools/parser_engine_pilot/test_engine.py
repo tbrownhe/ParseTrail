@@ -156,6 +156,22 @@ def test_schema_capability_and_executable_escape_hatch_refused() -> None:
             parse_csv(json.dumps(raw).encode(), data())
 
 
+def test_unknown_account_key_requires_absent_account_column() -> None:
+    raw = json.loads(definition())
+    raw["account_key"] = "unknown"
+    with pytest.raises(EngineError, match="invalid_definition"):
+        parse_csv(json.dumps(raw).encode(), data())
+    raw["columns"].pop("account")
+    raw["header"].remove("LoanName")
+    source = (
+        b"Date,Description,Principal,Interest,Fees,Total,UnpaidPrincipalBalanceValue\n"
+        b"10/01/2026,Payment,-$80.00,-$20.00,$0.00,-$100.00,Unavailable\n"
+    )
+    evidence = parse_csv(json.dumps(raw).encode(), source)
+    assert evidence.account_identities == ()
+    assert evidence.rows[0].account is None
+
+
 def test_cancellation_and_size_limits() -> None:
     checks = 0
 

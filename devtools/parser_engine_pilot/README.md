@@ -546,7 +546,10 @@ strict source pipeline. The one authorized detailed export matched the accepted
 reader across 299 rows and ten loan identities. Its source, declaration and
 evidence reopened from a temporary 2.0 profile; 208 unknown printed principal
 balances remained unknown. The older life-of-loan CSV has no loan identity
-column, so it remains a separate unresolved accounting format.
+column. `mohela-account-history-definition.json` now preserves that format as
+an activity export with no source account identity or printed balance. Both
+authorized files passed all 78 source component equations and reopened from a
+temporary 2.0 profile. Loan allocation and posting remain review decisions.
 
 The HealthEquity cash operation now classifies all 489 non-dated lines inside
 the printed cash boundaries as headings, rate tables, fee summaries or interest

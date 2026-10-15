@@ -4,8 +4,16 @@
       "additionalProperties": false,
       "properties": {
         "account": {
-          "title": "Account",
-          "type": "string"
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Account"
         },
         "date": {
           "title": "Date",
@@ -69,7 +77,6 @@
         }
       },
       "required": [
-        "account",
         "date",
         "description",
         "total"
@@ -179,7 +186,8 @@
       "default": "observed",
       "enum": [
         "observed",
-        "loan_id_dash_v1"
+        "loan_id_dash_v1",
+        "unknown"
       ],
       "title": "Account Key",
       "type": "string"

@@ -310,8 +310,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   remain open.
   Detailed MOHELA now round-trips 299 rows and ten loan identities through the
   strict source pipeline and temporary 2.0 profile, retaining 208 unknown
-  principal balances. The older CSV's missing loan identity remains an
-  accounting decision. HealthEquity now classifies all 489 non-dated cash-window
+  principal balances. The older MOHELA account-history CSV now retains all 78
+  rows from two authorized files with an unknown account identity and no
+  invented balance; all 78 printed component equations pass. Loan allocation
+  remains a review decision. HealthEquity now classifies all 489 non-dated cash-window
   lines and round-trips 60 PDFs, 236 cash rows and 489 dispositions through the
   bounded pipeline and temporary profile. Cash scope and full-page capture
   remain explicit limits. Ten authorized Synchrony PDFs outside the imported

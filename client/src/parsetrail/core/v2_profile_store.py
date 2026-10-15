@@ -22,24 +22,29 @@ MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_DEFINITION_BYTES = 64 * 1024
 MAX_EVIDENCE_BYTES = 32 * 1024 * 1024
 TABLE_COLUMNS = {
-    "Sources": (("sha256", "TEXT", 1), ("suffix", "TEXT", 0), ("size", "INTEGER", 0), ("content", "BLOB", 0)),
-    "Definitions": (("sha256", "TEXT", 1), ("size", "INTEGER", 0), ("content", "BLOB", 0)),
+    "Sources": (
+        ("sha256", "TEXT", 0, 1),
+        ("suffix", "TEXT", 1, 0),
+        ("size", "INTEGER", 1, 0),
+        ("content", "BLOB", 1, 0),
+    ),
+    "Definitions": (("sha256", "TEXT", 0, 1), ("size", "INTEGER", 1, 0), ("content", "BLOB", 1, 0)),
     "EvidenceSnapshots": (
-        ("source_sha256", "TEXT", 1),
-        ("definition_sha256", "TEXT", 0),
-        ("size", "INTEGER", 0),
-        ("sha256", "TEXT", 0),
-        ("content", "BLOB", 0),
+        ("source_sha256", "TEXT", 0, 1),
+        ("definition_sha256", "TEXT", 1, 0),
+        ("size", "INTEGER", 1, 0),
+        ("sha256", "TEXT", 1, 0),
+        ("content", "BLOB", 1, 0),
     ),
     "SourceObservations": (
-        ("row_id", "TEXT", 1),
-        ("source_sha256", "TEXT", 0),
-        ("source_account", "TEXT", 0),
-        ("source_account_form", "TEXT", 0),
-        ("row_role", "TEXT", 0),
-        ("date_role", "TEXT", 0),
-        ("observed_date", "TEXT", 0),
-        ("amount_minor", "INTEGER", 0),
+        ("row_id", "TEXT", 0, 1),
+        ("source_sha256", "TEXT", 1, 0),
+        ("source_account", "TEXT", 0, 0),
+        ("source_account_form", "TEXT", 0, 0),
+        ("row_role", "TEXT", 1, 0),
+        ("date_role", "TEXT", 1, 0),
+        ("observed_date", "TEXT", 1, 0),
+        ("amount_minor", "INTEGER", 1, 0),
     ),
 }
 FOREIGN_KEYS = {
@@ -84,7 +89,7 @@ def _check_format(connection: sqlite3.Connection) -> None:
             raise ProfileFormatError("profile_schema_missing")
         for table, columns in TABLE_COLUMNS.items():
             actual_columns = tuple(
-                (row[1], row[2], row[5]) for row in connection.execute(f"PRAGMA table_info({table})")
+                (row[1], row[2], row[3], row[5]) for row in connection.execute(f"PRAGMA table_info({table})")
             )
             if actual_columns != columns:
                 raise ProfileFormatError("profile_schema_mismatch")
@@ -140,11 +145,12 @@ class V2ProfileStore:
                 );
                 CREATE TABLE SourceObservations (
                     row_id TEXT PRIMARY KEY, source_sha256 TEXT NOT NULL REFERENCES Sources(sha256),
-                    source_account TEXT NOT NULL,
-                    source_account_form TEXT NOT NULL CHECK(source_account_form IN ('full','last_four','opaque')),
+                    source_account TEXT,
+                    source_account_form TEXT CHECK(source_account_form IN ('full','last_four','opaque')),
                     row_role TEXT NOT NULL CHECK(row_role IN ('activity','period_summary','header_charge')),
                     date_role TEXT NOT NULL CHECK(date_role IN ('posting_date','activity_date','statement_period_end')),
-                    observed_date TEXT NOT NULL, amount_minor INTEGER NOT NULL
+                    observed_date TEXT NOT NULL, amount_minor INTEGER NOT NULL,
+                    CHECK((source_account IS NULL) = (source_account_form IS NULL))
                 );
                 COMMIT;
             """)
