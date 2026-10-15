@@ -311,6 +311,87 @@
       ],
       "title": "TableCardStatementRule",
       "type": "object"
+    },
+    "TableWellsPersonalRule": {
+      "additionalProperties": false,
+      "properties": {
+        "operation": {
+          "const": "table_wells_personal_activity_v1",
+          "title": "Operation",
+          "type": "string"
+        },
+        "date_format": {
+          "const": "MONTH_D_YYYY+M/D",
+          "title": "Date Format",
+          "type": "string"
+        },
+        "money_format": {
+          "const": "usd_or_decimal_2dp",
+          "title": "Money Format",
+          "type": "string"
+        },
+        "summary_label": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Summary Label",
+          "type": "string"
+        },
+        "account_label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Account Label",
+          "type": "string"
+        },
+        "opening_label": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Opening Label",
+          "type": "string"
+        },
+        "closing_labels": {
+          "maxItems": 2,
+          "minItems": 2,
+          "prefixItems": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "string"
+            }
+          ],
+          "title": "Closing Labels",
+          "type": "array"
+        },
+        "balance_window_lines": {
+          "maximum": 40,
+          "minimum": 5,
+          "title": "Balance Window Lines",
+          "type": "integer"
+        },
+        "max_period_days": {
+          "maximum": 120,
+          "minimum": 30,
+          "title": "Max Period Days",
+          "type": "integer"
+        },
+        "continuation": {
+          "$ref": "#/$defs/ContinuationRule"
+        }
+      },
+      "required": [
+        "operation",
+        "date_format",
+        "money_format",
+        "summary_label",
+        "account_label",
+        "opening_label",
+        "closing_labels",
+        "balance_window_lines",
+        "max_period_days",
+        "continuation"
+      ],
+      "title": "TableWellsPersonalRule",
+      "type": "object"
     }
   },
   "additionalProperties": false,
@@ -421,7 +502,8 @@
           "discriminator": {
             "mapping": {
               "table_bank_activity_v1": "#/$defs/TableBankStatementRule",
-              "table_card_activity_v1": "#/$defs/TableCardStatementRule"
+              "table_card_activity_v1": "#/$defs/TableCardStatementRule",
+              "table_wells_personal_activity_v1": "#/$defs/TableWellsPersonalRule"
             },
             "propertyName": "operation"
           },
@@ -431,6 +513,9 @@
             },
             {
               "$ref": "#/$defs/TableBankStatementRule"
+            },
+            {
+              "$ref": "#/$defs/TableWellsPersonalRule"
             }
           ]
         },

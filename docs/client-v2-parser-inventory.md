@@ -41,7 +41,7 @@ output/behavior; it does not imply full private-archive regression coverage.
 | `pdf_usbankreicc_201405` | 0.2.0 | Credit-card line PDF | No parser-specific test found | Metadata/line extraction and row-boundary coverage. |
 | `pdf_vanguard_202210` | 0.2.0 | Retirement line PDF | No parser-specific test found | Quarterly period, account identity and activity semantics. |
 | `pdf_wfbankbus_202110` | 0.2.0 | Business bank dynamic table PDF | No parser-specific test found | Layout/table pilot: word coordinates create per-page table boundaries. |
-| `pdf_wfbankper_202105` | 0.2.0 | Personal bank table PDF | Ledger candidate tests reference it | Table layout and cash movements; add direct extraction fixture. |
+| `pdf_wfbankper_202105` | 0.2.0 | Personal bank table PDF | Finite V2 table pilot and synthetic refusal tests | All 148 routed archive PDFs pass 6,618-row and printed-balance parity; full page capture remains open. |
 | `pdf_wfloanper_202306` | 0.2.1 | Personal-loan line PDF | Accounting/loan tests reference it | Preserve legacy synthetic-loan uncertainty; no speculative history repair. |
 | `pdf_yamahafin_202306` | 0.2.0 | Auto-loan line PDF | Loan-readiness tests reference it | Interest/principal evidence and printed endpoint checks. |
 
@@ -300,6 +300,17 @@ The 28 money-bearing rows after activity belong to summary or disclosure
 material in this sample and remain unclassified; complete page capture, signed
 routing and native acceptance remain open.
 
+Wells personal checking/savings also uses the generic header-anchor worker.
+Its five header words locate six data columns, including the printed narrow
+number column. A complete-line header selector handles repeated `balance`
+words without guessing between two complete headers. The declared 3-point
+vertical snap matches the accepted text rows. All 148 routed archive PDFs
+matched 6,618 accepted transactions, account, period and printed endpoints;
+1,512 printed row balances and all closing equations passed. The pilot keeps
+5,473 table terminators and later rows as located dispositions. A temporary
+V2 profile reopened all 148 sources with unchanged hashes; complete page
+capture, signed routing and native acceptance remain open.
+
 ## Remaining family operation costs
 
 These estimates complete the source-code review for the other 18 modules in
@@ -315,7 +326,7 @@ conversion priority signal, not permission to embed Python in a declaration.
 | `pdf_citicc_202506` | Generic declared header-anchor geometry, table-cell continuation and liability sign with located tail dispositions. | Eight routed archive PDFs pass finite evidence parity; monetary tails and full page capture remain open. |
 | `pdf_fidelity401k_201810`, `pdf_fidelityhsa_202001`, `pdf_transamerica_202104`, `pdf_vanguard_202210` | Unique period/plan or account anchors, bounded balance sections, amount-bearing lines, explicit cash versus investment scope and a source-labeled date role. | Medium. The old readers often assign period-end dates to undated rows; retain those as derived, and do not turn investment valuation changes into cash activity without printed evidence. Fidelity 401(k) headerless/browser-print plan labels need a finite recognized variant. |
 | `pdf_happenbank_202606`, `pdf_lendingclubsavings_202601` | Bounded text sections, exact dates and amounts, optional inherited transaction date, printed running balances and independent closing equation. | Low to medium. LendingClub's `Interest Paid` date substitution is derived; require explicit row and tail dispositions and preserve printed source date. |
-| `pdf_lendingclublus_202506`, `pdf_wfbankper_202105` | Page-local anchored table geometry, debit/credit cells, continuation descriptions, optional printed running balance and exact partial-date resolution. | Older LendingClub passes seven-source finite evidence parity; 28 monetary tails and full page capture remain open. Wells personal still needs its own layout pilot. |
+| `pdf_lendingclublus_202506`, `pdf_wfbankper_202105` | Page-local anchored table geometry, debit/credit cells, continuation descriptions, optional printed running balance and exact partial-date resolution. | Older LendingClub passes seven-source parity; 28 monetary tails remain open. Wells personal passes 148-source parity with 6,618 rows; full page capture remains open. |
 | `pdf_occubank_201409` | Bounded simple lines, text dates before first-page annotation fallback, two located account sections and running balance chains. | Finite pilot passed 113 archived sources; personal credit line and full page capture remain open. |
 | `pdf_occucc_201904` | Bounded default-layout lines, dated card activity and a separately tagged header charge. | Finite pilot passed 32 archived sources; full page capture and native acceptance remain open. |
 | `pdf_synchrony-amzncc_202501` | Bounded partial-word table header recognition, page-local geometry, dated row continuation and liability sign. | High. Existing parser silently skips unmatched rows and pages; require full candidate and post-table dispositions before acceptance. |

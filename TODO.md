@@ -285,6 +285,13 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   and 225 located dispositions with unchanged hashes. The 28 money-bearing
   summary/disclosure rows remain unclassified; full-page capture and native
   acceptance remain open.
+  Wells personal bank now has a finite six-column anchored-table operation.
+  All 148 routed archive PDFs matched the accepted reader on period, account,
+  printed endpoints and 6,618 transactions. The pilot checked 1,512 printed
+  running balances and every closing equation; 5,473 table terminator or
+  after-stop rows remain located dispositions. A temporary V2 profile reopened
+  all 148 sources with unchanged hashes. Full-page capture, signed routing
+  and native acceptance remain open.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and

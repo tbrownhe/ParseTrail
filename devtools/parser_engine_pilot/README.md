@@ -239,6 +239,17 @@ account, period and endpoints. Temporary V2 storage reopened seven sources,
 eight money-bearing summary/disclosure table rows remain unclassified, so
 full-page capture and native acceptance remain open.
 
+`wells_personal_source_output.py` applies a finite six-column Wells personal
+bank operation to the same header-anchor worker. The declared 3-point vertical
+snap reproduces the accepted text rows, and complete-line header matching
+handles repeated `balance` words. All 148 routed archive PDFs matched the
+accepted reader on account, period, printed balances and 6,618 transactions;
+1,512 printed running balances and every closing equation passed. The worker
+retains 5,473 located terminator or after-stop dispositions. Full-page
+capture, signed routing and native acceptance remain open. A temporary V2
+profile reopened all 148 sources and their observations without changing
+source hashes.
+
 Every Chase-referenced fixture in the authorized closed-copy archive matched
 the accepted reader's account, period, printed balances and rows in a read-only
 comparison. The comparison also accounted for every date-prefixed line as a

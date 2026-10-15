@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "parser_id": "pdf_wfbankper_202105",
+  "revision": "1",
+  "suffix": ".pdf",
+  "kind": "statement",
+  "operation": "anchored_columns_table_v1",
+  "headers": ["Date", "Description", "Additions", "Subtractions", "balance"],
+  "partial_suffix_min": 3,
+  "header_line_tolerance": 2.0,
+  "crop_top_anchor": 0,
+  "crop_top_offset": 0.1,
+  "boundaries": [
+    {"kind": "anchor_edge", "anchor": 0, "edge": "x0", "offset": -3.0},
+    {"kind": "anchor_edge", "anchor": 0, "edge": "x1", "offset": 2.0},
+    {"kind": "anchor_edge", "anchor": 1, "edge": "x0", "offset": -2.0},
+    {"kind": "anchor_edge", "anchor": 2, "edge": "x0", "offset": -3.0},
+    {"kind": "anchor_edge", "anchor": 2, "edge": "x1", "offset": 2.0},
+    {"kind": "anchor_edge", "anchor": 3, "edge": "x1", "offset": 2.0},
+    {"kind": "anchor_edge", "anchor": 4, "edge": "x1", "offset": 2.0}
+  ],
+  "horizontal_strategy": "text",
+  "snap_y_tolerance": 3.0,
+  "statement": {
+    "operation": "table_wells_personal_activity_v1",
+    "date_format": "MONTH_D_YYYY+M/D",
+    "money_format": "usd_or_decimal_2dp",
+    "summary_label": "Statement period activity summary",
+    "account_label": "Account number:",
+    "opening_label": "Beginning ba",
+    "closing_labels": ["Ending ba", "Closing ba"],
+    "balance_window_lines": 20,
+    "max_period_days": 120,
+    "continuation": {
+      "operation": "table_continuation_v1",
+      "mode": "description_after_start",
+      "start_columns": [0],
+      "break_columns": [0],
+      "description_column": 2,
+      "amount_column": null,
+      "max_group_rows": 8,
+      "allow_cross_page": true
+    }
+  }
+}

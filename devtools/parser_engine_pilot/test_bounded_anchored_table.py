@@ -9,11 +9,17 @@ from pathlib import Path
 import pdfplumber
 import pytest
 
-from devtools.parser_engine_pilot.anchored_table import extract_anchored_table
+from devtools.parser_engine_pilot.anchored_table import (
+    AnchoredTableError,
+    _selected_header,
+    extract_anchored_table,
+    load_definition,
+)
 from devtools.parser_engine_pilot.bounded_anchored_table import extract_bounded_anchored_table
 from devtools.parser_engine_pilot.worker_limits import WorkerError
 
 DEFINITION = Path(__file__).with_name("middle-citi-table-pilot-definition.json").read_bytes()
+WELLS_DEFINITION = Path(__file__).with_name("wells-personal-table-pilot-definition.json").read_bytes()
 
 
 def sample_table_pdf() -> bytes:
@@ -74,3 +80,25 @@ def test_invalid_source_refuses_without_echoing_content() -> None:
     with pytest.raises(WorkerError, match="worker_failed") as error:
         extract_bounded_anchored_table(DEFINITION, b"private statement")
     assert "private" not in str(error.value)
+
+
+def test_header_line_ignores_repeated_balance_words_but_refuses_two_complete_headers() -> None:
+    definition, _ = load_definition(WELLS_DEFINITION)
+
+    class Page:
+        def __init__(self, duplicate_header: bool):
+            self.duplicate_header = duplicate_header
+
+        def extract_words(self):
+            result = []
+            for y in (100.0, 300.0) if self.duplicate_header else (100.0,):
+                result.extend(
+                    {"text": label, "x0": float(index * 30), "x1": float(index * 30 + 20), "top": y - 10, "bottom": y}
+                    for index, label in enumerate(definition.headers)
+                )
+            result.append({"text": "balance", "x0": 20.0, "x1": 40.0, "top": 490.0, "bottom": 500.0})
+            return result
+
+    assert _selected_header(Page(False), definition) is not None
+    with pytest.raises(AnchoredTableError, match="ambiguous_header_line"):
+        _selected_header(Page(True), definition)

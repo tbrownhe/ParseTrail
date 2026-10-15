@@ -35,6 +35,7 @@ from devtools.parser_engine_pilot.table_bank_source_output import from_anchored_
 from devtools.parser_engine_pilot.table_card_source_output import from_anchored_card
 from devtools.parser_engine_pilot.table_source_output import from_table
 from devtools.parser_engine_pilot.two_date_card_lines import parse_two_date_card
+from devtools.parser_engine_pilot.wells_personal_source_output import from_wells_personal
 from devtools.parser_engine_pilot.wells_statement_output import from_wells_business
 
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
@@ -84,6 +85,9 @@ MIDDLE_CITI_DEFINITION_SHA256 = hashlib.sha256(
 ).hexdigest()
 LENDINGCLUB_TABLE_DEFINITION_SHA256 = hashlib.sha256(
     Path(__file__).with_name("lendingclub-table-pilot-definition.json").read_bytes()
+).hexdigest()
+WELLS_PERSONAL_TABLE_DEFINITION_SHA256 = hashlib.sha256(
+    Path(__file__).with_name("wells-personal-table-pilot-definition.json").read_bytes()
 ).hexdigest()
 
 
@@ -170,6 +174,10 @@ def build_source_evidence(source: bytes, definition: bytes, *, suffix: Literal["
                 pages = decode_pdf(source).pages
                 lines = page_lines(source, pages, extraction_library="pdfplumber-bounded-simple-v1")
                 output = from_anchored_bank(definition, extract_bounded_anchored_table(definition, source), lines)
+            elif digest == WELLS_PERSONAL_TABLE_DEFINITION_SHA256:
+                pages = decode_pdf(source).pages
+                lines = page_lines(source, pages, extraction_library="pdfplumber-bounded-simple-v1")
+                output = from_wells_personal(definition, extract_bounded_anchored_table(definition, source), lines)
             else:
                 raise SourcePipelineError("unsupported_definition_revision")
         if (

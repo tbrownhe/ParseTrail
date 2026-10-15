@@ -5,7 +5,6 @@ from __future__ import annotations
 import hashlib
 import math
 from dataclasses import dataclass
-from statistics import median
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
@@ -102,6 +101,37 @@ class TableBankStatementRule(BaseModel):
         return self
 
 
+class TableWellsPersonalRule(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    operation: Literal["table_wells_personal_activity_v1"]
+    date_format: Literal["MONTH_D_YYYY+M/D"]
+    money_format: Literal["usd_or_decimal_2dp"]
+    summary_label: str = Field(min_length=1, max_length=100)
+    account_label: str = Field(min_length=1, max_length=80)
+    opening_label: str = Field(min_length=1, max_length=80)
+    closing_labels: tuple[str, str]
+    balance_window_lines: int = Field(ge=5, le=40)
+    max_period_days: int = Field(ge=30, le=120)
+    continuation: ContinuationRule
+
+    @model_validator(mode="after")
+    def valid_wells_rule(self) -> TableWellsPersonalRule:
+        labels = (self.summary_label, self.account_label, self.opening_label, *self.closing_labels)
+        rule = self.continuation
+        if (
+            len(set(labels)) != len(labels)
+            or any(label != label.strip() or "\n" in label for label in labels)
+            or rule.mode != "description_after_start"
+            or rule.start_columns != (0,)
+            or rule.break_columns != (0,)
+            or rule.description_column != 2
+            or rule.amount_column is not None
+        ):
+            raise ValueError("invalid Wells personal operation")
+        return self
+
+
 class AnchoredTableDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
@@ -119,9 +149,12 @@ class AnchoredTableDefinition(BaseModel):
     boundaries: tuple[Boundary, ...] = Field(min_length=3, max_length=9)
     horizontal_strategy: Literal["text", "lines"]
     snap_y_tolerance: float = Field(ge=0, le=3)
-    statement: Annotated[TableCardStatementRule | TableBankStatementRule, Field(discriminator="operation")] | None = (
-        None
-    )
+    statement: (
+        Annotated[
+            TableCardStatementRule | TableBankStatementRule | TableWellsPersonalRule, Field(discriminator="operation")
+        ]
+        | None
+    ) = None
 
     @model_validator(mode="after")
     def valid_geometry(self) -> AnchoredTableDefinition:
@@ -131,6 +164,7 @@ class AnchoredTableDefinition(BaseModel):
             or self.crop_top_anchor >= len(self.headers)
             or (isinstance(self.statement, TableCardStatementRule) and len(self.boundaries) != 5)
             or (isinstance(self.statement, TableBankStatementRule) and len(self.boundaries) != 6)
+            or (isinstance(self.statement, TableWellsPersonalRule) and len(self.boundaries) != 7)
         ):
             raise ValueError("invalid header geometry")
         for boundary in self.boundaries:
@@ -213,11 +247,17 @@ def _selected_header(page, definition: AnchoredTableDefinition):
     bottoms = [word.get("bottom") for word in candidates]
     if not bottoms or any(type(value) not in {int, float} or not math.isfinite(value) for value in bottoms):
         raise AnchoredTableError("invalid_header_geometry")
-    center = median(bottoms)
-    selected = [word for word in candidates if abs(word["bottom"] - center) < definition.header_line_tolerance]
-    if len(selected) != len(resolved) or {word["text"] for word in selected} != set(resolved):
+    valid = {}
+    for center in bottoms:
+        selected = [word for word in candidates if abs(word["bottom"] - center) < definition.header_line_tolerance]
+        if len(selected) == len(resolved) and {word["text"] for word in selected} == set(resolved):
+            key = tuple(sorted((word["text"], word["x0"], word["bottom"]) for word in selected))
+            valid[key] = tuple(next(word for word in selected if word["text"] == label) for label in resolved)
+    if len(valid) > 1:
+        raise AnchoredTableError("ambiguous_header_line")
+    if not valid:
         return None
-    return tuple(next(word for word in selected if word["text"] == label) for label in resolved)
+    return next(iter(valid.values()))
 
 
 def _boundary(boundary: Boundary, selected) -> float:
