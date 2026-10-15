@@ -225,7 +225,10 @@ and the PDF text worker returns capped metadata for routing. A
 [finite header adapter](../devtools/parser_engine_pilot/citi_statement_header.py)
 reads the billing period, account suffix and printed balances with source
 locations. Bounded layout classification and all header fields matched the
-old reader on ten archive statements. Runtime integration and Intel Mac native
+old reader on ten archive statements. The standalone
+[`read_recent_citi`](../devtools/parser_engine_pilot/citi_evidence.py) path
+builds source-linked candidates without the legacy reader; the audit invokes
+that reader afterward for comparison. Runtime integration and Intel Mac native
 limits remain open.
 The [XLSX worker pilot](../devtools/parser_engine_pilot/bounded_xlsx.py)
 uses the same fixed process limiter and matches synthetic in-process evidence;

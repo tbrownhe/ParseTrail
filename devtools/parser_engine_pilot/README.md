@@ -216,11 +216,14 @@ Run one authorized source with:
 client/.venv/Scripts/python.exe -m devtools.parser_engine_pilot.audit_citi_channels C:\private\recent-citi.pdf
 ```
 
-The audit's legacy baseline, including its layout classification, remains in
-process for comparison; candidate text and table evidence comes from the
-bounded workers. The pilot's
-finite resolver and dated-start inventory are not runtime parsers or full-page
-capture proof.
+[`citi_evidence.py`](citi_evidence.py) now exposes `read_recent_citi` as a
+standalone, read-only candidate path. It calls the bounded PDF workers and the
+finite header, table and channel operations, then applies the dated-start gate.
+The audit calls that path before opening the old reader for comparison. All ten
+archive statements still match 486 accepted rows and ten balance equations,
+with one printed dated start per resolved row and unchanged source hashes. A
+synthetic non-Citi PDF is refused before Citi table extraction. This remains a
+pilot and does not post to a profile or prove full-page capture.
 
 The Citi worker also retains a capped first-page character stream; the shared
 PDF text worker returns capped metadata for routing. The
@@ -254,6 +257,7 @@ client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_w
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_audit_citi_channels.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_citi_channels.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_citi_source_dispositions.py
+client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_citi_evidence.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_table_continuations.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_channel_occurrences.py
 client/.venv/Scripts/python.exe -m pytest -q devtools/parser_engine_pilot/test_bounded_pdf_text.py

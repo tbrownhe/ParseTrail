@@ -129,6 +129,9 @@ The bounded text worker supplies metadata to classify the recent layout, while
 the bounded candidate path reads the
 statement period, account suffix and printed balances from capped worker
 evidence. Those fields matched the old reader on all ten archive statements.
+The standalone [recent Citi evidence path](../devtools/parser_engine_pilot/citi_evidence.py)
+now runs without the old reader or any profile writes. The old reader remains
+only in the separate comparison audit.
 The XLSX adapter also runs in a fixed, bounded worker and matches the
 in-process synthetic evidence. It has no referenced archive workbook and
 still needs Intel Mac native checks before runtime admission.

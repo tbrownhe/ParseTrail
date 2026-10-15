@@ -9,9 +9,9 @@ from parsetrail.plugins.pdf_citicc_202511 import Parser
 from devtools.parser_engine_pilot.audit_citi_channels import (
     Candidate,
     dispositions,
-    fee_candidates,
     overlap_shape,
 )
+from devtools.parser_engine_pilot.citi_evidence import fee_candidates
 from devtools.parser_engine_pilot.citi_source_dispositions import dispose_dated_lines
 
 
@@ -69,7 +69,7 @@ def test_fee_and_extra_dated_lines_keep_distinct_source_locations() -> None:
             )
         )
     ]
-    fees = fee_candidates(parser, pages, parser.start_date, parser.end_date)
+    fees = fee_candidates(pages, parser.start_date, parser.end_date)
     assert [(fee.page, fee.line, fee.end_line, fee.description, fee.amount_minor) for fee in fees] == [
         (1, 6, 7, "MEMBERSHIP FEE SEE REVERSE", -4000)
     ]

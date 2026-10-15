@@ -161,6 +161,8 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   supplemental detail lines separately, with accepted-row order parity.
   Bounded evidence now also reproduces layout classification, statement
   dates, account suffix and printed balances on those ten sources.
+  A standalone recent-Citi evidence path now runs without the old reader; the
+  comparison audit still matches all ten statements and source hashes.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and
