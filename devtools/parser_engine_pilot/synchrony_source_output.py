@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import re
-from collections import Counter
+from collections import Counter, defaultdict, deque
 from datetime import date, datetime
 
 from parsetrail.core.source_evidence import (
@@ -35,6 +35,8 @@ from devtools.parser_engine_pilot.table_continuations import ContinuationError, 
 ENGINE_VERSION = "synchrony-table-source-pilot-1"
 DATE = re.compile(r"\d{2}/\d{2}\Z")
 DATE_PREFIX = re.compile(r"^\d{2}/\d{2}")
+TEXT_DATE = re.compile(r"^(\d{2}/\d{2})\s")
+FULL_DATE = re.compile(r"^\d{2}/\d{2}/(?:\d{2}|\d{4})\s")
 MONEY = re.compile(r"-?\$(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)\.[0-9]{2}\Z")
 
 
@@ -108,6 +110,24 @@ def from_synchrony_table(
     end: date = balances["closing"][2]
     selected = []
     dispositions = []
+    text_copies: dict[tuple[int, str, str], deque[PageLine]] = defaultdict(deque)
+    for line in text.lines:
+        normalized = line.normalized
+        short_date = TEXT_DATE.match(normalized)
+        if short_date is not None:
+            amounts = MONEY.findall(normalized)
+            if len(amounts) != 1:
+                raise SynchronySourceError("unresolved_dated_text_line")
+            text_copies[(line.page, short_date[1], amounts[0])].append(line)
+        elif FULL_DATE.match(normalized):
+            if not (
+                re.match(r"^\d{2}/\d{2}/\d{4} for online and phone payments\.", normalized)
+                or re.match(r"^\d{2}/\d{2}/\d{2} New Balance -?\$[0-9,]+\.\d{2}$", normalized)
+            ):
+                raise SynchronySourceError("unresolved_dated_text_line")
+            dispositions.append(
+                SourceDisposition(code="dated_statement_summary_line", location=_line(line), raw_values=(line.raw,))
+            )
     pending: list[AnchoredRow] = []
     for row in table.rows:
         date_raw, reference_raw, description_raw, amount_raw = (cell.strip() for cell in row.raw_cells)
@@ -158,6 +178,12 @@ def from_synchrony_table(
     for description, amount_raw, sources in selected:
         first = sources[0]
         date_raw = first.raw_cells[0].strip()
+        copies = text_copies[(first.page, date_raw, amount_raw)]
+        if not copies:
+            raise SynchronySourceError("missing_dated_text_copy")
+        copy = copies.popleft()
+        if description not in copy.normalized:
+            raise SynchronySourceError("dated_text_description_mismatch")
         try:
             activity_date = resolve_month_day(date_raw, start, end)
             amount = -usd_symbol_minor_v1(amount_raw)
@@ -192,9 +218,12 @@ def from_synchrony_table(
                 fragments=tuple(
                     SourceFragment(channel="anchored_table_row", location=_row(item), raw_values=item.raw_cells)
                     for item in sources
-                ),
+                )
+                + (SourceFragment(channel="simple_text_line", location=_line(copy), raw_values=(copy.raw,)),),
             )
         )
+    if any(copies for copies in text_copies.values()):
+        raise SynchronySourceError("unmatched_dated_text_line")
     opening = balances["opening"][4]
     closing = balances["closing"][4]
     if opening + sum(row.amount.minor for row in rows) != closing:

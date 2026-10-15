@@ -572,3 +572,7 @@ activity dates precede their statement periods; 2.0 preserves those dates as
 activity evidence without claiming a posting date. All ten snapshots reopened
 from temporary 2.0 storage with unchanged source hashes. Full-page capture,
 account mapping, ledger posting and native GUI acceptance remain open.
+An independent date-leading text scan now links all 97 short dated text lines
+one to one to those table rows and retains 20 full-date statement-summary lines
+as located dispositions. Any new unmatched dated line fails the pilot. The 118
+undated monetary table rows still need their broader source-capture review.
