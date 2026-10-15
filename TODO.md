@@ -110,16 +110,23 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   read-only development evidence. The 2.x contract uses a clean profile with no 1.x
   database migration, aliases or automatic authored-state carry-forward. Keep
   the old application/profile independent; no live writes or schema changes.
-- [~] **P2-1 — Parser/engine review:** first-pass 22-parser source/fixture matrix is in
+- [x] **P2-1 — Parser/engine review:** all 22 shipped parser families are in
   [the parser inventory](docs/client-v2-parser-inventory.md). Read-only archive replay
   and installed-catalog checks passed; historical parser revisions were bound
   source by source, including an ambiguous Citi layout split. Four representative
-  PDF operation costs are reviewed. Continue fixture gaps and remaining
-  operation-cost review.
+  PDF operation costs and the remaining 18 family costs are reviewed. The owner
+  requires every current family in the first 2.0 release. Per-family fixture
+  parity and native acceptance remain P2-3/P2-4 work.
   Inventory all current parsers, archive layouts,
   repeated extraction/normalization/checks, source provenance, developer tools and
   release coupling. Produce a family/fixture matrix and explicit custom-operation needs.
-- [~] **P2-2–3 — Declaration/evidence pilot:** a bounded synthetic table prototype is
+- [x] **P2-2 — Declaration/evidence design and prototype:** strict, finite
+  table/card/HSA/Wells/Citi pilot definitions and a shared immutable V2 source
+  evidence envelope cover exact values, nullable/provenanced endpoints, source
+  locations and multiple accounts. The table declaration refuses unknown schema,
+  capabilities and executable fields. This is a pilot contract, not final signed
+  catalog admission or a released storage schema.
+- [~] **P2-3 — Parser and decoder pilots:** a bounded synthetic table prototype is
   in [the parser engine pilot](devtools/parser_engine_pilot/README.md). The first
   read-only detailed CSV comparison matched the accepted reader; a separate
   PDF line pilot retained page/line locations on Chase and cross-page HSA

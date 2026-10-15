@@ -81,8 +81,24 @@ def test_saved_blob_integrity_is_checked_on_reopen(tmp_path: Path) -> None:
     with V2ProfileStore.create(path) as store:
         store.import_source(CSV, CSV_DEFINITION, evidence, suffix=".csv")
     with sqlite3.connect(path) as connection:
+        trigger = connection.execute(
+            "SELECT sql FROM sqlite_master WHERE name='immutable_EvidenceSnapshots_update'"
+        ).fetchone()[0]
         connection.execute("DROP TRIGGER immutable_EvidenceSnapshots_update")
         connection.execute("UPDATE EvidenceSnapshots SET content=?", (b"{}",))
+        connection.execute(trigger)
     with V2ProfileStore.open(path, read_only=True) as store:
         with pytest.raises(ProfileFormatError, match="saved_snapshot_integrity"):
             store.load_import(evidence.source_sha256)
+
+
+def test_changed_schema_is_refused_before_writable_open(tmp_path: Path) -> None:
+    path = tmp_path / "altered.db"
+    with V2ProfileStore.create(path):
+        pass
+    with sqlite3.connect(path) as connection:
+        connection.execute("DROP TRIGGER immutable_Sources_update")
+    original = path.read_bytes()
+    with pytest.raises(ProfileFormatError, match="profile_schema_mismatch"):
+        V2ProfileStore.open(path)
+    assert path.read_bytes() == original

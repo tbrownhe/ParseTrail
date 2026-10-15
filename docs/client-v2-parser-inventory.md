@@ -1,15 +1,17 @@
-# P2-1 parser and engine review: first pass
+# P2-1 parser and engine review
 
 The October 13, 2026 clean-profile decision makes this a read-only research
 inventory. It does not require 2.0 to replay every 1.x archive source or carry
-old parser IDs. Supported daily-use formats need explicit coverage; other old
-documents remain accessible through the retained 1.4.2 profile.
+old parser IDs. The owner subsequently requested **all 22 currently shipped
+parser families** in the first 2.0 release. Each family therefore needs an
+accepted 2.0 extraction path; historical documents remain accessible through
+the retained 1.4.2 profile while conversion is under way.
 
 Started October 4, 2026 on `feature/client-financial-insights`. This records
 source-code and synthetic-test coverage for the [declarative parser plan](client-v2-parsing.md).
 An authorized closed-copy replay and installed signed-catalog verification have
-since been completed. Declarative parity, fixture gaps and precise exception
-costs remain P2-1 work.
+since been completed. This review identifies conversion and fixture gates; it
+does not claim declarative parity for unconverted families.
 
 ## Shipped parser and fixture matrix
 
@@ -149,6 +151,31 @@ the current parser omits them from its transactions. This is deliberate source
 retention, not a currency conversion or a claim of complete activity coverage.
 The PDF decoder and final section/row disposition rules remain open.
 
+## Remaining family operation costs
+
+These estimates complete the source-code review for the other 18 modules in
+the matrix. They group shared operations; each listed parser still needs its own
+fixture and accepted evidence comparison under P2-3/P2-4. A "high" cost is a
+conversion priority signal, not permission to embed Python in a declaration.
+
+| Parser families | Candidate finite operations and source-evidence rule | Cost and conversion gate |
+| --- | --- | --- |
+| `csv_mohela_202411` | Strict CSV header/column mapping, account-group key, component equation, located duplicate occurrences; emit an activity export with unknown principal where printed `Unavailable`. | Low engine cost; high accounting review. Never carry the legacy invented zero opening or split interest rows into observed evidence. |
+| `pdf_capitaloneauto_202402`, `pdf_yamahafin_202306`, `pdf_wfloanper_202306` | Bounded loan history section, row components, exact principal and interest signs, printed principal endpoint, full versus partial transaction dates. | Medium. Capital One has no printed opening; Wells invents origination and groups interest/principal into a payment; Yamaha's date extraction must be checked against located source text. Preserve raw components before any posting decision. |
+| `pdf_citicc_201505`, `pdf_citicc_202506` | Old layout uses a page-local text-column boundary and at most five continuation lines; middle layout uses page word anchors, table cells and inherited continuation. Both need exact dated-start dispositions and liability sign. | Medium to high. Run separate archive fixtures for both layouts; the recent-Citi resolver cannot be presumed equivalent. Refuse a candidate that reaches a new dated start without an amount. |
+| `pdf_fidelity401k_201810`, `pdf_fidelityhsa_202001`, `pdf_transamerica_202104`, `pdf_vanguard_202210` | Unique period/plan or account anchors, bounded balance sections, amount-bearing lines, explicit cash versus investment scope and a source-labeled date role. | Medium. The old readers often assign period-end dates to undated rows; retain those as derived, and do not turn investment valuation changes into cash activity without printed evidence. Fidelity 401(k) headerless/browser-print plan labels need a finite recognized variant. |
+| `pdf_happenbank_202606`, `pdf_lendingclubsavings_202601` | Bounded text sections, exact dates and amounts, optional inherited transaction date, printed running balances and independent closing equation. | Low to medium. LendingClub's `Interest Paid` date substitution is derived; require explicit row and tail dispositions and preserve printed source date. |
+| `pdf_lendingclublus_202506`, `pdf_wfbankper_202105` | Page-local anchored table geometry, debit/credit cells, continuation descriptions, optional printed running balance and exact partial-date resolution. | Medium to high. Reuse the Wells geometry operation only after per-layout crop/header checks; do not fill missing row balances. |
+| `pdf_occubank_201409`, `pdf_occucc_201904` | Multiple account sections for bank statements; ordered text-date then annotation-date source selection; located row balances. Card interest printed in a header needs a separately identified source occurrence. | Medium. Annotation decoding may need a finite shipped decoder field operation. Its precedence and location must be explicit; synthesized card interest is not an ordinary activity-line capture. |
+| `pdf_synchrony-amzncc_202501` | Bounded partial-word table header recognition, page-local geometry, dated row continuation and liability sign. | High. Existing parser silently skips unmatched rows and pages; require full candidate and post-table dispositions before acceptance. |
+| `pdf_usbankreicc_201405` | Use one bounded simple-text representation for both routing and extraction; optional second date and explicit `CR` sign, with unique printed account/period/balance anchors. | Medium. Current reader deliberately selects simple text because layout text breaks credit indicators; archive fixtures must cover that difference. |
+
+Together with the four representative rows above, these entries cover every
+shipped parser. No named built-in exception has been
+approved. Reusable finite section, row continuation, geometry, annotation and
+channel-reconciliation operations should be tried before a layout-specific
+built-in is accepted.
+
 ## Archive layouts and developer/release coupling
 
 - The managed archive is derived from the database stem. Root files are a drop
@@ -187,22 +214,22 @@ The PDF decoder and final section/row disposition rules remain open.
   is required for new built-in extraction operations; definition-only layout
   fixes can follow the signed catalog after verification.
 
-## P2-1 gaps before schema or conversion work
+## Conversion and release gates after P2-1
 
 1. Repeat source/package binding on the frozen cutover snapshot, including the
    ambiguous historical Citi revision. Keep original parser references and
    source bytes; do not substitute parser names. Keep source names, paths and
    financial examples private.
-2. Detailed MOHELA CSV, Chase card, HealthEquity cash and Wells Fargo business
-   table pilots now match their accepted readers on the tested fields;
-   synthetic XLSX decoding is exercised separately. For the remaining Citi
-   multi-channel case, record independent printed checks, every candidate,
-   ignored or unresolved activity row and source location before settling a
-   built-in exception.
-3. Compare proposed finite operations against the difficult parsers above.
-   Record any explicit client-built exception with its fixture, reason and
-   engine release cost. Do not silently drop a parser or encode Python/SQL/eval
-   in a JSON declaration.
-4. Feed output-shape findings to V2-2 before freezing evidence tables. Source
-   hashes, definition/revision/digest, engine/library versions and diagnostics
-   must survive a reparse comparison without rewriting old decisions.
+2. Detailed MOHELA CSV, Chase card, HealthEquity cash, Wells Fargo business
+   table and recent Citi pilots have tested evidence. The recent Citi path
+   accounts for 486 dated starts and 803 located dispositions across ten
+   archive PDFs, but full-page capture and native worker acceptance remain
+   open. Synthetic XLSX decoding has no referenced archive fixture.
+3. Convert all 22 families using the operations above; for each, compare all
+   extracted, ignored and unresolved rows and independently printed values.
+   Record any necessary client-built exception with a fixture, reason and
+   engine release cost. Do not encode Python, SQL or eval in JSON definitions.
+4. The strict V2 evidence shape and fresh source store now preserve source,
+   definition, engine/extractor versions and diagnostics. Before freezing a
+   released schema, prove reparse comparison without rewriting old decisions,
+   account mapping and ledger review in the unified user-database service.

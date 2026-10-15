@@ -21,6 +21,32 @@ SCHEMA_VERSION = 2
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_DEFINITION_BYTES = 64 * 1024
 MAX_EVIDENCE_BYTES = 32 * 1024 * 1024
+TABLE_COLUMNS = {
+    "Sources": (("sha256", "TEXT", 1), ("suffix", "TEXT", 0), ("size", "INTEGER", 0), ("content", "BLOB", 0)),
+    "Definitions": (("sha256", "TEXT", 1), ("size", "INTEGER", 0), ("content", "BLOB", 0)),
+    "EvidenceSnapshots": (
+        ("source_sha256", "TEXT", 1),
+        ("definition_sha256", "TEXT", 0),
+        ("size", "INTEGER", 0),
+        ("sha256", "TEXT", 0),
+        ("content", "BLOB", 0),
+    ),
+    "SourceObservations": (
+        ("row_id", "TEXT", 1),
+        ("source_sha256", "TEXT", 0),
+        ("source_account", "TEXT", 0),
+        ("source_account_form", "TEXT", 0),
+        ("date_role", "TEXT", 0),
+        ("observed_date", "TEXT", 0),
+        ("amount_minor", "INTEGER", 0),
+    ),
+}
+FOREIGN_KEYS = {
+    "Sources": (),
+    "Definitions": (),
+    "EvidenceSnapshots": (("definition_sha256", "Definitions", "sha256"), ("source_sha256", "Sources", "sha256")),
+    "SourceObservations": (("source_sha256", "Sources", "sha256"),),
+}
 
 
 class ProfileFormatError(ValueError):
@@ -53,9 +79,28 @@ def _check_format(connection: sqlite3.Connection) -> None:
         if marker != APPLICATION_ID or version != SCHEMA_VERSION:
             raise ProfileFormatError("unsupported_profile_format")
         tables = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
-        if not {"Sources", "Definitions", "EvidenceSnapshots", "SourceObservations"} <= tables:
+        if tables != TABLE_COLUMNS.keys():
             raise ProfileFormatError("profile_schema_missing")
+        for table, columns in TABLE_COLUMNS.items():
+            actual_columns = tuple(
+                (row[1], row[2], row[5]) for row in connection.execute(f"PRAGMA table_info({table})")
+            )
+            if actual_columns != columns:
+                raise ProfileFormatError("profile_schema_mismatch")
+            actual_foreign_keys = tuple(
+                (row[3], row[2], row[4]) for row in connection.execute(f"PRAGMA foreign_key_list({table})")
+            )
+            if actual_foreign_keys != FOREIGN_KEYS[table]:
+                raise ProfileFormatError("profile_schema_mismatch")
+        expected_triggers = {
+            f"immutable_{table}_{action}" for table in TABLE_COLUMNS for action in ("update", "delete")
+        }
+        triggers = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='trigger'")}
+        if triggers != expected_triggers:
+            raise ProfileFormatError("profile_schema_mismatch")
         if connection.execute("PRAGMA quick_check").fetchone() != ("ok",):
+            raise ProfileFormatError("profile_integrity")
+        if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
             raise ProfileFormatError("profile_integrity")
     except sqlite3.DatabaseError:
         raise ProfileFormatError("profile_integrity") from None
