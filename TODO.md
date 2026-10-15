@@ -344,6 +344,9 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   tamper, rollback, cancellation and reopen tests pass. Production declaration
   admission, trusted release key, publication tooling and native installed
   offline acceptance remain open.
+  A separate read-only developer dialog now shows saved observations, source
+  locations, dispositions and coverage limits from a disposable 2.0 profile.
+  Its synthetic offscreen test passes; owner native GUI review remains a gate.
 - [ ] **P2-S — Declaration catalog server:** after accepted client work is merged,
   use a short-lived server branch for the reviewed snapshot API/storage/publication
   contract. A table may hold JSON definitions; clients consume immutable signed

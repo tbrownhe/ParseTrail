@@ -579,3 +579,14 @@ undated monetary table rows are now explicitly classified as rewards, balance,
 activity-section, interest/fee or APR summaries. An unknown monetary table line
 fails the pilot. Other page regions still need their broader source-capture
 review.
+
+The read-only developer preview can be opened with a synthetic example:
+
+```powershell
+client/.venv/Scripts/python.exe -m devtools.parser_engine_pilot.preview_source --demo
+```
+
+For an authorized source, pass its local PDF/CSV path and the matching checked-in
+definition. The launcher reads the source, parses through the bounded pipeline,
+opens a temporary 2.0 profile and deletes it after the dialog closes. It never
+opens the 1.x live database and has no posting or editing control.
