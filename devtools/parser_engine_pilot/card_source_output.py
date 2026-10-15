@@ -52,6 +52,7 @@ def from_card(evidence: CardStatementEvidence, lines: PDFLineEvidence) -> Source
             raise ValueError("card_row_source_mismatch")
         rows.append(
             ObservationEvidence(
+                row_role="activity",
                 row_id=row.row_id,
                 occurrence=row.occurrence,
                 source_account=str(account.normalized),

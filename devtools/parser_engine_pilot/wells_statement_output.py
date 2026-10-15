@@ -155,6 +155,7 @@ def from_wells_business(
         location = _table_location(first)
         rows.append(
             ObservationEvidence(
+                row_role="activity",
                 row_id=hashlib.sha256(": ".join(row.row_id for row in sources).encode()).hexdigest(),
                 occurrence=occurrence,
                 source_account=account_number,

@@ -20,6 +20,7 @@ from devtools.parser_engine_pilot.citi_layout import DEFINITION_SHA256
 from devtools.parser_engine_pilot.citi_layout import load_definition as load_citi_definition
 from devtools.parser_engine_pilot.citi_source_output import from_citi
 from devtools.parser_engine_pilot.engine import parse_csv
+from devtools.parser_engine_pilot.investment_summary_lines import parse_investment_summary
 from devtools.parser_engine_pilot.pdf_lines import page_lines
 from devtools.parser_engine_pilot.savings_lines import parse_savings_lines, parse_summary_savings_lines
 from devtools.parser_engine_pilot.table_source_output import from_table
@@ -39,6 +40,9 @@ LENDINGCLUB_DEFINITION_SHA256 = hashlib.sha256(
 ).hexdigest()
 WELLS_DEFINITION_SHA256 = hashlib.sha256(
     Path(__file__).with_name("wells-table-pilot-definition.json").read_bytes()
+).hexdigest()
+FIDELITY_HSA_DEFINITION_SHA256 = hashlib.sha256(
+    Path(__file__).with_name("fidelity-hsa-summary-pilot-definition.json").read_bytes()
 ).hexdigest()
 
 
@@ -62,13 +66,20 @@ def build_source_evidence(source: bytes, definition: bytes, *, suffix: Literal["
             if digest == DEFINITION_SHA256:
                 load_citi_definition(definition)
                 output = from_citi(read_recent_citi(source))
-            elif digest in {CHASE_DEFINITION_SHA256, HAPPEN_DEFINITION_SHA256, LENDINGCLUB_DEFINITION_SHA256}:
+            elif digest in {
+                CHASE_DEFINITION_SHA256,
+                HAPPEN_DEFINITION_SHA256,
+                LENDINGCLUB_DEFINITION_SHA256,
+                FIDELITY_HSA_DEFINITION_SHA256,
+            }:
                 decoded = decode_pdf(source)
                 lines = page_lines(source, decoded.pages, extraction_library="pdfplumber-bounded-simple-v1")
                 if digest == CHASE_DEFINITION_SHA256:
                     output = from_card(parse_card_lines(definition, lines), lines)
                 elif digest == HAPPEN_DEFINITION_SHA256:
                     output = parse_savings_lines(definition, lines)
+                elif digest == FIDELITY_HSA_DEFINITION_SHA256:
+                    output = parse_investment_summary(definition, lines)
                 else:
                     output = parse_summary_savings_lines(definition, lines)
             elif digest == WELLS_DEFINITION_SHA256:

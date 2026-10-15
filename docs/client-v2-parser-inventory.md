@@ -183,6 +183,16 @@ fields already matched the finite pilot, but the unclassified monetary lines
 must be dispositioned before normal import admission. Investment valuation
 remains outside the cash statement scope.
 
+A finite Fidelity HSA account-value summary operation now uses bounded lines
+and a checked-in definition. All 59 referenced PDFs matched the accepted
+reader on account, period, printed endpoints and 133 summary components; each
+printed account-value equation passed. Temporary V2 storage reopened the 59
+sources with 133 explicitly tagged `period_summary` rows and 472 located
+year-to-date or summary-window-tail dispositions; source hashes were
+unchanged. The date assigned to each component is explicitly derived from the
+statement end. Investment-value change remains a summary component.
+Full-page capture and accounting review remain gates.
+
 ## Remaining family operation costs
 
 These estimates complete the source-code review for the other 18 modules in

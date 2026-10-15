@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "parser_id": "pdf_fidelityhsa_202001",
+  "revision": "1",
+  "suffix": ".pdf",
+  "kind": "statement",
+  "operation": "printed_account_value_summary_v1",
+  "period_format": "Month D, YYYY - Month D, YYYY",
+  "money_format": "usd_or_decimal_2dp_or_dash",
+  "account_format": "NNN-NNNNNN",
+  "account_label": "Account Number:",
+  "summary_header": "This Period Year-to-Date",
+  "opening_label": "Beginning Account Value",
+  "closing_label": "Ending Account Value",
+  "row_labels": ["Additions", "Subtractions", "Change in Investment Value"],
+  "valuation_label": "Change in Investment Value",
+  "summary_window_lines": 8
+}

@@ -36,6 +36,7 @@ TABLE_COLUMNS = {
         ("source_sha256", "TEXT", 0),
         ("source_account", "TEXT", 0),
         ("source_account_form", "TEXT", 0),
+        ("row_role", "TEXT", 0),
         ("date_role", "TEXT", 0),
         ("observed_date", "TEXT", 0),
         ("amount_minor", "INTEGER", 0),
@@ -141,7 +142,8 @@ class V2ProfileStore:
                     row_id TEXT PRIMARY KEY, source_sha256 TEXT NOT NULL REFERENCES Sources(sha256),
                     source_account TEXT NOT NULL,
                     source_account_form TEXT NOT NULL CHECK(source_account_form IN ('full','last_four','opaque')),
-                    date_role TEXT NOT NULL,
+                    row_role TEXT NOT NULL CHECK(row_role IN ('activity','period_summary')),
+                    date_role TEXT NOT NULL CHECK(date_role IN ('posting_date','activity_date','statement_period_end')),
                     observed_date TEXT NOT NULL, amount_minor INTEGER NOT NULL
                 );
                 COMMIT;
@@ -238,13 +240,14 @@ class V2ProfileStore:
                 (source_hash, definition_hash, len(saved), _digest(saved), saved),
             )
             c.executemany(
-                "INSERT INTO SourceObservations VALUES (?,?,?,?,?,?,?)",
+                "INSERT INTO SourceObservations VALUES (?,?,?,?,?,?,?,?)",
                 (
                     (
                         row.row_id,
                         source_hash,
                         row.source_account,
                         row.source_account_form,
+                        row.row_role,
                         row.date_role,
                         row.date.iso,
                         row.amount.minor,
@@ -290,6 +293,7 @@ class V2ProfileStore:
                 item.row_id,
                 item.source_account,
                 item.source_account_form,
+                item.row_role,
                 item.date_role,
                 item.date.iso,
                 item.amount.minor,
@@ -298,7 +302,7 @@ class V2ProfileStore:
         }
         actual = set(
             self.connection.execute(
-                "SELECT row_id,source_account,source_account_form,date_role,observed_date,amount_minor "
+                "SELECT row_id,source_account,source_account_form,row_role,date_role,observed_date,amount_minor "
                 "FROM SourceObservations WHERE source_sha256=?",
                 (source_sha256,),
             )

@@ -132,6 +132,7 @@ def from_citi(evidence: CitiEvidence) -> SourceEvidence:
         locations = tuple(fragment.location for fragment in fragments)
         observations.append(
             ObservationEvidence(
+                row_role="activity",
                 row_id=row_id,
                 occurrence=index,
                 source_account=evidence.header.account_suffix,

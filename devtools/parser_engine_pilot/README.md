@@ -99,6 +99,20 @@ reader on account, period, printed endpoints and 24 rows. Their strict evidence
 reopened from a temporary profile with 20 located dispositions; source hashes
 were unchanged. Complete page capture and native admission remain open.
 
+`investment_summary_lines.py` adds a finite account-value summary operation
+under [`investment-summary-declaration-schema-v1.json`](investment-summary-declaration-schema-v1.json).
+It distinguishes printed period components from dated activity using a required
+`period_summary` row role and `statement_period_end` date role. The source's
+year-to-date column and all lines after the printed endpoint inside the bounded
+summary window remain located dispositions. All 59 referenced Fidelity HSA
+PDFs matched the accepted reader on account, period, printed endpoints and 133
+summary rows. The printed account-value equation passed on each source. A
+temporary V2 profile reopened all 59, indexing 133 summary rows and retaining
+472 dispositions with unchanged source hashes. These summary components are
+not ledger transactions: investment value change is not cash activity, and
+the period-end date is a derived label. Complete page capture, accounting
+review, signed routing and native acceptance remain open.
+
 Every Chase-referenced fixture in the authorized closed-copy archive matched
 the accepted reader's account, period, printed balances and rows in a read-only
 comparison. The comparison also accounted for every date-prefixed line as a

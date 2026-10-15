@@ -258,6 +258,7 @@ def parse_savings_lines(
         location = _location(line)
         rows.append(
             ObservationEvidence(
+                row_role="activity",
                 row_id=row_id,
                 occurrence=index,
                 source_account=account_number,
@@ -517,6 +518,7 @@ def parse_summary_savings_lines(
         location = _location(line)
         rows.append(
             ObservationEvidence(
+                row_role="activity",
                 row_id=row_id,
                 occurrence=index,
                 source_account=account["number"],

@@ -31,6 +31,10 @@ fields and all supporting source locations. Printed balances and derived
 values have distinct provenance and an explicit scope (`account_total`,
 `cash_component` or `principal_component`); absent values remain unknown. The envelope
 does not contain categories, verification flags, journal entries or postings.
+Rows also distinguish dated activity from printed period summary components.
+The latter carry a derived `statement_period_end` date role. The temporary
+source-observation index retains both roles so review queries can select
+activity explicitly.
 
 For recent Citi, the statement payload must retain the printed period,
 account suffix, previous/new balances and their locations; each resolved row

@@ -6,10 +6,13 @@ import pytest
 from parsetrail.core.source_evidence import (
     DateValue,
     MoneyValue,
+    ObservationEvidence,
     PdfLine,
     SourceEvidence,
+    SourceFragment,
     StatementAccount,
     StatementPayload,
+    TextValue,
 )
 from pydantic import ValidationError
 
@@ -103,3 +106,26 @@ def test_saved_schema_refuses_accounting_fields_and_unknown_versions() -> None:
     raw["schema_version"] = 3
     with pytest.raises(ValidationError):
         SourceEvidence.model_validate_json(json.dumps(raw))
+
+
+def test_period_summary_cannot_masquerade_as_posted_activity() -> None:
+    values = {
+        "row_id": "c" * 64,
+        "occurrence": 0,
+        "row_role": "period_summary",
+        "source_account": "123-456789",
+        "source_account_form": "full",
+        "date_role": "statement_period_end",
+        "date": DateValue(raw=None, iso="2026-01-31", provenance="derived", locations=(line(1),)),
+        "transaction_date": None,
+        "description": TextValue(raw="Additions", text="Additions", provenance="observed", locations=(line(2),)),
+        "amount": money(100, 2),
+        "running_balance": None,
+        "components": (),
+        "fragments": (SourceFragment(channel="summary", location=line(2), raw_values=("Additions $1.00 $1.00",)),),
+    }
+    assert ObservationEvidence(**values).row_role == "period_summary"
+    with pytest.raises(ValidationError, match="summary row date role"):
+        ObservationEvidence(**(values | {"date_role": "posting_date"}))
+    with pytest.raises(ValidationError, match="summary row date role"):
+        ObservationEvidence(**(values | {"row_role": "activity"}))

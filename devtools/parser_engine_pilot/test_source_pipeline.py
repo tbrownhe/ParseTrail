@@ -14,6 +14,7 @@ CHASE_DEFINITION = Path(__file__).with_name("chase-card-pilot-definition.json").
 HAPPEN_DEFINITION = Path(__file__).with_name("happen-savings-pilot-definition.json").read_bytes()
 LENDINGCLUB_DEFINITION = Path(__file__).with_name("lendingclub-savings-pilot-definition.json").read_bytes()
 WELLS_DEFINITION = Path(__file__).with_name("wells-table-pilot-definition.json").read_bytes()
+FIDELITY_HSA_DEFINITION = Path(__file__).with_name("fidelity-hsa-summary-pilot-definition.json").read_bytes()
 
 
 def test_csv_build_is_strict_and_keeps_raw_cells() -> None:
@@ -45,6 +46,10 @@ def test_pdf_requires_exact_pilot_definition_and_recent_layout() -> None:
         build_source_evidence(sample_table_pdf(), WELLS_DEFINITION + b" ", suffix=".pdf")
     with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
         build_source_evidence(sample_table_pdf(), WELLS_DEFINITION, suffix=".pdf")
+    with pytest.raises(SourcePipelineError, match="unsupported_definition_revision"):
+        build_source_evidence(sample_table_pdf(), FIDELITY_HSA_DEFINITION + b" ", suffix=".pdf")
+    with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
+        build_source_evidence(sample_table_pdf(), FIDELITY_HSA_DEFINITION, suffix=".pdf")
 
 
 def test_source_or_definition_failure_has_no_output_or_profile_write(tmp_path: Path) -> None:

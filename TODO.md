@@ -214,6 +214,12 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   60 referenced PDFs (236 cash rows, 489 unclassified cash-window lines) with
   unchanged hashes. Of those lines, 260 contain decimal values; classify them
   before this family enters normal import admission.
+  Fidelity HSA now has a finite account-value summary operation. All 59
+  referenced PDFs matched account, period, printed balances and 133 summary
+  components against the accepted reader; each printed equation passed.
+  Temporary V2 storage reopened them with 133 explicitly tagged period-summary
+  rows and 472 dispositions, and the source hashes remained unchanged.
+  Full-page capture and accounting review remain open.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and

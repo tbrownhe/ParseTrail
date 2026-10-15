@@ -32,6 +32,9 @@ def test_one_database_reopens_csv_and_statement_without_reparse(tmp_path: Path) 
         assert store.import_source(pdf, DEFINITION_BYTES, citi, suffix=".pdf")
         assert not store.import_source(CSV, CSV_DEFINITION, csv_evidence, suffix=".csv")
         assert store.connection.execute("SELECT count(*) FROM SourceObservations").fetchone() == (2,)
+        assert store.connection.execute("SELECT DISTINCT row_role FROM SourceObservations").fetchall() == [
+            ("activity",)
+        ]
         assert store.connection.execute("SELECT count(*) FROM sqlite_master WHERE name='LedgerEntries'").fetchone() == (
             0,
         )

@@ -81,6 +81,7 @@ def from_hsa_cash(evidence: HsaCashEvidence, lines: PDFLineEvidence) -> SourceEv
         )
         rows.append(
             ObservationEvidence(
+                row_role="activity",
                 row_id=row.row_id,
                 occurrence=occurrence,
                 source_account=account_id,
