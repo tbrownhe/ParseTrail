@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "parser_id": "pdf_transamerica_202104",
+  "revision": "1",
+  "suffix": ".pdf",
+  "kind": "statement",
+  "operation": "single_column_retirement_summary_v1",
+  "period_format": "Month D, YYYY - Month D, YYYY",
+  "money_format": "signed_usd_2dp",
+  "identity_format": "six_digit_plan_prefix",
+  "plan_label": "401(k) Plan",
+  "opening_label": "Beginning Balance",
+  "closing_label": "Ending Balance",
+  "row_labels": ["Your Contributions", "Money In", "Transfers", "Money Out", "Credits/Fees", "Gain/Loss"],
+  "income_labels": ["Your Contributions", "Money In"],
+  "required_labels": ["Money Out", "Credits/Fees", "Gain/Loss"],
+  "summary_window_lines": 16
+}

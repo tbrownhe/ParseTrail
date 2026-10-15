@@ -34,6 +34,7 @@ from devtools.parser_engine_pilot.single_column_summary import parse_plan_label_
 from devtools.parser_engine_pilot.table_bank_source_output import from_anchored_bank
 from devtools.parser_engine_pilot.table_card_source_output import from_anchored_card
 from devtools.parser_engine_pilot.table_source_output import from_table
+from devtools.parser_engine_pilot.transamerica_summary_lines import parse_retirement_summary
 from devtools.parser_engine_pilot.two_date_card_lines import parse_two_date_card
 from devtools.parser_engine_pilot.wells_personal_source_output import from_wells_personal
 from devtools.parser_engine_pilot.wells_statement_output import from_wells_business
@@ -89,6 +90,9 @@ LENDINGCLUB_TABLE_DEFINITION_SHA256 = hashlib.sha256(
 WELLS_PERSONAL_TABLE_DEFINITION_SHA256 = hashlib.sha256(
     Path(__file__).with_name("wells-personal-table-pilot-definition.json").read_bytes()
 ).hexdigest()
+TRANSAMERICA_DEFINITION_SHA256 = hashlib.sha256(
+    Path(__file__).with_name("transamerica-summary-pilot-definition.json").read_bytes()
+).hexdigest()
 
 
 class SourcePipelineError(ValueError):
@@ -120,6 +124,7 @@ def build_source_evidence(source: bytes, definition: bytes, *, suffix: Literal["
                 CAPITAL_ONE_DEFINITION_SHA256,
                 VANGUARD_DEFINITION_SHA256,
                 FIDELITY_401K_DEFINITION_SHA256,
+                TRANSAMERICA_DEFINITION_SHA256,
             }:
                 decoded = decode_pdf(source)
                 lines = page_lines(source, decoded.pages, extraction_library="pdfplumber-bounded-simple-v1")
@@ -137,6 +142,8 @@ def build_source_evidence(source: bytes, definition: bytes, *, suffix: Literal["
                     output = parse_single_column_summary(definition, lines)
                 elif digest == FIDELITY_401K_DEFINITION_SHA256:
                     output = parse_plan_label_summary(definition, lines)
+                elif digest == TRANSAMERICA_DEFINITION_SHA256:
+                    output = parse_retirement_summary(definition, lines)
                 else:
                     output = parse_summary_savings_lines(definition, lines)
             elif digest == WELLS_DEFINITION_SHA256:

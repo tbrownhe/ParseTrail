@@ -37,7 +37,7 @@ output/behavior; it does not imply full private-archive regression coverage.
 | `pdf_occubank_201409` | 0.2.0 | Multi-account bank PDF | Finite V2 pilot and synthetic refusal tests | All 113 archived sources pass two-account row and running-balance parity; 78 periods use bounded first-page annotations. Other account sections remain outside capture. |
 | `pdf_occucc_201904` | 0.2.0 | Credit-card line PDF | Finite V2 pilot and synthetic refusal tests | All 32 archived sources pass accepted-row and printed-balance parity; header interest is a separate located charge. Complete page capture remains open. |
 | `pdf_synchrony-amzncc_202501` | 0.3.0 | Store-card table PDF | No parser-specific test found | Word-header matching, dynamic table geometry and continuation. |
-| `pdf_transamerica_202104` | 0.2.0 | Retirement line PDF | No parser-specific test found | Quarterly period and noncash/account sections need archive comparison. |
+| `pdf_transamerica_202104` | 0.2.0 | Retirement line PDF | Finite V2 period-summary pilot and synthetic refusal tests | All 12 routed archive PDFs pass 49-component printed-value parity; full page capture remains open. |
 | `pdf_usbankreicc_201405` | 0.2.0 | Credit-card line PDF | No parser-specific test found | Metadata/line extraction and row-boundary coverage. |
 | `pdf_vanguard_202210` | 0.2.0 | Retirement line PDF | No parser-specific test found | Quarterly period, account identity and activity semantics. |
 | `pdf_wfbankbus_202110` | 0.2.0 | Business bank dynamic table PDF | No parser-specific test found | Layout/table pilot: word coordinates create per-page table boundaries. |
@@ -311,6 +311,15 @@ matched 6,618 accepted transactions, account, period and printed endpoints;
 V2 profile reopened all 148 sources with unchanged hashes; complete page
 capture, signed routing and native acceptance remain open.
 
+Transamerica retirement statements now use a bounded single-column account-
+value summary operation. The 12 routed archive PDFs matched the accepted
+reader on period, printed endpoints and 49 value components; all printed
+equations passed. The six-digit prefix near the plan title is retained as an
+opaque identity, and `Gain/Loss` is a period summary rather than cash activity.
+Temporary V2 storage reopened all 12 sources, 49 observations and 92 located
+interleaved-text dispositions with unchanged hashes. Full page capture,
+account-identity review, signed routing and native acceptance remain open.
+
 ## Remaining family operation costs
 
 These estimates complete the source-code review for the other 18 modules in
@@ -324,7 +333,7 @@ conversion priority signal, not permission to embed Python in a declaration.
 | `pdf_capitaloneauto_202402`, `pdf_yamahafin_202306`, `pdf_wfloanper_202306` | Bounded loan history section, row components, exact principal and interest signs, printed principal endpoint, full versus partial transaction dates. | Medium. Capital One has no printed opening; Wells invents origination and groups interest/principal into a payment; Yamaha's date extraction must be checked against located source text. Preserve raw components before any posting decision. |
 | `pdf_citicc_201505` | Bounded default-layout column edge and up to five same-page continuation lines; exact dated-start and liability-sign checks. | All 135 routed archive PDFs pass finite evidence parity; complete page capture remains open. |
 | `pdf_citicc_202506` | Generic declared header-anchor geometry, table-cell continuation and liability sign with located tail dispositions. | Eight routed archive PDFs pass finite evidence parity; monetary tails and full page capture remain open. |
-| `pdf_fidelity401k_201810`, `pdf_fidelityhsa_202001`, `pdf_transamerica_202104`, `pdf_vanguard_202210` | Unique period/plan or account anchors, bounded balance sections, amount-bearing lines, explicit cash versus investment scope and a source-labeled date role. | Medium. The old readers often assign period-end dates to undated rows; retain those as derived, and do not turn investment valuation changes into cash activity without printed evidence. Fidelity 401(k) headerless/browser-print plan labels need a finite recognized variant. |
+| `pdf_fidelity401k_201810`, `pdf_fidelityhsa_202001`, `pdf_transamerica_202104`, `pdf_vanguard_202210` | Unique period/plan or account anchors, bounded balance sections, amount-bearing lines, explicit cash versus investment scope and a source-labeled date role. | Transamerica passes 12-source account-value parity; its plan prefix remains opaque. Preserve derived period-end dates and keep investment valuation changes separate from cash activity. |
 | `pdf_happenbank_202606`, `pdf_lendingclubsavings_202601` | Bounded text sections, exact dates and amounts, optional inherited transaction date, printed running balances and independent closing equation. | Low to medium. LendingClub's `Interest Paid` date substitution is derived; require explicit row and tail dispositions and preserve printed source date. |
 | `pdf_lendingclublus_202506`, `pdf_wfbankper_202105` | Page-local anchored table geometry, debit/credit cells, continuation descriptions, optional printed running balance and exact partial-date resolution. | Older LendingClub passes seven-source parity; 28 monetary tails remain open. Wells personal passes 148-source parity with 6,618 rows; full page capture remains open. |
 | `pdf_occubank_201409` | Bounded simple lines, text dates before first-page annotation fallback, two located account sections and running balance chains. | Finite pilot passed 113 archived sources; personal credit line and full page capture remain open. |

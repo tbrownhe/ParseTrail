@@ -292,6 +292,13 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   after-stop rows remain located dispositions. A temporary V2 profile reopened
   all 148 sources with unchanged hashes. Full-page capture, signed routing
   and native acceptance remain open.
+  Transamerica retirement now has a bounded account-value summary operation.
+  All 12 routed archived PDFs matched 49 accepted summary components and
+  printed endpoints; every equation passed. The six-digit plan prefix is
+  retained as opaque identity and `Gain/Loss` stays a period summary, not
+  cash activity. Temporary V2 storage reopened 12 sources, 49 observations
+  and 92 located dispositions with unchanged hashes. Full-page capture,
+  account-identity review, signed routing and native acceptance remain open.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and

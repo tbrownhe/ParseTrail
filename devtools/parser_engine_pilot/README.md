@@ -250,6 +250,14 @@ capture, signed routing and native acceptance remain open. A temporary V2
 profile reopened all 148 sources and their observations without changing
 source hashes.
 
+`transamerica_summary_lines.py` retains quarterly retirement value components
+as period summaries rather than cash activity. All 12 routed archive PDFs
+matched the accepted reader on period, printed endpoints and 49 components;
+every printed equation passed. The six-digit plan prefix is opaque source
+identity. Temporary V2 storage reopened 12 sources, 49 observations and 92
+located interleaved-text dispositions with unchanged hashes. Full-page
+capture, account-identity review and native acceptance remain open.
+
 Every Chase-referenced fixture in the authorized closed-copy archive matched
 the accepted reader's account, period, printed balances and rows in a read-only
 comparison. The comparison also accounted for every date-prefixed line as a
