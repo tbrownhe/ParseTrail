@@ -6,30 +6,18 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from parsetrail.core.money import parse_money, to_minor_units
-from parsetrail.plugins.pdf_citicc_202511 import Parser as RecentCiti
 
 from devtools.parser_engine_pilot.channel_occurrences import Candidate, validate_candidates
+from devtools.parser_engine_pilot.citi_layout import AMOUNT, DEFINITION, TRANSACTION_DATE
 from devtools.parser_engine_pilot.citi_table import CitiTableEvidence
 from devtools.parser_engine_pilot.partial_dates import resolve_month_day
 from devtools.parser_engine_pilot.table_continuations import (
-    ContinuationRule,
     JoinedTableRow,
     RawTableRow,
     assemble,
 )
 
-CITI_TABLE_RULE = ContinuationRule.model_validate(
-    {
-        "operation": "table_continuation_v1",
-        "mode": "amount_with_details",
-        "start_columns": [0, 1],
-        "break_columns": [0, 1],
-        "description_column": 2,
-        "amount_column": 3,
-        "max_group_rows": 8,
-        "allow_cross_page": False,
-    }
-)
+CITI_TABLE_RULE = DEFINITION.table_continuation
 
 
 @dataclass(frozen=True, slots=True)
@@ -47,11 +35,11 @@ def candidates_from_table(evidence: CitiTableEvidence, start_date: datetime, end
     candidates = []
     for group in groups:
         first = group.sources[0]
-        transaction_match = RecentCiti.TRANSACTION_DATE.search(first.cells[0])
-        posting_match = RecentCiti.TRANSACTION_DATE.search(first.cells[1])
+        transaction_match = TRANSACTION_DATE.search(first.cells[0])
+        posting_match = TRANSACTION_DATE.search(first.cells[1])
         if transaction_match is None and posting_match is None:
             raise ValueError("missing_citi_table_date")
-        if group.amount_raw is None or RecentCiti.AMOUNT.fullmatch(group.amount_raw) is None:
+        if group.amount_raw is None or AMOUNT.fullmatch(group.amount_raw) is None:
             raise ValueError("invalid_citi_table_amount")
         transaction_raw = (transaction_match or posting_match).group()
         posting_raw = (posting_match or transaction_match).group()

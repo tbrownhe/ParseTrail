@@ -175,8 +175,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   ahead of the approved 2.0 storage implementation.
   A strict shared source-evidence model now represents statement and activity
   export payloads, typed locations, raw values and unknown/derived provenance.
-  A synthetic CSV adapter round-trips through it; Citi conversion and bounded
-  admission are still open before the released store.
+  A synthetic CSV and ten recent Citi statements round-trip through it. The
+  Citi path now uses a finite pilot definition without importing 1.x parser
+  methods; 486 rows and 803 located dispositions are retained, including 36
+  supplemental details. Bounded admission remains open before the store.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and

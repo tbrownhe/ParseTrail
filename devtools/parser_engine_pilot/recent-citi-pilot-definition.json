@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "parser_id": "pdf_citicc_202511",
+  "revision": "pilot-1",
+  "kind": "statement",
+  "suffix": ".pdf",
+  "routing": {
+    "body": "www.citicards.com",
+    "header": "\"sale post description amount\" || (\"sale post\" && \"date date description amount\")",
+    "metadata_author": "\"Citibank, N.A.\""
+  },
+  "geometry_operation": "citi_header_geometry_v1",
+  "date_operation": "partial_month_day_v1",
+  "money_operation": "citi_usd_amount_v1",
+  "account_effect": "negate_printed_amount_v1",
+  "table_continuation": {
+    "operation": "table_continuation_v1",
+    "mode": "amount_with_details",
+    "start_columns": [0, 1],
+    "break_columns": [0, 1],
+    "description_column": 2,
+    "amount_column": 3,
+    "max_group_rows": 8,
+    "allow_cross_page": false
+  },
+  "channel_occurrences": {
+    "operation": "channel_occurrences_v1",
+    "primary_channel": "table",
+    "secondary_channel": "text",
+    "scope": "same_page"
+  }
+}

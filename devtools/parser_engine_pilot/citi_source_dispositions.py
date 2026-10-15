@@ -12,9 +12,9 @@ from dataclasses import dataclass
 from typing import Literal
 
 from parsetrail.core.money import parse_money, to_minor_units
-from parsetrail.plugins.pdf_citicc_202511 import Parser as RecentCiti
 
 from devtools.parser_engine_pilot.channel_occurrences import Candidate, validate_candidates
+from devtools.parser_engine_pilot.citi_layout import AMOUNT, DATE_PREFIX, TEXT_TRANSACTION
 
 DATE_ONLY = re.compile(r"^\s*(?:\d+\s+)*(?P<date>\d{2}/\d{2})\s*$")
 
@@ -57,9 +57,9 @@ def _description_evidence(description: str, context: str) -> Literal["ordered_wo
     return None
 
 
-def _starts(parser: RecentCiti, pages: list[str]) -> list[_Start]:
+def _starts(pages: list[str]) -> list[_Start]:
     def dated(raw: str) -> re.Match[str] | None:
-        return parser.DATE_PREFIX.match(raw) or DATE_ONLY.match(raw)
+        return DATE_PREFIX.match(raw) or DATE_ONLY.match(raw)
 
     result = []
     for page_number, page in enumerate(pages, 1):
@@ -68,7 +68,7 @@ def _starts(parser: RecentCiti, pages: list[str]) -> list[_Start]:
             match = dated(line)
             if match is None:
                 continue
-            simple = parser.TEXT_TRANSACTION.match(line) is not None
+            simple = TEXT_TRANSACTION.match(line) is not None
             end = min(index + 4, len(lines))
             if simple:
                 end = index + 1
@@ -80,7 +80,7 @@ def _starts(parser: RecentCiti, pages: list[str]) -> list[_Start]:
             amounts = {
                 -to_minor_units(parse_money(found.group()))
                 for raw in lines[index:end]
-                for found in parser.AMOUNT.finditer(raw)
+                for found in AMOUNT.finditer(raw)
             }
             # A description may precede a date-only line in this layout. Do not
             # reach back past another dated start or beyond two nearby lines.
@@ -104,7 +104,6 @@ def _starts(parser: RecentCiti, pages: list[str]) -> list[_Start]:
 
 
 def dispose_dated_lines(
-    parser: RecentCiti,
     pages: list[str],
     table: list[Candidate],
     fees: list[Candidate],
@@ -112,7 +111,7 @@ def dispose_dated_lines(
     """Pair source starts with table occurrences in page order; refuse gaps."""
     validate_candidates(table, "table")
     validate_candidates(fees, "fee")
-    starts = _starts(parser, pages)
+    starts = _starts(pages)
     table_groups: dict[tuple[int, str, int], list[Candidate]] = defaultdict(list)
     source_groups: dict[tuple[int, str, int], list[_Start]] = defaultdict(list)
     for row in table:

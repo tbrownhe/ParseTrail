@@ -13,15 +13,13 @@ from devtools.parser_engine_pilot.channel_occurrences import (
     MAX_CANDIDATES,
     Candidate,
     OccurrenceError,
-    load_occurrence_rule,
     match_occurrences,
     validate_candidates,
 )
+from devtools.parser_engine_pilot.citi_layout import DEFINITION
 
 DATE_ONLY = re.compile(r"\d{2}/\d{2}\Z")
-CITI_OCCURRENCE_RULE = load_occurrence_rule(
-    b'{"operation":"channel_occurrences_v1","primary_channel":"table","secondary_channel":"text","scope":"same_page"}'
-)
+CITI_OCCURRENCE_RULE = DEFINITION.channel_occurrences
 
 
 @dataclass(frozen=True, slots=True)

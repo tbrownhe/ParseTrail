@@ -133,8 +133,10 @@ have been performed; declarative parity and fixture gaps remain open.
 The [2.0 upstream review](client-v2-upstream-boundary-review.md) now documents
 the router/model changes before storage. A strict shared evidence contract
 accepts statement and activity-export payloads; a synthetic CSV adapter
-round-trips raw cells and an unknown balance. Citi conversion and bounded
-admission into that contract are still open.
+round-trips raw cells and an unknown balance. The recent Citi pilot now uses a
+checked-in finite definition and maps the ten archived statements into the
+same strict output, retaining all 486 rows and 803 source dispositions.
+Bounded runtime admission into that contract remains open.
 
 The isolated [P2-2 table pilot](../devtools/parser_engine_pilot/README.md)
 demonstrates strict JSON validation, exact components, source locations,

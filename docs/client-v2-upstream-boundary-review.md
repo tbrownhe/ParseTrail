@@ -62,5 +62,13 @@ duplicate row IDs and unsupported versions. Statement balances use exact
 minor-unit equations only when both endpoints and row amounts are observed.
 The [table adapter](../devtools/parser_engine_pilot/table_source_output.py)
 round-trips a synthetic CSV with an unknown balance through this contract.
-The recent Citi adapter and bounded admission function remain the next proof;
-this schema is not yet the released stored snapshot.
+The [recent Citi output adapter](../devtools/parser_engine_pilot/citi_source_output.py)
+now maps bounded, source-linked evidence into the same statement payload. A
+finite checked-in pilot definition supplies routing, continuation, occurrence
+and source-sign rules. The bounded path no longer imports the 1.x Citi parser;
+that parser remains in the separate read-only comparison audit. Ten archived
+recent-layout PDFs produced 486 observations and 803 located dispositions,
+including 36 supplemental detail rows, and reopened from strict JSON without
+changing source hashes. `capture_verified` remains false pending final
+non-monetary section capture and native decoder acceptance. Bounded admission
+and the released stored snapshot remain the next proof.

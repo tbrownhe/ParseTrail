@@ -247,6 +247,14 @@ parity. The old reader remains only the audit's comparison baseline.
 The [partial-date operation](partial_dates.py) now resolves printed `MM/DD`
 dates with a finite year window and explicit refusal for invalid, distant or
 ambiguous results; the ten-source Citi comparison remains unchanged.
+The [recent Citi pilot definition](recent-citi-pilot-definition.json) now
+selects routing, table continuation, channel occurrence, source-sign and
+finite geometry operations. The bounded Citi path no longer imports the 1.x
+parser; only the separate comparison audit does. Its
+[shared output adapter](citi_source_output.py) reopens all ten statements from
+strict JSON with 486 observations and 803 located source dispositions,
+including 36 supplemental detail rows. It leaves capture verification false
+and creates no accounting postings or profile writes.
 
 [`bounded_pdf_text.py`](bounded_pdf_text.py) starts a separate PDF text worker
 with source, output, page, line and extracted-text limits plus a wall-clock

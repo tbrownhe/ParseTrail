@@ -6,11 +6,10 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-from parsetrail.plugins.pdf_citicc_202511 import Parser as RecentCiti
-
+from devtools.parser_engine_pilot.citi_layout import AMOUNT
 from devtools.parser_engine_pilot.citi_source_dispositions import DatedLineDisposition
 
-MONEY = RecentCiti.AMOUNT.pattern
+MONEY = AMOUNT.pattern
 NEW_CHARGES = re.compile(rf"New Charges\s+{MONEY}\Z")
 ANNUAL_TOTAL = re.compile(rf"Total (?:fees|interest) charged in \d{{4}}\s+{MONEY}\Z")
 SUMMARY_AMOUNT = re.compile(
@@ -56,7 +55,7 @@ def dispose_unlinked_money_lines(
             line = " ".join(raw.split())
             # Accessible-PDF decorative digits can precede a printed label.
             label = re.sub(r"^\d+\s+", "", line)
-            if RecentCiti.AMOUNT.search(raw) is None:
+            if AMOUNT.search(raw) is None:
                 if page_number == 1 and "Amount enclosed:" in label:
                     status = "payment_information"
                 elif page_number == 1 and "INnetewr ebsatlance" in label:
@@ -70,7 +69,7 @@ def dispose_unlinked_money_lines(
             elif label.startswith("and the purchase price must have been more than "):
                 status = "legal_disclosure"
             elif "TOTAL FEES FOR THIS PERIOD" in label or (
-                RecentCiti.AMOUNT.fullmatch(label)
+                AMOUNT.fullmatch(label)
                 and any(
                     "TOTAL FEES FOR THIS PERIOD" in lines[later]
                     for later in range(index + 1, min(len(lines), index + 4))
@@ -87,7 +86,7 @@ def dispose_unlinked_money_lines(
                 label.startswith(("Standard Purch ", "Standard Adv ", "RtSaleOffer "))
                 and "%" in label
                 and "(D)" in label
-                and len(RecentCiti.AMOUNT.findall(label)) >= 2
+                and len(AMOUNT.findall(label)) >= 2
             ):
                 status = "apr_information"
             elif label.startswith("Your account has an Annual Membership Fee of "):
@@ -110,11 +109,9 @@ def _first_page_status(label: str, lines: list[str], index: int) -> str:
         return "payment_information"
     if COUPON_AMOUNTS.fullmatch(label) and index > 0 and "Payment due date" in lines[index - 1]:
         return "payment_information"
-    if "Savings=" in label or ("Only the minimum payment" in label and RecentCiti.AMOUNT.search(label)):
+    if "Savings=" in label or ("Only the minimum payment" in label and AMOUNT.search(label)):
         return "repayment_example"
-    if RecentCiti.AMOUNT.fullmatch(label) and any(
-        "Savings=" in following for following in lines[index + 1 : index + 3]
-    ):
+    if AMOUNT.fullmatch(label) and any("Savings=" in following for following in lines[index + 1 : index + 3]):
         return "repayment_example"
     if (
         "late fee of up to " in label
