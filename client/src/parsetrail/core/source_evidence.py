@@ -214,6 +214,7 @@ class ObservationEvidence(EvidenceModel):
 class StatementAccount(EvidenceModel):
     source_identity: str = Field(min_length=1, max_length=4096)
     source_identity_form: Literal["full", "last_four", "opaque"]
+    balance_scope: Literal["account_total", "cash_component", "principal_component"]
     identity_locations: tuple[SourceLocation, ...] = Field(min_length=1, max_length=16)
     opening: MoneyValue | None
     closing: MoneyValue | None

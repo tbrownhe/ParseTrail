@@ -165,6 +165,13 @@ period, printed endpoints and 24 rows; their 20 located dispositions preserve
 balance-forward and section headers. The printed six-value summary and running
 chain check independently. The inherited date and period-end interest date
 remain derived, and complete page capture is still unverified.
+The HealthEquity cash pilot now maps to strict V2 evidence with explicit
+`cash_component` balance scope. A bounded read-only pass over all 60 referenced
+PDFs produced 236 rows and retained 489 unclassified lines between printed
+cash boundaries; 260 of these contain decimal values. The old parser's cash
+fields already matched the finite pilot, but the unclassified monetary lines
+must be dispositioned before normal import admission. Investment valuation
+remains outside the cash statement scope.
 
 ## Remaining family operation costs
 

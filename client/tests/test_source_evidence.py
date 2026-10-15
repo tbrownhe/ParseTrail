@@ -43,6 +43,7 @@ def statement(*, closing: int, verified: bool) -> SourceEvidence:
                 StatementAccount(
                     source_identity="card ending 1234",
                     source_identity_form="opaque",
+                    balance_scope="account_total",
                     identity_locations=(line(2),),
                     opening=money(100, 2),
                     closing=money(closing, 3),
@@ -79,6 +80,7 @@ def test_abbreviated_source_identity_requires_exactly_four_digits() -> None:
         StatementAccount(
             source_identity="card ending 1234",
             source_identity_form="last_four",
+            balance_scope="account_total",
             identity_locations=(line(2),),
             opening=money(100, 2),
             closing=money(100, 3),
@@ -89,6 +91,10 @@ def test_abbreviated_source_identity_requires_exactly_four_digits() -> None:
 def test_saved_schema_refuses_accounting_fields_and_unknown_versions() -> None:
     saved = statement(closing=100, verified=True)
     assert SourceEvidence.model_validate_json(saved.model_dump_json()).payload.kind == "statement"
+    raw = saved.model_dump(mode="json")
+    raw["payload"]["accounts"][0].pop("balance_scope")
+    with pytest.raises(ValidationError, match="balance_scope"):
+        SourceEvidence.model_validate_json(json.dumps(raw))
     raw = saved.model_dump(mode="json")
     raw["category"] = "Food"
     with pytest.raises(ValidationError, match="extra_forbidden"):

@@ -28,7 +28,8 @@ source locations. Its document payload is typed by kind: statement, activity
 export or other explicitly supported evidence. Rows retain exact signed minor
 units, transaction and posting dates when observed, description, original
 fields and all supporting source locations. Printed balances and derived
-values have distinct provenance; absent values remain unknown. The envelope
+values have distinct provenance and an explicit scope (`account_total`,
+`cash_component` or `principal_component`); absent values remain unknown. The envelope
 does not contain categories, verification flags, journal entries or postings.
 
 For recent Citi, the statement payload must retain the printed period,

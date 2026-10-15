@@ -294,6 +294,7 @@ def parse_savings_lines(
             StatementAccount(
                 source_identity=account_number,
                 source_identity_form="last_four",
+                balance_scope="account_total",
                 identity_locations=(_location(account_line),),
                 opening=MoneyValue(
                     raw=opening["amount"],
@@ -551,6 +552,7 @@ def parse_summary_savings_lines(
             StatementAccount(
                 source_identity=account["number"],
                 source_identity_form="full",
+                balance_scope="account_total",
                 identity_locations=(_location(account_line),),
                 opening=MoneyValue(
                     raw=values_line.normalized.split()[0],

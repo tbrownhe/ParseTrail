@@ -106,6 +106,7 @@ def from_card(evidence: CardStatementEvidence, lines: PDFLineEvidence) -> Source
             StatementAccount(
                 source_identity=str(account.normalized),
                 source_identity_form="last_four",
+                balance_scope="account_total",
                 identity_locations=(_location(account),),
                 opening=MoneyValue(
                     raw=evidence.opening_minor.raw,

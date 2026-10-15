@@ -136,9 +136,19 @@ an authorized source with:
 client/.venv/Scripts/python.exe -m devtools.parser_engine_pilot.compare_hsa C:\private\hsa-statement.pdf
 ```
 
-This comparison uses the existing unbounded PDF decoder. A bounded decoder,
-candidate-row disposition and separate investment evidence remain open before
-runtime use or schema freeze.
+This comparison uses the existing unbounded PDF decoder. Complete candidate-row
+disposition and separate investment evidence remain open before runtime use or
+schema freeze; the bounded-worker pass below is development evidence.
+
+`hsa_cash_source_output.py` maps the cash pilot into the strict shared V2
+envelope with `cash_component` balance scope. Its printed cash equation remains
+separate from whole-HSA valuation. A bounded read-only pass produced strict
+output for all 60 referenced HealthEquity PDFs: 236 cash rows and 489 located
+cash-window lines outside the dated row grammar, with unchanged source hashes.
+Of those 489 lines, 260 contain decimal values, including rate, balance and fee
+disclosures. They remain unclassified and `capture_verified` is false. This
+family is absent from the bounded source-import entry point until those
+monetary lines have accepted dispositions.
 
 `wells_table.py` pilots one named, finite page-local geometry operation under
 [`wells-table-declaration-schema-v1.json`](wells-table-declaration-schema-v1.json).

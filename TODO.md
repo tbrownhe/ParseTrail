@@ -203,6 +203,11 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   rows and the independently printed summary equation. Their strict evidence
   reopened from a temporary profile with 20 located dispositions and unchanged
   source hashes; full-page capture and native admission remain open.
+  Strict HealthEquity cash evidence now labels its printed balances as a cash
+  component, never whole-account value. A bounded read-only pass covered all
+  60 referenced PDFs (236 cash rows, 489 unclassified cash-window lines) with
+  unchanged hashes. Of those lines, 260 contain decimal values; classify them
+  before this family enters normal import admission.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and

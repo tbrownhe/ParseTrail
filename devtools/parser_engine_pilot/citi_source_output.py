@@ -215,6 +215,7 @@ def from_citi(evidence: CitiEvidence) -> SourceEvidence:
             StatementAccount(
                 source_identity=header.account_suffix,
                 source_identity_form="last_four",
+                balance_scope="account_total",
                 identity_locations=tuple(
                     PdfLine(kind="pdf_line", page=page, line=line) for page, line in header.account_locations
                 ),
