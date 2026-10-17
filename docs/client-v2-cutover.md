@@ -206,6 +206,12 @@ identified one definition for all 956 PDFs in the successful archive (20 familie
 missing matches; three separately sampled Synchrony PDFs covered the remaining
 family. This scan checks recognition, not transaction extraction or accounting.
 Installed-client trust remains open.
+
+The local [catalog artifact builder](../client/scripts/v2_catalog_release.py)
+validates, signs and re-verifies all 23 checked-in definitions into a new local
+directory using an encrypted key kept outside the repository. A production key,
+installed offline acceptance and server publication remain open.
+
 The finite parser operations, bounded adapters and source pipeline now live in
 the client package. Verified-catalog import uses that installed pipeline by
 default; a synthetic signed CSV import saves and reopens its evidence without

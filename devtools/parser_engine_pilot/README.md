@@ -3,8 +3,11 @@
 This is the development evidence for the [2.0 parser plan](../../docs/client-v2-parsing.md).
 The finite parser operations, bounded adapters and source pipeline now live in
 the client package. This directory retains tests, comparison tools and checked-in
-example definitions. Automatic routing and ordinary desktop import are not
-connected; this is not a released signed catalog.
+example definitions. The verified-catalog service now routes CSV and PDF imports;
+ordinary desktop import is not connected. All catalog tests use local test keys,
+so this is not a released signed catalog. The sections below record the pilot's
+incremental results; [the cutover plan](../../docs/client-v2-cutover.md) tracks
+current gates.
 
 The installed [`v2_parser_engine.py`](../../client/src/parsetrail/core/v2_parser_engine.py)
 accepts an exact JSON declaration under

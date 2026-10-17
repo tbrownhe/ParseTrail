@@ -47,7 +47,7 @@ verified definition can feed the pending 2.0 source import service, which refuse
 parser identity/revision mismatch before writing. The catalog revision contract
 allows the existing recent-Citi `pilot-2` revision. CSV matching and signed PDF
 routing now require one verified definition before a source write. Installed-client
-admission, a production trusted key, and publication tooling
+admission, a production trusted key, and server publication
 remain open. No 1.4 bytecode catalog or server contract was changed.
 The pilot source pipeline now validates a supplied declaration and dispatches
 current PDF parsers by admitted identity, so a valid definition revision can
@@ -64,6 +64,12 @@ recognition rules from the current parsers. A read-only scan routed all 956 PDFs
 in the successful archive uniquely across 20 families; three separately sampled
 Synchrony PDFs covered the remaining family. Routing alone does not prove
 transaction extraction parity or accounting acceptance.
+
+The local [catalog artifact builder](../client/scripts/v2_catalog_release.py)
+validates every checked-in definition, signs a deterministic snapshot with an
+encrypted Ed25519 key kept outside the repository, verifies the resulting pair,
+and writes it to a new directory. It does not publish or activate the release.
+A production trusted key and installed offline acceptance remain open.
 
 ## Initial code findings
 

@@ -359,9 +359,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   A local 2.0 catalog verifier/cache now authenticates exact Ed25519-signed
   snapshots, checks embedded definition hashes and a caller-supplied strict
   admission rule, and atomically selects a verified offline release. Synthetic
-  tamper, rollback, cancellation and reopen tests pass. Production declaration
-  admission, trusted release key, publication tooling and native installed
-  offline acceptance remain open.
+  tamper, rollback, cancellation and reopen tests pass. A local artifact builder
+  now validates and signs the 23 declarations using an encrypted key outside the
+  repository, then verifies and writes the pair to a new directory. Production
+  trust, installed offline acceptance and server publication remain open.
   One strict local admission callback now validates all 23 checked-in pilot
   definitions (22 current parser families, including both MOHELA export formats)
   inside a test-signed snapshot. An explicitly selected verified definition can
