@@ -19,8 +19,6 @@ from devtools.parser_engine_pilot.card_lines import parse_card_lines
 from devtools.parser_engine_pilot.card_source_output import from_card
 from devtools.parser_engine_pilot.catalog_admission import admit_pilot_definition
 from devtools.parser_engine_pilot.citi_evidence import read_recent_citi
-from devtools.parser_engine_pilot.citi_layout import DEFINITION_SHA256
-from devtools.parser_engine_pilot.citi_layout import load_definition as load_citi_definition
 from devtools.parser_engine_pilot.citi_source_output import from_citi
 from devtools.parser_engine_pilot.dual_text_card_lines import parse_dual_text_card
 from devtools.parser_engine_pilot.engine import EngineError, parse_csv
@@ -91,13 +89,9 @@ def build_source_evidence(
         if suffix == ".csv":
             output = from_table(parse_csv(definition, source, cancelled=cancelled))
         else:
-            digest = hashlib.sha256(definition).hexdigest()
             parser_id = identity.parser_id
             if parser_id == "pdf_citicc_202511":
-                if digest != DEFINITION_SHA256:
-                    raise SourcePipelineError("unsupported_definition_revision")
-                load_citi_definition(definition)
-                output = from_citi(read_recent_citi(source, cancelled=cancelled))
+                output = from_citi(read_recent_citi(source, definition, cancelled=cancelled), definition)
             elif parser_id in SIMPLE_LINE_PARSERS:
                 decoded = decode_pdf(source, cancelled=cancelled)
                 lines = page_lines(source, decoded.pages, extraction_library="pdfplumber-bounded-simple-v1")

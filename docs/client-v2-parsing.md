@@ -52,9 +52,13 @@ The pilot source pipeline now validates a supplied declaration and dispatches
 current PDF parsers by admitted identity, so a valid definition revision can
 reach its finite operation without an added hash allowlist entry. A synthetic
 Happen statement proves the new revision and hash survive in output. The recent
-Citi handler still uses its bundled definition and therefore requires the exact
-checked-in bytes; that handler must accept a supplied definition before Citi
-catalog updates can be activated. Signed source recognition remains open.
+Citi handler now consumes supplied routing, table-continuation and occurrence
+rules, and binds output to the supplied revision and hash. A revision-only
+definition change kept all 486 observations across ten read-only archived
+recent-Citi PDFs, with unchanged source hashes. A changed routing body refused
+an authorized source. One revised statement also reopened from a temporary
+pending 2.0 profile after local test-signature verification. Financial rule
+changes still require fixture review; signed source recognition remains open.
 
 ## Initial code findings
 

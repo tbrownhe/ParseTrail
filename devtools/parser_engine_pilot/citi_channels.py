@@ -13,13 +13,12 @@ from devtools.parser_engine_pilot.channel_occurrences import (
     MAX_CANDIDATES,
     Candidate,
     OccurrenceError,
+    OccurrenceRule,
     match_occurrences,
     validate_candidates,
 )
-from devtools.parser_engine_pilot.citi_layout import DEFINITION
 
 DATE_ONLY = re.compile(r"\d{2}/\d{2}\Z")
-CITI_OCCURRENCE_RULE = DEFINITION.channel_occurrences
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,11 +43,12 @@ def resolve(
     *,
     opening_minor: int,
     closing_minor: int,
+    occurrence_rule: OccurrenceRule,
 ) -> CitiResolution:
     """Apply Citi artifact rules and a printed balance check to matched evidence."""
     if sum(map(len, (table, text, fees))) > MAX_CANDIDATES:
         raise OccurrenceError("candidate_limit")
-    matches = match_occurrences(CITI_OCCURRENCE_RULE, table, text)
+    matches = match_occurrences(occurrence_rule, table, text)
     validate_candidates(fees, "fee")
     sources = [[row] for row in table]
     representatives = list(table)

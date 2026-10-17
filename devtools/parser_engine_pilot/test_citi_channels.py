@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from datetime import date
+from functools import partial
 
 import pytest
 
 from devtools.parser_engine_pilot.channel_occurrences import Candidate, OccurrenceError
-from devtools.parser_engine_pilot.citi_channels import resolve
+from devtools.parser_engine_pilot.citi_channels import resolve as resolve_with_rule
+from devtools.parser_engine_pilot.citi_layout import DEFINITION
 
 DAY = date(2026, 8, 2)
+resolve = partial(resolve_with_rule, occurrence_rule=DEFINITION.channel_occurrences)
 
 
 def row(description: str, amount: int, channel: str, line: int, page: int = 3) -> Candidate:

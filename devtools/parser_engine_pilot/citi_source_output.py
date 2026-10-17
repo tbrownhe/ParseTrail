@@ -23,10 +23,9 @@ from parsetrail.core.source_evidence import (
 from devtools.parser_engine_pilot.citi_evidence import CitiEvidence
 from devtools.parser_engine_pilot.citi_layout import (
     AMOUNT,
-    DEFINITION,
-    DEFINITION_SHA256,
     EVIDENCE_ENGINE_VERSION,
     TEXT_TRANSACTION,
+    load_definition,
 )
 from devtools.parser_engine_pilot.citi_table import CitiTableRow
 from devtools.parser_engine_pilot.money_operations import usd_symbol_minor_v1
@@ -51,10 +50,11 @@ def _table_location(row: CitiTableRow) -> PdfTableRow | PdfLine:
     return PdfTableRow(kind="pdf_table_row", page=row.page, row=row.table_row, region=row.region)
 
 
-def from_citi(evidence: CitiEvidence) -> SourceEvidence:
+def from_citi(evidence: CitiEvidence, definition_bytes: bytes) -> SourceEvidence:
     """Keep all supporting copies and nontransaction dispositions without posting."""
+    definition, definition_hash = load_definition(definition_bytes)
     if (
-        evidence.definition_sha256 != DEFINITION_SHA256
+        evidence.definition_sha256 != definition_hash
         or evidence.engine_version != EVIDENCE_ENGINE_VERSION
         or not evidence.dated_start_row_bijection
     ):
@@ -245,8 +245,8 @@ def from_citi(evidence: CitiEvidence) -> SourceEvidence:
         schema_version=2,
         source_sha256=evidence.source_sha256,
         definition_sha256=evidence.definition_sha256,
-        parser_id=DEFINITION.parser_id,
-        definition_revision=DEFINITION.revision,
+        parser_id=definition.parser_id,
+        definition_revision=definition.revision,
         engine_version=evidence.engine_version,
         extractor_version=evidence.table_evidence.extraction_library + "+simple-text-v1",
         payload=payload,

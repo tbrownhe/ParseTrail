@@ -90,8 +90,8 @@ def test_valid_pdf_definition_reaches_source_checks(definition: bytes) -> None:
         build_source_evidence(sample_table_pdf(), definition, suffix=".pdf")
 
 
-def test_recent_citi_stays_pinned_until_handler_uses_supplied_declaration() -> None:
-    with pytest.raises(SourcePipelineError, match="unsupported_definition_revision"):
+def test_recent_citi_valid_revision_reaches_source_checks() -> None:
+    with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
         build_source_evidence(sample_table_pdf(), DEFINITION_BYTES + b" ", suffix=".pdf")
     with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
         build_source_evidence(sample_table_pdf(), DEFINITION_BYTES, suffix=".pdf")

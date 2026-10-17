@@ -1,5 +1,7 @@
 """Citi output keeps both source channels and refuses changed printed money."""
 
+import hashlib
+import json
 from dataclasses import replace
 from datetime import date
 
@@ -9,7 +11,7 @@ from parsetrail.core.source_evidence import SourceEvidence
 from devtools.parser_engine_pilot.channel_occurrences import Candidate
 from devtools.parser_engine_pilot.citi_channels import CitiResolution, ResolvedRow
 from devtools.parser_engine_pilot.citi_evidence import CitiEvidence
-from devtools.parser_engine_pilot.citi_layout import DEFINITION_SHA256, EVIDENCE_ENGINE_VERSION
+from devtools.parser_engine_pilot.citi_layout import DEFINITION_BYTES, DEFINITION_SHA256, EVIDENCE_ENGINE_VERSION
 from devtools.parser_engine_pilot.citi_source_dispositions import DatedLineDisposition
 from devtools.parser_engine_pilot.citi_source_output import CitiOutputError, from_citi
 from devtools.parser_engine_pilot.citi_statement_header import CitiStatementHeader, PrintedBalance
@@ -63,7 +65,7 @@ def sample() -> CitiEvidence:
 
 
 def test_statement_output_roundtrip_preserves_source_copies() -> None:
-    output = from_citi(sample())
+    output = from_citi(sample(), DEFINITION_BYTES)
     assert SourceEvidence.model_validate_json(output.model_dump_json()) == output
     account = output.payload.accounts[0]
     assert account.source_identity_form == "last_four"
@@ -93,4 +95,17 @@ def test_changed_printed_amount_is_refused() -> None:
         ),
     )
     with pytest.raises(CitiOutputError, match="source_amount_mismatch"):
-        from_citi(changed)
+        from_citi(changed, DEFINITION_BYTES)
+
+
+def test_supplied_citi_definition_revision_is_preserved_in_output() -> None:
+    changed = json.loads(DEFINITION_BYTES)
+    changed["revision"] = "pilot-3"
+    definition = json.dumps(changed).encode("utf-8")
+    digest = hashlib.sha256(definition).hexdigest()
+    evidence = replace(sample(), definition_sha256=digest)
+    with pytest.raises(CitiOutputError, match="source_contract"):
+        from_citi(evidence, DEFINITION_BYTES)
+    output = from_citi(evidence, definition)
+    assert output.definition_revision == "pilot-3"
+    assert output.definition_sha256 == digest

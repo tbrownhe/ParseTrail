@@ -20,8 +20,8 @@ from parsetrail.plugins.pdf_citicc_202506 import Parser as OlderCiti
 from parsetrail.plugins.pdf_citicc_202511 import Parser as RecentCiti
 
 from devtools.parser_engine_pilot.channel_occurrences import Candidate, match_occurrences
-from devtools.parser_engine_pilot.citi_channels import CITI_OCCURRENCE_RULE
 from devtools.parser_engine_pilot.citi_evidence import read_recent_citi
+from devtools.parser_engine_pilot.citi_layout import DEFINITION, DEFINITION_BYTES
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,7 +33,7 @@ class TextDisposition:
 def dispositions(table: list[Candidate], text: list[Candidate]) -> tuple[TextDisposition, ...]:
     """Match exact occurrences; never infer that a coarse-key conflict is a new row."""
     result = []
-    for match in match_occurrences(CITI_OCCURRENCE_RULE, table, text):
+    for match in match_occurrences(DEFINITION.channel_occurrences, table, text):
         if match.status == "exact_copy":
             status = "exact_table_occurrence"
         elif match.status == "secondary_only":
@@ -69,7 +69,7 @@ def overlap_shape(candidate: Candidate, table: list[Candidate]) -> str:
 def audit(source: bytes) -> dict[str, int | bool]:
     """Compare a bounded candidate path with the current reader, without writes."""
     logger.remove()
-    evidence = read_recent_citi(source)
+    evidence = read_recent_citi(source, DEFINITION_BYTES)
     table = list(evidence.table_candidates.rows)
     text = list(evidence.text_candidates)
     classified = dispositions(table, text)

@@ -6,17 +6,16 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from devtools.parser_engine_pilot.channel_occurrences import Candidate, validate_candidates
-from devtools.parser_engine_pilot.citi_layout import AMOUNT, DEFINITION, TRANSACTION_DATE
+from devtools.parser_engine_pilot.citi_layout import AMOUNT, TRANSACTION_DATE
 from devtools.parser_engine_pilot.citi_table import CitiTableEvidence
 from devtools.parser_engine_pilot.money_operations import usd_symbol_minor_v1
 from devtools.parser_engine_pilot.partial_dates import resolve_month_day
 from devtools.parser_engine_pilot.table_continuations import (
+    ContinuationRule,
     JoinedTableRow,
     RawTableRow,
     assemble,
 )
-
-CITI_TABLE_RULE = DEFINITION.table_continuation
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,10 +24,16 @@ class CitiTableCandidates:
     groups: tuple[JoinedTableRow, ...]
 
 
-def candidates_from_table(evidence: CitiTableEvidence, start_date: datetime, end_date: datetime) -> CitiTableCandidates:
+def candidates_from_table(
+    evidence: CitiTableEvidence,
+    start_date: datetime,
+    end_date: datetime,
+    *,
+    continuation: ContinuationRule,
+) -> CitiTableCandidates:
     """Convert printed table groups; keep supplemental text as source evidence."""
     groups = assemble(
-        CITI_TABLE_RULE,
+        continuation,
         tuple(RawTableRow(row.page, row.table_row, row.raw_cells) for row in evidence.rows),
     )
     candidates = []

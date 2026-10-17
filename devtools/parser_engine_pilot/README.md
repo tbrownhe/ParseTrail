@@ -604,10 +604,14 @@ the daily import UI and Intel Mac worker acceptance remain separate gates.
 
 The source pipeline validates declarations with the local admission registry
 before dispatching PDFs by parser identity. A valid changed Happen revision is
-reflected in evidence without a new hard-coded hash. Recent Citi remains pinned
-to its bundled definition because that finite handler does not yet consume
-catalog-supplied rules. The pilot still needs automatic source recognition and
-installed-client trust before normal import admission.
+reflected in evidence without a new hard-coded hash. Recent Citi now consumes
+the supplied routing, continuation and occurrence rules. A revision-only change
+retained all 486 observations across ten read-only archived recent-Citi PDFs,
+with output bound to the new definition hash and no source-byte changes. A
+changed routing body refused one authorized source, and a revised statement
+reopened from a temporary pending profile after local test-signature
+verification. The pilot still needs automatic source recognition, complete
+page capture and installed-client trust before normal import admission.
 
 For an authorized source, pass its local PDF/CSV path and the matching checked-in
 definition. The launcher reads the source, parses through the bounded pipeline,

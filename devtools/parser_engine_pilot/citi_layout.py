@@ -84,21 +84,13 @@ DEFINITION, DEFINITION_SHA256 = load_definition(DEFINITION_BYTES)
 EVIDENCE_ENGINE_VERSION = "recent-citi-evidence-pilot-4"
 
 RECENT_CITI_ID = DEFINITION.parser_id
-ROUTING_METADATA = {
+OTHER_LAYOUT_ROUTING_METADATA = {
     "pdf_citicc_202506": {
         "SUFFIX": ".pdf",
         "SEARCH_STRING": "www.citicards.com",
         "ROUTING_RULE": {
             "pdf_metadata": {"Producer": '"crawfordtech"'},
             "header": '("trans. post description amount" || ("trans. post" && "date date description amount")) && !"sale post"',
-        },
-    },
-    RECENT_CITI_ID: {
-        "SUFFIX": DEFINITION.suffix,
-        "SEARCH_STRING": DEFINITION.routing.body,
-        "ROUTING_RULE": {
-            "pdf_metadata": {"Author": DEFINITION.routing.metadata_author},
-            "header": DEFINITION.routing.header,
         },
     },
 }

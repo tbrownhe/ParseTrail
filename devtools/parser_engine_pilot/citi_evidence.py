@@ -20,11 +20,12 @@ from devtools.parser_engine_pilot.citi_channels import CitiResolution, resolve
 from devtools.parser_engine_pilot.citi_layout import (
     AMOUNT,
     DATE_PREFIX,
-    DEFINITION_SHA256,
     EVIDENCE_ENGINE_VERSION,
+    OTHER_LAYOUT_ROUTING_METADATA,
     RECENT_CITI_ID,
-    ROUTING_METADATA,
     TEXT_TRANSACTION,
+    CitiDefinition,
+    load_definition,
 )
 from devtools.parser_engine_pilot.citi_money_lines import MoneyLineDisposition, dispose_unlinked_money_lines
 from devtools.parser_engine_pilot.citi_source_dispositions import (
@@ -59,8 +60,17 @@ class CitiEvidence:
     dated_start_row_bijection: bool
 
 
-def _layout_metadata() -> dict[str, dict]:
-    return ROUTING_METADATA
+def _layout_metadata(definition: CitiDefinition) -> dict[str, dict]:
+    metadata = dict(OTHER_LAYOUT_ROUTING_METADATA)
+    metadata[RECENT_CITI_ID] = {
+        "SUFFIX": definition.suffix,
+        "SEARCH_STRING": definition.routing.body,
+        "ROUTING_RULE": {
+            "pdf_metadata": {"Author": definition.routing.metadata_author},
+            "header": definition.routing.header,
+        },
+    }
+    return metadata
 
 
 def _features(pages: tuple[str, ...], metadata: tuple[tuple[str, str], ...]) -> DocumentFeatures:
@@ -182,10 +192,16 @@ def _dated_start_bijection(resolution: CitiResolution, dated_lines: tuple[DatedL
     return all(occurrences[index] == 1 for index in range(len(resolution.rows)))
 
 
-def read_recent_citi(source: bytes, *, cancelled: Callable[[], bool] | None = None) -> CitiEvidence:
+def read_recent_citi(
+    source: bytes,
+    definition_bytes: bytes,
+    *,
+    cancelled: Callable[[], bool] | None = None,
+) -> CitiEvidence:
     """Return source-linked candidates; refuse unresolved dated starts."""
+    definition, definition_hash = load_definition(definition_bytes)
     decoded = decode_pdf(source, cancelled=cancelled)
-    if matching_plugins(_features(decoded.pages, decoded.metadata), _layout_metadata()) != (RECENT_CITI_ID,):
+    if matching_plugins(_features(decoded.pages, decoded.metadata), _layout_metadata(definition)) != (RECENT_CITI_ID,):
         raise CitiEvidenceError("wrong_or_ambiguous_citi_layout")
     table_evidence = extract_bounded_citi(source, cancelled=cancelled)
     if len(table_evidence.pages) != len(decoded.pages):
@@ -193,7 +209,7 @@ def read_recent_citi(source: bytes, *, cancelled: Callable[[], bool] | None = No
     header = parse_header(table_evidence.first_page_chars, decoded.pages)
     start = datetime.combine(header.start_date, datetime.min.time())
     end = datetime.combine(header.end_date, datetime.min.time())
-    table = candidates_from_table(table_evidence, start, end)
+    table = candidates_from_table(table_evidence, start, end, continuation=definition.table_continuation)
     text = _text_candidates(decoded.pages, start, end)
     fees = fee_candidates(decoded.pages, start, end)
     resolution = resolve(
@@ -202,6 +218,7 @@ def read_recent_citi(source: bytes, *, cancelled: Callable[[], bool] | None = No
         list(fees),
         opening_minor=header.previous_balance.ledger_minor,
         closing_minor=header.new_balance.ledger_minor,
+        occurrence_rule=definition.channel_occurrences,
     )
     if any(not header.start_date <= row.representative.posting_date <= header.end_date for row in resolution.rows):
         raise CitiEvidenceError("posting_date_outside_statement")
@@ -214,7 +231,7 @@ def read_recent_citi(source: bytes, *, cancelled: Callable[[], bool] | None = No
         raise CitiEvidenceError("unresolved_money_line")
     return CitiEvidence(
         hashlib.sha256(source).hexdigest(),
-        DEFINITION_SHA256,
+        definition_hash,
         EVIDENCE_ENGINE_VERSION,
         decoded.pages,
         header,
