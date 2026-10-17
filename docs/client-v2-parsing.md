@@ -64,6 +64,9 @@ recognition rules from the current parsers. A read-only scan routed all 956 PDFs
 in the successful archive uniquely across 20 families; three separately sampled
 Synchrony PDFs covered the remaining family. Routing alone does not prove
 transaction extraction parity or accounting acceptance.
+One read-only archived source from each of the 21 PDF families also produced
+strict evidence through the installed pipeline after routing. Full per-source
+extraction parity and ledger interpretation remain separate gates.
 
 The local [catalog artifact builder](../client/scripts/v2_catalog_release.py)
 validates every checked-in definition, signs a deterministic snapshot with an

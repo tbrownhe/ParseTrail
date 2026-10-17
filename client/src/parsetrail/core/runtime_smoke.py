@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 from io import BytesIO
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 
 def check_build_provenance() -> None:
@@ -42,18 +46,23 @@ def _sample_pdf() -> bytes:
 
 
 def check_native_operations() -> None:
-    """Use memory-only fixtures; never read settings, credentials, or financial data."""
+    """Use synthetic fixtures; never read settings, credentials, or financial data."""
     import sqlite3
 
     import numpy as np
     import openpyxl
     import pdfplumber
+    from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
     from PySide6.QtGui import QImage
     from scipy.linalg import solve
     from sklearn.feature_extraction.text import TfidfVectorizer
     from sklearn.naive_bayes import MultinomialNB
 
+    from parsetrail.core.v2_catalog_admission import admit_pilot_definition
+    from parsetrail.core.v2_data_catalog import CatalogCache, key_id_for_public_key
+    from parsetrail.core.v2_profile_store import V2ProfileStore
+    from parsetrail.core.v2_source_import import import_catalog_source
     from parsetrail.core.v2_source_pipeline import build_source_evidence
 
     key = Ed25519PrivateKey.generate()
@@ -108,6 +117,44 @@ def check_native_operations() -> None:
     evidence = build_source_evidence(csv_source, definition, suffix=".csv")
     if evidence.parser_id != "synthetic_posted_cash_csv" or len(evidence.payload.rows) != 1:
         raise RuntimeError("V2 parser smoke failed")
+    public = key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    key_id = key_id_for_public_key(public)
+    snapshot = json.dumps(
+        {
+            "schema_version": 1,
+            "engine_contract": 1,
+            "release_sequence": 1,
+            "source_revision": "a" * 40,
+            "key_id": key_id,
+            "definitions": [
+                {
+                    "parser_id": "synthetic_posted_cash_csv",
+                    "revision": "1",
+                    "suffix": ".csv",
+                    "size": len(definition),
+                    "sha256": hashlib.sha256(definition).hexdigest(),
+                    "content_base64": base64.b64encode(definition).decode("ascii"),
+                }
+            ],
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+    with TemporaryDirectory(prefix="parsetrail-v2-smoke-") as temporary:
+        root = Path(temporary)
+        cache = CatalogCache(root / "catalog", {key_id: public}, admit_pilot_definition)
+        cache.activate(snapshot, key.sign(snapshot))
+        reopened = cache.load_current()
+        if reopened is None:
+            raise RuntimeError("V2 catalog smoke failed")
+        profile_path = root / "profile.db"
+        with V2ProfileStore.create(profile_path) as profile:
+            imported = import_catalog_source(profile, csv_source, catalog=reopened, suffix=".csv")
+            if imported.evidence != evidence:
+                raise RuntimeError("V2 import smoke failed")
+        with V2ProfileStore.open(profile_path, read_only=True) as profile:
+            if profile.load_import(imported.source_sha256).evidence != evidence:
+                raise RuntimeError("V2 profile reopen smoke failed")
     if not np.allclose(solve(np.eye(2), np.array([2.0, 3.0])), [2.0, 3.0]):
         raise RuntimeError("Scientific-library smoke failed")
     vectorizer = TfidfVectorizer()

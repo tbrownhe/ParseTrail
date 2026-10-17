@@ -205,6 +205,9 @@ mismatched selections before writing a source. A read-only bounded routing scan
 identified one definition for all 956 PDFs in the successful archive (20 families), with no ambiguous or
 missing matches; three separately sampled Synchrony PDFs covered the remaining
 family. This scan checks recognition, not transaction extraction or accounting.
+One read-only archived source from each of the 21 PDF families also passed the
+installed source-to-evidence pipeline after routing. That spot check does not
+establish full archive extraction parity or ledger interpretation.
 Installed-client trust remains open.
 
 The local [catalog artifact builder](../client/scripts/v2_catalog_release.py)
@@ -218,6 +221,11 @@ default; a synthetic signed CSV import saves and reopens its evidence without
 an injected parser. The frozen runtime smoke now exercises a synthetic V2
 parse and pulls the pipeline into packaging. A windowed Windows x64 probe
 passed that runtime smoke and all six worker pipes after the package move.
+The runtime smoke now also activates and reopens a synthetic signed catalog,
+imports one CSV through the verified path, and reopens its fresh 2.0 profile.
+A rebuilt windowed Windows x64 probe passed this smoke and all six worker pipes
+with synthetic build metadata. This remains a local packaging check, not an
+installed release or native GUI acceptance.
 Release trust and desktop import remain open.
 The bounded decoder worker now polls a cancellation callback and terminates its
 child on cancellation. The source pipeline also polls its CSV row loop and

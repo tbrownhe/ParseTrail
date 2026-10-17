@@ -374,8 +374,9 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   zero, multiple or explicitly mismatched selections leave no source write. A
   read-only scan routed all 956 successful archive PDFs uniquely across 20
   families, plus three sampled Synchrony PDFs for the remaining family. This
-  checks recognition only;
-  installed-client admission remains open. The catalog
+  checks recognition. One read-only archived source from each of the 21 PDF
+  families also passed the installed source-to-evidence pipeline; full archive
+  extraction parity and installed-client admission remain open. The catalog
   revision field accepts the existing Citi `pilot-2`
   revision without requiring a numeric alias.
   The bounded source pipeline now validates supplied declarations before PDF
@@ -401,6 +402,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   exercises one synthetic V2 parse and pulls the pipeline into packaging. A
   windowed Windows x64 probe passed that runtime smoke and all six worker
   pipes after the package move.
+  The runtime smoke now covers synthetic signed-catalog activation, offline
+  reopen, catalog import and fresh-profile reopen. A rebuilt windowed Windows
+  x64 probe passed this and all six worker pipes; it is not an installed release
+  or owner GUI acceptance.
   Release trust,
   ordinary desktop import and native Intel Mac acceptance remain open.
 - [ ] **P2-S — Declaration catalog server:** after accepted client work is merged,
