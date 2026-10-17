@@ -12,7 +12,15 @@ from PySide6.QtWidgets import QApplication
 
 from devtools.parser_engine_pilot.source_pipeline import build_source_evidence
 
-DEMO_SOURCE = b"Date,Account,Description,Amount,ReportedBalance\n10/01/2026,Checking A,Coffee,-$4.00,$996.00\n"
+DEMO_SOURCE = (
+    b"Date,Account,Description,Amount,ReportedBalance\n"
+    b"10/01/2026,Checking A,Paycheck,$1200.00,$2200.00\n"
+    b"10/02/2026,Checking A,Groceries,-$57.43,$2142.57\n"
+    b"10/03/2026,Checking A,Transfer to savings,-$200.00,$1942.57\n"
+    b"10/03/2026,Savings B,Transfer from checking,$200.00,$5200.00\n"
+    b"\n"
+    b"10/04/2026,Checking A,Coffee,-$4.00,Unavailable\n"
+)
 DEMO_DEFINITION = Path(__file__).parents[1] / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
 
 

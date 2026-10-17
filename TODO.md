@@ -344,9 +344,18 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   tamper, rollback, cancellation and reopen tests pass. Production declaration
   admission, trusted release key, publication tooling and native installed
   offline acceptance remain open.
+  One strict local admission callback now validates all 23 checked-in pilot
+  definitions (22 current parser families, including both MOHELA export formats)
+  inside a test-signed snapshot. An explicitly selected verified definition can
+  reach the pending-source import service; mismatched parser output is refused
+  before a profile write. Automatic source routing and installed-client admission
+  are still open. The catalog revision field now accepts the existing Citi
+  `pilot-2` revision without requiring a numeric alias.
   A separate read-only developer dialog now shows saved observations, source
   locations, dispositions and coverage limits from a disposable 2.0 profile.
-  Its synthetic offscreen test passes; owner native GUI review remains a gate.
+  Its expanded synthetic example has five observations, two source accounts,
+  one unknown balance and one classified blank line. Offscreen tests pass and
+  the owner accepted the native Windows preview layout on October 17, 2026.
 - [ ] **P2-S — Declaration catalog server:** after accepted client work is merged,
   use a short-lived server branch for the reviewed snapshot API/storage/publication
   contract. A table may hold JSON definitions; clients consume immutable signed

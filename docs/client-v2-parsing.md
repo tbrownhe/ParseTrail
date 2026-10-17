@@ -41,9 +41,13 @@ now signs/verifies exact snapshot bytes, authenticates embedded definition bytes
 requires a strict declaration-admission callback and switches one offline release
 with an atomic pointer write. Synthetic tests cover tampering, incompatible
 declarations, offline reopen, rollback refusal, explicit rollback and cancellation
-before activation. It does not yet contain a production trusted key, an admission
-registry for all built-in definitions or publication tooling. No 1.4 bytecode
-catalog or server contract was changed.
+before activation. A local admission callback now validates all 23 checked-in
+pilot definitions inside one test-signed snapshot. An explicitly selected
+verified definition can feed the pending 2.0 source import service, which refuses
+parser identity/revision mismatch before writing. The catalog revision contract
+allows the existing recent-Citi `pilot-2` revision. Automatic source recognition,
+installed-client admission, a production trusted key, and publication tooling
+remain open. No 1.4 bytecode catalog or server contract was changed.
 
 ## Initial code findings
 

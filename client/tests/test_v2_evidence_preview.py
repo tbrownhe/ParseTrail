@@ -54,9 +54,13 @@ def test_synthetic_preview_launcher_uses_disposable_profile(monkeypatch) -> None
     from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
 
     opened = []
-    monkeypatch.setattr(V2EvidencePreview, "exec", lambda self: opened.append(self.rows_model.rowCount()))
+    monkeypatch.setattr(
+        V2EvidencePreview,
+        "exec",
+        lambda self: opened.append((self.rows_model.rowCount(), self.dispositions_model.rowCount())),
+    )
     assert preview_main(["--demo"]) == 0
-    assert opened == [1]
+    assert opened == [(5, 1)]
 
 
 def test_preview_shows_statement_balance_check_and_dispositions(tmp_path: Path) -> None:

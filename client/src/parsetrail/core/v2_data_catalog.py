@@ -43,7 +43,7 @@ class CatalogDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     parser_id: str = Field(pattern=IDENTIFIER)
-    revision: str = Field(pattern=r"^[1-9][0-9]{0,8}$")
+    revision: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{0,79}$")
     suffix: Literal[".csv", ".pdf", ".xlsx"]
     size: int = Field(gt=0, le=MAX_DEFINITION_BYTES)
     sha256: str = Field(pattern=SHA256)

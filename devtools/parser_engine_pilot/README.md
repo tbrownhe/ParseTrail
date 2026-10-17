@@ -586,6 +586,16 @@ The read-only developer preview can be opened with a synthetic example:
 client/.venv/Scripts/python.exe -m devtools.parser_engine_pilot.preview_source --demo
 ```
 
+The example has five observations across two source accounts, one unknown
+running balance, and one classified blank source row. It is only a display
+fixture; no ledger account or category is inferred from it.
+
+`catalog_admission.py` validates every checked-in pilot declaration with its
+finite operation schema. The test signs one local snapshot containing all 23
+definitions and verifies it through the 2.0 catalog client. This proves the
+current declarations fit the signed format, including Citi's `pilot-2` revision;
+it is not a production signing key, source router, or installed engine.
+
 For an authorized source, pass its local PDF/CSV path and the matching checked-in
 definition. The launcher reads the source, parses through the bounded pipeline,
 opens a temporary 2.0 profile and deletes it after the dialog closes. It never
