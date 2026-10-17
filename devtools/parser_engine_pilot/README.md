@@ -602,6 +602,13 @@ to CSV rows and PDF workers; an interrupted catalog import leaves no pending
 source in the temporary profile. This has native Windows worker coverage, but
 the daily import UI and Intel Mac worker acceptance remain separate gates.
 
+The source pipeline validates declarations with the local admission registry
+before dispatching PDFs by parser identity. A valid changed Happen revision is
+reflected in evidence without a new hard-coded hash. Recent Citi remains pinned
+to its bundled definition because that finite handler does not yet consume
+catalog-supplied rules. The pilot still needs automatic source recognition and
+installed-client trust before normal import admission.
+
 For an authorized source, pass its local PDF/CSV path and the matching checked-in
 definition. The launcher reads the source, parses through the bounded pipeline,
 opens a temporary 2.0 profile and deletes it after the dialog closes. It never

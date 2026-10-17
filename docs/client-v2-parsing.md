@@ -48,6 +48,13 @@ parser identity/revision mismatch before writing. The catalog revision contract
 allows the existing recent-Citi `pilot-2` revision. Automatic source recognition,
 installed-client admission, a production trusted key, and publication tooling
 remain open. No 1.4 bytecode catalog or server contract was changed.
+The pilot source pipeline now validates a supplied declaration and dispatches
+current PDF parsers by admitted identity, so a valid definition revision can
+reach its finite operation without an added hash allowlist entry. A synthetic
+Happen statement proves the new revision and hash survive in output. The recent
+Citi handler still uses its bundled definition and therefore requires the exact
+checked-in bytes; that handler must accept a supplied definition before Citi
+catalog updates can be activated. Signed source recognition remains open.
 
 ## Initial code findings
 

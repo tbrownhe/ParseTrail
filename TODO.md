@@ -351,6 +351,12 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   before a profile write. Automatic source routing and installed-client admission
   are still open. The catalog revision field now accepts the existing Citi
   `pilot-2` revision without requiring a numeric alias.
+  The bounded source pipeline now validates supplied declarations before PDF
+  dispatch and selects the 20 non-recent-Citi PDF definitions by parser identity
+  instead of exact checked-in hashes. A changed valid Happen definition revision
+  produces evidence bound to its new bytes. Recent Citi remains hash-pinned
+  until its handler consumes the supplied declaration. This is still pilot
+  dispatch, not automatic document recognition or a released engine.
   A separate read-only developer dialog now shows saved observations, source
   locations, dispositions and coverage limits from a disposable 2.0 profile.
   Its expanded synthetic example has five observations, two source accounts,

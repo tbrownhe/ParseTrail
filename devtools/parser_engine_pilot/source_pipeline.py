@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Callable
-from pathlib import Path
 from typing import Literal
 
 from parsetrail.core.source_evidence import SourceEvidence
@@ -18,6 +17,7 @@ from devtools.parser_engine_pilot.bounded_pdf_text import decode_pdf, decode_pdf
 from devtools.parser_engine_pilot.bounded_wells import extract_bounded_wells
 from devtools.parser_engine_pilot.card_lines import parse_card_lines
 from devtools.parser_engine_pilot.card_source_output import from_card
+from devtools.parser_engine_pilot.catalog_admission import admit_pilot_definition
 from devtools.parser_engine_pilot.citi_evidence import read_recent_citi
 from devtools.parser_engine_pilot.citi_layout import DEFINITION_SHA256
 from devtools.parser_engine_pilot.citi_layout import load_definition as load_citi_definition
@@ -48,66 +48,20 @@ from devtools.parser_engine_pilot.worker_limits import WorkerError
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_DEFINITION_BYTES = 64 * 1024
 MAX_EVIDENCE_BYTES = 32 * 1024 * 1024
-CHASE_DEFINITION_SHA256 = hashlib.sha256(
-    Path(__file__).with_name("chase-card-pilot-definition.json").read_bytes()
-).hexdigest()
-HAPPEN_DEFINITION_SHA256 = hashlib.sha256(
-    Path(__file__).with_name("happen-savings-pilot-definition.json").read_bytes()
-).hexdigest()
-LENDINGCLUB_DEFINITION_SHA256 = hashlib.sha256(
-    Path(__file__).with_name("lendingclub-savings-pilot-definition.json").read_bytes()
-).hexdigest()
-WELLS_DEFINITION_SHA256 = hashlib.sha256(
-    Path(__file__).with_name("wells-table-pilot-definition.json").read_bytes()
-).hexdigest()
-FIDELITY_HSA_DEFINITION_SHA256 = hashlib.sha256(
-    Path(__file__).with_name("fidelity-hsa-summary-pilot-definition.json").read_bytes()
-).hexdigest()
-YAMAHA_DEFINITION_SHA256 = hashlib.sha256(
-    Path(__file__).with_name("yamaha-card-pilot-definition.json").read_bytes()
-).hexdigest()
-CAPITAL_ONE_DEFINITION_SHA256 = hashlib.sha256(
-    Path(__file__).with_name("capital-one-loan-pilot-definition.json").read_bytes()
-).hexdigest()
-USBANK_DEFINITION_SHA256 = hashlib.sha256(
-    Path(__file__).with_name("usbank-rei-card-pilot-definition.json").read_bytes()
-).hexdigest()
-VANGUARD_DEFINITION_SHA256 = hashlib.sha256(
-    Path(__file__).with_name("vanguard-summary-pilot-definition.json").read_bytes()
-).hexdigest()
-FIDELITY_401K_DEFINITION_SHA256 = hashlib.sha256(
-    Path(__file__).with_name("fidelity-401k-summary-pilot-definition.json").read_bytes()
-).hexdigest()
-OCCU_CARD_DEFINITION_SHA256 = hashlib.sha256(
-    Path(__file__).with_name("occu-card-pilot-definition.json").read_bytes()
-).hexdigest()
-OCCU_BANK_DEFINITION_SHA256 = hashlib.sha256(
-    Path(__file__).with_name("occu-bank-pilot-definition.json").read_bytes()
-).hexdigest()
-LEGACY_CITI_DEFINITION_SHA256 = hashlib.sha256(
-    Path(__file__).with_name("legacy-citi-pilot-definition.json").read_bytes()
-).hexdigest()
-MIDDLE_CITI_DEFINITION_SHA256 = hashlib.sha256(
-    Path(__file__).with_name("middle-citi-table-pilot-definition.json").read_bytes()
-).hexdigest()
-LENDINGCLUB_TABLE_DEFINITION_SHA256 = hashlib.sha256(
-    Path(__file__).with_name("lendingclub-table-pilot-definition.json").read_bytes()
-).hexdigest()
-WELLS_PERSONAL_TABLE_DEFINITION_SHA256 = hashlib.sha256(
-    Path(__file__).with_name("wells-personal-table-pilot-definition.json").read_bytes()
-).hexdigest()
-TRANSAMERICA_DEFINITION_SHA256 = hashlib.sha256(
-    Path(__file__).with_name("transamerica-summary-pilot-definition.json").read_bytes()
-).hexdigest()
-WELLS_LOAN_DEFINITION_SHA256 = hashlib.sha256(
-    Path(__file__).with_name("wells-loan-pilot-definition.json").read_bytes()
-).hexdigest()
-HSA_CASH_DEFINITION_SHA256 = hashlib.sha256(
-    Path(__file__).with_name("hsa-cash-pilot-definition.json").read_bytes()
-).hexdigest()
-SYNCHRONY_DEFINITION_SHA256 = hashlib.sha256(
-    Path(__file__).with_name("synchrony-table-pilot-definition.json").read_bytes()
-).hexdigest()
+SIMPLE_LINE_PARSERS = {
+    "chase_card_line_pilot",
+    "happen_savings_line_pilot",
+    "lendingclub_savings_line_pilot",
+    "pdf_fidelityhsa_202001",
+    "pdf_yamahafin_202306",
+    "pdf_capitaloneauto_202402",
+    "pdf_vanguard_202210",
+    "pdf_fidelity401k_201810",
+    "pdf_transamerica_202104",
+    "pdf_wfloanper_202306",
+    "hsa_cash_line_pilot",
+    "synchrony_amazon_store_card",
+}
 
 
 class SourcePipelineError(ValueError):
@@ -131,75 +85,68 @@ def build_source_evidence(
     if cancelled is not None and cancelled():
         raise SourcePipelineError("cancelled")
     try:
+        identity = admit_pilot_definition(definition)
+        if identity.suffix != suffix:
+            raise SourcePipelineError("definition_source_kind_mismatch")
         if suffix == ".csv":
             output = from_table(parse_csv(definition, source, cancelled=cancelled))
         else:
             digest = hashlib.sha256(definition).hexdigest()
-            if digest == DEFINITION_SHA256:
+            parser_id = identity.parser_id
+            if parser_id == "pdf_citicc_202511":
+                if digest != DEFINITION_SHA256:
+                    raise SourcePipelineError("unsupported_definition_revision")
                 load_citi_definition(definition)
                 output = from_citi(read_recent_citi(source, cancelled=cancelled))
-            elif digest in {
-                CHASE_DEFINITION_SHA256,
-                HAPPEN_DEFINITION_SHA256,
-                LENDINGCLUB_DEFINITION_SHA256,
-                FIDELITY_HSA_DEFINITION_SHA256,
-                YAMAHA_DEFINITION_SHA256,
-                CAPITAL_ONE_DEFINITION_SHA256,
-                VANGUARD_DEFINITION_SHA256,
-                FIDELITY_401K_DEFINITION_SHA256,
-                TRANSAMERICA_DEFINITION_SHA256,
-                WELLS_LOAN_DEFINITION_SHA256,
-                HSA_CASH_DEFINITION_SHA256,
-                SYNCHRONY_DEFINITION_SHA256,
-            }:
+            elif parser_id in SIMPLE_LINE_PARSERS:
                 decoded = decode_pdf(source, cancelled=cancelled)
                 lines = page_lines(source, decoded.pages, extraction_library="pdfplumber-bounded-simple-v1")
-                if digest == CHASE_DEFINITION_SHA256:
+                if parser_id == "chase_card_line_pilot":
                     output = from_card(parse_card_lines(definition, lines), lines)
-                elif digest == HAPPEN_DEFINITION_SHA256:
+                elif parser_id == "happen_savings_line_pilot":
                     output = parse_savings_lines(definition, lines)
-                elif digest == FIDELITY_HSA_DEFINITION_SHA256:
+                elif parser_id == "pdf_fidelityhsa_202001":
                     output = parse_investment_summary(definition, lines)
-                elif digest == YAMAHA_DEFINITION_SHA256:
+                elif parser_id == "pdf_yamahafin_202306":
                     output = parse_two_date_card(definition, lines)
-                elif digest == CAPITAL_ONE_DEFINITION_SHA256:
+                elif parser_id == "pdf_capitaloneauto_202402":
                     output = parse_loan_history(definition, lines)
-                elif digest == VANGUARD_DEFINITION_SHA256:
+                elif parser_id == "pdf_vanguard_202210":
                     output = parse_single_column_summary(definition, lines)
-                elif digest == FIDELITY_401K_DEFINITION_SHA256:
+                elif parser_id == "pdf_fidelity401k_201810":
                     output = parse_plan_label_summary(definition, lines)
-                elif digest == TRANSAMERICA_DEFINITION_SHA256:
+                elif parser_id == "pdf_transamerica_202104":
                     output = parse_retirement_summary(definition, lines)
-                elif digest == WELLS_LOAN_DEFINITION_SHA256:
+                elif parser_id == "pdf_wfloanper_202306":
                     output = parse_wells_loan(definition, lines)
-                elif digest == HSA_CASH_DEFINITION_SHA256:
+                elif parser_id == "hsa_cash_line_pilot":
                     cash = parse_cash_section(definition, lines)
                     if any(item.reason == "cash_window_unclassified" for item in cash.unresolved_section_lines):
                         raise SourcePipelineError("unclassified_cash_window_line")
                     output = from_hsa_cash(cash, lines)
-                elif digest == SYNCHRONY_DEFINITION_SHA256:
+                elif parser_id == "synchrony_amazon_store_card":
                     output = from_synchrony_table(
                         definition, extract_bounded_anchored_table(definition, source, cancelled=cancelled), lines
                     )
                 else:
                     output = parse_summary_savings_lines(definition, lines)
-            elif digest == WELLS_DEFINITION_SHA256:
+            elif parser_id == "wells_business_table_pilot":
                 decoded = decode_pdf(source, cancelled=cancelled)
                 lines = page_lines(source, decoded.pages, extraction_library="pdfplumber-bounded-simple-v1")
                 output = from_wells_business(
                     definition, extract_bounded_wells(definition, source, cancelled=cancelled), lines
                 )
-            elif digest == USBANK_DEFINITION_SHA256:
+            elif parser_id == "pdf_usbankreicc_201405":
                 simple_pages = decode_pdf(source, cancelled=cancelled).pages
                 layout_pages = decode_pdf_layout(source, cancelled=cancelled).pages
                 simple = page_lines(source, simple_pages, extraction_library="pdfplumber-bounded-simple-v1")
                 layout = page_lines(source, layout_pages, extraction_library="pdfplumber-bounded-layout-fixed-v1")
                 output = parse_dual_text_card(definition, layout, simple)
-            elif digest == OCCU_CARD_DEFINITION_SHA256:
+            elif parser_id == "pdf_occucc_201904":
                 pages = decode_pdf_default_layout(source, cancelled=cancelled).pages
                 lines = page_lines(source, pages, extraction_library="pdfplumber-bounded-layout-default-v1")
                 output = parse_occu_card(definition, lines)
-            elif digest == OCCU_BANK_DEFINITION_SHA256:
+            elif parser_id == "pdf_occubank_201409":
                 pages = decode_pdf(source, cancelled=cancelled).pages
                 lines = page_lines(source, pages, extraction_library="pdfplumber-bounded-simple-v1")
                 try:
@@ -210,23 +157,23 @@ def build_source_evidence(
                     output = parse_occu_bank(
                         definition, lines, decode_pdf_period_annotations(source, cancelled=cancelled)
                     )
-            elif digest == LEGACY_CITI_DEFINITION_SHA256:
+            elif parser_id == "pdf_citicc_201505":
                 pages = decode_pdf_default_layout(source, cancelled=cancelled).pages
                 lines = page_lines(source, pages, extraction_library="pdfplumber-bounded-layout-default-v1")
                 output = parse_legacy_citi(definition, lines)
-            elif digest == MIDDLE_CITI_DEFINITION_SHA256:
+            elif parser_id == "pdf_citicc_202506":
                 pages = decode_pdf_default_layout(source, cancelled=cancelled).pages
                 lines = page_lines(source, pages, extraction_library="pdfplumber-bounded-layout-default-v1")
                 output = from_anchored_card(
                     definition, extract_bounded_anchored_table(definition, source, cancelled=cancelled), lines
                 )
-            elif digest == LENDINGCLUB_TABLE_DEFINITION_SHA256:
+            elif parser_id == "pdf_lendingclublus_202506":
                 pages = decode_pdf(source, cancelled=cancelled).pages
                 lines = page_lines(source, pages, extraction_library="pdfplumber-bounded-simple-v1")
                 output = from_anchored_bank(
                     definition, extract_bounded_anchored_table(definition, source, cancelled=cancelled), lines
                 )
-            elif digest == WELLS_PERSONAL_TABLE_DEFINITION_SHA256:
+            elif parser_id == "pdf_wfbankper_202105":
                 pages = decode_pdf(source, cancelled=cancelled).pages
                 lines = page_lines(source, pages, extraction_library="pdfplumber-bounded-simple-v1")
                 output = from_wells_personal(

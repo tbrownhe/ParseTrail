@@ -5,30 +5,21 @@ from pathlib import Path
 import pytest
 from parsetrail.core.v2_profile_store import V2ProfileStore
 
+from devtools.parser_engine_pilot.catalog_admission import admit_pilot_definition
 from devtools.parser_engine_pilot.citi_layout import DEFINITION_BYTES
 from devtools.parser_engine_pilot.source_pipeline import SourcePipelineError, build_source_evidence
 from devtools.parser_engine_pilot.test_bounded_citi import sample_table_pdf
 
 CSV_DEFINITION = Path(__file__).parents[1] / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
 CSV = b"Date,Account,Description,Amount,ReportedBalance\n10/01/2026,Checking A,Coffee,-$4.00,$996.00\n"
-CHASE_DEFINITION = Path(__file__).with_name("chase-card-pilot-definition.json").read_bytes()
 HAPPEN_DEFINITION = Path(__file__).with_name("happen-savings-pilot-definition.json").read_bytes()
-LENDINGCLUB_DEFINITION = Path(__file__).with_name("lendingclub-savings-pilot-definition.json").read_bytes()
-LENDINGCLUB_TABLE_DEFINITION = Path(__file__).with_name("lendingclub-table-pilot-definition.json").read_bytes()
-WELLS_PERSONAL_TABLE_DEFINITION = Path(__file__).with_name("wells-personal-table-pilot-definition.json").read_bytes()
-TRANSAMERICA_DEFINITION = Path(__file__).with_name("transamerica-summary-pilot-definition.json").read_bytes()
-WELLS_LOAN_DEFINITION = Path(__file__).with_name("wells-loan-pilot-definition.json").read_bytes()
-WELLS_DEFINITION = Path(__file__).with_name("wells-table-pilot-definition.json").read_bytes()
-FIDELITY_HSA_DEFINITION = Path(__file__).with_name("fidelity-hsa-summary-pilot-definition.json").read_bytes()
-YAMAHA_DEFINITION = Path(__file__).with_name("yamaha-card-pilot-definition.json").read_bytes()
-CAPITAL_ONE_DEFINITION = Path(__file__).with_name("capital-one-loan-pilot-definition.json").read_bytes()
-USBANK_DEFINITION = Path(__file__).with_name("usbank-rei-card-pilot-definition.json").read_bytes()
-VANGUARD_DEFINITION = Path(__file__).with_name("vanguard-summary-pilot-definition.json").read_bytes()
-FIDELITY_401K_DEFINITION = Path(__file__).with_name("fidelity-401k-summary-pilot-definition.json").read_bytes()
 MOHELA_DEFINITION = Path(__file__).with_name("mohela-pilot-definition.json").read_bytes()
 MOHELA_ACCOUNT_HISTORY_DEFINITION = Path(__file__).with_name("mohela-account-history-definition.json").read_bytes()
-HSA_CASH_DEFINITION = Path(__file__).with_name("hsa-cash-pilot-definition.json").read_bytes()
-SYNCHRONY_DEFINITION = Path(__file__).with_name("synchrony-table-pilot-definition.json").read_bytes()
+PDF_DEFINITIONS = tuple(
+    path.read_bytes()
+    for path in sorted(Path(__file__).parent.glob("*definition.json"))
+    if admit_pilot_definition(path.read_bytes()).suffix == ".pdf"
+)
 
 
 def test_csv_build_is_strict_and_keeps_raw_cells() -> None:
@@ -92,75 +83,42 @@ def test_mohela_account_history_keeps_components_without_inventing_loan_identity
         assert store.load_import(output.source_sha256).evidence == output
 
 
-def test_pdf_requires_exact_pilot_definition_and_recent_layout() -> None:
+@pytest.mark.parametrize("definition", PDF_DEFINITIONS)
+def test_valid_pdf_definition_reaches_source_checks(definition: bytes) -> None:
+    assert len(PDF_DEFINITIONS) == 21
+    with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
+        build_source_evidence(sample_table_pdf(), definition, suffix=".pdf")
+
+
+def test_recent_citi_stays_pinned_until_handler_uses_supplied_declaration() -> None:
     with pytest.raises(SourcePipelineError, match="unsupported_definition_revision"):
         build_source_evidence(sample_table_pdf(), DEFINITION_BYTES + b" ", suffix=".pdf")
     with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
         build_source_evidence(sample_table_pdf(), DEFINITION_BYTES, suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="unsupported_definition_revision"):
-        build_source_evidence(sample_table_pdf(), CHASE_DEFINITION + b" ", suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
-        build_source_evidence(sample_table_pdf(), CHASE_DEFINITION, suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="unsupported_definition_revision"):
-        build_source_evidence(sample_table_pdf(), HAPPEN_DEFINITION + b" ", suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
-        build_source_evidence(sample_table_pdf(), HAPPEN_DEFINITION, suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="unsupported_definition_revision"):
-        build_source_evidence(sample_table_pdf(), LENDINGCLUB_DEFINITION + b" ", suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
-        build_source_evidence(sample_table_pdf(), LENDINGCLUB_DEFINITION, suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="unsupported_definition_revision"):
-        build_source_evidence(sample_table_pdf(), LENDINGCLUB_TABLE_DEFINITION + b" ", suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
-        build_source_evidence(sample_table_pdf(), LENDINGCLUB_TABLE_DEFINITION, suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="unsupported_definition_revision"):
-        build_source_evidence(sample_table_pdf(), WELLS_PERSONAL_TABLE_DEFINITION + b" ", suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
-        build_source_evidence(sample_table_pdf(), WELLS_PERSONAL_TABLE_DEFINITION, suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="unsupported_definition_revision"):
-        build_source_evidence(sample_table_pdf(), TRANSAMERICA_DEFINITION + b" ", suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
-        build_source_evidence(sample_table_pdf(), TRANSAMERICA_DEFINITION, suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="unsupported_definition_revision"):
-        build_source_evidence(sample_table_pdf(), WELLS_LOAN_DEFINITION + b" ", suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
-        build_source_evidence(sample_table_pdf(), WELLS_LOAN_DEFINITION, suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="unsupported_definition_revision"):
-        build_source_evidence(sample_table_pdf(), WELLS_DEFINITION + b" ", suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
-        build_source_evidence(sample_table_pdf(), WELLS_DEFINITION, suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="unsupported_definition_revision"):
-        build_source_evidence(sample_table_pdf(), FIDELITY_HSA_DEFINITION + b" ", suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
-        build_source_evidence(sample_table_pdf(), FIDELITY_HSA_DEFINITION, suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="unsupported_definition_revision"):
-        build_source_evidence(sample_table_pdf(), HSA_CASH_DEFINITION + b" ", suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
-        build_source_evidence(sample_table_pdf(), HSA_CASH_DEFINITION, suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="unsupported_definition_revision"):
-        build_source_evidence(sample_table_pdf(), SYNCHRONY_DEFINITION + b" ", suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
-        build_source_evidence(sample_table_pdf(), SYNCHRONY_DEFINITION, suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="unsupported_definition_revision"):
-        build_source_evidence(sample_table_pdf(), YAMAHA_DEFINITION + b" ", suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
-        build_source_evidence(sample_table_pdf(), YAMAHA_DEFINITION, suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="unsupported_definition_revision"):
-        build_source_evidence(sample_table_pdf(), CAPITAL_ONE_DEFINITION + b" ", suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
-        build_source_evidence(sample_table_pdf(), CAPITAL_ONE_DEFINITION, suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="unsupported_definition_revision"):
-        build_source_evidence(sample_table_pdf(), USBANK_DEFINITION + b" ", suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
-        build_source_evidence(sample_table_pdf(), USBANK_DEFINITION, suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="unsupported_definition_revision"):
-        build_source_evidence(sample_table_pdf(), VANGUARD_DEFINITION + b" ", suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
-        build_source_evidence(sample_table_pdf(), VANGUARD_DEFINITION, suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="unsupported_definition_revision"):
-        build_source_evidence(sample_table_pdf(), FIDELITY_401K_DEFINITION + b" ", suffix=".pdf")
-    with pytest.raises(SourcePipelineError, match="source_evidence_failed"):
-        build_source_evidence(sample_table_pdf(), FIDELITY_401K_DEFINITION, suffix=".pdf")
+
+
+def test_changed_valid_pdf_revision_uses_supplied_declaration(monkeypatch) -> None:
+    import json
+
+    from devtools.parser_engine_pilot import source_pipeline
+    from devtools.parser_engine_pilot.bounded_pdf_text import DecodedPDFText
+    from devtools.parser_engine_pilot.test_savings_lines import pages
+
+    raw = json.loads(HAPPEN_DEFINITION)
+    raw["revision"] = "2"
+    changed = json.dumps(raw).encode("utf-8")
+    monkeypatch.setattr(
+        source_pipeline,
+        "decode_pdf",
+        lambda _source, *, cancelled=None: DecodedPDFText(tuple(pages()), ()),
+    )
+    output = build_source_evidence(b"%PDF-synthetic", changed, suffix=".pdf")
+    assert output.definition_revision == "2"
+    assert (
+        output.definition_sha256
+        != build_source_evidence(b"%PDF-synthetic", HAPPEN_DEFINITION, suffix=".pdf").definition_sha256
+    )
+    assert len(output.payload.accounts[0].rows) == 1
 
 
 def test_source_or_definition_failure_has_no_output_or_profile_write(tmp_path: Path) -> None:
