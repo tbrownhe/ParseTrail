@@ -7,8 +7,9 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from parsetrail.core.v2_worker_limits import WorkerError, WorkerLimits, run_worker
+
 from devtools.parser_engine_pilot.pdf_annotation_worker import MAX_OUTPUT_BYTES, MAX_SOURCE_BYTES
-from devtools.parser_engine_pilot.worker_limits import WorkerError, WorkerLimits, run_worker
 
 DATE = re.compile(r"\d{2}/\d{2}/\d{2}\Z")
 

@@ -4,9 +4,6 @@ import sys
 from contextlib import suppress
 from platform import system
 
-from PySide6.QtGui import QIcon
-from PySide6.QtWidgets import QApplication
-
 RUNTIME_SMOKE_TEST_ARGUMENT = "--runtime-smoke-test"
 
 # Set Qt environment variables
@@ -51,6 +48,11 @@ def run_runtime_smoke_test() -> int:
 
 # Client entry point
 def main() -> int:
+    if sys.argv[1:2] == ["--v2-parser-worker"]:
+        from parsetrail.core.v2_pdf_text_worker import main as worker_main
+
+        return worker_main(sys.argv[2:])
+
     if "--offline-session-smoke-test" in sys.argv:
         import argparse
         from pathlib import Path
@@ -76,6 +78,9 @@ def main() -> int:
         return run_runtime_smoke_test()
 
     # Imports that depend on settings
+    from PySide6.QtGui import QIcon
+    from PySide6.QtWidgets import QApplication
+
     from parsetrail.core.logging import logger
     from parsetrail.core.utils import resource_path
     from parsetrail.gui.bootstrap import configure_ui_hooks

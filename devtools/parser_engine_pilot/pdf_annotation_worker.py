@@ -7,7 +7,7 @@ import re
 import sys
 from io import BytesIO
 
-from devtools.parser_engine_pilot.worker_limits import enforce_child_memory_limit
+from parsetrail.core.v2_worker_limits import enforce_child_memory_limit
 
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_ANNOTATIONS = 1000

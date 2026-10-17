@@ -6,11 +6,11 @@ import subprocess
 import sys
 
 import pytest
+from parsetrail.core import v2_worker_limits as worker_limits
 from parsetrail.core.runtime_smoke import _sample_pdf
+from parsetrail.core.v2_worker_limits import WorkerError, WorkerLimits, _WindowsJob
 
-from devtools.parser_engine_pilot import worker_limits
 from devtools.parser_engine_pilot.bounded_pdf_text import decode_pdf, decode_pdf_default_layout, decode_pdf_layout
-from devtools.parser_engine_pilot.worker_limits import WorkerError, WorkerLimits, _WindowsJob
 
 
 def test_decodes_synthetic_pdf_in_bounded_worker() -> None:

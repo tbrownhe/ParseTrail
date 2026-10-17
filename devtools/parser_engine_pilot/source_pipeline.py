@@ -10,6 +10,7 @@ from collections.abc import Callable
 from typing import Literal
 
 from parsetrail.core.source_evidence import SourceEvidence
+from parsetrail.core.v2_worker_limits import WorkerError
 
 from devtools.parser_engine_pilot.bounded_anchored_table import extract_bounded_anchored_table
 from devtools.parser_engine_pilot.bounded_pdf_annotations import decode_pdf_period_annotations
@@ -41,7 +42,6 @@ from devtools.parser_engine_pilot.two_date_card_lines import parse_two_date_card
 from devtools.parser_engine_pilot.wells_loan_lines import parse_wells_loan
 from devtools.parser_engine_pilot.wells_personal_source_output import from_wells_personal
 from devtools.parser_engine_pilot.wells_statement_output import from_wells_business
-from devtools.parser_engine_pilot.worker_limits import WorkerError
 
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_DEFINITION_BYTES = 64 * 1024

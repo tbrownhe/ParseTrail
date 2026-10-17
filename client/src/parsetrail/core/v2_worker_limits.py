@@ -16,15 +16,27 @@ DEFAULT_MEMORY_BYTES = 512 * 1024 * 1024
 MAX_INPUT_BYTES = 17 * 1024 * 1024
 MAX_OUTPUT_BYTES = 32 * 1024 * 1024
 WorkerModule = Literal[
-    "devtools.parser_engine_pilot.pdf_text_worker",
-    "devtools.parser_engine_pilot.pdf_layout_text_worker",
-    "devtools.parser_engine_pilot.pdf_default_layout_worker",
+    "pdf_text_simple",
+    "pdf_text_fixed",
+    "pdf_text_default",
     "devtools.parser_engine_pilot.pdf_annotation_worker",
     "devtools.parser_engine_pilot.anchored_table_worker",
     "devtools.parser_engine_pilot.xlsx_worker",
     "devtools.parser_engine_pilot.wells_worker",
     "devtools.parser_engine_pilot.citi_worker",
 ]
+PDF_TEXT_LAYOUTS = {
+    "pdf_text_simple": "simple",
+    "pdf_text_fixed": "fixed",
+    "pdf_text_default": "default",
+}
+PILOT_WORKERS = {
+    "devtools.parser_engine_pilot.pdf_annotation_worker",
+    "devtools.parser_engine_pilot.anchored_table_worker",
+    "devtools.parser_engine_pilot.xlsx_worker",
+    "devtools.parser_engine_pilot.wells_worker",
+    "devtools.parser_engine_pilot.citi_worker",
+}
 
 
 class WorkerError(ValueError):
@@ -145,6 +157,23 @@ class _WindowsJob:
             self._handle = None
 
 
+def _worker_launch(
+    module: WorkerModule, memory_bytes: int, *, frozen: bool, executable: str
+) -> tuple[list[str], Path | None]:
+    """Choose a fixed installed entry; pilot modules run only from source."""
+    if module in PDF_TEXT_LAYOUTS:
+        layout = PDF_TEXT_LAYOUTS[module]
+        command = (
+            [executable, "--v2-parser-worker", layout, str(memory_bytes)]
+            if frozen
+            else [executable, "-m", "parsetrail.core.v2_pdf_text_worker", layout, str(memory_bytes)]
+        )
+        return command, None
+    if frozen or module not in PILOT_WORKERS:
+        raise WorkerError("unsupported_worker")
+    return [executable, "-m", module, str(memory_bytes)], Path(__file__).resolve().parents[4]
+
+
 def run_worker(
     module: WorkerModule,
     payload: bytes,
@@ -154,16 +183,7 @@ def run_worker(
     cancelled: Callable[[], bool] | None = None,
 ) -> bytes:
     """Run only a fixed local decoder module behind native resource limits."""
-    if module not in {
-        "devtools.parser_engine_pilot.pdf_text_worker",
-        "devtools.parser_engine_pilot.pdf_layout_text_worker",
-        "devtools.parser_engine_pilot.pdf_default_layout_worker",
-        "devtools.parser_engine_pilot.pdf_annotation_worker",
-        "devtools.parser_engine_pilot.anchored_table_worker",
-        "devtools.parser_engine_pilot.xlsx_worker",
-        "devtools.parser_engine_pilot.wells_worker",
-        "devtools.parser_engine_pilot.citi_worker",
-    }:
+    if module not in PDF_TEXT_LAYOUTS and module not in PILOT_WORKERS:
         raise WorkerError("unsupported_worker")
     if not isinstance(payload, bytes) or not payload or len(payload) > MAX_INPUT_BYTES:
         raise WorkerError("input_size")
@@ -173,15 +193,18 @@ def run_worker(
         raise WorkerError("unsupported_platform")
     if cancelled is not None and cancelled():
         raise WorkerError("cancelled")
+    command, worker_cwd = _worker_launch(
+        module, limits.memory_bytes, frozen=bool(getattr(sys, "frozen", False)), executable=sys.executable
+    )
     job = _WindowsJob(limits.memory_bytes) if sys.platform == "win32" else None
     process = None
     try:
         process = subprocess.Popen(
-            [sys.executable, "-m", module, str(limits.memory_bytes)],
+            command,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
-            cwd=Path(__file__).resolve().parents[2],
+            cwd=worker_cwd,
         )
         if job is not None:
             job.attach(process.pid)

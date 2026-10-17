@@ -7,7 +7,7 @@ import sys
 from io import BytesIO
 from typing import Literal
 
-from devtools.parser_engine_pilot.worker_limits import enforce_child_memory_limit
+from parsetrail.core.v2_worker_limits import enforce_child_memory_limit
 
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_PAGES = 100
@@ -65,9 +65,13 @@ def extract(
     return tuple(pages), metadata
 
 
-def main(*, layout: Literal["simple", "fixed", "default"] = "simple") -> int:
+def main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else argv
     try:
-        enforce_child_memory_limit(sys.argv[1])
+        if len(args) != 2 or args[0] not in {"simple", "fixed", "default"}:
+            raise ValueError("worker_arguments")
+        layout = args[0]
+        enforce_child_memory_limit(args[1])
         source = sys.stdin.buffer.read(MAX_SOURCE_BYTES + 1)
         pages, metadata = extract(source, layout=layout)
         payload = json.dumps({"pages": pages, "metadata": metadata}, ensure_ascii=False, separators=(",", ":")).encode(

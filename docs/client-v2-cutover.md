@@ -120,6 +120,11 @@ unchanged source hashes. The Citi word/table pilot now also uses that worker
 boundary: 543 raw rows matched the current extractor across ten recent-layout
 archive PDFs, with unchanged hashes. Full page capture, runtime integration and
 Intel Mac native checks remain open, so this does not admit PDFs to runtime imports.
+The three PDF text layouts and shared worker limit runner now live in the
+installed client package. The app routes a fixed worker argument before profile
+or GUI bootstrap; source-entry and frozen-command tests pass. The other pilot
+workers remain source-only and are refused in a frozen launch. A real frozen
+build and native worker checks are still required.
 The read-only Citi audit now feeds its candidate resolver from the bounded text
 and table workers. The shared continuation operation forms 471 table rows and
 retains 36 post-amount travel/lodging detail rows as source evidence; no detail

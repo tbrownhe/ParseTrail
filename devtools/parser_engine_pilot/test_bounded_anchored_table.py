@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pdfplumber
 import pytest
+from parsetrail.core.v2_worker_limits import WorkerError
 
 from devtools.parser_engine_pilot.anchored_table import (
     AnchoredTableError,
@@ -16,7 +17,6 @@ from devtools.parser_engine_pilot.anchored_table import (
     load_definition,
 )
 from devtools.parser_engine_pilot.bounded_anchored_table import extract_bounded_anchored_table
-from devtools.parser_engine_pilot.worker_limits import WorkerError
 
 DEFINITION = Path(__file__).with_name("middle-citi-table-pilot-definition.json").read_bytes()
 WELLS_DEFINITION = Path(__file__).with_name("wells-personal-table-pilot-definition.json").read_bytes()

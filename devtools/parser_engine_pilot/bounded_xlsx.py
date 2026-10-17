@@ -5,10 +5,10 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable
 
+from parsetrail.core.v2_worker_limits import MAX_OUTPUT_BYTES, WorkerError, WorkerLimits, run_worker
 from pydantic import TypeAdapter, ValidationError
 
 from devtools.parser_engine_pilot.engine import MAX_DEFINITION_BYTES, MAX_SOURCE_BYTES, Evidence
-from devtools.parser_engine_pilot.worker_limits import MAX_OUTPUT_BYTES, WorkerError, WorkerLimits, run_worker
 
 _EVIDENCE_ADAPTER = TypeAdapter(Evidence)
 DEFAULT_XLSX_LIMITS = WorkerLimits(memory_bytes=1024 * 1024 * 1024)

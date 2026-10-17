@@ -8,10 +8,10 @@ from pathlib import Path
 
 import pdfplumber
 import pytest
+from parsetrail.core.v2_worker_limits import WorkerError
 
 from devtools.parser_engine_pilot.bounded_wells import extract_bounded_wells
 from devtools.parser_engine_pilot.wells_table import extract_table_rows
-from devtools.parser_engine_pilot.worker_limits import WorkerError
 
 DEFINITION = Path(__file__).with_name("wells-table-pilot-definition.json")
 

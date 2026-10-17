@@ -492,7 +492,8 @@ archive PDFs retain 486 rows and 803 dispositions under pilot revision 2.
 
 [`bounded_pdf_text.py`](bounded_pdf_text.py) starts a separate PDF text worker
 with source, output, page, line and extracted-text limits plus a wall-clock
-deadline. The decoder workers use [`worker_limits.py`](worker_limits.py): Windows uses
+deadline. The decoder workers use
+[`v2_worker_limits.py`](../../client/src/parsetrail/core/v2_worker_limits.py): Windows uses
 a Job Object committed-memory limit; POSIX workers set
 `RLIMIT_AS` before importing decoder libraries. The Windows synthetic test exercised
 actual memory refusal and deadline termination. Isolated text extraction exactly
@@ -500,6 +501,12 @@ matched the existing decoder on nine recent-layout archive PDFs, and source
 hashes remained unchanged. The Wells and Citi workers separately cover their
 word/table extraction. Intel Mac native limits still need a target-machine
 test. No runtime import calls these pilots.
+The PDF text worker and shared limit runner now live in the client package.
+The desktop entry handles `--v2-parser-worker` before loading Qt or a profile,
+so a frozen executable has a fixed worker command. A source-mode entry test
+passes; actual frozen Windows and Intel Mac worker acceptance remain open.
+The table, annotation, Citi, Wells and XLSX workers are still pilot modules and
+are explicitly refused from a frozen launch.
 
 Run the synthetic tests from the repository root:
 

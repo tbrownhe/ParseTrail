@@ -6,7 +6,7 @@ import json
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from devtools.parser_engine_pilot.pdf_text_worker import (
+from parsetrail.core.v2_pdf_text_worker import (
     MAX_LINES_PER_PAGE,
     MAX_METADATA_KEY_CHARS,
     MAX_METADATA_KEYS,
@@ -18,7 +18,7 @@ from devtools.parser_engine_pilot.pdf_text_worker import (
     MAX_TEXT_BYTES,
     MAX_TOTAL_LINES,
 )
-from devtools.parser_engine_pilot.worker_limits import WorkerError, WorkerLimits, WorkerModule, run_worker
+from parsetrail.core.v2_worker_limits import WorkerError, WorkerLimits, WorkerModule, run_worker
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,18 +76,18 @@ def decode_pdf(
     source: bytes, limits: WorkerLimits = WorkerLimits(), *, cancelled: Callable[[], bool] | None = None
 ) -> DecodedPDFText:
     """Return capped simple pages and metadata without opening a PDF here."""
-    return _decode_pdf(source, "devtools.parser_engine_pilot.pdf_text_worker", limits, cancelled)
+    return _decode_pdf(source, "pdf_text_simple", limits, cancelled)
 
 
 def decode_pdf_layout(
     source: bytes, limits: WorkerLimits = WorkerLimits(), *, cancelled: Callable[[], bool] | None = None
 ) -> DecodedPDFText:
     """Return capped fixed-tolerance layout pages through the same OS boundary."""
-    return _decode_pdf(source, "devtools.parser_engine_pilot.pdf_layout_text_worker", limits, cancelled)
+    return _decode_pdf(source, "pdf_text_fixed", limits, cancelled)
 
 
 def decode_pdf_default_layout(
     source: bytes, limits: WorkerLimits = WorkerLimits(), *, cancelled: Callable[[], bool] | None = None
 ) -> DecodedPDFText:
     """Return capped default-layout pages through the same OS boundary."""
-    return _decode_pdf(source, "devtools.parser_engine_pilot.pdf_default_layout_worker", limits, cancelled)
+    return _decode_pdf(source, "pdf_text_default", limits, cancelled)

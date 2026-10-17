@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 from parsetrail.core.source_evidence import PdfAnnotation
+from parsetrail.core.v2_worker_limits import WorkerError, WorkerLimits
 
 from devtools.parser_engine_pilot.bounded_pdf_annotations import decode_pdf_period_annotations
-from devtools.parser_engine_pilot.worker_limits import WorkerError, WorkerLimits
 
 
 def sample_pdf(values: tuple[tuple[str, str], ...]) -> bytes:

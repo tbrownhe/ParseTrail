@@ -6,7 +6,7 @@ import json
 import sys
 from dataclasses import asdict
 
-from devtools.parser_engine_pilot.worker_limits import (
+from parsetrail.core.v2_worker_limits import (
     MAX_INPUT_BYTES,
     MAX_OUTPUT_BYTES,
     enforce_child_memory_limit,
