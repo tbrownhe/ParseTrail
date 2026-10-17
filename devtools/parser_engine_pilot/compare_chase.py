@@ -11,10 +11,9 @@ import pdfplumber
 from loguru import logger
 from parsetrail.core.money import to_minor_units
 from parsetrail.core.utils import PDFReader
+from parsetrail.core.v2_card_lines import DATED_PREFIX, parse_card_lines
 from parsetrail.core.v2_pdf_lines import page_lines
 from parsetrail.plugins.pdf_chasecc_202602 import Parser
-
-from devtools.parser_engine_pilot.card_lines import DATED_PREFIX, parse_card_lines
 
 DEFINITION = Path(__file__).with_name("chase-card-pilot-definition.json")
 

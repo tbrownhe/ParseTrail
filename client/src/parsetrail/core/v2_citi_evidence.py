@@ -12,7 +12,10 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from parsetrail.core.parser_classification import DocumentFeatures, matching_plugins, normalize_pdf_metadata
+from parsetrail.core.v2_bounded_citi import extract_bounded_citi
+from parsetrail.core.v2_bounded_pdf_text import decode_pdf
 from parsetrail.core.v2_channel_occurrences import Candidate
+from parsetrail.core.v2_citi_channels import CitiResolution, resolve
 from parsetrail.core.v2_citi_layout import (
     AMOUNT,
     DATE_PREFIX,
@@ -21,20 +24,16 @@ from parsetrail.core.v2_citi_layout import (
     CitiDefinition,
     load_definition,
 )
-from parsetrail.core.v2_citi_table import CitiTableEvidence
-from parsetrail.core.v2_money_operations import usd_symbol_minor_v1
-
-from devtools.parser_engine_pilot.bounded_citi import extract_bounded_citi
-from devtools.parser_engine_pilot.bounded_pdf_text import decode_pdf
-from devtools.parser_engine_pilot.citi_channels import CitiResolution, resolve
-from devtools.parser_engine_pilot.citi_money_lines import MoneyLineDisposition, dispose_unlinked_money_lines
-from devtools.parser_engine_pilot.citi_source_dispositions import (
+from parsetrail.core.v2_citi_money_lines import MoneyLineDisposition, dispose_unlinked_money_lines
+from parsetrail.core.v2_citi_source_dispositions import (
     DatedLineDisposition,
     dispose_dated_lines,
 )
-from devtools.parser_engine_pilot.citi_statement_header import CitiStatementHeader, parse_header
-from devtools.parser_engine_pilot.citi_table_candidates import CitiTableCandidates, candidates_from_table
-from devtools.parser_engine_pilot.partial_dates import resolve_month_day
+from parsetrail.core.v2_citi_statement_header import CitiStatementHeader, parse_header
+from parsetrail.core.v2_citi_table import CitiTableEvidence
+from parsetrail.core.v2_citi_table_candidates import CitiTableCandidates, candidates_from_table
+from parsetrail.core.v2_money_operations import usd_symbol_minor_v1
+from parsetrail.core.v2_partial_dates import resolve_month_day
 
 
 class CitiEvidenceError(ValueError):

@@ -8,8 +8,7 @@ from pathlib import Path
 import pytest
 from parsetrail.core.source_evidence import SourceEvidence
 from parsetrail.core.v2_pdf_lines import page_lines
-
-from devtools.parser_engine_pilot.transamerica_summary_lines import (
+from parsetrail.core.v2_transamerica_summary_lines import (
     RetirementSummaryDefinition,
     RetirementSummaryError,
     parse_retirement_summary,

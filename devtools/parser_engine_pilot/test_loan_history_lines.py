@@ -7,13 +7,12 @@ from pathlib import Path
 
 import pytest
 from parsetrail.core.source_evidence import SourceEvidence
-from parsetrail.core.v2_pdf_lines import page_lines
-
-from devtools.parser_engine_pilot.loan_history_lines import (
+from parsetrail.core.v2_loan_history_lines import (
     LoanHistoryDefinition,
     LoanHistoryError,
     parse_loan_history,
 )
+from parsetrail.core.v2_pdf_lines import page_lines
 
 DEFINITION = Path(__file__).with_name("capital-one-loan-pilot-definition.json").read_bytes()
 

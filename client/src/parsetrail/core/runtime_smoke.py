@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from io import BytesIO
 
 
@@ -53,6 +54,8 @@ def check_native_operations() -> None:
     from sklearn.feature_extraction.text import TfidfVectorizer
     from sklearn.naive_bayes import MultinomialNB
 
+    from parsetrail.core.v2_source_pipeline import build_source_evidence
+
     key = Ed25519PrivateKey.generate()
     message = b"ParseTrail frozen runtime smoke"
     key.public_key().verify(key.sign(message), message)
@@ -79,6 +82,32 @@ def check_native_operations() -> None:
             raise RuntimeError("PDF text smoke failed")
         # Rendering exercises the bundled PDFium and Pillow native libraries too.
         pdf.pages[0].to_image(resolution=36).original.close()
+    definition = json.dumps(
+        {
+            "schema_version": 1,
+            "parser_id": "synthetic_posted_cash_csv",
+            "revision": "1",
+            "suffix": ".csv",
+            "kind": "activity_export",
+            "capabilities": ["table_rows_v1"],
+            "header": ["Date", "Account", "Description", "Amount", "ReportedBalance"],
+            "columns": {
+                "account": "Account",
+                "date": "Date",
+                "description": "Description",
+                "total": "Amount",
+                "balance": "ReportedBalance",
+            },
+            "date_format": "MM/DD/YYYY",
+            "date_role": "posting_date",
+            "money_format": "usd_symbol_2dp",
+            "unknown_balance_literals": ["Unavailable"],
+        }
+    ).encode("utf-8")
+    csv_source = b"Date,Account,Description,Amount,ReportedBalance\n10/01/2026,Checking A,Payment,$1.00,Unavailable\n"
+    evidence = build_source_evidence(csv_source, definition, suffix=".csv")
+    if evidence.parser_id != "synthetic_posted_cash_csv" or len(evidence.payload.rows) != 1:
+        raise RuntimeError("V2 parser smoke failed")
     if not np.allclose(solve(np.eye(2), np.array([2.0, 3.0])), [2.0, 3.0]):
         raise RuntimeError("Scientific-library smoke failed")
     vectorizer = TfidfVectorizer()

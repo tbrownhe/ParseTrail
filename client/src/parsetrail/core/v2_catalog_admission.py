@@ -1,7 +1,7 @@
 """Strict pilot admission of the finite declaration operations in 2.0 scope.
 
 This is a local catalog test boundary. It does not trust a release key or route
-documents, and the pilot engine is not yet an installed client import path.
+documents, and the engine is not yet connected to ordinary client imports.
 """
 
 from __future__ import annotations
@@ -10,26 +10,23 @@ import json
 from collections.abc import Callable
 
 from parsetrail.core import v2_anchored_table as anchored_table
+from parsetrail.core import v2_card_lines as card_lines
 from parsetrail.core import v2_citi_layout as citi_layout
+from parsetrail.core import v2_dual_text_card_lines as dual_text_card_lines
+from parsetrail.core import v2_hsa_cash_lines as hsa_cash_lines
+from parsetrail.core import v2_investment_summary_lines as investment_summary_lines
+from parsetrail.core import v2_legacy_citi_lines as legacy_citi_lines
+from parsetrail.core import v2_loan_history_lines as loan_history_lines
+from parsetrail.core import v2_occu_bank_lines as occu_bank_lines
+from parsetrail.core import v2_occu_card_lines as occu_card_lines
 from parsetrail.core import v2_parser_engine as engine
+from parsetrail.core import v2_savings_lines as savings_lines
+from parsetrail.core import v2_single_column_summary as single_column_summary
+from parsetrail.core import v2_transamerica_summary_lines as transamerica_summary_lines
+from parsetrail.core import v2_two_date_card_lines as two_date_card_lines
+from parsetrail.core import v2_wells_loan_lines as wells_loan_lines
 from parsetrail.core import v2_wells_table as wells_table
 from parsetrail.core.v2_data_catalog import DefinitionIdentity
-
-from devtools.parser_engine_pilot import (
-    card_lines,
-    dual_text_card_lines,
-    hsa_cash_lines,
-    investment_summary_lines,
-    legacy_citi_lines,
-    loan_history_lines,
-    occu_bank_lines,
-    occu_card_lines,
-    savings_lines,
-    single_column_summary,
-    transamerica_summary_lines,
-    two_date_card_lines,
-    wells_loan_lines,
-)
 
 MAX_DEFINITION_BYTES = 64 * 1024
 Loader = Callable[[bytes], tuple[object, str]]

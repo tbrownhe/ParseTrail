@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 from parsetrail.core.source_evidence import SourceEvidence
+from parsetrail.core.v2_hsa_cash_lines import parse_cash_section
+from parsetrail.core.v2_hsa_cash_source_output import from_hsa_cash
 from parsetrail.core.v2_pdf_lines import page_lines
 from parsetrail.core.v2_profile_store import V2ProfileStore
 
-from devtools.parser_engine_pilot.hsa_cash_lines import parse_cash_section
-from devtools.parser_engine_pilot.hsa_cash_source_output import from_hsa_cash
 from devtools.parser_engine_pilot.test_hsa_cash_lines import pages
 
 DEFINITION = Path(__file__).with_name("hsa-cash-pilot-definition.json").read_bytes()

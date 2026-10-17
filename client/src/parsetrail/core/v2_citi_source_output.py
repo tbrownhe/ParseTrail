@@ -19,6 +19,7 @@ from parsetrail.core.source_evidence import (
     StatementPayload,
     TextValue,
 )
+from parsetrail.core.v2_citi_evidence import CitiEvidence
 from parsetrail.core.v2_citi_layout import (
     AMOUNT,
     EVIDENCE_ENGINE_VERSION,
@@ -27,8 +28,6 @@ from parsetrail.core.v2_citi_layout import (
 )
 from parsetrail.core.v2_citi_table import CitiTableRow
 from parsetrail.core.v2_money_operations import usd_symbol_minor_v1
-
-from devtools.parser_engine_pilot.citi_evidence import CitiEvidence
 
 
 class CitiOutputError(ValueError):

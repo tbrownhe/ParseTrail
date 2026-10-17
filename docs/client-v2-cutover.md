@@ -95,7 +95,7 @@ one-character text copy and a fee description with its amount removed.
 The recent Citi PDF layout is in scope for the 2.0 release. Its overlap conflicts
 are separate from the foreign-transaction multiline pattern. A dated-line scan
 found 71 lines outside the simple text-row matcher in the earlier eight-source
-cohort. The [source-line ledger](../devtools/parser_engine_pilot/citi_source_dispositions.py)
+cohort. The [source-line ledger](../client/src/parsetrail/core/v2_citi_source_dispositions.py)
 now checks the ten recent-layout archive PDFs: all 486 dated starts map one to
 one to resolved rows, including 72 table copies and one fee; all ten printed
 balance equations pass. This accounts for dated starts in the tested sources,
@@ -141,7 +141,7 @@ The bounded text worker supplies metadata to classify the recent layout, while
 the bounded candidate path reads the
 statement period, account suffix and printed balances from capped worker
 evidence. Those fields matched the old reader on all ten archive statements.
-The standalone [recent Citi evidence path](../devtools/parser_engine_pilot/citi_evidence.py)
+The standalone [recent Citi evidence path](../client/src/parsetrail/core/v2_citi_evidence.py)
 now runs without the old reader or any profile writes. The old reader remains
 only in the separate comparison audit.
 It also labels every dollar-sign line outside dated transaction spans:
@@ -197,6 +197,12 @@ The local catalog-admission pilot now validates all 23 checked-in definitions in
 one test-signed snapshot. With a verified catalog and an explicit parser choice,
 the service checks parser identity and revision before saving pending evidence;
 automatic document routing and installed-client trust remain open.
+The finite parser operations, bounded adapters and source pipeline now live in
+the client package. Verified-catalog import uses that installed pipeline by
+default; a synthetic signed CSV import saves and reopens its evidence without
+an injected parser. The frozen runtime smoke now exercises a synthetic V2
+parse and pulls the pipeline into packaging. Automatic routing, release trust
+and desktop import remain open.
 The bounded decoder worker now polls a cancellation callback and terminates its
 child on cancellation. The source pipeline also polls its CSV row loop and
 passes the callback to PDF decoder workers. A cancelled catalog import leaves

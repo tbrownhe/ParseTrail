@@ -8,6 +8,8 @@ from collections import Counter
 from datetime import datetime
 from typing import Literal
 
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+
 from parsetrail.core.source_evidence import (
     DateValue,
     MoneyValue,
@@ -21,12 +23,10 @@ from parsetrail.core.source_evidence import (
     StatementPayload,
     TextValue,
 )
+from parsetrail.core.v2_bounded_pdf_annotations import PDFPeriodAnnotation
 from parsetrail.core.v2_money_operations import usd_parenthetical_2dp_minor_v1
+from parsetrail.core.v2_partial_dates import PartialDateError, resolve_month_day
 from parsetrail.core.v2_pdf_lines import ADAPTER_VERSION, PageLine, PDFLineEvidence
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
-
-from devtools.parser_engine_pilot.bounded_pdf_annotations import PDFPeriodAnnotation
-from devtools.parser_engine_pilot.partial_dates import PartialDateError, resolve_month_day
 
 ENGINE_VERSION = "occu-bank-lines-pilot-1"
 MAX_DEFINITION_BYTES = 64 * 1024

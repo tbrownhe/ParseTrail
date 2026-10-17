@@ -5,10 +5,10 @@ from pathlib import Path
 import pytest
 from parsetrail.core.source_evidence import SourceEvidence
 from parsetrail.core.v2_pdf_lines import page_lines
+from parsetrail.core.v2_wells_statement_output import WellsStatementError, from_wells_business
 from parsetrail.core.v2_wells_table import extract_table_rows
 
 from devtools.parser_engine_pilot.test_wells_table import FakePage, cells
-from devtools.parser_engine_pilot.wells_statement_output import WellsStatementError, from_wells_business
 
 DEFINITION = Path(__file__).with_name("wells-table-pilot-definition.json").read_bytes()
 SOURCE = b"%PDF-synthetic"

@@ -27,10 +27,9 @@ from parsetrail.core.v2_anchored_table import (
     load_definition,
 )
 from parsetrail.core.v2_money_operations import usd_symbol_minor_v1
+from parsetrail.core.v2_partial_dates import PartialDateError, resolve_month_day
 from parsetrail.core.v2_pdf_lines import ADAPTER_VERSION, PageLine, PDFLineEvidence
 from parsetrail.core.v2_table_continuations import ContinuationError, RawTableRow, assemble
-
-from devtools.parser_engine_pilot.partial_dates import PartialDateError, resolve_month_day
 
 ENGINE_VERSION = "synchrony-table-source-pilot-1"
 DATE = re.compile(r"\d{2}/\d{2}\Z")

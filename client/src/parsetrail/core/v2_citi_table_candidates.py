@@ -9,14 +9,13 @@ from parsetrail.core.v2_channel_occurrences import Candidate, validate_candidate
 from parsetrail.core.v2_citi_layout import AMOUNT, TRANSACTION_DATE
 from parsetrail.core.v2_citi_table import CitiTableEvidence
 from parsetrail.core.v2_money_operations import usd_symbol_minor_v1
+from parsetrail.core.v2_partial_dates import resolve_month_day
 from parsetrail.core.v2_table_continuations import (
     ContinuationRule,
     JoinedTableRow,
     RawTableRow,
     assemble,
 )
-
-from devtools.parser_engine_pilot.partial_dates import resolve_month_day
 
 
 @dataclass(frozen=True, slots=True)

@@ -7,10 +7,9 @@ import tempfile
 from pathlib import Path
 
 from parsetrail.core.v2_profile_store import V2ProfileStore
+from parsetrail.core.v2_source_pipeline import build_source_evidence
 from parsetrail.gui.v2_evidence_preview import preview_saved_source
 from PySide6.QtWidgets import QApplication
-
-from devtools.parser_engine_pilot.source_pipeline import build_source_evidence
 
 DEMO_SOURCE = (
     b"Date,Account,Description,Amount,ReportedBalance\n"

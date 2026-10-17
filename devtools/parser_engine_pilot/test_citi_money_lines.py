@@ -1,7 +1,7 @@
 """Dollar lines outside Citi transaction spans need explicit dispositions."""
 
-from devtools.parser_engine_pilot.citi_money_lines import dispose_unlinked_money_lines
-from devtools.parser_engine_pilot.citi_source_dispositions import DatedLineDisposition
+from parsetrail.core.v2_citi_money_lines import dispose_unlinked_money_lines
+from parsetrail.core.v2_citi_source_dispositions import DatedLineDisposition
 
 
 def test_labels_known_summary_lines_without_reinterpreting_a_transaction() -> None:

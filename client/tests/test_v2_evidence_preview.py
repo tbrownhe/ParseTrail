@@ -7,12 +7,12 @@ import os
 from pathlib import Path
 
 from parsetrail.core.v2_profile_store import V2ProfileStore
+from parsetrail.core.v2_source_pipeline import build_source_evidence
+from parsetrail.core.v2_synchrony_source_output import from_synchrony_table
 from parsetrail.gui.v2_evidence_preview import preview_saved_source
 from PySide6.QtWidgets import QApplication, QLabel, QTabWidget
 
 from devtools.parser_engine_pilot.preview_source import main as preview_main
-from devtools.parser_engine_pilot.source_pipeline import build_source_evidence
-from devtools.parser_engine_pilot.synchrony_source_output import from_synchrony_table
 from devtools.parser_engine_pilot.test_synchrony_source_output import DEFINITION as CARD_DEFINITION
 from devtools.parser_engine_pilot.test_synchrony_source_output import SOURCE as CARD_SOURCE
 from devtools.parser_engine_pilot.test_synchrony_source_output import channels as card_channels

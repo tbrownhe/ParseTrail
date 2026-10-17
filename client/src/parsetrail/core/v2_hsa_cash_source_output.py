@@ -16,9 +16,8 @@ from parsetrail.core.source_evidence import (
     StatementPayload,
     TextValue,
 )
+from parsetrail.core.v2_hsa_cash_lines import CashField, HsaCashEvidence
 from parsetrail.core.v2_pdf_lines import PDFLineEvidence
-
-from devtools.parser_engine_pilot.hsa_cash_lines import CashField, HsaCashEvidence
 
 
 def _location(field: CashField) -> PdfLine:

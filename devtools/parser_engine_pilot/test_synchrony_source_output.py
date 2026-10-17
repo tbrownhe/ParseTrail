@@ -21,8 +21,7 @@ from parsetrail.core.v2_anchored_table import (
 )
 from parsetrail.core.v2_pdf_lines import page_lines
 from parsetrail.core.v2_profile_store import V2ProfileStore
-
-from devtools.parser_engine_pilot.synchrony_source_output import SynchronySourceError, from_synchrony_table
+from parsetrail.core.v2_synchrony_source_output import SynchronySourceError, from_synchrony_table
 
 DEFINITION = Path(__file__).with_name("synchrony-table-pilot-definition.json").read_bytes()
 SOURCE = b"%PDF-synthetic"

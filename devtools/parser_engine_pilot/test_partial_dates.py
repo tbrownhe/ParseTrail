@@ -3,8 +3,7 @@
 from datetime import date
 
 import pytest
-
-from devtools.parser_engine_pilot.partial_dates import PartialDateError, resolve_month_day, resolve_slash_month_day
+from parsetrail.core.v2_partial_dates import PartialDateError, resolve_month_day, resolve_slash_month_day
 
 
 def test_rollover_and_just_before_period() -> None:

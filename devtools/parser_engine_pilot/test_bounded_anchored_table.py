@@ -14,9 +14,8 @@ from parsetrail.core.v2_anchored_table import (
     extract_anchored_table,
     load_definition,
 )
+from parsetrail.core.v2_bounded_anchored_table import extract_bounded_anchored_table
 from parsetrail.core.v2_worker_limits import WorkerError
-
-from devtools.parser_engine_pilot.bounded_anchored_table import extract_bounded_anchored_table
 
 DEFINITION = Path(__file__).with_name("middle-citi-table-pilot-definition.json").read_bytes()
 WELLS_DEFINITION = Path(__file__).with_name("wells-personal-table-pilot-definition.json").read_bytes()

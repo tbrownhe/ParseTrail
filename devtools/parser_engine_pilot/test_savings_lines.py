@@ -6,8 +6,7 @@ from pathlib import Path
 import pytest
 from parsetrail.core.source_evidence import SourceEvidence
 from parsetrail.core.v2_pdf_lines import page_lines
-
-from devtools.parser_engine_pilot.savings_lines import SavingsDefinition, SavingsLineError, parse_savings_lines
+from parsetrail.core.v2_savings_lines import SavingsDefinition, SavingsLineError, parse_savings_lines
 
 DEFINITION = Path(__file__).with_name("happen-savings-pilot-definition.json").read_bytes()
 

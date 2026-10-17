@@ -7,9 +7,9 @@ from functools import partial
 
 import pytest
 from parsetrail.core.v2_channel_occurrences import Candidate, OccurrenceError
+from parsetrail.core.v2_citi_channels import resolve as resolve_with_rule
 
 from devtools.parser_engine_pilot.citi_authoring import DEFINITION
-from devtools.parser_engine_pilot.citi_channels import resolve as resolve_with_rule
 
 DAY = date(2026, 8, 2)
 resolve = partial(resolve_with_rule, occurrence_rule=DEFINITION.channel_occurrences)

@@ -1,8 +1,7 @@
 """Printed Citi account and balance fields from bounded source evidence."""
 
 import pytest
-
-from devtools.parser_engine_pilot.citi_statement_header import CitiHeaderError, parse_header
+from parsetrail.core.v2_citi_statement_header import CitiHeaderError, parse_header
 
 
 def test_parses_period_account_and_printed_credit_balance_signs() -> None:

@@ -9,6 +9,8 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Literal
 
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+
 from parsetrail.core.source_evidence import (
     DateValue,
     MoneyValue,
@@ -21,10 +23,8 @@ from parsetrail.core.source_evidence import (
     StatementPayload,
     TextValue,
 )
+from parsetrail.core.v2_partial_dates import PartialDateError, resolve_month_day
 from parsetrail.core.v2_pdf_lines import PageLine, PDFLineEvidence
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
-
-from devtools.parser_engine_pilot.partial_dates import PartialDateError, resolve_month_day
 
 ENGINE_VERSION = "savings-lines-pilot-1"
 MAX_DEFINITION_BYTES = 64 * 1024

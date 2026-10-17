@@ -5,8 +5,7 @@ from pathlib import Path
 import pytest
 from parsetrail.core.v2_profile_store import V2ProfileStore
 from parsetrail.core.v2_source_import import ImportCancelled, compare_reparse, import_source
-
-from devtools.parser_engine_pilot.source_pipeline import build_source_evidence
+from parsetrail.core.v2_source_pipeline import build_source_evidence
 
 DEFINITION = Path(__file__).parents[2] / "devtools" / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
 SOURCE = b"Date,Account,Description,Amount,ReportedBalance\n10/01/2026,Checking A,Coffee,-$4.00,$996.00\n"

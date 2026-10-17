@@ -10,9 +10,8 @@ from pathlib import Path
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from parsetrail.core.v2_catalog_admission import admit_pilot_definition
 from parsetrail.core.v2_data_catalog import key_id_for_public_key, verify_catalog
-
-from devtools.parser_engine_pilot.catalog_admission import admit_pilot_definition
 
 
 def test_every_current_pilot_definition_admits_in_one_signed_local_snapshot() -> None:

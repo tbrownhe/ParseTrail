@@ -3,8 +3,7 @@
 from datetime import date
 
 from parsetrail.core.v2_channel_occurrences import Candidate
-
-from devtools.parser_engine_pilot.citi_source_dispositions import dispose_dated_lines
+from parsetrail.core.v2_citi_source_dispositions import dispose_dated_lines
 
 
 def table(description: str, amount: int, row: int, *, day: int = 2) -> Candidate:

@@ -11,10 +11,9 @@ import pdfplumber
 from loguru import logger
 from parsetrail.core.money import to_minor_units
 from parsetrail.core.utils import PDFReader
+from parsetrail.core.v2_hsa_cash_lines import parse_cash_section
 from parsetrail.core.v2_pdf_lines import page_lines
 from parsetrail.plugins.pdf_hehsa_201810 import Parser
-
-from devtools.parser_engine_pilot.hsa_cash_lines import parse_cash_section
 
 DEFINITION = Path(__file__).with_name("hsa-cash-pilot-definition.json")
 

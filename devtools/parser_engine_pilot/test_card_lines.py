@@ -6,14 +6,13 @@ import json
 from pathlib import Path
 
 import pytest
-from parsetrail.core.v2_pdf_lines import page_lines
-
-from devtools.parser_engine_pilot.card_lines import (
+from parsetrail.core.v2_card_lines import (
     MAX_DATED_LINE_CHARS,
     CardDefinition,
     CardLineError,
     parse_card_lines,
 )
+from parsetrail.core.v2_pdf_lines import page_lines
 
 DEFINITION = Path(__file__).with_name("chase-card-pilot-definition.json")
 

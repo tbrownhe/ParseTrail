@@ -4,13 +4,14 @@ from __future__ import annotations
 
 from datetime import date, datetime
 
+from parsetrail.core.v2_citi_evidence import fee_candidates
+from parsetrail.core.v2_citi_source_dispositions import dispose_dated_lines
+
 from devtools.parser_engine_pilot.audit_citi_channels import (
     Candidate,
     dispositions,
     overlap_shape,
 )
-from devtools.parser_engine_pilot.citi_evidence import fee_candidates
-from devtools.parser_engine_pilot.citi_source_dispositions import dispose_dated_lines
 
 
 def candidate(description: str, channel: str, line: int, amount: int = -100) -> Candidate:

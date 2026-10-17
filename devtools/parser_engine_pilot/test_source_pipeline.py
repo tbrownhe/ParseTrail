@@ -3,11 +3,11 @@
 from pathlib import Path
 
 import pytest
+from parsetrail.core.v2_catalog_admission import admit_pilot_definition
 from parsetrail.core.v2_profile_store import V2ProfileStore
+from parsetrail.core.v2_source_pipeline import SourcePipelineError, build_source_evidence
 
-from devtools.parser_engine_pilot.catalog_admission import admit_pilot_definition
 from devtools.parser_engine_pilot.citi_authoring import DEFINITION_BYTES
-from devtools.parser_engine_pilot.source_pipeline import SourcePipelineError, build_source_evidence
 from devtools.parser_engine_pilot.test_bounded_citi import sample_table_pdf
 
 CSV_DEFINITION = Path(__file__).parents[1] / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
@@ -100,8 +100,9 @@ def test_recent_citi_valid_revision_reaches_source_checks() -> None:
 def test_changed_valid_pdf_revision_uses_supplied_declaration(monkeypatch) -> None:
     import json
 
-    from devtools.parser_engine_pilot import source_pipeline
-    from devtools.parser_engine_pilot.bounded_pdf_text import DecodedPDFText
+    from parsetrail.core import v2_source_pipeline as source_pipeline
+    from parsetrail.core.v2_bounded_pdf_text import DecodedPDFText
+
     from devtools.parser_engine_pilot.test_savings_lines import pages
 
     raw = json.loads(HAPPEN_DEFINITION)

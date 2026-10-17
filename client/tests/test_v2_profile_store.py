@@ -7,11 +7,11 @@ import sqlite3
 from pathlib import Path
 
 import pytest
+from parsetrail.core.v2_citi_source_output import from_citi
 from parsetrail.core.v2_profile_store import ProfileFormatError, V2ProfileStore
+from parsetrail.core.v2_source_pipeline import build_source_evidence
 
 from devtools.parser_engine_pilot.citi_authoring import DEFINITION_BYTES
-from devtools.parser_engine_pilot.citi_source_output import from_citi
-from devtools.parser_engine_pilot.source_pipeline import build_source_evidence
 from devtools.parser_engine_pilot.test_citi_source_output import sample
 
 CSV_DEFINITION = (

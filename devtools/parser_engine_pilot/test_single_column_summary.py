@@ -8,8 +8,7 @@ from pathlib import Path
 import pytest
 from parsetrail.core.source_evidence import SourceEvidence
 from parsetrail.core.v2_pdf_lines import page_lines
-
-from devtools.parser_engine_pilot.single_column_summary import (
+from parsetrail.core.v2_single_column_summary import (
     SingleColumnSummaryDefinition,
     SingleColumnSummaryError,
     parse_single_column_summary,

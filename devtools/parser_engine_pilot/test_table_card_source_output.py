@@ -18,8 +18,7 @@ from parsetrail.core.v2_anchored_table import (
     AnchoredTableEvidence,
 )
 from parsetrail.core.v2_pdf_lines import page_lines
-
-from devtools.parser_engine_pilot.table_card_source_output import TableCardError, from_anchored_card
+from parsetrail.core.v2_table_card_source_output import TableCardError, from_anchored_card
 
 DEFINITION = Path(__file__).with_name("middle-citi-table-pilot-definition.json").read_bytes()
 SOURCE = b"%PDF-synthetic"

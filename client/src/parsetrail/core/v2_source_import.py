@@ -10,6 +10,7 @@ from typing import Literal, Protocol
 from parsetrail.core.source_evidence import SourceEvidence
 from parsetrail.core.v2_data_catalog import VerifiedCatalog
 from parsetrail.core.v2_profile_store import V2ProfileStore
+from parsetrail.core.v2_source_pipeline import build_source_evidence
 
 
 class ImportCancelled(ValueError):
@@ -88,7 +89,7 @@ def import_catalog_source(
     catalog: VerifiedCatalog,
     parser_id: str,
     suffix: Literal[".csv", ".pdf"],
-    parse: CatalogParser,
+    parse: CatalogParser = build_source_evidence,
     cancelled: Callable[[], bool] | None = None,
 ) -> SourceImportResult:
     """Import with an explicitly selected, previously verified catalog entry.

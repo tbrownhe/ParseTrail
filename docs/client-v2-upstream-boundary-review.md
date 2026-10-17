@@ -60,9 +60,9 @@ export payloads, typed PDF/CSV/XLSX locations, observed/derived/unknown value
 provenance, source fragments and dispositions. It rejects accounting fields,
 duplicate row IDs and unsupported versions. Statement balances use exact
 minor-unit equations only when both endpoints and row amounts are observed.
-The [table adapter](../devtools/parser_engine_pilot/table_source_output.py)
+The [table adapter](../client/src/parsetrail/core/v2_table_source_output.py)
 round-trips a synthetic CSV with an unknown balance through this contract.
-The [recent Citi output adapter](../devtools/parser_engine_pilot/citi_source_output.py)
+The [recent Citi output adapter](../client/src/parsetrail/core/v2_citi_source_output.py)
 now maps bounded, source-linked evidence into the same statement payload. A
 finite checked-in pilot definition supplies routing, continuation, occurrence
 and source-sign rules. The bounded path no longer imports the 1.x Citi parser;
@@ -71,7 +71,7 @@ recent-layout PDFs produced 486 observations and 803 located dispositions,
 including 36 supplemental detail rows, and reopened from strict JSON without
 changing source hashes. `capture_verified` remains false pending final
 non-monetary section capture and native decoder acceptance. The
-[bounded source pipeline](../devtools/parser_engine_pilot/source_pipeline.py)
+[bounded source pipeline](../client/src/parsetrail/core/v2_source_pipeline.py)
 now checks source/definition sizes and hashes, strict output shape and serialized
 output size. It refuses unknown Citi layouts and changed definition bytes. The
 [fresh 2.0 source store](../client/src/parsetrail/core/v2_profile_store.py)

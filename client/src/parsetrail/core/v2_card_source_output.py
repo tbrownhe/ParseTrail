@@ -14,9 +14,8 @@ from parsetrail.core.source_evidence import (
     StatementPayload,
     TextValue,
 )
+from parsetrail.core.v2_card_lines import CardField, CardStatementEvidence
 from parsetrail.core.v2_pdf_lines import PDFLineEvidence
-
-from devtools.parser_engine_pilot.card_lines import CardField, CardStatementEvidence
 
 
 def _location(field: CardField) -> PdfLine:

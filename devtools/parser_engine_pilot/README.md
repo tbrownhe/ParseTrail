@@ -1,9 +1,10 @@
 # P2-2 bounded declaration and evidence pilot
 
-This is a development pilot for the [2.0 parser plan](../../docs/client-v2-parsing.md).
-Some bounded engines and workers now live in the client package. Automatic
-routing and ordinary desktop import are not connected; the pilot is not a
-released signed catalog or accepted for real-statement ingestion.
+This is the development evidence for the [2.0 parser plan](../../docs/client-v2-parsing.md).
+The finite parser operations, bounded adapters and source pipeline now live in
+the client package. This directory retains tests, comparison tools and checked-in
+example definitions. Automatic routing and ordinary desktop import are not
+connected; this is not a released signed catalog.
 
 The installed [`v2_parser_engine.py`](../../client/src/parsetrail/core/v2_parser_engine.py)
 accepts an exact JSON declaration under
@@ -41,7 +42,7 @@ size, checks every member before `openpyxl` decoding, and selects one explicit
 sheet with bounded dimensions. It accepts string/blank cells only, rejecting
 formulas and typed numeric/date cells until their exact-value and display
 semantics are specified. Sheet/cell locations and extractor version remain in
-the evidence. [`bounded_xlsx.py`](bounded_xlsx.py) now runs that adapter in the
+the evidence. [`v2_bounded_xlsx.py`](../../client/src/parsetrail/core/v2_bounded_xlsx.py) now runs that adapter in the
 same fixed-worker resource boundary used for PDF text. It matched the
 in-process evidence on a synthetic workbook, refused formulas and terminated
 at its deadline on Windows. No archived statement exercises XLSX parity, and
@@ -349,7 +350,7 @@ authorized source with:
 client/.venv/Scripts/python.exe -m devtools.parser_engine_pilot.compare_wells C:\private\business-statement.pdf
 ```
 
-[`bounded_wells.py`](bounded_wells.py) now runs PDF decoding, word extraction and
+[`v2_bounded_wells.py`](../../client/src/parsetrail/core/v2_bounded_wells.py) now runs PDF decoding, word extraction and
 table finding inside the fixed worker boundary. Its returned cells, regions and
 dispositions exactly matched the in-process pilot on 21 authorized archive PDFs
 (1,029 extracted table rows); every source hash remained unchanged. A synthetic
@@ -383,7 +384,7 @@ date-only text copies on the same page as their table row, one table copy has
 lost the text description's first character, and one is an additional exact
 occurrence on a distinct source line. The nine text-only rows are three payments,
 two interest charges and four purchases. The finite
-[`citi_channels.py`](citi_channels.py) pilot retains each table/text/fee candidate
+[`v2_citi_channels.py`](../../client/src/parsetrail/core/v2_citi_channels.py) pilot retains each table/text/fee candidate
 location, pairs only explained occurrences and refuses other overlaps or a
 failed printed balance equation. On the eight authorized sources it reproduces
 all 421 accepted date/amount row occurrences and all eight printed balance
@@ -399,7 +400,7 @@ layout may be used for normal imports. That early pass used the old unbounded
 PDF decoder and table extractor.
 
 A later nine-file read-only sample found 67 such dated starts. The finite
-[`citi_source_dispositions.py`](citi_source_dispositions.py) ledger now accounts
+[`v2_citi_source_dispositions.py`](../../client/src/parsetrail/core/v2_citi_source_dispositions.py) ledger now accounts
 for all of them: 66 are table copies linked by page, date, signed amount,
 occurrence order and ordered description words; one is in the printed fee
 section. Three table descriptions lost their first character, so the ledger
@@ -412,7 +413,7 @@ dated starts, each linked to exactly one of 486 resolved rows. The ledger report
 equations pass; source hashes were unchanged. This check covers dated starts,
 not every non-dated item on every page. The read-only audit still uses the old
 in-process reader as its accepted-result baseline. Its candidate path now uses
-the bounded text and table workers. [`bounded_citi.py`](bounded_citi.py) moves
+the bounded text and table workers. [`v2_bounded_citi.py`](../../client/src/parsetrail/core/v2_bounded_citi.py) moves
 Citi word/table extraction to the installed
 [`v2_citi_table_worker.py`](../../client/src/parsetrail/core/v2_citi_table_worker.py)
 under the shared resource limit. It returned
@@ -431,7 +432,7 @@ every raw page/row reference and refuses orphan, truncated or undeclared
 continuations. Synthetic fixtures cover the amount-on-last-row shape used by
 Citi/Synchrony and the following-description shape used by Wells/LendingClub.
 The third mode retains detail lines printed after an amount separately from
-the transaction description. The [Citi table adapter](citi_table_candidates.py)
+the transaction description. The [Citi table adapter](../../client/src/parsetrail/core/v2_citi_table_candidates.py)
 uses that shared mode over bounded cells: ten archive PDFs produced 471 table
 transactions from 543 raw rows, preserving 36 supplemental travel/lodging
 detail rows. The transaction descriptions and amounts matched the accepted
@@ -454,7 +455,7 @@ Run one authorized source with:
 client/.venv/Scripts/python.exe -m devtools.parser_engine_pilot.audit_citi_channels C:\private\recent-citi.pdf
 ```
 
-[`citi_evidence.py`](citi_evidence.py) now exposes `read_recent_citi` as a
+[`v2_citi_evidence.py`](../../client/src/parsetrail/core/v2_citi_evidence.py) now exposes `read_recent_citi` as a
 standalone, read-only candidate path. It calls the bounded PDF workers and the
 finite header, table and channel operations, then applies the dated-start gate.
 The audit calls that path before opening the old reader for comparison. All ten
@@ -463,7 +464,7 @@ with one printed dated start per resolved row and unchanged source hashes. A
 synthetic non-Citi PDF is refused before Citi table extraction. This remains a
 pilot and does not post to a profile or prove capture of non-monetary content.
 
-The [money-line ledger](citi_money_lines.py) also accounts for every dollar-sign
+The [money-line ledger](../../client/src/parsetrail/core/v2_citi_money_lines.py) also accounts for every dollar-sign
 line outside dated transaction spans in the ten sources: 183 first-page lines
 cover payment information, account summaries, credit terms and repayment
 examples; 98 later-page lines cover printed totals, annual summaries,
@@ -476,13 +477,13 @@ transactions or claim that every non-money item on a page is understood.
 
 The Citi worker also retains a capped first-page character stream; the shared
 PDF text worker returns capped metadata for routing. The
-[statement-header adapter](citi_statement_header.py) reads the
+[statement-header adapter](../../client/src/parsetrail/core/v2_citi_statement_header.py) reads the
 billing period from that stream and finds the account suffix and printed
 balances at bounded text line locations. The audit now independently routes
 and builds candidate fields from bounded evidence, then compares them to the
 old reader. All ten archive statements passed header, routing, row and balance
 parity. The old reader remains only the audit's comparison baseline.
-The [partial-date operation](partial_dates.py) now resolves printed `MM/DD`
+The [partial-date operation](../../client/src/parsetrail/core/v2_partial_dates.py) now resolves printed `MM/DD`
 dates with a finite year window and explicit refusal for invalid, distant or
 ambiguous results; the ten-source Citi comparison remains unchanged.
 The [recent Citi pilot definition](recent-citi-pilot-definition.json) now
@@ -492,12 +493,12 @@ parser; only the separate comparison audit does. The checked-in example is
 loaded by [`citi_authoring.py`](citi_authoring.py), while the installed
 [`v2_citi_layout.py`](../../client/src/parsetrail/core/v2_citi_layout.py)
 has no bundled-definition dependency. Its
-[shared output adapter](citi_source_output.py) reopens all ten statements from
+[shared output adapter](../../client/src/parsetrail/core/v2_citi_source_output.py) reopens all ten statements from
 strict JSON with 486 observations and 803 located source dispositions,
 including 36 supplemental detail rows. It leaves capture verification false
 and creates no accounting postings or profile writes.
 
-The [source pipeline](source_pipeline.py) binds input and definition bytes to
+The [source pipeline](../../client/src/parsetrail/core/v2_source_pipeline.py) binds input and definition bytes to
 that strict output under explicit size limits. The same entry point builds
 synthetic CSV evidence and recent Citi PDF evidence; unknown Citi layouts and
 definitions whose routing does not match the source are refused. A temporary
@@ -509,7 +510,7 @@ The Citi definition's `usd_symbol_minor_v1` operation now rejects undeclared
 money spellings and computes integer cents directly. All ten recent-layout
 archive PDFs retain 486 rows and 803 dispositions under pilot revision 2.
 
-[`bounded_pdf_text.py`](bounded_pdf_text.py) starts a separate PDF text worker
+[`v2_bounded_pdf_text.py`](../../client/src/parsetrail/core/v2_bounded_pdf_text.py) starts a separate PDF text worker
 with source, output, page, line and extracted-text limits plus a wall-clock
 deadline. The decoder workers use
 [`v2_worker_limits.py`](../../client/src/parsetrail/core/v2_worker_limits.py): Windows uses

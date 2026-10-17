@@ -385,6 +385,13 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   Its expanded synthetic example has five observations, two source accounts,
   one unknown balance and one classified blank line. Offscreen tests pass and
   the owner accepted the native Windows preview layout on October 17, 2026.
+  All finite parser operations and bounded adapters now live in the client
+  package. The verified-catalog import service uses that installed source
+  pipeline by default; a synthetic signed CSV import saves and reopens its
+  evidence without an injected parser. The existing frozen runtime smoke now
+  exercises one synthetic V2 parse and pulls the pipeline into packaging.
+  Automatic routing, release trust,
+  ordinary desktop import and native Intel Mac acceptance remain open.
 - [ ] **P2-S — Declaration catalog server:** after accepted client work is merged,
   use a short-lived server branch for the reviewed snapshot API/storage/publication
   contract. A table may hold JSON definitions; clients consume immutable signed

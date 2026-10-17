@@ -10,8 +10,9 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
 
-from parsetrail.core.v2_pdf_lines import PageLine, PDFLineEvidence
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+
+from parsetrail.core.v2_pdf_lines import PageLine, PDFLineEvidence
 
 ENGINE_VERSION = "hsa-cash-lines-pilot-1"
 MAX_DEFINITION_BYTES = 64 * 1024

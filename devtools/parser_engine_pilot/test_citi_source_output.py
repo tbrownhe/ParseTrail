@@ -8,17 +8,17 @@ from datetime import date
 import pytest
 from parsetrail.core.source_evidence import SourceEvidence
 from parsetrail.core.v2_channel_occurrences import Candidate
+from parsetrail.core.v2_citi_channels import CitiResolution, ResolvedRow
+from parsetrail.core.v2_citi_evidence import CitiEvidence
 from parsetrail.core.v2_citi_layout import EVIDENCE_ENGINE_VERSION
+from parsetrail.core.v2_citi_source_dispositions import DatedLineDisposition
+from parsetrail.core.v2_citi_source_output import CitiOutputError, from_citi
+from parsetrail.core.v2_citi_statement_header import CitiStatementHeader, PrintedBalance
 from parsetrail.core.v2_citi_table import CitiTableEvidence, CitiTablePage, CitiTableRow
+from parsetrail.core.v2_citi_table_candidates import CitiTableCandidates
 from parsetrail.core.v2_table_continuations import JoinedTableRow, RawTableRow
 
 from devtools.parser_engine_pilot.citi_authoring import DEFINITION_BYTES, DEFINITION_SHA256
-from devtools.parser_engine_pilot.citi_channels import CitiResolution, ResolvedRow
-from devtools.parser_engine_pilot.citi_evidence import CitiEvidence
-from devtools.parser_engine_pilot.citi_source_dispositions import DatedLineDisposition
-from devtools.parser_engine_pilot.citi_source_output import CitiOutputError, from_citi
-from devtools.parser_engine_pilot.citi_statement_header import CitiStatementHeader, PrintedBalance
-from devtools.parser_engine_pilot.citi_table_candidates import CitiTableCandidates
 
 
 def sample() -> CitiEvidence:

@@ -17,8 +17,7 @@ from parsetrail.core.v2_anchored_table import (
     AnchoredTableEvidence,
 )
 from parsetrail.core.v2_pdf_lines import page_lines
-
-from devtools.parser_engine_pilot.table_bank_source_output import TableBankError, from_anchored_bank
+from parsetrail.core.v2_table_bank_source_output import TableBankError, from_anchored_bank
 
 DEFINITION = Path(__file__).with_name("lendingclub-table-pilot-definition.json").read_bytes()
 SOURCE = b"%PDF-synthetic-bank"

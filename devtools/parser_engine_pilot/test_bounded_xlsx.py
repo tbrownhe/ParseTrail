@@ -5,10 +5,10 @@ from __future__ import annotations
 from dataclasses import asdict
 
 import pytest
+from parsetrail.core.v2_bounded_xlsx import parse_bounded_xlsx
 from parsetrail.core.v2_worker_limits import WorkerError, WorkerLimits
 from parsetrail.core.v2_xlsx_adapter import parse_xlsx
 
-from devtools.parser_engine_pilot.bounded_xlsx import parse_bounded_xlsx
 from devtools.parser_engine_pilot.test_xlsx_adapter import definition, workbook
 
 

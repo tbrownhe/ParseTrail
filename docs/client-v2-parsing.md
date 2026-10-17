@@ -191,7 +191,7 @@ page-local geometry operation remains a prototype candidate, not an accepted
 schema or license to derive those balances. An isolated geometry pilot now
 retains each Wells table row's raw cells and region with an explicit disposition;
 all referenced Wells Fargo business sources matched the accepted reader on
-retained cells and dated-candidate count. A [bounded Wells worker pilot](../devtools/parser_engine_pilot/bounded_wells.py)
+retained cells and dated-candidate count. A [bounded Wells worker pilot](../client/src/parsetrail/core/v2_bounded_wells.py)
 now moves word extraction and table finding out of process. Its evidence exactly
 matched the in-process pilot on 21 archive PDFs (1,029 extracted rows) without
 changing source hashes. Neither comparison proves full page capture; Intel Mac
@@ -206,7 +206,7 @@ of the eight referenced sources found nine date-only incomplete text copies,
 one table copy missing the text description's first character, and one
 additional identical occurrence on two distinct lines. The nine text-only rows
 comprise three payments, two interest charges and four purchases. A finite
-[Citi channel resolver pilot](../devtools/parser_engine_pilot/citi_channels.py)
+[Citi channel resolver pilot](../client/src/parsetrail/core/v2_citi_channels.py)
 now reproduces all 421 accepted date/amount row occurrences and balances on
 the eight sources; it preserves source locations and refuses other overlaps.
 Two descriptions intentionally differ: the fuller text copy and a fee label
@@ -225,7 +225,7 @@ and nine printed balance equations; each source hash was unchanged. Leave only
 genuinely Citi-specific geometry or fee-section selection in a named built-in
 extractor if the shared operations cannot express it simply.
 
-A [Citi dated-line ledger](../devtools/parser_engine_pilot/citi_source_dispositions.py)
+A [Citi dated-line ledger](../client/src/parsetrail/core/v2_citi_source_dispositions.py)
 now checks page, date, signed amount, occurrence order and ordered description
 words against table rows; it also checks the printed fee-section span. In the
 nine-file sample, it accounts for all 67 extra dated starts as 66 table copies
@@ -238,40 +238,40 @@ capture result, not a claim about every non-dated item elsewhere on a page.
 
 Before any PDF or XLSX pilot is used for normal import, run library decoding in
 a separate worker with input/output, page/row, wall-clock and OS memory limits.
-An isolated [PDF simple-text worker pilot](../devtools/parser_engine_pilot/bounded_pdf_text.py)
+An isolated [PDF simple-text worker pilot](../client/src/parsetrail/core/v2_bounded_pdf_text.py)
 now covers that path: on Windows its Job Object memory cap and deadline passed
 native synthetic checks, and its text matched the existing decoder on nine
 recent-layout Citi PDFs without changing source hashes. Wells and Citi word/table
-extraction now use the same boundary. The [bounded Citi table pilot](../devtools/parser_engine_pilot/bounded_citi.py)
+extraction now use the same boundary. The [bounded Citi table pilot](../client/src/parsetrail/core/v2_bounded_citi.py)
 returned exactly the current reader's 543 raw table/interest rows and retained
 page, row and table-region locations on those ten archive PDFs. Their hashes
 were unchanged. The [shared continuation operation](../client/src/parsetrail/core/v2_table_continuations.py)
 now retains 36 post-amount travel/lodging detail rows separately from 471
-table transactions. The [Citi date/money adapter](../devtools/parser_engine_pilot/citi_table_candidates.py)
+table transactions. The [Citi date/money adapter](../client/src/parsetrail/core/v2_citi_table_candidates.py)
 matches the current table rows in order without promoting those details to
 financial activity. The Citi audit now feeds its candidate resolver from both
 bounded text and table workers; the old reader remains its accepted-result
 baseline. The Citi worker now also returns a capped first-page character stream,
 and the PDF text worker returns capped metadata for routing. A
-[finite header adapter](../devtools/parser_engine_pilot/citi_statement_header.py)
+[finite header adapter](../client/src/parsetrail/core/v2_citi_statement_header.py)
 reads the billing period, account suffix and printed balances with source
 locations. Bounded layout classification and all header fields matched the
 old reader on ten archive statements. The standalone
-[`read_recent_citi`](../devtools/parser_engine_pilot/citi_evidence.py) path
+[`read_recent_citi`](../client/src/parsetrail/core/v2_citi_evidence.py) path
 builds source-linked candidates without the legacy reader; the audit invokes
 that reader afterward for comparison. Runtime integration and Intel Mac native
 limits remain open.
-An additional [money-line ledger](../devtools/parser_engine_pilot/citi_money_lines.py)
+An additional [money-line ledger](../client/src/parsetrail/core/v2_citi_money_lines.py)
 disposes all 281 dollar-sign lines outside dated transaction spans across the
 ten recent statements. They include printed summaries, payment information,
 credit terms, APR information, fee notices, disclosure and unreadable
 extraction artifacts; none becomes a transaction. Unknown dollar-sign lines
 refuse the standalone path. A deterministic
-[partial-date operation](../devtools/parser_engine_pilot/partial_dates.py)
+[partial-date operation](../client/src/parsetrail/core/v2_partial_dates.py)
 now refuses invalid, distant or ambiguous year resolution and retains row
 parity on all ten statements. Non-money text and native import acceptance
 remain open.
-The [XLSX worker pilot](../devtools/parser_engine_pilot/bounded_xlsx.py)
+The [XLSX worker pilot](../client/src/parsetrail/core/v2_bounded_xlsx.py)
 uses the same fixed process limiter and matches synthetic in-process evidence;
 it still lacks an archived workbook fixture. Intel Mac memory and timeout
 behavior still need native checks.

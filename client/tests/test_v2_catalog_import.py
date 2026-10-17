@@ -10,12 +10,11 @@ from pathlib import Path
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from parsetrail.core.v2_catalog_admission import admit_pilot_definition
 from parsetrail.core.v2_data_catalog import key_id_for_public_key, verify_catalog
 from parsetrail.core.v2_profile_store import V2ProfileStore
 from parsetrail.core.v2_source_import import CatalogImportError, ImportCancelled, import_catalog_source
-
-from devtools.parser_engine_pilot.catalog_admission import admit_pilot_definition
-from devtools.parser_engine_pilot.source_pipeline import build_source_evidence
+from parsetrail.core.v2_source_pipeline import build_source_evidence
 
 DEFINITION = Path(__file__).parents[2] / "devtools" / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
 SOURCE = (
@@ -89,6 +88,20 @@ def test_verified_catalog_definition_imports_once_and_reopens_exact_snapshot(tmp
         assert saved.definition == DEFINITION.read_bytes()
         assert saved.evidence == first.evidence == second.evidence
         assert store.connection.execute("SELECT count(*) FROM SourceObservations").fetchone() == (2,)
+
+
+def test_verified_catalog_uses_installed_parser_by_default(tmp_path: Path) -> None:
+    with V2ProfileStore.create(tmp_path / "fresh.db") as store:
+        result = import_catalog_source(
+            store,
+            SOURCE,
+            catalog=_verified_catalog(),
+            parser_id="synthetic_posted_cash_csv",
+            suffix=".csv",
+        )
+        assert result.status == "imported"
+        assert len(result.evidence.payload.rows) == 2
+        assert store.load_import(result.source_sha256).evidence == result.evidence
 
 
 def test_catalog_selection_and_evidence_identity_refuse_before_write(tmp_path: Path) -> None:

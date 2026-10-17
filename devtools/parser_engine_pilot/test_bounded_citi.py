@@ -7,10 +7,9 @@ from io import BytesIO
 
 import pdfplumber
 import pytest
+from parsetrail.core.v2_bounded_citi import extract_bounded_citi
 from parsetrail.core.v2_citi_table import extract_citi_table
 from parsetrail.core.v2_worker_limits import WorkerError
-
-from devtools.parser_engine_pilot.bounded_citi import extract_bounded_citi
 
 
 def sample_table_pdf() -> bytes:
