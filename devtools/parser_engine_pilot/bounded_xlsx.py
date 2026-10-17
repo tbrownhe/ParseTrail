@@ -5,10 +5,9 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable
 
+from parsetrail.core.v2_parser_engine import MAX_DEFINITION_BYTES, MAX_SOURCE_BYTES, Evidence
 from parsetrail.core.v2_worker_limits import MAX_OUTPUT_BYTES, WorkerError, WorkerLimits, run_worker
 from pydantic import TypeAdapter, ValidationError
-
-from devtools.parser_engine_pilot.engine import MAX_DEFINITION_BYTES, MAX_SOURCE_BYTES, Evidence
 
 _EVIDENCE_ADAPTER = TypeAdapter(Evidence)
 DEFAULT_XLSX_LIMITS = WorkerLimits(memory_bytes=1024 * 1024 * 1024)
@@ -36,7 +35,7 @@ def parse_bounded_xlsx(
         len(definition).to_bytes(4, "big") + len(sheet_bytes).to_bytes(2, "big") + definition + sheet_bytes + source
     )
     output = run_worker(
-        "devtools.parser_engine_pilot.xlsx_worker",
+        "xlsx_evidence",
         payload,
         output_limit=MAX_OUTPUT_BYTES,
         limits=limits,

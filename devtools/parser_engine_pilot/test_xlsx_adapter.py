@@ -8,9 +8,8 @@ import zipfile
 
 import openpyxl
 import pytest
-
-from devtools.parser_engine_pilot.engine import EngineError
-from devtools.parser_engine_pilot.xlsx_adapter import XlsxError, parse_xlsx
+from parsetrail.core.v2_parser_engine import EngineError
+from parsetrail.core.v2_xlsx_adapter import XlsxError, parse_xlsx
 
 HEADER = ("Date", "Account", "Description", "Total", "Balance")
 
@@ -92,7 +91,7 @@ def test_archive_and_sheet_boundaries_are_refused(monkeypatch: pytest.MonkeyPatc
     with pytest.raises(XlsxError, match="xlsx_structure"):
         parse_xlsx(definition(), b"not a workbook", sheet="Activity")
 
-    import devtools.parser_engine_pilot.xlsx_adapter as adapter
+    import parsetrail.core.v2_xlsx_adapter as adapter
 
     monkeypatch.setattr(adapter, "MAX_EXPANDED_BYTES", 100)
     with pytest.raises(XlsxError, match="expanded_size"):

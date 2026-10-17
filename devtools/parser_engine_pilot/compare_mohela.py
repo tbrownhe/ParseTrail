@@ -9,8 +9,7 @@ from collections import Counter
 from pathlib import Path
 
 from parsetrail.core.mohela_export import COLUMNS, read_export
-
-from devtools.parser_engine_pilot.engine import parse_csv
+from parsetrail.core.v2_parser_engine import parse_csv
 
 DEFINITION = Path(__file__).with_name("mohela-pilot-definition.json")
 

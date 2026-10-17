@@ -1,10 +1,12 @@
 # P2-2 bounded declaration and evidence pilot
 
-This is an isolated prototype for the [2.0 parser plan](../../docs/client-v2-parsing.md).
-It is not imported by the desktop client, not a signed catalog and not accepted
-for real-statement ingestion. No database or server code is changed.
+This is a development pilot for the [2.0 parser plan](../../docs/client-v2-parsing.md).
+Some bounded engines and workers now live in the client package. Automatic
+routing and ordinary desktop import are not connected; the pilot is not a
+released signed catalog or accepted for real-statement ingestion.
 
-`engine.py` accepts an exact JSON declaration under
+The installed [`v2_parser_engine.py`](../../client/src/parsetrail/core/v2_parser_engine.py)
+accepts an exact JSON declaration under
 [`declaration-schema-v1.json`](declaration-schema-v1.json). The Pydantic model
 rejects extra fields and unsupported schema versions, suffixes, evidence kinds
 or required capabilities. The pilot operations are controlled table-header mapping,
@@ -32,7 +34,8 @@ parsing, and cancellation is checked for each row. Errors expose a code and row
 number without source values. PDF page/section extraction and observed statement
 endpoints are outside this table pilot.
 
-`xlsx_adapter.py` exercises the same table engine on a real, synthetic `.xlsx`
+The installed [`v2_xlsx_adapter.py`](../../client/src/parsetrail/core/v2_xlsx_adapter.py)
+exercises the same table engine on a real, synthetic `.xlsx`
 workbook. It limits compressed and expanded ZIP bytes, member count and member
 size, checks every member before `openpyxl` decoding, and selects one explicit
 sheet with bounded dimensions. It accepts string/blank cells only, rejecting
@@ -42,7 +45,9 @@ the evidence. [`bounded_xlsx.py`](bounded_xlsx.py) now runs that adapter in the
 same fixed-worker resource boundary used for PDF text. It matched the
 in-process evidence on a synthetic workbook, refused formulas and terminated
 at its deadline on Windows. No archived statement exercises XLSX parity, and
-Intel Mac native limits remain untested. This is not a runtime import path.
+Intel Mac native limits remain untested. A windowed Windows x64 probe ran the
+installed XLSX worker through the app entry and parent resource boundary;
+ordinary runtime import is still open.
 
 `pdf_lines.py` is a separate P2-3 provenance experiment for text already
 extracted by a trusted PDF reader. It binds each raw/normalized line to the

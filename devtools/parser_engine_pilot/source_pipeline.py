@@ -10,6 +10,7 @@ from collections.abc import Callable
 from typing import Literal
 
 from parsetrail.core.source_evidence import SourceEvidence
+from parsetrail.core.v2_parser_engine import EngineError, parse_csv
 from parsetrail.core.v2_worker_limits import WorkerError
 
 from devtools.parser_engine_pilot.bounded_anchored_table import extract_bounded_anchored_table
@@ -22,7 +23,6 @@ from devtools.parser_engine_pilot.catalog_admission import admit_pilot_definitio
 from devtools.parser_engine_pilot.citi_evidence import read_recent_citi
 from devtools.parser_engine_pilot.citi_source_output import from_citi
 from devtools.parser_engine_pilot.dual_text_card_lines import parse_dual_text_card
-from devtools.parser_engine_pilot.engine import EngineError, parse_csv
 from devtools.parser_engine_pilot.hsa_cash_lines import parse_cash_section
 from devtools.parser_engine_pilot.hsa_cash_source_output import from_hsa_cash
 from devtools.parser_engine_pilot.investment_summary_lines import parse_investment_summary

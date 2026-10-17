@@ -8,7 +8,7 @@ from collections.abc import Callable, Iterator
 
 import openpyxl
 
-from devtools.parser_engine_pilot.engine import (
+from parsetrail.core.v2_parser_engine import (
     MAX_CELL_CHARS,
     MAX_CELLS,
     MAX_COLUMNS,

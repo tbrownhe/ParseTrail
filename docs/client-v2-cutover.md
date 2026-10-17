@@ -148,7 +148,9 @@ subtotals are visibly garbled by simple-text extraction; their amounts are not
 used as transaction or balance evidence.
 The XLSX adapter also runs in a fixed, bounded worker and matches the
 in-process synthetic evidence. It has no referenced archive workbook and
-still needs Intel Mac native checks before runtime admission.
+still needs Intel Mac native checks before runtime admission. The shared table
+engine, XLSX adapter and worker now live in the client package. A windowed
+Windows x64 probe passed its synthetic worker pipe and parent resource boundary.
 
 ## Implementation chunks
 

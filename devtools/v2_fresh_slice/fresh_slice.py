@@ -23,15 +23,15 @@ from parsetrail.core.ledger import (
     Posting,
 )
 from parsetrail.core.ledger_store import LedgerStore, encoded
-from pydantic import ValidationError
-
-from devtools.parser_engine_pilot.engine import (
+from parsetrail.core.v2_parser_engine import (
     MAX_DEFINITION_BYTES,
     MAX_SOURCE_BYTES,
     Evidence,
     load_definition,
     parse_csv,
 )
+from pydantic import ValidationError
+
 from devtools.v2_fresh_slice.stored_evidence import MAX_EVIDENCE_BYTES, StoredEvidenceV1
 
 PROFILE_VERSION = 1

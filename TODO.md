@@ -136,8 +136,11 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   balances across continuation pages, with descriptionless and non-dated lines
   explicitly unresolved. A read-only XLSX adapter passes synthetic workbook
   checks with ZIP/sheet limits. Its new resource-limited worker matches the
-  synthetic evidence and refuses formulas; no referenced archive fixture or
-  Intel Mac native limit check exists. A read-only Wells Fargo business table
+  synthetic evidence and refuses formulas. The shared table engine, XLSX
+  adapter and worker now live in the client package; a windowed Windows x64
+  probe passed its synthetic worker pipe and parent boundary. No referenced
+  archive fixture or Intel Mac native limit check exists. A read-only Wells
+  Fargo business table
   pass supports a finite page-local geometry pilot; its raw cells and dated
   candidate count match all referenced archive sources but do not establish
   capture. A bounded worker now reproduces the in-process cells/regions on 21

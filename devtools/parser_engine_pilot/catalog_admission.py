@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 
+from parsetrail.core import v2_parser_engine as engine
 from parsetrail.core.v2_data_catalog import DefinitionIdentity
 
 from devtools.parser_engine_pilot import (
@@ -16,7 +17,6 @@ from devtools.parser_engine_pilot import (
     card_lines,
     citi_layout,
     dual_text_card_lines,
-    engine,
     hsa_cash_lines,
     investment_summary_lines,
     legacy_citi_lines,

@@ -17,8 +17,7 @@ from parsetrail.core.source_evidence import (
     XlsxCell,
     XlsxRow,
 )
-
-from devtools.parser_engine_pilot.engine import CellLocation, Evidence, FieldEvidence
+from parsetrail.core.v2_parser_engine import CellLocation, Evidence, FieldEvidence
 
 
 def _cell(location: CellLocation) -> CsvCell | XlsxCell:

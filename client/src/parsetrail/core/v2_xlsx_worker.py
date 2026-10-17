@@ -13,9 +13,12 @@ from parsetrail.core.v2_worker_limits import (
 )
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else argv
     try:
-        enforce_child_memory_limit(sys.argv[1])
+        if len(args) != 1:
+            raise ValueError("worker_arguments")
+        enforce_child_memory_limit(args[0])
         data = sys.stdin.buffer.read(MAX_INPUT_BYTES + 1)
         if len(data) < 6 or len(data) > MAX_INPUT_BYTES:
             return 1
@@ -29,7 +32,7 @@ def main() -> int:
         definition = data[6 : 6 + definition_size]
         sheet = data[6 + definition_size : boundary].decode("utf-8")
         source = data[boundary:]
-        from devtools.parser_engine_pilot.xlsx_adapter import parse_xlsx
+        from parsetrail.core.v2_xlsx_adapter import parse_xlsx
 
         evidence = parse_xlsx(definition, source, sheet=sheet)
         output = json.dumps(asdict(evidence), ensure_ascii=False, separators=(",", ":")).encode("utf-8")

@@ -7,16 +7,16 @@ import json
 from pathlib import Path
 
 import pytest
-
-from devtools.parser_engine_pilot import engine
-from devtools.parser_engine_pilot.compare_mohela import DEFINITION, compare
-from devtools.parser_engine_pilot.engine import (
+from parsetrail.core import v2_parser_engine as engine
+from parsetrail.core.v2_parser_engine import (
     MAX_SOURCE_BYTES,
     Definition,
     EngineError,
     parse_csv,
     parse_table,
 )
+
+from devtools.parser_engine_pilot.compare_mohela import DEFINITION, compare
 
 HEADER = ["Date", "LoanName", "Description", "Principal", "Interest", "Fees", "Total", "UnpaidPrincipalBalanceValue"]
 

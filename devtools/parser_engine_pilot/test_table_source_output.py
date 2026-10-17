@@ -3,8 +3,8 @@
 from pathlib import Path
 
 from parsetrail.core.source_evidence import ActivityExportPayload, SourceEvidence
+from parsetrail.core.v2_parser_engine import parse_csv
 
-from devtools.parser_engine_pilot.engine import parse_csv
 from devtools.parser_engine_pilot.table_source_output import from_table
 
 DEFINITION = Path(__file__).parents[1] / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"

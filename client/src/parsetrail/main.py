@@ -53,6 +53,10 @@ def main() -> int:
             from parsetrail.core.v2_pdf_annotation_worker import main as worker_main
 
             return worker_main(sys.argv[3:])
+        if sys.argv[2:3] == ["xlsx-evidence"]:
+            from parsetrail.core.v2_xlsx_worker import main as worker_main
+
+            return worker_main(sys.argv[3:])
         from parsetrail.core.v2_pdf_text_worker import main as worker_main
 
         return worker_main(sys.argv[2:])
