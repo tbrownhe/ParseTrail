@@ -9,8 +9,10 @@ from typing import Literal, Protocol
 
 from parsetrail.core.source_evidence import SourceEvidence
 from parsetrail.core.v2_data_catalog import VerifiedCatalog
+from parsetrail.core.v2_pdf_routing import PDFRoutingError, select_pdf_definition
 from parsetrail.core.v2_profile_store import V2ProfileStore
 from parsetrail.core.v2_source_pipeline import SourcePipelineError, build_source_evidence
+from parsetrail.core.v2_worker_limits import WorkerError
 
 
 class ImportCancelled(ValueError):
@@ -92,16 +94,31 @@ def import_catalog_source(
     parse: CatalogParser = build_source_evidence,
     cancelled: Callable[[], bool] | None = None,
 ) -> SourceImportResult:
-    """Import a verified entry, with unique bounded CSV selection when omitted."""
+    """Import a verified entry; PDFs must have one matching signed route."""
     if cancelled is not None and cancelled():
         raise ImportCancelled("cancelled")
     existing = _saved_retry(store, source)
     if existing is not None:
         return existing
+    selected = None
+    if parser_id is not None:
+        choices = tuple(item for item in catalog.definitions if item.identity.parser_id == parser_id)
+        if len(choices) != 1 or choices[0].identity.suffix != suffix:
+            raise CatalogImportError("catalog_definition_unavailable")
+        selected = choices[0]
+    if suffix == ".pdf":
+        try:
+            routed_id = select_pdf_definition(source, catalog, cancelled=cancelled)
+        except (PDFRoutingError, WorkerError) as error:
+            if cancelled is not None and cancelled():
+                raise ImportCancelled("cancelled") from None
+            code = str(error) if isinstance(error, PDFRoutingError) else "pdf_routing_failed"
+            raise CatalogImportError(code) from None
+        if parser_id is not None and parser_id != routed_id:
+            raise CatalogImportError("catalog_selected_route_mismatch")
+        parser_id = routed_id
     preparsed = None
     if parser_id is None:
-        if suffix != ".csv":
-            raise CatalogImportError("automatic_pdf_routing_unavailable")
         matches = []
         for item in catalog.definitions:
             if item.identity.suffix != ".csv":
@@ -125,7 +142,7 @@ def import_catalog_source(
         if len(matches) != 1:
             raise CatalogImportError("catalog_ambiguous_match" if matches else "catalog_no_match")
         selected, preparsed = matches[0]
-    else:
+    elif selected is None:
         choices = tuple(item for item in catalog.definitions if item.identity.parser_id == parser_id)
         if len(choices) != 1 or choices[0].identity.suffix != suffix:
             raise CatalogImportError("catalog_definition_unavailable")

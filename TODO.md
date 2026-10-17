@@ -368,7 +368,13 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   reach the pending-source import service; mismatched parser output is refused
   before a profile write. CSV imports select a unique verified matching definition,
   including both MOHELA formats; zero or multiple matches leave no source write.
-  Automatic PDF routing and installed-client admission remain open. The catalog
+  All 21 PDF declarations now require bounded recognition rules. Automatic PDF
+  imports decode text in the worker and require one verified route before parsing;
+  zero, multiple or explicitly mismatched selections leave no source write. A
+  read-only scan routed all 956 successful archive PDFs uniquely across 20
+  families, plus three sampled Synchrony PDFs for the remaining family. This
+  checks recognition only;
+  installed-client admission remains open. The catalog
   revision field accepts the existing Citi `pilot-2`
   revision without requiring a numeric alias.
   The bounded source pipeline now validates supplied declarations before PDF
@@ -394,7 +400,7 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   exercises one synthetic V2 parse and pulls the pipeline into packaging. A
   windowed Windows x64 probe passed that runtime smoke and all six worker
   pipes after the package move.
-  Automatic PDF routing, release trust,
+  Release trust,
   ordinary desktop import and native Intel Mac acceptance remain open.
 - [ ] **P2-S — Declaration catalog server:** after accepted client work is merged,
   use a short-lived server branch for the reviewed snapshot API/storage/publication
@@ -418,7 +424,7 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   compare a new parse against saved evidence without replacing the snapshot.
   The verified-catalog import path now passes cancellation through the bounded
   worker and CSV row loop. A running worker is killed on cancellation; a
-  cancelled import leaves no source write. Automatic PDF routing, installed-client
+  cancelled import leaves no source write. Installed-client
   trust, archive recovery and UI wiring remain open.
 - [ ] **V2-4a–b — Daily review:** create/edit accounts, categories and budgets; connect
   accepted ledger workflows to the application in small increments. Manual values,

@@ -25,6 +25,7 @@ from parsetrail.core.source_evidence import (
 )
 from parsetrail.core.v2_partial_dates import PartialDateError, resolve_month_day
 from parsetrail.core.v2_pdf_lines import PageLine, PDFLineEvidence
+from parsetrail.core.v2_pdf_routing import PDFRouting
 
 ENGINE_VERSION = "savings-lines-pilot-1"
 MAX_DEFINITION_BYTES = 64 * 1024
@@ -50,6 +51,7 @@ class SavingsLineError(ValueError):
 
 
 class SavingsDefinition(BaseModel):
+    routing: PDFRouting
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     schema_version: Literal[1]
@@ -329,6 +331,7 @@ def parse_savings_lines(
 
 
 class SummarySavingsDefinition(BaseModel):
+    routing: PDFRouting
     """Finite summary-plus-inherited-date operation, without expression fields."""
 
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)

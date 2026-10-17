@@ -14,5 +14,8 @@
   "row_labels": ["Your Contributions", "Money In", "Transfers", "Money Out", "Credits/Fees", "Gain/Loss"],
   "income_labels": ["Your Contributions", "Money In"],
   "required_labels": ["Money Out", "Credits/Fees", "Gain/Loss"],
-  "summary_window_lines": 16
+  "summary_window_lines": 16,
+  "routing": {
+    "body": "transamerica&&retirement account statement"
+  }
 }

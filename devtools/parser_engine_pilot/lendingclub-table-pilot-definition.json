@@ -29,5 +29,8 @@
     "account_label": "Account Number:",
     "summary_label": "Balance + Deposits + Paid - Withdrawals - Charge = Balance",
     "opening_row_label": "Balance Forward"
+  },
+  "routing": {
+    "body": "LLeevveellUUpp SSaavviinnggss"
   }
 }

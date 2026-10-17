@@ -45,8 +45,9 @@ before activation. A local admission callback now validates all 23 checked-in
 pilot definitions inside one test-signed snapshot. An explicitly selected
 verified definition can feed the pending 2.0 source import service, which refuses
 parser identity/revision mismatch before writing. The catalog revision contract
-allows the existing recent-Citi `pilot-2` revision. Automatic source recognition,
-installed-client admission, a production trusted key, and publication tooling
+allows the existing recent-Citi `pilot-2` revision. CSV matching and signed PDF
+routing now require one verified definition before a source write. Installed-client
+admission, a production trusted key, and publication tooling
 remain open. No 1.4 bytecode catalog or server contract was changed.
 The pilot source pipeline now validates a supplied declaration and dispatches
 current PDF parsers by admitted identity, so a valid definition revision can
@@ -58,7 +59,11 @@ definition change kept all 486 observations across ten read-only archived
 recent-Citi PDFs, with unchanged source hashes. A changed routing body refused
 an authorized source. One revised statement also reopened from a temporary
 pending 2.0 profile after local test-signature verification. Financial rule
-changes still require fixture review; signed source recognition remains open.
+changes still require fixture review. All 21 PDF declarations now include strict
+recognition rules from the current parsers. A read-only scan routed all 956 PDFs
+in the successful archive uniquely across 20 families; three separately sampled
+Synchrony PDFs covered the remaining family. Routing alone does not prove
+transaction extraction parity or accounting acceptance.
 
 ## Initial code findings
 

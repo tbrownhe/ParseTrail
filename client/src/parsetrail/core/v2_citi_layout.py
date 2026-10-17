@@ -14,9 +14,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from parsetrail.core.parser_classification import validate_routing_metadata
 from parsetrail.core.v2_channel_occurrences import OccurrenceRule
 from parsetrail.core.v2_money_operations import USD_SYMBOL
+from parsetrail.core.v2_pdf_routing import PDFRouting
 from parsetrail.core.v2_table_continuations import ContinuationRule
 
 
@@ -28,19 +28,13 @@ class _DefinitionModel(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
 
-class RoutingDefinition(_DefinitionModel):
-    body: str = Field(min_length=1, max_length=200)
-    header: str = Field(min_length=1, max_length=300)
-    metadata_author: str = Field(min_length=1, max_length=200)
-
-
 class CitiDefinition(_DefinitionModel):
     schema_version: Literal[1]
     parser_id: Literal["pdf_citicc_202511"]
     revision: str = Field(min_length=1, max_length=80)
     kind: Literal["statement"]
     suffix: Literal[".pdf"]
-    routing: RoutingDefinition
+    routing: PDFRouting
     geometry_operation: Literal["citi_header_geometry_v1"]
     date_operation: Literal["partial_month_day_v1"]
     money_operation: Literal["usd_symbol_minor_v1"]
@@ -56,15 +50,6 @@ class CitiDefinition(_DefinitionModel):
             or self.channel_occurrences.secondary_channel != "text"
         ):
             raise ValueError("unsupported Citi operation")
-        validate_routing_metadata(
-            {
-                "SEARCH_STRING": self.routing.body,
-                "ROUTING_RULE": {
-                    "pdf_metadata": {"Author": self.routing.metadata_author},
-                    "header": self.routing.header,
-                },
-            }
-        )
         return self
 
 

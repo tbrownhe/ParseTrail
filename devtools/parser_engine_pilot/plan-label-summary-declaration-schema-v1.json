@@ -1,6 +1,48 @@
 {
+  "$defs": {
+    "PDFRouting": {
+      "additionalProperties": false,
+      "properties": {
+        "body": {
+          "maxLength": 300,
+          "minLength": 1,
+          "title": "Body",
+          "type": "string"
+        },
+        "header": {
+          "anyOf": [
+            {
+              "maxLength": 400,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Header"
+        },
+        "pdf_metadata": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "maxProperties": 8,
+          "title": "Pdf Metadata",
+          "type": "object"
+        }
+      },
+      "required": [
+        "body"
+      ],
+      "title": "PDFRouting",
+      "type": "object"
+    }
+  },
   "additionalProperties": false,
   "properties": {
+    "routing": {
+      "$ref": "#/$defs/PDFRouting"
+    },
     "schema_version": {
       "const": 1,
       "title": "Schema Version",
@@ -100,6 +142,7 @@
     }
   },
   "required": [
+    "routing",
     "schema_version",
     "parser_id",
     "revision",

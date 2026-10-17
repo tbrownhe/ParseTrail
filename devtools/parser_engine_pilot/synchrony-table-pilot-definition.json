@@ -67,5 +67,8 @@
       "max_group_rows": 5,
       "allow_cross_page": false
     }
+  },
+  "routing": {
+    "body": "amazon.syf.com"
   }
 }

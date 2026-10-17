@@ -14,6 +14,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from parsetrail.core.v2_pdf_lines import MAX_PAGES, MAX_PDF_BYTES
+from parsetrail.core.v2_pdf_routing import PDFRouting
 from parsetrail.core.v2_table_continuations import ContinuationRule
 
 ENGINE_VERSION = "wells-table-pilot-1"
@@ -36,6 +37,7 @@ class WellsTableError(ValueError):
 
 
 class WellsTableDefinition(BaseModel):
+    routing: PDFRouting
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     schema_version: Literal[1]

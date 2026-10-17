@@ -7,7 +7,7 @@
   "routing": {
     "body": "www.citicards.com",
     "header": "\"sale post description amount\" || (\"sale post\" && \"date date description amount\")",
-    "metadata_author": "\"Citibank, N.A.\""
+    "pdf_metadata": {"Author": "\"Citibank, N.A.\""}
   },
   "geometry_operation": "citi_header_geometry_v1",
   "date_operation": "partial_month_day_v1",

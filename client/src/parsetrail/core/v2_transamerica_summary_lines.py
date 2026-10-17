@@ -24,6 +24,7 @@ from parsetrail.core.source_evidence import (
 )
 from parsetrail.core.v2_money_operations import usd_symbol_minor_v1
 from parsetrail.core.v2_pdf_lines import PageLine, PDFLineEvidence
+from parsetrail.core.v2_pdf_routing import PDFRouting
 
 ENGINE_VERSION = "retirement-summary-lines-pilot-1"
 MAX_DEFINITION_BYTES = 64 * 1024
@@ -36,6 +37,7 @@ class RetirementSummaryError(ValueError):
 
 
 class RetirementSummaryDefinition(BaseModel):
+    routing: PDFRouting
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     schema_version: Literal[1]

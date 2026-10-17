@@ -10,11 +10,14 @@ from pathlib import Path
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from parsetrail.core import v2_pdf_routing, v2_source_pipeline
+from parsetrail.core.v2_bounded_pdf_text import DecodedPDFText
 from parsetrail.core.v2_catalog_admission import admit_pilot_definition
 from parsetrail.core.v2_data_catalog import key_id_for_public_key, verify_catalog
 from parsetrail.core.v2_profile_store import V2ProfileStore
 from parsetrail.core.v2_source_import import CatalogImportError, ImportCancelled, import_catalog_source
 from parsetrail.core.v2_source_pipeline import build_source_evidence
+from parsetrail.core.v2_worker_limits import WorkerError
 
 DEFINITION = Path(__file__).parents[2] / "devtools" / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
 SOURCE = (
@@ -123,11 +126,11 @@ def test_unique_csv_auto_selection_and_ambiguous_refusal(tmp_path: Path) -> None
         assert store.connection.execute("SELECT count(*) FROM Sources").fetchone() == (0,)
 
 
-def test_auto_selection_refuses_missing_csv_match_and_pdf_without_rule(tmp_path: Path) -> None:
+def test_auto_selection_refuses_missing_csv_and_pdf_match(tmp_path: Path) -> None:
     with V2ProfileStore.create(tmp_path / "fresh.db") as store:
         with pytest.raises(CatalogImportError, match="catalog_no_match"):
             import_catalog_source(store, b"Wrong,Header\n1,2\n", catalog=_verified_catalog(), suffix=".csv")
-        with pytest.raises(CatalogImportError, match="automatic_pdf_routing_unavailable"):
+        with pytest.raises(CatalogImportError, match="catalog_no_match"):
             import_catalog_source(store, b"%PDF-1.4\n", catalog=_verified_catalog(), suffix=".pdf")
         assert store.connection.execute("SELECT count(*) FROM Sources").fetchone() == (0,)
 
@@ -158,6 +161,113 @@ def test_both_current_mohela_csv_formats_select_their_own_definition(tmp_path: P
             assert result.evidence.parser_id == expected_id
             assert len(result.evidence.payload.rows) == 1
             assert store.load_import(result.source_sha256).evidence == result.evidence
+
+
+def test_signed_pdf_catalog_routes_one_layout_before_import(monkeypatch, tmp_path: Path) -> None:
+    from devtools.parser_engine_pilot.test_savings_lines import pages
+
+    definitions = tuple(
+        (Path(__file__).parents[2] / "devtools" / "parser_engine_pilot" / name).read_bytes()
+        for name in ("happen-savings-pilot-definition.json", "lendingclub-savings-pilot-definition.json")
+    )
+    routed_pages = ("Summary of Accounts\n" + pages()[0], pages()[1])
+    decoded = DecodedPDFText(routed_pages, (("Creator", "VCTransaction"), ("Title", "StmtAPISvc")))
+    monkeypatch.setattr(v2_pdf_routing, "decode_pdf", lambda _source, *, cancelled=None: decoded)
+    monkeypatch.setattr(v2_source_pipeline, "decode_pdf", lambda _source, *, cancelled=None: decoded)
+    catalog = _verified_catalog(definitions)
+    with V2ProfileStore.create(tmp_path / "fresh.db") as store:
+        result = import_catalog_source(store, b"%PDF-synthetic", catalog=catalog, suffix=".pdf")
+        assert result.evidence.parser_id == "happen_savings_line_pilot"
+        assert len(result.evidence.payload.accounts[0].rows) == 1
+        assert store.load_import(result.source_sha256).evidence == result.evidence
+    with V2ProfileStore.create(tmp_path / "wrong.db") as store:
+        with pytest.raises(CatalogImportError, match="catalog_selected_route_mismatch"):
+            import_catalog_source(
+                store,
+                b"%PDF-synthetic",
+                catalog=catalog,
+                parser_id="lendingclub_savings_line_pilot",
+                suffix=".pdf",
+            )
+        assert store.connection.execute("SELECT count(*) FROM Sources").fetchone() == (0,)
+        result = import_catalog_source(
+            store,
+            b"%PDF-synthetic",
+            catalog=catalog,
+            parser_id="happen_savings_line_pilot",
+            suffix=".pdf",
+        )
+        assert result.evidence.parser_id == "happen_savings_line_pilot"
+
+
+def test_pdf_route_ambiguity_refuses_profile_write(monkeypatch, tmp_path: Path) -> None:
+    from devtools.parser_engine_pilot.test_savings_lines import pages
+
+    original = (
+        Path(__file__).parents[2] / "devtools" / "parser_engine_pilot" / "happen-savings-pilot-definition.json"
+    ).read_bytes()
+    alternate = json.loads(original)
+    alternate["parser_id"] = "happen_savings_line_alt"
+    routed_pages = ("Summary of Accounts\n" + pages()[0], pages()[1])
+    decoded = DecodedPDFText(routed_pages, (("Creator", "VCTransaction"), ("Title", "StmtAPISvc")))
+    monkeypatch.setattr(v2_pdf_routing, "decode_pdf", lambda _source, *, cancelled=None: decoded)
+    with V2ProfileStore.create(tmp_path / "fresh.db") as store:
+        with pytest.raises(CatalogImportError, match="catalog_ambiguous_match"):
+            import_catalog_source(
+                store,
+                b"%PDF-synthetic",
+                catalog=_verified_catalog((original, json.dumps(alternate).encode())),
+                suffix=".pdf",
+            )
+        assert store.connection.execute("SELECT count(*) FROM Sources").fetchone() == (0,)
+
+
+def test_pdf_route_normalizes_bounded_text_whitespace(monkeypatch) -> None:
+    definition = (
+        Path(__file__).parents[2] / "devtools" / "parser_engine_pilot" / "lendingclub-table-pilot-definition.json"
+    ).read_bytes()
+    monkeypatch.setattr(
+        v2_pdf_routing,
+        "decode_pdf",
+        lambda _source, *, cancelled=None: DecodedPDFText(("LLeevveellUUpp    SSaavviinnggss",), ()),
+    )
+    assert (
+        v2_pdf_routing.select_pdf_definition(b"%PDF-synthetic", _verified_catalog((definition,)))
+        == "pdf_lendingclublus_202506"
+    )
+
+
+def test_pdf_route_requires_valid_declaration_and_cancels_without_write(monkeypatch, tmp_path: Path) -> None:
+    original = (
+        Path(__file__).parents[2] / "devtools" / "parser_engine_pilot" / "happen-savings-pilot-definition.json"
+    ).read_bytes()
+    missing = json.loads(original)
+    del missing["routing"]
+    with pytest.raises(ValueError, match="invalid_definition"):
+        admit_pilot_definition(json.dumps(missing).encode())
+    invalid = json.loads(original)
+    invalid["routing"]["body"] = "("
+    with pytest.raises(ValueError, match="invalid_definition"):
+        admit_pilot_definition(json.dumps(invalid).encode())
+
+    state = {"cancelled": False}
+
+    def interrupt(_source: bytes, *, cancelled=None):
+        assert cancelled is not None
+        state["cancelled"] = True
+        raise WorkerError("cancelled")
+
+    monkeypatch.setattr(v2_pdf_routing, "decode_pdf", interrupt)
+    with V2ProfileStore.create(tmp_path / "fresh.db") as store:
+        with pytest.raises(ImportCancelled, match="cancelled"):
+            import_catalog_source(
+                store,
+                b"%PDF-synthetic",
+                catalog=_verified_catalog((original,)),
+                suffix=".pdf",
+                cancelled=lambda: state["cancelled"],
+            )
+        assert store.connection.execute("SELECT count(*) FROM Sources").fetchone() == (0,)
 
 
 def test_catalog_selection_and_evidence_identity_refuse_before_write(tmp_path: Path) -> None:

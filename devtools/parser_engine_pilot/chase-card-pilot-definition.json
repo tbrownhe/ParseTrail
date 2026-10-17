@@ -17,5 +17,12 @@
   "date_format": "MM/DD/YY",
   "money_format": "card_usd_2dp",
   "amount_direction": "invert_for_liability",
-  "dated_auxiliary": "three_uppercase_letters"
+  "dated_auxiliary": "three_uppercase_letters",
+  "routing": {
+    "body": "\"www.chase.com/cardhelp\" && \"Account Number:\"",
+    "header": "\"Transaction Merchant Name or Transaction Description $ Amount\"",
+    "pdf_metadata": {
+      "Producer": "\"OpenText Output Transformation Engine\""
+    }
+  }
 }

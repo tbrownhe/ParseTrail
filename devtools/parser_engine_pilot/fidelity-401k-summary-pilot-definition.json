@@ -15,5 +15,8 @@
   "opening_label": "Beginning Balance",
   "closing_label": "Ending Balance",
   "row_labels": ["Your Contributions", "Your Rollover Contributions", "Change in Market Value", "Fees/Credits", "Exchange In", "Exchange Out", "Employer Contributions", "Balance Forward", "Employee Contributions", "Fees", "Forfeitures"],
-  "summary_window_lines": 12
+  "summary_window_lines": 12,
+  "routing": {
+    "body": "Fidelity Brokerage Services&&Retirement Savings Statement"
+  }
 }

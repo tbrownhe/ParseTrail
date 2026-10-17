@@ -13,5 +13,8 @@
   "opening_label": "Beginning balance",
   "closing_label": "Ending balance",
   "row_labels": ["Your contributions", "Employer contributions", "Market gain/loss", "Other transactions", "Fees*"],
-  "summary_window_lines": 12
+  "summary_window_lines": 12,
+  "routing": {
+    "body": "vanguard.com&&account summary"
+  }
 }

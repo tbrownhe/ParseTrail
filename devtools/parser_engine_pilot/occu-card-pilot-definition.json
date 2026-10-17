@@ -14,5 +14,8 @@
   "cycle_days_label": "DaysinBillingCycle",
   "opening_label": "PreviousBalance",
   "closing_label": "NewBalance",
-  "interest_label": "InterestCharged"
+  "interest_label": "InterestCharged",
+  "routing": {
+    "body": "www.myoccu.org&&cardservices"
+  }
 }

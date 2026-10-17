@@ -25,6 +25,7 @@ from parsetrail.core.source_evidence import (
 from parsetrail.core.v2_money_operations import usd_trailing_cr_2dp_minor_v1
 from parsetrail.core.v2_partial_dates import PartialDateError, resolve_month_day
 from parsetrail.core.v2_pdf_lines import ADAPTER_VERSION, PageLine, PDFLineEvidence
+from parsetrail.core.v2_pdf_routing import PDFRouting
 
 ENGINE_VERSION = "dual-text-card-lines-pilot-1"
 MAX_DEFINITION_BYTES = 64 * 1024
@@ -43,6 +44,7 @@ class DualTextCardError(ValueError):
 
 
 class DualTextCardDefinition(BaseModel):
+    routing: PDFRouting
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     schema_version: Literal[1]

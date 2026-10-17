@@ -14,5 +14,8 @@
   "closing_label": "Ending Principal Balance",
   "interest_label": "INTEREST PAYMENT",
   "principal_label": "PRINCIPAL PAYMENT",
-  "max_activity_rows": 50
+  "max_activity_rows": 50,
+  "routing": {
+    "body": "wells fargo&&personal loan statement"
+  }
 }

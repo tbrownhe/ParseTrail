@@ -21,5 +21,13 @@
   "section_end": "Overdraft/Return Item Summary",
   "period_date_format": "MM/DD/YYYY",
   "row_date_format": "MM/DD",
-  "money_format": "trailing_minus_2dp"
+  "money_format": "trailing_minus_2dp",
+  "routing": {
+    "body": "\"LevelUp Savings\"",
+    "header": "\"Summary of Accounts\" && \"LevelUp Savings Account Number:\"",
+    "pdf_metadata": {
+      "Creator": "\"VCTransaction\"",
+      "Title": "\"StmtAPISvc\""
+    }
+  }
 }

@@ -71,14 +71,7 @@ class CitiEvidence:
 
 def _layout_metadata(definition: CitiDefinition) -> dict[str, dict]:
     metadata = dict(OTHER_LAYOUT_ROUTING_METADATA)
-    metadata[definition.parser_id] = {
-        "SUFFIX": definition.suffix,
-        "SEARCH_STRING": definition.routing.body,
-        "ROUTING_RULE": {
-            "pdf_metadata": {"Author": definition.routing.metadata_author},
-            "header": definition.routing.header,
-        },
-    }
+    metadata[definition.parser_id] = definition.routing.plugin_metadata()
     return metadata
 
 

@@ -41,5 +41,8 @@
       "max_group_rows": 8,
       "allow_cross_page": true
     }
+  },
+  "routing": {
+    "body": "wells fargo everyday checking||wells fargo way2save"
   }
 }

@@ -15,5 +15,8 @@
   "closing_label": "New Balance:",
   "section_start": "ACCOUNT ACTIVITY SINCE YOUR LAST STATEMENT",
   "transaction_post_header": "Transaction Post",
-  "description_amount_header": "Reference Number Transaction Description Amount"
+  "description_amount_header": "Reference Number Transaction Description Amount",
+  "routing": {
+    "body": "yamaha motor finance"
+  }
 }

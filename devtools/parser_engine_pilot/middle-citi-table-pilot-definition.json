@@ -39,5 +39,12 @@
       "max_group_rows": 5,
       "allow_cross_page": true
     }
+  },
+  "routing": {
+    "body": "www.citicards.com",
+    "header": "(\"trans. post description amount\" || (\"trans. post\" && \"date date description amount\")) && !\"sale post\"",
+    "pdf_metadata": {
+      "Producer": "\"crawfordtech\""
+    }
   }
 }

@@ -14,5 +14,8 @@
   "period_close_label": "Closing Date:",
   "account_label": "Account:",
   "opening_label": "Previous Balance",
-  "closing_label": "New Balance"
+  "closing_label": "New Balance",
+  "routing": {
+    "body": "u.s. bank&&(reivisa.com||reimastercard.com)"
+  }
 }

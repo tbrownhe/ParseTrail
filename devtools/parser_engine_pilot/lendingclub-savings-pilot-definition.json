@@ -21,5 +21,12 @@
   "interest_date_override_label": "Interest Paid",
   "period_date_format": "MM/DD/YY",
   "row_date_format": "MM/DD",
-  "money_format": "trailing_minus_2dp"
+  "money_format": "trailing_minus_2dp",
+  "routing": {
+    "body": "\"LevelUp Savings\"",
+    "header": "\"Previous Statement Date:\" && \"Date_Description\"",
+    "pdf_metadata": {
+      "Creator": "\"ImageCentre Statements\""
+    }
+  }
 }

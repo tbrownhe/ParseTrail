@@ -14,5 +14,12 @@
   "opening_label": "Previous balance",
   "closing_label": "New balance",
   "table_header": "Date Description Amount",
-  "max_continuation_lines": 5
+  "max_continuation_lines": 5,
+  "routing": {
+    "body": "www.citicards.com",
+    "header": "((\"date description amount\" && !\"date date description amount\") || (\"trans. post\" && \"date date description amount\")) && !\"trans. post description amount\" && !\"sale post\"",
+    "pdf_metadata": {
+      "Producer": "!\"crawfordtech\""
+    }
+  }
 }

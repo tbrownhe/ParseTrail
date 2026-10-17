@@ -12,5 +12,8 @@
   "account_labels": ["PRIMARY SAVINGS", "REMARKABLE CHECKING"],
   "opening_label": "Previous Balance",
   "closing_label": "Ending Balance",
-  "other_account_label": "PERSONAL CREDIT LINE"
+  "other_account_label": "PERSONAL CREDIT LINE",
+  "routing": {
+    "body": "oregon community credit union&&membernumber"
+  }
 }

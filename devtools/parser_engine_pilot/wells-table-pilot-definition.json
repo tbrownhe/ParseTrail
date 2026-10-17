@@ -22,5 +22,8 @@
     "amount_column": null,
     "max_group_rows": 8,
     "allow_cross_page": true
+  },
+  "routing": {
+    "body": "wells fargo&&(initiate business checking||business market rate savings)"
   }
 }
