@@ -10,7 +10,7 @@ from typing import Literal, Protocol
 from parsetrail.core.source_evidence import SourceEvidence
 from parsetrail.core.v2_data_catalog import VerifiedCatalog
 from parsetrail.core.v2_profile_store import V2ProfileStore
-from parsetrail.core.v2_source_pipeline import build_source_evidence
+from parsetrail.core.v2_source_pipeline import SourcePipelineError, build_source_evidence
 
 
 class ImportCancelled(ValueError):
@@ -18,7 +18,7 @@ class ImportCancelled(ValueError):
 
 
 class CatalogImportError(ValueError):
-    """The selected verified definition does not admit this source evidence."""
+    """No unique verified definition admits the source evidence."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -87,29 +87,57 @@ def import_catalog_source(
     source: bytes,
     *,
     catalog: VerifiedCatalog,
-    parser_id: str,
+    parser_id: str | None = None,
     suffix: Literal[".csv", ".pdf"],
     parse: CatalogParser = build_source_evidence,
     cancelled: Callable[[], bool] | None = None,
 ) -> SourceImportResult:
-    """Import with an explicitly selected, previously verified catalog entry.
-
-    Automatic document routing is a separate gate. Exact-source retries reopen
-    the original snapshot even after the selected definition changes.
-    """
+    """Import a verified entry, with unique bounded CSV selection when omitted."""
     if cancelled is not None and cancelled():
         raise ImportCancelled("cancelled")
     existing = _saved_retry(store, source)
     if existing is not None:
         return existing
-    choices = tuple(item for item in catalog.definitions if item.identity.parser_id == parser_id)
-    if len(choices) != 1 or choices[0].identity.suffix != suffix:
-        raise CatalogImportError("catalog_definition_unavailable")
-    selected = choices[0]
+    preparsed = None
+    if parser_id is None:
+        if suffix != ".csv":
+            raise CatalogImportError("automatic_pdf_routing_unavailable")
+        matches = []
+        for item in catalog.definitions:
+            if item.identity.suffix != ".csv":
+                continue
+            if cancelled is not None and cancelled():
+                raise ImportCancelled("cancelled")
+            try:
+                candidate = parse(source, item.content, suffix=suffix, cancelled=cancelled)
+            except SourcePipelineError:
+                if cancelled is not None and cancelled():
+                    raise ImportCancelled("cancelled") from None
+                continue
+            if (
+                not isinstance(candidate, SourceEvidence)
+                or candidate.parser_id != item.identity.parser_id
+                or candidate.definition_revision != item.identity.revision
+                or candidate.definition_sha256 != item.sha256
+            ):
+                raise CatalogImportError("catalog_evidence_mismatch")
+            matches.append((item, candidate))
+        if len(matches) != 1:
+            raise CatalogImportError("catalog_ambiguous_match" if matches else "catalog_no_match")
+        selected, preparsed = matches[0]
+    else:
+        choices = tuple(item for item in catalog.definitions if item.identity.parser_id == parser_id)
+        if len(choices) != 1 or choices[0].identity.suffix != suffix:
+            raise CatalogImportError("catalog_definition_unavailable")
+        selected = choices[0]
 
     def admitted_parse(source_bytes: bytes, definition_bytes: bytes) -> SourceEvidence:
         try:
-            evidence = parse(source_bytes, definition_bytes, suffix=suffix, cancelled=cancelled)
+            evidence = (
+                preparsed
+                if preparsed is not None
+                else parse(source_bytes, definition_bytes, suffix=suffix, cancelled=cancelled)
+            )
         except Exception:
             if cancelled is not None and cancelled():
                 raise ImportCancelled("cancelled") from None

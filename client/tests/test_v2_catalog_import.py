@@ -24,9 +24,8 @@ SOURCE = (
 )
 
 
-def _verified_catalog():
-    content = DEFINITION.read_bytes()
-    identity = admit_pilot_definition(content)
+def _verified_catalog(contents: tuple[bytes, ...] | None = None):
+    contents = contents or (DEFINITION.read_bytes(),)
     private_key = Ed25519PrivateKey.generate()
     public_key = private_key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
     key_id = key_id_for_public_key(public_key)
@@ -37,16 +36,21 @@ def _verified_catalog():
             "release_sequence": 1,
             "source_revision": "a" * 40,
             "key_id": key_id,
-            "definitions": [
-                {
-                    "parser_id": identity.parser_id,
-                    "revision": identity.revision,
-                    "suffix": identity.suffix,
-                    "size": len(content),
-                    "sha256": hashlib.sha256(content).hexdigest(),
-                    "content_base64": base64.b64encode(content).decode("ascii"),
-                }
-            ],
+            "definitions": sorted(
+                (
+                    {
+                        "parser_id": identity.parser_id,
+                        "revision": identity.revision,
+                        "suffix": identity.suffix,
+                        "size": len(content),
+                        "sha256": hashlib.sha256(content).hexdigest(),
+                        "content_base64": base64.b64encode(content).decode("ascii"),
+                    }
+                    for content in contents
+                    for identity in (admit_pilot_definition(content),)
+                ),
+                key=lambda item: item["parser_id"],
+            ),
         },
         sort_keys=True,
         separators=(",", ":"),
@@ -104,6 +108,58 @@ def test_verified_catalog_uses_installed_parser_by_default(tmp_path: Path) -> No
         assert store.load_import(result.source_sha256).evidence == result.evidence
 
 
+def test_unique_csv_auto_selection_and_ambiguous_refusal(tmp_path: Path) -> None:
+    original = DEFINITION.read_bytes()
+    alternate = json.loads(original)
+    alternate["parser_id"] = "synthetic_posted_cash_csv_alt"
+    alternate_bytes = json.dumps(alternate).encode()
+    with V2ProfileStore.create(tmp_path / "fresh.db") as store:
+        selected = import_catalog_source(store, SOURCE, catalog=_verified_catalog(), suffix=".csv")
+        assert selected.status == "imported"
+        assert selected.evidence.parser_id == "synthetic_posted_cash_csv"
+    with V2ProfileStore.create(tmp_path / "ambiguous.db") as store:
+        with pytest.raises(CatalogImportError, match="catalog_ambiguous_match"):
+            import_catalog_source(store, SOURCE, catalog=_verified_catalog((original, alternate_bytes)), suffix=".csv")
+        assert store.connection.execute("SELECT count(*) FROM Sources").fetchone() == (0,)
+
+
+def test_auto_selection_refuses_missing_csv_match_and_pdf_without_rule(tmp_path: Path) -> None:
+    with V2ProfileStore.create(tmp_path / "fresh.db") as store:
+        with pytest.raises(CatalogImportError, match="catalog_no_match"):
+            import_catalog_source(store, b"Wrong,Header\n1,2\n", catalog=_verified_catalog(), suffix=".csv")
+        with pytest.raises(CatalogImportError, match="automatic_pdf_routing_unavailable"):
+            import_catalog_source(store, b"%PDF-1.4\n", catalog=_verified_catalog(), suffix=".pdf")
+        assert store.connection.execute("SELECT count(*) FROM Sources").fetchone() == (0,)
+
+
+def test_both_current_mohela_csv_formats_select_their_own_definition(tmp_path: Path) -> None:
+    definitions = tuple(
+        (Path(__file__).parents[2] / "devtools" / "parser_engine_pilot" / name).read_bytes()
+        for name in ("mohela-account-history-definition.json", "mohela-pilot-definition.json")
+    )
+    catalog = _verified_catalog(definitions)
+    sources = (
+        (
+            b'<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">'
+            b"Date,Description,Principal,Interest,Fees,Total,\n"
+            b"10/01/2026,Payment,-$80.00,-$20.00,$0.00,-$100.00,\n",
+            "mohela_account_history_export",
+        ),
+        (
+            b'<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.0 Transitional//EN">'
+            b"Date,LoanName,Description,Principal,Interest,Fees,Total,UnpaidPrincipalBalanceValue,\n"
+            b"10/01/2026,123-1 Loan A,Payment,-$80.00,-$20.00,$0.00,-$100.00,$900.00,\n",
+            "mohela_detailed_export",
+        ),
+    )
+    for index, (source, expected_id) in enumerate(sources):
+        with V2ProfileStore.create(tmp_path / f"mohela-{index}.db") as store:
+            result = import_catalog_source(store, source, catalog=catalog, suffix=".csv")
+            assert result.evidence.parser_id == expected_id
+            assert len(result.evidence.payload.rows) == 1
+            assert store.load_import(result.source_sha256).evidence == result.evidence
+
+
 def test_catalog_selection_and_evidence_identity_refuse_before_write(tmp_path: Path) -> None:
     catalog = _verified_catalog()
     with V2ProfileStore.create(tmp_path / "fresh.db") as store:
@@ -142,7 +198,8 @@ def test_catalog_selection_and_evidence_identity_refuse_before_write(tmp_path: P
         assert store.connection.execute("SELECT count(*) FROM Sources").fetchone() == (0,)
 
 
-def test_catalog_import_cancelled_during_parser_keeps_profile_empty(tmp_path: Path) -> None:
+@pytest.mark.parametrize("parser_id", [None, "synthetic_posted_cash_csv"])
+def test_catalog_import_cancelled_during_parser_keeps_profile_empty(tmp_path: Path, parser_id: str | None) -> None:
     catalog = _verified_catalog()
     parsing = False
 
@@ -160,7 +217,7 @@ def test_catalog_import_cancelled_during_parser_keeps_profile_empty(tmp_path: Pa
                 store,
                 SOURCE,
                 catalog=catalog,
-                parser_id="synthetic_posted_cash_csv",
+                parser_id=parser_id,
                 suffix=".csv",
                 parse=parse,
                 cancelled=cancelled,

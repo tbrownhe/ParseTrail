@@ -366,8 +366,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   definitions (22 current parser families, including both MOHELA export formats)
   inside a test-signed snapshot. An explicitly selected verified definition can
   reach the pending-source import service; mismatched parser output is refused
-  before a profile write. Automatic source routing and installed-client admission
-  are still open. The catalog revision field accepts the existing Citi `pilot-2`
+  before a profile write. CSV imports select a unique verified matching definition,
+  including both MOHELA formats; zero or multiple matches leave no source write.
+  Automatic PDF routing and installed-client admission remain open. The catalog
+  revision field accepts the existing Citi `pilot-2`
   revision without requiring a numeric alias.
   The bounded source pipeline now validates supplied declarations before PDF
   dispatch and selects all 21 PDF pilots by parser identity rather than exact
@@ -392,7 +394,7 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   exercises one synthetic V2 parse and pulls the pipeline into packaging. A
   windowed Windows x64 probe passed that runtime smoke and all six worker
   pipes after the package move.
-  Automatic routing, release trust,
+  Automatic PDF routing, release trust,
   ordinary desktop import and native Intel Mac acceptance remain open.
 - [ ] **P2-S — Declaration catalog server:** after accepted client work is merged,
   use a short-lived server branch for the reviewed snapshot API/storage/publication
@@ -416,7 +418,7 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   compare a new parse against saved evidence without replacing the snapshot.
   The verified-catalog import path now passes cancellation through the bounded
   worker and CSV row loop. A running worker is killed on cancellation; a
-  cancelled import leaves no source write. Automatic routing, installed-client
+  cancelled import leaves no source write. Automatic PDF routing, installed-client
   trust, archive recovery and UI wiring remain open.
 - [ ] **V2-4a–b — Daily review:** create/edit accounts, categories and budgets; connect
   accepted ledger workflows to the application in small increments. Manual values,

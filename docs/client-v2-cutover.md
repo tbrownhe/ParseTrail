@@ -194,16 +194,17 @@ post-parse cancellation leave the new profile unchanged. This is a service
 boundary only; installed catalog admission, archive
 recovery and main-window integration remain open.
 The local catalog-admission pilot now validates all 23 checked-in definitions in
-one test-signed snapshot. With a verified catalog and an explicit parser choice,
-the service checks parser identity and revision before saving pending evidence;
-automatic document routing and installed-client trust remain open.
+one test-signed snapshot. With a verified catalog, the service checks parser
+identity and revision before saving pending evidence. CSV imports can select the
+only matching verified definition; zero or multiple matches leave no source
+write. PDF routing and installed-client trust remain open.
 The finite parser operations, bounded adapters and source pipeline now live in
 the client package. Verified-catalog import uses that installed pipeline by
 default; a synthetic signed CSV import saves and reopens its evidence without
 an injected parser. The frozen runtime smoke now exercises a synthetic V2
 parse and pulls the pipeline into packaging. A windowed Windows x64 probe
 passed that runtime smoke and all six worker pipes after the package move.
-Automatic routing, release trust
+Automatic PDF routing, release trust
 and desktop import remain open.
 The bounded decoder worker now polls a cancellation callback and terminates its
 child on cancellation. The source pipeline also polls its CSV row loop and
