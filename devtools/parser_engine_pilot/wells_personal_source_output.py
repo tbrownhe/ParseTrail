@@ -26,10 +26,10 @@ from parsetrail.core.v2_anchored_table import (
     TableWellsPersonalRule,
     load_definition,
 )
+from parsetrail.core.v2_money_operations import usd_or_decimal_2dp_minor_v1
 from parsetrail.core.v2_pdf_lines import ADAPTER_VERSION, PageLine, PDFLineEvidence
 from parsetrail.core.v2_table_continuations import ContinuationError, RawTableRow, assemble
 
-from devtools.parser_engine_pilot.money_operations import usd_or_decimal_2dp_minor_v1
 from devtools.parser_engine_pilot.partial_dates import PartialDateError, resolve_slash_month_day
 
 ENGINE_VERSION = "wells-personal-source-pilot-1"

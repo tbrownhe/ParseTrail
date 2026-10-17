@@ -4,10 +4,10 @@ from datetime import datetime
 from functools import partial
 
 import pytest
+from parsetrail.core.v2_citi_table import CitiTableEvidence, CitiTablePage, CitiTableRow
 from parsetrail.core.v2_table_continuations import ContinuationError
 
-from devtools.parser_engine_pilot.citi_layout import DEFINITION
-from devtools.parser_engine_pilot.citi_table import CitiTableEvidence, CitiTablePage, CitiTableRow
+from devtools.parser_engine_pilot.citi_authoring import DEFINITION
 from devtools.parser_engine_pilot.citi_table_candidates import candidates_from_table as candidates_from_table_with_rule
 
 candidates_from_table = partial(candidates_from_table_with_rule, continuation=DEFINITION.table_continuation)

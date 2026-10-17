@@ -11,9 +11,9 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Literal
 
-from devtools.parser_engine_pilot.channel_occurrences import Candidate, validate_candidates
-from devtools.parser_engine_pilot.citi_layout import AMOUNT, DATE_PREFIX, TEXT_TRANSACTION
-from devtools.parser_engine_pilot.money_operations import usd_symbol_minor_v1
+from parsetrail.core.v2_channel_occurrences import Candidate, validate_candidates
+from parsetrail.core.v2_citi_layout import AMOUNT, DATE_PREFIX, TEXT_TRANSACTION
+from parsetrail.core.v2_money_operations import usd_symbol_minor_v1
 
 DATE_ONLY = re.compile(r"^\s*(?:\d+\s+)*(?P<date>\d{2}/\d{2})\s*$")
 

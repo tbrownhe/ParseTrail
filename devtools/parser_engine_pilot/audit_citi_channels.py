@@ -16,12 +16,12 @@ from parsetrail.core.money import to_minor_units
 from parsetrail.core.parse import extract_pdf_features
 from parsetrail.core.parser_classification import matching_plugins
 from parsetrail.core.utils import PDFReader
+from parsetrail.core.v2_channel_occurrences import Candidate, match_occurrences
 from parsetrail.plugins.pdf_citicc_202506 import Parser as OlderCiti
 from parsetrail.plugins.pdf_citicc_202511 import Parser as RecentCiti
 
-from devtools.parser_engine_pilot.channel_occurrences import Candidate, match_occurrences
+from devtools.parser_engine_pilot.citi_authoring import DEFINITION, DEFINITION_BYTES
 from devtools.parser_engine_pilot.citi_evidence import read_recent_citi
-from devtools.parser_engine_pilot.citi_layout import DEFINITION, DEFINITION_BYTES
 
 
 @dataclass(frozen=True, slots=True)

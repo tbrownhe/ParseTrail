@@ -26,10 +26,10 @@ from parsetrail.core.v2_anchored_table import (
     TableSingleDateCardRule,
     load_definition,
 )
+from parsetrail.core.v2_money_operations import usd_symbol_minor_v1
 from parsetrail.core.v2_pdf_lines import ADAPTER_VERSION, PageLine, PDFLineEvidence
 from parsetrail.core.v2_table_continuations import ContinuationError, RawTableRow, assemble
 
-from devtools.parser_engine_pilot.money_operations import usd_symbol_minor_v1
 from devtools.parser_engine_pilot.partial_dates import PartialDateError, resolve_month_day
 
 ENGINE_VERSION = "synchrony-table-source-pilot-1"

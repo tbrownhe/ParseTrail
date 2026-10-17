@@ -217,7 +217,7 @@ interleaving. The repeated row-continuation behavior belongs in a bounded engine
 operation: Citi, Synchrony, LendingClub and Wells all use it. A strict
 [table-continuation pilot](../client/src/parsetrail/core/v2_table_continuations.py)
 now covers two finite shapes with column selectors and source-row references.
-The [shared occurrence pilot](../devtools/parser_engine_pilot/channel_occurrences.py)
+The [shared occurrence pilot](../client/src/parsetrail/core/v2_channel_occurrences.py)
 now pairs exact table/text copies one to one under a strict same-page rule and
 leaves all other occurrences for explicit disposition. The refactored Citi
 audit passed on nine recent-layout archive files with 428 resolved occurrences

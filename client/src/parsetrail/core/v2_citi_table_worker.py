@@ -14,15 +14,18 @@ from parsetrail.core.v2_worker_limits import (
 )
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else argv
     try:
-        enforce_child_memory_limit(sys.argv[1])
+        if len(args) != 1:
+            raise ValueError("worker_arguments")
+        enforce_child_memory_limit(args[0])
         source = sys.stdin.buffer.read(MAX_INPUT_BYTES + 1)
         if not source or len(source) > MAX_INPUT_BYTES:
             return 1
         import pdfplumber
 
-        from devtools.parser_engine_pilot.citi_table import extract_citi_table
+        from parsetrail.core.v2_citi_table import extract_citi_table
 
         with pdfplumber.open(BytesIO(source)) as pdf:
             evidence = extract_citi_table(

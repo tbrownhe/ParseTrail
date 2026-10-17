@@ -46,6 +46,12 @@ def run_runtime_smoke_test() -> int:
     return 0
 
 
+def create_application(argv):
+    from PySide6.QtWidgets import QApplication
+
+    return QApplication(argv)
+
+
 # Client entry point
 def main() -> int:
     if sys.argv[1:2] == ["--v2-parser-worker"]:
@@ -63,6 +69,10 @@ def main() -> int:
             return worker_main(sys.argv[3:])
         if sys.argv[2:3] == ["wells-table"]:
             from parsetrail.core.v2_wells_table_worker import main as worker_main
+
+            return worker_main(sys.argv[3:])
+        if sys.argv[2:3] == ["citi-table"]:
+            from parsetrail.core.v2_citi_table_worker import main as worker_main
 
             return worker_main(sys.argv[3:])
         from parsetrail.core.v2_pdf_text_worker import main as worker_main
@@ -95,7 +105,6 @@ def main() -> int:
 
     # Imports that depend on settings
     from PySide6.QtGui import QIcon
-    from PySide6.QtWidgets import QApplication
 
     from parsetrail.core.logging import logger
     from parsetrail.core.utils import resource_path
@@ -113,7 +122,7 @@ def main() -> int:
 
     # Kick off the GUI
     try:
-        app = QApplication(sys.argv)
+        app = create_application(sys.argv)
         icon = resource_path("assets/parsetrail_128px.ico")
         app.setWindowIcon(QIcon(str(icon)))
         configure_ui_hooks()  # bootstrap login ui to AuthManager

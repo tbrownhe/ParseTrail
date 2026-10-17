@@ -10,13 +10,13 @@ import json
 from collections.abc import Callable
 
 from parsetrail.core import v2_anchored_table as anchored_table
+from parsetrail.core import v2_citi_layout as citi_layout
 from parsetrail.core import v2_parser_engine as engine
 from parsetrail.core import v2_wells_table as wells_table
 from parsetrail.core.v2_data_catalog import DefinitionIdentity
 
 from devtools.parser_engine_pilot import (
     card_lines,
-    citi_layout,
     dual_text_card_lines,
     hsa_cash_lines,
     investment_summary_lines,

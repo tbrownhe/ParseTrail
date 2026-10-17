@@ -3,8 +3,9 @@
 import json
 
 import pytest
+from parsetrail.core.v2_citi_layout import CitiLayoutError, load_definition
 
-from devtools.parser_engine_pilot.citi_layout import DEFINITION_BYTES, CitiLayoutError, load_definition
+from devtools.parser_engine_pilot.citi_authoring import DEFINITION_BYTES
 
 
 def test_checked_in_definition_is_strict() -> None:

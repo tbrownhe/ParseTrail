@@ -395,7 +395,7 @@ The audit also counts 36 dated lines with money and 35 without money that the
 simple text-row matcher does not accept. Some are foreign transactions split
 across lines; others mix transaction text with legal copy. This is a separate
 complete-capture gate: each such line needs a source disposition before the
-layout may be used for normal imports. The pilot still uses the old unbounded
+layout may be used for normal imports. That early pass used the old unbounded
 PDF decoder and table extractor.
 
 A later nine-file read-only sample found 67 such dated starts. The finite
@@ -413,11 +413,14 @@ equations pass; source hashes were unchanged. This check covers dated starts,
 not every non-dated item on every page. The read-only audit still uses the old
 in-process reader as its accepted-result baseline. Its candidate path now uses
 the bounded text and table workers. [`bounded_citi.py`](bounded_citi.py) moves
-Citi word/table extraction to the shared resource-limited worker. It returned
+Citi word/table extraction to the installed
+[`v2_citi_table_worker.py`](../../client/src/parsetrail/core/v2_citi_table_worker.py)
+under the shared resource limit. It returned
 the same 543 raw table/interest rows as the accepted reader across those ten
 sources and retained page, row and table-region locations. Synthetic PDF parity
-and redacted invalid-source refusal also pass. Runtime integration and Intel
-Mac native limits remain open.
+and redacted invalid-source refusal also pass. A windowed Windows x64 probe
+passed the installed Citi table worker pipe and parent resource boundary.
+Runtime integration and Intel Mac native limits remain open.
 
 The installed [`v2_table_continuations.py`](../../client/src/parsetrail/core/v2_table_continuations.py)
 is a shared finite operation
@@ -435,7 +438,8 @@ detail rows. The transaction descriptions and amounts matched the accepted
 reader in order. No supplemental line was promoted to a financial row.
 This is the proposed engine boundary; the Citi candidate resolver remains a
 pilot. Its common occurrence-matching logic now lives in
-[`channel_occurrences.py`](channel_occurrences.py): a strict same-page rule pairs
+[`v2_channel_occurrences.py`](../../client/src/parsetrail/core/v2_channel_occurrences.py):
+a strict same-page rule pairs
 exact table/text copies one to one and labels additional exact, coarse overlap
 and text-only occurrences without admitting a financial row. Citi-specific
 artifact rules and the printed balance equation remain in `citi_channels.py`.
@@ -484,7 +488,10 @@ ambiguous results; the ten-source Citi comparison remains unchanged.
 The [recent Citi pilot definition](recent-citi-pilot-definition.json) now
 selects routing, table continuation, channel occurrence, source-sign and
 finite geometry operations. The bounded Citi path no longer imports the 1.x
-parser; only the separate comparison audit does. Its
+parser; only the separate comparison audit does. The checked-in example is
+loaded by [`citi_authoring.py`](citi_authoring.py), while the installed
+[`v2_citi_layout.py`](../../client/src/parsetrail/core/v2_citi_layout.py)
+has no bundled-definition dependency. Its
 [shared output adapter](citi_source_output.py) reopens all ten statements from
 strict JSON with 486 observations and 803 located source dispositions,
 including 36 supplemental detail rows. It leaves capture verification false
@@ -493,7 +500,8 @@ and creates no accounting postings or profile writes.
 The [source pipeline](source_pipeline.py) binds input and definition bytes to
 that strict output under explicit size limits. The same entry point builds
 synthetic CSV evidence and recent Citi PDF evidence; unknown Citi layouts and
-changed definition bytes are refused. A temporary fresh 2.0 SQLite profile
+definitions whose routing does not match the source are refused. A temporary
+fresh 2.0 SQLite profile
 saved and reopened all ten recent Citi archive files through this path without
 writing the originals. This remains a pilot, pending full page capture and
 native import acceptance.

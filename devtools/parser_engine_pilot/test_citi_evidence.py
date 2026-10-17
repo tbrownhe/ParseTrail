@@ -3,8 +3,8 @@
 import pytest
 from parsetrail.core.runtime_smoke import _sample_pdf
 
+from devtools.parser_engine_pilot.citi_authoring import DEFINITION_BYTES
 from devtools.parser_engine_pilot.citi_evidence import CitiEvidenceError, read_recent_citi
-from devtools.parser_engine_pilot.citi_layout import DEFINITION_BYTES
 
 
 def test_refuses_wrong_layout_before_citi_table_extraction() -> None:

@@ -6,7 +6,8 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-from devtools.parser_engine_pilot.citi_layout import AMOUNT
+from parsetrail.core.v2_citi_layout import AMOUNT
+
 from devtools.parser_engine_pilot.citi_source_dispositions import DatedLineDisposition
 
 MONEY = AMOUNT.pattern

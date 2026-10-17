@@ -5,15 +5,14 @@ from __future__ import annotations
 from datetime import date
 
 import pytest
-from pydantic import ValidationError
-
-from devtools.parser_engine_pilot.channel_occurrences import (
+from parsetrail.core.v2_channel_occurrences import (
     Candidate,
     OccurrenceError,
     OccurrenceRule,
     load_occurrence_rule,
     match_occurrences,
 )
+from pydantic import ValidationError
 
 DAY = date(2026, 8, 2)
 RULE = load_occurrence_rule(

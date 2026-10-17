@@ -177,9 +177,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   worker limit runner now live in the installed client package. The app has an
   early frozen worker entry before profile and GUI bootstrap. A windowed
   Windows x64 probe ran both worker pipes, a positive annotation decode and
-  native timeout. The client build scripts now gate frozen text and annotation
-  pipes. Intel Mac limits and the other pilot workers still need native
-  acceptance before runtime admission.
+  native timeout. All fixed decoder workers now live in the client package;
+  windowed Windows x64 probes passed text, annotation, XLSX, anchored table,
+  Wells table and Citi table pipes. The build scripts gate those worker pipes.
+  Intel Mac limits and ordinary runtime integration remain open.
   Wells and Citi word/table finding and XLSX XML decoding now run in bounded
   workers. The Citi worker matched 543 raw table/interest rows across ten
   recent-layout archive PDFs without changing source hashes. The shared

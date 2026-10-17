@@ -412,7 +412,8 @@ def _session(
     timer.start(25)
     # main() still owns icon setup, UI hooks, real window construction, and app.exec().
     entry_module = sys.modules[entrypoint.__module__]
-    patches.enter_context(patch.object(entry_module, "QApplication", lambda _argv: app))
+    factory = "create_application" if hasattr(entry_module, "create_application") else "QApplication"
+    patches.enter_context(patch.object(entry_module, factory, lambda _argv: app))
     try:
         diagnostics.mark("running client entry point")
         entrypoint()

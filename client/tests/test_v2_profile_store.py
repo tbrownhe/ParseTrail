@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from parsetrail.core.v2_profile_store import ProfileFormatError, V2ProfileStore
 
-from devtools.parser_engine_pilot.citi_layout import DEFINITION_BYTES
+from devtools.parser_engine_pilot.citi_authoring import DEFINITION_BYTES
 from devtools.parser_engine_pilot.citi_source_output import from_citi
 from devtools.parser_engine_pilot.source_pipeline import build_source_evidence
 from devtools.parser_engine_pilot.test_citi_source_output import sample
@@ -24,7 +24,7 @@ def test_one_database_reopens_csv_and_statement_without_reparse(tmp_path: Path) 
     path = tmp_path / "fresh-2.0.db"
     csv_evidence = build_source_evidence(CSV, CSV_DEFINITION, suffix=".csv")
     pdf = b"synthetic statement bytes"
-    citi = from_citi(sample()).model_copy(update={"source_sha256": hashlib.sha256(pdf).hexdigest()})
+    citi = from_citi(sample(), DEFINITION_BYTES).model_copy(update={"source_sha256": hashlib.sha256(pdf).hexdigest()})
     with V2ProfileStore.create(path) as store:
         assert not store.source_imported(CSV)
         assert store.import_source(CSV, CSV_DEFINITION, csv_evidence, suffix=".csv")

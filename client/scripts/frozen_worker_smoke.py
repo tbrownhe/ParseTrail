@@ -53,8 +53,12 @@ def _sample_xlsx_payload() -> bytes:
     )
 
 
-def _sample_table_pdf(words: tuple[tuple[int, int, str], ...]) -> bytes:
-    stream = "\n".join(f"BT /F1 12 Tf {x} {y} Td ({value}) Tj ET" for x, y, value in words).encode()
+def _sample_table_pdf(
+    words: tuple[tuple[int, int, str], ...], *, font_size: int = 12, horizontal_lines: tuple[int, ...] = ()
+) -> bytes:
+    commands = [f"BT /F1 {font_size} Tf {x} {y} Td ({value}) Tj ET" for x, y, value in words]
+    commands.extend(f"15 {y} m 370 {y} l S" for y in horizontal_lines)
+    stream = "\n".join(commands).encode()
     objects = [
         b"<< /Type /Catalog /Pages 2 0 R >>",
         b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
@@ -124,6 +128,23 @@ def check_frozen_workers(binary: Path) -> None:
                 ),
             ),
         ),
+        (
+            "citi-table",
+            _sample_table_pdf(
+                (
+                    (20, 370, "Sale"),
+                    (80, 370, "Post"),
+                    (140, 370, "Description"),
+                    (320, 370, "Amount"),
+                    (20, 320, "01/02"),
+                    (80, 320, "01/03"),
+                    (140, 320, "SAMPLE"),
+                    (320, 320, "$10.00"),
+                ),
+                font_size=10,
+                horizontal_lines=(340, 300),
+            ),
+        ),
     ):
         process = subprocess.run(
             [str(binary), "--v2-parser-worker", mode, str(512 * 1024 * 1024)],
@@ -145,6 +166,8 @@ def check_frozen_workers(binary: Path) -> None:
             raise RuntimeError("Frozen anchored table worker output mismatch")
         if mode == "wells-table" and len(decoded.get("rows", [])) != 1:
             raise RuntimeError("Frozen Wells table worker output mismatch")
+        if mode == "citi-table" and len(decoded.get("rows", [])) != 1:
+            raise RuntimeError("Frozen Citi table worker output mismatch")
 
 
 def main() -> int:

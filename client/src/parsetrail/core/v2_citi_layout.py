@@ -9,16 +9,15 @@ import math
 import re
 from dataclasses import dataclass
 from hashlib import sha256
-from pathlib import Path
 from statistics import median
 from typing import Literal
 
-from parsetrail.core.parser_classification import validate_routing_metadata
-from parsetrail.core.v2_table_continuations import ContinuationRule
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from devtools.parser_engine_pilot.channel_occurrences import OccurrenceRule
-from devtools.parser_engine_pilot.money_operations import USD_SYMBOL
+from parsetrail.core.parser_classification import validate_routing_metadata
+from parsetrail.core.v2_channel_occurrences import OccurrenceRule
+from parsetrail.core.v2_money_operations import USD_SYMBOL
+from parsetrail.core.v2_table_continuations import ContinuationRule
 
 
 class CitiLayoutError(ValueError):
@@ -79,21 +78,7 @@ def load_definition(data: bytes) -> tuple[CitiDefinition, str]:
     return definition, sha256(data).hexdigest()
 
 
-DEFINITION_BYTES = Path(__file__).with_name("recent-citi-pilot-definition.json").read_bytes()
-DEFINITION, DEFINITION_SHA256 = load_definition(DEFINITION_BYTES)
 EVIDENCE_ENGINE_VERSION = "recent-citi-evidence-pilot-4"
-
-RECENT_CITI_ID = DEFINITION.parser_id
-OTHER_LAYOUT_ROUTING_METADATA = {
-    "pdf_citicc_202506": {
-        "SUFFIX": ".pdf",
-        "SEARCH_STRING": "www.citicards.com",
-        "ROUTING_RULE": {
-            "pdf_metadata": {"Producer": '"crawfordtech"'},
-            "header": '("trans. post description amount" || ("trans. post" && "date date description amount")) && !"sale post"',
-        },
-    },
-}
 
 TRANSACTION_DATE = re.compile(r"\d{2}/\d{2}")
 AMOUNT = USD_SYMBOL

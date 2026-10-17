@@ -5,6 +5,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
+from parsetrail.core.v2_channel_occurrences import Candidate, validate_candidates
+from parsetrail.core.v2_citi_layout import AMOUNT, TRANSACTION_DATE
+from parsetrail.core.v2_citi_table import CitiTableEvidence
+from parsetrail.core.v2_money_operations import usd_symbol_minor_v1
 from parsetrail.core.v2_table_continuations import (
     ContinuationRule,
     JoinedTableRow,
@@ -12,10 +16,6 @@ from parsetrail.core.v2_table_continuations import (
     assemble,
 )
 
-from devtools.parser_engine_pilot.channel_occurrences import Candidate, validate_candidates
-from devtools.parser_engine_pilot.citi_layout import AMOUNT, TRANSACTION_DATE
-from devtools.parser_engine_pilot.citi_table import CitiTableEvidence
-from devtools.parser_engine_pilot.money_operations import usd_symbol_minor_v1
 from devtools.parser_engine_pilot.partial_dates import resolve_month_day
 
 

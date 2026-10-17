@@ -12,35 +12,45 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from parsetrail.core.parser_classification import DocumentFeatures, matching_plugins, normalize_pdf_metadata
-
-from devtools.parser_engine_pilot.bounded_citi import extract_bounded_citi
-from devtools.parser_engine_pilot.bounded_pdf_text import decode_pdf
-from devtools.parser_engine_pilot.channel_occurrences import Candidate
-from devtools.parser_engine_pilot.citi_channels import CitiResolution, resolve
-from devtools.parser_engine_pilot.citi_layout import (
+from parsetrail.core.v2_channel_occurrences import Candidate
+from parsetrail.core.v2_citi_layout import (
     AMOUNT,
     DATE_PREFIX,
     EVIDENCE_ENGINE_VERSION,
-    OTHER_LAYOUT_ROUTING_METADATA,
-    RECENT_CITI_ID,
     TEXT_TRANSACTION,
     CitiDefinition,
     load_definition,
 )
+from parsetrail.core.v2_citi_table import CitiTableEvidence
+from parsetrail.core.v2_money_operations import usd_symbol_minor_v1
+
+from devtools.parser_engine_pilot.bounded_citi import extract_bounded_citi
+from devtools.parser_engine_pilot.bounded_pdf_text import decode_pdf
+from devtools.parser_engine_pilot.citi_channels import CitiResolution, resolve
 from devtools.parser_engine_pilot.citi_money_lines import MoneyLineDisposition, dispose_unlinked_money_lines
 from devtools.parser_engine_pilot.citi_source_dispositions import (
     DatedLineDisposition,
     dispose_dated_lines,
 )
 from devtools.parser_engine_pilot.citi_statement_header import CitiStatementHeader, parse_header
-from devtools.parser_engine_pilot.citi_table import CitiTableEvidence
 from devtools.parser_engine_pilot.citi_table_candidates import CitiTableCandidates, candidates_from_table
-from devtools.parser_engine_pilot.money_operations import usd_symbol_minor_v1
 from devtools.parser_engine_pilot.partial_dates import resolve_month_day
 
 
 class CitiEvidenceError(ValueError):
     """Redacted refusal of an incomplete recent Citi statement."""
+
+
+OTHER_LAYOUT_ROUTING_METADATA = {
+    "pdf_citicc_202506": {
+        "SUFFIX": ".pdf",
+        "SEARCH_STRING": "www.citicards.com",
+        "ROUTING_RULE": {
+            "pdf_metadata": {"Producer": '"crawfordtech"'},
+            "header": '("trans. post description amount" || ("trans. post" && "date date description amount")) && !"sale post"',
+        },
+    },
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -62,7 +72,7 @@ class CitiEvidence:
 
 def _layout_metadata(definition: CitiDefinition) -> dict[str, dict]:
     metadata = dict(OTHER_LAYOUT_ROUTING_METADATA)
-    metadata[RECENT_CITI_ID] = {
+    metadata[definition.parser_id] = {
         "SUFFIX": definition.suffix,
         "SEARCH_STRING": definition.routing.body,
         "ROUTING_RULE": {
@@ -201,7 +211,9 @@ def read_recent_citi(
     """Return source-linked candidates; refuse unresolved dated starts."""
     definition, definition_hash = load_definition(definition_bytes)
     decoded = decode_pdf(source, cancelled=cancelled)
-    if matching_plugins(_features(decoded.pages, decoded.metadata), _layout_metadata(definition)) != (RECENT_CITI_ID,):
+    if matching_plugins(_features(decoded.pages, decoded.metadata), _layout_metadata(definition)) != (
+        definition.parser_id,
+    ):
         raise CitiEvidenceError("wrong_or_ambiguous_citi_layout")
     table_evidence = extract_bounded_citi(source, cancelled=cancelled)
     if len(table_evidence.pages) != len(decoded.pages):

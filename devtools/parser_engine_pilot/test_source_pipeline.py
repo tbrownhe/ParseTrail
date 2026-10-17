@@ -6,7 +6,7 @@ import pytest
 from parsetrail.core.v2_profile_store import V2ProfileStore
 
 from devtools.parser_engine_pilot.catalog_admission import admit_pilot_definition
-from devtools.parser_engine_pilot.citi_layout import DEFINITION_BYTES
+from devtools.parser_engine_pilot.citi_authoring import DEFINITION_BYTES
 from devtools.parser_engine_pilot.source_pipeline import SourcePipelineError, build_source_evidence
 from devtools.parser_engine_pilot.test_bounded_citi import sample_table_pdf
 

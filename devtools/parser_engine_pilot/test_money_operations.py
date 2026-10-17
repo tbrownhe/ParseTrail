@@ -1,8 +1,7 @@
 """The declaration's money operation accepts only its printed syntax."""
 
 import pytest
-
-from devtools.parser_engine_pilot.money_operations import (
+from parsetrail.core.v2_money_operations import (
     usd_or_decimal_2dp_minor_v1,
     usd_symbol_minor_v1,
     usd_trailing_cr_2dp_minor_v1,

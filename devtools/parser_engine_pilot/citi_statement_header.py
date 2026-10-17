@@ -6,7 +6,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime
 
-from devtools.parser_engine_pilot.money_operations import USD_SYMBOL, usd_symbol_minor_v1
+from parsetrail.core.v2_money_operations import USD_SYMBOL, usd_symbol_minor_v1
 
 MONEY = USD_SYMBOL.pattern
 

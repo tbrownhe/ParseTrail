@@ -9,7 +9,7 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-from devtools.parser_engine_pilot.channel_occurrences import (
+from parsetrail.core.v2_channel_occurrences import (
     MAX_CANDIDATES,
     Candidate,
     OccurrenceError,

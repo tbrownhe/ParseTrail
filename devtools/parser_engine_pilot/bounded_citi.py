@@ -6,17 +6,16 @@ import hashlib
 import math
 from collections.abc import Callable
 
-from parsetrail.core.v2_pdf_lines import MAX_PDF_BYTES
-from parsetrail.core.v2_worker_limits import MAX_OUTPUT_BYTES, WorkerError, WorkerLimits, run_worker
-from pydantic import TypeAdapter, ValidationError
-
-from devtools.parser_engine_pilot.citi_table import (
+from parsetrail.core.v2_citi_table import (
     ENGINE_VERSION,
     MAX_CELL_CHARS,
     MAX_CHARS_PER_PAGE,
     MAX_TABLE_ROWS,
     CitiTableEvidence,
 )
+from parsetrail.core.v2_pdf_lines import MAX_PDF_BYTES
+from parsetrail.core.v2_worker_limits import MAX_OUTPUT_BYTES, WorkerError, WorkerLimits, run_worker
+from pydantic import TypeAdapter, ValidationError
 
 _EVIDENCE_ADAPTER = TypeAdapter(CitiTableEvidence)
 
@@ -31,7 +30,7 @@ def extract_bounded_citi(
     if not isinstance(source, bytes) or not 0 < len(source) <= MAX_PDF_BYTES:
         raise WorkerError("source_size")
     output = run_worker(
-        "devtools.parser_engine_pilot.citi_worker",
+        "pdf_citi_table",
         source,
         output_limit=MAX_OUTPUT_BYTES,
         limits=limits,

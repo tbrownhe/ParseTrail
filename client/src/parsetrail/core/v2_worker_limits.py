@@ -7,7 +7,6 @@ import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Literal
 
 MIN_MEMORY_BYTES = 128 * 1024 * 1024
@@ -23,15 +22,19 @@ WorkerModule = Literal[
     "xlsx_evidence",
     "pdf_anchored_table",
     "pdf_wells_table",
-    "devtools.parser_engine_pilot.citi_worker",
+    "pdf_citi_table",
 ]
 PDF_TEXT_LAYOUTS = {
     "pdf_text_simple": "simple",
     "pdf_text_fixed": "fixed",
     "pdf_text_default": "default",
 }
-PILOT_WORKERS = {
-    "devtools.parser_engine_pilot.citi_worker",
+FIXED_WORKERS = {
+    "pdf_annotation_period": ("annotation-period", "parsetrail.core.v2_pdf_annotation_worker"),
+    "xlsx_evidence": ("xlsx-evidence", "parsetrail.core.v2_xlsx_worker"),
+    "pdf_anchored_table": ("anchored-table", "parsetrail.core.v2_anchored_table_worker"),
+    "pdf_wells_table": ("wells-table", "parsetrail.core.v2_wells_table_worker"),
+    "pdf_citi_table": ("citi-table", "parsetrail.core.v2_citi_table_worker"),
 }
 
 
@@ -153,10 +156,8 @@ class _WindowsJob:
             self._handle = None
 
 
-def _worker_launch(
-    module: WorkerModule, memory_bytes: int, *, frozen: bool, executable: str
-) -> tuple[list[str], Path | None]:
-    """Choose a fixed installed entry; pilot modules run only from source."""
+def _worker_launch(module: WorkerModule, memory_bytes: int, *, frozen: bool, executable: str) -> list[str]:
+    """Choose a fixed installed worker entry."""
     if module in PDF_TEXT_LAYOUTS:
         layout = PDF_TEXT_LAYOUTS[module]
         command = (
@@ -164,37 +165,15 @@ def _worker_launch(
             if frozen
             else [executable, "-m", "parsetrail.core.v2_pdf_text_worker", layout, str(memory_bytes)]
         )
-        return command, None
-    if module == "pdf_annotation_period":
-        command = (
-            [executable, "--v2-parser-worker", "annotation-period", str(memory_bytes)]
-            if frozen
-            else [executable, "-m", "parsetrail.core.v2_pdf_annotation_worker", str(memory_bytes)]
-        )
-        return command, None
-    if module == "xlsx_evidence":
-        command = (
-            [executable, "--v2-parser-worker", "xlsx-evidence", str(memory_bytes)]
-            if frozen
-            else [executable, "-m", "parsetrail.core.v2_xlsx_worker", str(memory_bytes)]
-        )
-        return command, None
-    if module in {"pdf_anchored_table", "pdf_wells_table"}:
-        operation = "anchored-table" if module == "pdf_anchored_table" else "wells-table"
-        worker_module = (
-            "parsetrail.core.v2_anchored_table_worker"
-            if module == "pdf_anchored_table"
-            else "parsetrail.core.v2_wells_table_worker"
-        )
-        command = (
-            [executable, "--v2-parser-worker", operation, str(memory_bytes)]
-            if frozen
-            else [executable, "-m", worker_module, str(memory_bytes)]
-        )
-        return command, None
-    if frozen or module not in PILOT_WORKERS:
+        return command
+    if module not in FIXED_WORKERS:
         raise WorkerError("unsupported_worker")
-    return [executable, "-m", module, str(memory_bytes)], Path(__file__).resolve().parents[4]
+    operation, worker_module = FIXED_WORKERS[module]
+    return (
+        [executable, "--v2-parser-worker", operation, str(memory_bytes)]
+        if frozen
+        else [executable, "-m", worker_module, str(memory_bytes)]
+    )
 
 
 def run_worker(
@@ -206,11 +185,7 @@ def run_worker(
     cancelled: Callable[[], bool] | None = None,
 ) -> bytes:
     """Run only a fixed local decoder module behind native resource limits."""
-    if (
-        module not in PDF_TEXT_LAYOUTS
-        and module not in {"pdf_annotation_period", "xlsx_evidence", "pdf_anchored_table", "pdf_wells_table"}
-        and module not in PILOT_WORKERS
-    ):
+    if module not in PDF_TEXT_LAYOUTS and module not in FIXED_WORKERS:
         raise WorkerError("unsupported_worker")
     if not isinstance(payload, bytes) or not payload or len(payload) > MAX_INPUT_BYTES:
         raise WorkerError("input_size")
@@ -220,7 +195,7 @@ def run_worker(
         raise WorkerError("unsupported_platform")
     if cancelled is not None and cancelled():
         raise WorkerError("cancelled")
-    command, worker_cwd = _worker_launch(
+    command = _worker_launch(
         module, limits.memory_bytes, frozen=bool(getattr(sys, "frozen", False)), executable=sys.executable
     )
     job = _WindowsJob(limits.memory_bytes) if sys.platform == "win32" else None
@@ -231,7 +206,6 @@ def run_worker(
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL,
-            cwd=worker_cwd,
         )
         if job is not None:
             job.attach(process.pid)
