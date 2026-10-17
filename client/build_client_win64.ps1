@@ -181,6 +181,11 @@ try {
     }
     Write-Host "Frozen runtime smoke test passed."
 
+    uv run --no-env-file --frozen --python $releasePython --no-python-downloads python -m scripts.frozen_worker_smoke --binary $builtExecutable
+    if ($LASTEXITCODE -ne 0) {
+        throw "Frozen parser worker smoke test failed with exit code $LASTEXITCODE"
+    }
+
     foreach ($offlineMode in @("fresh", "cached", "network-failure")) {
         Write-Host "Smoke-testing frozen offline session: $offlineMode"
         $offlineReportPath = Join-Path ([System.IO.Path]::GetTempPath()) "parsetrail-offline-$([guid]::NewGuid().ToString('N')).json"

@@ -129,6 +129,10 @@ echo "Auditing bundled libraries and smoke-testing the frozen executable (30-sec
     --app "$APP_PATH" --build-inputs "$BUILD_INPUTS" --output "$NATIVE_REPORT" \
     || error_exit "Native library audit or frozen runtime smoke test failed."
 
+uv run --no-env-file --no-sync --python "$RELEASE_PYTHON" --no-python-downloads python -m scripts.frozen_worker_smoke \
+    --binary "${APP_PATH}/Contents/MacOS/${APP_NAME}" \
+    || error_exit "Frozen parser worker smoke test failed."
+
 echo "Creating DMG installer..."
 mkdir -p "$DIST_DIR"
 create-dmg \

@@ -169,10 +169,11 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   exactly matches nine recent-layout Citi archive PDFs without source changes.
   The three PDF text layouts, first-page date annotation decoder and shared
   worker limit runner now live in the installed client package. The app has an
-  early frozen worker entry before
-  profile and GUI bootstrap; source-entry and frozen-command tests pass. An
-  actual frozen build, Intel Mac limits and the other pilot workers still need
-  native acceptance before runtime admission.
+  early frozen worker entry before profile and GUI bootstrap. A windowed
+  Windows x64 probe ran both worker pipes, a positive annotation decode and
+  native timeout. The client build scripts now gate frozen text and annotation
+  pipes. Intel Mac limits and the other pilot workers still need native
+  acceptance before runtime admission.
   Wells and Citi word/table finding and XLSX XML decoding now run in bounded
   workers. The Citi worker matched 543 raw table/interest rows across ten
   recent-layout archive PDFs without changing source hashes. The shared

@@ -190,8 +190,8 @@ Complete page capture, signed routing and native acceptance remain open.
 The installed [`v2_pdf_annotation_worker.py`](../../client/src/parsetrail/core/v2_pdf_annotation_worker.py)
 decodes only OCCU bank's first-page `FROM_DATE` and `TO_DATE` fields under the
 same source, output, memory and deadline limits as the other fixed workers.
-Its source entry and frozen command shape pass tests; native frozen acceptance
-remains open. `occu_bank_lines.py` first checks printed text dates,
+Its source entry and windowed Windows x64 worker pipes passed a native probe;
+Intel Mac acceptance remains open. `occu_bank_lines.py` first checks printed text dates,
 then uses those bounded annotations only when both text dates are absent.
 The dates keep a `pdf_annotation` page and ordinal location. The operation
 separates savings and checking by their printed account headings, preserves
