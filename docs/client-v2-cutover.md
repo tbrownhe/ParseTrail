@@ -201,7 +201,9 @@ The finite parser operations, bounded adapters and source pipeline now live in
 the client package. Verified-catalog import uses that installed pipeline by
 default; a synthetic signed CSV import saves and reopens its evidence without
 an injected parser. The frozen runtime smoke now exercises a synthetic V2
-parse and pulls the pipeline into packaging. Automatic routing, release trust
+parse and pulls the pipeline into packaging. A windowed Windows x64 probe
+passed that runtime smoke and all six worker pipes after the package move.
+Automatic routing, release trust
 and desktop import remain open.
 The bounded decoder worker now polls a cancellation callback and terminates its
 child on cancellation. The source pipeline also polls its CSV row loop and

@@ -389,7 +389,9 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   package. The verified-catalog import service uses that installed source
   pipeline by default; a synthetic signed CSV import saves and reopens its
   evidence without an injected parser. The existing frozen runtime smoke now
-  exercises one synthetic V2 parse and pulls the pipeline into packaging.
+  exercises one synthetic V2 parse and pulls the pipeline into packaging. A
+  windowed Windows x64 probe passed that runtime smoke and all six worker
+  pipes after the package move.
   Automatic routing, release trust,
   ordinary desktop import and native Intel Mac acceptance remain open.
 - [ ] **P2-S — Declaration catalog server:** after accepted client work is merged,
