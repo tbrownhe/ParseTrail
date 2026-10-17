@@ -170,6 +170,28 @@
       "title": "ContinuationRule",
       "type": "object"
     },
+    "MonetaryTextDisposition": {
+      "additionalProperties": false,
+      "properties": {
+        "prefix": {
+          "maxLength": 100,
+          "minLength": 3,
+          "title": "Prefix",
+          "type": "string"
+        },
+        "code": {
+          "pattern": "^[a-z][a-z0-9_]{2,79}$",
+          "title": "Code",
+          "type": "string"
+        }
+      },
+      "required": [
+        "prefix",
+        "code"
+      ],
+      "title": "MonetaryTextDisposition",
+      "type": "object"
+    },
     "TableBankStatementRule": {
       "additionalProperties": false,
       "properties": {
@@ -360,6 +382,15 @@
         },
         "continuation": {
           "$ref": "#/$defs/ContinuationRule"
+        },
+        "monetary_text_dispositions": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/MonetaryTextDisposition"
+          },
+          "maxItems": 64,
+          "title": "Monetary Text Dispositions",
+          "type": "array"
         }
       },
       "required": [

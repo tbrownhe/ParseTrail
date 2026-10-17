@@ -577,8 +577,12 @@ one to one to those table rows and retains 20 full-date statement-summary lines
 as located dispositions. Any new unmatched dated line fails the pilot. The 118
 undated monetary table rows are now explicitly classified as rewards, balance,
 activity-section, interest/fee or APR summaries. An unknown monetary table line
-fails the pilot. Other page regions still need their broader source-capture
-review.
+fails the pilot. A finite declaration list now classifies 258 additional
+money-bearing text lines as payment, rewards, balance, activity-summary,
+interest/fee, APR or payoff disclosures; an unknown monetary text line fails.
+The ten revised snapshots reopened from a disposable 2.0 profile with 97 rows
+and 1,169 located dispositions, and all source hashes were unchanged.
+Nonmonetary page regions still need their broader source-capture review.
 
 The read-only developer preview can be opened with a synthetic example:
 

@@ -326,8 +326,12 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   A second-channel Synchrony scan now links 97 dated text copies to the table
   rows and locates 20 dated summary lines; unmatched dated lines fail. All 118
   undated monetary table rows now have finite summary/disclosure dispositions;
-  unfamiliar monetary table lines fail. Other page regions remain a capture
-  review item.
+  unfamiliar monetary table lines fail. A shared finite prefix rule in the
+  declaration now classifies another 258 money-bearing text lines as payment,
+  reward, balance, activity-summary, interest/fee, APR or payoff disclosures;
+  unknown monetary text fails. All ten revised Synchrony snapshots reopened
+  with 97 rows and 1,169 located dispositions, and source hashes stayed
+  unchanged. Other nonmonetary page regions remain a capture review item.
   Intel Mac native checks remain open; XLSX has synthetic parity only.
   Continue decoder worker limits before choosing final schema and operations.
   Define strict schemas and a bounded engine; exercise MOHELA CSV, simple and

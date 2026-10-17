@@ -129,10 +129,32 @@ def test_unknown_monetary_table_line_refuses() -> None:
         from_synchrony_table(DEFINITION, *channels((*RAW_ROWS[:2], changed)))
 
 
+def test_monetary_text_dispositions_are_declared_and_unknown_line_refuses() -> None:
+    table, text = channels()
+
+    def replace_summary(raw: str):
+        return replace(
+            text,
+            lines=tuple(
+                replace(line, raw=raw, normalized=raw) if line.normalized.startswith("01/31/26 New Balance") else line
+                for line in text.lines
+            ),
+        )
+
+    output = from_synchrony_table(DEFINITION, table, replace_summary("Rewards Earned YTD $3.00"))
+    assert any(item.code == "rewards_summary" for item in output.payload.dispositions)
+    with pytest.raises(SynchronySourceError, match="unclassified_monetary_text_line"):
+        from_synchrony_table(DEFINITION, table, replace_summary("Unexpected charge $3.00"))
+
+
 def test_synchrony_declaration_schema_is_closed() -> None:
     saved = json.loads(Path(__file__).with_name("anchored-table-declaration-schema-v1.json").read_text())
     assert saved == AnchoredTableDefinition.model_json_schema()
     revised = json.loads(DEFINITION)
     revised["python"] = "import os"
+    with pytest.raises(AnchoredTableError, match="invalid_definition"):
+        from_synchrony_table(json.dumps(revised).encode(), *channels())
+    revised = json.loads(DEFINITION)
+    revised["statement"]["monetary_text_dispositions"][0]["python"] = "exec"
     with pytest.raises(AnchoredTableError, match="invalid_definition"):
         from_synchrony_table(json.dumps(revised).encode(), *channels())

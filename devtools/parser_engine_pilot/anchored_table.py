@@ -75,6 +75,19 @@ class TableCardStatementRule(BaseModel):
         return self
 
 
+class MonetaryTextDisposition(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    prefix: str = Field(min_length=3, max_length=100)
+    code: str = Field(pattern=r"^[a-z][a-z0-9_]{2,79}$")
+
+    @model_validator(mode="after")
+    def valid_prefix(self) -> MonetaryTextDisposition:
+        if self.prefix != self.prefix.strip() or "\n" in self.prefix or "\r" in self.prefix:
+            raise ValueError("invalid monetary text prefix")
+        return self
+
+
 class TableSingleDateCardRule(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
@@ -87,6 +100,7 @@ class TableSingleDateCardRule(BaseModel):
     opening_label: str = Field(min_length=1, max_length=80)
     closing_label: str = Field(min_length=1, max_length=80)
     continuation: ContinuationRule
+    monetary_text_dispositions: tuple[MonetaryTextDisposition, ...] = Field(default=(), max_length=64)
 
     @model_validator(mode="after")
     def valid_card_rule(self) -> TableSingleDateCardRule:
@@ -100,6 +114,7 @@ class TableSingleDateCardRule(BaseModel):
             or rule.break_columns != (0,)
             or rule.description_column != 2
             or rule.amount_column != 3
+            or len({item.prefix for item in self.monetary_text_dispositions}) != len(self.monetary_text_dispositions)
         ):
             raise ValueError("invalid single-date card operation")
         return self

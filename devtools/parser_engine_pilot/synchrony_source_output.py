@@ -38,6 +38,7 @@ DATE_PREFIX = re.compile(r"^\d{2}/\d{2}")
 TEXT_DATE = re.compile(r"^(\d{2}/\d{2})\s")
 FULL_DATE = re.compile(r"^\d{2}/\d{2}/(?:\d{2}|\d{4})\s")
 MONEY = re.compile(r"-?\$(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)\.[0-9]{2}\Z")
+MONEY_IN_TEXT = re.compile(r"-?\$[0-9][0-9,]*\.[0-9]{2}")
 
 
 class SynchronySourceError(ValueError):
@@ -256,6 +257,24 @@ def from_synchrony_table(
         )
     if any(copies for copies in text_copies.values()):
         raise SynchronySourceError("unmatched_dated_text_line")
+    linked_lines = {(line.page, line.line) for line, _suffix in accounts}
+    linked_lines.update((item[0].page, item[0].line) for item in balances.values())
+    linked_lines.update(
+        (fragment.location.page, fragment.location.line)
+        for row in rows
+        for fragment in row.fragments
+        if fragment.location.kind == "pdf_line"
+    )
+    linked_lines.update(
+        (item.location.page, item.location.line) for item in dispositions if item.location.kind == "pdf_line"
+    )
+    for line in text.lines:
+        if (line.page, line.line) in linked_lines or MONEY_IN_TEXT.search(line.normalized) is None:
+            continue
+        matches = [item for item in rule.monetary_text_dispositions if line.normalized.startswith(item.prefix)]
+        if len(matches) != 1:
+            raise SynchronySourceError("unclassified_monetary_text_line")
+        dispositions.append(SourceDisposition(code=matches[0].code, location=_line(line), raw_values=(line.raw,)))
     opening = balances["opening"][4]
     closing = balances["closing"][4]
     if opening + sum(row.amount.minor for row in rows) != closing:
