@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pytest
 from parsetrail.core.source_evidence import SourceEvidence
+from parsetrail.core.v2_pdf_lines import page_lines
 
 from devtools.parser_engine_pilot.card_lines import parse_card_lines
 from devtools.parser_engine_pilot.card_source_output import from_card
-from devtools.parser_engine_pilot.pdf_lines import page_lines
 from devtools.parser_engine_pilot.test_card_lines import pages
 
 DEFINITION = Path(__file__).with_name("chase-card-pilot-definition.json").read_bytes()

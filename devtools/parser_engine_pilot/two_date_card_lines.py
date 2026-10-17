@@ -20,11 +20,11 @@ from parsetrail.core.source_evidence import (
     StatementPayload,
     TextValue,
 )
+from parsetrail.core.v2_pdf_lines import PageLine, PDFLineEvidence
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from devtools.parser_engine_pilot.money_operations import usd_trailing_credit_2dp_minor_v1
 from devtools.parser_engine_pilot.partial_dates import PartialDateError, resolve_month_day
-from devtools.parser_engine_pilot.pdf_lines import PageLine, PDFLineEvidence
 
 ENGINE_VERSION = "two-date-card-lines-pilot-1"
 MAX_DEFINITION_BYTES = 64 * 1024

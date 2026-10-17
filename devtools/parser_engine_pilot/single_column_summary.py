@@ -21,10 +21,10 @@ from parsetrail.core.source_evidence import (
     StatementPayload,
     TextValue,
 )
+from parsetrail.core.v2_pdf_lines import PageLine, PDFLineEvidence
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from devtools.parser_engine_pilot.money_operations import usd_symbol_minor_v1
-from devtools.parser_engine_pilot.pdf_lines import PageLine, PDFLineEvidence
 
 ENGINE_VERSION = "single-column-summary-pilot-1"
 MAX_DEFINITION_BYTES = 64 * 1024

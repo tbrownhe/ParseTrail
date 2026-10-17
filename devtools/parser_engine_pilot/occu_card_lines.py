@@ -20,11 +20,11 @@ from parsetrail.core.source_evidence import (
     StatementPayload,
     TextValue,
 )
+from parsetrail.core.v2_pdf_lines import ADAPTER_VERSION, PageLine, PDFLineEvidence
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from devtools.parser_engine_pilot.money_operations import usd_or_decimal_2dp_minor_v1
 from devtools.parser_engine_pilot.partial_dates import PartialDateError, resolve_month_day
-from devtools.parser_engine_pilot.pdf_lines import ADAPTER_VERSION, PageLine, PDFLineEvidence
 
 ENGINE_VERSION = "occu-card-lines-pilot-1"
 MAX_DEFINITION_BYTES = 64 * 1024

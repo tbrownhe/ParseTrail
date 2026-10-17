@@ -6,6 +6,7 @@ import hashlib
 import math
 from collections.abc import Callable
 
+from parsetrail.core.v2_pdf_lines import MAX_PDF_BYTES
 from parsetrail.core.v2_worker_limits import MAX_OUTPUT_BYTES, WorkerError, WorkerLimits, run_worker
 from pydantic import TypeAdapter, ValidationError
 
@@ -16,7 +17,6 @@ from devtools.parser_engine_pilot.citi_table import (
     MAX_TABLE_ROWS,
     CitiTableEvidence,
 )
-from devtools.parser_engine_pilot.pdf_lines import MAX_PDF_BYTES
 
 _EVIDENCE_ADAPTER = TypeAdapter(CitiTableEvidence)
 

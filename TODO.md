@@ -140,12 +140,15 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   adapter and worker now live in the client package; a windowed Windows x64
   probe passed its synthetic worker pipe and parent boundary. No referenced
   archive fixture or Intel Mac native limit check exists. A read-only Wells
-  Fargo business table
-  pass supports a finite page-local geometry pilot; its raw cells and dated
-  candidate count match all referenced archive sources but do not establish
-  capture. A bounded worker now reproduces the in-process cells/regions on 21
+  Fargo business table pass supports a finite page-local geometry pilot; its
+  raw cells and dated candidate count match all referenced archive sources but
+  do not establish capture. A bounded worker now reproduces the in-process
+  cells/regions on 21
   archive PDFs (1,029 rows), but Intel Mac native limits and runtime integration
-  remain open.
+  remain open. The shared PDF line and continuation operations, anchored table
+  engine, Wells table engine and their workers now live in the client package.
+  A windowed Windows x64 probe passed both table worker pipes and parent
+  resource boundaries on synthetic evidence.
   A finite Wells business statement operation now joins declared description
   continuations and exact printed summary fields. All 29 business PDFs in the
   authorized closed-copy profile matched the accepted reader on account,

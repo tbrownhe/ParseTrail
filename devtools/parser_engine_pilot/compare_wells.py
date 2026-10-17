@@ -10,9 +10,8 @@ from pathlib import Path
 import pdfplumber
 from loguru import logger
 from parsetrail.core.utils import PDFReader
+from parsetrail.core.v2_wells_table import extract_table_rows
 from parsetrail.plugins.pdf_wfbankbus_202110 import Parser
-
-from devtools.parser_engine_pilot.wells_table import extract_table_rows
 
 DEFINITION = Path(__file__).with_name("wells-table-pilot-definition.json")
 

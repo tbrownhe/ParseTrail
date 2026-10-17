@@ -14,11 +14,11 @@ from statistics import median
 from typing import Literal
 
 from parsetrail.core.parser_classification import validate_routing_metadata
+from parsetrail.core.v2_table_continuations import ContinuationRule
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from devtools.parser_engine_pilot.channel_occurrences import OccurrenceRule
 from devtools.parser_engine_pilot.money_operations import USD_SYMBOL
-from devtools.parser_engine_pilot.table_continuations import ContinuationRule
 
 
 class CitiLayoutError(ValueError):

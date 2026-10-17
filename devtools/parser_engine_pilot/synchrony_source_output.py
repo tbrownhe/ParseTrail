@@ -20,17 +20,17 @@ from parsetrail.core.source_evidence import (
     StatementPayload,
     TextValue,
 )
-
-from devtools.parser_engine_pilot.anchored_table import (
+from parsetrail.core.v2_anchored_table import (
     AnchoredRow,
     AnchoredTableEvidence,
     TableSingleDateCardRule,
     load_definition,
 )
+from parsetrail.core.v2_pdf_lines import ADAPTER_VERSION, PageLine, PDFLineEvidence
+from parsetrail.core.v2_table_continuations import ContinuationError, RawTableRow, assemble
+
 from devtools.parser_engine_pilot.money_operations import usd_symbol_minor_v1
 from devtools.parser_engine_pilot.partial_dates import PartialDateError, resolve_month_day
-from devtools.parser_engine_pilot.pdf_lines import ADAPTER_VERSION, PageLine, PDFLineEvidence
-from devtools.parser_engine_pilot.table_continuations import ContinuationError, RawTableRow, assemble
 
 ENGINE_VERSION = "synchrony-table-source-pilot-1"
 DATE = re.compile(r"\d{2}/\d{2}\Z")

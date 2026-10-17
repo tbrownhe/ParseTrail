@@ -9,19 +9,19 @@ from pathlib import Path
 
 import pytest
 from parsetrail.core.source_evidence import SourceEvidence
-from parsetrail.core.v2_profile_store import V2ProfileStore
-
-from devtools.parser_engine_pilot.anchored_table import (
+from parsetrail.core.v2_anchored_table import (
     ENGINE_VERSION as TABLE_ENGINE_VERSION,
 )
-from devtools.parser_engine_pilot.anchored_table import (
+from parsetrail.core.v2_anchored_table import (
     AnchoredPage,
     AnchoredRow,
     AnchoredTableDefinition,
     AnchoredTableError,
     AnchoredTableEvidence,
 )
-from devtools.parser_engine_pilot.pdf_lines import page_lines
+from parsetrail.core.v2_pdf_lines import page_lines
+from parsetrail.core.v2_profile_store import V2ProfileStore
+
 from devtools.parser_engine_pilot.synchrony_source_output import SynchronySourceError, from_synchrony_table
 
 DEFINITION = Path(__file__).with_name("synchrony-table-pilot-definition.json").read_bytes()

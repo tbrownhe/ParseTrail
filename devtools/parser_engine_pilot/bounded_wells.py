@@ -5,16 +5,15 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable
 
-from parsetrail.core.v2_worker_limits import MAX_OUTPUT_BYTES, WorkerError, WorkerLimits, run_worker
-from pydantic import TypeAdapter, ValidationError
-
-from devtools.parser_engine_pilot.pdf_lines import MAX_PDF_BYTES
-from devtools.parser_engine_pilot.wells_table import (
+from parsetrail.core.v2_pdf_lines import MAX_PDF_BYTES
+from parsetrail.core.v2_wells_table import (
     MAX_DEFINITION_BYTES,
     MAX_TABLE_ROWS,
     WellsTableEvidence,
     load_definition,
 )
+from parsetrail.core.v2_worker_limits import MAX_OUTPUT_BYTES, WorkerError, WorkerLimits, run_worker
+from pydantic import TypeAdapter, ValidationError
 
 _EVIDENCE_ADAPTER = TypeAdapter(WellsTableEvidence)
 
@@ -34,7 +33,7 @@ def extract_bounded_wells(
     declaration, definition_hash = load_definition(definition)
     payload = len(definition).to_bytes(4, "big") + definition + source
     output = run_worker(
-        "devtools.parser_engine_pilot.wells_worker",
+        "pdf_wells_table",
         payload,
         output_limit=MAX_OUTPUT_BYTES,
         limits=limits,

@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
-from devtools.parser_engine_pilot.table_continuations import (
+from parsetrail.core.v2_table_continuations import (
     ContinuationError,
     ContinuationRule,
     RawTableRow,
     assemble,
 )
+from pydantic import ValidationError
 
 
 def test_citi_and_synchrony_amount_on_last_row_shape() -> None:

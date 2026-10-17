@@ -51,5 +51,12 @@ def test_frozen_launch_uses_app_entry_and_refuses_pilot_only_workers() -> None:
     xlsx_command, xlsx_cwd = _worker_launch("xlsx_evidence", 512 * 1024 * 1024, frozen=True, executable="app.exe")
     assert xlsx_command == ["app.exe", "--v2-parser-worker", "xlsx-evidence", "536870912"]
     assert xlsx_cwd is None
+    anchored_command, anchored_cwd = _worker_launch(
+        "pdf_anchored_table", 512 * 1024 * 1024, frozen=True, executable="app.exe"
+    )
+    wells_command, wells_cwd = _worker_launch("pdf_wells_table", 512 * 1024 * 1024, frozen=True, executable="app.exe")
+    assert anchored_command == ["app.exe", "--v2-parser-worker", "anchored-table", "536870912"]
+    assert wells_command == ["app.exe", "--v2-parser-worker", "wells-table", "536870912"]
+    assert anchored_cwd is None and wells_cwd is None
     with pytest.raises(WorkerError, match="unsupported_worker"):
         _worker_launch("devtools.parser_engine_pilot.citi_worker", 512 * 1024 * 1024, frozen=True, executable="app.exe")

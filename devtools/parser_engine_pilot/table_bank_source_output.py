@@ -20,16 +20,16 @@ from parsetrail.core.source_evidence import (
     StatementPayload,
     TextValue,
 )
-
-from devtools.parser_engine_pilot.anchored_table import (
+from parsetrail.core.v2_anchored_table import (
     AnchoredRow,
     AnchoredTableEvidence,
     TableBankStatementRule,
     load_definition,
 )
+from parsetrail.core.v2_pdf_lines import ADAPTER_VERSION, PageLine, PDFLineEvidence
+
 from devtools.parser_engine_pilot.money_operations import USD_TRAILING_CREDIT_2DP, usd_trailing_credit_2dp_minor_v1
 from devtools.parser_engine_pilot.partial_dates import PartialDateError, resolve_month_day
-from devtools.parser_engine_pilot.pdf_lines import ADAPTER_VERSION, PageLine, PDFLineEvidence
 
 ENGINE_VERSION = "table-bank-source-pilot-1"
 DATE = re.compile(r"\d{2}/\d{2}\Z")

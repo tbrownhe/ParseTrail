@@ -13,8 +13,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
-from devtools.parser_engine_pilot.pdf_lines import MAX_PAGES, MAX_PDF_BYTES
-from devtools.parser_engine_pilot.table_continuations import ContinuationRule
+from parsetrail.core.v2_pdf_lines import MAX_PAGES, MAX_PDF_BYTES
+from parsetrail.core.v2_table_continuations import ContinuationRule
 
 ENGINE_VERSION = "wells-table-pilot-1"
 MAX_DEFINITION_BYTES = 64 * 1024

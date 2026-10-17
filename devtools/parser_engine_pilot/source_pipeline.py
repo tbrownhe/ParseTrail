@@ -11,6 +11,7 @@ from typing import Literal
 
 from parsetrail.core.source_evidence import SourceEvidence
 from parsetrail.core.v2_parser_engine import EngineError, parse_csv
+from parsetrail.core.v2_pdf_lines import page_lines
 from parsetrail.core.v2_worker_limits import WorkerError
 
 from devtools.parser_engine_pilot.bounded_anchored_table import extract_bounded_anchored_table
@@ -30,7 +31,6 @@ from devtools.parser_engine_pilot.legacy_citi_lines import parse_legacy_citi
 from devtools.parser_engine_pilot.loan_history_lines import parse_loan_history
 from devtools.parser_engine_pilot.occu_bank_lines import OccuBankError, parse_occu_bank
 from devtools.parser_engine_pilot.occu_card_lines import parse_occu_card
-from devtools.parser_engine_pilot.pdf_lines import page_lines
 from devtools.parser_engine_pilot.savings_lines import parse_savings_lines, parse_summary_savings_lines
 from devtools.parser_engine_pilot.single_column_summary import parse_plan_label_summary, parse_single_column_summary
 from devtools.parser_engine_pilot.synchrony_source_output import from_synchrony_table

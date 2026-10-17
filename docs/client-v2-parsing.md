@@ -215,7 +215,7 @@ foreign multiline pattern. A separate scan found 71 other dated lines outside
 the simple text-row matcher, including foreign multiline rows and legal-text
 interleaving. The repeated row-continuation behavior belongs in a bounded engine
 operation: Citi, Synchrony, LendingClub and Wells all use it. A strict
-[table-continuation pilot](../devtools/parser_engine_pilot/table_continuations.py)
+[table-continuation pilot](../client/src/parsetrail/core/v2_table_continuations.py)
 now covers two finite shapes with column selectors and source-row references.
 The [shared occurrence pilot](../devtools/parser_engine_pilot/channel_occurrences.py)
 now pairs exact table/text copies one to one under a strict same-page rule and
@@ -245,7 +245,7 @@ recent-layout Citi PDFs without changing source hashes. Wells and Citi word/tabl
 extraction now use the same boundary. The [bounded Citi table pilot](../devtools/parser_engine_pilot/bounded_citi.py)
 returned exactly the current reader's 543 raw table/interest rows and retained
 page, row and table-region locations on those ten archive PDFs. Their hashes
-were unchanged. The [shared continuation operation](../devtools/parser_engine_pilot/table_continuations.py)
+were unchanged. The [shared continuation operation](../client/src/parsetrail/core/v2_table_continuations.py)
 now retains 36 post-amount travel/lodging detail rows separately from 471
 table transactions. The [Citi date/money adapter](../devtools/parser_engine_pilot/citi_table_candidates.py)
 matches the current table rows in order without promoting those details to

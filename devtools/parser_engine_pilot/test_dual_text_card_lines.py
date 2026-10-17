@@ -8,13 +8,13 @@ from pathlib import Path
 
 import pytest
 from parsetrail.core.source_evidence import SourceEvidence
+from parsetrail.core.v2_pdf_lines import page_lines
 
 from devtools.parser_engine_pilot.dual_text_card_lines import (
     DualTextCardDefinition,
     DualTextCardError,
     parse_dual_text_card,
 )
-from devtools.parser_engine_pilot.pdf_lines import page_lines
 
 DEFINITION = Path(__file__).with_name("usbank-rei-card-pilot-definition.json").read_bytes()
 

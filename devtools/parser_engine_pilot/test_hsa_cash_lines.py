@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 
 import pytest
+from parsetrail.core.v2_pdf_lines import page_lines
 
 from devtools.parser_engine_pilot.hsa_cash_lines import (
     MAX_DATED_LINE_CHARS,
@@ -13,7 +14,6 @@ from devtools.parser_engine_pilot.hsa_cash_lines import (
     HsaCashError,
     parse_cash_section,
 )
-from devtools.parser_engine_pilot.pdf_lines import page_lines
 
 DEFINITION = Path(__file__).with_name("hsa-cash-pilot-definition.json")
 

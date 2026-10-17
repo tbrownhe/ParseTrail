@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 from parsetrail.core.source_evidence import SourceEvidence
+from parsetrail.core.v2_pdf_lines import page_lines
 
-from devtools.parser_engine_pilot.pdf_lines import page_lines
 from devtools.parser_engine_pilot.savings_lines import (
     SavingsLineError,
     SummarySavingsDefinition,

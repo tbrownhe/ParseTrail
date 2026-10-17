@@ -7,8 +7,9 @@ import math
 from dataclasses import dataclass
 from typing import Literal
 
+from parsetrail.core.v2_pdf_lines import MAX_PAGES, MAX_PDF_BYTES
+
 from devtools.parser_engine_pilot.citi_layout import INTEREST_LINE, TRANSACTION_DATE, locate_table
-from devtools.parser_engine_pilot.pdf_lines import MAX_PAGES, MAX_PDF_BYTES
 
 MAX_CHARS_PER_PAGE = 200_000
 MAX_TABLE_ROWS = 20_000

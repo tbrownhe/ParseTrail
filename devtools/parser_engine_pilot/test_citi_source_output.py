@@ -7,6 +7,7 @@ from datetime import date
 
 import pytest
 from parsetrail.core.source_evidence import SourceEvidence
+from parsetrail.core.v2_table_continuations import JoinedTableRow, RawTableRow
 
 from devtools.parser_engine_pilot.channel_occurrences import Candidate
 from devtools.parser_engine_pilot.citi_channels import CitiResolution, ResolvedRow
@@ -17,7 +18,6 @@ from devtools.parser_engine_pilot.citi_source_output import CitiOutputError, fro
 from devtools.parser_engine_pilot.citi_statement_header import CitiStatementHeader, PrintedBalance
 from devtools.parser_engine_pilot.citi_table import CitiTableEvidence, CitiTablePage, CitiTableRow
 from devtools.parser_engine_pilot.citi_table_candidates import CitiTableCandidates
-from devtools.parser_engine_pilot.table_continuations import JoinedTableRow, RawTableRow
 
 
 def sample() -> CitiEvidence:

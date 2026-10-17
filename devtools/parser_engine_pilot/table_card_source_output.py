@@ -21,13 +21,13 @@ from parsetrail.core.source_evidence import (
     StatementPayload,
     TextValue,
 )
+from parsetrail.core.v2_anchored_table import AnchoredRow, AnchoredTableEvidence, load_definition
+from parsetrail.core.v2_pdf_lines import ADAPTER_VERSION, PDFLineEvidence
+from parsetrail.core.v2_table_continuations import ContinuationError, RawTableRow, assemble
 
-from devtools.parser_engine_pilot.anchored_table import AnchoredRow, AnchoredTableEvidence, load_definition
 from devtools.parser_engine_pilot.citi_statement_header import CitiHeaderError, parse_header
 from devtools.parser_engine_pilot.money_operations import usd_symbol_minor_v1
 from devtools.parser_engine_pilot.partial_dates import PartialDateError, resolve_month_day
-from devtools.parser_engine_pilot.pdf_lines import ADAPTER_VERSION, PDFLineEvidence
-from devtools.parser_engine_pilot.table_continuations import ContinuationError, RawTableRow, assemble
 
 ENGINE_VERSION = "table-card-source-pilot-1"
 MONEY = re.compile(r"-?\$(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)\.[0-9]{2}\Z")

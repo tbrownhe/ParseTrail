@@ -10,9 +10,12 @@ from io import BytesIO
 from parsetrail.core.v2_worker_limits import MAX_INPUT_BYTES, MAX_OUTPUT_BYTES, enforce_child_memory_limit
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else argv
     try:
-        enforce_child_memory_limit(sys.argv[1])
+        if len(args) != 1:
+            raise ValueError("worker_arguments")
+        enforce_child_memory_limit(args[0])
         payload = sys.stdin.buffer.read(MAX_INPUT_BYTES + 1)
         if len(payload) < 5 or len(payload) > MAX_INPUT_BYTES:
             return 1
@@ -22,7 +25,7 @@ def main() -> int:
         definition, source = payload[4 : 4 + size], payload[4 + size :]
         import pdfplumber
 
-        from devtools.parser_engine_pilot.anchored_table import extract_anchored_table
+        from parsetrail.core.v2_anchored_table import extract_anchored_table
 
         with pdfplumber.open(BytesIO(source)) as pdf:
             evidence = extract_anchored_table(

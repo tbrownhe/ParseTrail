@@ -11,9 +11,8 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Literal
 
+from parsetrail.core.v2_pdf_lines import PageLine, PDFLineEvidence
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
-
-from devtools.parser_engine_pilot.pdf_lines import PageLine, PDFLineEvidence
 
 ENGINE_VERSION = "card-lines-pilot-1"
 MAX_DEFINITION_BYTES = 64 * 1024

@@ -20,12 +20,12 @@ from parsetrail.core.source_evidence import (
     StatementPayload,
     TextValue,
 )
+from parsetrail.core.v2_pdf_lines import PageLine, PDFLineEvidence
+from parsetrail.core.v2_table_continuations import RawTableRow, assemble
+from parsetrail.core.v2_wells_table import TableRow, WellsTableEvidence, load_definition
 
 from devtools.parser_engine_pilot.money_operations import usd_or_decimal_2dp_minor_v1
 from devtools.parser_engine_pilot.partial_dates import PartialDateError, resolve_slash_month_day
-from devtools.parser_engine_pilot.pdf_lines import PageLine, PDFLineEvidence
-from devtools.parser_engine_pilot.table_continuations import RawTableRow, assemble
-from devtools.parser_engine_pilot.wells_table import TableRow, WellsTableEvidence, load_definition
 
 END_DATE = re.compile(r"(?P<date>[A-Z][a-z]+\s+\d{1,2},\s+\d{4})")
 PARTIAL = r"\d{1,2}/\d{1,2}"

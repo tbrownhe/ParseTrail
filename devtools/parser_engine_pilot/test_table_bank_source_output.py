@@ -8,16 +8,16 @@ from pathlib import Path
 
 import pytest
 from parsetrail.core.source_evidence import SourceEvidence
-
-from devtools.parser_engine_pilot.anchored_table import (
+from parsetrail.core.v2_anchored_table import (
     ENGINE_VERSION as TABLE_VERSION,
 )
-from devtools.parser_engine_pilot.anchored_table import (
+from parsetrail.core.v2_anchored_table import (
     AnchoredPage,
     AnchoredRow,
     AnchoredTableEvidence,
 )
-from devtools.parser_engine_pilot.pdf_lines import page_lines
+from parsetrail.core.v2_pdf_lines import page_lines
+
 from devtools.parser_engine_pilot.table_bank_source_output import TableBankError, from_anchored_bank
 
 DEFINITION = Path(__file__).with_name("lendingclub-table-pilot-definition.json").read_bytes()

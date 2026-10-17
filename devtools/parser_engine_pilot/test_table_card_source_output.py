@@ -8,17 +8,17 @@ from pathlib import Path
 
 import pytest
 from parsetrail.core.source_evidence import SourceEvidence
-
-from devtools.parser_engine_pilot.anchored_table import (
+from parsetrail.core.v2_anchored_table import (
     ENGINE_VERSION as TABLE_VERSION,
 )
-from devtools.parser_engine_pilot.anchored_table import (
+from parsetrail.core.v2_anchored_table import (
     AnchoredPage,
     AnchoredRow,
     AnchoredTableDefinition,
     AnchoredTableEvidence,
 )
-from devtools.parser_engine_pilot.pdf_lines import page_lines
+from parsetrail.core.v2_pdf_lines import page_lines
+
 from devtools.parser_engine_pilot.table_card_source_output import TableCardError, from_anchored_card
 
 DEFINITION = Path(__file__).with_name("middle-citi-table-pilot-definition.json").read_bytes()

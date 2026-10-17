@@ -7,13 +7,13 @@ from pathlib import Path
 
 import pytest
 from parsetrail.core.source_evidence import SourceEvidence
+from parsetrail.core.v2_pdf_lines import page_lines
 
 from devtools.parser_engine_pilot.legacy_citi_lines import (
     LegacyCitiDefinition,
     LegacyCitiError,
     parse_legacy_citi,
 )
-from devtools.parser_engine_pilot.pdf_lines import page_lines
 
 DEFINITION = Path(__file__).with_name("legacy-citi-pilot-definition.json").read_bytes()
 

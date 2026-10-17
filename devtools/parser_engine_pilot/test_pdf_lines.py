@@ -5,9 +5,8 @@ from __future__ import annotations
 import hashlib
 
 import pytest
-
-from devtools.parser_engine_pilot import pdf_lines
-from devtools.parser_engine_pilot.pdf_lines import PDFLineError, page_lines
+from parsetrail.core import v2_pdf_lines as pdf_lines
+from parsetrail.core.v2_pdf_lines import PDFLineError, page_lines
 
 
 def test_page_locations_keep_raw_text_and_replay_provenance() -> None:

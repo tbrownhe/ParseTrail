@@ -21,10 +21,10 @@ from parsetrail.core.source_evidence import (
     StatementPayload,
     TextValue,
 )
+from parsetrail.core.v2_pdf_lines import PageLine, PDFLineEvidence
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
 from devtools.parser_engine_pilot.partial_dates import PartialDateError, resolve_month_day
-from devtools.parser_engine_pilot.pdf_lines import PageLine, PDFLineEvidence
 
 ENGINE_VERSION = "savings-lines-pilot-1"
 MAX_DEFINITION_BYTES = 64 * 1024

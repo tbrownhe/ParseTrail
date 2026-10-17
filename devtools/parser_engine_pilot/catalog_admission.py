@@ -9,11 +9,12 @@ from __future__ import annotations
 import json
 from collections.abc import Callable
 
+from parsetrail.core import v2_anchored_table as anchored_table
 from parsetrail.core import v2_parser_engine as engine
+from parsetrail.core import v2_wells_table as wells_table
 from parsetrail.core.v2_data_catalog import DefinitionIdentity
 
 from devtools.parser_engine_pilot import (
-    anchored_table,
     card_lines,
     citi_layout,
     dual_text_card_lines,
@@ -28,7 +29,6 @@ from devtools.parser_engine_pilot import (
     transamerica_summary_lines,
     two_date_card_lines,
     wells_loan_lines,
-    wells_table,
 )
 
 MAX_DEFINITION_BYTES = 64 * 1024

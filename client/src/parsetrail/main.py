@@ -57,6 +57,14 @@ def main() -> int:
             from parsetrail.core.v2_xlsx_worker import main as worker_main
 
             return worker_main(sys.argv[3:])
+        if sys.argv[2:3] == ["anchored-table"]:
+            from parsetrail.core.v2_anchored_table_worker import main as worker_main
+
+            return worker_main(sys.argv[3:])
+        if sys.argv[2:3] == ["wells-table"]:
+            from parsetrail.core.v2_wells_table_worker import main as worker_main
+
+            return worker_main(sys.argv[3:])
         from parsetrail.core.v2_pdf_text_worker import main as worker_main
 
         return worker_main(sys.argv[2:])

@@ -49,7 +49,8 @@ Intel Mac native limits remain untested. A windowed Windows x64 probe ran the
 installed XLSX worker through the app entry and parent resource boundary;
 ordinary runtime import is still open.
 
-`pdf_lines.py` is a separate P2-3 provenance experiment for text already
+The installed [`v2_pdf_lines.py`](../../client/src/parsetrail/core/v2_pdf_lines.py)
+is a separate P2-3 provenance experiment for text already
 extracted by a trusted PDF reader. It binds each raw/normalized line to the
 source hash, extractor version, page and line, with in-memory page/text/line
 limits and cancellation. It does not open or decode a PDF, select transaction
@@ -222,7 +223,8 @@ activity. All 135 snapshots reopened from a temporary V2 profile with
 unchanged source hashes. Complete monetary-line dispositions, full page
 capture, signed routing and native acceptance remain open.
 
-`anchored_table.py` and its bounded worker implement a reusable PDF table
+The installed [`v2_anchored_table.py`](../../client/src/parsetrail/core/v2_anchored_table.py)
+and its bounded worker implement a reusable PDF table
 operation: strict declarations name header words and finite column edge or
 midpoint rules, with capped row cells, page regions, source hashes and worker
 limits. The middle Citi definition matched the accepted parser's selected
@@ -327,7 +329,8 @@ disclosures. They remain unclassified and `capture_verified` is false. This
 family is absent from the bounded source-import entry point until those
 monetary lines have accepted dispositions.
 
-`wells_table.py` pilots one named, finite page-local geometry operation under
+The installed [`v2_wells_table.py`](../../client/src/parsetrail/core/v2_wells_table.py)
+pilots one named, finite page-local geometry operation under
 [`wells-table-declaration-schema-v1.json`](wells-table-declaration-schema-v1.json).
 It finds the printed five-word header on each table page, derives column lines
 from those words, and retains raw six-cell rows with page/region references.
@@ -416,7 +419,8 @@ sources and retained page, row and table-region locations. Synthetic PDF parity
 and redacted invalid-source refusal also pass. Runtime integration and Intel
 Mac native limits remain open.
 
-[`table_continuations.py`](table_continuations.py) is a shared finite operation
+The installed [`v2_table_continuations.py`](../../client/src/parsetrail/core/v2_table_continuations.py)
+is a shared finite operation
 pilot over already decoded table cells. Its strict declaration selects start
 and break columns, description and optional amount columns, one of three
 continuation modes, a maximum group size and cross-page behavior. It retains

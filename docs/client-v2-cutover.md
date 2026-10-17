@@ -120,12 +120,16 @@ unchanged source hashes. The Citi word/table pilot now also uses that worker
 boundary: 543 raw rows matched the current extractor across ten recent-layout
 archive PDFs, with unchanged hashes. Full page capture, runtime integration and
 Intel Mac native checks remain open, so this does not admit PDFs to runtime imports.
+The shared PDF line and continuation operations, anchored table engine, Wells
+table engine and their workers now live in the client package. A windowed
+Windows x64 probe passed both table worker pipes and parent resource
+boundaries on synthetic evidence.
 The three PDF text layouts, first-page date annotation decoder and shared
 worker limit runner now live in the installed client package. The app routes a
 fixed worker argument before profile or GUI bootstrap. A windowed Windows x64
 probe passed both worker pipes, a positive annotation decode and native
 timeout. The client build scripts now gate the frozen text and annotation
-pipes. The other pilot workers remain source-only and are refused in a frozen
+pipes. The Citi table worker remains source-only and is refused in a frozen
 launch. Intel Mac native checks remain open.
 The read-only Citi audit now feeds its candidate resolver from the bounded text
 and table workers. The shared continuation operation forms 471 table rows and

@@ -7,10 +7,10 @@ from pathlib import Path
 
 import pytest
 from parsetrail.core.source_evidence import SourceEvidence
+from parsetrail.core.v2_anchored_table import ENGINE_VERSION as TABLE_VERSION
+from parsetrail.core.v2_anchored_table import AnchoredPage, AnchoredRow, AnchoredTableEvidence
+from parsetrail.core.v2_pdf_lines import page_lines
 
-from devtools.parser_engine_pilot.anchored_table import ENGINE_VERSION as TABLE_VERSION
-from devtools.parser_engine_pilot.anchored_table import AnchoredPage, AnchoredRow, AnchoredTableEvidence
-from devtools.parser_engine_pilot.pdf_lines import page_lines
 from devtools.parser_engine_pilot.wells_personal_source_output import WellsPersonalError, from_wells_personal
 
 DEFINITION = Path(__file__).with_name("wells-personal-table-pilot-definition.json").read_bytes()

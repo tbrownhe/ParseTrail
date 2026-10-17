@@ -7,8 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-
-from devtools.parser_engine_pilot.wells_table import (
+from parsetrail.core.v2_wells_table import (
     WellsTableDefinition,
     WellsTableError,
     extract_table_rows,
