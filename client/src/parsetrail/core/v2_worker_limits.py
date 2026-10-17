@@ -19,7 +19,7 @@ WorkerModule = Literal[
     "pdf_text_simple",
     "pdf_text_fixed",
     "pdf_text_default",
-    "devtools.parser_engine_pilot.pdf_annotation_worker",
+    "pdf_annotation_period",
     "devtools.parser_engine_pilot.anchored_table_worker",
     "devtools.parser_engine_pilot.xlsx_worker",
     "devtools.parser_engine_pilot.wells_worker",
@@ -31,7 +31,6 @@ PDF_TEXT_LAYOUTS = {
     "pdf_text_default": "default",
 }
 PILOT_WORKERS = {
-    "devtools.parser_engine_pilot.pdf_annotation_worker",
     "devtools.parser_engine_pilot.anchored_table_worker",
     "devtools.parser_engine_pilot.xlsx_worker",
     "devtools.parser_engine_pilot.wells_worker",
@@ -169,6 +168,13 @@ def _worker_launch(
             else [executable, "-m", "parsetrail.core.v2_pdf_text_worker", layout, str(memory_bytes)]
         )
         return command, None
+    if module == "pdf_annotation_period":
+        command = (
+            [executable, "--v2-parser-worker", "annotation-period", str(memory_bytes)]
+            if frozen
+            else [executable, "-m", "parsetrail.core.v2_pdf_annotation_worker", str(memory_bytes)]
+        )
+        return command, None
     if frozen or module not in PILOT_WORKERS:
         raise WorkerError("unsupported_worker")
     return [executable, "-m", module, str(memory_bytes)], Path(__file__).resolve().parents[4]
@@ -183,7 +189,7 @@ def run_worker(
     cancelled: Callable[[], bool] | None = None,
 ) -> bytes:
     """Run only a fixed local decoder module behind native resource limits."""
-    if module not in PDF_TEXT_LAYOUTS and module not in PILOT_WORKERS:
+    if module not in PDF_TEXT_LAYOUTS and module != "pdf_annotation_period" and module not in PILOT_WORKERS:
         raise WorkerError("unsupported_worker")
     if not isinstance(payload, bytes) or not payload or len(payload) > MAX_INPUT_BYTES:
         raise WorkerError("input_size")

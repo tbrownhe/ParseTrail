@@ -7,9 +7,8 @@ import re
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from parsetrail.core.v2_pdf_annotation_worker import MAX_OUTPUT_BYTES, MAX_SOURCE_BYTES
 from parsetrail.core.v2_worker_limits import WorkerError, WorkerLimits, run_worker
-
-from devtools.parser_engine_pilot.pdf_annotation_worker import MAX_OUTPUT_BYTES, MAX_SOURCE_BYTES
 
 DATE = re.compile(r"\d{2}/\d{2}/\d{2}\Z")
 
@@ -29,7 +28,7 @@ def decode_pdf_period_annotations(
     if type(source) is not bytes or not source or len(source) > MAX_SOURCE_BYTES:
         raise WorkerError("source_size")
     output = run_worker(
-        "devtools.parser_engine_pilot.pdf_annotation_worker",
+        "pdf_annotation_period",
         source,
         output_limit=MAX_OUTPUT_BYTES,
         limits=limits,

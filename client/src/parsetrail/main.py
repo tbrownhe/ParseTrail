@@ -49,6 +49,10 @@ def run_runtime_smoke_test() -> int:
 # Client entry point
 def main() -> int:
     if sys.argv[1:2] == ["--v2-parser-worker"]:
+        if sys.argv[2:3] == ["annotation-period"]:
+            from parsetrail.core.v2_pdf_annotation_worker import main as worker_main
+
+            return worker_main(sys.argv[3:])
         from parsetrail.core.v2_pdf_text_worker import main as worker_main
 
         return worker_main(sys.argv[2:])

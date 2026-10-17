@@ -41,9 +41,12 @@ def extract(source: bytes) -> tuple[dict[str, str | int], ...]:
         return tuple(dates)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    args = sys.argv[1:] if argv is None else argv
     try:
-        enforce_child_memory_limit(sys.argv[1])
+        if len(args) != 1:
+            raise ValueError("worker_arguments")
+        enforce_child_memory_limit(args[0])
         source = sys.stdin.buffer.read(MAX_SOURCE_BYTES + 1)
         output = json.dumps({"dates": extract(source)}, separators=(",", ":")).encode("utf-8")
         if len(output) > MAX_OUTPUT_BYTES:
