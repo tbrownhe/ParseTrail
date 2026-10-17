@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 from collections import Counter
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -181,12 +182,12 @@ def _dated_start_bijection(resolution: CitiResolution, dated_lines: tuple[DatedL
     return all(occurrences[index] == 1 for index in range(len(resolution.rows)))
 
 
-def read_recent_citi(source: bytes) -> CitiEvidence:
+def read_recent_citi(source: bytes, *, cancelled: Callable[[], bool] | None = None) -> CitiEvidence:
     """Return source-linked candidates; refuse unresolved dated starts."""
-    decoded = decode_pdf(source)
+    decoded = decode_pdf(source, cancelled=cancelled)
     if matching_plugins(_features(decoded.pages, decoded.metadata), _layout_metadata()) != (RECENT_CITI_ID,):
         raise CitiEvidenceError("wrong_or_ambiguous_citi_layout")
-    table_evidence = extract_bounded_citi(source)
+    table_evidence = extract_bounded_citi(source, cancelled=cancelled)
     if len(table_evidence.pages) != len(decoded.pages):
         raise CitiEvidenceError("page_count_mismatch")
     header = parse_header(table_evidence.first_page_chars, decoded.pages)

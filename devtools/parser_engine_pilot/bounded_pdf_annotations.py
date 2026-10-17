@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from devtools.parser_engine_pilot.pdf_annotation_worker import MAX_OUTPUT_BYTES, MAX_SOURCE_BYTES
@@ -21,7 +22,7 @@ class PDFPeriodAnnotation:
 
 
 def decode_pdf_period_annotations(
-    source: bytes, limits: WorkerLimits = WorkerLimits()
+    source: bytes, limits: WorkerLimits = WorkerLimits(), *, cancelled: Callable[[], bool] | None = None
 ) -> tuple[PDFPeriodAnnotation, PDFPeriodAnnotation]:
     """Return two first-page date fields, or refuse incomplete annotation evidence."""
     if type(source) is not bytes or not source or len(source) > MAX_SOURCE_BYTES:
@@ -31,6 +32,7 @@ def decode_pdf_period_annotations(
         source,
         output_limit=MAX_OUTPUT_BYTES,
         limits=limits,
+        cancelled=cancelled,
     )
     try:
         decoded = json.loads(output)

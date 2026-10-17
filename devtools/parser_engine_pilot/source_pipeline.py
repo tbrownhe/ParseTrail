@@ -6,6 +6,7 @@ This pilot does not activate a catalog, write a profile or approve accounting.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
 
@@ -22,7 +23,7 @@ from devtools.parser_engine_pilot.citi_layout import DEFINITION_SHA256
 from devtools.parser_engine_pilot.citi_layout import load_definition as load_citi_definition
 from devtools.parser_engine_pilot.citi_source_output import from_citi
 from devtools.parser_engine_pilot.dual_text_card_lines import parse_dual_text_card
-from devtools.parser_engine_pilot.engine import parse_csv
+from devtools.parser_engine_pilot.engine import EngineError, parse_csv
 from devtools.parser_engine_pilot.hsa_cash_lines import parse_cash_section
 from devtools.parser_engine_pilot.hsa_cash_source_output import from_hsa_cash
 from devtools.parser_engine_pilot.investment_summary_lines import parse_investment_summary
@@ -42,6 +43,7 @@ from devtools.parser_engine_pilot.two_date_card_lines import parse_two_date_card
 from devtools.parser_engine_pilot.wells_loan_lines import parse_wells_loan
 from devtools.parser_engine_pilot.wells_personal_source_output import from_wells_personal
 from devtools.parser_engine_pilot.wells_statement_output import from_wells_business
+from devtools.parser_engine_pilot.worker_limits import WorkerError
 
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_DEFINITION_BYTES = 64 * 1024
@@ -112,7 +114,13 @@ class SourcePipelineError(ValueError):
     """Redacted refusal before source evidence can be stored."""
 
 
-def build_source_evidence(source: bytes, definition: bytes, *, suffix: Literal[".csv", ".pdf"]) -> SourceEvidence:
+def build_source_evidence(
+    source: bytes,
+    definition: bytes,
+    *,
+    suffix: Literal[".csv", ".pdf"],
+    cancelled: Callable[[], bool] | None = None,
+) -> SourceEvidence:
     """Build strict, hash-bound evidence without source/profile writes."""
     if type(source) is not bytes or not 0 < len(source) <= MAX_SOURCE_BYTES:
         raise SourcePipelineError("source_size")
@@ -120,14 +128,16 @@ def build_source_evidence(source: bytes, definition: bytes, *, suffix: Literal["
         raise SourcePipelineError("definition_size")
     if suffix not in {".csv", ".pdf"}:
         raise SourcePipelineError("unsupported_source_kind")
+    if cancelled is not None and cancelled():
+        raise SourcePipelineError("cancelled")
     try:
         if suffix == ".csv":
-            output = from_table(parse_csv(definition, source))
+            output = from_table(parse_csv(definition, source, cancelled=cancelled))
         else:
             digest = hashlib.sha256(definition).hexdigest()
             if digest == DEFINITION_SHA256:
                 load_citi_definition(definition)
-                output = from_citi(read_recent_citi(source))
+                output = from_citi(read_recent_citi(source, cancelled=cancelled))
             elif digest in {
                 CHASE_DEFINITION_SHA256,
                 HAPPEN_DEFINITION_SHA256,
@@ -142,7 +152,7 @@ def build_source_evidence(source: bytes, definition: bytes, *, suffix: Literal["
                 HSA_CASH_DEFINITION_SHA256,
                 SYNCHRONY_DEFINITION_SHA256,
             }:
-                decoded = decode_pdf(source)
+                decoded = decode_pdf(source, cancelled=cancelled)
                 lines = page_lines(source, decoded.pages, extraction_library="pdfplumber-bounded-simple-v1")
                 if digest == CHASE_DEFINITION_SHA256:
                     output = from_card(parse_card_lines(definition, lines), lines)
@@ -168,48 +178,60 @@ def build_source_evidence(source: bytes, definition: bytes, *, suffix: Literal["
                         raise SourcePipelineError("unclassified_cash_window_line")
                     output = from_hsa_cash(cash, lines)
                 elif digest == SYNCHRONY_DEFINITION_SHA256:
-                    output = from_synchrony_table(definition, extract_bounded_anchored_table(definition, source), lines)
+                    output = from_synchrony_table(
+                        definition, extract_bounded_anchored_table(definition, source, cancelled=cancelled), lines
+                    )
                 else:
                     output = parse_summary_savings_lines(definition, lines)
             elif digest == WELLS_DEFINITION_SHA256:
-                decoded = decode_pdf(source)
+                decoded = decode_pdf(source, cancelled=cancelled)
                 lines = page_lines(source, decoded.pages, extraction_library="pdfplumber-bounded-simple-v1")
-                output = from_wells_business(definition, extract_bounded_wells(definition, source), lines)
+                output = from_wells_business(
+                    definition, extract_bounded_wells(definition, source, cancelled=cancelled), lines
+                )
             elif digest == USBANK_DEFINITION_SHA256:
-                simple_pages = decode_pdf(source).pages
-                layout_pages = decode_pdf_layout(source).pages
+                simple_pages = decode_pdf(source, cancelled=cancelled).pages
+                layout_pages = decode_pdf_layout(source, cancelled=cancelled).pages
                 simple = page_lines(source, simple_pages, extraction_library="pdfplumber-bounded-simple-v1")
                 layout = page_lines(source, layout_pages, extraction_library="pdfplumber-bounded-layout-fixed-v1")
                 output = parse_dual_text_card(definition, layout, simple)
             elif digest == OCCU_CARD_DEFINITION_SHA256:
-                pages = decode_pdf_default_layout(source).pages
+                pages = decode_pdf_default_layout(source, cancelled=cancelled).pages
                 lines = page_lines(source, pages, extraction_library="pdfplumber-bounded-layout-default-v1")
                 output = parse_occu_card(definition, lines)
             elif digest == OCCU_BANK_DEFINITION_SHA256:
-                pages = decode_pdf(source).pages
+                pages = decode_pdf(source, cancelled=cancelled).pages
                 lines = page_lines(source, pages, extraction_library="pdfplumber-bounded-simple-v1")
                 try:
                     output = parse_occu_bank(definition, lines)
                 except OccuBankError as error:
                     if str(error) != "missing_annotation_period":
                         raise
-                    output = parse_occu_bank(definition, lines, decode_pdf_period_annotations(source))
+                    output = parse_occu_bank(
+                        definition, lines, decode_pdf_period_annotations(source, cancelled=cancelled)
+                    )
             elif digest == LEGACY_CITI_DEFINITION_SHA256:
-                pages = decode_pdf_default_layout(source).pages
+                pages = decode_pdf_default_layout(source, cancelled=cancelled).pages
                 lines = page_lines(source, pages, extraction_library="pdfplumber-bounded-layout-default-v1")
                 output = parse_legacy_citi(definition, lines)
             elif digest == MIDDLE_CITI_DEFINITION_SHA256:
-                pages = decode_pdf_default_layout(source).pages
+                pages = decode_pdf_default_layout(source, cancelled=cancelled).pages
                 lines = page_lines(source, pages, extraction_library="pdfplumber-bounded-layout-default-v1")
-                output = from_anchored_card(definition, extract_bounded_anchored_table(definition, source), lines)
+                output = from_anchored_card(
+                    definition, extract_bounded_anchored_table(definition, source, cancelled=cancelled), lines
+                )
             elif digest == LENDINGCLUB_TABLE_DEFINITION_SHA256:
-                pages = decode_pdf(source).pages
+                pages = decode_pdf(source, cancelled=cancelled).pages
                 lines = page_lines(source, pages, extraction_library="pdfplumber-bounded-simple-v1")
-                output = from_anchored_bank(definition, extract_bounded_anchored_table(definition, source), lines)
+                output = from_anchored_bank(
+                    definition, extract_bounded_anchored_table(definition, source, cancelled=cancelled), lines
+                )
             elif digest == WELLS_PERSONAL_TABLE_DEFINITION_SHA256:
-                pages = decode_pdf(source).pages
+                pages = decode_pdf(source, cancelled=cancelled).pages
                 lines = page_lines(source, pages, extraction_library="pdfplumber-bounded-simple-v1")
-                output = from_wells_personal(definition, extract_bounded_anchored_table(definition, source), lines)
+                output = from_wells_personal(
+                    definition, extract_bounded_anchored_table(definition, source, cancelled=cancelled), lines
+                )
             else:
                 raise SourcePipelineError("unsupported_definition_revision")
         if (
@@ -220,8 +242,14 @@ def build_source_evidence(source: bytes, definition: bytes, *, suffix: Literal["
         saved = output.model_dump_json().encode("utf-8")
         if len(saved) > MAX_EVIDENCE_BYTES:
             raise SourcePipelineError("evidence_size")
+        if cancelled is not None and cancelled():
+            raise SourcePipelineError("cancelled")
         return SourceEvidence.model_validate_json(saved)
     except SourcePipelineError:
         raise
+    except (EngineError, WorkerError) as error:
+        if (isinstance(error, EngineError) and error.code == "cancelled") or str(error) == "cancelled":
+            raise SourcePipelineError("cancelled") from None
+        raise SourcePipelineError("source_evidence_failed") from None
     except Exception:
         raise SourcePipelineError("source_evidence_failed") from None

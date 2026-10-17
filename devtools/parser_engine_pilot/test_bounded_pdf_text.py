@@ -8,6 +8,7 @@ import sys
 import pytest
 from parsetrail.core.runtime_smoke import _sample_pdf
 
+from devtools.parser_engine_pilot import worker_limits
 from devtools.parser_engine_pilot.bounded_pdf_text import decode_pdf, decode_pdf_default_layout, decode_pdf_layout
 from devtools.parser_engine_pilot.worker_limits import WorkerError, WorkerLimits, _WindowsJob
 
@@ -62,6 +63,29 @@ def test_refuses_oversized_or_invalid_pdf_without_source_in_error() -> None:
 def test_deadline_terminates_worker() -> None:
     with pytest.raises(WorkerError, match="timeout"):
         decode_pdf(_sample_pdf(), WorkerLimits(wall_seconds=0.01))
+
+
+def test_cancellation_terminates_running_worker(monkeypatch) -> None:
+    original_popen = subprocess.Popen
+    children = []
+
+    def slow_child(_command, **kwargs):
+        process = original_popen([sys.executable, "-c", "import time; time.sleep(60)"], **kwargs)
+        children.append(process)
+        return process
+
+    monkeypatch.setattr(worker_limits.subprocess, "Popen", slow_child)
+    checks = 0
+
+    def cancelled() -> bool:
+        nonlocal checks
+        checks += 1
+        return checks >= 3
+
+    with pytest.raises(WorkerError, match="cancelled"):
+        decode_pdf(_sample_pdf(), WorkerLimits(wall_seconds=5), cancelled=cancelled)
+    assert len(children) == 1
+    assert children[0].poll() is not None
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Windows Job Object check")

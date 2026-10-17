@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -23,6 +24,7 @@ def extract_bounded_wells(
     source: bytes,
     *,
     limits: WorkerLimits = WorkerLimits(),
+    cancelled: Callable[[], bool] | None = None,
 ) -> WellsTableEvidence:
     """Extract capped raw cells and regions; no financial rows are admitted."""
     if not isinstance(definition, bytes) or not 0 < len(definition) <= MAX_DEFINITION_BYTES:
@@ -32,7 +34,11 @@ def extract_bounded_wells(
     declaration, definition_hash = load_definition(definition)
     payload = len(definition).to_bytes(4, "big") + definition + source
     output = run_worker(
-        "devtools.parser_engine_pilot.wells_worker", payload, output_limit=MAX_OUTPUT_BYTES, limits=limits
+        "devtools.parser_engine_pilot.wells_worker",
+        payload,
+        output_limit=MAX_OUTPUT_BYTES,
+        limits=limits,
+        cancelled=cancelled,
     )
     try:
         evidence = _EVIDENCE_ADAPTER.validate_json(output, strict=True)

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+from collections.abc import Callable
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -23,7 +24,11 @@ _ADAPTER = TypeAdapter(AnchoredTableEvidence)
 
 
 def extract_bounded_anchored_table(
-    definition: bytes, source: bytes, *, limits: WorkerLimits = WorkerLimits()
+    definition: bytes,
+    source: bytes,
+    *,
+    limits: WorkerLimits = WorkerLimits(),
+    cancelled: Callable[[], bool] | None = None,
 ) -> AnchoredTableEvidence:
     """Decode only checked declaration geometry and capped table cells."""
     if type(definition) is not bytes or not 0 < len(definition) <= MAX_DEFINITION_BYTES:
@@ -33,7 +38,11 @@ def extract_bounded_anchored_table(
     parsed, definition_hash = load_definition(definition)
     payload = len(definition).to_bytes(4, "big") + definition + source
     output = run_worker(
-        "devtools.parser_engine_pilot.anchored_table_worker", payload, output_limit=MAX_OUTPUT_BYTES, limits=limits
+        "devtools.parser_engine_pilot.anchored_table_worker",
+        payload,
+        output_limit=MAX_OUTPUT_BYTES,
+        limits=limits,
+        cancelled=cancelled,
     )
     try:
         evidence = _ADAPTER.validate_json(output, strict=True)

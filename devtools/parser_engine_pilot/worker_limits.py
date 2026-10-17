@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -149,6 +151,7 @@ def run_worker(
     *,
     output_limit: int,
     limits: WorkerLimits = WorkerLimits(),
+    cancelled: Callable[[], bool] | None = None,
 ) -> bytes:
     """Run only a fixed local decoder module behind native resource limits."""
     if module not in {
@@ -168,6 +171,8 @@ def run_worker(
         raise WorkerError("output_limit")
     if sys.platform not in {"win32", "darwin", "linux"}:
         raise WorkerError("unsupported_platform")
+    if cancelled is not None and cancelled():
+        raise WorkerError("cancelled")
     job = _WindowsJob(limits.memory_bytes) if sys.platform == "win32" else None
     process = None
     try:
@@ -180,12 +185,22 @@ def run_worker(
         )
         if job is not None:
             job.attach(process.pid)
-        try:
-            output, _ = process.communicate(input=payload, timeout=limits.wall_seconds)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.communicate()
-            raise WorkerError("timeout") from None
+        deadline = time.monotonic() + limits.wall_seconds
+        pending_input = payload
+        while True:
+            if cancelled is not None and cancelled():
+                raise WorkerError("cancelled")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise WorkerError("timeout")
+            try:
+                output, _ = process.communicate(
+                    input=pending_input,
+                    timeout=min(remaining, 0.1) if cancelled is not None else remaining,
+                )
+                break
+            except subprocess.TimeoutExpired:
+                pending_input = None
         if process.returncode != 0 or not output:
             raise WorkerError("worker_failed")
         if len(output) > output_limit:

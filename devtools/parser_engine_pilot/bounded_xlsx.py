@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -19,6 +20,7 @@ def parse_bounded_xlsx(
     *,
     sheet: str,
     limits: WorkerLimits = DEFAULT_XLSX_LIMITS,
+    cancelled: Callable[[], bool] | None = None,
 ) -> Evidence:
     """Return checked evidence without loading workbook XML in this process."""
     if not isinstance(definition, bytes) or not 0 < len(definition) <= MAX_DEFINITION_BYTES:
@@ -34,7 +36,11 @@ def parse_bounded_xlsx(
         len(definition).to_bytes(4, "big") + len(sheet_bytes).to_bytes(2, "big") + definition + sheet_bytes + source
     )
     output = run_worker(
-        "devtools.parser_engine_pilot.xlsx_worker", payload, output_limit=MAX_OUTPUT_BYTES, limits=limits
+        "devtools.parser_engine_pilot.xlsx_worker",
+        payload,
+        output_limit=MAX_OUTPUT_BYTES,
+        limits=limits,
+        cancelled=cancelled,
     )
     try:
         evidence = _EVIDENCE_ADAPTER.validate_json(output, strict=True)

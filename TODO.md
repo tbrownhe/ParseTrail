@@ -376,8 +376,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   retains revised bytes as a second pending snapshot, and leaves no source or
   observation write after parser failure or post-parse cancellation. It can
   compare a new parse against saved evidence without replacing the snapshot.
-  Parser execution cancellation, admission/routing, archive recovery and UI
-  remain open.
+  The verified-catalog import path now passes cancellation through the bounded
+  worker and CSV row loop. A running worker is killed on cancellation; a
+  cancelled import leaves no source write. Automatic routing, installed-client
+  trust, archive recovery and UI wiring remain open.
 - [ ] **V2-4a–b — Daily review:** create/edit accounts, categories and budgets; connect
   accepted ledger workflows to the application in small increments. Manual values,
   closures and unsupported accounting remain explicit. Owner Windows integration gate.

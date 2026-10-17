@@ -596,6 +596,12 @@ definitions and verifies it through the 2.0 catalog client. This proves the
 current declarations fit the signed format, including Citi's `pilot-2` revision;
 it is not a production signing key, source router, or installed engine.
 
+The shared bounded worker now polls a cancellation callback while decoding and
+terminates its child on cancellation. The source pipeline passes that callback
+to CSV rows and PDF workers; an interrupted catalog import leaves no pending
+source in the temporary profile. This has native Windows worker coverage, but
+the daily import UI and Intel Mac worker acceptance remain separate gates.
+
 For an authorized source, pass its local PDF/CSV path and the matching checked-in
 definition. The launcher reads the source, parses through the bounded pipeline,
 opens a temporary 2.0 profile and deletes it after the dialog closes. It never

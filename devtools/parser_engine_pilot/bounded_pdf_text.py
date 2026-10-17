@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from devtools.parser_engine_pilot.pdf_text_worker import (
@@ -26,10 +27,15 @@ class DecodedPDFText:
     metadata: tuple[tuple[str, str], ...]
 
 
-def _decode_pdf(source: bytes, module: WorkerModule, limits: WorkerLimits) -> DecodedPDFText:
+def _decode_pdf(
+    source: bytes,
+    module: WorkerModule,
+    limits: WorkerLimits,
+    cancelled: Callable[[], bool] | None,
+) -> DecodedPDFText:
     if not isinstance(source, bytes) or not source or len(source) > MAX_SOURCE_BYTES:
         raise WorkerError("source_size")
-    output = run_worker(module, source, output_limit=MAX_OUTPUT_BYTES, limits=limits)
+    output = run_worker(module, source, output_limit=MAX_OUTPUT_BYTES, limits=limits, cancelled=cancelled)
     try:
         decoded = json.loads(output)
     except (ValueError, UnicodeDecodeError):
@@ -66,16 +72,22 @@ def _decode_pdf(source: bytes, module: WorkerModule, limits: WorkerLimits) -> De
     return DecodedPDFText(tuple(pages), tuple(sorted(metadata.items())))
 
 
-def decode_pdf(source: bytes, limits: WorkerLimits = WorkerLimits()) -> DecodedPDFText:
+def decode_pdf(
+    source: bytes, limits: WorkerLimits = WorkerLimits(), *, cancelled: Callable[[], bool] | None = None
+) -> DecodedPDFText:
     """Return capped simple pages and metadata without opening a PDF here."""
-    return _decode_pdf(source, "devtools.parser_engine_pilot.pdf_text_worker", limits)
+    return _decode_pdf(source, "devtools.parser_engine_pilot.pdf_text_worker", limits, cancelled)
 
 
-def decode_pdf_layout(source: bytes, limits: WorkerLimits = WorkerLimits()) -> DecodedPDFText:
+def decode_pdf_layout(
+    source: bytes, limits: WorkerLimits = WorkerLimits(), *, cancelled: Callable[[], bool] | None = None
+) -> DecodedPDFText:
     """Return capped fixed-tolerance layout pages through the same OS boundary."""
-    return _decode_pdf(source, "devtools.parser_engine_pilot.pdf_layout_text_worker", limits)
+    return _decode_pdf(source, "devtools.parser_engine_pilot.pdf_layout_text_worker", limits, cancelled)
 
 
-def decode_pdf_default_layout(source: bytes, limits: WorkerLimits = WorkerLimits()) -> DecodedPDFText:
+def decode_pdf_default_layout(
+    source: bytes, limits: WorkerLimits = WorkerLimits(), *, cancelled: Callable[[], bool] | None = None
+) -> DecodedPDFText:
     """Return capped default-layout pages through the same OS boundary."""
-    return _decode_pdf(source, "devtools.parser_engine_pilot.pdf_default_layout_worker", limits)
+    return _decode_pdf(source, "devtools.parser_engine_pilot.pdf_default_layout_worker", limits, cancelled)

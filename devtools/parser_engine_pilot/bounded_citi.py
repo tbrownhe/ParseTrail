@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import math
+from collections.abc import Callable
 
 from pydantic import TypeAdapter, ValidationError
 
@@ -20,12 +21,21 @@ from devtools.parser_engine_pilot.worker_limits import MAX_OUTPUT_BYTES, WorkerE
 _EVIDENCE_ADAPTER = TypeAdapter(CitiTableEvidence)
 
 
-def extract_bounded_citi(source: bytes, *, limits: WorkerLimits = WorkerLimits()) -> CitiTableEvidence:
+def extract_bounded_citi(
+    source: bytes,
+    *,
+    limits: WorkerLimits = WorkerLimits(),
+    cancelled: Callable[[], bool] | None = None,
+) -> CitiTableEvidence:
     """Extract capped source cells and regions; never post financial rows."""
     if not isinstance(source, bytes) or not 0 < len(source) <= MAX_PDF_BYTES:
         raise WorkerError("source_size")
     output = run_worker(
-        "devtools.parser_engine_pilot.citi_worker", source, output_limit=MAX_OUTPUT_BYTES, limits=limits
+        "devtools.parser_engine_pilot.citi_worker",
+        source,
+        output_limit=MAX_OUTPUT_BYTES,
+        limits=limits,
+        cancelled=cancelled,
     )
     try:
         evidence = _EVIDENCE_ADAPTER.validate_json(output, strict=True)

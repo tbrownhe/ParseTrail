@@ -177,12 +177,17 @@ The isolated [V2 source import service](../client/src/parsetrail/core/v2_source_
 now checks an exact-source retry before invoking a parser and returns the saved
 snapshot. Revised bytes remain a separate pending import. Parser failure and
 post-parse cancellation leave the new profile unchanged. This is a service
-boundary only; parser execution cancellation, catalog admission, archive
+boundary only; installed catalog admission, archive
 recovery and main-window integration remain open.
 The local catalog-admission pilot now validates all 23 checked-in definitions in
 one test-signed snapshot. With a verified catalog and an explicit parser choice,
 the service checks parser identity and revision before saving pending evidence;
 automatic document routing and installed-client trust remain open.
+The bounded decoder worker now polls a cancellation callback and terminates its
+child on cancellation. The source pipeline also polls its CSV row loop and
+passes the callback to PDF decoder workers. A cancelled catalog import leaves
+the temporary profile without a new source. Native Windows worker cancellation
+passes; main-window cancellation wiring and Intel Mac native limits remain open.
 An explicit reparse comparison can read the saved source and test a candidate
 definition without replacing the original evidence snapshot or decisions. A
 changed definition revision changes the candidate output while the stored

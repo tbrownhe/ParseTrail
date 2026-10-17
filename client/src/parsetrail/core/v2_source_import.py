@@ -39,7 +39,14 @@ Parser = Callable[[bytes, bytes], SourceEvidence]
 
 
 class CatalogParser(Protocol):
-    def __call__(self, source: bytes, definition: bytes, *, suffix: Literal[".csv", ".pdf"]) -> SourceEvidence: ...
+    def __call__(
+        self,
+        source: bytes,
+        definition: bytes,
+        *,
+        suffix: Literal[".csv", ".pdf"],
+        cancelled: Callable[[], bool] | None = None,
+    ) -> SourceEvidence: ...
 
 
 def _saved_retry(store: V2ProfileStore, source: bytes) -> SourceImportResult | None:
@@ -100,7 +107,12 @@ def import_catalog_source(
     selected = choices[0]
 
     def admitted_parse(source_bytes: bytes, definition_bytes: bytes) -> SourceEvidence:
-        evidence = parse(source_bytes, definition_bytes, suffix=suffix)
+        try:
+            evidence = parse(source_bytes, definition_bytes, suffix=suffix, cancelled=cancelled)
+        except Exception:
+            if cancelled is not None and cancelled():
+                raise ImportCancelled("cancelled") from None
+            raise
         if (
             not isinstance(evidence, SourceEvidence)
             or evidence.parser_id != selected.identity.parser_id
