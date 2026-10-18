@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Literal
 
 from cryptography.exceptions import InvalidSignature
+from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
@@ -99,6 +100,17 @@ def key_id_for_public_key(public_key: bytes) -> str:
     if type(public_key) is not bytes or len(public_key) != 32:
         raise CatalogError("invalid_public_key")
     return "data-ed25519-" + hashlib.sha256(public_key).hexdigest()[:32]
+
+
+def load_trusted_catalog_keys(trust_store_path: Path | None = None) -> dict[str, bytes]:
+    """Use the shipped plugin release public keys for the data signing domain."""
+    from parsetrail.core.plugin_manifest import load_trusted_plugin_keys
+
+    plugin_keys = load_trusted_plugin_keys(trust_store_path)
+    raw_keys = (
+        key.public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw) for key in plugin_keys.values()
+    )
+    return {key_id_for_public_key(raw): raw for raw in raw_keys}
 
 
 def verify_catalog(

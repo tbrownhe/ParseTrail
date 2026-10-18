@@ -46,9 +46,10 @@ pilot definitions inside one test-signed snapshot. An explicitly selected
 verified definition can feed the pending 2.0 source import service, which refuses
 parser identity/revision mismatch before writing. The catalog revision contract
 allows the existing recent-Citi `pilot-2` revision. CSV matching and signed PDF
-routing now require one verified definition before a source write. Installed-client
-admission, a production trusted key, and server publication
-remain open. No 1.4 bytecode catalog or server contract was changed.
+routing now require one verified definition before a source write. Catalog trust
+now derives data-domain key IDs from the existing shipped plugin release public
+keys. Installed-client admission and server publication remain open. No 1.4
+bytecode catalog or server contract was changed.
 The pilot source pipeline now validates a supplied declaration and dispatches
 current PDF parsers by admitted identity, so a valid definition revision can
 reach its finite operation without an added hash allowlist entry. A synthetic
@@ -71,8 +72,11 @@ extraction parity and ledger interpretation remain separate gates.
 The local [catalog artifact builder](../client/scripts/v2_catalog_release.py)
 validates every checked-in definition, signs a deterministic snapshot with an
 encrypted Ed25519 key kept outside the repository, verifies the resulting pair,
-and writes it to a new directory. It does not publish or activate the release.
-A production trusted key and installed offline acceptance remain open.
+and writes it to a new directory. Its command refuses an encrypted signing key
+whose public half is absent from the shipped plugin trust store. The existing
+plugin release key is the selected catalog signing key; the private half remains
+outside the repository. It does not publish or activate the release. Installed
+offline acceptance remains open.
 
 ## Initial code findings
 

@@ -7,6 +7,7 @@ separate stage; every imported observation starts pending and unposted.
 from __future__ import annotations
 
 import hashlib
+import re
 import sqlite3
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,10 +15,10 @@ from typing import Literal
 
 from pydantic import ValidationError
 
-from parsetrail.core.source_evidence import SourceEvidence, StatementPayload
+from parsetrail.core.source_evidence import ActivityExportPayload, SourceEvidence, StatementPayload
 
 APPLICATION_ID = 0x50543230  # PT20
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_DEFINITION_BYTES = 64 * 1024
 MAX_EVIDENCE_BYTES = 32 * 1024 * 1024
@@ -46,13 +47,36 @@ TABLE_COLUMNS = {
         ("observed_date", "TEXT", 1, 0),
         ("amount_minor", "INTEGER", 1, 0),
     ),
+    "LedgerAccounts": (
+        ("id", "TEXT", 0, 1),
+        ("name", "TEXT", 1, 0),
+        ("kind", "TEXT", 1, 0),
+        ("institution_key", "TEXT", 1, 0),
+        ("full_account_number", "TEXT", 0, 0),
+    ),
+    "FileAccountAssertions": (
+        ("source_sha256", "TEXT", 0, 1),
+        ("ledger_account_id", "TEXT", 1, 0),
+    ),
+    "RowAccountAssignments": (
+        ("row_id", "TEXT", 0, 1),
+        ("ledger_account_id", "TEXT", 1, 0),
+    ),
 }
 FOREIGN_KEYS = {
     "Sources": (),
     "Definitions": (),
     "EvidenceSnapshots": (("definition_sha256", "Definitions", "sha256"), ("source_sha256", "Sources", "sha256")),
     "SourceObservations": (("source_sha256", "Sources", "sha256"),),
+    "LedgerAccounts": (),
+    "FileAccountAssertions": (("ledger_account_id", "LedgerAccounts", "id"), ("source_sha256", "Sources", "sha256")),
+    "RowAccountAssignments": (
+        ("ledger_account_id", "LedgerAccounts", "id"),
+        ("row_id", "SourceObservations", "row_id"),
+    ),
 }
+
+IMMUTABLE_TABLES = ("Sources", "Definitions", "EvidenceSnapshots", "SourceObservations")
 
 
 class ProfileFormatError(ValueError):
@@ -65,6 +89,22 @@ class SavedImport:
     definition: bytes
     evidence: SourceEvidence
     suffix: Literal[".csv", ".pdf"]
+
+
+@dataclass(frozen=True)
+class FinancialAccount:
+    id: str
+    name: str
+    kind: Literal["asset", "liability"]
+    institution_key: str
+    full_account_number: str | None = None
+
+
+@dataclass(frozen=True)
+class AccountBinding:
+    row_id: str
+    ledger_account_id: str | None
+    basis: Literal["row", "file"] | None
 
 
 def _digest(data: bytes) -> str:
@@ -99,7 +139,7 @@ def _check_format(connection: sqlite3.Connection) -> None:
             if actual_foreign_keys != FOREIGN_KEYS[table]:
                 raise ProfileFormatError("profile_schema_mismatch")
         expected_triggers = {
-            f"immutable_{table}_{action}" for table in TABLE_COLUMNS for action in ("update", "delete")
+            f"immutable_{table}_{action}" for table in IMMUTABLE_TABLES for action in ("update", "delete")
         }
         triggers = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='trigger'")}
         if triggers != expected_triggers:
@@ -152,9 +192,22 @@ class V2ProfileStore:
                     observed_date TEXT NOT NULL, amount_minor INTEGER NOT NULL,
                     CHECK((source_account IS NULL) = (source_account_form IS NULL))
                 );
+                CREATE TABLE LedgerAccounts (
+                    id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL
+                        CHECK(kind IN ('asset','liability')),
+                    institution_key TEXT NOT NULL, full_account_number TEXT
+                );
+                CREATE TABLE FileAccountAssertions (
+                    source_sha256 TEXT PRIMARY KEY REFERENCES Sources(sha256),
+                    ledger_account_id TEXT NOT NULL REFERENCES LedgerAccounts(id)
+                );
+                CREATE TABLE RowAccountAssignments (
+                    row_id TEXT PRIMARY KEY REFERENCES SourceObservations(row_id),
+                    ledger_account_id TEXT NOT NULL REFERENCES LedgerAccounts(id)
+                );
                 COMMIT;
             """)
-            for table in ("Sources", "Definitions", "EvidenceSnapshots", "SourceObservations"):
+            for table in IMMUTABLE_TABLES:
                 for action in ("UPDATE", "DELETE"):
                     connection.execute(
                         f"CREATE TRIGGER immutable_{table}_{action.lower()} "
@@ -199,6 +252,123 @@ class V2ProfileStore:
     def __exit__(self, *_args) -> None:
         self.connection.close()
 
+    def _require_writable(self) -> None:
+        if self.read_only:
+            raise ProfileFormatError("profile_read_only")
+
+    def add_financial_account(self, account: FinancialAccount) -> None:
+        """Create one user-authored financial account before any source binding."""
+        self._require_writable()
+        if (
+            not isinstance(account, FinancialAccount)
+            or type(account.id) is not str
+            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9:_-]{0,79}", account.id) is None
+            or type(account.name) is not str
+            or not 0 < len(account.name.strip()) <= 200
+            or account.kind not in {"asset", "liability"}
+            or type(account.institution_key) is not str
+            or re.fullmatch(r"[a-z][a-z0-9_-]{2,79}", account.institution_key) is None
+            or (
+                account.full_account_number is not None
+                and (
+                    type(account.full_account_number) is not str
+                    or not 0 < len(account.full_account_number.strip()) <= 80
+                )
+            )
+        ):
+            raise ProfileFormatError("invalid_financial_account")
+        self.connection.execute(
+            "INSERT INTO LedgerAccounts VALUES (?,?,?,?,?)",
+            (account.id, account.name, account.kind, account.institution_key, account.full_account_number),
+        )
+
+    def financial_accounts(self) -> tuple[FinancialAccount, ...]:
+        return tuple(
+            FinancialAccount(*row)
+            for row in self.connection.execute(
+                "SELECT id,name,kind,institution_key,full_account_number FROM LedgerAccounts ORDER BY name,id"
+            )
+        )
+
+    def _require_financial_account(self, account_id: str) -> None:
+        if self.connection.execute("SELECT 1 FROM LedgerAccounts WHERE id=?", (account_id,)).fetchone() is None:
+            raise ProfileFormatError("financial_account_missing")
+
+    def assert_file_account(self, source_sha256: str, account_id: str) -> None:
+        """Assert that every accountless row belongs to one financial account."""
+        self._require_writable()
+        self._require_financial_account(account_id)
+        evidence = self.load_import(source_sha256).evidence
+        payload = evidence.payload
+        if (
+            not isinstance(payload, ActivityExportPayload)
+            or not payload.rows
+            or any(row.source_account is not None for row in payload.rows)
+        ):
+            raise ProfileFormatError("file_account_assertion_requires_accountless_export")
+        if self.connection.execute(
+            "SELECT 1 FROM RowAccountAssignments a JOIN SourceObservations o ON o.row_id=a.row_id "
+            "WHERE o.source_sha256=? LIMIT 1",
+            (source_sha256,),
+        ).fetchone():
+            raise ProfileFormatError("file_account_assertion_conflicts_with_row_assignments")
+        self.connection.execute(
+            "INSERT INTO FileAccountAssertions VALUES (?,?) "
+            "ON CONFLICT(source_sha256) DO UPDATE SET ledger_account_id=excluded.ledger_account_id",
+            (source_sha256, account_id),
+        )
+
+    def clear_file_account_assertion(self, source_sha256: str) -> None:
+        self._require_writable()
+        self.connection.execute("DELETE FROM FileAccountAssertions WHERE source_sha256=?", (source_sha256,))
+
+    def assign_row_account(self, row_id: str, account_id: str) -> None:
+        """Assign one accountless row in an export reviewed row by row."""
+        self._require_writable()
+        self._require_financial_account(account_id)
+        row = self.connection.execute(
+            "SELECT source_sha256,source_account FROM SourceObservations WHERE row_id=?", (row_id,)
+        ).fetchone()
+        if row is None:
+            raise ProfileFormatError("observation_missing")
+        if row[1] is not None or not isinstance(self.load_import(row[0]).evidence.payload, ActivityExportPayload):
+            raise ProfileFormatError("row_account_assignment_requires_accountless_export")
+        if self.connection.execute("SELECT 1 FROM FileAccountAssertions WHERE source_sha256=?", (row[0],)).fetchone():
+            raise ProfileFormatError("row_account_assignment_conflicts_with_file_assertion")
+        self.connection.execute(
+            "INSERT INTO RowAccountAssignments VALUES (?,?) "
+            "ON CONFLICT(row_id) DO UPDATE SET ledger_account_id=excluded.ledger_account_id",
+            (row_id, account_id),
+        )
+
+    def clear_row_account_assignment(self, row_id: str) -> None:
+        self._require_writable()
+        self.connection.execute("DELETE FROM RowAccountAssignments WHERE row_id=?", (row_id,))
+
+    def account_bindings(self, source_sha256: str) -> tuple[AccountBinding, ...]:
+        """Show effective user decisions; unassigned rows remain unresolved."""
+        evidence = self.load_import(source_sha256).evidence
+        file_row = self.connection.execute(
+            "SELECT ledger_account_id FROM FileAccountAssertions WHERE source_sha256=?", (source_sha256,)
+        ).fetchone()
+        file_account_id = file_row[0] if file_row else None
+        row_assignments = dict(
+            self.connection.execute(
+                "SELECT a.row_id,a.ledger_account_id FROM RowAccountAssignments a "
+                "JOIN SourceObservations o ON o.row_id=a.row_id WHERE o.source_sha256=?",
+                (source_sha256,),
+            )
+        )
+        result = []
+        for row in _rows(evidence):
+            if row.row_id in row_assignments:
+                result.append(AccountBinding(row.row_id, row_assignments[row.row_id], "row"))
+            elif row.source_account is None and file_account_id is not None:
+                result.append(AccountBinding(row.row_id, file_account_id, "file"))
+            else:
+                result.append(AccountBinding(row.row_id, None, None))
+        return tuple(result)
+
     def source_imported(self, source: bytes) -> bool:
         """Check an exact-source retry before invoking a parser."""
         if type(source) is not bytes or not 0 < len(source) <= MAX_SOURCE_BYTES:
@@ -211,8 +381,7 @@ class V2ProfileStore:
         self, source: bytes, definition: bytes, evidence: SourceEvidence, *, suffix: Literal[".csv", ".pdf"]
     ) -> bool:
         """Atomically save one admitted snapshot. False means exact-source retry."""
-        if self.read_only:
-            raise ProfileFormatError("profile_read_only")
+        self._require_writable()
         if (
             type(source) is not bytes
             or not 0 < len(source) <= MAX_SOURCE_BYTES

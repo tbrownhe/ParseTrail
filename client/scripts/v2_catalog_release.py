@@ -20,6 +20,7 @@ from parsetrail.core.v2_data_catalog import (
     MAX_DEFINITIONS,
     VerifiedCatalog,
     key_id_for_public_key,
+    load_trusted_catalog_keys,
     verify_catalog,
 )
 
@@ -41,6 +42,13 @@ def load_offline_key(path: Path, passphrase: bytes) -> Ed25519PrivateKey:
     if not isinstance(loaded, Ed25519PrivateKey):
         raise ValueError("signing_key_not_ed25519")
     return loaded
+
+
+def require_shipped_plugin_key(private_key: Ed25519PrivateKey, trust_store_path: Path | None = None) -> None:
+    """Refuse a catalog release signed by a key absent from the installed client."""
+    public = private_key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    if load_trusted_catalog_keys(trust_store_path).get(key_id_for_public_key(public)) != public:
+        raise ValueError("signing_key_not_shipped_plugin_key")
 
 
 def signed_catalog_bytes(
@@ -142,6 +150,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--source-revision", required=True)
     args = parser.parse_args(argv)
     private_key = load_offline_key(args.private_key, getpass.getpass("Catalog key passphrase: ").encode())
+    require_shipped_plugin_key(private_key)
     verified = write_release(
         args.definitions_dir,
         private_key,

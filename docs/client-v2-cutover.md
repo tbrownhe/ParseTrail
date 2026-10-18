@@ -186,7 +186,11 @@ The first [fresh 2.0 SQLite source store](../client/src/parsetrail/core/v2_profi
 now saves exact source, definition, strict evidence and unposted observation IDs
 atomically. A temporary profile reopened ten recent Citi PDFs with 486 rows and
 803 dispositions; the originals were read-only and their hashes unchanged.
-This does not yet connect ledger account mapping or native import UI.
+The fresh profile now also stores user-authored financial accounts and explicit
+accountless-export decisions. A whole-file assertion says every row belongs to
+one account; a mixed export uses row assignments. The modes cannot coexist for
+one source. These editable decisions remain separate from immutable evidence
+and do not post ledger entries. Native review and import UI remain open.
 The isolated [V2 source import service](../client/src/parsetrail/core/v2_source_import.py)
 now checks an exact-source retry before invoking a parser and returns the saved
 snapshot. Revised bytes remain a separate pending import. Parser failure and

@@ -2,16 +2,43 @@
 
 from __future__ import annotations
 
+import base64
+import json
 from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from parsetrail.core.plugin_manifest import key_id_for_public_key as plugin_key_id
 from parsetrail.core.v2_catalog_admission import admit_pilot_definition
-from parsetrail.core.v2_data_catalog import verify_catalog
-from scripts.v2_catalog_release import REPOSITORY_ROOT, load_offline_key, write_release
+from parsetrail.core.v2_data_catalog import key_id_for_public_key, load_trusted_catalog_keys, verify_catalog
+from scripts.v2_catalog_release import REPOSITORY_ROOT, load_offline_key, require_shipped_plugin_key, write_release
 
 DEFINITIONS = Path(__file__).parents[2] / "devtools" / "parser_engine_pilot"
+
+
+def test_catalog_reuses_plugin_release_public_trust(tmp_path: Path) -> None:
+    private = Ed25519PrivateKey.generate()
+    raw = private.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    trust_store = tmp_path / "plugin-release-keys.json"
+    trust_store.write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "keys": [
+                    {
+                        "key_id": plugin_key_id(raw),
+                        "public_key": base64.b64encode(raw).decode("ascii"),
+                    }
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
+    assert load_trusted_catalog_keys(trust_store) == {key_id_for_public_key(raw): raw}
+    require_shipped_plugin_key(private, trust_store)
+    with pytest.raises(ValueError, match="signing_key_not_shipped_plugin_key"):
+        require_shipped_plugin_key(Ed25519PrivateKey.generate(), trust_store)
 
 
 def test_all_current_definitions_build_reproducible_verified_artifacts(tmp_path: Path) -> None:

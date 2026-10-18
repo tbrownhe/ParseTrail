@@ -361,8 +361,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   admission rule, and atomically selects a verified offline release. Synthetic
   tamper, rollback, cancellation and reopen tests pass. A local artifact builder
   now validates and signs the 23 declarations using an encrypted key outside the
-  repository, then verifies and writes the pair to a new directory. Production
-  trust, installed offline acceptance and server publication remain open.
+  repository, then verifies and writes the pair to a new directory. The release
+  command now requires the encrypted key to match a public key in the shipped
+  plugin trust store; catalog IDs keep a separate signing domain. Installed
+  offline acceptance and server publication remain open.
   One strict local admission callback now validates all 23 checked-in pilot
   definitions (22 current parser families, including both MOHELA export formats)
   inside a test-signed snapshot. An explicitly selected verified definition can
@@ -406,8 +408,7 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   reopen, catalog import and fresh-profile reopen. A rebuilt windowed Windows
   x64 probe passed this and all six worker pipes; it is not an installed release
   or owner GUI acceptance.
-  Release trust,
-  ordinary desktop import and native Intel Mac acceptance remain open.
+  Ordinary desktop import and native Intel Mac acceptance remain open.
 - [ ] **P2-S — Declaration catalog server:** after accepted client work is merged,
   use a short-lived server branch for the reviewed snapshot API/storage/publication
   contract. A table may hold JSON definitions; clients consume immutable signed
@@ -432,6 +433,12 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   worker and CSV row loop. A running worker is killed on cancellation; a
   cancelled import leaves no source write. Installed-client
   trust, archive recovery and UI wiring remain open.
+  The fresh profile now stores user-authored financial accounts and explicit
+  accountless-export bindings alongside immutable source evidence. A whole-file
+  assertion covers a single-account export; individual row assignments cover
+  mixed files. The two modes are mutually exclusive and neither posts a ledger
+  entry. This pre-release profile schema is revision 3; review UI and ledger
+  integration remain open.
 - [ ] **V2-4a–b — Daily review:** create/edit accounts, categories and budgets; connect
   accepted ledger workflows to the application in small increments. Manual values,
   closures and unsupported accounting remain explicit. Owner Windows integration gate.
