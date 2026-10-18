@@ -1,7 +1,7 @@
-"""Fresh 2.0 SQLite profile for immutable source and parser evidence snapshots.
+"""Fresh 2.0 SQLite profile for source evidence and authored account decisions.
 
-This store has no reader or migration path for 1.x data. Accounting review is a
-separate stage; every imported observation starts pending and unposted.
+This store has no reader or migration path for 1.x data. Source facts remain
+immutable; imported observations start pending and unposted.
 """
 
 from __future__ import annotations
@@ -306,17 +306,23 @@ class V2ProfileStore:
             or any(row.source_account is not None for row in payload.rows)
         ):
             raise ProfileFormatError("file_account_assertion_requires_accountless_export")
-        if self.connection.execute(
-            "SELECT 1 FROM RowAccountAssignments a JOIN SourceObservations o ON o.row_id=a.row_id "
-            "WHERE o.source_sha256=? LIMIT 1",
-            (source_sha256,),
-        ).fetchone():
-            raise ProfileFormatError("file_account_assertion_conflicts_with_row_assignments")
-        self.connection.execute(
-            "INSERT INTO FileAccountAssertions VALUES (?,?) "
-            "ON CONFLICT(source_sha256) DO UPDATE SET ledger_account_id=excluded.ledger_account_id",
-            (source_sha256, account_id),
-        )
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            if self.connection.execute(
+                "SELECT 1 FROM RowAccountAssignments a JOIN SourceObservations o ON o.row_id=a.row_id "
+                "WHERE o.source_sha256=? LIMIT 1",
+                (source_sha256,),
+            ).fetchone():
+                raise ProfileFormatError("file_account_assertion_conflicts_with_row_assignments")
+            self.connection.execute(
+                "INSERT INTO FileAccountAssertions VALUES (?,?) "
+                "ON CONFLICT(source_sha256) DO UPDATE SET ledger_account_id=excluded.ledger_account_id",
+                (source_sha256, account_id),
+            )
+            self.connection.execute("COMMIT")
+        except BaseException:
+            self.connection.execute("ROLLBACK")
+            raise
 
     def clear_file_account_assertion(self, source_sha256: str) -> None:
         self._require_writable()
@@ -325,25 +331,64 @@ class V2ProfileStore:
     def assign_row_account(self, row_id: str, account_id: str) -> None:
         """Assign one accountless row in an export reviewed row by row."""
         self._require_writable()
-        self._require_financial_account(account_id)
         row = self.connection.execute(
-            "SELECT source_sha256,source_account FROM SourceObservations WHERE row_id=?", (row_id,)
+            "SELECT source_sha256 FROM SourceObservations WHERE row_id=?", (row_id,)
         ).fetchone()
         if row is None:
             raise ProfileFormatError("observation_missing")
-        if row[1] is not None or not isinstance(self.load_import(row[0]).evidence.payload, ActivityExportPayload):
+        self.assign_rows_account(row[0], (row_id,), account_id)
+
+    def assign_rows_account(self, source_sha256: str, row_ids: tuple[str, ...], account_id: str) -> None:
+        """Atomically assign selected rows in a mixed, accountless export."""
+        self._require_writable()
+        self._require_financial_account(account_id)
+        evidence = self.load_import(source_sha256).evidence
+        payload = evidence.payload
+        if (
+            not isinstance(payload, ActivityExportPayload)
+            or not row_ids
+            or len(set(row_ids)) != len(row_ids)
+            or not set(row_ids) <= {row.row_id for row in payload.rows if row.source_account is None}
+        ):
             raise ProfileFormatError("row_account_assignment_requires_accountless_export")
-        if self.connection.execute("SELECT 1 FROM FileAccountAssertions WHERE source_sha256=?", (row[0],)).fetchone():
-            raise ProfileFormatError("row_account_assignment_conflicts_with_file_assertion")
-        self.connection.execute(
-            "INSERT INTO RowAccountAssignments VALUES (?,?) "
-            "ON CONFLICT(row_id) DO UPDATE SET ledger_account_id=excluded.ledger_account_id",
-            (row_id, account_id),
-        )
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            if self.connection.execute(
+                "SELECT 1 FROM FileAccountAssertions WHERE source_sha256=?", (source_sha256,)
+            ).fetchone():
+                raise ProfileFormatError("row_account_assignment_conflicts_with_file_assertion")
+            self.connection.executemany(
+                "INSERT INTO RowAccountAssignments VALUES (?,?) "
+                "ON CONFLICT(row_id) DO UPDATE SET ledger_account_id=excluded.ledger_account_id",
+                ((row_id, account_id) for row_id in row_ids),
+            )
+            self.connection.execute("COMMIT")
+        except BaseException:
+            self.connection.execute("ROLLBACK")
+            raise
 
     def clear_row_account_assignment(self, row_id: str) -> None:
+        row = self.connection.execute(
+            "SELECT source_sha256 FROM SourceObservations WHERE row_id=?", (row_id,)
+        ).fetchone()
+        if row is None:
+            raise ProfileFormatError("observation_missing")
+        self.clear_row_account_assignments(row[0], (row_id,))
+
+    def clear_row_account_assignments(self, source_sha256: str, row_ids: tuple[str, ...]) -> None:
         self._require_writable()
-        self.connection.execute("DELETE FROM RowAccountAssignments WHERE row_id=?", (row_id,))
+        evidence = self.load_import(source_sha256).evidence
+        if len(set(row_ids)) != len(row_ids) or not set(row_ids) <= {row.row_id for row in _rows(evidence)}:
+            raise ProfileFormatError("invalid_row_assignment_selection")
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            self.connection.executemany(
+                "DELETE FROM RowAccountAssignments WHERE row_id=?", ((row_id,) for row_id in row_ids)
+            )
+            self.connection.execute("COMMIT")
+        except BaseException:
+            self.connection.execute("ROLLBACK")
+            raise
 
     def account_bindings(self, source_sha256: str) -> tuple[AccountBinding, ...]:
         """Show effective user decisions; unassigned rows remain unresolved."""

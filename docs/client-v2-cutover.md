@@ -190,7 +190,20 @@ The fresh profile now also stores user-authored financial accounts and explicit
 accountless-export decisions. A whole-file assertion says every row belongs to
 one account; a mixed export uses row assignments. The modes cannot coexist for
 one source. These editable decisions remain separate from immutable evidence
-and do not post ledger entries. Native review and import UI remain open.
+and do not post ledger entries. The isolated
+[account assignment review](../client/src/parsetrail/gui/v2_account_binding_review.py)
+uses the same fresh profile and shows a pending count, source rows, the asserted
+account and the basis of each decision. Its
+[six-row disposable demo](../devtools/parser_engine_pilot/review_accountless_export.py)
+can be opened from the repository root with:
+
+```powershell
+$env:PYTHONPATH='.;client/src;client'
+.\client\.venv\Scripts\python.exe -m devtools.parser_engine_pilot.review_accountless_export --demo
+```
+
+The demo writes only to a temporary 2.0 profile and deletes it on close.
+Native Windows review and main-window import integration remain open.
 The isolated [V2 source import service](../client/src/parsetrail/core/v2_source_import.py)
 now checks an exact-source retry before invoking a parser and returns the saved
 snapshot. Revised bytes remain a separate pending import. Parser failure and

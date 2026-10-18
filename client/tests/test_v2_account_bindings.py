@@ -32,7 +32,11 @@ def test_file_assertion_and_mixed_row_review_survive_reopen(tmp_path: Path) -> N
         assert all(binding.ledger_account_id is None for binding in store.account_bindings(evidence.source_sha256))
         store.add_financial_account(FinancialAccount("loan-a", "Loan A", "liability", "mohela"))
         store.add_financial_account(FinancialAccount("loan-b", "Loan B", "liability", "mohela"))
+        with pytest.raises(ProfileFormatError, match="row_account_assignment_requires_accountless_export"):
+            store.assign_rows_account(evidence.source_sha256, (first, "0" * 64), "loan-a")
+        assert all(binding.ledger_account_id is None for binding in store.account_bindings(evidence.source_sha256))
         store.assert_file_account(evidence.source_sha256, "loan-a")
+        assert not store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
         with pytest.raises(ProfileFormatError, match="row_account_assignment_conflicts_with_file_assertion"):
             store.assign_row_account(second, "loan-b")
         assert [

@@ -437,8 +437,11 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   accountless-export bindings alongside immutable source evidence. A whole-file
   assertion covers a single-account export; individual row assignments cover
   mixed files. The two modes are mutually exclusive and neither posts a ledger
-  entry. This pre-release profile schema is revision 3; review UI and ledger
-  integration remain open.
+  entry. This pre-release profile schema is revision 3. An isolated
+  accountless-export review dialog now
+  presents a six-row disposable MOHELA-shaped demo and saves either explicit
+  file or selected-row decisions. Offscreen interaction tests pass. Owner native
+  Windows review, main-window connection and ledger integration remain open.
 - [ ] **V2-4a–b — Daily review:** create/edit accounts, categories and budgets; connect
   accepted ledger workflows to the application in small increments. Manual values,
   closures and unsupported accounting remain explicit. Owner Windows integration gate.
