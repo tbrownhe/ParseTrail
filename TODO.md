@@ -298,7 +298,8 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   activity rows, located all 4,552 lines with supported dollar tokens,
   classified 532 clearly labeled annual/period fee and interest totals, and left 1,944 explicitly
   unclassified. These are source labels, not transaction postings. Full-page
-  capture and accounting review remain open.
+  capture and accounting review remain open. The read-only preview now surfaces
+  a nonzero unclassified dollar-line count; native acceptance is pending.
   Middle Citi now uses a generic declaration-driven header-anchor table worker.
   All eight routed archive PDFs matched the accepted reader on account,
   period, printed balances and 323 rows. The 1,311 raw table rows divide into

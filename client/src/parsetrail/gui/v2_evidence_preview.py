@@ -114,6 +114,8 @@ class V2EvidencePreview(QDialog):
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("Imported source evidence is pending review. No ledger entries were posted."))
         coverage = payload.capture_verified if isinstance(payload, StatementPayload) else payload.coverage_verified
+        unclassified_money = sum(item.code == "unclassified_monetary_line" for item in payload.dispositions)
+        unclassified_note = f" · Unclassified dollar lines: {unclassified_money}" if unclassified_money else ""
         balance = (
             (
                 "Printed balance equation passed"
@@ -125,7 +127,8 @@ class V2EvidencePreview(QDialog):
         )
         summary = QLabel(
             f"Parser: {evidence.parser_id} · Definition: {evidence.definition_revision} · "
-            f"Source: {evidence.source_sha256[:12]}… · Rows: {len(rows)} · Other source lines: {len(payload.dispositions)}\n"
+            f"Source: {evidence.source_sha256[:12]}… · Rows: {len(rows)} · Other source lines: {len(payload.dispositions)}"
+            f"{unclassified_note}\n"
             f"{'Source capture checked' if coverage else 'Source capture needs review'} · {balance}"
         )
         summary.setWordWrap(True)

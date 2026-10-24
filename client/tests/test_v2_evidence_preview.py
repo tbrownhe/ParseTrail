@@ -6,6 +6,7 @@ import hashlib
 import os
 from pathlib import Path
 
+from parsetrail.core.v2_legacy_citi_lines import parse_legacy_citi
 from parsetrail.core.v2_profile_store import V2ProfileStore
 from parsetrail.core.v2_source_pipeline import build_source_evidence
 from parsetrail.core.v2_synchrony_source_output import from_synchrony_table
@@ -13,6 +14,8 @@ from parsetrail.gui.v2_evidence_preview import preview_saved_source
 from PySide6.QtWidgets import QApplication, QLabel, QTabWidget
 
 from devtools.parser_engine_pilot.preview_source import main as preview_main
+from devtools.parser_engine_pilot.test_legacy_citi_lines import DEFINITION as CITI_DEFINITION
+from devtools.parser_engine_pilot.test_legacy_citi_lines import lines as citi_lines
 from devtools.parser_engine_pilot.test_synchrony_source_output import DEFINITION as CARD_DEFINITION
 from devtools.parser_engine_pilot.test_synchrony_source_output import SOURCE as CARD_SOURCE
 from devtools.parser_engine_pilot.test_synchrony_source_output import channels as card_channels
@@ -76,6 +79,22 @@ def test_preview_shows_statement_balance_check_and_dispositions(tmp_path: Path) 
         assert dialog.rows_model.rowCount() == 1
         assert dialog.dispositions_model.rowCount() == 4
         assert dialog.rows_model.data(dialog.rows_model.index(0, 0)) == "2025-12-31 (year inferred)"
+    finally:
+        dialog.close()
+        app.processEvents()
+
+
+def test_preview_surfaces_unclassified_dollar_lines(tmp_path: Path) -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = QApplication.instance() or QApplication([])
+    evidence = parse_legacy_citi(CITI_DEFINITION, citi_lines(extra=("Offer balance $2.34",)))
+    profile = tmp_path / "older-citi.db"
+    with V2ProfileStore.create(profile) as store:
+        store.import_source(b"%PDF-synthetic", CITI_DEFINITION, evidence, suffix=".pdf")
+    dialog = preview_saved_source(profile, evidence.source_sha256)
+    try:
+        assert any("Unclassified dollar lines: 1" in label.text() for label in dialog.findChildren(QLabel))
+        assert dialog.dispositions_model.rowCount() >= 1
     finally:
         dialog.close()
         app.processEvents()

@@ -19,8 +19,8 @@ from devtools.parser_engine_pilot.audit_legacy_citi_money import audit as audit_
 DEFINITION = Path(__file__).with_name("legacy-citi-pilot-definition.json").read_bytes()
 
 
-def lines(changes: dict[int, str] | None = None, extra: tuple[str, ...] = ()):
-    source = [
+def lines(changes: dict[int, str] | None = None, extra: tuple[str, ...] = (), *, source: bytes = b"%PDF-synthetic"):
+    source_lines = [
         "www.citicards.com",
         "Account number ending in: 1234",
         "Billing Period: 01/01/26-01/31/26",
@@ -32,11 +32,11 @@ def lines(changes: dict[int, str] | None = None, extra: tuple[str, ...] = ()):
         "            LOCATION $10.00",
     ]
     for index, replacement in (changes or {}).items():
-        source[index] = replacement
-    source.extend(extra)
+        source_lines[index] = replacement
+    source_lines.extend(extra)
     return page_lines(
-        b"%PDF-synthetic",
-        ["\n".join(source)],
+        source,
+        ["\n".join(source_lines)],
         extraction_library="pdfplumber-bounded-layout-default-v1",
     )
 

@@ -9,6 +9,7 @@ from pathlib import Path
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from parsetrail.core.v2_data_catalog import key_id_for_public_key
+from parsetrail.core.v2_legacy_citi_lines import parse_legacy_citi
 from parsetrail.core.v2_profile_store import FinancialAccount, V2ProfileStore
 from parsetrail.core.v2_synchrony_source_output import from_synchrony_table
 from parsetrail.core.v2_workspace import V2Workspace
@@ -18,6 +19,8 @@ from scripts.v2_catalog_release import signed_catalog_bytes
 
 from devtools.parser_engine_pilot.review_accountless_export import DEFINITION as MOHELA_DEFINITION
 from devtools.parser_engine_pilot.review_accountless_export import SOURCE as MOHELA_SOURCE
+from devtools.parser_engine_pilot.test_legacy_citi_lines import DEFINITION as CITI_DEFINITION
+from devtools.parser_engine_pilot.test_legacy_citi_lines import lines as citi_lines
 from devtools.parser_engine_pilot.test_synchrony_source_output import DEFINITION as CARD_DEFINITION
 from devtools.parser_engine_pilot.test_synchrony_source_output import SOURCE as CARD_SOURCE
 from devtools.parser_engine_pilot.test_synchrony_source_output import channels as card_channels
@@ -26,6 +29,7 @@ ROOT = Path(__file__).resolve().parents[2]
 CASH_DEFINITION = ROOT / "devtools" / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
 CASH_SOURCE = b"Date,Account,Description,Amount,ReportedBalance\n10/01/2026,Checking A,Coffee,-$4.00,$996.00\n"
 MORE_CASH = b"Date,Account,Description,Amount,ReportedBalance\n10/02/2026,Checking A,Tea,-$3.00,$993.00\n"
+CITI_SOURCE = b"%PDF-older-citi-synthetic"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -40,8 +44,10 @@ def main(argv: list[str] | None = None) -> int:
         (definitions / MOHELA_DEFINITION.name).write_bytes(MOHELA_DEFINITION.read_bytes())
         (definitions / CASH_DEFINITION.name).write_bytes(CASH_DEFINITION.read_bytes())
         (definitions / "synchrony-card-definition.json").write_bytes(CARD_DEFINITION)
+        (definitions / "older-citi-definition.json").write_bytes(CITI_DEFINITION)
         (definitions / "account-contexts.json").write_text(
-            '{"synchrony_amazon_store_card":{"institution_key":"synchrony","kind":"liability"}}'
+            '{"synchrony_amazon_store_card":{"institution_key":"synchrony","kind":"liability"},'
+            '"pdf_citicc_201505":{"institution_key":"citi","kind":"liability"}}'
         )
         private = Ed25519PrivateKey.generate()
         public = private.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
@@ -76,6 +82,15 @@ def main(argv: list[str] | None = None) -> int:
         workspace.import_file(cash_path)
         with V2ProfileStore.open(workspace.profile_path) as store:
             store.import_source(
+                CITI_SOURCE,
+                CITI_DEFINITION,
+                parse_legacy_citi(
+                    CITI_DEFINITION,
+                    citi_lines(extra=("Offer balance $2.34",), source=CITI_SOURCE),
+                ),
+                suffix=".pdf",
+            )
+            store.import_source(
                 CARD_SOURCE,
                 CARD_DEFINITION,
                 from_synchrony_table(CARD_DEFINITION, *card_channels()),
@@ -88,7 +103,8 @@ def main(argv: list[str] | None = None) -> int:
         window = V2WorkspaceWindow(workspace)
         window.status.setWordWrap(True)
         window.status.setText(
-            "Disposable demo. First source: review its last-four match and inline preference. "
+            "Disposable demo. First source: review its last-four match. "
+            "Older Citi source: preview its unclassified dollar line. "
             f"Import source: {more_path}\nInstall signed catalog: {next_release}"
         )
         window.show()

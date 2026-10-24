@@ -311,10 +311,12 @@ $env:PYTHONPATH='.;client/src;client'
 & .\client\.venv\Scripts\python.exe -m devtools.parser_engine_pilot.open_v2_workspace --demo
 ```
 
-The demo signs a temporary three-definition catalog with a generated key,
-creates a temporary profile, and saves a synthetic last-four card statement,
-a six-row accountless export, and a one-row identified cash export. Select the
-first source and open Review source accounts to inspect the inline preference.
+The demo signs a temporary four-definition catalog with a generated key,
+creates a temporary profile, and saves synthetic last-four card and older-Citi
+statements, a six-row accountless export, and a one-row identified cash export.
+Select the first source and open Review source accounts to inspect the inline
+preference. Select the older-Citi source and open Preview evidence to see its
+unclassified dollar-line count.
 Its status line gives the path of another synthetic file
 for testing Import source and a second test-signed release folder for testing
 Install signed catalog. Closing the window removes the temporary workspace.
@@ -357,6 +359,9 @@ unclassified. The 1,675 activity rows were unchanged and every line with a
 supported dollar token has a location. These labels do not authorize ledger
 postings. Other page text, full-page capture, and accounting review remain open
 before 2.0 acceptance.
+The read-only evidence preview now shows the unclassified dollar-line count when
+it is nonzero. The disposable demo includes one such synthetic older-Citi line;
+native acceptance of that preview change is pending.
 
 ## Current stop/go decision
 
