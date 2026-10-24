@@ -1,4 +1,4 @@
-"""The narrow desktop review posts and corrects only supported cash expenses."""
+"""The desktop review posts and corrects explicit asset cash categories."""
 
 from __future__ import annotations
 
@@ -18,9 +18,9 @@ SOURCE = (
 )
 
 
-def test_cash_expense_dialog_posts_corrects_and_keeps_other_row_pending(tmp_path: Path, monkeypatch) -> None:
+def test_cash_activity_dialog_keeps_unclassified_deposit_pending(tmp_path: Path, monkeypatch) -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from parsetrail.gui.v2_cash_expense_review import V2CashExpenseReview
+    from parsetrail.gui.v2_cash_activity_review import V2CashActivityReview
     from PySide6.QtWidgets import QApplication, QMessageBox
 
     app = QApplication.instance() or QApplication([])
@@ -32,7 +32,7 @@ def test_cash_expense_dialog_posts_corrects_and_keeps_other_row_pending(tmp_path
         store.add_category_account("expense:food", "Food", "expense")
         store.add_category_account("expense:travel", "Travel", "expense")
     monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.StandardButton.Yes)
-    dialog = V2CashExpenseReview(profile, evidence.source_sha256)
+    dialog = V2CashActivityReview(profile, evidence.source_sha256)
     try:
         assert dialog.model.rows[0].status == "Assign a financial account first"
         dialog.table.selectRow(0)
@@ -42,16 +42,17 @@ def test_cash_expense_dialog_posts_corrects_and_keeps_other_row_pending(tmp_path
         dialog.refresh()
         assert [row.status for row in dialog.model.rows] == [
             "Ready for expense review",
-            "Outside cash expense scope",
+            "Ready for income review",
         ]
         dialog.table.selectRow(1)
         assert not dialog.action_button.isEnabled()
+        assert "add an income category first" in dialog.status.text()
         dialog.table.selectRow(0)
         assert dialog.action_button.isEnabled()
         dialog.reason.setText("Reviewed purchase")
         dialog.action_button.click()
         assert dialog.model.rows[0].status == "Posted: Food"
-        assert dialog.model.rows[1].status == "Outside cash expense scope"
+        assert dialog.model.rows[1].status == "Ready for income review"
         assert dialog.action_button.text() == "Correct expense category"
         renamed = "A Very Long Renamed Checking Account For Testing"
         with V2ProfileStore.open(profile) as store:
@@ -65,7 +66,7 @@ def test_cash_expense_dialog_posts_corrects_and_keeps_other_row_pending(tmp_path
         dialog.reason.setText("Correct category")
         dialog.action_button.click()
         assert dialog.model.rows[0].status == "Posted: Travel"
-        assert dialog.model.rows[1].status == "Outside cash expense scope"
+        assert dialog.model.rows[1].status == "Ready for income review"
     finally:
         dialog.close()
         app.processEvents()
@@ -74,3 +75,49 @@ def test_cash_expense_dialog_posts_corrects_and_keeps_other_row_pending(tmp_path
         assert store.connection.execute("SELECT count(*) FROM JournalCorrections").fetchone() == (1,)
         assert store._active_consumed() == {evidence.payload.rows[0].row_id: -400}
         assert store.load_import(evidence.source_sha256).evidence == evidence
+
+
+def test_cash_activity_dialog_explicitly_posts_and_corrects_income(tmp_path: Path, monkeypatch) -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from parsetrail.gui.v2_cash_activity_review import V2CashActivityReview
+    from PySide6.QtWidgets import QApplication, QMessageBox
+
+    app = QApplication.instance() or QApplication([])
+    evidence = build_source_evidence(SOURCE, DEFINITION, suffix=".csv")
+    profile = tmp_path / "fresh.db"
+    with V2ProfileStore.create(profile) as store:
+        store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
+        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        store.add_category_account("expense:food", "Food", "expense")
+        store.add_category_account("income:pay", "Pay", "income")
+        store.add_category_account("income:gift", "Gift", "income")
+        store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
+    confirmations = []
+
+    def confirm(_dialog, _title, message):
+        confirmations.append(message)
+        return QMessageBox.StandardButton.Yes
+
+    monkeypatch.setattr(QMessageBox, "question", confirm)
+    dialog = V2CashActivityReview(profile, evidence.source_sha256)
+    try:
+        dialog.table.selectRow(1)
+        assert dialog.category.count() == 2
+        assert dialog.category.findData("expense:food") == -1
+        assert dialog.action_button.text() == "Post reviewed income"
+        dialog.category.setCurrentIndex(dialog.category.findData("income:pay"))
+        dialog.reason.setText("Confirmed income")
+        dialog.action_button.click()
+        assert dialog.model.rows[1].status == "Posted: Pay"
+        assert any("I confirm this receipt is income." in message for message in confirmations)
+        assert dialog.action_button.text() == "Correct income category"
+        dialog.category.setCurrentIndex(dialog.category.findData("income:gift"))
+        dialog.reason.setText("Correct classification")
+        dialog.action_button.click()
+        assert dialog.model.rows[1].status == "Posted: Gift"
+        assert dialog.model.rows[0].status == "Ready for expense review"
+    finally:
+        dialog.close()
+        app.processEvents()
+    with V2ProfileStore.open(profile, read_only=True) as store:
+        assert store._active_consumed() == {evidence.payload.rows[1].row_id: 1_000}

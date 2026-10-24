@@ -393,11 +393,15 @@ the category dialog was confirmed by the owner on October 24, 2026. The store
 now supports an append-only category correction for a reviewed cash expense:
 it saves a reversal, replacement and linked reason atomically, without changing
 source evidence or reusing its allocation. An account assignment with journal
-history cannot change. A new cash-expense review dialog now connects those
-service actions to eligible activity-export rows. It shows unsupported rows as
-pending, requires an expense category and explicit reason, and confirms each
-posting or correction. Offscreen interaction passes; the owner confirmed its
-native Windows behavior on October 24, 2026. The reason remains required for
+history cannot change. The cash activity review dialog connects those service
+actions to eligible activity-export rows. It now also supports explicitly
+classified positive asset receipts as income, with same-kind category
+corrections. Transfers and loan proceeds remain pending unless the owner
+deliberately chooses income; no deposit is classified automatically. The dialog
+shows unsupported rows as pending, requires a category and explicit reason, and
+confirms each posting or correction. Offscreen interaction passes; the owner
+confirmed the expense flow on native Windows on October 24, 2026. The new
+income flow awaits native Windows acceptance. The reason remains required for
 now, although the owner identified it as possible friction for routine
 categorization. Financial-account editing now changes a name, institution key
 or full number without changing its ledger class or ID; existing bindings and
@@ -428,8 +432,9 @@ budgets tab now compares effective expense targets with net reviewed journal
 spending for a whole calendar month. Categories with no target stay visible;
 the view omits the total target if any category is untargeted and states the
 source coverage limit. Offscreen checks pass; native Windows acceptance of
-the new budget tab remains open. Cash classification and export cutover remain
-V2-5 work.
+the new budget tab was accepted by the owner, including the total appearing
+after Travel received a target. Cash-flow classification and export cutover
+remain V2-5 work.
 
 ## Current stop/go decision
 

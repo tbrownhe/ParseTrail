@@ -138,7 +138,7 @@ def test_accountless_review_explains_posted_assignment_lock(tmp_path: Path, assi
             store.assert_file_account(evidence.source_sha256, "cash")
         else:
             store.assign_row_account(row_id, "cash")
-        store.post_reviewed_cash_expense(row_id, "expense:food", reason="Reviewed coffee")
+        store.post_reviewed_cash_category(row_id, "expense:food", reason="Reviewed coffee")
     dialog = review_accountless_export(profile, evidence.source_sha256)
     try:
         dialog.table.selectRow(0)

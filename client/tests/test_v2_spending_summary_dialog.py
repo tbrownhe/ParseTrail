@@ -35,7 +35,7 @@ def test_spending_dialog_reads_posted_totals_without_changing_profile(tmp_path: 
         store.add_category_account("expense:food", "Food", "expense")
         store.set_category_budget_rate("expense:food", date(2026, 10, 1), 1_000)
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
-        store.post_reviewed_cash_expense(evidence.payload.rows[0].row_id, "expense:food", reason="Reviewed coffee")
+        store.post_reviewed_cash_category(evidence.payload.rows[0].row_id, "expense:food", reason="Reviewed coffee")
     before = hashlib.sha256(profile.read_bytes()).hexdigest()
     dialog = V2SpendingSummaryDialog(profile)
     try:

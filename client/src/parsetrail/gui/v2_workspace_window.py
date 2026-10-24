@@ -34,7 +34,7 @@ from parsetrail.core.v2_profile_store import FinancialAccount, ProfileFormatErro
 from parsetrail.core.v2_source_import import ImportCancelled, SourceImportResult
 from parsetrail.core.v2_workspace import V2Workspace
 from parsetrail.gui.v2_account_binding_review import V2AccountBindingReview
-from parsetrail.gui.v2_cash_expense_review import V2CashExpenseReview
+from parsetrail.gui.v2_cash_activity_review import V2CashActivityReview
 from parsetrail.gui.v2_categories import V2CategoryDialog
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
 from parsetrail.gui.v2_source_account_review import V2SourceAccountReview
@@ -158,9 +158,9 @@ class V2WorkspaceWindow(QMainWindow):
         self.preview_button = QPushButton("Preview evidence")
         self.preview_button.clicked.connect(self._preview)
         controls.addWidget(self.preview_button)
-        self.expense_review_button = QPushButton("Review cash expenses")
-        self.expense_review_button.clicked.connect(self._review_cash_expenses)
-        controls.addWidget(self.expense_review_button)
+        self.cash_review_button = QPushButton("Review cash activity")
+        self.cash_review_button.clicked.connect(self._review_cash_activity)
+        controls.addWidget(self.cash_review_button)
         self.spending_button = QPushButton("Reviewed reports")
         self.spending_button.clicked.connect(self._spending_summary)
         controls.addWidget(self.spending_button)
@@ -217,7 +217,7 @@ class V2WorkspaceWindow(QMainWindow):
     def _update_controls(self, *_args) -> None:
         source_id = self._selected_source()
         self.preview_button.setEnabled(source_id is not None)
-        self.expense_review_button.setEnabled(source_id is not None)
+        self.cash_review_button.setEnabled(source_id is not None)
         unidentified_rows = False
         identified_accounts = False
         if source_id is not None:
@@ -320,10 +320,10 @@ class V2WorkspaceWindow(QMainWindow):
         if source_id is not None:
             V2EvidencePreview(self.workspace.saved_import(source_id), self).exec()
 
-    def _review_cash_expenses(self) -> None:
+    def _review_cash_activity(self) -> None:
         source_id = self._selected_source()
         if source_id is not None:
-            V2CashExpenseReview(self.workspace.profile_path, source_id, self).exec()
+            V2CashActivityReview(self.workspace.profile_path, source_id, self).exec()
             self.refresh(select_source=source_id)
 
     def _spending_summary(self) -> None:

@@ -218,7 +218,7 @@ def test_source_account_review_explains_posted_assignment_lock(tmp_path: Path, m
     messages = []
     monkeypatch.setattr(QMessageBox, "warning", lambda _parent, _title, message: messages.append(message))
     with V2ProfileStore.open(path) as store:
-        store.post_reviewed_cash_expense(row.row_id, "expense:food", reason="Reviewed coffee")
+        store.post_reviewed_cash_category(row.row_id, "expense:food", reason="Reviewed coffee")
         assert row.row_id in store.journal_history_row_ids(evidence.source_sha256)
     stale_dialog.clear_button.click()
     assert messages and "posted journal history" in messages[0]

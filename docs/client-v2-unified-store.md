@@ -60,8 +60,9 @@ the service saves an inverse reversal, a replacement entry and a correction
 record atomically. The old entry and source allocation remain as history, while
 only the active allocation counts toward evidence use. Account assignments with
 journal history cannot be changed. A narrow desktop review now posts and
-recategorizes eligible asset outflows from activity exports; general journal
-workflow remains open. Earlier disposable pilot profiles are refused, not
+recategorizes eligible asset outflows and explicitly classified positive income
+receipts from activity exports; general journal workflow remains open. Earlier
+disposable pilot profiles are refused, not
 migrated.
 
 Pre-release schema revision 8 adds `CategoryBudgetRates` to the same profile.

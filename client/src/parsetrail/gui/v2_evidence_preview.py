@@ -113,7 +113,7 @@ class V2EvidencePreview(QDialog):
         self.resize(1100, 700)
         layout = QVBoxLayout(self)
         layout.addWidget(
-            QLabel("This preview shows saved source evidence. Review cash expenses for row posting status.")
+            QLabel("This preview shows saved source evidence. Review cash activity for row posting status.")
         )
         coverage = payload.capture_verified if isinstance(payload, StatementPayload) else payload.coverage_verified
         unclassified_money = sum(item.code == "unclassified_monetary_line" for item in payload.dispositions)

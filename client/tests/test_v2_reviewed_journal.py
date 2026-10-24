@@ -28,15 +28,15 @@ def test_reviewed_cash_expense_reopens_once_and_other_row_stays_pending(tmp_path
         store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
-        key = store.post_reviewed_cash_expense(outflow.row_id, "expense:food", reason="Reviewed coffee purchase")
-        assert key == f"review:expense:{outflow.row_id}"
+        key = store.post_reviewed_cash_category(outflow.row_id, "expense:food", reason="Reviewed coffee purchase")
+        assert key == f"review:cash:expense:{outflow.row_id}"
         assert (
-            store.post_reviewed_cash_expense(outflow.row_id, "expense:food", reason="Reviewed coffee purchase") == key
+            store.post_reviewed_cash_category(outflow.row_id, "expense:food", reason="Reviewed coffee purchase") == key
         )
-        with pytest.raises(ProfileFormatError, match="expense_review_conflicts_with_prior_entry"):
-            store.post_reviewed_cash_expense(outflow.row_id, "expense:food", reason="Different review")
-        with pytest.raises(ProfileFormatError, match="cash_expense_requires_bound_posted_outflow"):
-            store.post_reviewed_cash_expense(inflow.row_id, "expense:food", reason="Not an expense")
+        with pytest.raises(ProfileFormatError, match="cash_review_conflicts_with_prior_entry"):
+            store.post_reviewed_cash_category(outflow.row_id, "expense:food", reason="Different review")
+        with pytest.raises(ProfileFormatError, match="cash_category_requires_bound_posted_movement"):
+            store.post_reviewed_cash_category(inflow.row_id, "expense:food", reason="Not an expense")
         original_payload = store.connection.execute(
             "SELECT payload FROM JournalEntries WHERE key=?", (key,)
         ).fetchone()[0]
@@ -62,7 +62,7 @@ def test_reviewed_cash_expense_reopens_once_and_other_row_stays_pending(tmp_path
             "SELECT count(*) FROM JournalAllocations WHERE row_id=?", (inflow.row_id,)
         ).fetchone() == (0,)
         with pytest.raises(ProfileFormatError, match="profile_read_only"):
-            store.post_reviewed_cash_expense(outflow.row_id, "expense:food", reason="Reviewed coffee purchase")
+            store.post_reviewed_cash_category(outflow.row_id, "expense:food", reason="Reviewed coffee purchase")
 
 
 def test_cash_expense_requires_explicit_mapping_and_expense_category(tmp_path: Path) -> None:
@@ -74,15 +74,15 @@ def test_cash_expense_requires_explicit_mapping_and_expense_category(tmp_path: P
         store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
         store.add_financial_account(FinancialAccount("card", "Card", "liability", "synthetic"))
         store.add_category_account("income:other", "Other income", "income")
-        with pytest.raises(ProfileFormatError, match="cash_expense_requires_bound_posted_outflow"):
-            store.post_reviewed_cash_expense(row_id, "income:other", reason="Missing account decision")
+        with pytest.raises(ProfileFormatError, match="cash_category_requires_bound_posted_movement"):
+            store.post_reviewed_cash_category(row_id, "income:other", reason="Missing account decision")
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
-        with pytest.raises(ProfileFormatError, match="cash_expense_account_or_category"):
-            store.post_reviewed_cash_expense(row_id, "income:other", reason="Wrong category")
+        with pytest.raises(ProfileFormatError, match="cash_category_requires_bound_posted_movement"):
+            store.post_reviewed_cash_category(row_id, "income:other", reason="Wrong category")
         store.add_category_account("expense:food", "Food", "expense")
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "card")
-        with pytest.raises(ProfileFormatError, match="cash_expense_account_or_category"):
-            store.post_reviewed_cash_expense(row_id, "expense:food", reason="Liability sign is different")
+        with pytest.raises(ProfileFormatError, match="cash_category_requires_asset_account"):
+            store.post_reviewed_cash_category(row_id, "expense:food", reason="Liability sign is different")
         assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (0,)
 
 
@@ -98,7 +98,7 @@ def test_cash_expense_correction_reverses_and_replaces_without_reusing_evidence(
         store.add_category_account("expense:travel", "Travel", "expense")
         store.add_category_account("income:other", "Other income", "income")
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
-        original = store.post_reviewed_cash_expense(row_id, "expense:food", reason="Reviewed coffee purchase")
+        original = store.post_reviewed_cash_category(row_id, "expense:food", reason="Reviewed coffee purchase")
         old_payload = store.connection.execute(
             "SELECT payload FROM JournalEntries WHERE key=?", (original,)
         ).fetchone()[0]
@@ -115,22 +115,24 @@ def test_cash_expense_correction_reverses_and_replaces_without_reusing_evidence(
             store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "other-cash")
         with pytest.raises(ProfileFormatError, match="account_binding_has_journal_history"):
             store.clear_source_account_binding(evidence.source_sha256, "Checking A", "opaque")
-        with pytest.raises(ProfileFormatError, match="expense_correction_requires_new_expense_category"):
-            store.correct_reviewed_cash_expense(original, "expense:food", reason="No category change")
-        with pytest.raises(ProfileFormatError, match="expense_correction_requires_new_expense_category"):
-            store.correct_reviewed_cash_expense(original, "income:other", reason="Income is wrong")
+        with pytest.raises(ProfileFormatError, match="cash_correction_requires_new_same_kind_category"):
+            store.correct_reviewed_cash_category(original, "expense:food", reason="No category change")
+        with pytest.raises(ProfileFormatError, match="cash_correction_requires_new_same_kind_category"):
+            store.correct_reviewed_cash_category(original, "income:other", reason="Income is wrong")
         assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (1,)
-        replacement = store.correct_reviewed_cash_expense(original, "expense:travel", reason="Correct category")
-        assert store.correct_reviewed_cash_expense(original, "expense:travel", reason="Correct category") == replacement
-        with pytest.raises(ProfileFormatError, match="expense_correction_conflicts_with_prior_decision"):
-            store.correct_reviewed_cash_expense(original, "expense:food", reason="Different correction")
-        with pytest.raises(ProfileFormatError, match="expense_review_already_corrected"):
-            store.post_reviewed_cash_expense(row_id, "expense:food", reason="Reviewed coffee purchase")
+        replacement = store.correct_reviewed_cash_category(original, "expense:travel", reason="Correct category")
+        assert (
+            store.correct_reviewed_cash_category(original, "expense:travel", reason="Correct category") == replacement
+        )
+        with pytest.raises(ProfileFormatError, match="cash_correction_conflicts_with_prior_decision"):
+            store.correct_reviewed_cash_category(original, "expense:food", reason="Different correction")
+        with pytest.raises(ProfileFormatError, match="cash_review_already_corrected"):
+            store.post_reviewed_cash_category(row_id, "expense:food", reason="Reviewed coffee purchase")
         assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (3,)
         assert store.connection.execute("SELECT count(*) FROM JournalCorrections").fetchone() == (1,)
         assert store.connection.execute("SELECT count(*) FROM JournalAllocations").fetchone() == (2,)
         assert store._active_consumed() == {row_id: -400}
-        second = store.correct_reviewed_cash_expense(replacement, "expense:food", reason="Reconsidered category")
+        second = store.correct_reviewed_cash_category(replacement, "expense:food", reason="Reconsidered category")
         assert second != replacement
         assert store._active_consumed() == {row_id: -400}
     with V2ProfileStore.open(profile, read_only=True) as store:
@@ -142,6 +144,43 @@ def test_cash_expense_correction_reverses_and_replaces_without_reusing_evidence(
         assert totals == {"cash": -400, "expense:food": 400, "expense:travel": 0}
         assert store.connection.execute("SELECT count(*) FROM JournalCorrections").fetchone() == (2,)
         assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (5,)
+        assert store.load_import(evidence.source_sha256).evidence == evidence
+
+
+def test_positive_cash_requires_explicit_income_category_and_corrects_with_history(tmp_path: Path) -> None:
+    profile = tmp_path / "fresh.db"
+    evidence = build_source_evidence(SOURCE, DEFINITION, suffix=".csv")
+    expense_row, deposit = evidence.payload.rows
+    with V2ProfileStore.create(profile) as store:
+        store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
+        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        store.add_category_account("expense:food", "Food", "expense")
+        store.add_category_account("income:pay", "Pay", "income")
+        store.add_category_account("income:gift", "Gift", "income")
+        store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
+        with pytest.raises(ProfileFormatError, match="cash_category_requires_bound_posted_movement"):
+            store.post_reviewed_cash_category(deposit.row_id, "expense:food", reason="Wrong sign")
+        with pytest.raises(ProfileFormatError, match="cash_category_requires_bound_posted_movement"):
+            store.post_reviewed_cash_category(expense_row.row_id, "income:pay", reason="Wrong sign")
+        assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (0,)
+        original = store.post_reviewed_cash_category(deposit.row_id, "income:pay", reason="Confirmed cash income")
+        assert (
+            store.post_reviewed_cash_category(deposit.row_id, "income:pay", reason="Confirmed cash income") == original
+        )
+        with pytest.raises(ProfileFormatError, match="cash_correction_requires_new_same_kind_category"):
+            store.correct_reviewed_cash_category(original, "expense:food", reason="Wrong kind")
+        replacement = store.correct_reviewed_cash_category(original, "income:gift", reason="Correct income category")
+        assert replacement != original
+        assert store._active_consumed() == {deposit.row_id: 1_000}
+        assert store.connection.execute("SELECT count(*) FROM JournalCorrections").fetchone() == (1,)
+    with V2ProfileStore.open(profile, read_only=True) as store:
+        entries = [json.loads(payload) for (payload,) in store.connection.execute("SELECT payload FROM JournalEntries")]
+        totals: dict[str, int] = {}
+        for entry in entries:
+            for posting in entry["postings"]:
+                totals[posting["account_id"]] = totals.get(posting["account_id"], 0) + posting["amount_minor"]
+        assert totals == {"cash": 1_000, "income:pay": 0, "income:gift": -1_000}
+        assert store.cash_activity_review_rows(evidence.source_sha256)[1].status == "Posted: Gift"
         assert store.load_import(evidence.source_sha256).evidence == evidence
 
 
@@ -165,7 +204,7 @@ def test_accountless_assignment_stays_fixed_after_cash_expense_post(tmp_path: Pa
             store.assert_file_account(evidence.source_sha256, "cash")
         else:
             store.assign_row_account(row_id, "cash")
-        store.post_reviewed_cash_expense(row_id, "expense:food", reason="Reviewed coffee purchase")
+        store.post_reviewed_cash_category(row_id, "expense:food", reason="Reviewed coffee purchase")
         if assignment == "file":
             store.assert_file_account(evidence.source_sha256, "cash")
             with pytest.raises(ProfileFormatError, match="account_binding_has_journal_history"):

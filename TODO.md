@@ -518,10 +518,13 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   an existing journal keeps its
   account ID and payload after a rename. Offscreen acceptance passes, and the
   owner confirmed the native Windows dialog on October 24, 2026. A new
-  cash-expense review dialog shows all source rows and permits explicit posting
-  or append-only recategorization only for bound asset outflows from activity
-  exports with a source posting date. Its offscreen interaction test passes;
-  the owner confirmed its native Windows behavior on October 24, 2026. The
+  cash activity review dialog shows all source rows and permits explicit posting
+  or append-only recategorization for bound asset outflows and positive receipts
+  from activity exports with a source posting date. Positive receipts become
+  income only after an income-category choice; transfers and loan proceeds stay
+  pending unless deliberately classified. Its offscreen interaction tests pass;
+  the owner confirmed the expense flow on native Windows on October 24, 2026.
+  Native Windows acceptance of the new income flow remains open. The
   reason remains required for now; the owner flagged the per-categorization
   entry as potential daily-workflow friction for later review. Financial
   account editing now changes the display name, institution key and full number
@@ -550,8 +553,9 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   budgets tab now compares each effective-month expense target with reviewed
   journal spending for that calendar month. Missing targets remain visible,
   and no total target is shown unless every expense category has one; source
-  coverage limits remain visible. Offscreen checks pass; native Windows
-  acceptance of this new tab remains open.
+  coverage limits remain visible. Offscreen checks pass; the owner accepted
+  this tab and confirmed that setting Travel's target made the monthly total
+  appear.
   Inventory every legacy menu action; approve concrete deferrals rather than
   silently removing functionality. Owner Windows gate.
 - [ ] **V2-6a–b — Profile selection:** backup/restore the new profile and make

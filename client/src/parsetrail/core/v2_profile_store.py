@@ -201,7 +201,7 @@ class SourceAccountBinding:
 
 
 @dataclass(frozen=True)
-class CashExpenseReviewRow:
+class CashActivityReviewRow:
     row_id: str
     date: str | None
     description: str
@@ -649,7 +649,7 @@ class V2ProfileStore:
             for category in self.category_accounts()
         )
 
-    def _cash_expense_source(self, row_id: str):
+    def _cash_category_source(self, row_id: str, kind: Literal["expense", "income"]):
         source_row = self.connection.execute(
             "SELECT source_sha256,row_role,date_role,observed_date,amount_minor FROM SourceObservations WHERE row_id=?",
             (row_id,),
@@ -666,16 +666,17 @@ class V2ProfileStore:
             or row.date_role != "posting_date"
             or row.date.iso is None
             or row.amount.minor is None
-            or row.amount.minor >= 0
+            or row.amount.minor == 0
+            or (row.amount.minor < 0) != (kind == "expense")
             or not row.description.text
             or financial_id is None
         ):
-            raise ProfileFormatError("cash_expense_requires_bound_posted_outflow")
+            raise ProfileFormatError("cash_category_requires_bound_posted_movement")
         if source_row[1:] != (row.row_role, row.date_role, row.date.iso, row.amount.minor):
             raise ProfileFormatError("source_observation_index_mismatch")
         financial = self.connection.execute("SELECT kind,role FROM Accounts WHERE id=?", (financial_id,)).fetchone()
         if financial != ("asset", "financial"):
-            raise ProfileFormatError("cash_expense_account_or_category")
+            raise ProfileFormatError("cash_category_requires_asset_account")
         account_rows = self.connection.execute("SELECT id,name,kind,currency,role,purpose FROM Accounts").fetchall()
         accounts = {
             account_id: LedgerAccount(
@@ -723,8 +724,8 @@ class V2ProfileStore:
             )
         return assigned
 
-    def cash_expense_review_rows(self, source_sha256: str) -> tuple[CashExpenseReviewRow, ...]:
-        """Describe source rows for the narrow reviewed cash-expense workflow."""
+    def cash_activity_review_rows(self, source_sha256: str) -> tuple[CashActivityReviewRow, ...]:
+        """Describe source rows for explicit asset cash expense or income review."""
         saved = self.load_import(source_sha256)
         bindings = {binding.row_id: binding.ledger_account_id for binding in self.account_bindings(source_sha256)}
         accounts = {
@@ -758,15 +759,15 @@ class V2ProfileStore:
                         and entry.postings[0].account_id == account_id
                         and entry.postings[0].allocations == (Allocation(row.row_id, row.amount.minor),)
                         and accounts.get(entry.postings[1].account_id, (None, None, None))[1:]
-                        == ("expense", "category")
+                        == ("expense" if row.amount.minor < 0 else "income", "category")
                     ):
                         entry_key = entry.key
                         category_id = entry.postings[1].account_id
                         status = "Posted: " + accounts[category_id][0]
             elif not isinstance(saved.evidence.payload, ActivityExportPayload):
                 status = "Statement posting is not available in this review"
-            elif row.row_role != "activity" or row.amount.minor is None or row.amount.minor >= 0:
-                status = "Outside cash expense scope"
+            elif row.row_role != "activity" or row.amount.minor is None or row.amount.minor == 0:
+                status = "Outside cash activity scope"
             elif row.date_role != "posting_date" or row.date.iso is None:
                 status = "Posting date needs review"
             elif account_id is None:
@@ -776,9 +777,9 @@ class V2ProfileStore:
             elif not row.description.text:
                 status = "Description needs review"
             else:
-                status = "Ready for expense review"
+                status = "Ready for expense review" if row.amount.minor < 0 else "Ready for income review"
             result.append(
-                CashExpenseReviewRow(
+                CashActivityReviewRow(
                     row.row_id,
                     row.date.iso,
                     row.description.text,
@@ -906,20 +907,21 @@ class V2ProfileStore:
             excluded_unreviewed,
         )
 
-    def post_reviewed_cash_expense(self, row_id: str, category_id: str, *, reason: str) -> str:
-        """Post one explicitly classified asset outflow, supported by source evidence."""
+    def post_reviewed_cash_category(self, row_id: str, category_id: str, *, reason: str) -> str:
+        """Post one explicitly classified asset cash movement with source evidence."""
         self._require_writable()
         if type(reason) is not str or not 0 < len(reason.strip()) <= 500:
-            raise ProfileFormatError("expense_review_reason_required")
+            raise ProfileFormatError("cash_review_reason_required")
         self.connection.execute("BEGIN IMMEDIATE")
         try:
-            row, financial_id, accounts = self._cash_expense_source(row_id)
             category = self.connection.execute("SELECT kind,role FROM Accounts WHERE id=?", (category_id,)).fetchone()
-            if category != ("expense", "category"):
-                raise ProfileFormatError("cash_expense_account_or_category")
+            if category not in {("expense", "category"), ("income", "category")}:
+                raise ProfileFormatError("cash_category_invalid")
+            kind = category[0]
+            row, financial_id, accounts = self._cash_category_source(row_id, kind)
             amount = row.amount.minor
             entry = JournalEntry(
-                key=f"review:expense:{row_id}",
+                key=f"review:cash:{kind}:{row_id}",
                 event_id=f"source:{row_id}",
                 posting_date=date.fromisoformat(row.date.iso),
                 description=row.description.text,
@@ -936,9 +938,9 @@ class V2ProfileStore:
                 if self.connection.execute(
                     "SELECT 1 FROM JournalCorrections WHERE original_key=?", (entry.key,)
                 ).fetchone():
-                    raise ProfileFormatError("expense_review_already_corrected")
+                    raise ProfileFormatError("cash_review_already_corrected")
                 if prior[0] != payload:
-                    raise ProfileFormatError("expense_review_conflicts_with_prior_entry")
+                    raise ProfileFormatError("cash_review_conflicts_with_prior_entry")
                 self.connection.execute("COMMIT")
                 return entry.key
             validate_entry(
@@ -954,20 +956,19 @@ class V2ProfileStore:
         except BaseException as exc:
             self.connection.execute("ROLLBACK")
             if isinstance(exc, LedgerError):
-                raise ProfileFormatError("expense_review_refused") from None
+                raise ProfileFormatError("cash_review_refused") from None
             raise
 
-    def correct_reviewed_cash_expense(self, original_key: str, category_id: str, *, reason: str) -> str:
-        """Atomically reverse and recategorize one active reviewed cash expense."""
+    def correct_reviewed_cash_category(self, original_key: str, category_id: str, *, reason: str) -> str:
+        """Atomically reverse and recategorize an active reviewed cash movement."""
         self._require_writable()
         if type(original_key) is not str or not original_key or type(category_id) is not str or not category_id:
-            raise ProfileFormatError("expense_correction_identity_required")
+            raise ProfileFormatError("cash_correction_identity_required")
         if type(reason) is not str or not 0 < len(reason.strip()) <= 500:
-            raise ProfileFormatError("expense_correction_reason_required")
+            raise ProfileFormatError("cash_correction_reason_required")
         reason = reason.strip()
         replacement_key = (
-            "review:expense:correction:"
-            + hashlib.sha256(f"{original_key}\0{category_id}\0{reason}".encode()).hexdigest()
+            "review:cash:correction:" + hashlib.sha256(f"{original_key}\0{category_id}\0{reason}".encode()).hexdigest()
         )
         self.connection.execute("BEGIN IMMEDIATE")
         try:
@@ -978,12 +979,12 @@ class V2ProfileStore:
                 if prior == (replacement_key, reason):
                     self.connection.execute("COMMIT")
                     return replacement_key
-                raise ProfileFormatError("expense_correction_conflicts_with_prior_decision")
+                raise ProfileFormatError("cash_correction_conflicts_with_prior_decision")
             original_row = self.connection.execute(
                 "SELECT payload FROM JournalEntries WHERE key=?", (original_key,)
             ).fetchone()
             if original_row is None:
-                raise ProfileFormatError("expense_correction_original_missing")
+                raise ProfileFormatError("cash_correction_original_missing")
             original = _decode_journal(original_row[0])
             allocations = self.connection.execute(
                 "SELECT row_id,amount_minor FROM JournalAllocations WHERE entry_key=?", (original_key,)
@@ -995,13 +996,12 @@ class V2ProfileStore:
                 or len(original.postings) != 2
                 or len(allocations) != 1
                 or original.postings[0].amount_minor != allocations[0][1]
-                or original.postings[0].amount_minor >= 0
+                or original.postings[0].amount_minor == 0
                 or original.postings[0].allocations != (Allocation(*allocations[0]),)
                 or original.postings[1].amount_minor != -allocations[0][1]
             ):
-                raise ProfileFormatError("expense_correction_original_invalid")
+                raise ProfileFormatError("cash_correction_original_invalid")
             row_id, amount = allocations[0]
-            row, financial_id, accounts = self._cash_expense_source(row_id)
             old_category_id = original.postings[1].account_id
             old_category = self.connection.execute(
                 "SELECT kind,role FROM Accounts WHERE id=?", (old_category_id,)
@@ -1009,16 +1009,18 @@ class V2ProfileStore:
             new_category = self.connection.execute(
                 "SELECT kind,role FROM Accounts WHERE id=?", (category_id,)
             ).fetchone()
+            kind = "expense" if amount < 0 else "income"
+            row, financial_id, accounts = self._cash_category_source(row_id, kind)
             if (
                 original.postings[0].account_id != financial_id
                 or original.event_id != f"source:{row_id}"
                 or original.posting_date.isoformat() != row.date.iso
                 or original.description != row.description.text
-                or old_category != ("expense", "category")
-                or new_category != ("expense", "category")
+                or old_category != (kind, "category")
+                or new_category != (kind, "category")
                 or category_id == old_category_id
             ):
-                raise ProfileFormatError("expense_correction_requires_new_expense_category")
+                raise ProfileFormatError("cash_correction_requires_new_same_kind_category")
             reversal = JournalEntry(
                 key="reversal:" + hashlib.sha256(original_key.encode()).hexdigest(),
                 event_id=original.event_id,
@@ -1044,7 +1046,7 @@ class V2ProfileStore:
             if self.connection.execute(
                 "SELECT 1 FROM JournalEntries WHERE key IN (?,?)", (reversal.key, replacement.key)
             ).fetchone():
-                raise ProfileFormatError("expense_correction_key_conflict")
+                raise ProfileFormatError("cash_correction_key_conflict")
             validate_entry(
                 replacement,
                 accounts,
@@ -1067,7 +1069,7 @@ class V2ProfileStore:
         except BaseException as exc:
             self.connection.execute("ROLLBACK")
             if isinstance(exc, LedgerError):
-                raise ProfileFormatError("expense_correction_refused") from None
+                raise ProfileFormatError("cash_correction_refused") from None
             raise
 
     def source_account_bindings(self, source_sha256: str) -> tuple[SourceAccountBinding, ...]:

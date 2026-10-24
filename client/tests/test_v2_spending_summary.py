@@ -33,9 +33,9 @@ def test_spending_summary_nets_corrections_and_keeps_unallocated_activity_visibl
         store.set_category_budget_rate("expense:food", date(2026, 10, 1), 1_000)
         store.set_category_budget_rate("expense:food", date(2026, 11, 1), 2_000)
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
-        original = store.post_reviewed_cash_expense(coffee.row_id, "expense:food", reason="Reviewed coffee")
-        store.post_reviewed_cash_expense(tea.row_id, "expense:food", reason="Reviewed tea")
-        store.correct_reviewed_cash_expense(original, "expense:travel", reason="Correct category")
+        original = store.post_reviewed_cash_category(coffee.row_id, "expense:food", reason="Reviewed coffee")
+        store.post_reviewed_cash_category(tea.row_id, "expense:food", reason="Reviewed tea")
+        store.correct_reviewed_cash_category(original, "expense:travel", reason="Correct category")
         store.rename_category_account("expense:travel", "Trips")
         store.update_financial_account(FinancialAccount("cash", "Updated checking", "asset", "synthetic"))
     with V2ProfileStore.open(profile, read_only=True) as store:

@@ -121,6 +121,8 @@ def main(argv: list[str] | None = None) -> int:
             store.add_financial_account(FinancialAccount("citi-card", "Citi Card", "liability", "citi"))
             store.add_category_account("category:food", "Food", "expense")
             store.add_category_account("category:travel", "Travel", "expense")
+            store.add_category_account("category:cash-income", "Demo income", "income")
+            store.add_category_account("category:other-income", "Other income", "income")
             store.set_category_budget_rate("category:food", date(2026, 10, 1), 10_000)
             for evidence in (citi_evidence, citi_overlap):
                 account = evidence.payload.accounts[0]
@@ -132,8 +134,9 @@ def main(argv: list[str] | None = None) -> int:
         window.status.setWordWrap(True)
         window.status.setText(
             "Disposable demo. Selected cash export: bind Checking A to its asset account under "
-            "Review source accounts, then open Review cash expenses. Post Coffee to Food; "
-            "correct it to Travel. Deposit stays pending. "
+            "Review source accounts, then open Review cash activity. Post Coffee to Food; "
+            "correct it to Travel. Deposit remains pending unless you explicitly classify it as income; "
+            "the demo offers two income categories for that review. "
             "Select the card source to review its last-four match. "
             "Older Citi sources: inspect the period-overlap warning; one source previews an unclassified dollar line. "
             "Categories: rename Food, add a category, or change Food's October $100 target. "
