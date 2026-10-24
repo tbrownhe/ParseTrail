@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import os
+from datetime import date
 from pathlib import Path
 
 from parsetrail.core.v2_profile_store import FinancialAccount, V2ProfileStore
@@ -32,6 +33,7 @@ def test_spending_dialog_reads_posted_totals_without_changing_profile(tmp_path: 
         store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
         store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
+        store.set_category_budget_rate("expense:food", date(2026, 10, 1), 1_000)
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
         store.post_reviewed_cash_expense(evidence.payload.rows[0].row_id, "expense:food", reason="Reviewed coffee")
     before = hashlib.sha256(profile.read_bytes()).hexdigest()
@@ -51,9 +53,18 @@ def test_spending_dialog_reads_posted_totals_without_changing_profile(tmp_path: 
         assert dialog.account_model.data(dialog.account_model.index(0, 2)) == "-$4.00"
         assert dialog.account_model.data(dialog.account_model.index(0, 3)) == "Not established"
         assert "not account balances" in dialog.scope.text()
+        dialog.tabs.setCurrentIndex(2)
+        dialog.budget_month.setDate(QDate(2026, 10, 1))
+        assert dialog.budget_model.rowCount() == 1
+        assert dialog.budget_model.data(dialog.budget_model.index(0, 1)) == "$10.00"
+        assert dialog.budget_model.data(dialog.budget_model.index(0, 2)) == "$4.00"
+        assert dialog.budget_model.data(dialog.budget_model.index(0, 3)) == "$6.00"
+        assert "whole calendar months" in dialog.scope.text()
         dialog.end.setDate(QDate(2026, 10, 1))
         assert dialog.model.rowCount() == 0
         assert dialog.account_model.rowCount() == 0
+        assert dialog.budget_model.rowCount() == 1
+        dialog.tabs.setCurrentIndex(0)
         assert "end date after" in dialog.total.text()
     finally:
         dialog.close()

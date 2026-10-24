@@ -410,7 +410,8 @@ The owner confirmed these presentation fixes on native Windows. Pre-release
 schema revision 8 adds effective-month category budget targets to the same
 profile. The category dialog can save a new target or clear one from a selected
 month forward while preserving prior months. These planning values do not post
-journal entries. Offscreen checks pass; native Windows acceptance is pending.
+journal entries. Offscreen checks pass; the owner accepted effective dates on
+native Windows.
 
 A first read-only Spending summary in the 2.0 workspace uses reviewed expense
 journal postings for a selected half-open date range. Reversal and replacement
@@ -422,8 +423,12 @@ Windows. A new Account movement tab uses the same date range to show reviewed
 financial-account journal changes. It presents assets as changes in value and
 liabilities as changes in amount owed, separates opening postings, and labels
 missing openings Not established. It does not calculate account balances or
-certify cash flow. Offscreen checks pass; native Windows acceptance of this tab
-remains open. Budget reporting, cash classification and export cutover remain
+certify cash flow. The owner accepted this tab on native Windows. A Monthly
+budgets tab now compares effective expense targets with net reviewed journal
+spending for a whole calendar month. Categories with no target stay visible;
+the view omits the total target if any category is untargeted and states the
+source coverage limit. Offscreen checks pass; native Windows acceptance of
+the new budget tab remains open. Cash classification and export cutover remain
 V2-5 work.
 
 ## Current stop/go decision

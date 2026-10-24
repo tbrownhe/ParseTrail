@@ -137,6 +137,7 @@ def main(argv: list[str] | None = None) -> int:
             "Select the card source to review its last-four match. "
             "Older Citi sources: inspect the period-overlap warning; one source previews an unclassified dollar line. "
             "Categories: rename Food, add a category, or change Food's October $100 target. "
+            "Reviewed reports > Monthly budgets: October shows Food's $100 target and reviewed Coffee spending. "
             f"Import source: {more_path}\nInstall signed catalog: {next_release}"
         )
         window.show()

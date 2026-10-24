@@ -17,11 +17,14 @@ from PySide6.QtWidgets import (
     QTableView,
     QTabWidget,
     QVBoxLayout,
+    QWidget,
 )
 
 from parsetrail.core.v2_profile_store import (
     FinancialJournalMovement,
     FinancialJournalSummary,
+    MonthlyBudgetRow,
+    MonthlyBudgetSummary,
     ProfileFormatError,
     SpendingCategoryTotal,
     SpendingSummary,
@@ -97,13 +100,51 @@ class _AccountMovementModel(QAbstractTableModel):
         return values[index.column()]
 
 
+class _MonthlyBudgetModel(QAbstractTableModel):
+    HEADERS = ("Expense category", "Monthly target", "Reviewed spending", "Remaining")
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.rows: tuple[MonthlyBudgetRow, ...] = ()
+
+    def replace(self, rows: tuple[MonthlyBudgetRow, ...]) -> None:
+        self.beginResetModel()
+        self.rows = rows
+        self.endResetModel()
+
+    def rowCount(self, _parent: QModelIndex = QModelIndex()) -> int:
+        return len(self.rows)
+
+    def columnCount(self, _parent: QModelIndex = QModelIndex()) -> int:
+        return len(self.HEADERS)
+
+    def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole):
+        if role == Qt.DisplayRole and orientation == Qt.Horizontal:
+            return self.HEADERS[section]
+        return None
+
+    def data(self, index: QModelIndex, role: int = Qt.DisplayRole):
+        if not index.isValid() or role not in {Qt.DisplayRole, Qt.ToolTipRole}:
+            return None
+        row = self.rows[index.row()]
+        values = (
+            row.name,
+            _money(row.target_minor) if row.target_minor is not None else "No target",
+            _money(row.reviewed_spending_minor),
+            _money(row.remaining_minor) if row.remaining_minor is not None else "—",
+        )
+        if role == Qt.ToolTipRole and index.column() == 1 and row.target_effective_month is not None:
+            return f"Target effective {row.target_effective_month:%Y-%m}"
+        return values[index.column()]
+
+
 class V2SpendingSummaryDialog(QDialog):
     """Show reviewed net spending without claiming complete source coverage."""
 
     def __init__(self, profile: Path, parent=None):
         super().__init__(parent)
         self.profile = profile
-        self.setWindowTitle("2.0 spending and account movement")
+        self.setWindowTitle("2.0 reviewed reports")
         self.resize(850, 550)
         layout = QVBoxLayout(self)
         form = QFormLayout()
@@ -118,6 +159,9 @@ class V2SpendingSummaryDialog(QDialog):
         form.addRow("From (inclusive)", self.start)
         form.addRow("To (exclusive)", self.end)
         layout.addLayout(form)
+        layout.addWidget(
+            QLabel("Date range applies to Spending and Account movement; Monthly budgets use their own month.")
+        )
         self.model = _SpendingModel(self)
         self.table = QTableView()
         self.table.setModel(self.model)
@@ -134,6 +178,24 @@ class V2SpendingSummaryDialog(QDialog):
         self.tabs = QTabWidget()
         self.tabs.addTab(self.table, "Spending")
         self.tabs.addTab(self.account_table, "Account movement")
+        budget_panel = QWidget()
+        budget_layout = QVBoxLayout(budget_panel)
+        budget_form = QFormLayout()
+        self.budget_month = QDateEdit(QDate(first.year, first.month, 1))
+        self.budget_month.setCalendarPopup(True)
+        self.budget_month.setDisplayFormat("yyyy-MM")
+        self.budget_month.setMaximumDate(QDate(9999, 11, 1))
+        budget_form.addRow("Budget month", self.budget_month)
+        budget_layout.addLayout(budget_form)
+        self.budget_model = _MonthlyBudgetModel(self)
+        self.budget_table = QTableView()
+        self.budget_table.setModel(self.budget_model)
+        self.budget_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.budget_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        for column in (1, 2, 3):
+            self.budget_table.horizontalHeader().setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
+        budget_layout.addWidget(self.budget_table)
+        self.tabs.addTab(budget_panel, "Monthly budgets")
         layout.addWidget(self.tabs)
         self.total = QLabel()
         layout.addWidget(self.total)
@@ -146,9 +208,12 @@ class V2SpendingSummaryDialog(QDialog):
         self.start.dateChanged.connect(self.refresh)
         self.end.dateChanged.connect(self.refresh)
         self.tabs.currentChanged.connect(self._show_selected_tab)
+        self.budget_month.dateChanged.connect(self._refresh_budget)
         self.spending_report: SpendingSummary | None = None
         self.account_report: FinancialJournalSummary | None = None
+        self.budget_report: MonthlyBudgetSummary | None = None
         self.refresh()
+        self._refresh_budget()
 
     def refresh(self, *_args) -> None:
         try:
@@ -163,16 +228,47 @@ class V2SpendingSummaryDialog(QDialog):
             self.account_model.replace(())
             self.spending_report = None
             self.account_report = None
-            self.total.setText("Choose an end date after the start date.")
-            self.scope.clear()
+            self._show_selected_tab()
             return
         self.model.replace(self.spending_report.categories)
         self.account_model.replace(self.account_report.accounts)
         self._show_selected_tab()
 
+    def _refresh_budget(self, *_args) -> None:
+        selected = self.budget_month.date()
+        month = date(selected.year(), selected.month(), 1)
+        with V2ProfileStore.open(self.profile, read_only=True) as store:
+            self.budget_report = store.monthly_budget_summary(month)
+        self.budget_model.replace(self.budget_report.categories)
+        self._show_selected_tab()
+
     def _show_selected_tab(self, *_args) -> None:
+        if self.tabs.currentIndex() == 2:
+            budget = self.budget_report
+            if budget is None:
+                return
+            untargeted = sum(row.target_minor is None for row in budget.categories)
+            if budget.total_target_minor is None:
+                target_note = f"{untargeted} expense category(s) have no target; no total target is shown."
+            else:
+                target_note = f"Total target: {_money(budget.total_target_minor)}."
+            self.total.setText(
+                f"{budget.month:%Y-%m}: {target_note} "
+                f"Net reviewed spending: {_money(budget.total_reviewed_spending_minor)}. "
+                "Remaining means target minus reviewed spending."
+            )
+            self.scope.setText(
+                f"Across the whole profile, {budget.activity_rows_without_full_allocation} activity source row(s) "
+                f"from {budget.sources_with_incomplete_activity} source(s) lack a full ledger allocation. "
+                f"{budget.excluded_unreviewed_expense_entries} unreviewed expense journal entries were excluded. "
+                "Targets apply to whole calendar months; spending includes reviewed journal entries only. "
+                "Source rows may overlap, and this view does not establish complete spending or budget compliance."
+            )
+            return
         report = self.spending_report
         if report is None:
+            self.total.setText("Choose an end date after the start date.")
+            self.scope.clear()
             return
         if self.tabs.currentIndex() == 1:
             self.total.setText(

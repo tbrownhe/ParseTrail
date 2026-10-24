@@ -231,6 +231,27 @@ class SpendingSummary:
 
 
 @dataclass(frozen=True)
+class MonthlyBudgetRow:
+    category_id: str
+    name: str
+    target_minor: int | None
+    target_effective_month: date | None
+    reviewed_spending_minor: int
+    remaining_minor: int | None
+
+
+@dataclass(frozen=True)
+class MonthlyBudgetSummary:
+    month: date
+    categories: tuple[MonthlyBudgetRow, ...]
+    total_target_minor: int | None
+    total_reviewed_spending_minor: int
+    activity_rows_without_full_allocation: int
+    sources_with_incomplete_activity: int
+    excluded_unreviewed_expense_entries: int
+
+
+@dataclass(frozen=True)
 class FinancialJournalMovement:
     account_id: str
     name: str
@@ -812,6 +833,41 @@ class V2ProfileStore:
             unresolved_rows,
             unresolved_sources,
             excluded_unreviewed,
+        )
+
+    def monthly_budget_summary(self, month: date) -> MonthlyBudgetSummary:
+        """Compare effective expense targets with reviewed spending in a whole month."""
+        self._budget_month(month)
+        if month.year == 9999 and month.month == 12:
+            raise ProfileFormatError("report_period_invalid")
+        next_month = date(month.year + (month.month == 12), month.month % 12 + 1, 1)
+        spending = self.spending_summary(start=month, end=next_month)
+        targets = {target.category_id: target for target in self.category_budget_targets(month)}
+        rows = tuple(
+            MonthlyBudgetRow(
+                category.category_id,
+                category.name,
+                targets[category.category_id].amount_minor,
+                targets[category.category_id].effective_month,
+                category.amount_minor,
+                (
+                    targets[category.category_id].amount_minor - category.amount_minor
+                    if targets[category.category_id].amount_minor is not None
+                    else None
+                ),
+            )
+            for category in spending.categories
+        )
+        return MonthlyBudgetSummary(
+            month,
+            rows,
+            sum(row.target_minor for row in rows if row.target_minor is not None)
+            if all(row.target_minor is not None for row in rows)
+            else None,
+            spending.total_minor,
+            spending.activity_rows_without_full_allocation,
+            spending.sources_with_incomplete_activity,
+            spending.excluded_unreviewed_expense_entries,
         )
 
     def financial_journal_summary(self, *, start: date, end: date) -> FinancialJournalSummary:

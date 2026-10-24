@@ -533,8 +533,8 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   these presentation fixes on native Windows. Pre-release schema revision 8
   stores monthly category targets by effective month in the same user database;
   the category dialog saves, clears and displays target history. Earlier months
-  retain their targets after a later change. Offscreen checks pass; native
-  Windows acceptance of budget editing remains open. Manual values,
+  retain their targets after a later change. Offscreen checks pass; the owner
+  accepted budget effective dates on native Windows. Manual values,
   closures and unsupported accounting remain explicit. Owner Windows
   integration gate.
 - [ ] **V2-5a–b — Report cutover:** shared ledger spending/cash/balance/budget queries,
@@ -546,8 +546,12 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   Account movement tab now shows reviewed financial-account journal changes in
   natural asset/liability direction, with opening positions separate and
   unknown openings marked Not established. It does not compute a balance or
-  certify cash flow; offscreen checks pass and native Windows acceptance of
-  this tab remains open.
+  certify cash flow; the owner accepted this tab on native Windows. A Monthly
+  budgets tab now compares each effective-month expense target with reviewed
+  journal spending for that calendar month. Missing targets remain visible,
+  and no total target is shown unless every expense category has one; source
+  coverage limits remain visible. Offscreen checks pass; native Windows
+  acceptance of this new tab remains open.
   Inventory every legacy menu action; approve concrete deferrals rather than
   silently removing functionality. Owner Windows gate.
 - [ ] **V2-6a–b — Profile selection:** backup/restore the new profile and make

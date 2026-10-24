@@ -30,6 +30,8 @@ def test_spending_summary_nets_corrections_and_keeps_unallocated_activity_visibl
         store.add_financial_account(FinancialAccount("card", "Card", "liability", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         store.add_category_account("expense:travel", "Travel", "expense")
+        store.set_category_budget_rate("expense:food", date(2026, 10, 1), 1_000)
+        store.set_category_budget_rate("expense:food", date(2026, 11, 1), 2_000)
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
         original = store.post_reviewed_cash_expense(coffee.row_id, "expense:food", reason="Reviewed coffee")
         store.post_reviewed_cash_expense(tea.row_id, "expense:food", reason="Reviewed tea")
@@ -57,6 +59,18 @@ def test_spending_summary_nets_corrections_and_keeps_unallocated_activity_visibl
         ]
         assert movement.activity_rows_without_full_allocation == 1
         assert movement.sources_with_incomplete_activity == 1
+        october_budget = store.monthly_budget_summary(date(2026, 10, 1))
+        assert [
+            (row.name, row.target_minor, row.reviewed_spending_minor, row.remaining_minor)
+            for row in october_budget.categories
+        ] == [("Food", 1_000, 300, 700), ("Trips", None, 400, None)]
+        assert october_budget.total_target_minor is None
+        assert october_budget.total_reviewed_spending_minor == report.total_minor
+        assert october_budget.activity_rows_without_full_allocation == 1
+        november_budget = store.monthly_budget_summary(date(2026, 11, 1))
+        assert november_budget.categories[0].target_minor == 2_000
+        assert november_budget.categories[0].reviewed_spending_minor == 0
+        assert november_budget.categories[0].remaining_minor == 2_000
         narrow = store.spending_summary(start=date(2026, 10, 3), end=date(2026, 10, 4))
         assert narrow.total_minor == 0
         assert narrow.activity_rows_without_full_allocation == 1
@@ -66,4 +80,6 @@ def test_spending_summary_nets_corrections_and_keeps_unallocated_activity_visibl
             store.spending_summary(start=date(2026, 10, 1), end=date(2026, 10, 1))
         with pytest.raises(ProfileFormatError, match="report_period_invalid"):
             store.financial_journal_summary(start=date(2026, 10, 2), end=date(2026, 10, 1))
+        with pytest.raises(ProfileFormatError, match="budget_effective_month_invalid"):
+            store.monthly_budget_summary(date(2026, 10, 2))
         assert store.load_import(evidence.source_sha256).evidence == evidence

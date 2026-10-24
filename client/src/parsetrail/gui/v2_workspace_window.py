@@ -161,7 +161,7 @@ class V2WorkspaceWindow(QMainWindow):
         self.expense_review_button = QPushButton("Review cash expenses")
         self.expense_review_button.clicked.connect(self._review_cash_expenses)
         controls.addWidget(self.expense_review_button)
-        self.spending_button = QPushButton("Spending summary")
+        self.spending_button = QPushButton("Reviewed reports")
         self.spending_button.clicked.connect(self._spending_summary)
         controls.addWidget(self.spending_button)
         controls.addStretch()
