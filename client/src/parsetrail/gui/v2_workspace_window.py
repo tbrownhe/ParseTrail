@@ -38,6 +38,7 @@ from parsetrail.gui.v2_cash_expense_review import V2CashExpenseReview
 from parsetrail.gui.v2_categories import V2CategoryDialog
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
 from parsetrail.gui.v2_source_account_review import V2SourceAccountReview
+from parsetrail.gui.v2_spending_summary import V2SpendingSummaryDialog
 
 
 class V2ImportWorker(QThread):
@@ -160,6 +161,9 @@ class V2WorkspaceWindow(QMainWindow):
         self.expense_review_button = QPushButton("Review cash expenses")
         self.expense_review_button.clicked.connect(self._review_cash_expenses)
         controls.addWidget(self.expense_review_button)
+        self.spending_button = QPushButton("Spending summary")
+        self.spending_button.clicked.connect(self._spending_summary)
+        controls.addWidget(self.spending_button)
         controls.addStretch()
         layout.addLayout(controls)
         account_controls = QHBoxLayout()
@@ -321,6 +325,9 @@ class V2WorkspaceWindow(QMainWindow):
         if source_id is not None:
             V2CashExpenseReview(self.workspace.profile_path, source_id, self).exec()
             self.refresh(select_source=source_id)
+
+    def _spending_summary(self) -> None:
+        V2SpendingSummaryDialog(self.workspace.profile_path, self).exec()
 
     def _review_account(self) -> None:
         source_id = self._selected_source()

@@ -406,7 +406,16 @@ flow, but observed a clipped renamed account and
 a raw error on attempted reassignment after posting. The cash and accountless
 review tables now size account columns to contents, and the account review
 dialogs show posted-history locks and disable conflicting assignment controls.
-Native Windows acceptance of these presentation fixes remains open.
+The owner confirmed these presentation fixes on native Windows.
+
+A first read-only Spending summary in the 2.0 workspace uses reviewed expense
+journal postings for a selected half-open date range. Reversal and replacement
+postings net to the corrected category amount. It separately counts activity
+source rows across the whole profile that lack full ledger allocation. The
+view explicitly avoids claiming unique transaction coverage, statement
+reconciliation or complete spending. Offscreen interaction passes; native
+Windows acceptance of this summary remains open. Budget, cash and balance
+reads and export cutover remain V2-5 work.
 
 ## Current stop/go decision
 

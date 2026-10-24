@@ -190,6 +190,24 @@ class CashExpenseReviewRow:
     category_id: str | None = None
 
 
+@dataclass(frozen=True)
+class SpendingCategoryTotal:
+    category_id: str
+    name: str
+    amount_minor: int
+
+
+@dataclass(frozen=True)
+class SpendingSummary:
+    start: date
+    end: date
+    categories: tuple[SpendingCategoryTotal, ...]
+    total_minor: int
+    activity_rows_without_full_allocation: int
+    sources_with_incomplete_activity: int
+    excluded_unreviewed_expense_entries: int
+
+
 def _digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -644,6 +662,44 @@ class V2ProfileStore:
                 )
             )
         return tuple(result)
+
+    def spending_summary(self, *, start: date, end: date) -> SpendingSummary:
+        """Summarize reviewed expense postings; report unresolved source activity separately."""
+        if type(start) is not date or type(end) is not date or start >= end:
+            raise ProfileFormatError("spending_period_invalid")
+        categories = {category.id: category for category in self.category_accounts() if category.kind == "expense"}
+        totals = dict.fromkeys(categories, 0)
+        excluded_unreviewed = 0
+        for (payload,) in self.connection.execute("SELECT payload FROM JournalEntries"):
+            entry = _decode_journal(payload)
+            if not start <= entry.posting_date < end:
+                continue
+            if not entry.reviewed:
+                excluded_unreviewed += any(posting.account_id in totals for posting in entry.postings)
+                continue
+            for posting in entry.postings:
+                if posting.account_id in totals:
+                    totals[posting.account_id] += posting.amount_minor
+        unresolved_rows, unresolved_sources = self.connection.execute(
+            "SELECT COUNT(*),COUNT(DISTINCT o.source_sha256) FROM SourceObservations o "
+            "LEFT JOIN ("
+            "SELECT a.row_id,SUM(a.amount_minor) AS used FROM JournalAllocations a "
+            "WHERE a.entry_key NOT IN (SELECT original_key FROM JournalCorrections) GROUP BY a.row_id"
+            ") active ON active.row_id=o.row_id "
+            "WHERE o.row_role='activity' AND (active.used IS NULL OR active.used<>o.amount_minor)"
+        ).fetchone()
+        return SpendingSummary(
+            start,
+            end,
+            tuple(
+                SpendingCategoryTotal(category_id, category.name, totals[category_id])
+                for category_id, category in categories.items()
+            ),
+            sum(totals.values()),
+            unresolved_rows,
+            unresolved_sources,
+            excluded_unreviewed,
+        )
 
     def post_reviewed_cash_expense(self, row_id: str, category_id: str, *, reason: str) -> str:
         """Post one explicitly classified asset outflow, supported by source evidence."""

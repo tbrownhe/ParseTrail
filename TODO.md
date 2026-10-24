@@ -529,13 +529,18 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   The owner confirmed this worked on native Windows, then observed a clipped
   renamed account and a raw lock error when trying to reassign a posted row.
   Review tables now size account columns to contents; posted assignments show
-  an explanatory lock and disable reassignment controls. Native acceptance of
-  these presentation fixes remains open. Manual values, budgets,
+  an explanatory lock and disable reassignment controls. The owner confirmed
+  these presentation fixes on native Windows. Manual values, budgets,
   closures and unsupported accounting remain explicit. Owner Windows
   integration gate.
 - [ ] **V2-5a–b — Report cutover:** shared ledger spending/cash/balance/budget queries,
-  then dashboard and export integration. Inventory every legacy menu action; approve
-  concrete deferrals rather than silently removing functionality. Owner Windows gate.
+  then dashboard and export integration. A first read-only spending summary now
+  nets reviewed expense postings, including reversal/replacement corrections,
+  and separately counts profile-wide activity source rows without full ledger
+  allocation. It does not claim deduplicated source coverage or reconciled
+  balances; offscreen checks pass, and native Windows acceptance remains open.
+  Inventory every legacy menu action; approve concrete deferrals rather than
+  silently removing functionality. Owner Windows gate.
 - [ ] **V2-6a–b — Profile selection:** backup/restore the new profile and make
   1.x/2.x profile selection explicit. No old-database activation or rebuild
   assistant. Owner Windows reopen/fallback rehearsal is required.
