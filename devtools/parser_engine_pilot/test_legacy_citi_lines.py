@@ -14,6 +14,8 @@ from parsetrail.core.v2_legacy_citi_lines import (
 )
 from parsetrail.core.v2_pdf_lines import page_lines
 
+from devtools.parser_engine_pilot.audit_legacy_citi_money import audit as audit_monetary_archive
+
 DEFINITION = Path(__file__).with_name("legacy-citi-pilot-definition.json").read_bytes()
 
 
@@ -87,6 +89,31 @@ def test_parallel_column_and_repeated_balance_are_located() -> None:
         parse({6: "01/05 AUTOPAY AUTO-PMT -$20.00 Unknown $10.00"})
 
 
+def test_unclassified_money_lines_are_preserved_without_becoming_rows() -> None:
+    output = parse(extra=("Total fees charged in 2026 $1.23", "Offer balance $2.34", "A stray $ sign"))
+    assert len(output.payload.accounts[0].rows) == 2
+    money = [
+        item
+        for item in output.payload.dispositions
+        if item.code.endswith("monetary_line") or item.code == "annual_fee_total"
+    ]
+    assert [(item.location.page, item.location.line, item.code) for item in money] == [
+        (1, 10, "annual_fee_total"),
+        (1, 11, "unclassified_monetary_line"),
+    ]
+    assert output.payload.capture_verified is False
+
+
+def test_overlapping_literal_labels_stay_unclassified() -> None:
+    raw = json.loads(DEFINITION)
+    raw["monetary_line_rules"].append({"code": "fee_period_total", "all_of": ["Total fees charged in 2026"]})
+    output = parse_legacy_citi(
+        json.dumps(raw).encode(),
+        lines(extra=("Total fees charged in 2026 $1.23",)),
+    )
+    assert output.payload.dispositions[-1].code == "unclassified_monetary_line"
+
+
 def test_zero_activity_requires_printed_equal_balances_and_table_header() -> None:
     output = parse({4: "New balance $100.00", 6: "", 7: "", 8: ""})
     assert output.payload.accounts[0].rows == ()
@@ -98,9 +125,17 @@ def test_zero_activity_requires_printed_equal_balances_and_table_header() -> Non
 
 def test_definition_schema_and_unknown_field() -> None:
     assert LegacyCitiDefinition.model_validate_json(DEFINITION).operation == "layout_date_start_continuation_v1"
-    schema = json.loads(Path(__file__).with_name("legacy-citi-declaration-schema-v1.json").read_text())
+    schema = json.loads(Path(__file__).with_name("legacy-citi-declaration-schema-v2.json").read_text())
     assert schema == LegacyCitiDefinition.model_json_schema()
     raw = json.loads(DEFINITION)
     raw["python_module"] = "arbitrary"
     with pytest.raises(LegacyCitiError, match="invalid_definition"):
         parse_legacy_citi(json.dumps(raw).encode(), lines())
+    nested = json.loads(DEFINITION)
+    nested["monetary_line_rules"][0]["regex"] = ".*"
+    with pytest.raises(LegacyCitiError, match="invalid_definition"):
+        parse_legacy_citi(json.dumps(nested).encode(), lines())
+
+
+def test_monetary_audit_refuses_an_empty_archive(tmp_path: Path) -> None:
+    assert audit_monetary_archive(tmp_path)["failure_reasons"] == {"no_matching_sources": 1}

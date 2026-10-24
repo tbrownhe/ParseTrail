@@ -1,5 +1,45 @@
 {
   "$defs": {
+    "MonetaryLineRule": {
+      "additionalProperties": false,
+      "description": "A finite, literal label rule; no regex or accounting action is supplied.",
+      "properties": {
+        "code": {
+          "enum": [
+            "fee_period_total",
+            "interest_period_total",
+            "annual_fee_total",
+            "annual_interest_total"
+          ],
+          "title": "Code",
+          "type": "string"
+        },
+        "all_of": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 3,
+          "minItems": 1,
+          "title": "All Of",
+          "type": "array"
+        },
+        "none_of": {
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 3,
+          "title": "None Of",
+          "type": "array"
+        }
+      },
+      "required": [
+        "code",
+        "all_of"
+      ],
+      "title": "MonetaryLineRule",
+      "type": "object"
+    },
     "PDFRouting": {
       "additionalProperties": false,
       "properties": {
@@ -44,7 +84,7 @@
       "$ref": "#/$defs/PDFRouting"
     },
     "schema_version": {
-      "const": 1,
+      "const": 2,
       "title": "Schema Version",
       "type": "integer"
     },
@@ -127,6 +167,15 @@
       "const": 5,
       "title": "Max Continuation Lines",
       "type": "integer"
+    },
+    "monetary_line_rules": {
+      "items": {
+        "$ref": "#/$defs/MonetaryLineRule"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "title": "Monetary Line Rules",
+      "type": "array"
     }
   },
   "required": [
@@ -146,7 +195,8 @@
     "opening_label",
     "closing_label",
     "table_header",
-    "max_continuation_lines"
+    "max_continuation_lines",
+    "monetary_line_rules"
   ],
   "title": "LegacyCitiDefinition",
   "type": "object"

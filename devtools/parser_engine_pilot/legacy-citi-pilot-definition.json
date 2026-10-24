@@ -1,7 +1,7 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "parser_id": "pdf_citicc_201505",
-  "revision": "1",
+  "revision": "2",
   "suffix": ".pdf",
   "kind": "statement",
   "operation": "layout_date_start_continuation_v1",
@@ -15,6 +15,12 @@
   "closing_label": "New balance",
   "table_header": "Date Description Amount",
   "max_continuation_lines": 5,
+  "monetary_line_rules": [
+    {"code": "fee_period_total", "all_of": ["Total fees charged in this billing period"]},
+    {"code": "interest_period_total", "all_of": ["Total interest charged in this billing period"]},
+    {"code": "annual_fee_total", "all_of": ["Total fees charged in "], "none_of": ["this billing period"]},
+    {"code": "annual_interest_total", "all_of": ["Total interest charged in "], "none_of": ["this billing period"]}
+  ],
   "routing": {
     "body": "www.citicards.com",
     "header": "((\"date description amount\" && !\"date date description amount\") || (\"trans. post\" && \"date date description amount\")) && !\"trans. post description amount\" && !\"sale post\"",

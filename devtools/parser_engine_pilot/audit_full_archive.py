@@ -33,6 +33,9 @@ def _test_signed_catalog(definitions_dir: Path):
         staging = Path(temporary)
         for path in sorted(definitions_dir.glob("*definition.json")):
             (staging / path.name).write_bytes(path.read_bytes())
+        context_manifest = definitions_dir / "account-contexts.json"
+        if context_manifest.is_file():
+            (staging / context_manifest.name).write_bytes(context_manifest.read_bytes())
         snapshot, signature, verified = signed_catalog_bytes(
             staging, private, release_sequence=1, source_revision="a" * 40
         )

@@ -221,11 +221,25 @@ the statement. All 135 routed archive PDFs (including two direct fixtures)
 matched the accepted reader on period, account, printed balances and 1,740
 dated rows, including foreign multi-line detail. Every printed equation
 passed. Five zero-activity statements retain zero rows only with matching
-printed balances. Repeated headers/balances and parallel column text are
-547 located dispositions include four `No Late Fee` amounts excluded from
+printed balances. Repeated headers/balances and parallel column text form
+547 located dispositions, including four `No Late Fee` amounts excluded from
 activity. All 135 snapshots reopened from a temporary V2 profile with
 unchanged source hashes. Complete monetary-line dispositions, full page
 capture, signed routing and native acceptance remain open.
+
+The revised older-Citi declaration is schema/revision 2. A shared monetary-line
+inventory records default-layout lines with supported dollar tokens outside rows,
+balances, and existing dispositions. Four literal, non-executable rules label
+only printed annual/period fee and interest totals; unknown or overlapping
+matches remain `unclassified_monetary_line`. A read-only replay of the 133
+successful-archive PDFs kept 1,675 activity rows and found 4,552 such
+lines: 532 labeled totals, 1,944 explicitly unclassified, and zero without a
+location. `capture_verified` remains false. Run the aggregate audit from the
+repository root with `--archive` pointing at the authorized archive root:
+
+```powershell
+client/.venv/Scripts/python.exe -m devtools.parser_engine_pilot.audit_legacy_citi_money --archive C:\private\archive
+```
 
 The installed [`v2_anchored_table.py`](../../client/src/parsetrail/core/v2_anchored_table.py)
 and its bounded worker implement a reusable PDF table

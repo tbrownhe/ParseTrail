@@ -292,12 +292,13 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   balances and all 1,740 dated rows; every printed equation passed. Five
   zero-activity statements keep zero rows only with matching printed balances.
   Temporary V2 storage reopened all 135 sources, 1,740 rows and 547 located
-  dispositions with unchanged hashes. Complete monetary-line dispositions
-  and page capture remain open. A read-only scan of the 133 successful-archive
-  PDFs counted 2,476 money-bearing text lines outside activity, printed balance,
-  and disposition locations; most frequent forms include statement summaries,
-  APR tables, and payment notices. Classify source locations before claiming
-  complete monetary capture; do not infer transaction postings from this count.
+  dispositions with unchanged hashes under the first declaration. The revised
+  declaration retains every uncovered line with a supported dollar token as a located source
+  disposition. A read-only replay of the 133 successful-archive PDFs kept 1,675
+  activity rows, located all 4,552 lines with supported dollar tokens,
+  classified 532 clearly labeled annual/period fee and interest totals, and left 1,944 explicitly
+  unclassified. These are source labels, not transaction postings. Full-page
+  capture and accounting review remain open.
   Middle Citi now uses a generic declaration-driven header-anchor table worker.
   All eight routed archive PDFs matched the accepted reader on account,
   period, printed balances and 323 rows. The 1,311 raw table rows divide into
@@ -450,8 +451,8 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   acceptance. Keep each service/UI chunk separately testable. The global
   abbreviated-account matching setting defaults off; the 2.0 review now uses
   exact signed-catalog institution/class context, suggests a unique suffix
-  match, and offers a reversible inline toggle. Owner native GUI acceptance
-  remains open. Consolidate the
+  match, and offers a reversible inline toggle. The owner accepted that toggle
+  on native Windows. Consolidate the
   temporary V2 source store with the user-database service before activation.
   The first isolated import service now skips parsing on exact-source retry,
   retains revised bytes as a second pending snapshot, and leaves no source or
@@ -485,8 +486,8 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   review for printed identities and accountless rows. Offscreen tests pass;
   the owner accepted the native review dialog on October 24, 2026. Signed parser
   context and the 2.0 global preference now support unique automatic matches;
-  the owner confirmed the on direction and requested a persistent off toggle.
-  Native acceptance of that correction and ledger integration remain open.
+  the owner confirmed the on direction and requested a persistent off toggle,
+  then accepted the correction. Ledger integration remains open.
 - [ ] **V2-4a–b — Daily review:** create/edit accounts, categories and budgets; connect
   accepted ledger workflows to the application in small increments. Manual values,
   closures and unsupported accounting remain explicit. Owner Windows integration gate.

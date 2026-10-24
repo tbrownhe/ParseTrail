@@ -301,7 +301,7 @@ Windows on October 24, 2026. Signed catalog entries now supply institution and
 account class for unambiguous parser families. The owner confirmed that the
 inline control changed a possible match to an automatic match, then found that
 the control vanished. The 2.0 control now remains visible as a reversible toggle;
-native acceptance of its off direction is pending.
+the owner accepted that correction on native Windows on October 24, 2026.
 
 For a native review without live data, launch the disposable synthetic demo from
 the repository root in PowerShell:
@@ -348,13 +348,15 @@ longer contains the exact definition hash, automatic matching stops until a
 matching signed catalog is installed. Source and ledger persistence will
 converge into one user-database service before activation.
 
-A read-only scan of 133 older Citi PDFs found 4,552 text lines containing money
-tokens; 2,076 were covered by current activity, printed balance, or disposition
-locations, leaving 2,476 outside those sets. Frequent uncovered forms include
-minimum payment notices, annual fee/interest summaries, APR tables, and page
-text mixed with amounts. This is a location-coverage finding, not a count of
-missing transactions or an accounting classification. Older Citi full-page
-capture remains open before 2.0 release acceptance.
+A read-only scan of 133 older Citi PDFs found 4,552 text lines containing
+supported dollar tokens; 2,076 were covered by the original activity, printed
+balance, or disposition locations. The revised parser now records the remaining 2,476 as
+located source dispositions. Four literal declaration rules classify the 532
+clearly labeled annual/period fee and interest totals; 1,944 stay explicitly
+unclassified. The 1,675 activity rows were unchanged and every line with a
+supported dollar token has a location. These labels do not authorize ledger
+postings. Other page text, full-page capture, and accounting review remain open
+before 2.0 acceptance.
 
 ## Current stop/go decision
 

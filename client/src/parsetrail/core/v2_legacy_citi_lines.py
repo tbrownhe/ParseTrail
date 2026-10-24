@@ -22,6 +22,7 @@ from parsetrail.core.source_evidence import (
     StatementPayload,
     TextValue,
 )
+from parsetrail.core.v2_monetary_line_inventory import MonetaryLineRule, inventory_monetary_lines
 from parsetrail.core.v2_money_operations import usd_symbol_minor_v1
 from parsetrail.core.v2_partial_dates import PartialDateError, resolve_month_day
 from parsetrail.core.v2_pdf_lines import ADAPTER_VERSION, PageLine, PDFLineEvidence
@@ -46,7 +47,7 @@ class LegacyCitiDefinition(BaseModel):
     routing: PDFRouting
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
-    schema_version: Literal[1]
+    schema_version: Literal[2]
     parser_id: str = Field(pattern=r"^[a-z][a-z0-9_-]{2,79}$")
     revision: str = Field(pattern=r"^[1-9][0-9]{0,8}$")
     suffix: Literal[".pdf"]
@@ -62,6 +63,7 @@ class LegacyCitiDefinition(BaseModel):
     closing_label: str = Field(min_length=1, max_length=80)
     table_header: str = Field(min_length=1, max_length=80)
     max_continuation_lines: Literal[5]
+    monetary_line_rules: tuple[MonetaryLineRule, ...] = Field(min_length=1, max_length=16)
 
 
 def load_definition(data: bytes) -> tuple[LegacyCitiDefinition, str]:
@@ -263,6 +265,23 @@ def parse_legacy_citi(definition_bytes: bytes, lines: PDFLineEvidence) -> Source
         )
     if opening + sum(row.amount.minor for row in rows) != closing:
         raise LegacyCitiError("printed_card_balance_equation")
+    repeated_closing_dispositions = tuple(
+        SourceDisposition(code="repeated_closing_balance", location=_location(line), raw_values=(line.raw,))
+        for line, _ in closings[1:]
+    )
+    classified_dispositions = tuple(table_dispositions) + tuple(tail_dispositions) + repeated_closing_dispositions
+    covered_locations = (
+        (_location(opening_line),)
+        + tuple(_location(line) for line, _ in closings)
+        + tuple(fragment.location for row in rows for fragment in row.fragments)
+        + tuple(disposition.location for disposition in classified_dispositions)
+    )
+    monetary_dispositions = inventory_monetary_lines(
+        lines,
+        money_token=MONEY_TOKEN,
+        covered_locations=covered_locations,
+        rules=definition.monetary_line_rules,
+    )
     return SourceEvidence(
         schema_version=2,
         source_sha256=lines.source_sha256,
@@ -303,12 +322,7 @@ def parse_legacy_citi(definition_bytes: bytes, lines: PDFLineEvidence) -> Source
                     rows=tuple(rows),
                 ),
             ),
-            dispositions=tuple(table_dispositions)
-            + tuple(tail_dispositions)
-            + tuple(
-                SourceDisposition(code="repeated_closing_balance", location=_location(line), raw_values=(line.raw,))
-                for line, _ in closings[1:]
-            ),
+            dispositions=classified_dispositions + monetary_dispositions,
             capture_verified=False,
             independent_balance_verified=True,
         ),
