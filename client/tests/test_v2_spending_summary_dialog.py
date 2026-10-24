@@ -45,8 +45,15 @@ def test_spending_dialog_reads_posted_totals_without_changing_profile(tmp_path: 
         assert "$4.00" in dialog.total.text()
         assert "whole profile, 1 activity source row" in dialog.scope.text()
         assert "date range above filters posted journal entries only" in dialog.scope.text()
+        dialog.tabs.setCurrentIndex(1)
+        assert dialog.account_model.rowCount() == 1
+        assert dialog.account_model.data(dialog.account_model.index(0, 0)) == "Checking"
+        assert dialog.account_model.data(dialog.account_model.index(0, 2)) == "-$4.00"
+        assert dialog.account_model.data(dialog.account_model.index(0, 3)) == "Not established"
+        assert "not account balances" in dialog.scope.text()
         dialog.end.setDate(QDate(2026, 10, 1))
         assert dialog.model.rowCount() == 0
+        assert dialog.account_model.rowCount() == 0
         assert "end date after" in dialog.total.text()
     finally:
         dialog.close()

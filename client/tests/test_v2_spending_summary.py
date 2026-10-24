@@ -27,6 +27,7 @@ def test_spending_summary_nets_corrections_and_keeps_unallocated_activity_visibl
     with V2ProfileStore.create(profile) as store:
         store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
         store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        store.add_financial_account(FinancialAccount("card", "Card", "liability", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         store.add_category_account("expense:travel", "Travel", "expense")
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
@@ -34,6 +35,7 @@ def test_spending_summary_nets_corrections_and_keeps_unallocated_activity_visibl
         store.post_reviewed_cash_expense(tea.row_id, "expense:food", reason="Reviewed tea")
         store.correct_reviewed_cash_expense(original, "expense:travel", reason="Correct category")
         store.rename_category_account("expense:travel", "Trips")
+        store.update_financial_account(FinancialAccount("cash", "Updated checking", "asset", "synthetic"))
     with V2ProfileStore.open(profile, read_only=True) as store:
         report = store.spending_summary(start=date(2026, 10, 1), end=date(2026, 10, 4))
         assert [(row.category_id, row.name, row.amount_minor) for row in report.categories] == [
@@ -45,9 +47,23 @@ def test_spending_summary_nets_corrections_and_keeps_unallocated_activity_visibl
         assert report.sources_with_incomplete_activity == 1
         assert report.excluded_unreviewed_expense_entries == 0
         assert deposit.row_id not in store._active_consumed()
+        movement = store.financial_journal_summary(start=date(2026, 10, 1), end=date(2026, 10, 4))
+        assert [
+            (row.account_id, row.name, row.kind, row.nonopening_change_minor, row.opening_minor)
+            for row in movement.accounts
+        ] == [
+            ("card", "Card", "liability", 0, None),
+            ("cash", "Updated checking", "asset", -700, None),
+        ]
+        assert movement.activity_rows_without_full_allocation == 1
+        assert movement.sources_with_incomplete_activity == 1
         narrow = store.spending_summary(start=date(2026, 10, 3), end=date(2026, 10, 4))
         assert narrow.total_minor == 0
         assert narrow.activity_rows_without_full_allocation == 1
-        with pytest.raises(ProfileFormatError, match="spending_period_invalid"):
+        narrow_movement = store.financial_journal_summary(start=date(2026, 10, 3), end=date(2026, 10, 4))
+        assert all(row.nonopening_change_minor == 0 for row in narrow_movement.accounts)
+        with pytest.raises(ProfileFormatError, match="report_period_invalid"):
             store.spending_summary(start=date(2026, 10, 1), end=date(2026, 10, 1))
+        with pytest.raises(ProfileFormatError, match="report_period_invalid"):
+            store.financial_journal_summary(start=date(2026, 10, 2), end=date(2026, 10, 1))
         assert store.load_import(evidence.source_sha256).evidence == evidence

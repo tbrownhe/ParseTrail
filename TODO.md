@@ -538,7 +538,12 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   nets reviewed expense postings, including reversal/replacement corrections,
   and separately counts profile-wide activity source rows without full ledger
   allocation. It does not claim deduplicated source coverage or reconciled
-  balances; offscreen checks pass, and native Windows acceptance remains open.
+  balances; the owner accepted the native Windows spending view. A second
+  Account movement tab now shows reviewed financial-account journal changes in
+  natural asset/liability direction, with opening positions separate and
+  unknown openings marked Not established. It does not compute a balance or
+  certify cash flow; offscreen checks pass and native Windows acceptance of
+  this tab remains open.
   Inventory every legacy menu action; approve concrete deferrals rather than
   silently removing functionality. Owner Windows gate.
 - [ ] **V2-6a–b — Profile selection:** backup/restore the new profile and make

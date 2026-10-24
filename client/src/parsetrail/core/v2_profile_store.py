@@ -208,6 +208,25 @@ class SpendingSummary:
     excluded_unreviewed_expense_entries: int
 
 
+@dataclass(frozen=True)
+class FinancialJournalMovement:
+    account_id: str
+    name: str
+    kind: Literal["asset", "liability"]
+    nonopening_change_minor: int
+    opening_minor: int | None
+
+
+@dataclass(frozen=True)
+class FinancialJournalSummary:
+    start: date
+    end: date
+    accounts: tuple[FinancialJournalMovement, ...]
+    activity_rows_without_full_allocation: int
+    sources_with_incomplete_activity: int
+    excluded_unreviewed_financial_entries: int
+
+
 def _digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -663,24 +682,16 @@ class V2ProfileStore:
             )
         return tuple(result)
 
-    def spending_summary(self, *, start: date, end: date) -> SpendingSummary:
-        """Summarize reviewed expense postings; report unresolved source activity separately."""
+    def _journal_entries_in_period(self, start: date, end: date):
         if type(start) is not date or type(end) is not date or start >= end:
-            raise ProfileFormatError("spending_period_invalid")
-        categories = {category.id: category for category in self.category_accounts() if category.kind == "expense"}
-        totals = dict.fromkeys(categories, 0)
-        excluded_unreviewed = 0
+            raise ProfileFormatError("report_period_invalid")
         for (payload,) in self.connection.execute("SELECT payload FROM JournalEntries"):
             entry = _decode_journal(payload)
-            if not start <= entry.posting_date < end:
-                continue
-            if not entry.reviewed:
-                excluded_unreviewed += any(posting.account_id in totals for posting in entry.postings)
-                continue
-            for posting in entry.postings:
-                if posting.account_id in totals:
-                    totals[posting.account_id] += posting.amount_minor
-        unresolved_rows, unresolved_sources = self.connection.execute(
+            if start <= entry.posting_date < end:
+                yield entry
+
+    def _unallocated_activity_counts(self) -> tuple[int, int]:
+        return self.connection.execute(
             "SELECT COUNT(*),COUNT(DISTINCT o.source_sha256) FROM SourceObservations o "
             "LEFT JOIN ("
             "SELECT a.row_id,SUM(a.amount_minor) AS used FROM JournalAllocations a "
@@ -688,6 +699,20 @@ class V2ProfileStore:
             ") active ON active.row_id=o.row_id "
             "WHERE o.row_role='activity' AND (active.used IS NULL OR active.used<>o.amount_minor)"
         ).fetchone()
+
+    def spending_summary(self, *, start: date, end: date) -> SpendingSummary:
+        """Summarize reviewed expense postings; report unresolved source activity separately."""
+        categories = {category.id: category for category in self.category_accounts() if category.kind == "expense"}
+        totals = dict.fromkeys(categories, 0)
+        excluded_unreviewed = 0
+        for entry in self._journal_entries_in_period(start, end):
+            if not entry.reviewed:
+                excluded_unreviewed += any(posting.account_id in totals for posting in entry.postings)
+                continue
+            for posting in entry.postings:
+                if posting.account_id in totals:
+                    totals[posting.account_id] += posting.amount_minor
+        unresolved_rows, unresolved_sources = self._unallocated_activity_counts()
         return SpendingSummary(
             start,
             end,
@@ -696,6 +721,42 @@ class V2ProfileStore:
                 for category_id, category in categories.items()
             ),
             sum(totals.values()),
+            unresolved_rows,
+            unresolved_sources,
+            excluded_unreviewed,
+        )
+
+    def financial_journal_summary(self, *, start: date, end: date) -> FinancialJournalSummary:
+        """Show reviewed account postings, keeping openings apart from period activity."""
+        accounts = {account.id: account for account in self.financial_accounts()}
+        nonopening = dict.fromkeys(accounts, 0)
+        opening = dict.fromkeys(accounts, 0)
+        opening_seen: set[str] = set()
+        excluded_unreviewed = 0
+        for entry in self._journal_entries_in_period(start, end):
+            financial_postings = tuple(posting for posting in entry.postings if posting.account_id in accounts)
+            if not entry.reviewed:
+                excluded_unreviewed += bool(financial_postings)
+                continue
+            target = opening if entry.origin == "opening" else nonopening
+            for posting in financial_postings:
+                target[posting.account_id] += posting.amount_minor
+                if entry.origin == "opening":
+                    opening_seen.add(posting.account_id)
+        unresolved_rows, unresolved_sources = self._unallocated_activity_counts()
+        return FinancialJournalSummary(
+            start,
+            end,
+            tuple(
+                FinancialJournalMovement(
+                    account_id,
+                    account.name,
+                    account.kind,
+                    nonopening[account_id],
+                    opening[account_id] if account_id in opening_seen else None,
+                )
+                for account_id, account in accounts.items()
+            ),
             unresolved_rows,
             unresolved_sources,
             excluded_unreviewed,

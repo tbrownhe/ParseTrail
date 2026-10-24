@@ -413,9 +413,13 @@ journal postings for a selected half-open date range. Reversal and replacement
 postings net to the corrected category amount. It separately counts activity
 source rows across the whole profile that lack full ledger allocation. The
 view explicitly avoids claiming unique transaction coverage, statement
-reconciliation or complete spending. Offscreen interaction passes; native
-Windows acceptance of this summary remains open. Budget, cash and balance
-reads and export cutover remain V2-5 work.
+reconciliation or complete spending. The owner accepted this view on native
+Windows. A new Account movement tab uses the same date range to show reviewed
+financial-account journal changes. It presents assets as changes in value and
+liabilities as changes in amount owed, separates opening postings, and labels
+missing openings Not established. It does not calculate account balances or
+certify cash flow. Offscreen checks pass; native Windows acceptance of this tab
+remains open. Budget, cash classification and export cutover remain V2-5 work.
 
 ## Current stop/go decision
 
