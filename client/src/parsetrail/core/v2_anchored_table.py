@@ -89,6 +89,26 @@ class MonetaryTextDisposition(BaseModel):
         return self
 
 
+class MonetaryTableTailRule(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    code: str = Field(pattern=r"^[a-z][a-z0-9_]{2,79}$")
+    column: int = Field(ge=0, le=4)
+    contains: str = Field(min_length=1, max_length=80)
+    text_prefix: str = Field(min_length=3, max_length=100)
+
+    @model_validator(mode="after")
+    def valid_tail_rule(self) -> MonetaryTableTailRule:
+        if (
+            self.contains != self.contains.strip()
+            or not self.text_prefix.strip()
+            or self.text_prefix != self.text_prefix.strip()
+            or any(character in value for value in (self.contains, self.text_prefix) for character in "\r\n")
+        ):
+            raise ValueError("invalid monetary table tail rule")
+        return self
+
+
 class TableSingleDateCardRule(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
@@ -132,6 +152,7 @@ class TableBankStatementRule(BaseModel):
     account_label: str = Field(min_length=1, max_length=80)
     summary_label: str = Field(min_length=1, max_length=100)
     opening_row_label: str = Field(min_length=1, max_length=80)
+    monetary_table_tail: tuple[MonetaryTableTailRule, ...] = Field(default=(), max_length=16)
 
     @model_validator(mode="after")
     def valid_bank_rule(self) -> TableBankStatementRule:
@@ -142,7 +163,12 @@ class TableBankStatementRule(BaseModel):
             self.summary_label,
             self.opening_row_label,
         )
-        if len(set(labels)) != len(labels) or any(label != label.strip() or "\n" in label for label in labels):
+        if (
+            len(set(labels)) != len(labels)
+            or any(label != label.strip() or "\n" in label for label in labels)
+            or len({item.code for item in self.monetary_table_tail}) != len(self.monetary_table_tail)
+            or len({item.text_prefix for item in self.monetary_table_tail}) != len(self.monetary_table_tail)
+        ):
             raise ValueError("invalid table bank operation")
         return self
 

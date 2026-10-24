@@ -19,11 +19,19 @@ from parsetrail.core.v2_anchored_table import (
 from parsetrail.core.v2_pdf_lines import page_lines
 from parsetrail.core.v2_table_bank_source_output import TableBankError, from_anchored_bank
 
-DEFINITION = Path(__file__).with_name("lendingclub-table-pilot-definition.json").read_bytes()
+TAIL_DEFINITION = Path(__file__).with_name("lendingclub-table-pilot-definition.json").read_bytes()
+BASE_RULE = json.loads(TAIL_DEFINITION)
+BASE_RULE["statement"].pop("monetary_table_tail")
+DEFINITION = json.dumps(BASE_RULE).encode()
 SOURCE = b"%PDF-synthetic-bank"
 
 
-def evidence(changes: dict[int, tuple[str, str, str, str, str]] | None = None):
+def evidence(
+    changes: dict[int, tuple[str, str, str, str, str]] | None = None,
+    *,
+    definition: bytes = DEFINITION,
+    tail: bool = False,
+):
     raw = [
         ("01/01", "Balance Forward", "", "", "$100.00"),
         ("01/05", "Interest Paid", "", "$10.00", "$110.00"),
@@ -31,12 +39,19 @@ def evidence(changes: dict[int, tuple[str, str, str, str, str]] | None = None):
         ("", "Unclassified", "", "$999.00", ""),
         ("", "", "", "", ""),
     ]
+    if tail:
+        raw[3:4] = [
+            ("ious Sta", "tement Date: 12/31/2025", "Average Statem", "ent Balance: $100.00", ""),
+            ("", "$100.00 $0.00", "$10.00", "$20.00", "$0.00 $90.00"),
+            ("rest Ear", "ned $10.00", "", "", ""),
+            ("", "Savings 1234567890 $90.00", "4.00%", "$10.00 $0.00", ""),
+        ]
     for index, replacement in (changes or {}).items():
         raw[index] = replacement
     table = AnchoredTableEvidence(
         1,
         hashlib.sha256(SOURCE).hexdigest(),
-        hashlib.sha256(DEFINITION).hexdigest(),
+        hashlib.sha256(definition).hexdigest(),
         TABLE_VERSION,
         "pdfplumber-synthetic-anchored-table",
         "synthetic bank statement",
@@ -54,7 +69,10 @@ def evidence(changes: dict[int, tuple[str, str, str, str, str]] | None = None):
             "Statement End Date: 01/31/2026\n"
             "Account Number: 1234567890\n"
             "Balance + Deposits + Paid - Withdrawals - Charge = Balance\n"
-            "$100.00 $0.00 $10.00 $20.00 $0.00 $90.00"
+            "$100.00 $0.00 $10.00 $20.00 $0.00 $90.00\n"
+            "Previous Statement Date: 12/31/2025 Average Statement Balance: $100.00\n"
+            "Interest Earned $10.00\n"
+            "Savings 1234567890 $90.00 4.00% $10.00 $0.00"
         ],
         extraction_library="pdfplumber-bounded-simple-v1",
     )
@@ -87,8 +105,51 @@ def test_wrong_running_balance_or_missing_activity_refuses() -> None:
         from_anchored_bank(DEFINITION, *evidence({1: ("01/05/26", "Interest Paid", "", "$10.00", "$110.00")}))
 
 
+def test_declared_monetary_tail_requires_matching_table_fragments_and_text() -> None:
+    output = from_anchored_bank(TAIL_DEFINITION, *evidence(definition=TAIL_DEFINITION, tail=True))
+    assert SourceEvidence.model_validate_json(output.model_dump_json()) == output
+    assert [item.code for item in output.payload.dispositions] == [
+        "balance_forward",
+        "prior_period_average_balance",
+        "summary_values_tail",
+        "interest_earned_summary",
+        "savings_rate_disclosure",
+        "blank_table_row",
+        "prior_period_average_balance_text",
+        "summary_values_tail_text",
+        "interest_earned_summary_text",
+        "savings_rate_disclosure_text",
+    ]
+    assert output.payload.dispositions[-1].location.kind == "pdf_line"
+    assert output.payload.dispositions[-1].raw_values[0].startswith("Savings")
+    with pytest.raises(TableBankError, match="monetary_table_tail_shape"):
+        from_anchored_bank(
+            TAIL_DEFINITION,
+            *evidence(
+                {3: ("Unknown", "tement Date: 12/31/2025", "Average Statem", "ent Balance: $100.00", "")},
+                definition=TAIL_DEFINITION,
+                tail=True,
+            ),
+        )
+    with pytest.raises(TableBankError, match="monetary_table_tail_count"):
+        from_anchored_bank(TAIL_DEFINITION, *evidence(definition=TAIL_DEFINITION))
+    with pytest.raises(TableBankError, match="activity_after_monetary_table_tail"):
+        from_anchored_bank(
+            TAIL_DEFINITION,
+            *evidence(
+                {7: ("01/20", "Late activity", "$1.00-", "", "$89.00")},
+                definition=TAIL_DEFINITION,
+                tail=True,
+            ),
+        )
+
+
 def test_declaration_rejects_executable_extension() -> None:
     raw = json.loads(DEFINITION)
     raw["python_module"] = "arbitrary"
+    with pytest.raises(ValueError, match="invalid_definition"):
+        from_anchored_bank(json.dumps(raw).encode(), *evidence())
+    raw = json.loads(TAIL_DEFINITION)
+    raw["statement"]["monetary_table_tail"][0]["python"] = "exec"
     with pytest.raises(ValueError, match="invalid_definition"):
         from_anchored_bank(json.dumps(raw).encode(), *evidence())

@@ -146,6 +146,7 @@ def from_anchored_bank(definition_bytes: bytes, table: AnchoredTableEvidence, te
     running = opening
     rows = []
     dispositions = []
+    monetary_tail_rows: list[tuple[int, AnchoredRow]] = []
     occurrences: Counter[tuple[str, int, str]] = Counter()
     saw_forward = False
     for source in table.rows:
@@ -164,6 +165,10 @@ def from_anchored_bank(definition_bytes: bytes, table: AnchoredTableEvidence, te
                 if any(MONEY_HINT.search(c) for c in source.raw_cells)
                 else "nonactivity_table_row"
             )
+            if code == "unclassified_monetary_table_row":
+                if rule.monetary_table_tail and not rows:
+                    raise TableBankError("monetary_table_tail_before_activity")
+                monetary_tail_rows.append((len(dispositions), source))
             dispositions.append(SourceDisposition(code=code, location=location, raw_values=source.raw_cells))
             continue
         if description_raw == rule.opening_row_label:
@@ -174,6 +179,8 @@ def from_anchored_bank(definition_bytes: bytes, table: AnchoredTableEvidence, te
                 SourceDisposition(code="balance_forward", location=location, raw_values=source.raw_cells)
             )
             continue
+        if rule.monetary_table_tail and monetary_tail_rows:
+            raise TableBankError("activity_after_monetary_table_tail")
         if not description_raw or bool(debit_raw) == bool(credit_raw) or not balance_raw:
             raise TableBankError("incomplete_activity_row")
         try:
@@ -224,6 +231,27 @@ def from_anchored_bank(definition_bytes: bytes, table: AnchoredTableEvidence, te
                 ),
             )
         )
+    if rule.monetary_table_tail:
+        if len(monetary_tail_rows) != len(rule.monetary_table_tail):
+            raise TableBankError("monetary_table_tail_count")
+        for (position, source), tail_rule in zip(monetary_tail_rows, rule.monetary_table_tail, strict=True):
+            matching_text = [
+                line
+                for line in text.lines
+                if line.page == source.page and line.normalized.startswith(tail_rule.text_prefix)
+            ]
+            if tail_rule.contains not in source.raw_cells[tail_rule.column] or len(matching_text) != 1:
+                raise TableBankError("monetary_table_tail_shape")
+            dispositions[position] = SourceDisposition(
+                code=tail_rule.code, location=_table_location(source), raw_values=source.raw_cells
+            )
+            dispositions.append(
+                SourceDisposition(
+                    code=f"{tail_rule.code}_text",
+                    location=_line_location(matching_text[0]),
+                    raw_values=(matching_text[0].raw,),
+                )
+            )
     if not saw_forward or not rows or running != closing:
         raise TableBankError("printed_balance_chain")
     return SourceEvidence(

@@ -248,9 +248,12 @@ older LendingClub savings. Its seven header words locate five data columns;
 the bank operation checks the printed six-value summary and every dated
 running balance. All seven routed archive PDFs matched 18 accepted rows,
 account, period and endpoints. Temporary V2 storage reopened seven sources,
-18 observations and 225 located dispositions with unchanged hashes. Twenty-
-eight money-bearing summary/disclosure table rows remain unclassified, so
-full-page capture and native acceptance remain open.
+18 observations and 225 located table dispositions with unchanged source hashes. The 28
+money-bearing table tails now match four ordered, declared table fragments and
+unique same-page text labels per source: prior balance, printed summary,
+interest summary and savings-rate disclosure. The 28 text copies are retained
+separately (253 dispositions total). Unknown dollar-bearing tails refuse
+extraction. Full-page capture and native acceptance remain open.
 
 `wells_personal_source_output.py` applies a finite six-column Wells personal
 bank operation to the same header-anchor worker. The declared 3-point vertical

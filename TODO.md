@@ -305,9 +305,12 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   header words locating five data columns. All seven routed archived PDFs
   matched 18 accepted rows, printed running balances and six-value summary
   equations. Temporary V2 storage reopened seven sources, 18 observations
-  and 225 located dispositions with unchanged hashes. The 28 money-bearing
-  summary/disclosure rows remain unclassified; full-page capture and native
-  acceptance remain open.
+  and 225 located table dispositions with unchanged source hashes. The 28 money-bearing
+  tail rows now require four declared table/text shapes per statement and are
+  classified as prior balance, printed summary, interest summary or savings-rate
+  disclosure, with 28 matching text lines retained separately (253 total
+  dispositions). An unfamiliar dollar-bearing tail refuses extraction. Full-page capture
+  and native acceptance remain open.
   Wells personal bank now has a finite six-column anchored-table operation.
   All 148 routed archive PDFs matched the accepted reader on period, account,
   printed endpoints and 6,618 transactions. The pilot checked 1,512 printed

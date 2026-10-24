@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "parser_id": "pdf_lendingclublus_202506",
-  "revision": "1",
+  "revision": "2",
   "suffix": ".pdf",
   "kind": "statement",
   "operation": "anchored_columns_table_v1",
@@ -28,7 +28,13 @@
     "end_label": "Statement End Date:",
     "account_label": "Account Number:",
     "summary_label": "Balance + Deposits + Paid - Withdrawals - Charge = Balance",
-    "opening_row_label": "Balance Forward"
+    "opening_row_label": "Balance Forward",
+    "monetary_table_tail": [
+      {"code": "prior_period_average_balance", "column": 0, "contains": "ious Sta", "text_prefix": "Previous Statement Date:"},
+      {"code": "summary_values_tail", "column": 1, "contains": "$", "text_prefix": "Balance + Deposits + Paid - Withdrawals - Charge = Balance"},
+      {"code": "interest_earned_summary", "column": 0, "contains": "rest Ear", "text_prefix": "Interest Earned"},
+      {"code": "savings_rate_disclosure", "column": 1, "contains": "Savings", "text_prefix": "Savings"}
+    ]
   },
   "routing": {
     "body": "LLeevveellUUpp SSaavviinnggss"

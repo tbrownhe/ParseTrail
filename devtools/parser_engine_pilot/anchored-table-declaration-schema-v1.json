@@ -170,6 +170,42 @@
       "title": "ContinuationRule",
       "type": "object"
     },
+    "MonetaryTableTailRule": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "pattern": "^[a-z][a-z0-9_]{2,79}$",
+          "title": "Code",
+          "type": "string"
+        },
+        "column": {
+          "maximum": 4,
+          "minimum": 0,
+          "title": "Column",
+          "type": "integer"
+        },
+        "contains": {
+          "maxLength": 80,
+          "minLength": 1,
+          "title": "Contains",
+          "type": "string"
+        },
+        "text_prefix": {
+          "maxLength": 100,
+          "minLength": 3,
+          "title": "Text Prefix",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "column",
+        "contains",
+        "text_prefix"
+      ],
+      "title": "MonetaryTableTailRule",
+      "type": "object"
+    },
     "MonetaryTextDisposition": {
       "additionalProperties": false,
       "properties": {
@@ -276,6 +312,15 @@
           "minLength": 1,
           "title": "Opening Row Label",
           "type": "string"
+        },
+        "monetary_table_tail": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/MonetaryTableTailRule"
+          },
+          "maxItems": 16,
+          "title": "Monetary Table Tail",
+          "type": "array"
         }
       },
       "required": [

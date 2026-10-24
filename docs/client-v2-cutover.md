@@ -247,6 +247,10 @@ into one disposable 2.0 profile: 957 new imports, zero retries or failures.
 Each import saved and reloaded its evidence, and the complete profile reopened
 read-only with 957 sources. The temporary profile was removed. This checks
 cross-source storage and schema integrity, not ledger posting or accounting.
+That full replay used the older LendingClub table definition at revision 1;
+its later revision 2 was rechecked on all seven matching PDFs with unchanged
+18 activity rows and 253 located dispositions. The other definitions were
+unchanged.
 Installed-client trust remains open.
 
 The local [catalog artifact builder](../client/scripts/v2_catalog_release.py)
