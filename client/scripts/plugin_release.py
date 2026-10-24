@@ -27,7 +27,6 @@ from parsetrail.core.plugin_manifest import (
     SIGNATURE_FILENAME,
     PluginArtifact,
     PluginManifest,
-    TrustedPluginKeyStore,
     current_python_magic,
     current_python_tag,
     key_id_for_public_key,
@@ -36,6 +35,7 @@ from parsetrail.core.plugin_manifest import (
     verify_artifact_file,
     verify_manifest,
 )
+from parsetrail.core.release_trust import TrustedReleaseKeyStore
 
 CLIENT_ROOT = Path(__file__).resolve().parents[1]
 REPOSITORY_ROOT = CLIENT_ROOT.parent
@@ -97,7 +97,7 @@ def generate_key(
 
     if trust_store_path.exists():
         try:
-            trust_store = TrustedPluginKeyStore.model_validate_json(trust_store_path.read_bytes())
+            trust_store = TrustedReleaseKeyStore.model_validate_json(trust_store_path.read_bytes())
         except Exception as exc:
             raise ValueError("Existing plugin trust store is invalid") from exc
         trust_payload = trust_store.model_dump(mode="json")

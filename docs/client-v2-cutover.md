@@ -202,8 +202,15 @@ $env:PYTHONPATH='.;client/src;client'
 .\client\.venv\Scripts\python.exe -m devtools.parser_engine_pilot.review_accountless_export --demo
 ```
 
-The demo writes only to a temporary 2.0 profile and deletes it on close.
-Native Windows review and main-window import integration remain open.
+The demo writes only to a temporary 2.0 profile and deletes it on close. The
+owner accepted the native Windows interaction on October 23, 2026. A separate
+[2.0 workspace service](../client/src/parsetrail/core/v2_workspace.py) now
+creates or opens only a marked 2.0 profile, requires a verified offline catalog,
+reads a selected CSV/PDF without changing the original, and stores pending
+evidence. Refused input leaves no import. Desktop integration remains open.
+The existing main window initializes the 1.x database and its account/report
+services during startup. The next desktop slice therefore needs a separate 2.0
+window and explicit profile path rather than a 2.0 menu inside that runtime.
 The isolated [V2 source import service](../client/src/parsetrail/core/v2_source_import.py)
 now checks an exact-source retry before invoking a parser and returns the saved
 snapshot. Revised bytes remain a separate pending import. Parser failure and
@@ -229,8 +236,13 @@ Installed-client trust remains open.
 
 The local [catalog artifact builder](../client/scripts/v2_catalog_release.py)
 validates, signs and re-verifies all 23 checked-in definitions into a new local
-directory using an encrypted key kept outside the repository. A production key,
-installed offline acceptance and server publication remain open.
+directory using an encrypted key kept outside the repository. The existing
+plugin release key is selected for catalog signing; the release command checks
+its public half against the shipped trust store. A shared
+[public trust loader](../client/src/parsetrail/core/release_trust.py) lets 2.0
+verify that key without importing the 1.x plugin manifest module. An actual
+production-signed starter catalog, installed offline acceptance and server
+publication remain open.
 
 The finite parser operations, bounded adapters and source pipeline now live in
 the client package. Verified-catalog import uses that installed pipeline by
@@ -243,7 +255,7 @@ imports one CSV through the verified path, and reopens its fresh 2.0 profile.
 A rebuilt windowed Windows x64 probe passed this smoke and all six worker pipes
 with synthetic build metadata. This remains a local packaging check, not an
 installed release or native GUI acceptance.
-Release trust and desktop import remain open.
+Production catalog packaging and desktop import remain open.
 The bounded decoder worker now polls a cancellation callback and terminates its
 child on cancellation. The source pipeline also polls its CSV row loop and
 passes the callback to PDF decoder workers. A cancelled catalog import leaves

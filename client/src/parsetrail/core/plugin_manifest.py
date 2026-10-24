@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import base64
 import hashlib
 import importlib.util
 import json
@@ -17,16 +16,21 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from parsetrail.core.release_trust import (
+    ReleaseTrustError,
+    load_release_public_keys,
+)
+from parsetrail.core.release_trust import (
+    key_id_for_public_key as key_id_for_public_key,
+)
 from parsetrail.core.versioning import validate_semver
 
 MANIFEST_FILENAME = "plugin-manifest.json"
 SIGNATURE_FILENAME = "plugin-manifest.sig"
-TRUST_STORE_FILENAME = "plugin-release-keys.json"
 CURRENT_RELEASE_FILENAME = "current-release.json"
 RELEASES_DIRECTORY = "releases"
 
 MAX_MANIFEST_BYTES = 1024 * 1024
-MAX_TRUST_STORE_BYTES = 64 * 1024
 MAX_PLUGIN_BYTES = 32 * 1024 * 1024
 ED25519_SIGNATURE_BYTES = 64
 SHA256_PATTERN = re.compile(r"^[0-9a-f]{64}$")
@@ -199,43 +203,6 @@ class PluginManifest(BaseModel):
         return self
 
 
-class TrustedPluginKey(BaseModel):
-    """One public release key embedded in the desktop application."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    key_id: str
-    public_key: str
-
-    @model_validator(mode="after")
-    def validate_public_key(self) -> TrustedPluginKey:
-        try:
-            raw_key = base64.b64decode(self.public_key, validate=True)
-        except ValueError as exc:
-            raise ValueError("public_key must be valid base64") from exc
-        if len(raw_key) != 32:
-            raise ValueError("public_key must encode a 32-byte Ed25519 public key")
-        if self.key_id != key_id_for_public_key(raw_key):
-            raise ValueError("key_id does not match public_key")
-        return self
-
-
-class TrustedPluginKeyStore(BaseModel):
-    """Public keys compiled into a ParseTrail client release."""
-
-    model_config = ConfigDict(extra="forbid", frozen=True)
-
-    schema_version: Literal[1] = 1
-    keys: tuple[TrustedPluginKey, ...]
-
-    @model_validator(mode="after")
-    def validate_unique_keys(self) -> TrustedPluginKeyStore:
-        key_ids = [key.key_id for key in self.keys]
-        if len(key_ids) != len(set(key_ids)):
-            raise ValueError("trusted key identifiers must be unique")
-        return self
-
-
 @dataclass(frozen=True)
 class VerifiedPluginRelease:
     """Authenticated manifest bytes and their validated representation."""
@@ -256,10 +223,6 @@ def current_python_magic() -> str:
     return importlib.util.MAGIC_NUMBER.hex()
 
 
-def key_id_for_public_key(raw_public_key: bytes) -> str:
-    return f"plugin-ed25519-{hashlib.sha256(raw_public_key).hexdigest()[:32]}"
-
-
 def serialize_manifest(manifest: PluginManifest) -> bytes:
     """Serialize deterministically; the resulting exact bytes are signed."""
     payload = manifest.model_dump(mode="json", exclude_none=True)
@@ -274,32 +237,14 @@ def serialize_manifest(manifest: PluginManifest) -> bytes:
     )
 
 
-def default_trust_store_path() -> Path:
-    return Path(__file__).resolve().parents[1] / "assets" / TRUST_STORE_FILENAME
-
-
 def load_trusted_plugin_keys(
     trust_store_path: Path | None = None,
 ) -> dict[str, Ed25519PublicKey]:
-    path = trust_store_path or default_trust_store_path()
     try:
-        payload = path.read_bytes()
-    except OSError as exc:
-        raise PluginSignatureError(f"Plugin trust store is unavailable: {path}") from exc
-    if len(payload) > MAX_TRUST_STORE_BYTES:
-        raise PluginSignatureError("Plugin trust store exceeds its size limit")
-    try:
-        store = TrustedPluginKeyStore.model_validate_json(payload)
-    except Exception as exc:
-        raise PluginSignatureError("Plugin trust store is invalid") from exc
-    if not store.keys:
-        raise PluginSignatureError("Plugin trust store contains no public keys")
-
-    trusted_keys: dict[str, Ed25519PublicKey] = {}
-    for trusted_key in store.keys:
-        raw_key = base64.b64decode(trusted_key.public_key, validate=True)
-        trusted_keys[trusted_key.key_id] = Ed25519PublicKey.from_public_bytes(raw_key)
-    return trusted_keys
+        raw_keys = load_release_public_keys(trust_store_path)
+    except ReleaseTrustError as exc:
+        raise PluginSignatureError(str(exc)) from exc
+    return {key_id: Ed25519PublicKey.from_public_bytes(raw) for key_id, raw in raw_keys.items()}
 
 
 def verify_manifest(

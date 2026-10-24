@@ -440,8 +440,13 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   entry. This pre-release profile schema is revision 3. An isolated
   accountless-export review dialog now
   presents a six-row disposable MOHELA-shaped demo and saves either explicit
-  file or selected-row decisions. Offscreen interaction tests pass. Owner native
-  Windows review, main-window connection and ledger integration remain open.
+  file or selected-row decisions. Offscreen interaction tests pass; the owner
+  accepted its native Windows interaction on October 23, 2026. A separate 2.0
+  workspace service now opens only marked fresh profiles, loads an authenticated
+  catalog, reads a chosen CSV/PDF without moving it, and saves pending evidence.
+  Missing catalog, unsupported/oversized files, cancellation and 1.x profile
+  refusal leave no source import. Desktop connection and ledger integration
+  remain open.
 - [ ] **V2-4a–b — Daily review:** create/edit accounts, categories and budgets; connect
   accepted ledger workflows to the application in small increments. Manual values,
   closures and unsupported accounting remain explicit. Owner Windows integration gate.

@@ -422,6 +422,10 @@ class V2ProfileStore:
             self.connection.execute("SELECT 1 FROM Sources WHERE sha256=?", (_digest(source),)).fetchone() is not None
         )
 
+    def source_ids(self) -> tuple[str, ...]:
+        """List saved imports in their original insertion order, newest first."""
+        return tuple(row[0] for row in self.connection.execute("SELECT sha256 FROM Sources ORDER BY rowid DESC"))
+
     def import_source(
         self, source: bytes, definition: bytes, evidence: SourceEvidence, *, suffix: Literal[".csv", ".pdf"]
     ) -> bool:

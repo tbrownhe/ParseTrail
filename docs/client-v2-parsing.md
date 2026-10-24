@@ -48,8 +48,9 @@ parser identity/revision mismatch before writing. The catalog revision contract
 allows the existing recent-Citi `pilot-2` revision. CSV matching and signed PDF
 routing now require one verified definition before a source write. Catalog trust
 now derives data-domain key IDs from the existing shipped plugin release public
-keys. Installed-client admission and server publication remain open. No 1.4
-bytecode catalog or server contract was changed.
+keys through a shared public-key loader, without importing the 1.x plugin
+manifest module. Installed-client admission and server publication remain open.
+No 1.4 bytecode catalog or server contract was changed.
 The pilot source pipeline now validates a supplied declaration and dispatches
 current PDF parsers by admitted identity, so a valid definition revision can
 reach its finite operation without an added hash allowlist entry. A synthetic
