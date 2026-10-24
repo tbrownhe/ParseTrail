@@ -102,12 +102,21 @@ def test_review_offers_inline_toggle_and_updates_menu(tmp_path: Path) -> None:
         window.show()
         dialog.show()
         app.processEvents()
-        assert dialog.enable_abbreviated_button.isVisible()
+        assert dialog.abbreviated_matching_button.isVisible()
+        assert not dialog.abbreviated_matching_button.isChecked()
         assert dialog.matches[0].offer_enable_abbreviated_matching
-        dialog.enable_abbreviated_button.click()
+        dialog.abbreviated_matching_button.click()
         assert window.abbreviated_matching_action.isChecked()
+        assert dialog.abbreviated_matching_button.isVisible()
+        assert dialog.abbreviated_matching_button.isChecked()
         assert dialog.matches[0].status == "automatic"
         assert workspace.account_bindings(workspace.source_ids()[0])[0].basis == "automatic"
+        dialog.abbreviated_matching_button.click()
+        assert dialog.abbreviated_matching_button.isVisible()
+        assert not dialog.abbreviated_matching_button.isChecked()
+        assert not window.abbreviated_matching_action.isChecked()
+        assert dialog.matches[0].offer_enable_abbreviated_matching
+        assert workspace.account_bindings(workspace.source_ids()[0])[0].ledger_account_id is None
     finally:
         dialog.close()
         window.close()

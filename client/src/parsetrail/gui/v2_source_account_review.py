@@ -61,11 +61,12 @@ class V2SourceAccountReview(QDialog):
         self.clear_button.clicked.connect(self._clear)
         controls.addWidget(self.clear_button)
         layout.addLayout(controls)
-        self.enable_abbreviated_button = QPushButton(
+        self.abbreviated_matching_button = QPushButton(
             "Allow abbreviated account numbers to automatically match to ledger"
         )
-        self.enable_abbreviated_button.clicked.connect(self._enable_abbreviated_matching)
-        layout.addWidget(self.enable_abbreviated_button)
+        self.abbreviated_matching_button.setCheckable(True)
+        self.abbreviated_matching_button.clicked.connect(self._toggle_abbreviated_matching)
+        layout.addWidget(self.abbreviated_matching_button)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -79,6 +80,14 @@ class V2SourceAccountReview(QDialog):
             accounts = store.financial_accounts()
         catalog = self.workspace.catalog_cache.load_current()
         preferences = self.workspace.preferences()
+        self.abbreviated_matching_button.blockSignals(True)
+        self.abbreviated_matching_button.setChecked(preferences.allow_abbreviated_account_matching)
+        self.abbreviated_matching_button.blockSignals(False)
+        self.abbreviated_matching_button.setText(
+            "Stop automatically matching abbreviated account numbers"
+            if preferences.allow_abbreviated_account_matching
+            else "Allow abbreviated account numbers to automatically match to ledger"
+        )
         candidates = tuple(
             LedgerAccountCandidate(account.id, account.institution_key, account.kind, account.full_account_number)
             for account in accounts
@@ -147,19 +156,25 @@ class V2SourceAccountReview(QDialog):
         selected = 0 <= index < len(self.bindings)
         self.assign_button.setEnabled(selected and self.account_combo.currentData() is not None)
         self.clear_button.setEnabled(selected and self.bindings[index].ledger_account_id is not None)
-        self.enable_abbreviated_button.setVisible(
+        self.abbreviated_matching_button.setVisible(
             selected
-            and self.bindings[index].ledger_account_id is None
-            and self.matches[index].offer_enable_abbreviated_matching
+            and self.bindings[index].source_identity_form == "last_four"
+            and (self.matches[index].offer_enable_abbreviated_matching or self.matches[index].status == "automatic")
         )
 
-    def _enable_abbreviated_matching(self) -> None:
+    def _toggle_abbreviated_matching(self, enabled: bool) -> None:
         try:
-            self.workspace.set_allow_abbreviated_account_matching(True)
+            self.workspace.set_allow_abbreviated_account_matching(enabled)
             self._reload()
             if self.parent() is not None and hasattr(self.parent(), "abbreviated_matching_action"):
-                self.parent().abbreviated_matching_action.setChecked(True)
+                action = self.parent().abbreviated_matching_action
+                action.blockSignals(True)
+                action.setChecked(enabled)
+                action.blockSignals(False)
         except (OSError, ValueError) as exc:
+            self.abbreviated_matching_button.blockSignals(True)
+            self.abbreviated_matching_button.setChecked(not enabled)
+            self.abbreviated_matching_button.blockSignals(False)
             QMessageBox.warning(self, "Preference was not saved", str(exc))
 
     def _write(self, action) -> None:

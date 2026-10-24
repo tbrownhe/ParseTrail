@@ -450,7 +450,7 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   acceptance. Keep each service/UI chunk separately testable. The global
   abbreviated-account matching setting defaults off; the 2.0 review now uses
   exact signed-catalog institution/class context, suggests a unique suffix
-  match, and offers to enable the preference inline. Owner native GUI acceptance
+  match, and offers a reversible inline toggle. Owner native GUI acceptance
   remains open. Consolidate the
   temporary V2 source store with the user-database service before activation.
   The first isolated import service now skips parsing on exact-source retry,
@@ -483,9 +483,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   on October 23, 2026. A further slice stores reversible, explicit bindings
   for source-identified statement and export accounts, and offers separate
   review for printed identities and accountless rows. Offscreen tests pass;
-  the owner accepted the native review dialog on October 24, 2026. Automatic
-  suffix matching still needs trustworthy source institution/account-class
-  metadata and an operational 2.0 global preference. Ledger integration remains open.
+  the owner accepted the native review dialog on October 24, 2026. Signed parser
+  context and the 2.0 global preference now support unique automatic matches;
+  the owner confirmed the on direction and requested a persistent off toggle.
+  Native acceptance of that correction and ledger integration remain open.
 - [ ] **V2-4a–b — Daily review:** create/edit accounts, categories and budgets; connect
   accepted ledger workflows to the application in small increments. Manual values,
   closures and unsupported accounting remain explicit. Owner Windows integration gate.

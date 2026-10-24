@@ -298,9 +298,10 @@ post entries. The fresh pre-release profile schema is revision 4. The shell now
 offers separate review buttons for printed identities and unidentified rows.
 Offscreen tests pass; the owner accepted the printed-identity dialog on native
 Windows on October 24, 2026. Signed catalog entries now supply institution and
-account class for unambiguous parser families. The 2.0 global preference and
-inline option are implemented; native acceptance of this new interaction is
-pending.
+account class for unambiguous parser families. The owner confirmed that the
+inline control changed a possible match to an automatic match, then found that
+the control vanished. The 2.0 control now remains visible as a reversible toggle;
+native acceptance of its off direction is pending.
 
 For a native review without live data, launch the disposable synthetic demo from
 the repository root in PowerShell:
@@ -339,8 +340,9 @@ The 2.0 read model then resolves a unique full-number match automatically, or
 a unique last-four match when the preference is enabled. Missing signed context,
 an unknown identity, a different account class, or multiple eligible accounts
 stay in review. Explicit user assignments take precedence. The source-account
-review shows a unique suffix candidate and offers to enable the preference
-inline. These matches are computed from the verified current catalog and saved
+review shows a unique suffix candidate and offers an inline toggle for the
+preference. The toggle remains available after enabling so it can be switched
+off again. These matches are computed from the verified current catalog and saved
 evidence, without posting ledger entries. If that catalog is unavailable or no
 longer contains the exact definition hash, automatic matching stops until a
 matching signed catalog is installed. Source and ledger persistence will
