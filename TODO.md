@@ -510,17 +510,19 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   one reviewed cash outflow only when its financial account is explicitly bound,
   its source date role is `posting_date`, and exact source/ledger signs agree.
   Journal and source allocations are immutable; the same decision is idempotent,
-  while conflicting reinterpretation and liability rows are refused. This
-  A correction service now reverses and replaces a reviewed cash expense in one
+  while conflicting reinterpretation and liability rows are refused. A
+  correction service now reverses and replaces a reviewed cash expense in one
   transaction, preserves its source allocation history, and refuses changes to
-  account assignments after posting. This synthetic proof has no desktop
-  posting or correction control yet. The
-  workspace now opens a fresh category dialog for adding expense/income
+  account assignments after posting. The workspace opens a fresh category
+  dialog for adding expense/income
   categories and renaming their display names; an existing journal keeps its
   account ID and payload after a rename. Offscreen acceptance passes, and the
-  owner confirmed the native Windows dialog on October 24, 2026. Manual
-  values, closures and unsupported accounting remain explicit. Owner Windows
-  integration gate.
+  owner confirmed the native Windows dialog on October 24, 2026. A new
+  cash-expense review dialog shows all source rows and permits explicit posting
+  or append-only recategorization only for bound asset outflows from activity
+  exports with a source posting date. Its offscreen interaction test passes;
+  native Windows acceptance remains open. Manual values, closures and
+  unsupported accounting remain explicit. Owner Windows integration gate.
 - [ ] **V2-5a–b — Report cutover:** shared ledger spending/cash/balance/budget queries,
   then dashboard and export integration. Inventory every legacy menu action; approve
   concrete deferrals rather than silently removing functionality. Owner Windows gate.

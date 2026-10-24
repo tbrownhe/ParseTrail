@@ -112,7 +112,9 @@ class V2EvidencePreview(QDialog):
         self.setWindowTitle("2.0 source evidence preview")
         self.resize(1100, 700)
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Imported source evidence is pending review. No ledger entries were posted."))
+        layout.addWidget(
+            QLabel("This preview shows saved source evidence. Review cash expenses for row posting status.")
+        )
         coverage = payload.capture_verified if isinstance(payload, StatementPayload) else payload.coverage_verified
         unclassified_money = sum(item.code == "unclassified_monetary_line" for item in payload.dispositions)
         unclassified_note = f" · Unclassified dollar lines: {unclassified_money}" if unclassified_money else ""

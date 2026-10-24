@@ -68,6 +68,7 @@ def _wait_finished(worker, app) -> None:
 
 def test_window_imports_pending_evidence_and_reuses_exact_source(tmp_path: Path, monkeypatch) -> None:
     app = _app()
+    from parsetrail.gui.v2_cash_expense_review import V2CashExpenseReview
     from parsetrail.gui.v2_categories import V2CategoryDialog
     from parsetrail.gui.v2_source_account_review import V2SourceAccountReview
     from parsetrail.gui.v2_workspace_window import V2WorkspaceWindow
@@ -87,6 +88,7 @@ def test_window_imports_pending_evidence_and_reuses_exact_source(tmp_path: Path,
         _wait_finished(window.import_worker, app)
         assert window.sources.count() == 1
         assert window.preview_button.isEnabled()
+        assert window.expense_review_button.isEnabled()
         assert not window.review_button.isEnabled()
         assert window.source_review_button.isEnabled()
         assert "pending review" in window.status.text()
@@ -94,6 +96,10 @@ def test_window_imports_pending_evidence_and_reuses_exact_source(tmp_path: Path,
         monkeypatch.setattr(V2SourceAccountReview, "exec", lambda dialog: opened.append(dialog.identities.count()))
         window.source_review_button.click()
         assert opened == [1]
+        expense_opens = []
+        monkeypatch.setattr(V2CashExpenseReview, "exec", lambda dialog: expense_opens.append(dialog.model.rowCount()))
+        window.expense_review_button.click()
+        assert expense_opens == [1]
         window.start_import(source)
         _wait_finished(window.import_worker, app)
         assert window.sources.count() == 1

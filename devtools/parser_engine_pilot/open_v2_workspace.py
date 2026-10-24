@@ -27,7 +27,12 @@ from devtools.parser_engine_pilot.test_synchrony_source_output import channels a
 
 ROOT = Path(__file__).resolve().parents[2]
 CASH_DEFINITION = ROOT / "devtools" / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
-CASH_SOURCE = b"Date,Account,Description,Amount,ReportedBalance\n10/01/2026,Checking A,Coffee,-$4.00,$996.00\n"
+CASH_SOURCE = (
+    b"Date,Account,Description,Amount,ReportedBalance\n"
+    b"10/01/2026,Checking A,Coffee,-$4.00,$996.00\n"
+    b"10/02/2026,Checking A,Deposit,$10.00,$1006.00\n"
+    b"10/03/2026,Checking A,Tea,-$3.00,$1003.00\n"
+)
 MORE_CASH = b"Date,Account,Description,Amount,ReportedBalance\n10/02/2026,Checking A,Tea,-$3.00,$993.00\n"
 CITI_SOURCE = b"%PDF-older-citi-synthetic"
 CITI_OVERLAP_SOURCE = b"%PDF-older-citi-overlap-synthetic"
@@ -80,7 +85,7 @@ def main(argv: list[str] | None = None) -> int:
         more_path = root / "import-this.csv"
         more_path.write_bytes(MORE_CASH)
         workspace.import_file(mohela_path)
-        workspace.import_file(cash_path)
+        cash_result = workspace.import_file(cash_path)
         with V2ProfileStore.open(workspace.profile_path) as store:
             citi_evidence = parse_legacy_citi(
                 CITI_DEFINITION,
@@ -114,15 +119,20 @@ def main(argv: list[str] | None = None) -> int:
             store.add_financial_account(FinancialAccount("card-a", "Card A", "liability", "synchrony", "999991234"))
             store.add_financial_account(FinancialAccount("citi-card", "Citi Card", "liability", "citi"))
             store.add_category_account("category:food", "Food", "expense")
+            store.add_category_account("category:travel", "Travel", "expense")
             for evidence in (citi_evidence, citi_overlap):
                 account = evidence.payload.accounts[0]
                 store.bind_source_account(
                     evidence.source_sha256, account.source_identity, account.source_identity_form, "citi-card"
                 )
         window = V2WorkspaceWindow(workspace)
+        window.refresh(select_source=cash_result.source_sha256)
         window.status.setWordWrap(True)
         window.status.setText(
-            "Disposable demo. First source: review its last-four match. "
+            "Disposable demo. Selected cash export: bind Checking A to its asset account under "
+            "Review source accounts, then open Review cash expenses. Post Coffee to Food; "
+            "correct it to Travel. Deposit stays pending. "
+            "Select the card source to review its last-four match. "
             "Older Citi sources: inspect the period-overlap warning; one source previews an unclassified dollar line. "
             "Categories: rename Food or add a category. "
             f"Import source: {more_path}\nInstall signed catalog: {next_release}"

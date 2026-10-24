@@ -178,6 +178,18 @@ class SourceAccountBinding:
     ledger_account_id: str | None
 
 
+@dataclass(frozen=True)
+class CashExpenseReviewRow:
+    row_id: str
+    date: str | None
+    description: str
+    amount_minor: int | None
+    financial_account: str | None
+    status: str
+    entry_key: str | None = None
+    category_id: str | None = None
+
+
 def _digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -539,6 +551,74 @@ class V2ProfileStore:
                 )
             )
         return assigned
+
+    def cash_expense_review_rows(self, source_sha256: str) -> tuple[CashExpenseReviewRow, ...]:
+        """Describe source rows for the narrow reviewed cash-expense workflow."""
+        saved = self.load_import(source_sha256)
+        bindings = {binding.row_id: binding.ledger_account_id for binding in self.account_bindings(source_sha256)}
+        accounts = {
+            account_id: (name, kind, role)
+            for account_id, name, kind, role in self.connection.execute("SELECT id,name,kind,role FROM Accounts")
+        }
+        active: dict[str, list[JournalEntry]] = {}
+        for row_id, payload in self.connection.execute(
+            "SELECT a.row_id,e.payload FROM JournalAllocations a JOIN JournalEntries e ON e.key=a.entry_key "
+            "JOIN SourceObservations o ON o.row_id=a.row_id "
+            "WHERE o.source_sha256=? AND a.entry_key NOT IN (SELECT original_key FROM JournalCorrections)",
+            (source_sha256,),
+        ):
+            active.setdefault(row_id, []).append(_decode_journal(payload))
+        result = []
+        for row in _rows(saved.evidence):
+            account_id = bindings.get(row.row_id)
+            financial = accounts.get(account_id) if account_id is not None else None
+            account_name = financial[0] if financial is not None else None
+            entries = active.get(row.row_id, [])
+            entry_key = None
+            category_id = None
+            if entries:
+                status = "Already posted to the ledger"
+                if len(entries) == 1:
+                    entry = entries[0]
+                    if (
+                        entry.origin == "imported"
+                        and entry.reviewed
+                        and len(entry.postings) == 2
+                        and entry.postings[0].account_id == account_id
+                        and entry.postings[0].allocations == (Allocation(row.row_id, row.amount.minor),)
+                        and accounts.get(entry.postings[1].account_id, (None, None, None))[1:]
+                        == ("expense", "category")
+                    ):
+                        entry_key = entry.key
+                        category_id = entry.postings[1].account_id
+                        status = "Posted: " + accounts[category_id][0]
+            elif not isinstance(saved.evidence.payload, ActivityExportPayload):
+                status = "Statement posting is not available in this review"
+            elif row.row_role != "activity" or row.amount.minor is None or row.amount.minor >= 0:
+                status = "Outside cash expense scope"
+            elif row.date_role != "posting_date" or row.date.iso is None:
+                status = "Posting date needs review"
+            elif account_id is None:
+                status = "Assign a financial account first"
+            elif financial is None or financial[1:] != ("asset", "financial"):
+                status = "Requires a bound asset account"
+            elif not row.description.text:
+                status = "Description needs review"
+            else:
+                status = "Ready for expense review"
+            result.append(
+                CashExpenseReviewRow(
+                    row.row_id,
+                    row.date.iso,
+                    row.description.text,
+                    row.amount.minor,
+                    account_name,
+                    status,
+                    entry_key,
+                    category_id,
+                )
+            )
+        return tuple(result)
 
     def post_reviewed_cash_expense(self, row_id: str, category_id: str, *, reason: str) -> str:
         """Post one explicitly classified asset outflow, supported by source evidence."""

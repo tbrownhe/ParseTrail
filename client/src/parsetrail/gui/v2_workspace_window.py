@@ -33,6 +33,7 @@ from parsetrail.core.v2_profile_store import FinancialAccount, ProfileFormatErro
 from parsetrail.core.v2_source_import import ImportCancelled, SourceImportResult
 from parsetrail.core.v2_workspace import V2Workspace
 from parsetrail.gui.v2_account_binding_review import V2AccountBindingReview
+from parsetrail.gui.v2_cash_expense_review import V2CashExpenseReview
 from parsetrail.gui.v2_categories import V2CategoryDialog
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
 from parsetrail.gui.v2_source_account_review import V2SourceAccountReview
@@ -130,7 +131,7 @@ class V2WorkspaceWindow(QMainWindow):
         catalog_controls.addWidget(self.install_catalog_button)
         catalog_controls.addStretch()
         layout.addLayout(catalog_controls)
-        layout.addWidget(QLabel("Saved source evidence (pending review; no ledger entries posted)"))
+        layout.addWidget(QLabel("Saved source evidence (review status depends on each row)"))
         self.sources = QListWidget()
         self.sources.currentItemChanged.connect(self._update_controls)
         self.sources.itemDoubleClicked.connect(self._preview)
@@ -145,6 +146,9 @@ class V2WorkspaceWindow(QMainWindow):
         self.preview_button = QPushButton("Preview evidence")
         self.preview_button.clicked.connect(self._preview)
         controls.addWidget(self.preview_button)
+        self.expense_review_button = QPushButton("Review cash expenses")
+        self.expense_review_button.clicked.connect(self._review_cash_expenses)
+        controls.addWidget(self.expense_review_button)
         controls.addStretch()
         layout.addLayout(controls)
         account_controls = QHBoxLayout()
@@ -185,7 +189,7 @@ class V2WorkspaceWindow(QMainWindow):
                 self.sources.setCurrentItem(item)
         if self.sources.currentItem() is None and self.sources.count():
             self.sources.setCurrentRow(0)
-        self.status.setText(f"{self.sources.count()} saved source(s). Import retains evidence without posting entries.")
+        self.status.setText(f"{self.sources.count()} saved source(s). Imported rows start pending review.")
         self._update_controls()
 
     def _selected_source(self) -> str | None:
@@ -195,6 +199,7 @@ class V2WorkspaceWindow(QMainWindow):
     def _update_controls(self, *_args) -> None:
         source_id = self._selected_source()
         self.preview_button.setEnabled(source_id is not None)
+        self.expense_review_button.setEnabled(source_id is not None)
         unidentified_rows = False
         identified_accounts = False
         if source_id is not None:
@@ -206,7 +211,7 @@ class V2WorkspaceWindow(QMainWindow):
                 else len(payload.rows)
             )
             kind = "Statement" if isinstance(payload, StatementPayload) else "Activity export"
-            details = f"{kind} · {evidence.parser_id} · {rows} row(s) · pending review"
+            details = f"{kind} · {evidence.parser_id} · {rows} row(s) · review rows for posting status"
             if isinstance(payload, StatementPayload):
                 overlaps = self.workspace.overlapping_statement_sources(source_id)
                 if overlaps:
@@ -296,6 +301,12 @@ class V2WorkspaceWindow(QMainWindow):
         source_id = self._selected_source()
         if source_id is not None:
             V2EvidencePreview(self.workspace.saved_import(source_id), self).exec()
+
+    def _review_cash_expenses(self) -> None:
+        source_id = self._selected_source()
+        if source_id is not None:
+            V2CashExpenseReview(self.workspace.profile_path, source_id, self).exec()
+            self.refresh(select_source=source_id)
 
     def _review_account(self) -> None:
         source_id = self._selected_source()

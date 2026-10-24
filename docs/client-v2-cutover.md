@@ -314,9 +314,15 @@ $env:PYTHONPATH='.;client/src;client'
 The demo signs a temporary four-definition catalog with a generated key,
 creates a temporary profile, and saves synthetic last-four card and older-Citi
 statements, a six-row accountless export, and a one-row identified cash export.
-Select the first source and open Review source accounts to inspect the inline
-preference. Select the older-Citi source and open Preview evidence to see its
-unclassified dollar-line count.
+The demo initially selects a three-row cash export. Open Review source accounts
+and explicitly bind Checking A to the existing asset account. Then open Review
+cash expenses: Coffee and Tea are eligible for reviewed expense posting, while
+Deposit remains outside that workflow. Select Coffee, choose Food, enter a
+reason and confirm the posting. To inspect append-only correction, select the
+posted Coffee row, choose Travel, enter a different reason and confirm. The
+source facts remain unchanged. Select the card source to inspect the inline
+abbreviated-match preference. Select the older-Citi source and open Preview
+evidence to see its unclassified dollar-line count.
 Its status line gives the path of another synthetic file
 for testing Import source and a second test-signed release folder for testing
 Install signed catalog. Closing the window removes the temporary workspace.
@@ -387,7 +393,11 @@ the category dialog was confirmed by the owner on October 24, 2026. The store
 now supports an append-only category correction for a reviewed cash expense:
 it saves a reversal, replacement and linked reason atomically, without changing
 source evidence or reusing its allocation. An account assignment with journal
-history cannot change. No desktop posting or correction control is connected yet.
+history cannot change. A new cash-expense review dialog now connects those
+service actions to eligible activity-export rows. It shows unsupported rows as
+pending, requires an expense category and explicit reason, and confirms each
+posting or correction. Offscreen interaction passes; owner native Windows
+acceptance of this dialog remains open.
 
 ## Current stop/go decision
 

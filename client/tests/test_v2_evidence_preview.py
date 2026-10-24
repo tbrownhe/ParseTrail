@@ -40,7 +40,7 @@ def test_preview_reopens_unknown_account_without_writing_profile(tmp_path: Path)
     dialog = preview_saved_source(profile, evidence.source_sha256)
     try:
         labels = dialog.findChildren(QLabel)
-        assert any("No ledger entries were posted" in label.text() for label in labels)
+        assert any("This preview shows saved source evidence" in label.text() for label in labels)
         assert any("Source capture needs review" in label.text() for label in labels)
         assert dialog.rows_model.rowCount() == 1
         assert dialog.rows_model.data(dialog.rows_model.index(0, 2)) == "Not identified by source"
