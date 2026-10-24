@@ -66,6 +66,48 @@ def test_spending_dialog_reads_posted_totals_without_changing_profile(tmp_path: 
         assert dialog.budget_model.rowCount() == 1
         dialog.tabs.setCurrentIndex(0)
         assert "end date after" in dialog.total.text()
+        assert not dialog.export_button.isEnabled()
+    finally:
+        dialog.close()
+        app.processEvents()
+    assert hashlib.sha256(profile.read_bytes()).hexdigest() == before
+
+
+def test_report_dialog_exports_reviewed_rows_without_changing_profile(tmp_path: Path, monkeypatch) -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from openpyxl import load_workbook
+    from parsetrail.gui.v2_reviewed_reports import V2ReviewedReportsDialog
+    from PySide6.QtCore import QDate
+    from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
+
+    app = QApplication.instance() or QApplication([])
+    evidence = build_source_evidence(SOURCE, DEFINITION, suffix=".csv")
+    profile = tmp_path / "fresh.db"
+    with V2ProfileStore.create(profile) as store:
+        store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
+        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        store.add_category_account("expense:food", "Food", "expense")
+        store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
+        store.post_reviewed_cash_category(evidence.payload.rows[0].row_id, "expense:food", reason="Reviewed coffee")
+    before = hashlib.sha256(profile.read_bytes()).hexdigest()
+    export_path = tmp_path / "reviewed.xlsx"
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *_args, **_kwargs: (str(export_path), ""))
+    notices = []
+    monkeypatch.setattr(QMessageBox, "information", lambda _parent, _title, message: notices.append(message))
+    dialog = V2ReviewedReportsDialog(profile)
+    try:
+        dialog.start.setDate(QDate(2026, 10, 1))
+        dialog.end.setDate(QDate(2026, 11, 1))
+        assert dialog.export_button.isEnabled()
+        dialog.export_button.click()
+        assert export_path.is_file()
+        assert "1 active reviewed entries" in notices[0]
+        workbook = load_workbook(export_path, read_only=True)
+        try:
+            assert len(list(workbook["Reviewed Entries"].values)) == 2
+            assert len(list(workbook["Source Allocations"].values)) == 2
+        finally:
+            workbook.close()
     finally:
         dialog.close()
         app.processEvents()

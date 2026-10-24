@@ -273,6 +273,36 @@ class FinancialJournalSummary:
     excluded_unreviewed_financial_entries: int
 
 
+@dataclass(frozen=True)
+class JournalExportAccount:
+    id: str
+    name: str
+    kind: str
+
+
+@dataclass(frozen=True)
+class JournalExportCorrection:
+    original_key: str
+    reversal_key: str
+    replacement_key: str
+    reason: str
+    created_at: str
+
+
+@dataclass(frozen=True)
+class ReviewedJournalExport:
+    start: date
+    end: date
+    entries: tuple[JournalEntry, ...]
+    accounts: tuple[JournalExportAccount, ...]
+    source_rows: tuple[tuple[str, str], ...]
+    corrections: tuple[JournalExportCorrection, ...]
+    activity_rows_without_full_allocation: int
+    sources_with_incomplete_activity: int
+    excluded_unreviewed_entries: int
+    excluded_opening_entries: int
+
+
 def _digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -952,6 +982,62 @@ class V2ProfileStore:
             unresolved_rows,
             unresolved_sources,
             excluded_unreviewed,
+        )
+
+    def reviewed_journal_export(self, *, start: date, end: date) -> ReviewedJournalExport:
+        """Read active reviewed entries with posting and source provenance for export."""
+        period_entries = tuple(self._journal_entries_in_period(start, end))
+        corrections = tuple(
+            JournalExportCorrection(original_key, reversal_key, replacement_key, reason, created_at)
+            for original_key, reversal_key, replacement_key, reason, created_at, payload in self.connection.execute(
+                "SELECT c.original_key,c.reversal_key,c.replacement_key,c.reason,c.created_at,e.payload "
+                "FROM JournalCorrections c JOIN JournalEntries e ON e.key=c.original_key "
+                "ORDER BY c.created_at,c.original_key"
+            )
+            if start <= _decode_journal(payload).posting_date < end
+        )
+        inactive = {row[0] for row in self.connection.execute("SELECT original_key FROM JournalCorrections")}
+        inactive.update(row[0] for row in self.connection.execute("SELECT reversal_key FROM JournalCorrections"))
+        entries = tuple(
+            sorted(
+                (
+                    entry
+                    for entry in period_entries
+                    if entry.reviewed and entry.origin != "opening" and entry.key not in inactive
+                ),
+                key=lambda entry: (entry.posting_date, entry.key),
+            )
+        )
+        accounts = tuple(
+            JournalExportAccount(*row)
+            for row in self.connection.execute("SELECT id,name,kind FROM Accounts ORDER BY id")
+        )
+        account_ids = {account.id for account in accounts}
+        if any(posting.account_id not in account_ids for entry in entries for posting in entry.postings):
+            raise ProfileFormatError("journal_export_account_missing")
+        source_rows = tuple(
+            self.connection.execute("SELECT row_id,source_sha256 FROM SourceObservations ORDER BY row_id")
+        )
+        source_ids = {row_id for row_id, _source_id in source_rows}
+        if any(
+            allocation.observation_id not in source_ids
+            for entry in entries
+            for posting in entry.postings
+            for allocation in posting.allocations
+        ):
+            raise ProfileFormatError("journal_export_source_row_missing")
+        unresolved_rows, unresolved_sources = self._unallocated_activity_counts()
+        return ReviewedJournalExport(
+            start,
+            end,
+            entries,
+            accounts,
+            source_rows,
+            corrections,
+            unresolved_rows,
+            unresolved_sources,
+            sum(not entry.reviewed for entry in period_entries),
+            sum(entry.reviewed and entry.origin == "opening" for entry in period_entries),
         )
 
     def post_reviewed_cash_category(self, row_id: str, category_id: str, *, reason: str) -> str:

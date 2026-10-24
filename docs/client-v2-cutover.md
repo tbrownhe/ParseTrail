@@ -446,8 +446,18 @@ only at a new path. Restore creates a new `.db` and switches after it passes
 verification; choosing a 1.x or damaged profile leaves the active profile in
 place. The snapshot contains the embedded source evidence, authored accounts,
 budgets and reviewed journal. The separately installed signed catalog cache and
-global preferences are outside the database snapshot. Offscreen checks pass;
-native Windows backup/restore and failed-switch acceptance remains open.
+global preferences are outside the database snapshot. Offscreen checks passed;
+the owner accepted backup, restore and profile switching on native Windows.
+
+The [1.x desktop action inventory](client-v2-menu-inventory.md) lists every
+menu action and dashboard tab with its current 2.0 status. The owner selected
+reviewed transaction rows for the first 2.0 export. The new workbook contains
+active reviewed non-opening journal entries, exact posting and source
+allocation lines, correction links and source coverage notes for an explicit
+date range. It
+does not claim unique source coverage, reconciled balances or cash flow.
+Offscreen checks pass; native Windows export acceptance remains open. Other
+1.x action deferrals in the inventory still need explicit decisions.
 
 ## Current stop/go decision
 

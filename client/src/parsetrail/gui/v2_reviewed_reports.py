@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from datetime import date
 from pathlib import Path
 
@@ -11,9 +12,11 @@ from PySide6.QtWidgets import (
     QDateEdit,
     QDialog,
     QDialogButtonBox,
+    QFileDialog,
     QFormLayout,
     QHeaderView,
     QLabel,
+    QMessageBox,
     QTableView,
     QTabWidget,
     QVBoxLayout,
@@ -30,6 +33,7 @@ from parsetrail.core.v2_profile_store import (
     ReviewedCategoryTotal,
     V2ProfileStore,
 )
+from parsetrail.core.v2_report_export import ReportExportError, write_reviewed_journal_workbook
 from parsetrail.gui.v2_evidence_preview import _money
 
 
@@ -213,6 +217,8 @@ class V2ReviewedReportsDialog(QDialog):
         self.scope.setWordWrap(True)
         layout.addWidget(self.scope)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        self.export_button = buttons.addButton("Export reviewed rows…", QDialogButtonBox.ActionRole)
+        self.export_button.clicked.connect(self._export_reviewed_rows)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
         self.start.dateChanged.connect(self.refresh)
@@ -242,12 +248,42 @@ class V2ReviewedReportsDialog(QDialog):
             self.spending_report = None
             self.income_report = None
             self.account_report = None
+            self.export_button.setEnabled(False)
             self._show_selected_tab()
             return
         self.model.replace(self.spending_report.categories)
         self.income_model.replace(self.income_report.categories)
         self.account_model.replace(self.account_report.accounts)
+        self.export_button.setEnabled(True)
         self._show_selected_tab()
+
+    def _export_reviewed_rows(self) -> None:
+        if self.spending_report is None:
+            return
+        start, end = self.start.date().toPython(), self.end.date().toPython()
+        default = self.profile.with_name(f"reviewed-{start:%Y%m%d}-{end:%Y%m%d}.xlsx")
+        selected, _filter = QFileDialog.getSaveFileName(
+            self, "Export active reviewed journal rows", str(default), "Excel workbooks (*.xlsx);;All files (*)"
+        )
+        if not selected:
+            return
+        destination = Path(selected)
+        if not destination.suffix:
+            destination = destination.with_suffix(".xlsx")
+        try:
+            with V2ProfileStore.open(self.profile, read_only=True) as store:
+                report = store.reviewed_journal_export(start=start, end=end)
+            saved = write_reviewed_journal_workbook(report, destination)
+        except (ProfileFormatError, ReportExportError, sqlite3.Error, OSError) as exc:
+            QMessageBox.warning(self, "Export was not saved", str(exc))
+            return
+        QMessageBox.information(
+            self,
+            "Reviewed export saved",
+            f"Saved {len(report.entries)} active reviewed entries to {saved}. "
+            "The workbook includes posting lines, source allocations, corrections and coverage notes. "
+            "It contains financial data and is not encrypted by ParseTrail.",
+        )
 
     def _refresh_budget(self, *_args) -> None:
         selected = self.budget_month.date()

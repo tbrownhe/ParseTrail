@@ -559,8 +559,13 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   the natural income direction, nets category corrections, and exposes the
   same source coverage limits. Offscreen checks pass; the owner accepted the
   Income report on native Windows.
-  Inventory every legacy menu action; approve concrete deferrals rather than
-  silently removing functionality. Owner Windows gate.
+  The [1.x action inventory](docs/client-v2-menu-inventory.md) now maps menu
+  actions and dashboard tabs to 2.0 work or explicit pending decisions. The
+  owner chose reviewed transaction rows for the first 2.0 export. A new `.xlsx`
+  workbook exports active reviewed non-opening entries, posting lines, source allocations,
+  correction links and coverage notes for a chosen period. Offscreen checks
+  pass; native Windows export acceptance remains open. Approve concrete
+  deferrals rather than silently removing functionality. Owner Windows gate.
 - [ ] **V2-6a–b — Profile selection:** backup/restore the new profile and make
   1.x/2.x profile selection explicit. No old-database activation or rebuild
   assistant. A preliminary 2.0 Profile menu now opens only verified `.db`
@@ -568,8 +573,8 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   a backup to a new `.db` before switching. Existing destinations, 1.x and
   corrupt sources are refused without changing the active profile. Source
   evidence is embedded in the snapshot; the separate signed catalog cache and
-  global preferences are not. Disposable-profile offscreen checks pass. Owner
-  Windows backup/restore and failed-switch rehearsal remains open.
+  global preferences are not. Disposable-profile offscreen checks passed; the
+  owner accepted backup, restore and profile switching on native Windows.
 - [ ] **V2-7 — Release:** remove obsolete runtime paths after integration, set the major
   version when ready, then packaged Windows/targeted Intel acceptance and a separately
   approved publication. Include the P2 declaration-catalog release gate; installer
