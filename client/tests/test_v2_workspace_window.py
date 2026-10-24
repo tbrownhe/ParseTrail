@@ -68,6 +68,7 @@ def _wait_finished(worker, app) -> None:
 
 def test_window_imports_pending_evidence_and_reuses_exact_source(tmp_path: Path, monkeypatch) -> None:
     app = _app()
+    from parsetrail.gui.v2_categories import V2CategoryDialog
     from parsetrail.gui.v2_source_account_review import V2SourceAccountReview
     from parsetrail.gui.v2_workspace_window import V2WorkspaceWindow
 
@@ -77,6 +78,10 @@ def test_window_imports_pending_evidence_and_reuses_exact_source(tmp_path: Path,
     window = V2WorkspaceWindow(workspace)
     try:
         assert window.sources.count() == 0
+        category_opens = []
+        monkeypatch.setattr(V2CategoryDialog, "exec", lambda dialog: category_opens.append(dialog.categories.count()))
+        window.categories_button.click()
+        assert category_opens == [0]
         assert window.import_button.isEnabled()
         window.start_import(source)
         _wait_finished(window.import_worker, app)

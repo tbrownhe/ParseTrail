@@ -511,7 +511,11 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   its source date role is `posting_date`, and exact source/ledger signs agree.
   Journal and source allocations are immutable; the same decision is idempotent,
   while conflicting reinterpretation and liability rows are refused. This
-  synthetic proof has no desktop posting control or correction flow yet. Manual
+  synthetic proof has no desktop posting control or correction flow yet. The
+  workspace now opens a fresh category dialog for adding expense/income
+  categories and renaming their display names; an existing journal keeps its
+  account ID and payload after a rename. Offscreen acceptance passes, while
+  owner native Windows acceptance of the dialog is pending. Manual
   values, closures and unsupported accounting remain explicit. Owner Windows
   integration gate.
 - [ ] **V2-5a–b — Report cutover:** shared ledger spending/cash/balance/budget queries,

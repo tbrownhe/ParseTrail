@@ -37,8 +37,17 @@ def test_reviewed_cash_expense_reopens_once_and_other_row_stays_pending(tmp_path
             store.post_reviewed_cash_expense(outflow.row_id, "expense:food", reason="Different review")
         with pytest.raises(ProfileFormatError, match="cash_expense_requires_bound_posted_outflow"):
             store.post_reviewed_cash_expense(inflow.row_id, "expense:food", reason="Not an expense")
+        original_payload = store.connection.execute(
+            "SELECT payload FROM JournalEntries WHERE key=?", (key,)
+        ).fetchone()[0]
+        store.rename_category_account("expense:food", "Dining")
+        assert (
+            store.connection.execute("SELECT payload FROM JournalEntries WHERE key=?", (key,)).fetchone()[0]
+            == original_payload
+        )
     with V2ProfileStore.open(profile, read_only=True) as store:
         assert store.load_import(evidence.source_sha256).evidence == evidence
+        assert [(category.name, category.kind) for category in store.category_accounts()] == [("Dining", "expense")]
         rows = store.connection.execute("SELECT key,payload FROM JournalEntries").fetchall()
         assert len(rows) == 1 and rows[0][0] == key
         posted = json.loads(rows[0][1])

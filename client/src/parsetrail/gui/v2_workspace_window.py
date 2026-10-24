@@ -33,6 +33,7 @@ from parsetrail.core.v2_profile_store import FinancialAccount, ProfileFormatErro
 from parsetrail.core.v2_source_import import ImportCancelled, SourceImportResult
 from parsetrail.core.v2_workspace import V2Workspace
 from parsetrail.gui.v2_account_binding_review import V2AccountBindingReview
+from parsetrail.gui.v2_categories import V2CategoryDialog
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
 from parsetrail.gui.v2_source_account_review import V2SourceAccountReview
 
@@ -156,6 +157,9 @@ class V2WorkspaceWindow(QMainWindow):
         self.account_button = QPushButton("Add financial account")
         self.account_button.clicked.connect(self._add_account)
         account_controls.addWidget(self.account_button)
+        self.categories_button = QPushButton("Categories")
+        self.categories_button.clicked.connect(self._edit_categories)
+        account_controls.addWidget(self.categories_button)
         account_controls.addStretch()
         layout.addLayout(account_controls)
         self.status = QLabel()
@@ -325,6 +329,9 @@ class V2WorkspaceWindow(QMainWindow):
                 continue
             self.status.setText("Financial account saved. Select an accountless export to assign it.")
             break
+
+    def _edit_categories(self) -> None:
+        V2CategoryDialog(self.workspace.profile_path, self).exec()
 
     def closeEvent(self, event) -> None:
         if self.import_worker is not None:

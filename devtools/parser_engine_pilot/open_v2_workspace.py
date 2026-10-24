@@ -113,6 +113,7 @@ def main(argv: list[str] | None = None) -> int:
             store.add_financial_account(FinancialAccount("checking-a", "Checking A", "asset", "synthetic"))
             store.add_financial_account(FinancialAccount("card-a", "Card A", "liability", "synchrony", "999991234"))
             store.add_financial_account(FinancialAccount("citi-card", "Citi Card", "liability", "citi"))
+            store.add_category_account("category:food", "Food", "expense")
             for evidence in (citi_evidence, citi_overlap):
                 account = evidence.payload.accounts[0]
                 store.bind_source_account(
@@ -123,6 +124,7 @@ def main(argv: list[str] | None = None) -> int:
         window.status.setText(
             "Disposable demo. First source: review its last-four match. "
             "Older Citi sources: inspect the period-overlap warning; one source previews an unclassified dollar line. "
+            "Categories: rename Food or add a category. "
             f"Import source: {more_path}\nInstall signed catalog: {next_release}"
         )
         window.show()

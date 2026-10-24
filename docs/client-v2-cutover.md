@@ -376,6 +376,16 @@ known starts receive no overlap conclusion. The disposable demo includes two
 overlapping older-Citi sources. The owner confirmed the warning's native Windows
 presentation on October 24, 2026.
 
+The fresh-profile service now proves one reviewed cash expense through the
+double-entry checks and saves its journal and source allocation in the same
+database as its immutable evidence. It requires an explicit asset account
+binding, source posting date, selected expense category and review reason;
+liability rows and other interpretations stay pending. The workspace now has a
+Categories dialog to add fresh expense/income categories and rename them without
+rewriting journal entries. Offscreen tests pass; native Windows acceptance of
+the category dialog is pending. No desktop posting control or correction flow
+is connected yet.
+
 ## Current stop/go decision
 
 **Go** for fresh-profile service integration and finite parser work. The

@@ -145,6 +145,13 @@ class FinancialAccount:
 
 
 @dataclass(frozen=True)
+class CategoryAccount:
+    id: str
+    name: str
+    kind: Literal["expense", "income"]
+
+
+@dataclass(frozen=True)
 class AccountBinding:
     row_id: str
     ledger_account_id: str | None
@@ -391,6 +398,25 @@ class V2ProfileStore:
             "INSERT INTO Accounts VALUES (?,?,?,'USD','category','normal',NULL,NULL)",
             (account_id, name, kind),
         )
+
+    def category_accounts(self) -> tuple[CategoryAccount, ...]:
+        return tuple(
+            CategoryAccount(*row)
+            for row in self.connection.execute(
+                "SELECT id,name,kind FROM Accounts WHERE role='category' ORDER BY name,id"
+            )
+        )
+
+    def rename_category_account(self, account_id: str, name: str) -> None:
+        """Change only a category's display name; journal references use its ID."""
+        self._require_writable()
+        if type(name) is not str or not 0 < len(name.strip()) <= 200:
+            raise ProfileFormatError("invalid_category_name")
+        cursor = self.connection.execute(
+            "UPDATE Accounts SET name=? WHERE id=? AND role='category'", (name.strip(), account_id)
+        )
+        if cursor.rowcount != 1:
+            raise ProfileFormatError("category_account_missing")
 
     def post_reviewed_cash_expense(self, row_id: str, category_id: str, *, reason: str) -> str:
         """Post one explicitly classified asset outflow, supported by source evidence."""
