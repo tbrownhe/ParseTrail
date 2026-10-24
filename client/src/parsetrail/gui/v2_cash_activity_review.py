@@ -1,4 +1,4 @@
-"""Explicit cash expense and income review for posted-date activity exports."""
+"""Explicit cash expense and income review for eligible source rows."""
 
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from parsetrail.core.source_evidence import StatementPayload
 from parsetrail.core.v2_profile_store import CashActivityReviewRow, ProfileFormatError, V2ProfileStore
 
 
@@ -79,13 +80,9 @@ class V2CashActivityReview(QDialog):
         self.setWindowTitle("2.0 cash activity review")
         self.resize(1050, 620)
         layout = QVBoxLayout(self)
-        note = QLabel(
-            "Select an activity export row assigned to an asset account with a source posting date. "
-            "Classify a positive deposit as income only after confirming it is income; transfers and loan proceeds "
-            "must remain pending here."
-        )
-        note.setWordWrap(True)
-        layout.addWidget(note)
+        self.note = QLabel()
+        self.note.setWordWrap(True)
+        layout.addWidget(self.note)
         self.model = _ReviewModel((), self)
         self.table = QTableView()
         self.table.setModel(self.model)
@@ -150,6 +147,18 @@ class V2CashActivityReview(QDialog):
         with V2ProfileStore.open(self.profile, read_only=True) as store:
             rows = store.cash_activity_review_rows(self.source_sha256)
             self.categories = store.category_accounts()
+            statement = isinstance(store.load_import(self.source_sha256).evidence.payload, StatementPayload)
+            overlaps = store.overlapping_statement_sources(self.source_sha256) if statement else ()
+        self.note.setText(
+            "Select a row assigned to an asset account with a source posting date. "
+            "Bank statement rows also need account-total scope; other statement rows stay pending. "
+            "Confirm a positive receipt is income before categorizing it; transfers and loan proceeds stay pending."
+            + (
+                f" This statement has {len(overlaps)} possible overlapping saved source(s). Review before posting."
+                if overlaps
+                else ""
+            )
+        )
         self.model.replace(rows)
         if selected_row_id is not None:
             for index, row in enumerate(rows):

@@ -13,6 +13,7 @@ from parsetrail.core.v2_data_catalog import key_id_for_public_key
 from parsetrail.core.v2_legacy_citi_lines import parse_legacy_citi
 from parsetrail.core.v2_profile_store import FinancialAccount, V2ProfileStore
 from parsetrail.core.v2_synchrony_source_output import from_synchrony_table
+from parsetrail.core.v2_table_bank_source_output import from_anchored_bank
 from parsetrail.core.v2_workspace import V2Workspace
 from parsetrail.gui.v2_workspace_window import V2WorkspaceWindow
 from PySide6.QtWidgets import QApplication, QFormLayout, QLineEdit
@@ -25,6 +26,9 @@ from devtools.parser_engine_pilot.test_legacy_citi_lines import lines as citi_li
 from devtools.parser_engine_pilot.test_synchrony_source_output import DEFINITION as CARD_DEFINITION
 from devtools.parser_engine_pilot.test_synchrony_source_output import SOURCE as CARD_SOURCE
 from devtools.parser_engine_pilot.test_synchrony_source_output import channels as card_channels
+from devtools.parser_engine_pilot.test_table_bank_source_output import SOURCE as BANK_SOURCE
+from devtools.parser_engine_pilot.test_table_bank_source_output import TAIL_DEFINITION as BANK_DEFINITION
+from devtools.parser_engine_pilot.test_table_bank_source_output import evidence as bank_channels
 
 ROOT = Path(__file__).resolve().parents[2]
 CASH_DEFINITION = ROOT / "devtools" / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
@@ -52,9 +56,11 @@ def main(argv: list[str] | None = None) -> int:
         (definitions / CASH_DEFINITION.name).write_bytes(CASH_DEFINITION.read_bytes())
         (definitions / "synchrony-card-definition.json").write_bytes(CARD_DEFINITION)
         (definitions / "older-citi-definition.json").write_bytes(CITI_DEFINITION)
+        (definitions / "lendingclub-table-definition.json").write_bytes(BANK_DEFINITION)
         (definitions / "account-contexts.json").write_text(
             '{"synchrony_amazon_store_card":{"institution_key":"synchrony","kind":"liability"},'
-            '"pdf_citicc_201505":{"institution_key":"citi","kind":"liability"}}'
+            '"pdf_citicc_201505":{"institution_key":"citi","kind":"liability"},'
+            '"pdf_lendingclublus_202506":{"institution_key":"lendingclub","kind":"asset"}}'
         )
         private = Ed25519PrivateKey.generate()
         public = private.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
@@ -114,9 +120,12 @@ def main(argv: list[str] | None = None) -> int:
                 from_synchrony_table(CARD_DEFINITION, *card_channels()),
                 suffix=".pdf",
             )
+            bank_evidence = from_anchored_bank(BANK_DEFINITION, *bank_channels(definition=BANK_DEFINITION, tail=True))
+            store.import_source(BANK_SOURCE, BANK_DEFINITION, bank_evidence, suffix=".pdf")
             store.add_financial_account(FinancialAccount("loan-a", "Loan A", "liability", "mohela"))
             store.add_financial_account(FinancialAccount("loan-b", "Loan B", "liability", "mohela"))
             store.add_financial_account(FinancialAccount("checking-a", "Checking A", "asset", "synthetic"))
+            store.add_financial_account(FinancialAccount("savings-a", "Savings A", "asset", "lendingclub"))
             store.add_financial_account(FinancialAccount("card-a", "Card A", "liability", "synchrony", "999991234"))
             store.add_financial_account(FinancialAccount("citi-card", "Citi Card", "liability", "citi"))
             store.add_category_account("category:food", "Food", "expense")
@@ -142,6 +151,8 @@ def main(argv: list[str] | None = None) -> int:
             "Categories: rename Food, add a category, or change Food's October $100 target. "
             "Reviewed reports > Monthly budgets: October shows Food's $100 target and reviewed Coffee spending. "
             "Reviewed reports > Income: after explicitly posting the synthetic Deposit, October shows $10 income. "
+            "Select the LendingClub bank statement, bind its printed account to Savings A, then review "
+            "its interest and withdrawal separately. "
             "Profile menu: back up this disposable profile, restore to a new .db, then reopen the original. "
         )
         demo_paths = QFormLayout()

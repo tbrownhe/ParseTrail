@@ -323,6 +323,11 @@ posted Coffee row, choose Travel, enter a different reason and confirm. The
 source facts remain unchanged. Select the card source to inspect the inline
 abbreviated-match preference. Select the older-Citi source and open Preview
 evidence to see its unclassified dollar-line count.
+For the bank-statement review slice, select the synthetic LendingClub statement,
+bind its printed account to Savings A under Review source accounts, and open
+Review cash activity. Its interest and withdrawal are separate pending rows;
+choose an income category only for confirmed interest and an expense category
+only for a confirmed expense. A correction retains its reversal and replacement.
 Its copyable path fields show another synthetic file for testing Import source
 and a second test-signed release folder for testing Install signed catalog.
 Closing the window removes the temporary workspace.
@@ -416,6 +421,14 @@ profile. The category dialog can save a new target or clear one from a selected
 month forward while preserving prior months. These planning values do not post
 journal entries. Offscreen checks pass; the owner accepted effective dates on
 native Windows.
+
+The owner approved extending that explicit cash review to bound asset bank
+statement rows with source posting dates. The service now limits statement
+eligibility to six supported bank families and account-total balance scope.
+HSA cash components, cards, loans, investment summaries and other date roles
+stay pending; positive receipts still require explicit income confirmation.
+Synthetic bank posting, correction and dialog checks pass. Native Windows
+acceptance of this extension remains open.
 
 A first read-only Spending summary in the 2.0 workspace uses reviewed expense
 journal postings for a selected half-open date range. Reversal and replacement

@@ -7,6 +7,11 @@ from pathlib import Path
 
 from parsetrail.core.v2_profile_store import FinancialAccount, V2ProfileStore
 from parsetrail.core.v2_source_pipeline import build_source_evidence
+from parsetrail.core.v2_table_bank_source_output import from_anchored_bank
+
+from devtools.parser_engine_pilot.test_table_bank_source_output import DEFINITION as BANK_DEFINITION
+from devtools.parser_engine_pilot.test_table_bank_source_output import SOURCE as BANK_SOURCE
+from devtools.parser_engine_pilot.test_table_bank_source_output import evidence as bank_channels
 
 DEFINITION = (
     Path(__file__).parents[2] / "devtools" / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
@@ -121,3 +126,47 @@ def test_cash_activity_dialog_explicitly_posts_and_corrects_income(tmp_path: Pat
         app.processEvents()
     with V2ProfileStore.open(profile, read_only=True) as store:
         assert store._active_consumed() == {evidence.payload.rows[1].row_id: 1_000}
+
+
+def test_bank_statement_rows_use_explicit_cash_review_dialog(tmp_path: Path, monkeypatch) -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from parsetrail.gui.v2_cash_activity_review import V2CashActivityReview
+    from PySide6.QtWidgets import QApplication, QMessageBox
+
+    app = QApplication.instance() or QApplication([])
+    evidence = from_anchored_bank(BANK_DEFINITION, *bank_channels())
+    account = evidence.payload.accounts[0]
+    profile = tmp_path / "bank.db"
+    with V2ProfileStore.create(profile) as store:
+        store.import_source(BANK_SOURCE, BANK_DEFINITION, evidence, suffix=".pdf")
+        store.add_financial_account(FinancialAccount("cash", "Savings", "asset", "lendingclub"))
+        store.add_category_account("expense:other", "Other", "expense")
+        store.add_category_account("income:interest", "Interest", "income")
+        store.bind_source_account(evidence.source_sha256, account.source_identity, account.source_identity_form, "cash")
+    confirmations = []
+
+    def confirm(_dialog, _title, message):
+        confirmations.append(message)
+        return QMessageBox.StandardButton.Yes
+
+    monkeypatch.setattr(QMessageBox, "question", confirm)
+    dialog = V2CashActivityReview(profile, evidence.source_sha256)
+    try:
+        assert [row.status for row in dialog.model.rows] == ["Ready for income review", "Ready for expense review"]
+        assert "account-total scope" in dialog.note.text()
+        dialog.table.selectRow(0)
+        dialog.category.setCurrentIndex(dialog.category.findData("income:interest"))
+        dialog.reason.setText("Confirmed interest")
+        dialog.action_button.click()
+        assert dialog.model.rows[0].status == "Posted: Interest"
+        assert any("I confirm this receipt is income." in message for message in confirmations)
+        dialog.table.selectRow(1)
+        dialog.category.setCurrentIndex(dialog.category.findData("expense:other"))
+        dialog.reason.setText("Reviewed withdrawal")
+        dialog.action_button.click()
+        assert dialog.model.rows[1].status == "Posted: Other"
+    finally:
+        dialog.close()
+        app.processEvents()
+    with V2ProfileStore.open(profile, read_only=True) as store:
+        assert store._active_consumed() == {account.rows[0].row_id: 1_000, account.rows[1].row_id: -2_000}

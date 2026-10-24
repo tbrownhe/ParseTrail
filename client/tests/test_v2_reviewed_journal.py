@@ -8,6 +8,11 @@ from pathlib import Path
 import pytest
 from parsetrail.core.v2_profile_store import FinancialAccount, ProfileFormatError, V2ProfileStore
 from parsetrail.core.v2_source_pipeline import build_source_evidence
+from parsetrail.core.v2_table_bank_source_output import from_anchored_bank
+
+from devtools.parser_engine_pilot.test_table_bank_source_output import DEFINITION as BANK_DEFINITION
+from devtools.parser_engine_pilot.test_table_bank_source_output import SOURCE as BANK_SOURCE
+from devtools.parser_engine_pilot.test_table_bank_source_output import evidence as bank_channels
 
 DEFINITION = (
     Path(__file__).parents[2] / "devtools" / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
@@ -217,3 +222,57 @@ def test_accountless_assignment_stays_fixed_after_cash_expense_post(tmp_path: Pa
                 store.assign_row_account(row_id, "other-cash")
             with pytest.raises(ProfileFormatError, match="account_binding_has_journal_history"):
                 store.clear_row_account_assignments(evidence.source_sha256, (row_id,))
+
+
+def test_bound_bank_statement_cash_rows_post_but_component_scope_stays_pending(tmp_path: Path) -> None:
+    evidence = from_anchored_bank(BANK_DEFINITION, *bank_channels())
+    interest, withdrawal = evidence.payload.accounts[0].rows
+    profile = tmp_path / "bank.db"
+    with V2ProfileStore.create(profile) as store:
+        store.import_source(BANK_SOURCE, BANK_DEFINITION, evidence, suffix=".pdf")
+        store.add_financial_account(FinancialAccount("cash", "Savings", "asset", "lendingclub"))
+        store.add_category_account("expense:other", "Other", "expense")
+        store.add_category_account("expense:travel", "Travel", "expense")
+        store.add_category_account("income:interest", "Interest", "income")
+        source_account = evidence.payload.accounts[0]
+        assert [row.status for row in store.cash_activity_review_rows(evidence.source_sha256)] == [
+            "Assign a financial account first",
+            "Assign a financial account first",
+        ]
+        store.bind_source_account(
+            evidence.source_sha256, source_account.source_identity, source_account.source_identity_form, "cash"
+        )
+        assert [row.status for row in store.cash_activity_review_rows(evidence.source_sha256)] == [
+            "Ready for income review",
+            "Ready for expense review",
+        ]
+        expense_key = store.post_reviewed_cash_category(
+            withdrawal.row_id, "expense:other", reason="Reviewed withdrawal"
+        )
+        store.post_reviewed_cash_category(interest.row_id, "income:interest", reason="Confirmed interest")
+        store.correct_reviewed_cash_category(expense_key, "expense:travel", reason="Corrected category")
+        assert [row.status for row in store.cash_activity_review_rows(evidence.source_sha256)] == [
+            "Posted: Interest",
+            "Posted: Travel",
+        ]
+        assert store._active_consumed() == {interest.row_id: 1000, withdrawal.row_id: -2000}
+    with V2ProfileStore.open(profile, read_only=True) as store:
+        assert store.load_import(evidence.source_sha256).evidence == evidence
+
+    component = evidence.payload.accounts[0].model_copy(update={"balance_scope": "cash_component"})
+    component_payload = evidence.payload.model_copy(update={"accounts": (component,)})
+    component_evidence = evidence.model_copy(update={"payload": component_payload})
+    with V2ProfileStore.create(tmp_path / "component.db") as store:
+        store.import_source(BANK_SOURCE, BANK_DEFINITION, component_evidence, suffix=".pdf")
+        store.add_financial_account(FinancialAccount("cash", "Savings", "asset", "lendingclub"))
+        store.add_category_account("expense:other", "Other", "expense")
+        store.bind_source_account(
+            evidence.source_sha256, component.source_identity, component.source_identity_form, "cash"
+        )
+        assert all(
+            row.status == "Outside supported asset cash statement scope"
+            for row in store.cash_activity_review_rows(evidence.source_sha256)
+        )
+        with pytest.raises(ProfileFormatError, match="cash_category_unsupported_source_scope"):
+            store.post_reviewed_cash_category(withdrawal.row_id, "expense:other", reason="Unsupported component")
+        assert store.connection.execute("SELECT COUNT(*) FROM JournalEntries").fetchone() == (0,)

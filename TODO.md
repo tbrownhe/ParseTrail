@@ -538,7 +538,12 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   the category dialog saves, clears and displays target history. Earlier months
   retain their targets after a later change. Offscreen checks pass; the owner
   accepted budget effective dates on native Windows. Manual values,
-  closures and unsupported accounting remain explicit. Owner Windows
+  closures and unsupported accounting remain explicit. The owner approved the
+  same explicit expense/income review for bound asset bank-statement rows with
+  source posting dates. A narrow account-total scope now admits those rows from
+  the six supported bank parser families; HSA cash components, cards, loans,
+  investment summaries and uncertain-date rows stay pending. Synthetic bank
+  posting, correction and GUI checks pass; native Windows review remains the
   integration gate.
 - [ ] **V2-5a–b — Report cutover:** shared ledger spending/cash/balance/budget queries,
   then dashboard and export integration. A first read-only spending summary now

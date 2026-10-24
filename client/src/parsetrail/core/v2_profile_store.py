@@ -303,6 +303,30 @@ class ReviewedJournalExport:
     excluded_opening_entries: int
 
 
+BANK_CASH_STATEMENT_PARSERS = frozenset(
+    {
+        "happen_savings_line_pilot",
+        "lendingclub_savings_line_pilot",
+        "pdf_lendingclublus_202506",
+        "pdf_occubank_201409",
+        "pdf_wfbankper_202105",
+        "wells_business_table_pilot",
+    }
+)
+
+
+def _cash_review_scopes(evidence: SourceEvidence) -> dict[str, bool]:
+    if isinstance(evidence.payload, ActivityExportPayload):
+        return {row.row_id: True for row in evidence.payload.rows}
+    if isinstance(evidence.payload, StatementPayload) and evidence.parser_id in BANK_CASH_STATEMENT_PARSERS:
+        return {
+            row.row_id: account.balance_scope == "account_total"
+            for account in evidence.payload.accounts
+            for row in account.rows
+        }
+    return {}
+
+
 def _digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -728,6 +752,8 @@ class V2ProfileStore:
         if source_row is None:
             raise ProfileFormatError("source_observation_missing")
         saved = self.load_import(source_row[0])
+        if not _cash_review_scopes(saved.evidence).get(row_id, False):
+            raise ProfileFormatError("cash_category_unsupported_source_scope")
         bindings = {binding.row_id: binding.ledger_account_id for binding in self.account_bindings(source_row[0])}
         row = next((item for item in _rows(saved.evidence) if item.row_id == row_id), None)
         financial_id = bindings.get(row_id)
@@ -798,6 +824,7 @@ class V2ProfileStore:
     def cash_activity_review_rows(self, source_sha256: str) -> tuple[CashActivityReviewRow, ...]:
         """Describe source rows for explicit asset cash expense or income review."""
         saved = self.load_import(source_sha256)
+        scopes = _cash_review_scopes(saved.evidence)
         bindings = {binding.row_id: binding.ledger_account_id for binding in self.account_bindings(source_sha256)}
         accounts = {
             account_id: (name, kind, role)
@@ -835,8 +862,8 @@ class V2ProfileStore:
                         entry_key = entry.key
                         category_id = entry.postings[1].account_id
                         status = "Posted: " + accounts[category_id][0]
-            elif not isinstance(saved.evidence.payload, ActivityExportPayload):
-                status = "Statement posting is not available in this review"
+            elif not scopes.get(row.row_id, False):
+                status = "Outside supported asset cash statement scope"
             elif row.row_role != "activity" or row.amount.minor is None or row.amount.minor == 0:
                 status = "Outside cash activity scope"
             elif row.date_role != "posting_date" or row.date.iso is None:
