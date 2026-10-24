@@ -534,6 +534,16 @@ fresh 2.0 SQLite profile
 saved and reopened all ten recent Citi archive files through this path without
 writing the originals. This remains a pilot, pending full page capture and
 native import acceptance.
+The read-only [`audit_recent_citi_capture.py`](audit_recent_citi_capture.py)
+checks line locations against the bounded simple-text channel for explicitly
+selected recent-layout PDFs. Pass each source with `--source`; it prints only
+aggregate counts and redacted failure reasons. On the ten signed-catalog-routed
+archive files, 909 of 3,046 nonblank lines had line locations. None of the
+2,137 remaining lines matched the declaration's supported dollar-token or
+dated-start patterns. A line location does not prove that the parser captured
+every page region or assigned financial meaning, and `capture_verified` stays
+false. The audit reads source bytes again after parsing to confirm their hashes
+are unchanged.
 The Citi definition's `usd_symbol_minor_v1` operation now rejects undeclared
 money spellings and computes integer cents directly. All ten recent-layout
 archive PDFs retain 486 rows and 803 dispositions under pilot revision 2.

@@ -204,6 +204,12 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   Five garbled first-page summary lines and ten garbled later-page cardholder
   subtotals are retained as extraction artifacts, never as transaction or
   balance evidence.
+  A separate read-only simple-text location audit of the ten routed recent-Citi
+  PDFs checked 56 pages and 3,046 nonblank extracted lines. All lines matching
+  the supported dollar-token or dated-start patterns have evidence line
+  locations; 2,137 other lines have none. Their source PDFs remain intact.
+  This measures line locations, not full PDF-page capture, so capture stays
+  unverified.
   A deterministic partial-date operation now refuses invalid, distant and
   ambiguous `MM/DD` years while retaining ten-statement Citi parity. The
   [upstream boundary review](docs/client-v2-upstream-boundary-review.md) orders
@@ -543,8 +549,8 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   source posting dates. A narrow account-total scope now admits those rows from
   the six supported bank parser families; HSA cash components, cards, loans,
   investment summaries and uncertain-date rows stay pending. Synthetic bank
-  posting, correction and GUI checks pass; native Windows review remains the
-  integration gate.
+  posting, correction and GUI checks pass; the owner accepted native Windows
+  review of this extension.
 - [ ] **V2-5a–b — Report cutover:** shared ledger spending/cash/balance/budget queries,
   then dashboard and export integration. A first read-only spending summary now
   nets reviewed expense postings, including reversal/replacement corrections,

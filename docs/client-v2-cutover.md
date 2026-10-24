@@ -151,6 +151,10 @@ notices and disclosure lines. No dollar-sign line is unresolved in the
 ten-source sample. Five first-page summary lines and ten later-page cardholder
 subtotals are visibly garbled by simple-text extraction; their amounts are not
 used as transaction or balance evidence.
+A separate read-only line-location audit of those ten recent-layout PDFs found
+line locations for every supported dollar-token and dated-start text line.
+Across 56 pages, 2,137 other nonblank simple-text lines lack line locations.
+This does not verify full-page capture, so `capture_verified` remains false.
 The XLSX adapter also runs in a fixed, bounded worker and matches the
 in-process synthetic evidence. It has no referenced archive workbook and
 still needs Intel Mac native checks before runtime admission. The shared table
@@ -427,8 +431,8 @@ statement rows with source posting dates. The service now limits statement
 eligibility to six supported bank families and account-total balance scope.
 HSA cash components, cards, loans, investment summaries and other date roles
 stay pending; positive receipts still require explicit income confirmation.
-Synthetic bank posting, correction and dialog checks pass. Native Windows
-acceptance of this extension remains open.
+Synthetic bank posting, correction and dialog checks pass. The owner accepted
+the bank-statement review extension on native Windows.
 
 A first read-only Spending summary in the 2.0 workspace uses reviewed expense
 journal postings for a selected half-open date range. Reversal and replacement

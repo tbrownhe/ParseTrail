@@ -77,6 +77,12 @@ separate Synchrony fixture covers the absent PDF family. This is an execution
 coverage result; complete page capture, corrected legacy parity and accounting
 acceptance still require their own evidence. Six queued bank transaction CSVs
 and 21 Amazon-related CSVs have headers outside the two current declarations.
+An additional read-only recent-Citi line-location audit selected ten PDFs by
+the signed catalog route. Across 56 pages, 909 of 3,046 nonblank simple-text
+lines had evidence line locations. The other 2,137 matched neither the
+supported dollar-token nor dated transaction-start patterns. This is a gap
+inventory, not complete page-capture verification; the original PDFs remain
+read-only and `capture_verified` remains false.
 
 The local [catalog artifact builder](../client/scripts/v2_catalog_release.py)
 validates every checked-in definition, signs a deterministic snapshot with an
