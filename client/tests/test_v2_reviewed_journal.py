@@ -84,3 +84,86 @@ def test_cash_expense_requires_explicit_mapping_and_expense_category(tmp_path: P
         with pytest.raises(ProfileFormatError, match="cash_expense_account_or_category"):
             store.post_reviewed_cash_expense(row_id, "expense:food", reason="Liability sign is different")
         assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (0,)
+
+
+def test_cash_expense_correction_reverses_and_replaces_without_reusing_evidence(tmp_path: Path) -> None:
+    profile = tmp_path / "fresh.db"
+    evidence = build_source_evidence(SOURCE, DEFINITION, suffix=".csv")
+    row_id = evidence.payload.rows[0].row_id
+    with V2ProfileStore.create(profile) as store:
+        store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
+        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        store.add_financial_account(FinancialAccount("other-cash", "Other checking", "asset", "synthetic"))
+        store.add_category_account("expense:food", "Food", "expense")
+        store.add_category_account("expense:travel", "Travel", "expense")
+        store.add_category_account("income:other", "Other income", "income")
+        store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
+        original = store.post_reviewed_cash_expense(row_id, "expense:food", reason="Reviewed coffee purchase")
+        store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
+        with pytest.raises(ProfileFormatError, match="account_binding_has_journal_history"):
+            store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "other-cash")
+        with pytest.raises(ProfileFormatError, match="account_binding_has_journal_history"):
+            store.clear_source_account_binding(evidence.source_sha256, "Checking A", "opaque")
+        with pytest.raises(ProfileFormatError, match="expense_correction_requires_new_expense_category"):
+            store.correct_reviewed_cash_expense(original, "expense:food", reason="No category change")
+        with pytest.raises(ProfileFormatError, match="expense_correction_requires_new_expense_category"):
+            store.correct_reviewed_cash_expense(original, "income:other", reason="Income is wrong")
+        assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (1,)
+        replacement = store.correct_reviewed_cash_expense(original, "expense:travel", reason="Correct category")
+        assert store.correct_reviewed_cash_expense(original, "expense:travel", reason="Correct category") == replacement
+        with pytest.raises(ProfileFormatError, match="expense_correction_conflicts_with_prior_decision"):
+            store.correct_reviewed_cash_expense(original, "expense:food", reason="Different correction")
+        with pytest.raises(ProfileFormatError, match="expense_review_already_corrected"):
+            store.post_reviewed_cash_expense(row_id, "expense:food", reason="Reviewed coffee purchase")
+        assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (3,)
+        assert store.connection.execute("SELECT count(*) FROM JournalCorrections").fetchone() == (1,)
+        assert store.connection.execute("SELECT count(*) FROM JournalAllocations").fetchone() == (2,)
+        assert store._active_consumed() == {row_id: -400}
+        second = store.correct_reviewed_cash_expense(replacement, "expense:food", reason="Reconsidered category")
+        assert second != replacement
+        assert store._active_consumed() == {row_id: -400}
+    with V2ProfileStore.open(profile, read_only=True) as store:
+        totals: dict[str, int] = {}
+        for (payload,) in store.connection.execute("SELECT payload FROM JournalEntries"):
+            for posting in json.loads(payload)["postings"]:
+                account_id = posting["account_id"]
+                totals[account_id] = totals.get(account_id, 0) + posting["amount_minor"]
+        assert totals == {"cash": -400, "expense:food": 400, "expense:travel": 0}
+        assert store.connection.execute("SELECT count(*) FROM JournalCorrections").fetchone() == (2,)
+        assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (5,)
+        assert store.load_import(evidence.source_sha256).evidence == evidence
+
+
+@pytest.mark.parametrize("assignment", ["file", "row"])
+def test_accountless_assignment_stays_fixed_after_cash_expense_post(tmp_path: Path, assignment: str) -> None:
+    definition = json.loads(DEFINITION)
+    definition["parser_id"] = "synthetic_accountless_cash_csv"
+    definition["header"].remove("Account")
+    del definition["columns"]["account"]
+    definition["account_key"] = "unknown"
+    definition_bytes = json.dumps(definition).encode()
+    source = SOURCE.replace(b"Account,", b"").replace(b"Checking A,", b"")
+    evidence = build_source_evidence(source, definition_bytes, suffix=".csv")
+    row_id = evidence.payload.rows[0].row_id
+    with V2ProfileStore.create(tmp_path / "fresh.db") as store:
+        store.import_source(source, definition_bytes, evidence, suffix=".csv")
+        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        store.add_financial_account(FinancialAccount("other-cash", "Other checking", "asset", "synthetic"))
+        store.add_category_account("expense:food", "Food", "expense")
+        if assignment == "file":
+            store.assert_file_account(evidence.source_sha256, "cash")
+        else:
+            store.assign_row_account(row_id, "cash")
+        store.post_reviewed_cash_expense(row_id, "expense:food", reason="Reviewed coffee purchase")
+        if assignment == "file":
+            store.assert_file_account(evidence.source_sha256, "cash")
+            with pytest.raises(ProfileFormatError, match="account_binding_has_journal_history"):
+                store.assert_file_account(evidence.source_sha256, "other-cash")
+            with pytest.raises(ProfileFormatError, match="account_binding_has_journal_history"):
+                store.clear_file_account_assertion(evidence.source_sha256)
+        else:
+            store.assign_row_account(row_id, "cash")
+            with pytest.raises(ProfileFormatError, match="account_binding_has_journal_history"):
+                store.assign_row_account(row_id, "other-cash")
+            with pytest.raises(ProfileFormatError, match="account_binding_has_journal_history"):
+                store.clear_row_account_assignments(evidence.source_sha256, (row_id,))

@@ -30,7 +30,7 @@ from parsetrail.core.ledger import (
 from parsetrail.core.source_evidence import ActivityExportPayload, SourceEvidence, StatementPayload
 
 APPLICATION_ID = 0x50543230  # PT20
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_DEFINITION_BYTES = 64 * 1024
 MAX_EVIDENCE_BYTES = 32 * 1024 * 1024
@@ -93,6 +93,13 @@ TABLE_COLUMNS = {
         ("row_id", "TEXT", 1, 2),
         ("amount_minor", "INTEGER", 1, 0),
     ),
+    "JournalCorrections": (
+        ("original_key", "TEXT", 0, 1),
+        ("reversal_key", "TEXT", 1, 0),
+        ("replacement_key", "TEXT", 1, 0),
+        ("reason", "TEXT", 1, 0),
+        ("created_at", "TEXT", 1, 0),
+    ),
 }
 FOREIGN_KEYS = {
     "Sources": (),
@@ -111,6 +118,11 @@ FOREIGN_KEYS = {
     ),
     "JournalEntries": (),
     "JournalAllocations": (("row_id", "SourceObservations", "row_id"), ("entry_key", "JournalEntries", "key")),
+    "JournalCorrections": (
+        ("replacement_key", "JournalEntries", "key"),
+        ("reversal_key", "JournalEntries", "key"),
+        ("original_key", "JournalEntries", "key"),
+    ),
 }
 
 IMMUTABLE_TABLES = (
@@ -120,6 +132,7 @@ IMMUTABLE_TABLES = (
     "SourceObservations",
     "JournalEntries",
     "JournalAllocations",
+    "JournalCorrections",
 )
 
 
@@ -174,6 +187,34 @@ def _rows(evidence: SourceEvidence):
     if isinstance(payload, StatementPayload):
         return tuple(row for account in payload.accounts for row in account.rows)
     return payload.rows
+
+
+def _journal_payload(entry: JournalEntry) -> str:
+    return json.dumps(entry.payload(), sort_keys=True, separators=(",", ":"))
+
+
+def _decode_journal(payload: str) -> JournalEntry:
+    try:
+        data = json.loads(payload)
+        return JournalEntry(
+            key=data["key"],
+            event_id=data["event_id"],
+            posting_date=date.fromisoformat(data["posting_date"]),
+            description=data["description"],
+            postings=tuple(
+                Posting(
+                    posting["account_id"],
+                    posting["amount_minor"],
+                    tuple(Allocation(**allocation) for allocation in posting["allocations"]),
+                )
+                for posting in data["postings"]
+            ),
+            origin=data["origin"],
+            reviewed=data["reviewed"],
+            reason=data["reason"],
+        )
+    except (KeyError, TypeError, ValueError):
+        raise ProfileFormatError("journal_entry_invalid") from None
 
 
 def _check_format(connection: sqlite3.Connection) -> None:
@@ -289,6 +330,13 @@ class V2ProfileStore:
                     row_id TEXT NOT NULL REFERENCES SourceObservations(row_id),
                     amount_minor INTEGER NOT NULL CHECK(amount_minor<>0),
                     PRIMARY KEY(entry_key,row_id)
+                );
+                CREATE TABLE JournalCorrections (
+                    original_key TEXT PRIMARY KEY REFERENCES JournalEntries(key),
+                    reversal_key TEXT NOT NULL UNIQUE REFERENCES JournalEntries(key),
+                    replacement_key TEXT NOT NULL UNIQUE REFERENCES JournalEntries(key),
+                    reason TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
                 );
                 COMMIT;
             """)
@@ -418,6 +466,80 @@ class V2ProfileStore:
         if cursor.rowcount != 1:
             raise ProfileFormatError("category_account_missing")
 
+    def _cash_expense_source(self, row_id: str):
+        source_row = self.connection.execute(
+            "SELECT source_sha256,row_role,date_role,observed_date,amount_minor FROM SourceObservations WHERE row_id=?",
+            (row_id,),
+        ).fetchone()
+        if source_row is None:
+            raise ProfileFormatError("source_observation_missing")
+        saved = self.load_import(source_row[0])
+        bindings = {binding.row_id: binding.ledger_account_id for binding in self.account_bindings(source_row[0])}
+        row = next((item for item in _rows(saved.evidence) if item.row_id == row_id), None)
+        financial_id = bindings.get(row_id)
+        if (
+            row is None
+            or row.row_role != "activity"
+            or row.date_role != "posting_date"
+            or row.date.iso is None
+            or row.amount.minor is None
+            or row.amount.minor >= 0
+            or not row.description.text
+            or financial_id is None
+        ):
+            raise ProfileFormatError("cash_expense_requires_bound_posted_outflow")
+        if source_row[1:] != (row.row_role, row.date_role, row.date.iso, row.amount.minor):
+            raise ProfileFormatError("source_observation_index_mismatch")
+        financial = self.connection.execute("SELECT kind,role FROM Accounts WHERE id=?", (financial_id,)).fetchone()
+        if financial != ("asset", "financial"):
+            raise ProfileFormatError("cash_expense_account_or_category")
+        account_rows = self.connection.execute("SELECT id,name,kind,currency,role,purpose FROM Accounts").fetchall()
+        accounts = {
+            account_id: LedgerAccount(
+                account_id,
+                name,
+                AccountKind(kind),
+                currency,
+                account_id if role == "financial" else None,
+                purpose,
+            )
+            for account_id, name, kind, currency, role, purpose in account_rows
+        }
+        return row, financial_id, accounts
+
+    def _active_consumed(self, *, excluding: str | None = None) -> dict[str, int]:
+        query = (
+            "SELECT row_id,SUM(amount_minor) FROM JournalAllocations "
+            "WHERE entry_key NOT IN (SELECT original_key FROM JournalCorrections)"
+        )
+        parameters: tuple[str, ...] = ()
+        if excluding is not None:
+            query += " AND entry_key<>?"
+            parameters = (excluding,)
+        return dict(self.connection.execute(query + " GROUP BY row_id", parameters))
+
+    def _require_unposted_rows(self, row_ids: tuple[str, ...]) -> None:
+        for offset in range(0, len(row_ids), 500):
+            batch = row_ids[offset : offset + 500]
+            placeholders = ",".join("?" for _ in batch)
+            if self.connection.execute(
+                f"SELECT 1 FROM JournalAllocations WHERE row_id IN ({placeholders}) LIMIT 1", batch
+            ).fetchone():
+                raise ProfileFormatError("account_binding_has_journal_history")
+
+    def _row_assignments(self, row_ids: tuple[str, ...]) -> dict[str, str]:
+        assigned = {}
+        for offset in range(0, len(row_ids), 500):
+            batch = row_ids[offset : offset + 500]
+            placeholders = ",".join("?" for _ in batch)
+            assigned.update(
+                self.connection.execute(
+                    f"SELECT row_id,ledger_account_id FROM RowAccountAssignments WHERE row_id IN ({placeholders})",
+                    batch,
+                )
+            )
+        return assigned
+
     def post_reviewed_cash_expense(self, row_id: str, category_id: str, *, reason: str) -> str:
         """Post one explicitly classified asset outflow, supported by source evidence."""
         self._require_writable()
@@ -425,45 +547,9 @@ class V2ProfileStore:
             raise ProfileFormatError("expense_review_reason_required")
         self.connection.execute("BEGIN IMMEDIATE")
         try:
-            source_row = self.connection.execute(
-                "SELECT source_sha256,row_role,date_role,observed_date,amount_minor "
-                "FROM SourceObservations WHERE row_id=?",
-                (row_id,),
-            ).fetchone()
-            if source_row is None:
-                raise ProfileFormatError("source_observation_missing")
-            saved = self.load_import(source_row[0])
-            bindings = {binding.row_id: binding.ledger_account_id for binding in self.account_bindings(source_row[0])}
-            row = next((item for item in _rows(saved.evidence) if item.row_id == row_id), None)
-            financial_id = bindings.get(row_id)
-            if (
-                row is None
-                or row.row_role != "activity"
-                or row.date_role != "posting_date"
-                or row.date.iso is None
-                or row.amount.minor is None
-                or row.amount.minor >= 0
-                or not row.description.text
-                or financial_id is None
-            ):
-                raise ProfileFormatError("cash_expense_requires_bound_posted_outflow")
-            if source_row[1:] != (row.row_role, row.date_role, row.date.iso, row.amount.minor):
-                raise ProfileFormatError("source_observation_index_mismatch")
-            account_rows = self.connection.execute("SELECT id,name,kind,currency,role,purpose FROM Accounts").fetchall()
-            accounts = {
-                account_id: LedgerAccount(
-                    account_id,
-                    name,
-                    AccountKind(kind),
-                    currency,
-                    account_id if role == "financial" else None,
-                    purpose,
-                )
-                for account_id, name, kind, currency, role, purpose in account_rows
-            }
-            financial = self.connection.execute("SELECT kind,role FROM Accounts WHERE id=?", (financial_id,)).fetchone()
+            row, financial_id, accounts = self._cash_expense_source(row_id)
             category = self.connection.execute("SELECT kind,role FROM Accounts WHERE id=?", (category_id,)).fetchone()
-            if financial != ("asset", "financial") or category != ("expense", "category"):
+            if category != ("expense", "category"):
                 raise ProfileFormatError("cash_expense_account_or_category")
             amount = row.amount.minor
             entry = JournalEntry(
@@ -478,21 +564,22 @@ class V2ProfileStore:
                 reviewed=True,
                 reason=reason.strip(),
             )
-            payload = json.dumps(entry.payload(), sort_keys=True, separators=(",", ":"))
+            payload = _journal_payload(entry)
             prior = self.connection.execute("SELECT payload FROM JournalEntries WHERE key=?", (entry.key,)).fetchone()
             if prior is not None:
+                if self.connection.execute(
+                    "SELECT 1 FROM JournalCorrections WHERE original_key=?", (entry.key,)
+                ).fetchone():
+                    raise ProfileFormatError("expense_review_already_corrected")
                 if prior[0] != payload:
                     raise ProfileFormatError("expense_review_conflicts_with_prior_entry")
                 self.connection.execute("COMMIT")
                 return entry.key
-            consumed = dict(
-                self.connection.execute("SELECT row_id,SUM(amount_minor) FROM JournalAllocations GROUP BY row_id")
-            )
             validate_entry(
                 entry,
                 accounts,
                 {row_id: Observation(row_id, financial_id, amount, entry.posting_date)},
-                consumed,
+                self._active_consumed(),
             )
             self.connection.execute("INSERT INTO JournalEntries(key,payload) VALUES (?,?)", (entry.key, payload))
             self.connection.execute("INSERT INTO JournalAllocations VALUES (?,?,?)", (entry.key, row_id, amount))
@@ -502,6 +589,119 @@ class V2ProfileStore:
             self.connection.execute("ROLLBACK")
             if isinstance(exc, LedgerError):
                 raise ProfileFormatError("expense_review_refused") from None
+            raise
+
+    def correct_reviewed_cash_expense(self, original_key: str, category_id: str, *, reason: str) -> str:
+        """Atomically reverse and recategorize one active reviewed cash expense."""
+        self._require_writable()
+        if type(original_key) is not str or not original_key or type(category_id) is not str or not category_id:
+            raise ProfileFormatError("expense_correction_identity_required")
+        if type(reason) is not str or not 0 < len(reason.strip()) <= 500:
+            raise ProfileFormatError("expense_correction_reason_required")
+        reason = reason.strip()
+        replacement_key = (
+            "review:expense:correction:"
+            + hashlib.sha256(f"{original_key}\0{category_id}\0{reason}".encode()).hexdigest()
+        )
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            prior = self.connection.execute(
+                "SELECT replacement_key,reason FROM JournalCorrections WHERE original_key=?", (original_key,)
+            ).fetchone()
+            if prior is not None:
+                if prior == (replacement_key, reason):
+                    self.connection.execute("COMMIT")
+                    return replacement_key
+                raise ProfileFormatError("expense_correction_conflicts_with_prior_decision")
+            original_row = self.connection.execute(
+                "SELECT payload FROM JournalEntries WHERE key=?", (original_key,)
+            ).fetchone()
+            if original_row is None:
+                raise ProfileFormatError("expense_correction_original_missing")
+            original = _decode_journal(original_row[0])
+            allocations = self.connection.execute(
+                "SELECT row_id,amount_minor FROM JournalAllocations WHERE entry_key=?", (original_key,)
+            ).fetchall()
+            if (
+                original.key != original_key
+                or original.origin != "imported"
+                or not original.reviewed
+                or len(original.postings) != 2
+                or len(allocations) != 1
+                or original.postings[0].amount_minor != allocations[0][1]
+                or original.postings[0].amount_minor >= 0
+                or original.postings[0].allocations != (Allocation(*allocations[0]),)
+                or original.postings[1].amount_minor != -allocations[0][1]
+            ):
+                raise ProfileFormatError("expense_correction_original_invalid")
+            row_id, amount = allocations[0]
+            row, financial_id, accounts = self._cash_expense_source(row_id)
+            old_category_id = original.postings[1].account_id
+            old_category = self.connection.execute(
+                "SELECT kind,role FROM Accounts WHERE id=?", (old_category_id,)
+            ).fetchone()
+            new_category = self.connection.execute(
+                "SELECT kind,role FROM Accounts WHERE id=?", (category_id,)
+            ).fetchone()
+            if (
+                original.postings[0].account_id != financial_id
+                or original.event_id != f"source:{row_id}"
+                or original.posting_date.isoformat() != row.date.iso
+                or original.description != row.description.text
+                or old_category != ("expense", "category")
+                or new_category != ("expense", "category")
+                or category_id == old_category_id
+            ):
+                raise ProfileFormatError("expense_correction_requires_new_expense_category")
+            reversal = JournalEntry(
+                key="reversal:" + hashlib.sha256(original_key.encode()).hexdigest(),
+                event_id=original.event_id,
+                posting_date=original.posting_date,
+                description="Reversal: " + original.description,
+                postings=tuple(Posting(posting.account_id, -posting.amount_minor) for posting in original.postings),
+                origin="reversal",
+                reviewed=True,
+                reason=reason,
+            )
+            replacement = JournalEntry(
+                key=replacement_key,
+                event_id=original.event_id,
+                posting_date=original.posting_date,
+                description=original.description,
+                postings=(
+                    Posting(financial_id, amount, (Allocation(row_id, amount),)),
+                    Posting(category_id, -amount),
+                ),
+                reviewed=True,
+                reason=reason,
+            )
+            if self.connection.execute(
+                "SELECT 1 FROM JournalEntries WHERE key IN (?,?)", (reversal.key, replacement.key)
+            ).fetchone():
+                raise ProfileFormatError("expense_correction_key_conflict")
+            validate_entry(
+                replacement,
+                accounts,
+                {row_id: Observation(row_id, financial_id, amount, replacement.posting_date)},
+                self._active_consumed(excluding=original_key),
+            )
+            self.connection.execute(
+                "INSERT INTO JournalEntries(key,payload) VALUES (?,?)", (reversal.key, _journal_payload(reversal))
+            )
+            self.connection.execute(
+                "INSERT INTO JournalEntries(key,payload) VALUES (?,?)", (replacement.key, _journal_payload(replacement))
+            )
+            self.connection.execute("INSERT INTO JournalAllocations VALUES (?,?,?)", (replacement.key, row_id, amount))
+            self.connection.execute(
+                "INSERT INTO JournalCorrections(original_key,reversal_key,replacement_key,reason) VALUES (?,?,?,?)",
+                (original_key, reversal.key, replacement.key, reason),
+            )
+            self.connection.execute("COMMIT")
+            return replacement.key
+        except BaseException as exc:
+            self.connection.execute("ROLLBACK")
+            if isinstance(exc, LedgerError):
+                raise ProfileFormatError("expense_correction_refused") from None
             raise
 
     def source_account_bindings(self, source_sha256: str) -> tuple[SourceAccountBinding, ...]:
@@ -539,12 +739,33 @@ class V2ProfileStore:
         }:
             raise ProfileFormatError("source_account_missing")
         self._require_financial_account(account_id)
-        self.connection.execute(
-            "INSERT INTO SourceAccountBindings VALUES (?,?,?,?) "
-            "ON CONFLICT(source_sha256,source_identity,source_identity_form) "
-            "DO UPDATE SET ledger_account_id=excluded.ledger_account_id",
-            (source_sha256, source_identity, source_identity_form, account_id),
-        )
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            prior = self.connection.execute(
+                "SELECT ledger_account_id FROM SourceAccountBindings "
+                "WHERE source_sha256=? AND source_identity=? AND source_identity_form=?",
+                (source_sha256, source_identity, source_identity_form),
+            ).fetchone()
+            if prior != (account_id,):
+                row_ids = tuple(
+                    row[0]
+                    for row in self.connection.execute(
+                        "SELECT row_id FROM SourceObservations WHERE source_sha256=? "
+                        "AND source_account=? AND source_account_form=?",
+                        (source_sha256, source_identity, source_identity_form),
+                    )
+                )
+                self._require_unposted_rows(row_ids)
+                self.connection.execute(
+                    "INSERT INTO SourceAccountBindings VALUES (?,?,?,?) "
+                    "ON CONFLICT(source_sha256,source_identity,source_identity_form) "
+                    "DO UPDATE SET ledger_account_id=excluded.ledger_account_id",
+                    (source_sha256, source_identity, source_identity_form, account_id),
+                )
+            self.connection.execute("COMMIT")
+        except BaseException:
+            self.connection.execute("ROLLBACK")
+            raise
 
     def clear_source_account_binding(self, source_sha256: str, source_identity: str, source_identity_form: str) -> None:
         self._require_writable()
@@ -553,10 +774,25 @@ class V2ProfileStore:
             for binding in self.source_account_bindings(source_sha256)
         }:
             raise ProfileFormatError("source_account_missing")
-        self.connection.execute(
-            "DELETE FROM SourceAccountBindings WHERE source_sha256=? AND source_identity=? AND source_identity_form=?",
-            (source_sha256, source_identity, source_identity_form),
-        )
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            row_ids = tuple(
+                row[0]
+                for row in self.connection.execute(
+                    "SELECT row_id FROM SourceObservations WHERE source_sha256=? "
+                    "AND source_account=? AND source_account_form=?",
+                    (source_sha256, source_identity, source_identity_form),
+                )
+            )
+            self._require_unposted_rows(row_ids)
+            self.connection.execute(
+                "DELETE FROM SourceAccountBindings WHERE source_sha256=? AND source_identity=? AND source_identity_form=?",
+                (source_sha256, source_identity, source_identity_form),
+            )
+            self.connection.execute("COMMIT")
+        except BaseException:
+            self.connection.execute("ROLLBACK")
+            raise
 
     def assert_file_account(self, source_sha256: str, account_id: str) -> None:
         """Assert that every accountless row belongs to one financial account."""
@@ -578,6 +814,11 @@ class V2ProfileStore:
                 (source_sha256,),
             ).fetchone():
                 raise ProfileFormatError("file_account_assertion_conflicts_with_row_assignments")
+            prior = self.connection.execute(
+                "SELECT ledger_account_id FROM FileAccountAssertions WHERE source_sha256=?", (source_sha256,)
+            ).fetchone()
+            if prior != (account_id,):
+                self._require_unposted_rows(tuple(row.row_id for row in payload.rows))
             self.connection.execute(
                 "INSERT INTO FileAccountAssertions VALUES (?,?) "
                 "ON CONFLICT(source_sha256) DO UPDATE SET ledger_account_id=excluded.ledger_account_id",
@@ -590,7 +831,24 @@ class V2ProfileStore:
 
     def clear_file_account_assertion(self, source_sha256: str) -> None:
         self._require_writable()
-        self.connection.execute("DELETE FROM FileAccountAssertions WHERE source_sha256=?", (source_sha256,))
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            if self.connection.execute(
+                "SELECT 1 FROM FileAccountAssertions WHERE source_sha256=?", (source_sha256,)
+            ).fetchone():
+                self._require_unposted_rows(
+                    tuple(
+                        row[0]
+                        for row in self.connection.execute(
+                            "SELECT row_id FROM SourceObservations WHERE source_sha256=?", (source_sha256,)
+                        )
+                    )
+                )
+            self.connection.execute("DELETE FROM FileAccountAssertions WHERE source_sha256=?", (source_sha256,))
+            self.connection.execute("COMMIT")
+        except BaseException:
+            self.connection.execute("ROLLBACK")
+            raise
 
     def assign_row_account(self, row_id: str, account_id: str) -> None:
         """Assign one accountless row in an export reviewed row by row."""
@@ -621,6 +879,8 @@ class V2ProfileStore:
                 "SELECT 1 FROM FileAccountAssertions WHERE source_sha256=?", (source_sha256,)
             ).fetchone():
                 raise ProfileFormatError("row_account_assignment_conflicts_with_file_assertion")
+            prior = self._row_assignments(row_ids)
+            self._require_unposted_rows(tuple(row_id for row_id in row_ids if prior.get(row_id) != account_id))
             self.connection.executemany(
                 "INSERT INTO RowAccountAssignments VALUES (?,?) "
                 "ON CONFLICT(row_id) DO UPDATE SET ledger_account_id=excluded.ledger_account_id",
@@ -644,8 +904,12 @@ class V2ProfileStore:
         evidence = self.load_import(source_sha256).evidence
         if len(set(row_ids)) != len(row_ids) or not set(row_ids) <= {row.row_id for row in _rows(evidence)}:
             raise ProfileFormatError("invalid_row_assignment_selection")
+        if not row_ids:
+            return
         self.connection.execute("BEGIN IMMEDIATE")
         try:
+            assigned = tuple(self._row_assignments(row_ids))
+            self._require_unposted_rows(assigned)
             self.connection.executemany(
                 "DELETE FROM RowAccountAssignments WHERE row_id=?", ((row_id,) for row_id in row_ids)
             )

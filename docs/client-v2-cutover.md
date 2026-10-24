@@ -294,7 +294,7 @@ The next review slice retains one explicit, reversible ledger binding for each
 source account identity printed by a statement or identified export. It also
 allows row assignment when an export mixes identified and unidentified rows.
 Source evidence and financial accounts remain unchanged; these decisions do not
-post entries. The fresh pre-release profile schema is revision 6. The shell now
+post entries. The fresh pre-release profile schema is revision 7. The shell now
 offers separate review buttons for printed identities and unidentified rows.
 Offscreen tests pass; the owner accepted the printed-identity dialog on native
 Windows on October 24, 2026. Signed catalog entries now supply institution and
@@ -383,8 +383,11 @@ binding, source posting date, selected expense category and review reason;
 liability rows and other interpretations stay pending. The workspace now has a
 Categories dialog to add fresh expense/income categories and rename them without
 rewriting journal entries. Offscreen tests pass; native Windows acceptance of
-the category dialog is pending. No desktop posting control or correction flow
-is connected yet.
+the category dialog was confirmed by the owner on October 24, 2026. The store
+now supports an append-only category correction for a reviewed cash expense:
+it saves a reversal, replacement and linked reason atomically, without changing
+source evidence or reusing its allocation. An account assignment with journal
+history cannot change. No desktop posting or correction control is connected yet.
 
 ## Current stop/go decision
 

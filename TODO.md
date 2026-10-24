@@ -480,7 +480,7 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   mixed files. The two modes are mutually exclusive and neither posts a ledger
   entry. The owner approved one authoritative account table for the clean 2.0
   database; the provisional financial-only `LedgerAccounts` table has been
-  replaced by `Accounts` in pre-release schema revision 6. Earlier disposable
+  replaced by `Accounts` in pre-release schema revision 7. Earlier disposable
   pilot profiles are refused and recreated, with no migration layer. The
   [unified store direction](docs/client-v2-unified-store.md) leaves reviewed
   journal persistence and category/budget authoring as V2-4 work. An isolated
@@ -511,11 +511,14 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   its source date role is `posting_date`, and exact source/ledger signs agree.
   Journal and source allocations are immutable; the same decision is idempotent,
   while conflicting reinterpretation and liability rows are refused. This
-  synthetic proof has no desktop posting control or correction flow yet. The
+  A correction service now reverses and replaces a reviewed cash expense in one
+  transaction, preserves its source allocation history, and refuses changes to
+  account assignments after posting. This synthetic proof has no desktop
+  posting or correction control yet. The
   workspace now opens a fresh category dialog for adding expense/income
   categories and renaming their display names; an existing journal keeps its
-  account ID and payload after a rename. Offscreen acceptance passes, while
-  owner native Windows acceptance of the dialog is pending. Manual
+  account ID and payload after a rename. Offscreen acceptance passes, and the
+  owner confirmed the native Windows dialog on October 24, 2026. Manual
   values, closures and unsupported accounting remain explicit. Owner Windows
   integration gate.
 - [ ] **V2-5a–b — Report cutover:** shared ledger spending/cash/balance/budget queries,

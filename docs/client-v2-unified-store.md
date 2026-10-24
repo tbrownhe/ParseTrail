@@ -49,12 +49,16 @@ formats cannot be combined by opening both stores on one file.
    then remove obsolete 1.x runtime financial paths and freeze the released
    2.0 schema.
 
-A bounded proof toward the first two steps is in pre-release schema revision 6:
+A bounded proof toward the first two steps is in pre-release schema revision 7:
 a single `Accounts` table replaces the conflicting pilot account table, and
 one reviewed asset outflow can create an immutable, balanced expense journal
 entry with a source-row allocation in the same database transaction. It requires
 an explicit account binding and source posting-date role. A liability row, an
 activity-date-only row, an unknown interpretation or a missing category remains
-pending. This is not yet a general journal workflow, correction service or
-desktop posting control. Disposable revision-4/5 profiles are refused, not
+pending. A reviewed expense can be corrected to a different expense category:
+the service saves an inverse reversal, a replacement entry and a correction
+record atomically. The old entry and source allocation remain as history, while
+only the active allocation counts toward evidence use. Account assignments with
+journal history cannot be changed. This is not yet a general journal workflow
+or desktop posting control. Earlier disposable pilot profiles are refused, not
 migrated.

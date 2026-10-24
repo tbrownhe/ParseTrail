@@ -48,7 +48,7 @@ def test_one_database_reopens_csv_and_statement_without_reparse(tmp_path: Path) 
             reopened.import_source(CSV, CSV_DEFINITION, csv_evidence, suffix=".csv")
 
 
-@pytest.mark.parametrize("kind", ["legacy", "old_pilot_4", "old_pilot_5", "newer", "unknown", "corrupt"])
+@pytest.mark.parametrize("kind", ["legacy", "old_pilot_4", "old_pilot_5", "old_pilot_6", "newer", "unknown", "corrupt"])
 def test_unsupported_profile_is_refused_before_write(tmp_path: Path, kind: str) -> None:
     path = tmp_path / "profile.db"
     if kind == "corrupt":
