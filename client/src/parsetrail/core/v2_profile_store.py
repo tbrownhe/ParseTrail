@@ -7,18 +7,30 @@ immutable; imported observations start pending and unposted.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import sqlite3
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Literal
 
 from pydantic import ValidationError
 
+from parsetrail.core.ledger import (
+    AccountKind,
+    Allocation,
+    JournalEntry,
+    LedgerAccount,
+    LedgerError,
+    Observation,
+    Posting,
+    validate_entry,
+)
 from parsetrail.core.source_evidence import ActivityExportPayload, SourceEvidence, StatementPayload
 
 APPLICATION_ID = 0x50543230  # PT20
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_DEFINITION_BYTES = 64 * 1024
 MAX_EVIDENCE_BYTES = 32 * 1024 * 1024
@@ -71,6 +83,16 @@ TABLE_COLUMNS = {
         ("source_identity_form", "TEXT", 1, 3),
         ("ledger_account_id", "TEXT", 1, 0),
     ),
+    "JournalEntries": (
+        ("key", "TEXT", 0, 1),
+        ("payload", "TEXT", 1, 0),
+        ("created_at", "TEXT", 1, 0),
+    ),
+    "JournalAllocations": (
+        ("entry_key", "TEXT", 1, 1),
+        ("row_id", "TEXT", 1, 2),
+        ("amount_minor", "INTEGER", 1, 0),
+    ),
 }
 FOREIGN_KEYS = {
     "Sources": (),
@@ -87,9 +109,18 @@ FOREIGN_KEYS = {
         ("ledger_account_id", "Accounts", "id"),
         ("source_sha256", "Sources", "sha256"),
     ),
+    "JournalEntries": (),
+    "JournalAllocations": (("row_id", "SourceObservations", "row_id"), ("entry_key", "JournalEntries", "key")),
 }
 
-IMMUTABLE_TABLES = ("Sources", "Definitions", "EvidenceSnapshots", "SourceObservations")
+IMMUTABLE_TABLES = (
+    "Sources",
+    "Definitions",
+    "EvidenceSnapshots",
+    "SourceObservations",
+    "JournalEntries",
+    "JournalAllocations",
+)
 
 
 class ProfileFormatError(ValueError):
@@ -242,6 +273,16 @@ class V2ProfileStore:
                     ledger_account_id TEXT NOT NULL REFERENCES Accounts(id),
                     PRIMARY KEY(source_sha256,source_identity,source_identity_form)
                 );
+                CREATE TABLE JournalEntries (
+                    key TEXT PRIMARY KEY, payload TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+                );
+                CREATE TABLE JournalAllocations (
+                    entry_key TEXT NOT NULL REFERENCES JournalEntries(key),
+                    row_id TEXT NOT NULL REFERENCES SourceObservations(row_id),
+                    amount_minor INTEGER NOT NULL CHECK(amount_minor<>0),
+                    PRIMARY KEY(entry_key,row_id)
+                );
                 COMMIT;
             """)
             for table in IMMUTABLE_TABLES:
@@ -334,6 +375,108 @@ class V2ProfileStore:
             is None
         ):
             raise ProfileFormatError("financial_account_missing")
+
+    def add_category_account(self, account_id: str, name: str, kind: Literal["expense", "income"]) -> None:
+        """Create a fresh authored ledger category without source interpretation."""
+        self._require_writable()
+        if (
+            type(account_id) is not str
+            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9:_-]{0,79}", account_id) is None
+            or type(name) is not str
+            or not 0 < len(name.strip()) <= 200
+            or kind not in {"expense", "income"}
+        ):
+            raise ProfileFormatError("invalid_category_account")
+        self.connection.execute(
+            "INSERT INTO Accounts VALUES (?,?,?,'USD','category','normal',NULL,NULL)",
+            (account_id, name, kind),
+        )
+
+    def post_reviewed_cash_expense(self, row_id: str, category_id: str, *, reason: str) -> str:
+        """Post one explicitly classified asset outflow, supported by source evidence."""
+        self._require_writable()
+        if type(reason) is not str or not 0 < len(reason.strip()) <= 500:
+            raise ProfileFormatError("expense_review_reason_required")
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            source_row = self.connection.execute(
+                "SELECT source_sha256,row_role,date_role,observed_date,amount_minor "
+                "FROM SourceObservations WHERE row_id=?",
+                (row_id,),
+            ).fetchone()
+            if source_row is None:
+                raise ProfileFormatError("source_observation_missing")
+            saved = self.load_import(source_row[0])
+            bindings = {binding.row_id: binding.ledger_account_id for binding in self.account_bindings(source_row[0])}
+            row = next((item for item in _rows(saved.evidence) if item.row_id == row_id), None)
+            financial_id = bindings.get(row_id)
+            if (
+                row is None
+                or row.row_role != "activity"
+                or row.date_role != "posting_date"
+                or row.date.iso is None
+                or row.amount.minor is None
+                or row.amount.minor >= 0
+                or not row.description.text
+                or financial_id is None
+            ):
+                raise ProfileFormatError("cash_expense_requires_bound_posted_outflow")
+            if source_row[1:] != (row.row_role, row.date_role, row.date.iso, row.amount.minor):
+                raise ProfileFormatError("source_observation_index_mismatch")
+            account_rows = self.connection.execute("SELECT id,name,kind,currency,role,purpose FROM Accounts").fetchall()
+            accounts = {
+                account_id: LedgerAccount(
+                    account_id,
+                    name,
+                    AccountKind(kind),
+                    currency,
+                    account_id if role == "financial" else None,
+                    purpose,
+                )
+                for account_id, name, kind, currency, role, purpose in account_rows
+            }
+            financial = self.connection.execute("SELECT kind,role FROM Accounts WHERE id=?", (financial_id,)).fetchone()
+            category = self.connection.execute("SELECT kind,role FROM Accounts WHERE id=?", (category_id,)).fetchone()
+            if financial != ("asset", "financial") or category != ("expense", "category"):
+                raise ProfileFormatError("cash_expense_account_or_category")
+            amount = row.amount.minor
+            entry = JournalEntry(
+                key=f"review:expense:{row_id}",
+                event_id=f"source:{row_id}",
+                posting_date=date.fromisoformat(row.date.iso),
+                description=row.description.text,
+                postings=(
+                    Posting(financial_id, amount, (Allocation(row_id, amount),)),
+                    Posting(category_id, -amount),
+                ),
+                reviewed=True,
+                reason=reason.strip(),
+            )
+            payload = json.dumps(entry.payload(), sort_keys=True, separators=(",", ":"))
+            prior = self.connection.execute("SELECT payload FROM JournalEntries WHERE key=?", (entry.key,)).fetchone()
+            if prior is not None:
+                if prior[0] != payload:
+                    raise ProfileFormatError("expense_review_conflicts_with_prior_entry")
+                self.connection.execute("COMMIT")
+                return entry.key
+            consumed = dict(
+                self.connection.execute("SELECT row_id,SUM(amount_minor) FROM JournalAllocations GROUP BY row_id")
+            )
+            validate_entry(
+                entry,
+                accounts,
+                {row_id: Observation(row_id, financial_id, amount, entry.posting_date)},
+                consumed,
+            )
+            self.connection.execute("INSERT INTO JournalEntries(key,payload) VALUES (?,?)", (entry.key, payload))
+            self.connection.execute("INSERT INTO JournalAllocations VALUES (?,?,?)", (entry.key, row_id, amount))
+            self.connection.execute("COMMIT")
+            return entry.key
+        except BaseException as exc:
+            self.connection.execute("ROLLBACK")
+            if isinstance(exc, LedgerError):
+                raise ProfileFormatError("expense_review_refused") from None
+            raise
 
     def source_account_bindings(self, source_sha256: str) -> tuple[SourceAccountBinding, ...]:
         """Show each identity printed by a source and its explicit ledger decision."""

@@ -480,7 +480,7 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   mixed files. The two modes are mutually exclusive and neither posts a ledger
   entry. The owner approved one authoritative account table for the clean 2.0
   database; the provisional financial-only `LedgerAccounts` table has been
-  replaced by `Accounts` in pre-release schema revision 5. Earlier disposable
+  replaced by `Accounts` in pre-release schema revision 6. Earlier disposable
   pilot profiles are refused and recreated, with no migration layer. The
   [unified store direction](docs/client-v2-unified-store.md) leaves reviewed
   journal persistence and category/budget authoring as V2-4 work. An isolated
@@ -505,8 +505,15 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   the owner confirmed its native Windows presentation on October 24, 2026.
   Ledger integration remains open.
 - [ ] **V2-4a–b — Daily review:** create/edit accounts, categories and budgets; connect
-  accepted ledger workflows to the application in small increments. Manual values,
-  closures and unsupported accounting remain explicit. Owner Windows integration gate.
+  accepted ledger workflows to the application in small increments. A first
+  same-database service slice now creates an explicit expense category and posts
+  one reviewed cash outflow only when its financial account is explicitly bound,
+  its source date role is `posting_date`, and exact source/ledger signs agree.
+  Journal and source allocations are immutable; the same decision is idempotent,
+  while conflicting reinterpretation and liability rows are refused. This
+  synthetic proof has no desktop posting control or correction flow yet. Manual
+  values, closures and unsupported accounting remain explicit. Owner Windows
+  integration gate.
 - [ ] **V2-5a–b — Report cutover:** shared ledger spending/cash/balance/budget queries,
   then dashboard and export integration. Inventory every legacy menu action; approve
   concrete deferrals rather than silently removing functionality. Owner Windows gate.

@@ -48,3 +48,13 @@ formats cannot be combined by opening both stores on one file.
 4. Use the same journal reads for spending, cash, balances and exports; only
    then remove obsolete 1.x runtime financial paths and freeze the released
    2.0 schema.
+
+A bounded proof toward the first two steps is in pre-release schema revision 6:
+a single `Accounts` table replaces the conflicting pilot account table, and
+one reviewed asset outflow can create an immutable, balanced expense journal
+entry with a source-row allocation in the same database transaction. It requires
+an explicit account binding and source posting-date role. A liability row, an
+activity-date-only row, an unknown interpretation or a missing category remains
+pending. This is not yet a general journal workflow, correction service or
+desktop posting control. Disposable revision-4/5 profiles are refused, not
+migrated.

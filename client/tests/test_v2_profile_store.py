@@ -48,7 +48,7 @@ def test_one_database_reopens_csv_and_statement_without_reparse(tmp_path: Path) 
             reopened.import_source(CSV, CSV_DEFINITION, csv_evidence, suffix=".csv")
 
 
-@pytest.mark.parametrize("kind", ["legacy", "old_pilot", "newer", "unknown", "corrupt"])
+@pytest.mark.parametrize("kind", ["legacy", "old_pilot_4", "old_pilot_5", "newer", "unknown", "corrupt"])
 def test_unsupported_profile_is_refused_before_write(tmp_path: Path, kind: str) -> None:
     path = tmp_path / "profile.db"
     if kind == "corrupt":
@@ -60,9 +60,9 @@ def test_unsupported_profile_is_refused_before_write(tmp_path: Path, kind: str) 
             if kind == "newer":
                 connection.execute("PRAGMA application_id=1347691056")
                 connection.execute("PRAGMA user_version=99")
-            elif kind == "old_pilot":
+            elif kind in {"old_pilot_4", "old_pilot_5"}:
                 connection.execute("PRAGMA application_id=1347691056")
-                connection.execute("PRAGMA user_version=4")
+                connection.execute(f"PRAGMA user_version={kind[-1]}")
             elif kind == "legacy":
                 connection.execute("PRAGMA user_version=1")
     original = path.read_bytes()

@@ -294,7 +294,7 @@ The next review slice retains one explicit, reversible ledger binding for each
 source account identity printed by a statement or identified export. It also
 allows row assignment when an export mixes identified and unidentified rows.
 Source evidence and financial accounts remain unchanged; these decisions do not
-post entries. The fresh pre-release profile schema is revision 5. The shell now
+post entries. The fresh pre-release profile schema is revision 6. The shell now
 offers separate review buttons for printed identities and unidentified rows.
 Offscreen tests pass; the owner accepted the printed-identity dialog on native
 Windows on October 24, 2026. Signed catalog entries now supply institution and
