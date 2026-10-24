@@ -238,8 +238,11 @@ cells on all eight routed archive PDFs. `table_card_source_output.py` forms
 foreign transaction is dispositioned while the amount continuation is kept.
 All eight archive statements matched account, period, printed balances and
 row order; each printed equation passed. Temporary V2 storage reopened all
-eight with unchanged source hashes. Monetary table tails, full page capture,
-signed routing and native acceptance remain open. The shared Citi header
+eight with unchanged source hashes. The 21 dollar-bearing tails now have
+declared fee-total, interest-total, standard-APR or APR-continuation
+dispositions; an unfamiliar dollar-bearing tail refuses extraction. All 323
+activity rows and 929 dispositions remain. Full page capture, production-signed
+routing and native acceptance remain open. The shared Citi header
 reader now resolves a single embedded closing balance or a matching anchored
 copy, and refuses conflicting copies.
 

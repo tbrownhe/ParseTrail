@@ -91,11 +91,29 @@ def test_new_start_before_amount_or_unbalanced_statement_refuses() -> None:
         from_anchored_card(DEFINITION, *evidence({4: ("", "", "PURCHASE", "$11.00")}))
 
 
+def test_declared_card_monetary_tails_are_disclosures_and_unknown_refuses() -> None:
+    fee = from_anchored_card(DEFINITION, *evidence({5: ("Total fees c", "harged", "in this billing period", "$0.00")}))
+    assert len(fee.payload.accounts[0].rows) == 2
+    assert "period_fee_total" in {item.code for item in fee.payload.dispositions}
+    apr = from_anchored_card(DEFINITION, *evidence({5: ("", "", "24.99% (V) $25.00 (D)", "$2.00")}))
+    assert "apr_continuation_disclosure" in {item.code for item in apr.payload.dispositions}
+    with pytest.raises(TableCardError, match="unclassified_monetary_table_tail"):
+        from_anchored_card(DEFINITION, *evidence({5: ("Unknown charge", "", "", "$1.00")}))
+
+
 def test_declaration_schema_and_executable_field_refusal() -> None:
     assert AnchoredTableDefinition.model_validate_json(DEFINITION).operation == "anchored_columns_table_v1"
     schema = json.loads(Path(__file__).with_name("anchored-table-declaration-schema-v1.json").read_text())
     assert schema == AnchoredTableDefinition.model_json_schema()
     raw = json.loads(DEFINITION)
     raw["python_module"] = "arbitrary"
+    with pytest.raises(ValueError, match="invalid_definition"):
+        from_anchored_card(json.dumps(raw).encode(), *evidence())
+    raw = json.loads(DEFINITION)
+    raw["statement"]["monetary_table_tail"][0]["python"] = "exec"
+    with pytest.raises(ValueError, match="invalid_definition"):
+        from_anchored_card(json.dumps(raw).encode(), *evidence())
+    raw = json.loads(DEFINITION)
+    raw["statement"]["monetary_table_tail"][-1]["empty_columns"] = [0, 4]
     with pytest.raises(ValueError, match="invalid_definition"):
         from_anchored_card(json.dumps(raw).encode(), *evidence())

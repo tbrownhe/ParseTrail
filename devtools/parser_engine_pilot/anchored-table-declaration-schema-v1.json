@@ -190,18 +190,34 @@
           "title": "Contains",
           "type": "string"
         },
+        "empty_columns": {
+          "default": [],
+          "items": {
+            "type": "integer"
+          },
+          "maxItems": 4,
+          "title": "Empty Columns",
+          "type": "array"
+        },
         "text_prefix": {
-          "maxLength": 100,
-          "minLength": 3,
-          "title": "Text Prefix",
-          "type": "string"
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "minLength": 3,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Text Prefix"
         }
       },
       "required": [
         "code",
         "column",
-        "contains",
-        "text_prefix"
+        "contains"
       ],
       "title": "MonetaryTableTailRule",
       "type": "object"
@@ -399,6 +415,15 @@
         },
         "continuation": {
           "$ref": "#/$defs/ContinuationRule"
+        },
+        "monetary_table_tail": {
+          "default": [],
+          "items": {
+            "$ref": "#/$defs/MonetaryTableTailRule"
+          },
+          "maxItems": 16,
+          "title": "Monetary Table Tail",
+          "type": "array"
         }
       },
       "required": [

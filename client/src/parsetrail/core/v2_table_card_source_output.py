@@ -21,7 +21,12 @@ from parsetrail.core.source_evidence import (
     StatementPayload,
     TextValue,
 )
-from parsetrail.core.v2_anchored_table import AnchoredRow, AnchoredTableEvidence, load_definition
+from parsetrail.core.v2_anchored_table import (
+    AnchoredRow,
+    AnchoredTableEvidence,
+    TableCardStatementRule,
+    load_definition,
+)
 from parsetrail.core.v2_citi_statement_header import CitiHeaderError, parse_header
 from parsetrail.core.v2_money_operations import usd_symbol_minor_v1
 from parsetrail.core.v2_partial_dates import PartialDateError, resolve_month_day
@@ -57,7 +62,7 @@ def from_anchored_card(definition_bytes: bytes, table: AnchoredTableEvidence, te
     """Admit only dated table starts; preserve every other raw table row."""
     definition, definition_hash = load_definition(definition_bytes)
     rule = definition.statement
-    if rule is None:
+    if not isinstance(rule, TableCardStatementRule):
         raise TableCardError("missing_statement_rule")
     if (
         table.definition_sha256 != definition_hash
@@ -116,7 +121,17 @@ def from_anchored_card(definition_bytes: bytes, table: AnchoredTableEvidence, te
         else:
             if any(DATE_PREFIX.search(cell) for cell in cells[:2]):
                 raise TableCardError("unresolved_dated_table_row")
-            code = "monetary_table_tail" if any(MONEY.search(cell) for cell in cells) else "nonactivity_table_row"
+            if any(MONEY.search(cell) for cell in cells):
+                matches = [
+                    item
+                    for item in rule.monetary_table_tail
+                    if item.contains in cells[item.column] and all(not cells[column] for column in item.empty_columns)
+                ]
+                if rule.monetary_table_tail and len(matches) != 1:
+                    raise TableCardError("unclassified_monetary_table_tail")
+                code = matches[0].code if matches else "monetary_table_tail"
+            else:
+                code = "nonactivity_table_row"
             dispositions.append(SourceDisposition(code=code, location=location, raw_values=row.raw_cells))
             continue
         if len(pending) > rule.continuation.max_group_rows:

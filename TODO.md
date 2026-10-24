@@ -299,8 +299,11 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   period, printed balances and 323 rows. The 1,311 raw table rows divide into
   382 admitted source rows and 929 located dispositions, including a repeated
   header across a foreign-transaction page break. Temporary V2 storage
-  reopened all eight sources with unchanged hashes. Monetary table tails,
-  complete page capture, signed routing and native acceptance remain open.
+  reopened all eight sources with unchanged source hashes. The 21 dollar-bearing
+  table tails now match declared fee-total, interest-total and APR-disclosure
+  shapes; unmatched dollar-bearing tails refuse extraction. They remain source
+  summaries/disclosures and do not add activity rows. Complete page capture,
+  production-signed routing and native acceptance remain open.
   Older LendingClub savings now reuses the header-anchor worker with seven
   header words locating five data columns. All seven routed archived PDFs
   matched 18 accepted rows, printed running balances and six-value summary

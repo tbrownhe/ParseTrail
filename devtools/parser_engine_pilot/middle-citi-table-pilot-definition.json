@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "parser_id": "pdf_citicc_202506",
-  "revision": "1",
+  "revision": "2",
   "suffix": ".pdf",
   "kind": "statement",
   "operation": "anchored_columns_table_v1",
@@ -29,6 +29,12 @@
     "opening_label": "Previous balance",
     "closing_label": "New balance",
     "repeated_header_date_cells": ["date", "date"],
+    "monetary_table_tail": [
+      {"code": "period_fee_total", "column": 0, "contains": "Total fees"},
+      {"code": "period_interest_total", "column": 0, "contains": "Total intere"},
+      {"code": "apr_standard_disclosure", "column": 0, "contains": "Standard"},
+      {"code": "apr_continuation_disclosure", "column": 2, "contains": "(V)", "empty_columns": [0, 1]}
+    ],
     "continuation": {
       "operation": "table_continuation_v1",
       "mode": "amount_on_last_row",

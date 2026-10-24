@@ -44,6 +44,35 @@ class AnchorMidpoint(BaseModel):
 Boundary = Annotated[AnchorEdge | AnchorMidpoint, Field(discriminator="kind")]
 
 
+class MonetaryTableTailRule(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    code: str = Field(pattern=r"^[a-z][a-z0-9_]{2,79}$")
+    column: int = Field(ge=0, le=4)
+    contains: str = Field(min_length=1, max_length=80)
+    empty_columns: tuple[int, ...] = Field(default=(), max_length=4)
+    text_prefix: str | None = Field(default=None, min_length=3, max_length=100)
+
+    @model_validator(mode="after")
+    def valid_tail_rule(self) -> MonetaryTableTailRule:
+        if (
+            self.contains != self.contains.strip()
+            or any(character in self.contains for character in "\r\n")
+            or len(set(self.empty_columns)) != len(self.empty_columns)
+            or self.column in self.empty_columns
+            or any(column < 0 or column > 4 for column in self.empty_columns)
+            or (
+                self.text_prefix is not None
+                and (
+                    self.text_prefix != self.text_prefix.strip()
+                    or any(character in self.text_prefix for character in "\r\n")
+                )
+            )
+        ):
+            raise ValueError("invalid monetary table tail rule")
+        return self
+
+
 class TableCardStatementRule(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
@@ -57,6 +86,7 @@ class TableCardStatementRule(BaseModel):
     closing_label: str = Field(min_length=1, max_length=80)
     repeated_header_date_cells: tuple[str, str]
     continuation: ContinuationRule
+    monetary_table_tail: tuple[MonetaryTableTailRule, ...] = Field(default=(), max_length=16)
 
     @model_validator(mode="after")
     def valid_card_rule(self) -> TableCardStatementRule:
@@ -71,6 +101,11 @@ class TableCardStatementRule(BaseModel):
             or rule.break_columns != (0, 1)
             or rule.description_column != 2
             or rule.amount_column != 3
+            or len({item.code for item in self.monetary_table_tail}) != len(self.monetary_table_tail)
+            or any(
+                item.column > 3 or any(column > 3 for column in item.empty_columns) or item.text_prefix is not None
+                for item in self.monetary_table_tail
+            )
         ):
             raise ValueError("invalid table card operation")
         return self
@@ -86,26 +121,6 @@ class MonetaryTextDisposition(BaseModel):
     def valid_prefix(self) -> MonetaryTextDisposition:
         if self.prefix != self.prefix.strip() or "\n" in self.prefix or "\r" in self.prefix:
             raise ValueError("invalid monetary text prefix")
-        return self
-
-
-class MonetaryTableTailRule(BaseModel):
-    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
-
-    code: str = Field(pattern=r"^[a-z][a-z0-9_]{2,79}$")
-    column: int = Field(ge=0, le=4)
-    contains: str = Field(min_length=1, max_length=80)
-    text_prefix: str = Field(min_length=3, max_length=100)
-
-    @model_validator(mode="after")
-    def valid_tail_rule(self) -> MonetaryTableTailRule:
-        if (
-            self.contains != self.contains.strip()
-            or not self.text_prefix.strip()
-            or self.text_prefix != self.text_prefix.strip()
-            or any(character in value for value in (self.contains, self.text_prefix) for character in "\r\n")
-        ):
-            raise ValueError("invalid monetary table tail rule")
         return self
 
 
@@ -168,6 +183,7 @@ class TableBankStatementRule(BaseModel):
             or any(label != label.strip() or "\n" in label for label in labels)
             or len({item.code for item in self.monetary_table_tail}) != len(self.monetary_table_tail)
             or len({item.text_prefix for item in self.monetary_table_tail}) != len(self.monetary_table_tail)
+            or any(item.text_prefix is None for item in self.monetary_table_tail)
         ):
             raise ValueError("invalid table bank operation")
         return self
