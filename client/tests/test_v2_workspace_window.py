@@ -63,8 +63,9 @@ def _wait_finished(worker, app) -> None:
     assert not timed_out
 
 
-def test_window_imports_pending_evidence_and_reuses_exact_source(tmp_path: Path) -> None:
+def test_window_imports_pending_evidence_and_reuses_exact_source(tmp_path: Path, monkeypatch) -> None:
     app = _app()
+    from parsetrail.gui.v2_source_account_review import V2SourceAccountReview
     from parsetrail.gui.v2_workspace_window import V2WorkspaceWindow
 
     workspace = _workspace(tmp_path)
@@ -79,7 +80,12 @@ def test_window_imports_pending_evidence_and_reuses_exact_source(tmp_path: Path)
         assert window.sources.count() == 1
         assert window.preview_button.isEnabled()
         assert not window.review_button.isEnabled()
+        assert window.source_review_button.isEnabled()
         assert "pending review" in window.status.text()
+        opened = []
+        monkeypatch.setattr(V2SourceAccountReview, "exec", lambda dialog: opened.append(dialog.identities.count()))
+        window.source_review_button.click()
+        assert opened == [1]
         window.start_import(source)
         _wait_finished(window.import_worker, app)
         assert window.sources.count() == 1

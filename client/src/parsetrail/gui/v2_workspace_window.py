@@ -33,6 +33,7 @@ from parsetrail.core.v2_source_import import ImportCancelled, SourceImportResult
 from parsetrail.core.v2_workspace import V2Workspace
 from parsetrail.gui.v2_account_binding_review import V2AccountBindingReview
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
+from parsetrail.gui.v2_source_account_review import V2SourceAccountReview
 
 
 class V2ImportWorker(QThread):
@@ -126,13 +127,20 @@ class V2WorkspaceWindow(QMainWindow):
         self.preview_button = QPushButton("Preview evidence")
         self.preview_button.clicked.connect(self._preview)
         controls.addWidget(self.preview_button)
-        self.review_button = QPushButton("Review account assignment")
+        controls.addStretch()
+        layout.addLayout(controls)
+        account_controls = QHBoxLayout()
+        self.source_review_button = QPushButton("Review source accounts")
+        self.source_review_button.clicked.connect(self._review_source_account)
+        account_controls.addWidget(self.source_review_button)
+        self.review_button = QPushButton("Review unidentified rows")
         self.review_button.clicked.connect(self._review_account)
-        controls.addWidget(self.review_button)
+        account_controls.addWidget(self.review_button)
         self.account_button = QPushButton("Add financial account")
         self.account_button.clicked.connect(self._add_account)
-        controls.addWidget(self.account_button)
-        layout.addLayout(controls)
+        account_controls.addWidget(self.account_button)
+        account_controls.addStretch()
+        layout.addLayout(account_controls)
         self.status = QLabel()
         layout.addWidget(self.status)
         self.refresh()
@@ -166,7 +174,8 @@ class V2WorkspaceWindow(QMainWindow):
     def _update_controls(self, *_args) -> None:
         source_id = self._selected_source()
         self.preview_button.setEnabled(source_id is not None)
-        reviewable = False
+        unidentified_rows = False
+        identified_accounts = False
         if source_id is not None:
             evidence = self.workspace.saved_import(source_id).evidence
             payload = evidence.payload
@@ -177,14 +186,16 @@ class V2WorkspaceWindow(QMainWindow):
             )
             kind = "Statement" if isinstance(payload, StatementPayload) else "Activity export"
             self.selected_details.setText(f"{kind} · {evidence.parser_id} · {rows} row(s) · pending review")
-            reviewable = (
-                isinstance(payload, ActivityExportPayload)
-                and bool(payload.rows)
-                and all(row.source_account is None for row in payload.rows)
+            unidentified_rows = isinstance(payload, ActivityExportPayload) and any(
+                row.source_account is None for row in payload.rows
+            )
+            identified_accounts = isinstance(payload, StatementPayload) or any(
+                row.source_account is not None for row in payload.rows
             )
         else:
             self.selected_details.clear()
-        self.review_button.setEnabled(reviewable)
+        self.review_button.setEnabled(unidentified_rows)
+        self.source_review_button.setEnabled(identified_accounts)
 
     def _choose_import(self) -> None:
         source, _filter = QFileDialog.getOpenFileName(
@@ -249,6 +260,12 @@ class V2WorkspaceWindow(QMainWindow):
         source_id = self._selected_source()
         if source_id is not None:
             V2AccountBindingReview(self.workspace.profile_path, source_id, self).exec()
+            self.refresh(select_source=source_id)
+
+    def _review_source_account(self) -> None:
+        source_id = self._selected_source()
+        if source_id is not None:
+            V2SourceAccountReview(self.workspace.profile_path, source_id, self).exec()
             self.refresh(select_source=source_id)
 
     def _add_account(self) -> None:

@@ -207,10 +207,9 @@ owner accepted the native Windows interaction on October 23, 2026. A separate
 [2.0 workspace service](../client/src/parsetrail/core/v2_workspace.py) now
 creates or opens only a marked 2.0 profile, requires a verified offline catalog,
 reads a selected CSV/PDF without changing the original, and stores pending
-evidence. Refused input leaves no import. Desktop integration remains open.
-The existing main window initializes the 1.x database and its account/report
-services during startup. The next desktop slice therefore needs a separate 2.0
-window and explicit profile path rather than a 2.0 menu inside that runtime.
+evidence. Refused input leaves no import. The separate desktop shell described
+below now connects this service. The existing 1.x main window still initializes
+its own database and account/report services during startup.
 The isolated [V2 source import service](../client/src/parsetrail/core/v2_source_import.py)
 now checks an exact-source retry before invoking a parser and returns the saved
 snapshot. Revised bytes remain a separate pending import. Parser failure and
@@ -260,9 +259,21 @@ opens only an explicitly chosen fresh profile and verified catalog cache. It
 lists saved sources, imports CSV/PDF with a cancellable background thread,
 previews unposted evidence, creates financial accounts and opens the accepted
 accountless-export review. The entry point branches before 1.x profile/settings
-startup. Offscreen interaction tests pass; owner native Windows acceptance is
-still required before treating the shell as accepted. This is an isolated pilot,
+startup. Offscreen interaction tests passed, and the owner accepted this shell
+on native Windows on October 23, 2026. This is an isolated pilot,
 not the daily 2.0 profile picker or ledger workflow.
+
+The next review slice retains one explicit, reversible ledger binding for each
+source account identity printed by a statement or identified export. It also
+allows row assignment when an export mixes identified and unidentified rows.
+Source evidence and financial accounts remain unchanged; these decisions do not
+post entries. The fresh pre-release profile schema is revision 4. The shell now
+offers separate review buttons for printed identities and unidentified rows.
+Offscreen tests pass; owner native acceptance for the printed-identity dialog
+is open. Automatic suffix matching remains pending because the current evidence
+does not yet carry trustworthy source institution and financial-account class
+for the matching policy. The 2.0 global preference must become operational
+before exposing that switch in the 2.0 shell.
 
 For a native review without live data, launch the disposable synthetic demo from
 the repository root in PowerShell:
@@ -274,7 +285,7 @@ $env:PYTHONPATH='.;client/src;client'
 
 The demo signs a temporary two-definition catalog with a generated key, creates
 a temporary profile, and imports a six-row accountless export plus a one-row
-statement. Its status line gives the path of a third synthetic file for testing
+identified cash export. Its status line gives the path of a third synthetic file for testing
 the Import source button. Closing the window removes the temporary workspace.
 The real `--v2` entry requires `--profile` and `--catalog-cache`; it opens an
 existing 2.x profile unless `--create-profile` is explicitly supplied. It will

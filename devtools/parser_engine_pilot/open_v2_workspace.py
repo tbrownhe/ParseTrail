@@ -55,6 +55,7 @@ def main(argv: list[str] | None = None) -> int:
         with V2ProfileStore.open(workspace.profile_path) as store:
             store.add_financial_account(FinancialAccount("loan-a", "Loan A", "liability", "mohela"))
             store.add_financial_account(FinancialAccount("loan-b", "Loan B", "liability", "mohela"))
+            store.add_financial_account(FinancialAccount("checking-a", "Checking A", "asset", "synthetic"))
         window = V2WorkspaceWindow(workspace)
         window.status.setText(f"Disposable demo. To try Import source, choose {more_path}")
         window.show()

@@ -18,7 +18,7 @@ from pydantic import ValidationError
 from parsetrail.core.source_evidence import ActivityExportPayload, SourceEvidence, StatementPayload
 
 APPLICATION_ID = 0x50543230  # PT20
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_DEFINITION_BYTES = 64 * 1024
 MAX_EVIDENCE_BYTES = 32 * 1024 * 1024
@@ -62,6 +62,12 @@ TABLE_COLUMNS = {
         ("row_id", "TEXT", 0, 1),
         ("ledger_account_id", "TEXT", 1, 0),
     ),
+    "SourceAccountBindings": (
+        ("source_sha256", "TEXT", 1, 1),
+        ("source_identity", "TEXT", 1, 2),
+        ("source_identity_form", "TEXT", 1, 3),
+        ("ledger_account_id", "TEXT", 1, 0),
+    ),
 }
 FOREIGN_KEYS = {
     "Sources": (),
@@ -73,6 +79,10 @@ FOREIGN_KEYS = {
     "RowAccountAssignments": (
         ("ledger_account_id", "LedgerAccounts", "id"),
         ("row_id", "SourceObservations", "row_id"),
+    ),
+    "SourceAccountBindings": (
+        ("ledger_account_id", "LedgerAccounts", "id"),
+        ("source_sha256", "Sources", "sha256"),
     ),
 }
 
@@ -104,7 +114,14 @@ class FinancialAccount:
 class AccountBinding:
     row_id: str
     ledger_account_id: str | None
-    basis: Literal["row", "file"] | None
+    basis: Literal["row", "file", "source"] | None
+
+
+@dataclass(frozen=True)
+class SourceAccountBinding:
+    source_identity: str
+    source_identity_form: Literal["full", "last_four", "opaque"]
+    ledger_account_id: str | None
 
 
 def _digest(data: bytes) -> str:
@@ -205,6 +222,13 @@ class V2ProfileStore:
                     row_id TEXT PRIMARY KEY REFERENCES SourceObservations(row_id),
                     ledger_account_id TEXT NOT NULL REFERENCES LedgerAccounts(id)
                 );
+                CREATE TABLE SourceAccountBindings (
+                    source_sha256 TEXT NOT NULL REFERENCES Sources(sha256),
+                    source_identity TEXT NOT NULL,
+                    source_identity_form TEXT NOT NULL CHECK(source_identity_form IN ('full','last_four','opaque')),
+                    ledger_account_id TEXT NOT NULL REFERENCES LedgerAccounts(id),
+                    PRIMARY KEY(source_sha256,source_identity,source_identity_form)
+                );
                 COMMIT;
             """)
             for table in IMMUTABLE_TABLES:
@@ -293,6 +317,60 @@ class V2ProfileStore:
     def _require_financial_account(self, account_id: str) -> None:
         if self.connection.execute("SELECT 1 FROM LedgerAccounts WHERE id=?", (account_id,)).fetchone() is None:
             raise ProfileFormatError("financial_account_missing")
+
+    def source_account_bindings(self, source_sha256: str) -> tuple[SourceAccountBinding, ...]:
+        """Show each identity printed by a source and its explicit ledger decision."""
+        evidence = self.load_import(source_sha256).evidence
+        payload = evidence.payload
+        if isinstance(payload, StatementPayload):
+            identities = tuple((account.source_identity, account.source_identity_form) for account in payload.accounts)
+        else:
+            identities = tuple(
+                dict.fromkeys(
+                    (row.source_account, row.source_account_form)
+                    for row in payload.rows
+                    if row.source_account is not None
+                )
+            )
+        saved = {
+            (identity, form): account_id
+            for identity, form, account_id in self.connection.execute(
+                "SELECT source_identity,source_identity_form,ledger_account_id "
+                "FROM SourceAccountBindings WHERE source_sha256=?",
+                (source_sha256,),
+            )
+        }
+        return tuple(SourceAccountBinding(identity, form, saved.get((identity, form))) for identity, form in identities)
+
+    def bind_source_account(
+        self, source_sha256: str, source_identity: str, source_identity_form: str, account_id: str
+    ) -> None:
+        """Bind one printed account identity after an explicit user decision."""
+        self._require_writable()
+        if (source_identity, source_identity_form) not in {
+            (binding.source_identity, binding.source_identity_form)
+            for binding in self.source_account_bindings(source_sha256)
+        }:
+            raise ProfileFormatError("source_account_missing")
+        self._require_financial_account(account_id)
+        self.connection.execute(
+            "INSERT INTO SourceAccountBindings VALUES (?,?,?,?) "
+            "ON CONFLICT(source_sha256,source_identity,source_identity_form) "
+            "DO UPDATE SET ledger_account_id=excluded.ledger_account_id",
+            (source_sha256, source_identity, source_identity_form, account_id),
+        )
+
+    def clear_source_account_binding(self, source_sha256: str, source_identity: str, source_identity_form: str) -> None:
+        self._require_writable()
+        if (source_identity, source_identity_form) not in {
+            (binding.source_identity, binding.source_identity_form)
+            for binding in self.source_account_bindings(source_sha256)
+        }:
+            raise ProfileFormatError("source_account_missing")
+        self.connection.execute(
+            "DELETE FROM SourceAccountBindings WHERE source_sha256=? AND source_identity=? AND source_identity_form=?",
+            (source_sha256, source_identity, source_identity_form),
+        )
 
     def assert_file_account(self, source_sha256: str, account_id: str) -> None:
         """Assert that every accountless row belongs to one financial account."""
@@ -404,10 +482,22 @@ class V2ProfileStore:
                 (source_sha256,),
             )
         )
+        source_assignments = {
+            (binding.source_identity, binding.source_identity_form): binding.ledger_account_id
+            for binding in self.source_account_bindings(source_sha256)
+        }
         result = []
         for row in _rows(evidence):
             if row.row_id in row_assignments:
                 result.append(AccountBinding(row.row_id, row_assignments[row.row_id], "row"))
+            elif row.source_account is not None and source_assignments.get(
+                (row.source_account, row.source_account_form)
+            ):
+                result.append(
+                    AccountBinding(
+                        row.row_id, source_assignments[(row.source_account, row.source_account_form)], "source"
+                    )
+                )
             elif row.source_account is None and file_account_id is not None:
                 result.append(AccountBinding(row.row_id, file_account_id, "file"))
             else:

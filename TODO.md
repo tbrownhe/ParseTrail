@@ -443,7 +443,7 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   accountless-export bindings alongside immutable source evidence. A whole-file
   assertion covers a single-account export; individual row assignments cover
   mixed files. The two modes are mutually exclusive and neither posts a ledger
-  entry. This pre-release profile schema is revision 3. An isolated
+  entry. This pre-release profile schema is revision 4. An isolated
   accountless-export review dialog now
   presents a six-row disposable MOHELA-shaped demo and saves either explicit
   file or selected-row decisions. Offscreen interaction tests pass; the owner
@@ -451,7 +451,13 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   workspace service now opens only marked fresh profiles, loads an authenticated
   catalog, reads a chosen CSV/PDF without moving it, and saves pending evidence.
   Missing catalog, unsupported/oversized files, cancellation and 1.x profile
-  refusal leave no source import. Ledger integration remains open.
+  refusal leave no source import. The owner accepted the native Windows shell
+  on October 23, 2026. A further slice stores reversible, explicit bindings
+  for source-identified statement and export accounts, and offers separate
+  review for printed identities and accountless rows. Offscreen tests pass;
+  owner native acceptance for the new review dialog remains open. Automatic
+  suffix matching still needs trustworthy source institution/account-class
+  metadata and an operational 2.0 global preference. Ledger integration remains open.
 - [ ] **V2-4a–b — Daily review:** create/edit accounts, categories and budgets; connect
   accepted ledger workflows to the application in small increments. Manual values,
   closures and unsupported accounting remain explicit. Owner Windows integration gate.

@@ -75,3 +75,36 @@ def test_disposable_native_review_demo_has_six_rows(monkeypatch) -> None:
     monkeypatch.setattr(V2AccountBindingReview, "exec", lambda self: opened.append(self.model.rowCount()))
     assert demo_main(["--demo"]) == 0
     assert opened == [6]
+
+
+def test_mixed_identity_export_reviews_only_unidentified_rows(tmp_path: Path) -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = QApplication.instance() or QApplication([])
+    from parsetrail.gui.v2_account_binding_review import V2AccountBindingReview
+
+    evidence = build_source_evidence(SOURCE, DEFINITION, suffix=".csv")
+    first, second = evidence.payload.rows
+    identified = first.model_copy(update={"source_account": "Loan A", "source_account_form": "opaque"})
+    mixed = evidence.model_copy(update={"payload": evidence.payload.model_copy(update={"rows": (identified, second)})})
+    profile = tmp_path / "mixed.db"
+    with V2ProfileStore.create(profile) as store:
+        store.import_source(SOURCE, DEFINITION, mixed, suffix=".csv")
+        store.add_financial_account(FinancialAccount("loan-a", "Loan A", "liability", "mohela"))
+    dialog = V2AccountBindingReview(profile, mixed.source_sha256)
+    try:
+        assert dialog.model.rowCount() == 1
+        assert not dialog.file_button.isEnabled()
+        dialog.table.selectRow(0)
+        assert dialog.assign_rows_button.isEnabled()
+        dialog.assign_rows_button.click()
+        assert "1 of 1" in dialog.status.text()
+    finally:
+        dialog.close()
+        app.processEvents()
+    with V2ProfileStore.open(profile, read_only=True) as store:
+        assert [
+            (binding.ledger_account_id, binding.basis) for binding in store.account_bindings(mixed.source_sha256)
+        ] == [
+            (None, None),
+            ("loan-a", "row"),
+        ]

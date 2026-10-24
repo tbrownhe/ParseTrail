@@ -84,8 +84,9 @@ class V2AccountBindingReview(QDialog):
         self.resize(1080, 620)
         layout = QVBoxLayout(self)
         intro = QLabel(
-            "The source does not identify an account. Assign the whole file only when every row belongs "
-            "to one ledger account. For a mixed file, select rows with Ctrl or Shift and assign them below. "
+            "The rows below do not identify an account. Assign the whole file only when every row in the "
+            "source lacks an account identity and belongs to one ledger account. For a mixed file, select "
+            "rows with Ctrl or Shift and assign them below. "
             "No ledger entries are posted."
         )
         intro.setWordWrap(True)
@@ -137,12 +138,18 @@ class V2AccountBindingReview(QDialog):
         with V2ProfileStore.open(self.profile, read_only=True) as store:
             evidence = store.load_import(self.source_sha256).evidence
             payload = evidence.payload
-            if not isinstance(payload, ActivityExportPayload) or any(
-                row.source_account is not None for row in payload.rows
+            if not isinstance(payload, ActivityExportPayload) or not any(
+                row.source_account is None for row in payload.rows
             ):
                 raise ProfileFormatError("account_review_requires_accountless_export")
             accounts = store.financial_accounts()
-            bindings = store.account_bindings(self.source_sha256)
+            rows = tuple(row for row in payload.rows if row.source_account is None)
+            bindings = tuple(
+                binding
+                for row, binding in zip(payload.rows, store.account_bindings(self.source_sha256), strict=True)
+                if row.source_account is None
+            )
+            self._file_eligible = len(rows) == len(payload.rows)
         selected_account = self.account_combo.currentData()
         self.account_combo.clear()
         for account in accounts:
@@ -151,7 +158,7 @@ class V2AccountBindingReview(QDialog):
             selected_index = self.account_combo.findData(selected_account)
             if selected_index >= 0:
                 self.account_combo.setCurrentIndex(selected_index)
-        self.model.replace(payload.rows, bindings, accounts)
+        self.model.replace(rows, bindings, accounts)
         file_count = sum(binding.basis == "file" for binding in bindings)
         row_count = sum(binding.basis == "row" for binding in bindings)
         if file_count:
@@ -175,7 +182,9 @@ class V2AccountBindingReview(QDialog):
         file_mode = any(binding.basis == "file" for binding in self.model.bindings)
         row_mode = any(binding.basis == "row" for binding in self.model.bindings)
         account_available = self.account_combo.currentData() is not None
-        self.file_button.setEnabled(account_available and bool(self.model.rows) and not row_mode)
+        self.file_button.setEnabled(
+            account_available and self._file_eligible and bool(self.model.rows) and not row_mode
+        )
         self.clear_file_button.setEnabled(file_mode)
         self.assign_rows_button.setEnabled(account_available and bool(selected) and not file_mode)
         self.clear_rows_button.setEnabled(
