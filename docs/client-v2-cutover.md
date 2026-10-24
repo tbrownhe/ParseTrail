@@ -401,8 +401,12 @@ native Windows behavior on October 24, 2026. The reason remains required for
 now, although the owner identified it as possible friction for routine
 categorization. Financial-account editing now changes a name, institution key
 or full number without changing its ledger class or ID; existing bindings and
-journals still reference that ID. Native Windows acceptance of account editing
-remains open.
+journals still reference that ID. The owner confirmed the native Windows edit
+flow, but observed a clipped renamed account and
+a raw error on attempted reassignment after posting. The cash and accountless
+review tables now size account columns to contents, and the account review
+dialogs show posted-history locks and disable conflicting assignment controls.
+Native Windows acceptance of these presentation fixes remains open.
 
 ## Current stop/go decision
 

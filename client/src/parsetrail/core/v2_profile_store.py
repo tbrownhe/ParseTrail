@@ -1059,6 +1059,18 @@ class V2ProfileStore:
                 result.append(AccountBinding(row.row_id, None, None))
         return tuple(result)
 
+    def journal_history_row_ids(self, source_sha256: str) -> frozenset[str]:
+        """Rows whose account assignment is locked by any posted journal history."""
+        self.load_import(source_sha256)
+        return frozenset(
+            row_id
+            for (row_id,) in self.connection.execute(
+                "SELECT DISTINCT a.row_id FROM JournalAllocations a "
+                "JOIN SourceObservations o ON o.row_id=a.row_id WHERE o.source_sha256=?",
+                (source_sha256,),
+            )
+        )
+
     def source_imported(self, source: bytes) -> bool:
         """Check an exact-source retry before invoking a parser."""
         if type(source) is not bytes or not 0 < len(source) <= MAX_SOURCE_BYTES:

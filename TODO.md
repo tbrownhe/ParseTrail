@@ -526,7 +526,11 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   entry as potential daily-workflow friction for later review. Financial
   account editing now changes the display name, institution key and full number
   while retaining the account ID, ledger class, source bindings and entries.
-  Its native Windows interaction remains open. Manual values, budgets,
+  The owner confirmed this worked on native Windows, then observed a clipped
+  renamed account and a raw lock error when trying to reassign a posted row.
+  Review tables now size account columns to contents; posted assignments show
+  an explanatory lock and disable reassignment controls. Native acceptance of
+  these presentation fixes remains open. Manual values, budgets,
   closures and unsupported accounting remain explicit. Owner Windows
   integration gate.
 - [ ] **V2-5a–b — Report cutover:** shared ledger spending/cash/balance/budget queries,

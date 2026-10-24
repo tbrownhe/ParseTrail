@@ -53,6 +53,14 @@ def test_cash_expense_dialog_posts_corrects_and_keeps_other_row_pending(tmp_path
         assert dialog.model.rows[0].status == "Posted: Food"
         assert dialog.model.rows[1].status == "Outside cash expense scope"
         assert dialog.action_button.text() == "Correct expense category"
+        renamed = "A Very Long Renamed Checking Account For Testing"
+        with V2ProfileStore.open(profile) as store:
+            store.update_financial_account(FinancialAccount("cash", renamed, "asset", "synthetic"))
+        dialog.refresh(selected_row_id=evidence.payload.rows[0].row_id)
+        dialog.show()
+        app.processEvents()
+        assert dialog.model.rows[0].financial_account == renamed
+        assert dialog.table.columnWidth(3) > dialog.table.fontMetrics().horizontalAdvance(renamed)
         dialog.category.setCurrentIndex(dialog.category.findData("expense:travel"))
         dialog.reason.setText("Correct category")
         dialog.action_button.click()

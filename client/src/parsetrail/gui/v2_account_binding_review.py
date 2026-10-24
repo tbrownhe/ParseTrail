@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QMessageBox,
     QPushButton,
@@ -93,6 +94,9 @@ class V2AccountBindingReview(QDialog):
         layout.addWidget(intro)
         self.status = QLabel()
         layout.addWidget(self.status)
+        self.lock_notice = QLabel()
+        self.lock_notice.setWordWrap(True)
+        layout.addWidget(self.lock_notice)
 
         controls = QHBoxLayout()
         controls.addWidget(QLabel("Ledger account:"))
@@ -114,9 +118,11 @@ class V2AccountBindingReview(QDialog):
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.setAlternatingRowColors(True)
-        self.table.horizontalHeader().setStretchLastSection(True)
-        for column, width in enumerate((110, 280, 110, 180, 160)):
-            self.table.setColumnWidth(column, width)
+        header = self.table.horizontalHeader()
+        header.setStretchLastSection(False)
+        for column in (0, 2, 3, 4, 5):
+            header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.table.selectionModel().selectionChanged.connect(self._update_controls)
         layout.addWidget(self.table)
 
@@ -150,6 +156,7 @@ class V2AccountBindingReview(QDialog):
                 if row.source_account is None
             )
             self._file_eligible = len(rows) == len(payload.rows)
+            self.posted_row_ids = store.journal_history_row_ids(self.source_sha256)
         selected_account = self.account_combo.currentData()
         self.account_combo.clear()
         for account in accounts:
@@ -181,14 +188,25 @@ class V2AccountBindingReview(QDialog):
         selected_bindings = (self.model.bindings[index.row()] for index in self.table.selectionModel().selectedRows())
         file_mode = any(binding.basis == "file" for binding in self.model.bindings)
         row_mode = any(binding.basis == "row" for binding in self.model.bindings)
+        file_locked = file_mode and bool(self.posted_row_ids)
+        selected_locked = any(row_id in self.posted_row_ids for row_id in selected)
         account_available = self.account_combo.currentData() is not None
         self.file_button.setEnabled(
-            account_available and self._file_eligible and bool(self.model.rows) and not row_mode
+            account_available and self._file_eligible and bool(self.model.rows) and not row_mode and not file_locked
         )
-        self.clear_file_button.setEnabled(file_mode)
-        self.assign_rows_button.setEnabled(account_available and bool(selected) and not file_mode)
+        self.clear_file_button.setEnabled(file_mode and not file_locked)
+        self.assign_rows_button.setEnabled(
+            account_available and bool(selected) and not file_mode and not selected_locked
+        )
         self.clear_rows_button.setEnabled(
-            not file_mode and any(binding.basis == "row" for binding in selected_bindings)
+            not file_mode and not selected_locked and any(binding.basis == "row" for binding in selected_bindings)
+        )
+        self.lock_notice.setText(
+            "Posted journal history locks the whole-file account assertion. Review or correct the entry first."
+            if file_locked
+            else "Selected posted rows have locked account assignments. Review or correct their entries first."
+            if selected_locked
+            else ""
         )
 
     def _write(self, action) -> None:
@@ -197,7 +215,14 @@ class V2AccountBindingReview(QDialog):
                 action(store)
             self._reload()
         except (ProfileFormatError, OSError) as exc:
-            QMessageBox.warning(self, "Account assignment was not saved", str(exc))
+            message = (
+                "This account assignment is locked because a row has posted journal history. "
+                "Review or correct the entry; its source account cannot be reassigned."
+                if str(exc) == "account_binding_has_journal_history"
+                else str(exc)
+            )
+            QMessageBox.warning(self, "Account assignment was not saved", message)
+            self._reload()
 
     def _assert_file(self) -> None:
         account_id = self.account_combo.currentData()

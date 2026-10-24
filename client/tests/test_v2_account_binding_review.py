@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
+import pytest
 from parsetrail.core.v2_profile_store import FinancialAccount, V2ProfileStore
 from parsetrail.core.v2_source_pipeline import build_source_evidence
 from parsetrail.gui.v2_account_binding_review import review_accountless_export
@@ -108,3 +110,47 @@ def test_mixed_identity_export_reviews_only_unidentified_rows(tmp_path: Path) ->
             (None, None),
             ("loan-a", "row"),
         ]
+
+
+@pytest.mark.parametrize("assignment", ["file", "row"])
+def test_accountless_review_explains_posted_assignment_lock(tmp_path: Path, assignment: str) -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = QApplication.instance() or QApplication([])
+    cash_definition = json.loads(
+        (
+            Path(__file__).parents[2] / "devtools" / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
+        ).read_bytes()
+    )
+    cash_definition["parser_id"] = "synthetic_accountless_cash_csv"
+    cash_definition["header"].remove("Account")
+    del cash_definition["columns"]["account"]
+    cash_definition["account_key"] = "unknown"
+    definition = json.dumps(cash_definition).encode()
+    source = b"Date,Description,Amount,ReportedBalance\n10/01/2026,Coffee,-$4.00,$996.00\n"
+    evidence = build_source_evidence(source, definition, suffix=".csv")
+    row_id = evidence.payload.rows[0].row_id
+    profile = tmp_path / "review.db"
+    with V2ProfileStore.create(profile) as store:
+        store.import_source(source, definition, evidence, suffix=".csv")
+        store.add_financial_account(FinancialAccount("cash", "Renamed Checking Account", "asset", "synthetic"))
+        store.add_category_account("expense:food", "Food", "expense")
+        if assignment == "file":
+            store.assert_file_account(evidence.source_sha256, "cash")
+        else:
+            store.assign_row_account(row_id, "cash")
+        store.post_reviewed_cash_expense(row_id, "expense:food", reason="Reviewed coffee")
+    dialog = review_accountless_export(profile, evidence.source_sha256)
+    try:
+        dialog.table.selectRow(0)
+        dialog.show()
+        app.processEvents()
+        assert dialog.table.columnWidth(3) > dialog.table.fontMetrics().horizontalAdvance("Renamed Checking Account")
+        assert "posted" in dialog.lock_notice.text().lower()
+        assert not dialog.assign_rows_button.isEnabled()
+        assert not dialog.clear_rows_button.isEnabled()
+        if assignment == "file":
+            assert not dialog.file_button.isEnabled()
+            assert not dialog.clear_file_button.isEnabled()
+    finally:
+        dialog.close()
+        app.processEvents()

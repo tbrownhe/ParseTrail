@@ -49,6 +49,9 @@ class V2SourceAccountReview(QDialog):
         self.identities = QListWidget()
         self.identities.currentRowChanged.connect(self._update_controls)
         layout.addWidget(self.identities)
+        self.lock_notice = QLabel()
+        self.lock_notice.setWordWrap(True)
+        layout.addWidget(self.lock_notice)
         controls = QHBoxLayout()
         controls.addWidget(QLabel("Ledger account:"))
         self.account_combo = QComboBox()
@@ -78,6 +81,7 @@ class V2SourceAccountReview(QDialog):
             evidence = store.load_import(self.source_sha256).evidence
             self.bindings = store.source_account_bindings(self.source_sha256)
             accounts = store.financial_accounts()
+            posted_rows = store.journal_history_row_ids(self.source_sha256)
         catalog = self.workspace.catalog_cache.load_current()
         preferences = self.workspace.preferences()
         self.abbreviated_matching_button.blockSignals(True)
@@ -110,6 +114,7 @@ class V2SourceAccountReview(QDialog):
             else payload.rows
         )
         counts = Counter((row.source_account, row.source_account_form) for row in rows)
+        self.locked_keys = {(row.source_account, row.source_account_form) for row in rows if row.row_id in posted_rows}
         names = {account.id: account.name for account in accounts}
         self.account_combo.clear()
         self.account_combo.addItem("Choose a ledger account…", None)
@@ -128,10 +133,12 @@ class V2SourceAccountReview(QDialog):
                 assigned = f"Possible match: {names.get(match.suggestions[0], 'Unknown account')}"
             else:
                 assigned = "Unassigned"
+            locked = (binding.source_identity, binding.source_identity_form) in self.locked_keys
             item = QListWidgetItem(
                 f"{binding.source_identity} ({binding.source_identity_form}) · {count} row(s) · {assigned}"
+                + (" · Locked by posted entries" if locked else "")
             )
-            item.setToolTip(binding.source_identity)
+            item.setToolTip(item.text())
             self.identities.addItem(item)
             if (binding.source_identity, binding.source_identity_form) == prior:
                 self.identities.setCurrentItem(item)
@@ -154,8 +161,15 @@ class V2SourceAccountReview(QDialog):
     def _update_controls(self, *_args) -> None:
         index = self.identities.currentRow()
         selected = 0 <= index < len(self.bindings)
-        self.assign_button.setEnabled(selected and self.account_combo.currentData() is not None)
-        self.clear_button.setEnabled(selected and self.bindings[index].ledger_account_id is not None)
+        locked = selected and self._selected_key() in self.locked_keys
+        self.assign_button.setEnabled(selected and not locked and self.account_combo.currentData() is not None)
+        self.clear_button.setEnabled(selected and not locked and self.bindings[index].ledger_account_id is not None)
+        self.lock_notice.setText(
+            "This account assignment is locked because a row has posted journal history. "
+            "Review or correct the entry; its source account cannot be reassigned."
+            if locked
+            else ""
+        )
         self.abbreviated_matching_button.setVisible(
             selected
             and self.bindings[index].source_identity_form == "last_four"
@@ -183,7 +197,14 @@ class V2SourceAccountReview(QDialog):
                 action(store)
             self._reload()
         except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            QMessageBox.warning(self, "Account assignment was not saved", str(exc))
+            message = (
+                "This account assignment is locked because a row has posted journal history. "
+                "Review or correct the entry; its source account cannot be reassigned."
+                if str(exc) == "account_binding_has_journal_history"
+                else str(exc)
+            )
+            QMessageBox.warning(self, "Account assignment was not saved", message)
+            self._reload()
 
     def _assign(self) -> None:
         key = self._selected_key()

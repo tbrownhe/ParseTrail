@@ -196,3 +196,46 @@ def test_source_account_review_assigns_and_clears_without_posting(tmp_path: Path
     with V2ProfileStore.open(path, read_only=True) as store:
         assert store.load_import(evidence.source_sha256).evidence == evidence
         assert all(binding.ledger_account_id is None for binding in store.account_bindings(evidence.source_sha256))
+
+
+def test_source_account_review_explains_posted_assignment_lock(tmp_path: Path, monkeypatch) -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from parsetrail.gui.v2_source_account_review import V2SourceAccountReview
+    from PySide6.QtWidgets import QApplication, QMessageBox
+
+    app = QApplication.instance() or QApplication([])
+    path = tmp_path / "review.db"
+    evidence = build_source_evidence(CASH_SOURCE, CASH_DEFINITION, suffix=".csv")
+    row = evidence.payload.rows[0]
+    with V2ProfileStore.create(path) as store:
+        store.import_source(CASH_SOURCE, CASH_DEFINITION, evidence, suffix=".csv")
+        store.add_financial_account(FinancialAccount("checking-a", "Checking A", "asset", "synthetic"))
+        store.add_category_account("expense:food", "Food", "expense")
+        store.bind_source_account(evidence.source_sha256, row.source_account, row.source_account_form, "checking-a")
+    workspace = V2Workspace.open(path, tmp_path / "catalog", preferences_path=tmp_path / "preferences.json")
+    stale_dialog = V2SourceAccountReview(workspace, evidence.source_sha256)
+    assert stale_dialog.clear_button.isEnabled()
+    messages = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda _parent, _title, message: messages.append(message))
+    with V2ProfileStore.open(path) as store:
+        store.post_reviewed_cash_expense(row.row_id, "expense:food", reason="Reviewed coffee")
+        assert row.row_id in store.journal_history_row_ids(evidence.source_sha256)
+    stale_dialog.clear_button.click()
+    assert messages and "posted journal history" in messages[0]
+    assert "account_binding_has_journal_history" not in messages[0]
+    assert not stale_dialog.clear_button.isEnabled()
+    stale_dialog.close()
+    dialog = V2SourceAccountReview(workspace, evidence.source_sha256)
+    try:
+        selected = next(
+            index for index, binding in enumerate(dialog.bindings) if binding.source_identity == row.source_account
+        )
+        dialog.identities.setCurrentRow(selected)
+        dialog.account_combo.setCurrentIndex(1)
+        assert "Locked by posted entries" in dialog.identities.currentItem().text()
+        assert "posted journal history" in dialog.lock_notice.text()
+        assert not dialog.assign_button.isEnabled()
+        assert not dialog.clear_button.isEnabled()
+    finally:
+        dialog.close()
+        app.processEvents()
