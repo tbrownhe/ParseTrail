@@ -114,7 +114,7 @@ class FinancialAccount:
 class AccountBinding:
     row_id: str
     ledger_account_id: str | None
-    basis: Literal["row", "file", "source"] | None
+    basis: Literal["row", "file", "source", "automatic"] | None
 
 
 @dataclass(frozen=True)

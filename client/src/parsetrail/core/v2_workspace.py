@@ -5,9 +5,12 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from pathlib import Path
 
+from parsetrail.core.source_evidence import StatementPayload
+from parsetrail.core.v2_account_matching import LedgerAccountCandidate, match_verified_source_account
 from parsetrail.core.v2_catalog_admission import admit_pilot_definition
 from parsetrail.core.v2_data_catalog import CatalogCache, VerifiedCatalog, load_trusted_catalog_keys
-from parsetrail.core.v2_profile_store import MAX_SOURCE_BYTES, SavedImport, V2ProfileStore
+from parsetrail.core.v2_preferences import V2Preferences, default_preferences_path, load_preferences, save_preferences
+from parsetrail.core.v2_profile_store import MAX_SOURCE_BYTES, AccountBinding, SavedImport, V2ProfileStore
 from parsetrail.core.v2_source_import import ImportCancelled, SourceImportResult, import_catalog_source
 
 
@@ -50,8 +53,10 @@ class V2Workspace:
         catalog_cache_path: Path,
         *,
         trusted_keys: Mapping[str, bytes] | None = None,
+        preferences_path: Path | None = None,
     ):
         self.profile_path = profile_path.expanduser().resolve()
+        self.preferences_path = preferences_path or default_preferences_path()
         self.catalog_cache = CatalogCache(
             catalog_cache_path,
             trusted_keys if trusted_keys is not None else load_trusted_catalog_keys(),
@@ -65,8 +70,9 @@ class V2Workspace:
         catalog_cache_path: Path,
         *,
         trusted_keys: Mapping[str, bytes] | None = None,
+        preferences_path: Path | None = None,
     ) -> V2Workspace:
-        workspace = cls(profile_path, catalog_cache_path, trusted_keys=trusted_keys)
+        workspace = cls(profile_path, catalog_cache_path, trusted_keys=trusted_keys, preferences_path=preferences_path)
         with V2ProfileStore.create(workspace.profile_path):
             pass
         return workspace
@@ -78,8 +84,9 @@ class V2Workspace:
         catalog_cache_path: Path,
         *,
         trusted_keys: Mapping[str, bytes] | None = None,
+        preferences_path: Path | None = None,
     ) -> V2Workspace:
-        workspace = cls(profile_path, catalog_cache_path, trusted_keys=trusted_keys)
+        workspace = cls(profile_path, catalog_cache_path, trusted_keys=trusted_keys, preferences_path=preferences_path)
         with V2ProfileStore.open(workspace.profile_path, read_only=True):
             pass
         return workspace
@@ -91,6 +98,56 @@ class V2Workspace:
     def saved_import(self, source_sha256: str) -> SavedImport:
         with V2ProfileStore.open(self.profile_path, read_only=True) as store:
             return store.load_import(source_sha256)
+
+    def preferences(self) -> V2Preferences:
+        return load_preferences(self.preferences_path)
+
+    def set_allow_abbreviated_account_matching(self, enabled: bool) -> None:
+        if type(enabled) is not bool:
+            raise ValueError("invalid_abbreviated_matching_preference")
+        save_preferences(self.preferences_path, V2Preferences(enabled))
+
+    def account_bindings(self, source_sha256: str) -> tuple[AccountBinding, ...]:
+        """Resolve automatic suggestions at read time; explicit decisions win."""
+        catalog = self.catalog_cache.load_current()
+        preferences = self.preferences()
+        with V2ProfileStore.open(self.profile_path, read_only=True) as store:
+            saved = store.load_import(source_sha256)
+            bindings = store.account_bindings(source_sha256)
+            accounts = store.financial_accounts()
+        candidates = tuple(
+            LedgerAccountCandidate(account.id, account.institution_key, account.kind, account.full_account_number)
+            for account in accounts
+        )
+        payload = saved.evidence.payload
+        rows = (
+            tuple(row for account in payload.accounts for row in account.rows)
+            if isinstance(payload, StatementPayload)
+            else payload.rows
+        )
+        matches = {}
+        resolved = []
+        for row, binding in zip(rows, bindings, strict=True):
+            if binding.ledger_account_id is not None or row.source_account is None:
+                resolved.append(binding)
+                continue
+            key = (row.source_account, row.source_account_form)
+            if key not in matches:
+                matches[key] = match_verified_source_account(
+                    saved.evidence,
+                    row.source_account,
+                    row.source_account_form,
+                    catalog=catalog,
+                    candidates=candidates,
+                    preferences=preferences,
+                )
+            match = matches[key]
+            resolved.append(
+                AccountBinding(row.row_id, match.ledger_account_id, "automatic")
+                if match.status == "automatic"
+                else binding
+            )
+        return tuple(resolved)
 
     def install_catalog_release(self, release_dir: Path) -> VerifiedCatalog:
         """Install only a locally selected, authenticated catalog release."""

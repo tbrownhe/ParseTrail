@@ -18,6 +18,7 @@ from parsetrail.core.v2_data_catalog import (
     MAX_CATALOG_BYTES,
     MAX_DEFINITION_BYTES,
     MAX_DEFINITIONS,
+    CatalogAccountContext,
     VerifiedCatalog,
     key_id_for_public_key,
     load_trusted_catalog_keys,
@@ -25,6 +26,15 @@ from parsetrail.core.v2_data_catalog import (
 )
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _unique_pairs(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate_account_context_key")
+        result[key] = value
+    return result
 
 
 def load_offline_key(path: Path, passphrase: bytes) -> Ed25519PrivateKey:
@@ -68,6 +78,17 @@ def signed_catalog_bytes(
     paths = sorted(definitions_dir.glob("*definition.json"))
     if not 1 <= len(paths) <= MAX_DEFINITIONS:
         raise ValueError("definition_count")
+    context_path = definitions_dir / "account-contexts.json"
+    contexts = {}
+    if context_path.exists() or context_path.is_symlink():
+        if context_path.is_symlink() or not context_path.is_file() or not 0 < context_path.stat().st_size <= 16 * 1024:
+            raise ValueError("account_context_manifest_shape")
+        try:
+            contexts = json.loads(context_path.read_bytes(), object_pairs_hook=_unique_pairs)
+        except (UnicodeError, ValueError):
+            raise ValueError("account_context_manifest_shape") from None
+        if type(contexts) is not dict:
+            raise ValueError("account_context_manifest_shape")
     entries = []
     for path in paths:
         if path.is_symlink() or not path.is_file():
@@ -77,6 +98,11 @@ def signed_catalog_bytes(
         if not 0 < len(content) <= MAX_DEFINITION_BYTES:
             raise ValueError("definition_file_shape")
         identity = admit_pilot_definition(content)
+        context = (
+            CatalogAccountContext.model_validate(contexts[identity.parser_id]).model_dump()
+            if identity.parser_id in contexts
+            else None
+        )
         entries.append(
             {
                 "parser_id": identity.parser_id,
@@ -85,11 +111,14 @@ def signed_catalog_bytes(
                 "size": len(content),
                 "sha256": hashlib.sha256(content).hexdigest(),
                 "content_base64": base64.b64encode(content).decode("ascii"),
+                "account_context": context,
             }
         )
     entries.sort(key=lambda item: item["parser_id"])
     if len({item["parser_id"] for item in entries}) != len(entries):
         raise ValueError("duplicate_parser_id")
+    if set(contexts) - {item["parser_id"] for item in entries}:
+        raise ValueError("unknown_account_context_parser")
     public = private_key.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
     key_id = key_id_for_public_key(public)
     snapshot = json.dumps(

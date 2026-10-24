@@ -293,7 +293,11 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   zero-activity statements keep zero rows only with matching printed balances.
   Temporary V2 storage reopened all 135 sources, 1,740 rows and 547 located
   dispositions with unchanged hashes. Complete monetary-line dispositions
-  and page capture remain open.
+  and page capture remain open. A read-only scan of the 133 successful-archive
+  PDFs counted 2,476 money-bearing text lines outside activity, printed balance,
+  and disposition locations; most frequent forms include statement summaries,
+  APR tables, and payment notices. Classify source locations before claiming
+  complete monetary capture; do not infer transaction postings from this count.
   Middle Citi now uses a generic declaration-driven header-anchor table worker.
   All eight routed archive PDFs matched the accepted reader on account,
   period, printed balances and 323 rows. The 1,311 raw table rows divide into
@@ -444,8 +448,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
 - [ ] **V2-3a–c — Import integration:** common replay/ongoing ingestion, bounded export
   evidence policy, then main-window import/cancellation/archive recovery and Windows
   acceptance. Keep each service/UI chunk separately testable. The global
-  abbreviated-account matching setting defaults off; the 2.0 review flow must
-  suggest a unique suffix match and offer to enable it inline. Consolidate the
+  abbreviated-account matching setting defaults off; the 2.0 review now uses
+  exact signed-catalog institution/class context, suggests a unique suffix
+  match, and offers to enable the preference inline. Owner native GUI acceptance
+  remains open. Consolidate the
   temporary V2 source store with the user-database service before activation.
   The first isolated import service now skips parsing on exact-source retry,
   retains revised bytes as a second pending snapshot, and leaves no source or

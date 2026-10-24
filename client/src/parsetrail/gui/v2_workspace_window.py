@@ -8,6 +8,7 @@ from threading import Event
 from uuid import uuid4
 
 from PySide6.QtCore import Qt, QThread, QTimer
+from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -105,6 +106,14 @@ class V2WorkspaceWindow(QMainWindow):
         self._close_after_import = False
         self.setWindowTitle("ParseTrail 2.0 workspace")
         self.resize(850, 560)
+        settings_menu = self.menuBar().addMenu("Settings")
+        self.abbreviated_matching_action = QAction(
+            "Allow abbreviated account numbers to automatically match to ledger", self
+        )
+        self.abbreviated_matching_action.setCheckable(True)
+        self.abbreviated_matching_action.setChecked(workspace.preferences().allow_abbreviated_account_matching)
+        self.abbreviated_matching_action.toggled.connect(self._set_abbreviated_matching)
+        settings_menu.addAction(self.abbreviated_matching_action)
         central = QWidget()
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
@@ -284,8 +293,17 @@ class V2WorkspaceWindow(QMainWindow):
     def _review_source_account(self) -> None:
         source_id = self._selected_source()
         if source_id is not None:
-            V2SourceAccountReview(self.workspace.profile_path, source_id, self).exec()
+            V2SourceAccountReview(self.workspace, source_id, self).exec()
             self.refresh(select_source=source_id)
+
+    def _set_abbreviated_matching(self, enabled: bool) -> None:
+        try:
+            self.workspace.set_allow_abbreviated_account_matching(enabled)
+        except (OSError, ValueError) as exc:
+            self.abbreviated_matching_action.blockSignals(True)
+            self.abbreviated_matching_action.setChecked(not enabled)
+            self.abbreviated_matching_action.blockSignals(False)
+            QMessageBox.warning(self, "Preference was not saved", str(exc))
 
     def _add_account(self) -> None:
         dialog = V2FinancialAccountDialog(self)

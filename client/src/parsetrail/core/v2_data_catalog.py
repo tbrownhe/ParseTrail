@@ -39,6 +39,15 @@ class CatalogCancelled(CatalogError):
     """Activation stopped before changing the current catalog pointer."""
 
 
+class CatalogAccountContext(BaseModel):
+    """Signed institution and ledger class for an unambiguous parser family."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    institution_key: str = Field(pattern=IDENTIFIER)
+    kind: Literal["asset", "liability"]
+
+
 class CatalogDefinition(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
@@ -48,6 +57,7 @@ class CatalogDefinition(BaseModel):
     size: int = Field(gt=0, le=MAX_DEFINITION_BYTES)
     sha256: str = Field(pattern=SHA256)
     content_base64: str = Field(min_length=1, max_length=MAX_DEFINITION_BYTES * 2)
+    account_context: CatalogAccountContext | None = None
 
 
 class CatalogEnvelope(BaseModel):
@@ -80,6 +90,7 @@ class VerifiedDefinition:
     identity: DefinitionIdentity
     content: bytes
     sha256: str
+    account_context: CatalogAccountContext | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -146,7 +157,7 @@ def verify_catalog(
             entry.parser_id, entry.revision, entry.suffix
         ):
             raise CatalogError("definition_identity_mismatch")
-        verified.append(VerifiedDefinition(identity, content, entry.sha256))
+        verified.append(VerifiedDefinition(identity, content, entry.sha256, entry.account_context))
     return VerifiedCatalog(
         envelope.release_sequence,
         envelope.source_revision,

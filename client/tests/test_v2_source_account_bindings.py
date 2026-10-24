@@ -9,6 +9,7 @@ import pytest
 from parsetrail.core.v2_profile_store import FinancialAccount, ProfileFormatError, V2ProfileStore
 from parsetrail.core.v2_source_pipeline import build_source_evidence
 from parsetrail.core.v2_synchrony_source_output import from_synchrony_table
+from parsetrail.core.v2_workspace import V2Workspace
 
 from devtools.parser_engine_pilot.test_synchrony_source_output import DEFINITION as CARD_DEFINITION
 from devtools.parser_engine_pilot.test_synchrony_source_output import SOURCE as CARD_SOURCE
@@ -92,7 +93,8 @@ def test_source_account_review_assigns_and_clears_without_posting(tmp_path: Path
     with V2ProfileStore.create(path) as store:
         store.import_source(CASH_SOURCE, CASH_DEFINITION, evidence, suffix=".csv")
         store.add_financial_account(FinancialAccount("checking-a", "Checking A", "asset", "synthetic"))
-    dialog = V2SourceAccountReview(path, evidence.source_sha256)
+    workspace = V2Workspace.open(path, tmp_path / "catalog", preferences_path=tmp_path / "preferences.json")
+    dialog = V2SourceAccountReview(workspace, evidence.source_sha256)
     try:
         assert dialog.identities.count() == 2
         assert "2 of 2" in dialog.status.text()

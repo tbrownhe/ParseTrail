@@ -34,7 +34,10 @@ def _workspace(tmp_path: Path) -> V2Workspace:
     (definitions / "cash-definition.json").write_bytes(DEFINITION)
     snapshot, signature, _ = signed_catalog_bytes(definitions, private, release_sequence=1, source_revision="a" * 40)
     workspace = V2Workspace.create(
-        tmp_path / "fresh.db", tmp_path / "catalog", trusted_keys={key_id_for_public_key(public): public}
+        tmp_path / "fresh.db",
+        tmp_path / "catalog",
+        trusted_keys={key_id_for_public_key(public): public},
+        preferences_path=tmp_path / "preferences.json",
     )
     workspace.catalog_cache.activate(snapshot, signature)
     return workspace
@@ -147,7 +150,10 @@ def test_window_installs_local_signed_catalog_before_enabling_import(tmp_path: P
     (release / "catalog.json").write_bytes(snapshot)
     (release / "catalog.sig").write_bytes(signature)
     workspace = V2Workspace.create(
-        tmp_path / "fresh.db", tmp_path / "catalog", trusted_keys={key_id_for_public_key(public): public}
+        tmp_path / "fresh.db",
+        tmp_path / "catalog",
+        trusted_keys={key_id_for_public_key(public): public},
+        preferences_path=tmp_path / "preferences.json",
     )
     monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *_args: str(release))
     window = V2WorkspaceWindow(workspace)

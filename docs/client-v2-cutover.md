@@ -297,10 +297,10 @@ Source evidence and financial accounts remain unchanged; these decisions do not
 post entries. The fresh pre-release profile schema is revision 4. The shell now
 offers separate review buttons for printed identities and unidentified rows.
 Offscreen tests pass; the owner accepted the printed-identity dialog on native
-Windows on October 24, 2026. Automatic suffix matching remains pending because the current evidence
-does not yet carry trustworthy source institution and financial-account class
-for the matching policy. The 2.0 global preference must become operational
-before exposing that switch in the 2.0 shell.
+Windows on October 24, 2026. Signed catalog entries now supply institution and
+account class for unambiguous parser families. The 2.0 global preference and
+inline option are implemented; native acceptance of this new interaction is
+pending.
 
 For a native review without live data, launch the disposable synthetic demo from
 the repository root in PowerShell:
@@ -310,9 +310,11 @@ $env:PYTHONPATH='.;client/src;client'
 & .\client\.venv\Scripts\python.exe -m devtools.parser_engine_pilot.open_v2_workspace --demo
 ```
 
-The demo signs a temporary two-definition catalog with a generated key, creates
-a temporary profile, and imports a six-row accountless export plus a one-row
-identified cash export. Its status line gives the path of a third synthetic file
+The demo signs a temporary three-definition catalog with a generated key,
+creates a temporary profile, and saves a synthetic last-four card statement,
+a six-row accountless export, and a one-row identified cash export. Select the
+first source and open Review source accounts to inspect the inline preference.
+Its status line gives the path of another synthetic file
 for testing Import source and a second test-signed release folder for testing
 Install signed catalog. Closing the window removes the temporary workspace.
 The real `--v2` entry requires `--profile` and `--catalog-cache`; it opens an
@@ -330,12 +332,27 @@ An explicit reparse comparison can read the saved source and test a candidate
 definition without replacing the original evidence snapshot or decisions. A
 changed definition revision changes the candidate output while the stored
 snapshot survives reopening unchanged.
-The global abbreviated-account matching preference now defaults off and appears
-under File > Preferences. A unique same-institution, same-class suffix match can
-bind automatically only when enabled; ambiguity always requires review. The
-2.0 account review UI must show the candidate and an inline option to enable
-this preference while it is off. Source and ledger persistence will converge
-into one user-database service before activation.
+The 2.0 global abbreviated-account matching preference defaults off in its own
+application settings file and appears under Settings in the 2.0 menu bar. A
+signed catalog entry may declare an unambiguous institution and ledger class.
+The 2.0 read model then resolves a unique full-number match automatically, or
+a unique last-four match when the preference is enabled. Missing signed context,
+an unknown identity, a different account class, or multiple eligible accounts
+stay in review. Explicit user assignments take precedence. The source-account
+review shows a unique suffix candidate and offers to enable the preference
+inline. These matches are computed from the verified current catalog and saved
+evidence, without posting ledger entries. If that catalog is unavailable or no
+longer contains the exact definition hash, automatic matching stops until a
+matching signed catalog is installed. Source and ledger persistence will
+converge into one user-database service before activation.
+
+A read-only scan of 133 older Citi PDFs found 4,552 text lines containing money
+tokens; 2,076 were covered by current activity, printed balance, or disposition
+locations, leaving 2,476 outside those sets. Frequent uncovered forms include
+minimum payment notices, annual fee/interest summaries, APR tables, and page
+text mixed with amounts. This is a location-coverage finding, not a count of
+missing transactions or an accounting classification. Older Citi full-page
+capture remains open before 2.0 release acceptance.
 
 ## Current stop/go decision
 

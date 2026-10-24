@@ -635,6 +635,11 @@ finite operation schema. The test signs one local snapshot containing all 23
 definitions and verifies it through the 2.0 catalog client. This proves the
 current declarations fit the signed format, including Citi's `pilot-2` revision;
 it is not a production signing key, source router, or installed engine.
+The local release builder also reads `account-contexts.json` beside the
+definitions and signs each declared institution and account class into its
+catalog entry. A parser without that context cannot automatically match a
+source identity to a ledger account. Context is not taken from file names or
+unsigned metadata.
 
 The shared bounded worker now polls a cancellation callback while decoding and
 terminates its child on cancellation. The source pipeline passes that callback
