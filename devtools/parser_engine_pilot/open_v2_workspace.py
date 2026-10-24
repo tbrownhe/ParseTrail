@@ -43,7 +43,18 @@ def main(argv: list[str] | None = None) -> int:
         workspace = V2Workspace.create(
             root / "demo.db", root / "catalog", trusted_keys={key_id_for_public_key(public): public}
         )
-        workspace.catalog_cache.activate(snapshot, signature)
+        first_release = root / "signed-release-1"
+        first_release.mkdir()
+        (first_release / "catalog.json").write_bytes(snapshot)
+        (first_release / "catalog.sig").write_bytes(signature)
+        workspace.install_catalog_release(first_release)
+        next_snapshot, next_signature, _next_verified = signed_catalog_bytes(
+            definitions, private, release_sequence=2, source_revision="a" * 40
+        )
+        next_release = root / "signed-release-2"
+        next_release.mkdir()
+        (next_release / "catalog.json").write_bytes(next_snapshot)
+        (next_release / "catalog.sig").write_bytes(next_signature)
         mohela_path = root / "mohela.csv"
         mohela_path.write_bytes(MOHELA_SOURCE)
         cash_path = root / "cash.csv"
@@ -57,7 +68,8 @@ def main(argv: list[str] | None = None) -> int:
             store.add_financial_account(FinancialAccount("loan-b", "Loan B", "liability", "mohela"))
             store.add_financial_account(FinancialAccount("checking-a", "Checking A", "asset", "synthetic"))
         window = V2WorkspaceWindow(workspace)
-        window.status.setText(f"Disposable demo. To try Import source, choose {more_path}")
+        window.status.setWordWrap(True)
+        window.status.setText(f"Disposable demo. Import source: {more_path}\nInstall signed catalog: {next_release}")
         window.show()
         return app.exec()
 

@@ -364,7 +364,13 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   repository, then verifies and writes the pair to a new directory. The release
   command now requires the encrypted key to match a public key in the shipped
   plugin trust store; catalog IDs keep a separate signing domain. Installed
-  offline acceptance and server publication remain open.
+  offline acceptance and server publication remain open. The isolated 2.0
+  workspace can now install a locally selected signed release pair. Exact
+  signature/definition validation, same-release retry and rollback refusal run
+  before updating the active catalog; tampered input leaves the current release
+  available. The window exposes this as Install signed catalog, and keeps
+  source import disabled until verification succeeds. A production-signed
+  starter pair and owner native UI acceptance remain open.
   One strict local admission callback now validates all 23 checked-in pilot
   definitions (22 current parser families, including both MOHELA export formats)
   inside a test-signed snapshot. An explicitly selected verified definition can
@@ -408,7 +414,7 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   reopen, catalog import and fresh-profile reopen. A rebuilt windowed Windows
   x64 probe passed this and all six worker pipes; it is not an installed release
   or owner GUI acceptance.
-  Ordinary desktop import and native Intel Mac acceptance remain open.
+  Daily-workflow desktop import and native Intel Mac acceptance remain open.
 - [ ] **P2-S — Declaration catalog server:** after accepted client work is merged,
   use a short-lived server branch for the reviewed snapshot API/storage/publication
   contract. A table may hold JSON definitions; clients consume immutable signed
@@ -436,8 +442,8 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   opens an explicit fresh profile and verified catalog cache, lists saved
   sources, imports CSV/PDF in a cancellable thread, previews evidence, creates
   financial accounts and opens accountless-export review. It does not post
-  entries or initialize 1.x settings. Offscreen interaction tests pass; owner
-  native Windows acceptance remains open. This shell is a pilot, not the final
+  entries or initialize 1.x settings. Offscreen interaction tests pass; the
+  owner accepted this shell on native Windows. It is a pilot, not the final
   profile picker or daily ledger workflow.
   The fresh profile now stores user-authored financial accounts and explicit
   accountless-export bindings alongside immutable source evidence. A whole-file
@@ -455,7 +461,7 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   on October 23, 2026. A further slice stores reversible, explicit bindings
   for source-identified statement and export accounts, and offers separate
   review for printed identities and accountless rows. Offscreen tests pass;
-  owner native acceptance for the new review dialog remains open. Automatic
+  the owner accepted the native review dialog on October 24, 2026. Automatic
   suffix matching still needs trustworthy source institution/account-class
   metadata and an operational 2.0 global preference. Ledger integration remains open.
 - [ ] **V2-4a–b — Daily review:** create/edit accounts, categories and budgets; connect

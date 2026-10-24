@@ -6,7 +6,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 
 from parsetrail.core.v2_catalog_admission import admit_pilot_definition
-from parsetrail.core.v2_data_catalog import CatalogCache, load_trusted_catalog_keys
+from parsetrail.core.v2_data_catalog import CatalogCache, VerifiedCatalog, load_trusted_catalog_keys
 from parsetrail.core.v2_profile_store import MAX_SOURCE_BYTES, SavedImport, V2ProfileStore
 from parsetrail.core.v2_source_import import ImportCancelled, SourceImportResult, import_catalog_source
 
@@ -91,6 +91,10 @@ class V2Workspace:
     def saved_import(self, source_sha256: str) -> SavedImport:
         with V2ProfileStore.open(self.profile_path, read_only=True) as store:
             return store.load_import(source_sha256)
+
+    def install_catalog_release(self, release_dir: Path) -> VerifiedCatalog:
+        """Install only a locally selected, authenticated catalog release."""
+        return self.catalog_cache.activate_directory(release_dir)
 
     def import_file(
         self,

@@ -241,7 +241,13 @@ its public half against the shipped trust store. A shared
 [public trust loader](../client/src/parsetrail/core/release_trust.py) lets 2.0
 verify that key without importing the 1.x plugin manifest module. An actual
 production-signed starter catalog, installed offline acceptance and server
-publication remain open.
+publication remain open. The separate 2.0 workspace now installs a locally
+selected signed release pair into its verified cache. It refuses tampering,
+untrusted signatures, conflicting same-sequence releases and rollback before
+changing the active pointer. The desktop offers Install signed catalog and
+keeps source import unavailable when no verified release is active. Synthetic
+service and offscreen UI tests pass; owner native acceptance and an actual
+production-signed starter pair are still required.
 
 The finite parser operations, bounded adapters and source pipeline now live in
 the client package. Verified-catalog import uses that installed pipeline by
@@ -269,8 +275,8 @@ allows row assignment when an export mixes identified and unidentified rows.
 Source evidence and financial accounts remain unchanged; these decisions do not
 post entries. The fresh pre-release profile schema is revision 4. The shell now
 offers separate review buttons for printed identities and unidentified rows.
-Offscreen tests pass; owner native acceptance for the printed-identity dialog
-is open. Automatic suffix matching remains pending because the current evidence
+Offscreen tests pass; the owner accepted the printed-identity dialog on native
+Windows on October 24, 2026. Automatic suffix matching remains pending because the current evidence
 does not yet carry trustworthy source institution and financial-account class
 for the matching policy. The 2.0 global preference must become operational
 before exposing that switch in the 2.0 shell.
@@ -285,8 +291,9 @@ $env:PYTHONPATH='.;client/src;client'
 
 The demo signs a temporary two-definition catalog with a generated key, creates
 a temporary profile, and imports a six-row accountless export plus a one-row
-identified cash export. Its status line gives the path of a third synthetic file for testing
-the Import source button. Closing the window removes the temporary workspace.
+identified cash export. Its status line gives the path of a third synthetic file
+for testing Import source and a second test-signed release folder for testing
+Install signed catalog. Closing the window removes the temporary workspace.
 The real `--v2` entry requires `--profile` and `--catalog-cache`; it opens an
 existing 2.x profile unless `--create-profile` is explicitly supplied. It will
 not import until that cache contains a verified catalog.

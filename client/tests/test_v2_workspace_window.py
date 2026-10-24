@@ -129,6 +129,39 @@ def test_window_cancel_reaches_worker_and_saves_nothing(tmp_path: Path, monkeypa
         app.processEvents()
 
 
+def test_window_installs_local_signed_catalog_before_enabling_import(tmp_path: Path, monkeypatch) -> None:
+    app = _app()
+    from parsetrail.gui.v2_workspace_window import V2WorkspaceWindow
+    from PySide6.QtWidgets import QFileDialog
+
+    private = Ed25519PrivateKey.generate()
+    public = private.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    definitions = tmp_path / "definitions"
+    definitions.mkdir()
+    (definitions / "cash-definition.json").write_bytes(DEFINITION)
+    snapshot, signature, _verified = signed_catalog_bytes(
+        definitions, private, release_sequence=1, source_revision="a" * 40
+    )
+    release = tmp_path / "release"
+    release.mkdir()
+    (release / "catalog.json").write_bytes(snapshot)
+    (release / "catalog.sig").write_bytes(signature)
+    workspace = V2Workspace.create(
+        tmp_path / "fresh.db", tmp_path / "catalog", trusted_keys={key_id_for_public_key(public): public}
+    )
+    monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *_args: str(release))
+    window = V2WorkspaceWindow(workspace)
+    try:
+        assert not window.import_button.isEnabled()
+        assert "No verified catalog" in window.catalog_label.text()
+        window.install_catalog_button.click()
+        assert window.import_button.isEnabled()
+        assert "Verified catalog release 1" in window.catalog_label.text()
+    finally:
+        window.close()
+        app.processEvents()
+
+
 def test_v2_argument_dispatch_precedes_legacy_profile(monkeypatch) -> None:
     from parsetrail import main
 

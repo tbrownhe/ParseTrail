@@ -209,6 +209,15 @@ class CatalogCache:
             raise CatalogError("catalog_pointer")
         return verified
 
+    def activate_directory(self, release_dir: Path) -> VerifiedCatalog:
+        """Activate a local signed release pair through the normal trust boundary."""
+        release_dir = release_dir.expanduser()
+        if release_dir.is_symlink() or not release_dir.is_dir():
+            raise CatalogError("catalog_release_directory")
+        snapshot = _read_limited(release_dir / "catalog.json", MAX_CATALOG_BYTES)
+        signature = _read_limited(release_dir / "catalog.sig", SIGNATURE_BYTES)
+        return self.activate(snapshot, signature)
+
     def activate(
         self,
         snapshot: bytes,

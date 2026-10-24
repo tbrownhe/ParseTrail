@@ -111,8 +111,15 @@ class V2WorkspaceWindow(QMainWindow):
         self.profile_label = QLabel(f"Profile: {workspace.profile_path}")
         self.profile_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         layout.addWidget(self.profile_label)
+        catalog_controls = QHBoxLayout()
         self.catalog_label = QLabel()
-        layout.addWidget(self.catalog_label)
+        catalog_controls.addWidget(self.catalog_label)
+        self.install_catalog_button = QPushButton("Install signed catalog…")
+        self.install_catalog_button.setToolTip("Choose a folder containing catalog.json and catalog.sig")
+        self.install_catalog_button.clicked.connect(self._choose_catalog_release)
+        catalog_controls.addWidget(self.install_catalog_button)
+        catalog_controls.addStretch()
+        layout.addLayout(catalog_controls)
         layout.addWidget(QLabel("Saved source evidence (pending review; no ledger entries posted)"))
         self.sources = QListWidget()
         self.sources.currentItemChanged.connect(self._update_controls)
@@ -150,7 +157,7 @@ class V2WorkspaceWindow(QMainWindow):
         self.catalog_label.setText(
             f"Verified catalog release {catalog.release_sequence}"
             if catalog is not None
-            else "No verified catalog installed. Import is unavailable."
+            else "No verified catalog installed. Choose Install signed catalog to enable import."
         )
         self.import_button.setEnabled(catalog is not None and self.import_worker is None)
         prior = select_source or self._selected_source()
@@ -207,6 +214,18 @@ class V2WorkspaceWindow(QMainWindow):
         )
         if source:
             self.start_import(Path(source))
+
+    def _choose_catalog_release(self) -> None:
+        directory = QFileDialog.getExistingDirectory(self, "Select a signed catalog release folder")
+        if not directory:
+            return
+        try:
+            release = self.workspace.install_catalog_release(Path(directory))
+        except (ValueError, OSError) as exc:
+            QMessageBox.warning(self, "Catalog was not installed", str(exc))
+            return
+        self.refresh()
+        self.status.setText(f"Verified catalog release {release.release_sequence} installed.")
 
     def start_import(self, source_path: Path) -> None:
         if self.import_worker is not None:

@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from parsetrail.core.v2_data_catalog import key_id_for_public_key
+from parsetrail.core.v2_data_catalog import MAX_CATALOG_BYTES, CatalogError, CatalogRollbackError, key_id_for_public_key
 from parsetrail.core.v2_profile_store import MAX_SOURCE_BYTES, ProfileFormatError
 from parsetrail.core.v2_source_import import ImportCancelled
 from parsetrail.core.v2_workspace import V2Workspace, WorkspaceError
@@ -91,3 +91,63 @@ def test_non_v2_profile_is_rejected_before_import(tmp_path: Path) -> None:
     with pytest.raises(ProfileFormatError):
         V2Workspace.open(profile, tmp_path / "catalog", trusted_keys={})
     assert profile.read_bytes() == before
+
+
+def test_local_signed_catalog_install_is_idempotent_and_refuses_rollback(tmp_path: Path) -> None:
+    private = Ed25519PrivateKey.generate()
+    public = private.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    definitions = tmp_path / "definitions"
+    definitions.mkdir()
+    (definitions / "cash-definition.json").write_bytes(DEFINITION)
+    workspace = V2Workspace.create(
+        tmp_path / "fresh.db", tmp_path / "cache", trusted_keys={key_id_for_public_key(public): public}
+    )
+
+    def release(sequence: int) -> Path:
+        snapshot, signature, _verified = signed_catalog_bytes(
+            definitions, private, release_sequence=sequence, source_revision="a" * 40
+        )
+        directory = tmp_path / f"release-{sequence}"
+        directory.mkdir()
+        (directory / "catalog.json").write_bytes(snapshot)
+        (directory / "catalog.sig").write_bytes(signature)
+        return directory
+
+    first, second = release(1), release(2)
+    assert workspace.install_catalog_release(first).release_sequence == 1
+    assert workspace.install_catalog_release(first).release_sequence == 1
+    assert workspace.install_catalog_release(second).release_sequence == 2
+    with pytest.raises(CatalogRollbackError, match="catalog_rollback"):
+        workspace.install_catalog_release(first)
+    assert workspace.catalog_cache.load_current().release_sequence == 2
+    source = tmp_path / "cash.csv"
+    source.write_bytes(SOURCE)
+    assert workspace.import_file(source).status == "imported"
+
+
+def test_local_catalog_refusal_does_not_replace_current_release(tmp_path: Path) -> None:
+    private = Ed25519PrivateKey.generate()
+    public = private.public_key().public_bytes(serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    definitions = tmp_path / "definitions"
+    definitions.mkdir()
+    (definitions / "cash-definition.json").write_bytes(DEFINITION)
+    workspace = V2Workspace.create(
+        tmp_path / "fresh.db", tmp_path / "cache", trusted_keys={key_id_for_public_key(public): public}
+    )
+    release = tmp_path / "release"
+    release.mkdir()
+    snapshot, signature, _verified = signed_catalog_bytes(
+        definitions, private, release_sequence=1, source_revision="a" * 40
+    )
+    (release / "catalog.json").write_bytes(snapshot)
+    (release / "catalog.sig").write_bytes(signature)
+    workspace.install_catalog_release(release)
+    (release / "catalog.sig").write_bytes(b"\x00" * len(signature))
+    with pytest.raises(CatalogError, match="invalid_signature"):
+        workspace.install_catalog_release(release)
+    (release / "catalog.json").write_bytes(b"x" * (MAX_CATALOG_BYTES + 1))
+    with pytest.raises(CatalogError, match="catalog_cache_shape"):
+        workspace.install_catalog_release(release)
+    with pytest.raises(CatalogError, match="catalog_release_directory"):
+        workspace.install_catalog_release(tmp_path / "missing")
+    assert workspace.catalog_cache.load_current().snapshot == snapshot
