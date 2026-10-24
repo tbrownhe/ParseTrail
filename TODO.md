@@ -557,13 +557,19 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   this tab and confirmed that setting Travel's target made the monthly total
   appear. A new Income tab uses the same reviewed-category journal query in
   the natural income direction, nets category corrections, and exposes the
-  same source coverage limits. Offscreen checks pass; native Windows
-  acceptance of the Income report remains open.
+  same source coverage limits. Offscreen checks pass; the owner accepted the
+  Income report on native Windows.
   Inventory every legacy menu action; approve concrete deferrals rather than
   silently removing functionality. Owner Windows gate.
 - [ ] **V2-6a–b — Profile selection:** backup/restore the new profile and make
   1.x/2.x profile selection explicit. No old-database activation or rebuild
-  assistant. Owner Windows reopen/fallback rehearsal is required.
+  assistant. A preliminary 2.0 Profile menu now opens only verified `.db`
+  profiles, makes a verified SQLite backup of the active profile, and restores
+  a backup to a new `.db` before switching. Existing destinations, 1.x and
+  corrupt sources are refused without changing the active profile. Source
+  evidence is embedded in the snapshot; the separate signed catalog cache and
+  global preferences are not. Disposable-profile offscreen checks pass. Owner
+  Windows backup/restore and failed-switch rehearsal remains open.
 - [ ] **V2-7 — Release:** remove obsolete runtime paths after integration, set the major
   version when ready, then packaged Windows/targeted Intel acceptance and a separately
   approved publication. Include the P2 declaration-catalog release gate; installer

@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import sqlite3
+import tempfile
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -477,6 +479,44 @@ class V2ProfileStore:
                 raise
         except sqlite3.DatabaseError:
             raise ProfileFormatError("profile_integrity") from None
+
+    @classmethod
+    def snapshot_to(cls, source_path: Path, destination_path: Path) -> Path:
+        """Publish a verified SQLite snapshot at a new path without overwriting files."""
+        requested = destination_path.expanduser()
+        if requested.is_symlink():
+            raise ProfileFormatError("profile_destination_exists")
+        destination = requested.resolve()
+        if destination.exists():
+            raise ProfileFormatError("profile_destination_exists")
+        if not destination.parent.is_dir():
+            raise ProfileFormatError("profile_destination_parent_missing")
+        with cls.open(source_path, read_only=True) as source:
+            descriptor, partial_name = tempfile.mkstemp(
+                prefix=f".{destination.name}.", suffix=".partial", dir=destination.parent
+            )
+            os.close(descriptor)
+            partial = Path(partial_name)
+            try:
+                target = sqlite3.connect(partial)
+                try:
+                    source.connection.backup(target)
+                finally:
+                    target.close()
+                with cls.open(partial, read_only=True) as verified:
+                    if verified.connection.execute("PRAGMA integrity_check").fetchone() != ("ok",):
+                        raise ProfileFormatError("profile_snapshot_integrity")
+                    for source_id in verified.source_ids():
+                        verified.load_import(source_id)
+                    for (payload,) in verified.connection.execute("SELECT payload FROM JournalEntries"):
+                        _decode_journal(payload)
+                try:
+                    os.link(partial, destination)
+                except FileExistsError:
+                    raise ProfileFormatError("profile_destination_exists") from None
+                return destination
+            finally:
+                partial.unlink(missing_ok=True)
 
     def __enter__(self) -> V2ProfileStore:
         return self

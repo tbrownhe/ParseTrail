@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sqlite3
 import sys
 from pathlib import Path
 from threading import Event
@@ -115,6 +116,56 @@ def test_window_imports_pending_evidence_and_reuses_exact_source(tmp_path: Path,
         window.close()
         app.processEvents()
     assert len(workspace.source_ids()) == 1
+
+
+def test_profile_menu_backs_up_restores_and_keeps_failed_selection_on_current_profile(
+    tmp_path: Path, monkeypatch
+) -> None:
+    app = _app()
+    from parsetrail.gui.v2_workspace_window import V2WorkspaceWindow
+    from PySide6.QtWidgets import QFileDialog, QMessageBox
+
+    workspace = _workspace(tmp_path)
+    with V2ProfileStore.open(workspace.profile_path) as store:
+        store.add_category_account("expense:food", "Food", "expense")
+    backup = tmp_path / "saved.dbb"
+    restored = tmp_path / "restored.db"
+    legacy = tmp_path / "legacy.db"
+    with sqlite3.connect(legacy) as connection:
+        connection.execute("CREATE TABLE Sentinel(value TEXT)")
+    saved_paths = iter(((str(backup), ""), (str(restored), "")))
+    open_paths = iter(((str(backup), ""), (str(backup), ""), (str(workspace.profile_path), ""), (str(legacy), "")))
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *_args, **_kwargs: next(saved_paths))
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *_args, **_kwargs: next(open_paths))
+    notices = []
+    warnings = []
+    monkeypatch.setattr(QMessageBox, "information", lambda _parent, _title, message: notices.append(message))
+    monkeypatch.setattr(QMessageBox, "warning", lambda _parent, _title, message: warnings.append(message))
+    window = V2WorkspaceWindow(workspace)
+    try:
+        window.backup_profile_action.trigger()
+        assert backup.is_file()
+        assert "not encrypted" in notices[0]
+        with V2ProfileStore.open(workspace.profile_path) as store:
+            store.rename_category_account("expense:food", "Changed")
+        window.restore_profile_action.trigger()
+        assert window.workspace.profile_path == restored.resolve()
+        assert str(restored.resolve()) in window.profile_label.text()
+        with V2ProfileStore.open(restored, read_only=True) as store:
+            assert store.category_accounts()[0].name == "Food"
+        with V2ProfileStore.open(workspace.profile_path, read_only=True) as store:
+            assert store.category_accounts()[0].name == "Changed"
+        window.open_profile_action.trigger()
+        assert window.workspace.profile_path == restored.resolve()
+        assert "Restore .dbb backups first" in warnings[-1]
+        window.open_profile_action.trigger()
+        assert window.workspace.profile_path == workspace.profile_path
+        window.open_profile_action.trigger()
+        assert window.workspace.profile_path == workspace.profile_path
+        assert warnings and "unsupported_profile_format" in warnings[-1]
+    finally:
+        window.close()
+        app.processEvents()
 
 
 def test_window_cancel_reaches_worker_and_saves_nothing(tmp_path: Path, monkeypatch) -> None:

@@ -436,8 +436,18 @@ appearing after Travel received a target. A new Income tab reads reviewed
 income-category journal postings in their natural direction, nets corrections,
 and displays the same incomplete-source scope. It excludes unreviewed entries
 and does not claim all deposits or certified cash flow. Offscreen checks pass;
-native Windows acceptance of this tab remains open. Cash-flow classification
+the owner accepted this tab on native Windows. Cash-flow classification
 and export cutover remain V2-5 work.
+
+The 2.0 Profile menu now has a preliminary fresh-profile backup, restore and
+open workflow. One store snapshot operation uses SQLite's online backup API,
+verifies the resulting 2.0 database and saved source evidence, and publishes
+only at a new path. Restore creates a new `.db` and switches after it passes
+verification; choosing a 1.x or damaged profile leaves the active profile in
+place. The snapshot contains the embedded source evidence, authored accounts,
+budgets and reviewed journal. The separately installed signed catalog cache and
+global preferences are outside the database snapshot. Offscreen checks pass;
+native Windows backup/restore and failed-switch acceptance remains open.
 
 ## Current stop/go decision
 

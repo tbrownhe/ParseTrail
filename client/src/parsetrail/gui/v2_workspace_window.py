@@ -120,6 +120,13 @@ class V2WorkspaceWindow(QMainWindow):
         self._close_after_import = False
         self.setWindowTitle("ParseTrail 2.0 workspace")
         self.resize(1050, 560)
+        profile_menu = self.menuBar().addMenu("Profile")
+        self.open_profile_action = profile_menu.addAction("Open 2.0 profile…")
+        self.open_profile_action.triggered.connect(self._choose_profile)
+        self.backup_profile_action = profile_menu.addAction("Back up current profile…")
+        self.backup_profile_action.triggered.connect(self._backup_profile)
+        self.restore_profile_action = profile_menu.addAction("Restore backup as new profile…")
+        self.restore_profile_action.triggered.connect(self._restore_profile)
         settings_menu = self.menuBar().addMenu("Settings")
         self.abbreviated_matching_action = QAction(
             "Allow abbreviated account numbers to automatically match to ledger", self
@@ -196,6 +203,8 @@ class V2WorkspaceWindow(QMainWindow):
             else "No verified catalog installed. Choose Install signed catalog to enable import."
         )
         self.import_button.setEnabled(catalog is not None and self.import_worker is None)
+        for action in (self.open_profile_action, self.backup_profile_action, self.restore_profile_action):
+            action.setEnabled(self.import_worker is None)
         prior = select_source or self._selected_source()
         self.sources.clear()
         for source_id in self.workspace.source_ids():
@@ -272,6 +281,89 @@ class V2WorkspaceWindow(QMainWindow):
         self.refresh()
         self.status.setText(f"Verified catalog release {release.release_sequence} installed.")
 
+    def _switch_profile(self, path: Path) -> None:
+        if self.import_worker is not None:
+            return
+        try:
+            selected = V2Workspace.open(
+                path,
+                self.workspace.catalog_cache.root,
+                trusted_keys=self.workspace.catalog_cache.trusted_keys,
+                preferences_path=self.workspace.preferences_path,
+            )
+        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
+            QMessageBox.warning(self, "Profile was not opened", str(exc))
+            return
+        self.workspace = selected
+        self.profile_label.setText(f"Profile: {selected.profile_path}")
+        self.refresh()
+        self.status.setText(f"Opened 2.0 profile: {selected.profile_path}")
+
+    def _choose_profile(self) -> None:
+        selected, _filter = QFileDialog.getOpenFileName(
+            self,
+            "Open a 2.0 profile",
+            str(self.workspace.profile_path.parent),
+            "ParseTrail profiles (*.db);;All files (*)",
+            options=QFileDialog.ReadOnly,
+        )
+        if selected:
+            if Path(selected).suffix.lower() != ".db":
+                QMessageBox.warning(self, "Profile was not opened", "Choose a .db profile. Restore .dbb backups first.")
+                return
+            self._switch_profile(Path(selected))
+
+    def _backup_profile(self) -> None:
+        if self.import_worker is not None:
+            return
+        proposed = self.workspace.profile_path.with_name(f"{self.workspace.profile_path.stem}-backup.dbb")
+        selected, _filter = QFileDialog.getSaveFileName(
+            self, "Back up current 2.0 profile", str(proposed), "ParseTrail backups (*.dbb);;All files (*)"
+        )
+        if not selected:
+            return
+        destination = Path(selected)
+        if not destination.suffix:
+            destination = destination.with_suffix(".dbb")
+        try:
+            saved = V2ProfileStore.snapshot_to(self.workspace.profile_path, destination)
+        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
+            QMessageBox.warning(self, "Backup was not created", str(exc))
+            return
+        QMessageBox.information(
+            self,
+            "Backup verified",
+            f"Verified 2.0 profile backup: {saved}\n\nThis file contains financial source evidence and is not encrypted by ParseTrail.",
+        )
+
+    def _restore_profile(self) -> None:
+        if self.import_worker is not None:
+            return
+        backup, _filter = QFileDialog.getOpenFileName(
+            self,
+            "Select a 2.0 profile backup",
+            str(self.workspace.profile_path.parent),
+            "ParseTrail backups (*.dbb *.db);;All files (*)",
+            options=QFileDialog.ReadOnly,
+        )
+        if not backup:
+            return
+        proposed = self.workspace.profile_path.with_name(f"{self.workspace.profile_path.stem}-restored.db")
+        selected, _filter = QFileDialog.getSaveFileName(
+            self, "Restore to a new 2.0 profile", str(proposed), "ParseTrail profiles (*.db);;All files (*)"
+        )
+        if not selected:
+            return
+        destination = Path(selected)
+        if not destination.suffix:
+            destination = destination.with_suffix(".db")
+        try:
+            restored = V2ProfileStore.snapshot_to(Path(backup), destination)
+        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
+            QMessageBox.warning(self, "Restore was not created", str(exc))
+            return
+        self._switch_profile(restored)
+
     def start_import(self, source_path: Path) -> None:
         if self.import_worker is not None:
             return
@@ -283,6 +375,8 @@ class V2WorkspaceWindow(QMainWindow):
         self.progress.setMinimumDuration(0)
         self.progress.canceled.connect(self.import_worker.cancel)
         self.import_button.setEnabled(False)
+        for action in (self.open_profile_action, self.backup_profile_action, self.restore_profile_action):
+            action.setEnabled(False)
         self.progress.show()
         self.import_worker.start()
 
@@ -297,6 +391,8 @@ class V2WorkspaceWindow(QMainWindow):
             self.progress = None
         self.import_worker = None
         worker.deleteLater()
+        for action in (self.open_profile_action, self.backup_profile_action, self.restore_profile_action):
+            action.setEnabled(True)
         if self._close_after_import:
             QTimer.singleShot(0, self.close)
             return
