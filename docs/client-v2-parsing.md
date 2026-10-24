@@ -69,6 +69,14 @@ transaction extraction parity or accounting acceptance.
 One read-only archived source from each of the 21 PDF families also produced
 strict evidence through the installed pipeline after routing. Full per-source
 extraction parity and ledger interpretation remain separate gates.
+The October 24 broader read-only replay parsed every source in the two
+successful-archive folders: 956 PDFs, 20,095 evidence rows across 20 PDF
+families, and one MOHELA CSV with 29 rows. All routed uniquely and produced
+hash-bound evidence using a locally test-signed 23-definition snapshot. The
+separate Synchrony fixture covers the absent PDF family. This is an execution
+coverage result; complete page capture, corrected legacy parity and accounting
+acceptance still require their own evidence. Six queued bank transaction CSVs
+and 21 Amazon-related CSVs have headers outside the two current declarations.
 
 The local [catalog artifact builder](../client/scripts/v2_catalog_release.py)
 validates every checked-in definition, signs a deterministic snapshot with an

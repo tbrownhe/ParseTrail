@@ -651,3 +651,22 @@ For an authorized source, pass its local PDF/CSV path and the matching checked-i
 definition. The launcher reads the source, parses through the bounded pipeline,
 opens a temporary 2.0 profile and deletes it after the dialog closes. It never
 opens the 1.x live database and has no posting or editing control.
+
+## Read-only successful-archive replay
+
+`audit_full_archive.py` copies the 23 checked-in declarations into a temporary
+test-signed catalog, routes each PDF uniquely or tries the verified CSV
+declarations, and builds source evidence. It reads source files without opening
+a profile. Stdout contains aggregate counts only. Source-level failures can be
+written to a new private report path outside the repository:
+
+```powershell
+client/.venv/Scripts/python.exe -m devtools.parser_engine_pilot.audit_full_archive `
+  --archive C:\private\successful-archive `
+  --private-report "$env:TEMP\parsetrail-v2-audit.json"
+```
+
+Use `--suffix .csv` for CSVs; the default is `.pdf`. An empty source set fails.
+The audit proves current routing and source-to-evidence execution, including
+source and declaration hash binding. It does not assert full-page capture,
+legacy row parity, ledger interpretation or production catalog trust.

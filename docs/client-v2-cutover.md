@@ -231,6 +231,17 @@ family. This scan checks recognition, not transaction extraction or accounting.
 One read-only archived source from each of the 21 PDF families also passed the
 installed source-to-evidence pipeline after routing. That spot check does not
 establish full archive extraction parity or ledger interpretation.
+An October 24 replay of both successful-archive folders through a locally
+test-signed snapshot and the bounded source pipeline parsed all 956 PDFs
+across 20 represented PDF families (20,095 evidence rows) and the one MOHELA
+account-history CSV (29 rows). No source failed routing or extraction. The
+archive has no Synchrony PDF; its separate ten-source pilot remains the fixture
+for that family. This replay checks execution and evidence identity for the
+current declarations, not full-page capture, legacy row parity, ledger
+interpretation or production-signed installed-client trust. A separate queued
+folder has six bank transaction-export CSVs and 21 Amazon-related CSVs that
+match neither current CSV declaration; these are outside the successful-archive
+replay and do not add a shipped parser family.
 Installed-client trust remains open.
 
 The local [catalog artifact builder](../client/scripts/v2_catalog_release.py)
@@ -246,8 +257,9 @@ selected signed release pair into its verified cache. It refuses tampering,
 untrusted signatures, conflicting same-sequence releases and rollback before
 changing the active pointer. The desktop offers Install signed catalog and
 keeps source import unavailable when no verified release is active. Synthetic
-service and offscreen UI tests pass; owner native acceptance and an actual
-production-signed starter pair are still required.
+service and offscreen UI tests pass; the owner accepted the native Windows
+install interaction on October 24, 2026. An actual production-signed starter
+pair and installed offline acceptance remain open.
 
 The finite parser operations, bounded adapters and source pipeline now live in
 the client package. Verified-catalog import uses that installed pipeline by

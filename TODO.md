@@ -117,6 +117,11 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   PDF operation costs and the remaining 18 family costs are reviewed. The owner
   requires every current family in the first 2.0 release. Per-family fixture
   parity and native acceptance remain P2-3/P2-4 work.
+  An October 24 read-only replay through a locally test-signed catalog parsed
+  all 956 PDFs (20 represented PDF families, 20,095 evidence rows) and one
+  MOHELA CSV (29 rows) in the successful archive without routing/extraction
+  failure; Synchrony has a separate ten-source fixture. This is execution
+  coverage, not full-page capture, legacy parity or accounting acceptance.
   Inventory all current parsers, archive layouts,
   repeated extraction/normalization/checks, source provenance, developer tools and
   release coupling. Produce a family/fixture matrix and explicit custom-operation needs.
@@ -369,8 +374,9 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   signature/definition validation, same-release retry and rollback refusal run
   before updating the active catalog; tampered input leaves the current release
   available. The window exposes this as Install signed catalog, and keeps
-  source import disabled until verification succeeds. A production-signed
-  starter pair and owner native UI acceptance remain open.
+  source import disabled until verification succeeds. The owner accepted the
+  native Windows install interaction on October 24, 2026; a production-signed
+  starter pair and installed offline acceptance remain open.
   One strict local admission callback now validates all 23 checked-in pilot
   definitions (22 current parser families, including both MOHELA export formats)
   inside a test-signed snapshot. An explicitly selected verified definition can

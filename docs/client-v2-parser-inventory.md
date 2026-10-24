@@ -50,6 +50,15 @@ family. A signed installed catalog can differ from this checkout's parser
 versions. P2-1 must join actual legacy `Plugins`/`Statements` references to
 verified installed artifacts and archived source families before conversion.
 
+The October 24 read-only source-to-evidence replay of the two successful-archive
+folders passed all 956 PDFs (20 represented PDF families, 20,095 evidence rows)
+and one MOHELA account-history CSV (29 rows) through the 23 current declarations
+in a locally test-signed catalog. Synchrony is absent from those folders and has
+a separate ten-source fixture. This result proves those files execute through
+the current bounded pipeline; it does not prove all-page capture or corrected
+legacy parity. A separate queued folder contains six bank transaction-export
+CSVs and 21 Amazon-related CSVs with no matching current CSV declaration.
+
 An authorized closed-copy replay subsequently parsed every referenced archive
 source with current checkout code; all resulting account statements retained
 their expected source membership. One shipped parser had no referenced fixture
