@@ -432,7 +432,13 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   The verified-catalog import path now passes cancellation through the bounded
   worker and CSV row loop. A running worker is killed on cancellation; a
   cancelled import leaves no source write. Installed-client
-  trust, archive recovery and UI wiring remain open.
+  trust and archive recovery remain open. The separate 2.0 desktop shell now
+  opens an explicit fresh profile and verified catalog cache, lists saved
+  sources, imports CSV/PDF in a cancellable thread, previews evidence, creates
+  financial accounts and opens accountless-export review. It does not post
+  entries or initialize 1.x settings. Offscreen interaction tests pass; owner
+  native Windows acceptance remains open. This shell is a pilot, not the final
+  profile picker or daily ledger workflow.
   The fresh profile now stores user-authored financial accounts and explicit
   accountless-export bindings alongside immutable source evidence. A whole-file
   assertion covers a single-account export; individual row assignments cover
@@ -445,8 +451,7 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   workspace service now opens only marked fresh profiles, loads an authenticated
   catalog, reads a chosen CSV/PDF without moving it, and saves pending evidence.
   Missing catalog, unsupported/oversized files, cancellation and 1.x profile
-  refusal leave no source import. Desktop connection and ledger integration
-  remain open.
+  refusal leave no source import. Ledger integration remains open.
 - [ ] **V2-4a–b — Daily review:** create/edit accounts, categories and budgets; connect
   accepted ledger workflows to the application in small increments. Manual values,
   closures and unsupported accounting remain explicit. Owner Windows integration gate.

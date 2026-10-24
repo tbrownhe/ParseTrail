@@ -255,12 +255,38 @@ imports one CSV through the verified path, and reopens its fresh 2.0 profile.
 A rebuilt windowed Windows x64 probe passed this smoke and all six worker pipes
 with synthetic build metadata. This remains a local packaging check, not an
 installed release or native GUI acceptance.
-Production catalog packaging and desktop import remain open.
+Production catalog packaging remains open. A separate 2.0 desktop shell now
+opens only an explicitly chosen fresh profile and verified catalog cache. It
+lists saved sources, imports CSV/PDF with a cancellable background thread,
+previews unposted evidence, creates financial accounts and opens the accepted
+accountless-export review. The entry point branches before 1.x profile/settings
+startup. Offscreen interaction tests pass; owner native Windows acceptance is
+still required before treating the shell as accepted. This is an isolated pilot,
+not the daily 2.0 profile picker or ledger workflow.
+
+For a native review without live data, launch the disposable synthetic demo from
+the repository root in PowerShell:
+
+```powershell
+$env:PYTHONPATH='.;client/src;client'
+& .\client\.venv\Scripts\python.exe -m devtools.parser_engine_pilot.open_v2_workspace --demo
+```
+
+The demo signs a temporary two-definition catalog with a generated key, creates
+a temporary profile, and imports a six-row accountless export plus a one-row
+statement. Its status line gives the path of a third synthetic file for testing
+the Import source button. Closing the window removes the temporary workspace.
+The real `--v2` entry requires `--profile` and `--catalog-cache`; it opens an
+existing 2.x profile unless `--create-profile` is explicitly supplied. It will
+not import until that cache contains a verified catalog.
+
 The bounded decoder worker now polls a cancellation callback and terminates its
 child on cancellation. The source pipeline also polls its CSV row loop and
 passes the callback to PDF decoder workers. A cancelled catalog import leaves
 the temporary profile without a new source. Native Windows worker cancellation
-passes; main-window cancellation wiring and Intel Mac native limits remain open.
+passes; the separate 2.0 shell now wires Cancel import through this callback.
+Owner native shell acceptance and Intel Mac native limits remain open.
+
 An explicit reparse comparison can read the saved source and test a candidate
 definition without replacing the original evidence snapshot or decisions. A
 changed definition revision changes the candidate output while the stored

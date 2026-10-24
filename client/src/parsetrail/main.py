@@ -52,6 +52,40 @@ def create_application(argv):
     return QApplication(argv)
 
 
+def run_v2_workspace(argv: list[str]) -> int:
+    """Launch the fresh-profile desktop path without initializing 1.x settings."""
+    import argparse
+    from pathlib import Path
+
+    from parsetrail.core.v2_workspace import V2Workspace
+
+    parser = argparse.ArgumentParser(description="Open an explicit ParseTrail 2.0 workspace")
+    parser.add_argument("--v2", action="store_true", required=True)
+    parser.add_argument("--profile", type=Path, required=True)
+    parser.add_argument("--catalog-cache", type=Path, required=True)
+    parser.add_argument("--create-profile", action="store_true")
+    args = parser.parse_args(argv)
+    try:
+        workspace = (
+            V2Workspace.create(args.profile, args.catalog_cache)
+            if args.create_profile
+            else V2Workspace.open(args.profile, args.catalog_cache)
+        )
+        from parsetrail.gui.v2_workspace_window import V2WorkspaceWindow
+
+        app = create_application(sys.argv[:1])
+        with suppress(ModuleNotFoundError):
+            import pyi_splash  # type: ignore
+
+            pyi_splash.close()
+        window = V2WorkspaceWindow(workspace)
+        window.show()
+        return app.exec()
+    except (OSError, ValueError) as exc:
+        print(f"ParseTrail 2.0 could not start: {exc}", file=sys.stderr)
+        return 2
+
+
 # Client entry point
 def main() -> int:
     if sys.argv[1:2] == ["--v2-parser-worker"]:
@@ -91,6 +125,9 @@ def main() -> int:
         args = parser.parse_args(sys.argv[1:])
         sys.argv[:] = sys.argv[:1]
         return run_offline_session_smoke(args.offline_session_smoke_test, main, report_path=args.offline_smoke_report)
+
+    if "--v2" in sys.argv[1:]:
+        return run_v2_workspace(sys.argv[1:])
 
     from parsetrail.core.profile import ProfileError, configure_runtime_profile
 
