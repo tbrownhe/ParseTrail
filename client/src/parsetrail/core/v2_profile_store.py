@@ -18,7 +18,7 @@ from pydantic import ValidationError
 from parsetrail.core.source_evidence import ActivityExportPayload, SourceEvidence, StatementPayload
 
 APPLICATION_ID = 0x50543230  # PT20
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_DEFINITION_BYTES = 64 * 1024
 MAX_EVIDENCE_BYTES = 32 * 1024 * 1024
@@ -47,11 +47,14 @@ TABLE_COLUMNS = {
         ("observed_date", "TEXT", 1, 0),
         ("amount_minor", "INTEGER", 1, 0),
     ),
-    "LedgerAccounts": (
+    "Accounts": (
         ("id", "TEXT", 0, 1),
         ("name", "TEXT", 1, 0),
         ("kind", "TEXT", 1, 0),
-        ("institution_key", "TEXT", 1, 0),
+        ("currency", "TEXT", 1, 0),
+        ("role", "TEXT", 1, 0),
+        ("purpose", "TEXT", 1, 0),
+        ("institution_key", "TEXT", 0, 0),
         ("full_account_number", "TEXT", 0, 0),
     ),
     "FileAccountAssertions": (
@@ -74,14 +77,14 @@ FOREIGN_KEYS = {
     "Definitions": (),
     "EvidenceSnapshots": (("definition_sha256", "Definitions", "sha256"), ("source_sha256", "Sources", "sha256")),
     "SourceObservations": (("source_sha256", "Sources", "sha256"),),
-    "LedgerAccounts": (),
-    "FileAccountAssertions": (("ledger_account_id", "LedgerAccounts", "id"), ("source_sha256", "Sources", "sha256")),
+    "Accounts": (),
+    "FileAccountAssertions": (("ledger_account_id", "Accounts", "id"), ("source_sha256", "Sources", "sha256")),
     "RowAccountAssignments": (
-        ("ledger_account_id", "LedgerAccounts", "id"),
+        ("ledger_account_id", "Accounts", "id"),
         ("row_id", "SourceObservations", "row_id"),
     ),
     "SourceAccountBindings": (
-        ("ledger_account_id", "LedgerAccounts", "id"),
+        ("ledger_account_id", "Accounts", "id"),
         ("source_sha256", "Sources", "sha256"),
     ),
 }
@@ -209,24 +212,34 @@ class V2ProfileStore:
                     observed_date TEXT NOT NULL, amount_minor INTEGER NOT NULL,
                     CHECK((source_account IS NULL) = (source_account_form IS NULL))
                 );
-                CREATE TABLE LedgerAccounts (
-                    id TEXT PRIMARY KEY, name TEXT NOT NULL, kind TEXT NOT NULL
-                        CHECK(kind IN ('asset','liability')),
-                    institution_key TEXT NOT NULL, full_account_number TEXT
+                CREATE TABLE Accounts (
+                    id TEXT PRIMARY KEY, name TEXT NOT NULL,
+                    kind TEXT NOT NULL CHECK(kind IN ('asset','liability','equity','income','expense')),
+                    currency TEXT NOT NULL CHECK(currency='USD'),
+                    role TEXT NOT NULL CHECK(role IN ('financial','category','internal')),
+                    purpose TEXT NOT NULL CHECK(purpose IN ('normal','clearing','opening_equity','suspense')),
+                    institution_key TEXT, full_account_number TEXT,
+                    CHECK(
+                        (role='financial' AND kind IN ('asset','liability') AND purpose='normal'
+                            AND institution_key IS NOT NULL)
+                        OR (role='category' AND kind IN ('income','expense') AND purpose='normal'
+                            AND institution_key IS NULL AND full_account_number IS NULL)
+                        OR (role='internal' AND institution_key IS NULL AND full_account_number IS NULL)
+                    )
                 );
                 CREATE TABLE FileAccountAssertions (
                     source_sha256 TEXT PRIMARY KEY REFERENCES Sources(sha256),
-                    ledger_account_id TEXT NOT NULL REFERENCES LedgerAccounts(id)
+                    ledger_account_id TEXT NOT NULL REFERENCES Accounts(id)
                 );
                 CREATE TABLE RowAccountAssignments (
                     row_id TEXT PRIMARY KEY REFERENCES SourceObservations(row_id),
-                    ledger_account_id TEXT NOT NULL REFERENCES LedgerAccounts(id)
+                    ledger_account_id TEXT NOT NULL REFERENCES Accounts(id)
                 );
                 CREATE TABLE SourceAccountBindings (
                     source_sha256 TEXT NOT NULL REFERENCES Sources(sha256),
                     source_identity TEXT NOT NULL,
                     source_identity_form TEXT NOT NULL CHECK(source_identity_form IN ('full','last_four','opaque')),
-                    ledger_account_id TEXT NOT NULL REFERENCES LedgerAccounts(id),
+                    ledger_account_id TEXT NOT NULL REFERENCES Accounts(id),
                     PRIMARY KEY(source_sha256,source_identity,source_identity_form)
                 );
                 COMMIT;
@@ -302,7 +315,7 @@ class V2ProfileStore:
         ):
             raise ProfileFormatError("invalid_financial_account")
         self.connection.execute(
-            "INSERT INTO LedgerAccounts VALUES (?,?,?,?,?)",
+            "INSERT INTO Accounts VALUES (?,?,?,'USD','financial','normal',?,?)",
             (account.id, account.name, account.kind, account.institution_key, account.full_account_number),
         )
 
@@ -310,12 +323,16 @@ class V2ProfileStore:
         return tuple(
             FinancialAccount(*row)
             for row in self.connection.execute(
-                "SELECT id,name,kind,institution_key,full_account_number FROM LedgerAccounts ORDER BY name,id"
+                "SELECT id,name,kind,institution_key,full_account_number FROM Accounts "
+                "WHERE role='financial' ORDER BY name,id"
             )
         )
 
     def _require_financial_account(self, account_id: str) -> None:
-        if self.connection.execute("SELECT 1 FROM LedgerAccounts WHERE id=?", (account_id,)).fetchone() is None:
+        if (
+            self.connection.execute("SELECT 1 FROM Accounts WHERE id=? AND role='financial'", (account_id,)).fetchone()
+            is None
+        ):
             raise ProfileFormatError("financial_account_missing")
 
     def source_account_bindings(self, source_sha256: str) -> tuple[SourceAccountBinding, ...]:

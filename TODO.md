@@ -478,7 +478,12 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   accountless-export bindings alongside immutable source evidence. A whole-file
   assertion covers a single-account export; individual row assignments cover
   mixed files. The two modes are mutually exclusive and neither posts a ledger
-  entry. This pre-release profile schema is revision 4. An isolated
+  entry. The owner approved one authoritative account table for the clean 2.0
+  database; the provisional financial-only `LedgerAccounts` table has been
+  replaced by `Accounts` in pre-release schema revision 5. Earlier disposable
+  pilot profiles are refused and recreated, with no migration layer. The
+  [unified store direction](docs/client-v2-unified-store.md) leaves reviewed
+  journal persistence and category/budget authoring as V2-4 work. An isolated
   accountless-export review dialog now
   presents a six-row disposable MOHELA-shaped demo and saves either explicit
   file or selected-row decisions. Offscreen interaction tests pass; the owner
@@ -497,8 +502,8 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   read-only possible-period-overlap warning when another saved statement is
   bound to the same ledger account and their known date ranges intersect. The
   warning names the other source and makes no duplicate or posting decision;
-  native Windows acceptance of this warning is pending. Ledger integration
-  remains open.
+  the owner confirmed its native Windows presentation on October 24, 2026.
+  Ledger integration remains open.
 - [ ] **V2-4a–b — Daily review:** create/edit accounts, categories and budgets; connect
   accepted ledger workflows to the application in small increments. Manual values,
   closures and unsupported accounting remain explicit. Owner Windows integration gate.

@@ -34,6 +34,13 @@ def test_identified_export_binds_only_selected_identity_and_survives_reopen(tmp_
         store.import_source(CASH_SOURCE, CASH_DEFINITION, evidence, suffix=".csv")
         store.add_financial_account(FinancialAccount("checking-a", "Checking A", "asset", "synthetic"))
         store.add_financial_account(FinancialAccount("checking-b", "Checking B", "asset", "synthetic"))
+        assert store.connection.execute("SELECT role,currency FROM Accounts WHERE id='checking-a'").fetchone() == (
+            "financial",
+            "USD",
+        )
+        assert store.connection.execute(
+            "SELECT count(*) FROM sqlite_master WHERE name='LedgerAccounts'"
+        ).fetchone() == (0,)
         bindings = store.source_account_bindings(source_id)
         assert [(binding.source_identity, binding.ledger_account_id) for binding in bindings] == [
             ("Checking A", None),

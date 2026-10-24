@@ -294,7 +294,7 @@ The next review slice retains one explicit, reversible ledger binding for each
 source account identity printed by a statement or identified export. It also
 allows row assignment when an export mixes identified and unidentified rows.
 Source evidence and financial accounts remain unchanged; these decisions do not
-post entries. The fresh pre-release profile schema is revision 4. The shell now
+post entries. The fresh pre-release profile schema is revision 5. The shell now
 offers separate review buttons for printed identities and unidentified rows.
 Offscreen tests pass; the owner accepted the printed-identity dialog on native
 Windows on October 24, 2026. Signed catalog entries now supply institution and
@@ -373,7 +373,8 @@ only when both have explicit bindings to the same ledger account and both
 period starts are known. It lists the other source ID for review and makes no
 duplicate, merge or posting decision. Sources without explicit bindings or
 known starts receive no overlap conclusion. The disposable demo includes two
-overlapping older-Citi sources; native acceptance of this warning is pending.
+overlapping older-Citi sources. The owner confirmed the warning's native Windows
+presentation on October 24, 2026.
 
 ## Current stop/go decision
 
