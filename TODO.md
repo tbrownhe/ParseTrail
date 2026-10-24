@@ -297,9 +297,14 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   disposition. A read-only replay of the 133 successful-archive PDFs kept 1,675
   activity rows, located all 4,552 lines with supported dollar tokens,
   classified 532 clearly labeled annual/period fee and interest totals, and left 1,944 explicitly
-  unclassified. These are source labels, not transaction postings. Full-page
-  capture and accounting review remain open. The read-only preview now surfaces
-  a nonzero unclassified dollar-line count; native acceptance is pending.
+  unclassified. These are source labels, not transaction postings. Owner-approved
+  older-Citi review policy: proceed to transaction review when the independent
+  printed balance equation passes and every supported dollar-token line is
+  located; show each unresolved non-activity line with source text and location,
+  and leave it unposted. `capture_verified` stays false; other page text,
+  full-page capture, and separate accounting review remain open. The read-only
+  preview shows a nonzero unclassified dollar-line count and the individual
+  lines; native acceptance is pending.
   Middle Citi now uses a generic declaration-driven header-anchor table worker.
   All eight routed archive PDFs matched the accepted reader on account,
   period, printed balances and 323 rows. The 1,311 raw table rows divide into

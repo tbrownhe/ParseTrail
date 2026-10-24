@@ -234,8 +234,13 @@ only printed annual/period fee and interest totals; unknown or overlapping
 matches remain `unclassified_monetary_line`. A read-only replay of the 133
 successful-archive PDFs kept 1,675 activity rows and found 4,552 such
 lines: 532 labeled totals, 1,944 explicitly unclassified, and zero without a
-location. `capture_verified` remains false. Run the aggregate audit from the
-repository root with `--archive` pointing at the authorized archive root:
+location. The owner approved transaction review for this family when the
+independent printed balance equation passes and every supported dollar-token
+line is located. Unclassified non-activity lines must remain visible with source
+text and location, and unposted. `capture_verified` remains false; this policy
+does not resolve other page text or separate accounting questions. Run the
+aggregate audit from the repository root with `--archive` pointing at the
+authorized archive root:
 
 ```powershell
 client/.venv/Scripts/python.exe -m devtools.parser_engine_pilot.audit_legacy_citi_money --archive C:\private\archive

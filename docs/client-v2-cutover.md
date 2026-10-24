@@ -357,11 +357,16 @@ located source dispositions. Four literal declaration rules classify the 532
 clearly labeled annual/period fee and interest totals; 1,944 stay explicitly
 unclassified. The 1,675 activity rows were unchanged and every line with a
 supported dollar token has a location. These labels do not authorize ledger
-postings. Other page text, full-page capture, and accounting review remain open
-before 2.0 acceptance.
+postings. For this older-Citi family, the owner approved proceeding to
+transaction review when the independent printed balance equation passes and
+every line with a supported dollar token has a location. Remaining non-activity
+lines may stay explicitly unclassified if review shows their source text and
+location; they remain unposted. This does not set `capture_verified` or settle
+other page text, full-page capture, or separate accounting questions.
 The read-only evidence preview now shows the unclassified dollar-line count when
-it is nonzero. The disposable demo includes one such synthetic older-Citi line;
-native acceptance of that preview change is pending.
+it is nonzero and lists each line under Other source lines. The disposable demo
+includes one such synthetic older-Citi line; native acceptance of that preview
+change is pending.
 
 ## Current stop/go decision
 
