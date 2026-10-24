@@ -192,7 +192,7 @@ def test_v2_argument_dispatch_precedes_legacy_profile(monkeypatch) -> None:
 def test_accountless_source_opens_review_and_account_creation(tmp_path: Path, monkeypatch) -> None:
     app = _app()
     from parsetrail.gui.v2_workspace_window import V2FinancialAccountDialog, V2WorkspaceWindow
-    from PySide6.QtWidgets import QDialog
+    from PySide6.QtWidgets import QDialog, QInputDialog
 
     workspace = _workspace(tmp_path)
     definition = MOHELA_DEFINITION.read_bytes()
@@ -203,12 +203,19 @@ def test_accountless_source_opens_review_and_account_creation(tmp_path: Path, mo
     opened = []
 
     def accept_account(dialog):
-        dialog.name.setText("Loan A")
-        dialog.kind.setCurrentIndex(1)
-        dialog.institution.setText("mohela")
+        if dialog.existing is None:
+            dialog.name.setText("Loan A")
+            dialog.kind.setCurrentIndex(1)
+            dialog.institution.setText("mohela")
+        else:
+            assert not dialog.kind.isEnabled()
+            dialog.name.setText("Updated loan")
+            dialog.institution.setText("new-lender")
+            dialog.number.setText("12345678")
         return QDialog.Accepted
 
     monkeypatch.setattr(V2FinancialAccountDialog, "exec", accept_account)
+    monkeypatch.setattr(QInputDialog, "getItem", lambda *_args: (_args[3][0], True))
     monkeypatch.setattr(
         "parsetrail.gui.v2_workspace_window.V2AccountBindingReview.exec",
         lambda dialog: opened.append(dialog.model.rowCount()),
@@ -218,8 +225,12 @@ def test_accountless_source_opens_review_and_account_creation(tmp_path: Path, mo
         window.account_button.click()
         window.review_button.click()
         assert opened == [6]
+        window.edit_account_button.click()
         with V2ProfileStore.open(workspace.profile_path, read_only=True) as store:
-            assert [(account.name, account.kind) for account in store.financial_accounts()] == [("Loan A", "liability")]
+            assert [
+                (account.name, account.kind, account.institution_key, account.full_account_number)
+                for account in store.financial_accounts()
+            ] == [("Updated loan", "liability", "new-lender", "12345678")]
     finally:
         window.close()
         app.processEvents()

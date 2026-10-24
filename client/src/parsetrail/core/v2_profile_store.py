@@ -404,6 +404,14 @@ class V2ProfileStore:
     def add_financial_account(self, account: FinancialAccount) -> None:
         """Create one user-authored financial account before any source binding."""
         self._require_writable()
+        name, institution_key, full_number = self._financial_account_values(account)
+        self.connection.execute(
+            "INSERT INTO Accounts VALUES (?,?,?,'USD','financial','normal',?,?)",
+            (account.id, name, account.kind, institution_key, full_number),
+        )
+
+    @staticmethod
+    def _financial_account_values(account: FinancialAccount) -> tuple[str, str, str | None]:
         if (
             not isinstance(account, FinancialAccount)
             or type(account.id) is not str
@@ -422,9 +430,26 @@ class V2ProfileStore:
             )
         ):
             raise ProfileFormatError("invalid_financial_account")
+        return (
+            account.name.strip(),
+            account.institution_key,
+            account.full_account_number.strip() if account.full_account_number is not None else None,
+        )
+
+    def update_financial_account(self, account: FinancialAccount) -> None:
+        """Edit account identity labels while preserving its ledger class and ID."""
+        self._require_writable()
+        name, institution_key, full_number = self._financial_account_values(account)
+        current = self.connection.execute(
+            "SELECT kind FROM Accounts WHERE id=? AND role='financial'", (account.id,)
+        ).fetchone()
+        if current is None:
+            raise ProfileFormatError("financial_account_missing")
+        if current[0] != account.kind:
+            raise ProfileFormatError("financial_account_kind_immutable")
         self.connection.execute(
-            "INSERT INTO Accounts VALUES (?,?,?,'USD','financial','normal',?,?)",
-            (account.id, account.name, account.kind, account.institution_key, account.full_account_number),
+            "UPDATE Accounts SET name=?,institution_key=?,full_account_number=? WHERE id=? AND role='financial'",
+            (name, institution_key, full_number, account.id),
         )
 
     def financial_accounts(self) -> tuple[FinancialAccount, ...]:

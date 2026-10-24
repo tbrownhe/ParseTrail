@@ -99,6 +99,17 @@ def test_cash_expense_correction_reverses_and_replaces_without_reusing_evidence(
         store.add_category_account("income:other", "Other income", "income")
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
         original = store.post_reviewed_cash_expense(row_id, "expense:food", reason="Reviewed coffee purchase")
+        old_payload = store.connection.execute(
+            "SELECT payload FROM JournalEntries WHERE key=?", (original,)
+        ).fetchone()[0]
+        store.update_financial_account(FinancialAccount("cash", "Main checking", "asset", "new-bank", "12345678"))
+        assert store.financial_accounts()[0].name == "Main checking"
+        assert (
+            store.connection.execute("SELECT payload FROM JournalEntries WHERE key=?", (original,)).fetchone()[0]
+            == old_payload
+        )
+        with pytest.raises(ProfileFormatError, match="financial_account_kind_immutable"):
+            store.update_financial_account(FinancialAccount("cash", "Main checking", "liability", "new-bank"))
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
         with pytest.raises(ProfileFormatError, match="account_binding_has_journal_history"):
             store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "other-cash")

@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QFormLayout,
     QHBoxLayout,
+    QInputDialog,
     QLabel,
     QLineEdit,
     QListWidget,
@@ -63,24 +64,34 @@ class V2ImportWorker(QThread):
 class V2FinancialAccountDialog(QDialog):
     """Record an account exactly as the owner describes it."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, *, existing: FinancialAccount | None = None):
         super().__init__(parent)
-        self.setWindowTitle("Add financial account")
+        self.existing = existing
+        self.setWindowTitle("Edit financial account" if existing is not None else "Add financial account")
         form = QFormLayout(self)
         self.name = QLineEdit()
         self.name.setMaxLength(200)
+        if existing is not None:
+            self.name.setText(existing.name)
         form.addRow("Account name", self.name)
         self.kind = QComboBox()
         self.kind.addItem("Asset (cash or investment)", "asset")
         self.kind.addItem("Liability (card or loan)", "liability")
+        if existing is not None:
+            self.kind.setCurrentIndex(self.kind.findData(existing.kind))
+            self.kind.setEnabled(False)
         form.addRow("Account kind", self.kind)
         self.institution = QLineEdit()
         self.institution.setPlaceholderText("e.g. mohela")
         self.institution.setMaxLength(80)
+        if existing is not None:
+            self.institution.setText(existing.institution_key)
         form.addRow("Institution key", self.institution)
         self.number = QLineEdit()
         self.number.setPlaceholderText("Optional; full number only")
         self.number.setMaxLength(80)
+        if existing is not None:
+            self.number.setText(existing.full_account_number or "")
         form.addRow("Full account number", self.number)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
@@ -89,7 +100,7 @@ class V2FinancialAccountDialog(QDialog):
 
     def account(self) -> FinancialAccount:
         return FinancialAccount(
-            id=uuid4().hex,
+            id=self.existing.id if self.existing is not None else uuid4().hex,
             name=self.name.text().strip(),
             kind=self.kind.currentData(),
             institution_key=self.institution.text().strip(),
@@ -107,7 +118,7 @@ class V2WorkspaceWindow(QMainWindow):
         self.progress: QProgressDialog | None = None
         self._close_after_import = False
         self.setWindowTitle("ParseTrail 2.0 workspace")
-        self.resize(850, 560)
+        self.resize(1050, 560)
         settings_menu = self.menuBar().addMenu("Settings")
         self.abbreviated_matching_action = QAction(
             "Allow abbreviated account numbers to automatically match to ledger", self
@@ -161,6 +172,9 @@ class V2WorkspaceWindow(QMainWindow):
         self.account_button = QPushButton("Add financial account")
         self.account_button.clicked.connect(self._add_account)
         account_controls.addWidget(self.account_button)
+        self.edit_account_button = QPushButton("Edit financial account")
+        self.edit_account_button.clicked.connect(self._edit_account)
+        account_controls.addWidget(self.edit_account_button)
         self.categories_button = QPushButton("Categories")
         self.categories_button.clicked.connect(self._edit_categories)
         account_controls.addWidget(self.categories_button)
@@ -339,6 +353,29 @@ class V2WorkspaceWindow(QMainWindow):
                 QMessageBox.warning(self, "Account was not saved", str(exc))
                 continue
             self.status.setText("Financial account saved. Select an accountless export to assign it.")
+            break
+
+    def _edit_account(self) -> None:
+        with V2ProfileStore.open(self.workspace.profile_path, read_only=True) as store:
+            accounts = store.financial_accounts()
+        if not accounts:
+            QMessageBox.information(self, "No financial accounts", "Add a financial account before editing one.")
+            return
+        labels = [f"{account.name} ({account.kind}, {account.id})" for account in accounts]
+        selected, accepted = QInputDialog.getItem(self, "Edit financial account", "Account", labels, 0, False)
+        if not accepted:
+            return
+        account = accounts[labels.index(selected)]
+        dialog = V2FinancialAccountDialog(self, existing=account)
+        while dialog.exec() == QDialog.Accepted:
+            try:
+                with V2ProfileStore.open(self.workspace.profile_path) as store:
+                    store.update_financial_account(dialog.account())
+            except (ProfileFormatError, sqlite3.Error, OSError) as exc:
+                QMessageBox.warning(self, "Account was not saved", str(exc))
+                continue
+            self.status.setText("Financial account details saved. Existing source bindings and postings keep this ID.")
+            self._update_controls()
             break
 
     def _edit_categories(self) -> None:

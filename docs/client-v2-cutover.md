@@ -396,14 +396,19 @@ source evidence or reusing its allocation. An account assignment with journal
 history cannot change. A new cash-expense review dialog now connects those
 service actions to eligible activity-export rows. It shows unsupported rows as
 pending, requires an expense category and explicit reason, and confirms each
-posting or correction. Offscreen interaction passes; owner native Windows
-acceptance of this dialog remains open.
+posting or correction. Offscreen interaction passes; the owner confirmed its
+native Windows behavior on October 24, 2026. The reason remains required for
+now, although the owner identified it as possible friction for routine
+categorization. Financial-account editing now changes a name, institution key
+or full number without changing its ledger class or ID; existing bindings and
+journals still reference that ID. Native Windows acceptance of account editing
+remains open.
 
 ## Current stop/go decision
 
 **Go** for fresh-profile service integration and finite parser work. The
-synthetic slice keeps the source and parser evidence, leaves rows unposted,
-posts one explicitly reviewed expense exactly once, and leaves a credit
+synthetic slice keeps the source and parser evidence, posts one explicitly
+reviewed expense exactly once, and leaves a credit
 pending. **No go** for 2.0 activation or release yet: full-page capture review,
 Intel Mac decoder-limit checks, production snapshot integration, ongoing
 import/recovery, common reports and native GUI acceptance remain open. The

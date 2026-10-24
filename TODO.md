@@ -514,15 +514,21 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   correction service now reverses and replaces a reviewed cash expense in one
   transaction, preserves its source allocation history, and refuses changes to
   account assignments after posting. The workspace opens a fresh category
-  dialog for adding expense/income
-  categories and renaming their display names; an existing journal keeps its
+  dialog for adding expense/income categories and renaming their display names;
+  an existing journal keeps its
   account ID and payload after a rename. Offscreen acceptance passes, and the
   owner confirmed the native Windows dialog on October 24, 2026. A new
   cash-expense review dialog shows all source rows and permits explicit posting
   or append-only recategorization only for bound asset outflows from activity
   exports with a source posting date. Its offscreen interaction test passes;
-  native Windows acceptance remains open. Manual values, closures and
-  unsupported accounting remain explicit. Owner Windows integration gate.
+  the owner confirmed its native Windows behavior on October 24, 2026. The
+  reason remains required for now; the owner flagged the per-categorization
+  entry as potential daily-workflow friction for later review. Financial
+  account editing now changes the display name, institution key and full number
+  while retaining the account ID, ledger class, source bindings and entries.
+  Its native Windows interaction remains open. Manual values, budgets,
+  closures and unsupported accounting remain explicit. Owner Windows
+  integration gate.
 - [ ] **V2-5a–b — Report cutover:** shared ledger spending/cash/balance/budget queries,
   then dashboard and export integration. Inventory every legacy menu action; approve
   concrete deferrals rather than silently removing functionality. Owner Windows gate.
