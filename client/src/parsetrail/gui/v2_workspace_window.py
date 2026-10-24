@@ -135,6 +135,7 @@ class V2WorkspaceWindow(QMainWindow):
         self.sources.itemDoubleClicked.connect(self._preview)
         layout.addWidget(self.sources)
         self.selected_details = QLabel()
+        self.selected_details.setWordWrap(True)
         layout.addWidget(self.selected_details)
         controls = QHBoxLayout()
         self.import_button = QPushButton("Import source…")
@@ -201,7 +202,15 @@ class V2WorkspaceWindow(QMainWindow):
                 else len(payload.rows)
             )
             kind = "Statement" if isinstance(payload, StatementPayload) else "Activity export"
-            self.selected_details.setText(f"{kind} · {evidence.parser_id} · {rows} row(s) · pending review")
+            details = f"{kind} · {evidence.parser_id} · {rows} row(s) · pending review"
+            if isinstance(payload, StatementPayload):
+                overlaps = self.workspace.overlapping_statement_sources(source_id)
+                if overlaps:
+                    other_sources = ", ".join(source[:16] for source in overlaps[:3])
+                    if len(overlaps) > 3:
+                        other_sources += f", and {len(overlaps) - 3} more"
+                    details += f"\nPossible period overlap on an explicitly linked account: {other_sources}. Review before posting."
+            self.selected_details.setText(details)
             unidentified_rows = isinstance(payload, ActivityExportPayload) and any(
                 row.source_account is None for row in payload.rows
             )

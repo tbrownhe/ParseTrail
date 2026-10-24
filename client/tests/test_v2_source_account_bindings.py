@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
@@ -80,6 +81,81 @@ def test_statement_identity_can_be_bound_without_changing_evidence(tmp_path: Pat
     with V2ProfileStore.open(path, read_only=True) as store:
         assert store.load_import(source_id).evidence == evidence
         assert store.source_account_bindings(source_id)[0].ledger_account_id == "card"
+
+
+def test_statement_overlap_uses_explicit_account_and_printed_period(tmp_path: Path) -> None:
+    path = tmp_path / "overlap.db"
+    original = from_synchrony_table(CARD_DEFINITION, *card_channels())
+    account = original.payload.accounts[0]
+    payload = original.payload.model_copy(
+        update={"accounts": (account.model_copy(update={"rows": ()}),), "independent_balance_verified": False}
+    )
+
+    def source_variant(label: bytes, *, starts: str = "2026-01-01", ends: str = "2026-01-31"):
+        source = CARD_SOURCE + label
+        period = payload.model_copy(
+            update={
+                "start": payload.start.model_copy(update={"iso": starts, "raw": starts}),
+                "end": payload.end.model_copy(update={"iso": ends, "raw": ends}),
+            }
+        )
+        evidence = original.model_copy(update={"source_sha256": sha256(source).hexdigest(), "payload": period})
+        return source, evidence
+
+    first, first_evidence = source_variant(b" first")
+    overlapping, overlapping_evidence = source_variant(b" overlapping", starts="2026-01-15", ends="2026-02-15")
+    disjoint, disjoint_evidence = source_variant(b" disjoint", starts="2026-03-01", ends="2026-03-31")
+    with V2ProfileStore.create(path) as store:
+        store.add_financial_account(FinancialAccount("card", "Card", "liability", "synchrony"))
+        store.add_financial_account(FinancialAccount("other", "Other card", "liability", "synchrony"))
+        for source, evidence in (
+            (first, first_evidence),
+            (overlapping, overlapping_evidence),
+            (disjoint, disjoint_evidence),
+        ):
+            store.import_source(source, CARD_DEFINITION, evidence, suffix=".pdf")
+        identity = account.source_identity
+        form = account.source_identity_form
+        store.bind_source_account(first_evidence.source_sha256, identity, form, "card")
+        assert store.overlapping_statement_sources(first_evidence.source_sha256) == ()
+        store.bind_source_account(overlapping_evidence.source_sha256, identity, form, "other")
+        assert store.overlapping_statement_sources(first_evidence.source_sha256) == ()
+        store.bind_source_account(overlapping_evidence.source_sha256, identity, form, "card")
+        store.bind_source_account(disjoint_evidence.source_sha256, identity, form, "card")
+    with V2ProfileStore.open(path, read_only=True) as store:
+        assert store.overlapping_statement_sources(first_evidence.source_sha256) == (
+            overlapping_evidence.source_sha256,
+        )
+        assert store.overlapping_statement_sources(overlapping_evidence.source_sha256) == (
+            first_evidence.source_sha256,
+        )
+        assert store.overlapping_statement_sources(disjoint_evidence.source_sha256) == ()
+        assert store.connection.execute("SELECT count(*) FROM sqlite_master WHERE name='LedgerEntries'").fetchone() == (
+            0,
+        )
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from parsetrail.gui.v2_workspace_window import V2WorkspaceWindow
+    from PySide6.QtCore import Qt
+    from PySide6.QtWidgets import QApplication
+
+    app = QApplication.instance() or QApplication([])
+    workspace = V2Workspace.open(path, tmp_path / "catalog", preferences_path=tmp_path / "preferences.json")
+    window = V2WorkspaceWindow(workspace)
+    try:
+        for index in range(window.sources.count()):
+            if window.sources.item(index).data(Qt.UserRole) == first_evidence.source_sha256:
+                window.sources.setCurrentRow(index)
+                break
+        assert "Possible period overlap" in window.selected_details.text()
+        assert overlapping_evidence.source_sha256[:16] in window.selected_details.text()
+        assert disjoint_evidence.source_sha256[:16] not in window.selected_details.text()
+        with V2ProfileStore.open(path) as store:
+            store.clear_source_account_binding(overlapping_evidence.source_sha256, identity, form)
+        window.refresh(select_source=first_evidence.source_sha256)
+        assert "Possible period overlap" not in window.selected_details.text()
+    finally:
+        window.close()
+        app.processEvents()
 
 
 def test_source_account_review_assigns_and_clears_without_posting(tmp_path: Path) -> None:

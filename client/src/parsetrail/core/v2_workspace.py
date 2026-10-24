@@ -99,6 +99,10 @@ class V2Workspace:
         with V2ProfileStore.open(self.profile_path, read_only=True) as store:
             return store.load_import(source_sha256)
 
+    def overlapping_statement_sources(self, source_sha256: str) -> tuple[str, ...]:
+        with V2ProfileStore.open(self.profile_path, read_only=True) as store:
+            return store.overlapping_statement_sources(source_sha256)
+
     def preferences(self) -> V2Preferences:
         return load_preferences(self.preferences_path)
 

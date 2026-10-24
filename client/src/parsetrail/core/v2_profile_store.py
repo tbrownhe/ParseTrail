@@ -516,6 +516,40 @@ class V2ProfileStore:
         """List saved imports in their original insertion order, newest first."""
         return tuple(row[0] for row in self.connection.execute("SELECT sha256 FROM Sources ORDER BY rowid DESC"))
 
+    def overlapping_statement_sources(self, source_sha256: str) -> tuple[str, ...]:
+        """Find period overlaps only for explicitly linked ledger accounts."""
+        payload = self.load_import(source_sha256).evidence.payload
+        if not isinstance(payload, StatementPayload) or payload.start.iso is None:
+            return ()
+        account_ids = tuple(
+            sorted(
+                {
+                    binding.ledger_account_id
+                    for binding in self.source_account_bindings(source_sha256)
+                    if binding.ledger_account_id is not None
+                }
+            )
+        )
+        if not account_ids:
+            return ()
+        placeholders = ",".join("?" for _ in account_ids)
+        candidates = self.connection.execute(
+            "SELECT DISTINCT source_sha256 FROM SourceAccountBindings "
+            f"WHERE ledger_account_id IN ({placeholders}) AND source_sha256<>? ORDER BY source_sha256",
+            (*account_ids, source_sha256),
+        )
+        overlaps = []
+        for (candidate_id,) in candidates:
+            other = self.load_import(candidate_id).evidence.payload
+            if (
+                isinstance(other, StatementPayload)
+                and other.start.iso is not None
+                and payload.start.iso <= other.end.iso
+                and other.start.iso <= payload.end.iso
+            ):
+                overlaps.append(candidate_id)
+        return tuple(overlaps)
+
     def import_source(
         self, source: bytes, definition: bytes, evidence: SourceEvidence, *, suffix: Literal[".csv", ".pdf"]
     ) -> bool:

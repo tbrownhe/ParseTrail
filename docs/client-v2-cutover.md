@@ -366,7 +366,14 @@ other page text, full-page capture, or separate accounting questions.
 The read-only evidence preview now shows the unclassified dollar-line count when
 it is nonzero and lists each line under Other source lines. The disposable demo
 includes one such synthetic older-Citi line; native acceptance of that preview
-change is pending.
+change was confirmed by the owner on October 24, 2026.
+
+The workspace now flags possible date-range overlap between saved statements
+only when both have explicit bindings to the same ledger account and both
+period starts are known. It lists the other source ID for review and makes no
+duplicate, merge or posting decision. Sources without explicit bindings or
+known starts receive no overlap conclusion. The disposable demo includes two
+overlapping older-Citi sources; native acceptance of this warning is pending.
 
 ## Current stop/go decision
 

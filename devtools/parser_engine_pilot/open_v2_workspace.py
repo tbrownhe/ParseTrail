@@ -30,6 +30,7 @@ CASH_DEFINITION = ROOT / "devtools" / "v2_fresh_slice" / "synthetic-posted-cash-
 CASH_SOURCE = b"Date,Account,Description,Amount,ReportedBalance\n10/01/2026,Checking A,Coffee,-$4.00,$996.00\n"
 MORE_CASH = b"Date,Account,Description,Amount,ReportedBalance\n10/02/2026,Checking A,Tea,-$3.00,$993.00\n"
 CITI_SOURCE = b"%PDF-older-citi-synthetic"
+CITI_OVERLAP_SOURCE = b"%PDF-older-citi-overlap-synthetic"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -81,13 +82,24 @@ def main(argv: list[str] | None = None) -> int:
         workspace.import_file(mohela_path)
         workspace.import_file(cash_path)
         with V2ProfileStore.open(workspace.profile_path) as store:
+            citi_evidence = parse_legacy_citi(
+                CITI_DEFINITION,
+                citi_lines(extra=("Offer balance $2.34",), source=CITI_SOURCE),
+            )
             store.import_source(
                 CITI_SOURCE,
                 CITI_DEFINITION,
-                parse_legacy_citi(
-                    CITI_DEFINITION,
-                    citi_lines(extra=("Offer balance $2.34",), source=CITI_SOURCE),
-                ),
+                citi_evidence,
+                suffix=".pdf",
+            )
+            citi_overlap = parse_legacy_citi(
+                CITI_DEFINITION,
+                citi_lines(source=CITI_OVERLAP_SOURCE),
+            )
+            store.import_source(
+                CITI_OVERLAP_SOURCE,
+                CITI_DEFINITION,
+                citi_overlap,
                 suffix=".pdf",
             )
             store.import_source(
@@ -100,11 +112,17 @@ def main(argv: list[str] | None = None) -> int:
             store.add_financial_account(FinancialAccount("loan-b", "Loan B", "liability", "mohela"))
             store.add_financial_account(FinancialAccount("checking-a", "Checking A", "asset", "synthetic"))
             store.add_financial_account(FinancialAccount("card-a", "Card A", "liability", "synchrony", "999991234"))
+            store.add_financial_account(FinancialAccount("citi-card", "Citi Card", "liability", "citi"))
+            for evidence in (citi_evidence, citi_overlap):
+                account = evidence.payload.accounts[0]
+                store.bind_source_account(
+                    evidence.source_sha256, account.source_identity, account.source_identity_form, "citi-card"
+                )
         window = V2WorkspaceWindow(workspace)
         window.status.setWordWrap(True)
         window.status.setText(
             "Disposable demo. First source: review its last-four match. "
-            "Older Citi source: preview its unclassified dollar line. "
+            "Older Citi sources: inspect the period-overlap warning; one source previews an unclassified dollar line. "
             f"Import source: {more_path}\nInstall signed catalog: {next_release}"
         )
         window.show()

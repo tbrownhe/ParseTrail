@@ -304,7 +304,7 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   and leave it unposted. `capture_verified` stays false; other page text,
   full-page capture, and separate accounting review remain open. The read-only
   preview shows a nonzero unclassified dollar-line count and the individual
-  lines; native acceptance is pending.
+  lines; the owner confirmed the native Windows preview on October 24, 2026.
   Middle Citi now uses a generic declaration-driven header-anchor table worker.
   All eight routed archive PDFs matched the accepted reader on account,
   period, printed balances and 323 rows. The 1,311 raw table rows divide into
@@ -493,7 +493,12 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   the owner accepted the native review dialog on October 24, 2026. Signed parser
   context and the 2.0 global preference now support unique automatic matches;
   the owner confirmed the on direction and requested a persistent off toggle,
-  then accepted the correction. Ledger integration remains open.
+  then accepted the correction. Explicitly bound statement sources now show a
+  read-only possible-period-overlap warning when another saved statement is
+  bound to the same ledger account and their known date ranges intersect. The
+  warning names the other source and makes no duplicate or posting decision;
+  native Windows acceptance of this warning is pending. Ledger integration
+  remains open.
 - [ ] **V2-4a–b — Daily review:** create/edit accounts, categories and budgets; connect
   accepted ledger workflows to the application in small increments. Manual values,
   closures and unsupported accounting remain explicit. Owner Windows integration gate.
