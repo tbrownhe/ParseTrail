@@ -213,21 +213,22 @@ class CashActivityReviewRow:
 
 
 @dataclass(frozen=True)
-class SpendingCategoryTotal:
+class ReviewedCategoryTotal:
     category_id: str
     name: str
     amount_minor: int
 
 
 @dataclass(frozen=True)
-class SpendingSummary:
+class ReviewedCategorySummary:
     start: date
     end: date
-    categories: tuple[SpendingCategoryTotal, ...]
+    kind: Literal["expense", "income"]
+    categories: tuple[ReviewedCategoryTotal, ...]
     total_minor: int
     activity_rows_without_full_allocation: int
     sources_with_incomplete_activity: int
-    excluded_unreviewed_expense_entries: int
+    excluded_unreviewed_entries: int
 
 
 @dataclass(frozen=True)
@@ -810,24 +811,30 @@ class V2ProfileStore:
             "WHERE o.row_role='activity' AND (active.used IS NULL OR active.used<>o.amount_minor)"
         ).fetchone()
 
-    def spending_summary(self, *, start: date, end: date) -> SpendingSummary:
-        """Summarize reviewed expense postings; report unresolved source activity separately."""
-        categories = {category.id: category for category in self.category_accounts() if category.kind == "expense"}
+    def reviewed_category_summary(
+        self, *, kind: Literal["expense", "income"], start: date, end: date
+    ) -> ReviewedCategorySummary:
+        """Summarize reviewed category postings in the category's natural direction."""
+        if kind not in {"expense", "income"}:
+            raise ProfileFormatError("report_category_kind_invalid")
+        categories = {category.id: category for category in self.category_accounts() if category.kind == kind}
         totals = dict.fromkeys(categories, 0)
         excluded_unreviewed = 0
+        direction = 1 if kind == "expense" else -1
         for entry in self._journal_entries_in_period(start, end):
             if not entry.reviewed:
                 excluded_unreviewed += any(posting.account_id in totals for posting in entry.postings)
                 continue
             for posting in entry.postings:
                 if posting.account_id in totals:
-                    totals[posting.account_id] += posting.amount_minor
+                    totals[posting.account_id] += direction * posting.amount_minor
         unresolved_rows, unresolved_sources = self._unallocated_activity_counts()
-        return SpendingSummary(
+        return ReviewedCategorySummary(
             start,
             end,
+            kind,
             tuple(
-                SpendingCategoryTotal(category_id, category.name, totals[category_id])
+                ReviewedCategoryTotal(category_id, category.name, totals[category_id])
                 for category_id, category in categories.items()
             ),
             sum(totals.values()),
@@ -842,7 +849,7 @@ class V2ProfileStore:
         if month.year == 9999 and month.month == 12:
             raise ProfileFormatError("report_period_invalid")
         next_month = date(month.year + (month.month == 12), month.month % 12 + 1, 1)
-        spending = self.spending_summary(start=month, end=next_month)
+        spending = self.reviewed_category_summary(kind="expense", start=month, end=next_month)
         targets = {target.category_id: target for target in self.category_budget_targets(month)}
         rows = tuple(
             MonthlyBudgetRow(
@@ -868,7 +875,7 @@ class V2ProfileStore:
             spending.total_minor,
             spending.activity_rows_without_full_allocation,
             spending.sources_with_incomplete_activity,
-            spending.excluded_unreviewed_expense_entries,
+            spending.excluded_unreviewed_entries,
         )
 
     def financial_journal_summary(self, *, start: date, end: date) -> FinancialJournalSummary:

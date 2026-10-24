@@ -400,8 +400,8 @@ corrections. Transfers and loan proceeds remain pending unless the owner
 deliberately chooses income; no deposit is classified automatically. The dialog
 shows unsupported rows as pending, requires a category and explicit reason, and
 confirms each posting or correction. Offscreen interaction passes; the owner
-confirmed the expense flow on native Windows on October 24, 2026. The new
-income flow awaits native Windows acceptance. The reason remains required for
+confirmed the expense flow on native Windows on October 24, 2026 and later
+accepted the income flow. The reason remains required for
 now, although the owner identified it as possible friction for routine
 categorization. Financial-account editing now changes a name, institution key
 or full number without changing its ledger class or ID; existing bindings and
@@ -431,10 +431,13 @@ certify cash flow. The owner accepted this tab on native Windows. A Monthly
 budgets tab now compares effective expense targets with net reviewed journal
 spending for a whole calendar month. Categories with no target stay visible;
 the view omits the total target if any category is untargeted and states the
-source coverage limit. Offscreen checks pass; native Windows acceptance of
-the new budget tab was accepted by the owner, including the total appearing
-after Travel received a target. Cash-flow classification and export cutover
-remain V2-5 work.
+source coverage limit. The owner accepted this tab, including the total
+appearing after Travel received a target. A new Income tab reads reviewed
+income-category journal postings in their natural direction, nets corrections,
+and displays the same incomplete-source scope. It excludes unreviewed entries
+and does not claim all deposits or certified cash flow. Offscreen checks pass;
+native Windows acceptance of this tab remains open. Cash-flow classification
+and export cutover remain V2-5 work.
 
 ## Current stop/go decision
 

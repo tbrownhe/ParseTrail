@@ -1,4 +1,4 @@
-"""A 2.0 spending read uses journal postings and exposes incomplete source scope."""
+"""2.0 category reports use reviewed journal postings and expose incomplete scope."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def test_spending_summary_nets_corrections_and_keeps_unallocated_activity_visibl
         store.rename_category_account("expense:travel", "Trips")
         store.update_financial_account(FinancialAccount("cash", "Updated checking", "asset", "synthetic"))
     with V2ProfileStore.open(profile, read_only=True) as store:
-        report = store.spending_summary(start=date(2026, 10, 1), end=date(2026, 10, 4))
+        report = store.reviewed_category_summary(kind="expense", start=date(2026, 10, 1), end=date(2026, 10, 4))
         assert [(row.category_id, row.name, row.amount_minor) for row in report.categories] == [
             ("expense:food", "Food", 300),
             ("expense:travel", "Trips", 400),
@@ -47,7 +47,7 @@ def test_spending_summary_nets_corrections_and_keeps_unallocated_activity_visibl
         assert report.total_minor == 700
         assert report.activity_rows_without_full_allocation == 1
         assert report.sources_with_incomplete_activity == 1
-        assert report.excluded_unreviewed_expense_entries == 0
+        assert report.excluded_unreviewed_entries == 0
         assert deposit.row_id not in store._active_consumed()
         movement = store.financial_journal_summary(start=date(2026, 10, 1), end=date(2026, 10, 4))
         assert [
@@ -71,15 +71,39 @@ def test_spending_summary_nets_corrections_and_keeps_unallocated_activity_visibl
         assert november_budget.categories[0].target_minor == 2_000
         assert november_budget.categories[0].reviewed_spending_minor == 0
         assert november_budget.categories[0].remaining_minor == 2_000
-        narrow = store.spending_summary(start=date(2026, 10, 3), end=date(2026, 10, 4))
+        narrow = store.reviewed_category_summary(kind="expense", start=date(2026, 10, 3), end=date(2026, 10, 4))
         assert narrow.total_minor == 0
         assert narrow.activity_rows_without_full_allocation == 1
         narrow_movement = store.financial_journal_summary(start=date(2026, 10, 3), end=date(2026, 10, 4))
         assert all(row.nonopening_change_minor == 0 for row in narrow_movement.accounts)
         with pytest.raises(ProfileFormatError, match="report_period_invalid"):
-            store.spending_summary(start=date(2026, 10, 1), end=date(2026, 10, 1))
+            store.reviewed_category_summary(kind="expense", start=date(2026, 10, 1), end=date(2026, 10, 1))
         with pytest.raises(ProfileFormatError, match="report_period_invalid"):
             store.financial_journal_summary(start=date(2026, 10, 2), end=date(2026, 10, 1))
         with pytest.raises(ProfileFormatError, match="budget_effective_month_invalid"):
             store.monthly_budget_summary(date(2026, 10, 2))
         assert store.load_import(evidence.source_sha256).evidence == evidence
+
+
+def test_reviewed_income_uses_natural_sign_and_nets_category_correction(tmp_path: Path) -> None:
+    profile = tmp_path / "fresh.db"
+    evidence = build_source_evidence(SOURCE, DEFINITION, suffix=".csv")
+    deposit = evidence.payload.rows[2]
+    with V2ProfileStore.create(profile) as store:
+        store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
+        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        store.add_category_account("income:pay", "Pay", "income")
+        store.add_category_account("income:gift", "Gift", "income")
+        store.add_category_account("expense:food", "Food", "expense")
+        store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
+        original = store.post_reviewed_cash_category(deposit.row_id, "income:pay", reason="Confirmed income")
+        store.correct_reviewed_cash_category(original, "income:gift", reason="Correct source of income")
+    with V2ProfileStore.open(profile, read_only=True) as store:
+        income = store.reviewed_category_summary(kind="income", start=date(2026, 10, 1), end=date(2026, 11, 1))
+        assert [(row.name, row.amount_minor) for row in income.categories] == [("Gift", 1_000), ("Pay", 0)]
+        assert income.total_minor == 1_000
+        assert income.activity_rows_without_full_allocation == 2
+        spending = store.reviewed_category_summary(kind="expense", start=date(2026, 10, 1), end=date(2026, 11, 1))
+        assert spending.total_minor == 0
+        with pytest.raises(ProfileFormatError, match="report_category_kind_invalid"):
+            store.reviewed_category_summary(kind="asset", start=date(2026, 10, 1), end=date(2026, 11, 1))

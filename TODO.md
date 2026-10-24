@@ -524,7 +524,7 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   income only after an income-category choice; transfers and loan proceeds stay
   pending unless deliberately classified. Its offscreen interaction tests pass;
   the owner confirmed the expense flow on native Windows on October 24, 2026.
-  Native Windows acceptance of the new income flow remains open. The
+  The owner accepted the new income flow on native Windows. The
   reason remains required for now; the owner flagged the per-categorization
   entry as potential daily-workflow friction for later review. Financial
   account editing now changes the display name, institution key and full number
@@ -555,7 +555,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   and no total target is shown unless every expense category has one; source
   coverage limits remain visible. Offscreen checks pass; the owner accepted
   this tab and confirmed that setting Travel's target made the monthly total
-  appear.
+  appear. A new Income tab uses the same reviewed-category journal query in
+  the natural income direction, nets category corrections, and exposes the
+  same source coverage limits. Offscreen checks pass; native Windows
+  acceptance of the Income report remains open.
   Inventory every legacy menu action; approve concrete deferrals rather than
   silently removing functionality. Owner Windows gate.
 - [ ] **V2-6a–b — Profile selection:** backup/restore the new profile and make

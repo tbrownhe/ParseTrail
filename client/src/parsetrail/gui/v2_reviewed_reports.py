@@ -1,4 +1,4 @@
-"""Read-only 2.0 spending summary from the reviewed journal."""
+"""Read-only 2.0 category, account movement and budget reports."""
 
 from __future__ import annotations
 
@@ -26,21 +26,24 @@ from parsetrail.core.v2_profile_store import (
     MonthlyBudgetRow,
     MonthlyBudgetSummary,
     ProfileFormatError,
-    SpendingCategoryTotal,
-    SpendingSummary,
+    ReviewedCategorySummary,
+    ReviewedCategoryTotal,
     V2ProfileStore,
 )
 from parsetrail.gui.v2_evidence_preview import _money
 
 
-class _SpendingModel(QAbstractTableModel):
-    HEADERS = ("Expense category", "Net reviewed spending")
-
-    def __init__(self, parent=None):
+class _CategoryModel(QAbstractTableModel):
+    def __init__(self, kind: str, parent=None):
         super().__init__(parent)
-        self.rows: tuple[SpendingCategoryTotal, ...] = ()
+        self.headers = (
+            ("Expense category", "Net reviewed spending")
+            if kind == "expense"
+            else ("Income category", "Net reviewed income")
+        )
+        self.rows: tuple[ReviewedCategoryTotal, ...] = ()
 
-    def replace(self, rows: tuple[SpendingCategoryTotal, ...]) -> None:
+    def replace(self, rows: tuple[ReviewedCategoryTotal, ...]) -> None:
         self.beginResetModel()
         self.rows = rows
         self.endResetModel()
@@ -49,11 +52,11 @@ class _SpendingModel(QAbstractTableModel):
         return len(self.rows)
 
     def columnCount(self, _parent: QModelIndex = QModelIndex()) -> int:
-        return len(self.HEADERS)
+        return len(self.headers)
 
     def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole):
         if role == Qt.DisplayRole and orientation == Qt.Horizontal:
-            return self.HEADERS[section]
+            return self.headers[section]
         return None
 
     def data(self, index: QModelIndex, role: int = Qt.DisplayRole):
@@ -138,8 +141,8 @@ class _MonthlyBudgetModel(QAbstractTableModel):
         return values[index.column()]
 
 
-class V2SpendingSummaryDialog(QDialog):
-    """Show reviewed net spending without claiming complete source coverage."""
+class V2ReviewedReportsDialog(QDialog):
+    """Show reviewed journal totals with visible source coverage limits."""
 
     def __init__(self, profile: Path, parent=None):
         super().__init__(parent)
@@ -160,9 +163,9 @@ class V2SpendingSummaryDialog(QDialog):
         form.addRow("To (exclusive)", self.end)
         layout.addLayout(form)
         layout.addWidget(
-            QLabel("Date range applies to Spending and Account movement; Monthly budgets use their own month.")
+            QLabel("Date range applies to Spending, Income and Account movement; Monthly budgets use their own month.")
         )
-        self.model = _SpendingModel(self)
+        self.model = _CategoryModel("expense", self)
         self.table = QTableView()
         self.table.setModel(self.model)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -196,6 +199,13 @@ class V2SpendingSummaryDialog(QDialog):
             self.budget_table.horizontalHeader().setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
         budget_layout.addWidget(self.budget_table)
         self.tabs.addTab(budget_panel, "Monthly budgets")
+        self.income_model = _CategoryModel("income", self)
+        self.income_table = QTableView()
+        self.income_table.setModel(self.income_model)
+        self.income_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.income_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.income_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        self.tabs.addTab(self.income_table, "Income")
         layout.addWidget(self.tabs)
         self.total = QLabel()
         layout.addWidget(self.total)
@@ -209,7 +219,8 @@ class V2SpendingSummaryDialog(QDialog):
         self.end.dateChanged.connect(self.refresh)
         self.tabs.currentChanged.connect(self._show_selected_tab)
         self.budget_month.dateChanged.connect(self._refresh_budget)
-        self.spending_report: SpendingSummary | None = None
+        self.spending_report: ReviewedCategorySummary | None = None
+        self.income_report: ReviewedCategorySummary | None = None
         self.account_report: FinancialJournalSummary | None = None
         self.budget_report: MonthlyBudgetSummary | None = None
         self.refresh()
@@ -219,18 +230,22 @@ class V2SpendingSummaryDialog(QDialog):
         try:
             with V2ProfileStore.open(self.profile, read_only=True) as store:
                 start, end = self.start.date().toPython(), self.end.date().toPython()
-                self.spending_report = store.spending_summary(start=start, end=end)
+                self.spending_report = store.reviewed_category_summary(kind="expense", start=start, end=end)
+                self.income_report = store.reviewed_category_summary(kind="income", start=start, end=end)
                 self.account_report = store.financial_journal_summary(start=start, end=end)
         except ProfileFormatError as exc:
             if str(exc) != "report_period_invalid":
                 raise
             self.model.replace(())
+            self.income_model.replace(())
             self.account_model.replace(())
             self.spending_report = None
+            self.income_report = None
             self.account_report = None
             self._show_selected_tab()
             return
         self.model.replace(self.spending_report.categories)
+        self.income_model.replace(self.income_report.categories)
         self.account_model.replace(self.account_report.accounts)
         self._show_selected_tab()
 
@@ -265,6 +280,22 @@ class V2SpendingSummaryDialog(QDialog):
                 "Source rows may overlap, and this view does not establish complete spending or budget compliance."
             )
             return
+        if self.tabs.currentIndex() == 3:
+            income = self.income_report
+            if income is None:
+                self.total.setText("Choose an end date after the start date.")
+                self.scope.clear()
+                return
+            self.total.setText(f"Net reviewed income from posted journal entries: {_money(income.total_minor)}")
+            self.scope.setText(
+                f"Across the whole profile, {income.activity_rows_without_full_allocation} activity source row(s) "
+                f"from {income.sources_with_incomplete_activity} source(s) lack a full ledger allocation. "
+                "The date range above filters posted journal entries only. "
+                f"{income.excluded_unreviewed_entries} unreviewed income journal entries were excluded. "
+                "This is explicitly categorized income, not all deposits or certified cash flow. "
+                "Source rows may overlap; this view does not establish complete income or statement coverage."
+            )
+            return
         report = self.spending_report
         if report is None:
             self.total.setText("Choose an end date after the start date.")
@@ -280,7 +311,7 @@ class V2SpendingSummaryDialog(QDialog):
         excluded = (
             self.account_report.excluded_unreviewed_financial_entries
             if self.tabs.currentIndex() == 1
-            else report.excluded_unreviewed_expense_entries
+            else report.excluded_unreviewed_entries
         )
         unreviewed_note = f"{excluded} unreviewed journal entries were excluded. " if excluded else ""
         account_note = (

@@ -1,4 +1,4 @@
-"""The 2.0 spending view states its reviewed-journal and source-coverage scope."""
+"""The 2.0 reports state their reviewed-journal and source-coverage scope."""
 
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ SOURCE = (
 
 def test_spending_dialog_reads_posted_totals_without_changing_profile(tmp_path: Path) -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
-    from parsetrail.gui.v2_spending_summary import V2SpendingSummaryDialog
+    from parsetrail.gui.v2_reviewed_reports import V2ReviewedReportsDialog
     from PySide6.QtCore import QDate
     from PySide6.QtWidgets import QApplication
 
@@ -37,7 +37,7 @@ def test_spending_dialog_reads_posted_totals_without_changing_profile(tmp_path: 
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
         store.post_reviewed_cash_category(evidence.payload.rows[0].row_id, "expense:food", reason="Reviewed coffee")
     before = hashlib.sha256(profile.read_bytes()).hexdigest()
-    dialog = V2SpendingSummaryDialog(profile)
+    dialog = V2ReviewedReportsDialog(profile)
     try:
         dialog.start.setDate(QDate(2026, 10, 1))
         dialog.end.setDate(QDate(2026, 11, 1))
@@ -66,6 +66,42 @@ def test_spending_dialog_reads_posted_totals_without_changing_profile(tmp_path: 
         assert dialog.budget_model.rowCount() == 1
         dialog.tabs.setCurrentIndex(0)
         assert "end date after" in dialog.total.text()
+    finally:
+        dialog.close()
+        app.processEvents()
+    assert hashlib.sha256(profile.read_bytes()).hexdigest() == before
+
+
+def test_income_tab_shows_only_reviewed_income_and_coverage(tmp_path: Path) -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from parsetrail.gui.v2_reviewed_reports import V2ReviewedReportsDialog
+    from PySide6.QtCore import QDate
+    from PySide6.QtWidgets import QApplication
+
+    app = QApplication.instance() or QApplication([])
+    evidence = build_source_evidence(SOURCE, DEFINITION, suffix=".csv")
+    profile = tmp_path / "fresh.db"
+    with V2ProfileStore.create(profile) as store:
+        store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
+        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        store.add_category_account("income:pay", "Pay", "income")
+        store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
+        store.post_reviewed_cash_category(evidence.payload.rows[1].row_id, "income:pay", reason="Confirmed income")
+    before = hashlib.sha256(profile.read_bytes()).hexdigest()
+    dialog = V2ReviewedReportsDialog(profile)
+    try:
+        dialog.start.setDate(QDate(2026, 10, 1))
+        dialog.end.setDate(QDate(2026, 11, 1))
+        dialog.tabs.setCurrentIndex(3)
+        assert dialog.income_model.rowCount() == 1
+        assert dialog.income_model.data(dialog.income_model.index(0, 0)) == "Pay"
+        assert dialog.income_model.data(dialog.income_model.index(0, 1)) == "$10.00"
+        assert "Net reviewed income" in dialog.total.text()
+        assert "1 activity source row" in dialog.scope.text()
+        assert "not all deposits" in dialog.scope.text()
+        dialog.start.setDate(QDate(2026, 11, 1))
+        dialog.end.setDate(QDate(2026, 12, 1))
+        assert dialog.income_model.data(dialog.income_model.index(0, 1)) == "$0.00"
     finally:
         dialog.close()
         app.processEvents()

@@ -37,8 +37,8 @@ from parsetrail.gui.v2_account_binding_review import V2AccountBindingReview
 from parsetrail.gui.v2_cash_activity_review import V2CashActivityReview
 from parsetrail.gui.v2_categories import V2CategoryDialog
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
+from parsetrail.gui.v2_reviewed_reports import V2ReviewedReportsDialog
 from parsetrail.gui.v2_source_account_review import V2SourceAccountReview
-from parsetrail.gui.v2_spending_summary import V2SpendingSummaryDialog
 
 
 class V2ImportWorker(QThread):
@@ -161,9 +161,9 @@ class V2WorkspaceWindow(QMainWindow):
         self.cash_review_button = QPushButton("Review cash activity")
         self.cash_review_button.clicked.connect(self._review_cash_activity)
         controls.addWidget(self.cash_review_button)
-        self.spending_button = QPushButton("Reviewed reports")
-        self.spending_button.clicked.connect(self._spending_summary)
-        controls.addWidget(self.spending_button)
+        self.reports_button = QPushButton("Reviewed reports")
+        self.reports_button.clicked.connect(self._open_reviewed_reports)
+        controls.addWidget(self.reports_button)
         controls.addStretch()
         layout.addLayout(controls)
         account_controls = QHBoxLayout()
@@ -326,8 +326,8 @@ class V2WorkspaceWindow(QMainWindow):
             V2CashActivityReview(self.workspace.profile_path, source_id, self).exec()
             self.refresh(select_source=source_id)
 
-    def _spending_summary(self) -> None:
-        V2SpendingSummaryDialog(self.workspace.profile_path, self).exec()
+    def _open_reviewed_reports(self) -> None:
+        V2ReviewedReportsDialog(self.workspace.profile_path, self).exec()
 
     def _review_account(self) -> None:
         source_id = self._selected_source()

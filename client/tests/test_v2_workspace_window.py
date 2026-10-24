@@ -70,8 +70,8 @@ def test_window_imports_pending_evidence_and_reuses_exact_source(tmp_path: Path,
     app = _app()
     from parsetrail.gui.v2_cash_activity_review import V2CashActivityReview
     from parsetrail.gui.v2_categories import V2CategoryDialog
+    from parsetrail.gui.v2_reviewed_reports import V2ReviewedReportsDialog
     from parsetrail.gui.v2_source_account_review import V2SourceAccountReview
-    from parsetrail.gui.v2_spending_summary import V2SpendingSummaryDialog
     from parsetrail.gui.v2_workspace_window import V2WorkspaceWindow
 
     workspace = _workspace(tmp_path)
@@ -86,9 +86,9 @@ def test_window_imports_pending_evidence_and_reuses_exact_source(tmp_path: Path,
         assert category_opens == [0]
         spending_opens = []
         monkeypatch.setattr(
-            V2SpendingSummaryDialog, "exec", lambda dialog: spending_opens.append(dialog.model.rowCount())
+            V2ReviewedReportsDialog, "exec", lambda dialog: spending_opens.append(dialog.model.rowCount())
         )
-        window.spending_button.click()
+        window.reports_button.click()
         assert spending_opens == [0]
         assert window.import_button.isEnabled()
         window.start_import(source)

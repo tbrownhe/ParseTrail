@@ -141,6 +141,7 @@ def main(argv: list[str] | None = None) -> int:
             "Older Citi sources: inspect the period-overlap warning; one source previews an unclassified dollar line. "
             "Categories: rename Food, add a category, or change Food's October $100 target. "
             "Reviewed reports > Monthly budgets: October shows Food's $100 target and reviewed Coffee spending. "
+            "Reviewed reports > Income: after explicitly posting the synthetic Deposit, October shows $10 income. "
             f"Import source: {more_path}\nInstall signed catalog: {next_release}"
         )
         window.show()
