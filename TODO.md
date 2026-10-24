@@ -564,7 +564,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   owner chose reviewed transaction rows for the first 2.0 export. A new `.xlsx`
   workbook exports active reviewed non-opening entries, posting lines, source allocations,
   correction links and coverage notes for a chosen period. Offscreen checks
-  pass; native Windows export acceptance remains open. Approve concrete
+  pass; the owner accepted the native Windows export and noted that internal
+  keys may later be hidden for readability. Path-bearing 2.0 notices and the
+  disposable demo now put paths in selectable single-line fields to avoid
+  wrapping after a Windows drive letter. Approve concrete
   deferrals rather than silently removing functionality. Owner Windows gate.
 - [ ] **V2-6a–b — Profile selection:** backup/restore the new profile and make
   1.x/2.x profile selection explicit. No old-database activation or rebuild

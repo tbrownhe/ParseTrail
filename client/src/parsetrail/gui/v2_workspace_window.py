@@ -37,6 +37,7 @@ from parsetrail.gui.v2_account_binding_review import V2AccountBindingReview
 from parsetrail.gui.v2_cash_activity_review import V2CashActivityReview
 from parsetrail.gui.v2_categories import V2CategoryDialog
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
+from parsetrail.gui.v2_path_notice import show_path_notice
 from parsetrail.gui.v2_reviewed_reports import V2ReviewedReportsDialog
 from parsetrail.gui.v2_source_account_review import V2SourceAccountReview
 
@@ -138,9 +139,13 @@ class V2WorkspaceWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
-        self.profile_label = QLabel(f"Profile: {workspace.profile_path}")
-        self.profile_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        layout.addWidget(self.profile_label)
+        profile_row = QHBoxLayout()
+        profile_row.addWidget(QLabel("Profile:"))
+        self.profile_label = QLineEdit(str(workspace.profile_path))
+        self.profile_label.setReadOnly(True)
+        self.profile_label.setCursorPosition(0)
+        profile_row.addWidget(self.profile_label)
+        layout.addLayout(profile_row)
         catalog_controls = QHBoxLayout()
         self.catalog_label = QLabel()
         catalog_controls.addWidget(self.catalog_label)
@@ -295,9 +300,10 @@ class V2WorkspaceWindow(QMainWindow):
             QMessageBox.warning(self, "Profile was not opened", str(exc))
             return
         self.workspace = selected
-        self.profile_label.setText(f"Profile: {selected.profile_path}")
+        self.profile_label.setText(str(selected.profile_path))
+        self.profile_label.setCursorPosition(0)
         self.refresh()
-        self.status.setText(f"Opened 2.0 profile: {selected.profile_path}")
+        self.status.setText("Opened 2.0 profile. Its path is shown above.")
 
     def _choose_profile(self) -> None:
         selected, _filter = QFileDialog.getOpenFileName(
@@ -330,10 +336,12 @@ class V2WorkspaceWindow(QMainWindow):
         except (ProfileFormatError, sqlite3.Error, OSError) as exc:
             QMessageBox.warning(self, "Backup was not created", str(exc))
             return
-        QMessageBox.information(
+        show_path_notice(
             self,
             "Backup verified",
-            f"Verified 2.0 profile backup: {saved}\n\nThis file contains financial source evidence and is not encrypted by ParseTrail.",
+            "Verified 2.0 profile backup:",
+            saved,
+            "This file contains financial source evidence and is not encrypted by ParseTrail.",
         )
 
     def _restore_profile(self) -> None:

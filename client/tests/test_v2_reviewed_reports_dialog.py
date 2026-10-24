@@ -78,7 +78,7 @@ def test_report_dialog_exports_reviewed_rows_without_changing_profile(tmp_path: 
     from openpyxl import load_workbook
     from parsetrail.gui.v2_reviewed_reports import V2ReviewedReportsDialog
     from PySide6.QtCore import QDate
-    from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
+    from PySide6.QtWidgets import QApplication, QFileDialog
 
     app = QApplication.instance() or QApplication([])
     evidence = build_source_evidence(SOURCE, DEFINITION, suffix=".csv")
@@ -93,7 +93,10 @@ def test_report_dialog_exports_reviewed_rows_without_changing_profile(tmp_path: 
     export_path = tmp_path / "reviewed.xlsx"
     monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *_args, **_kwargs: (str(export_path), ""))
     notices = []
-    monkeypatch.setattr(QMessageBox, "information", lambda _parent, _title, message: notices.append(message))
+    monkeypatch.setattr(
+        "parsetrail.gui.v2_reviewed_reports.show_path_notice",
+        lambda _parent, _title, summary, path, detail: notices.append((summary, path, detail)),
+    )
     dialog = V2ReviewedReportsDialog(profile)
     try:
         dialog.start.setDate(QDate(2026, 10, 1))
@@ -101,7 +104,8 @@ def test_report_dialog_exports_reviewed_rows_without_changing_profile(tmp_path: 
         assert dialog.export_button.isEnabled()
         dialog.export_button.click()
         assert export_path.is_file()
-        assert "1 active reviewed entries" in notices[0]
+        assert "1 active reviewed entries" in notices[0][0]
+        assert notices[0][1] == export_path
         workbook = load_workbook(export_path, read_only=True)
         try:
             assert len(list(workbook["Reviewed Entries"].values)) == 2

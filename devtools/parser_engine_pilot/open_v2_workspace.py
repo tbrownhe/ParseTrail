@@ -15,7 +15,7 @@ from parsetrail.core.v2_profile_store import FinancialAccount, V2ProfileStore
 from parsetrail.core.v2_synchrony_source_output import from_synchrony_table
 from parsetrail.core.v2_workspace import V2Workspace
 from parsetrail.gui.v2_workspace_window import V2WorkspaceWindow
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QFormLayout, QLineEdit
 from scripts.v2_catalog_release import signed_catalog_bytes
 
 from devtools.parser_engine_pilot.review_accountless_export import DEFINITION as MOHELA_DEFINITION
@@ -143,8 +143,14 @@ def main(argv: list[str] | None = None) -> int:
             "Reviewed reports > Monthly budgets: October shows Food's $100 target and reviewed Coffee spending. "
             "Reviewed reports > Income: after explicitly posting the synthetic Deposit, October shows $10 income. "
             "Profile menu: back up this disposable profile, restore to a new .db, then reopen the original. "
-            f"Import source: {more_path}\nInstall signed catalog: {next_release}"
         )
+        demo_paths = QFormLayout()
+        for label, path in (("Import source:", more_path), ("Install signed catalog:", next_release)):
+            path_field = QLineEdit(str(path))
+            path_field.setReadOnly(True)
+            path_field.setCursorPosition(0)
+            demo_paths.addRow(label, path_field)
+        window.centralWidget().layout().addLayout(demo_paths)
         window.show()
         return app.exec()
 

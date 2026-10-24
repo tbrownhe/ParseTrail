@@ -139,13 +139,17 @@ def test_profile_menu_backs_up_restores_and_keeps_failed_selection_on_current_pr
     monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *_args, **_kwargs: next(open_paths))
     notices = []
     warnings = []
-    monkeypatch.setattr(QMessageBox, "information", lambda _parent, _title, message: notices.append(message))
+    monkeypatch.setattr(
+        "parsetrail.gui.v2_workspace_window.show_path_notice",
+        lambda _parent, _title, summary, path, detail: notices.append((summary, path, detail)),
+    )
     monkeypatch.setattr(QMessageBox, "warning", lambda _parent, _title, message: warnings.append(message))
     window = V2WorkspaceWindow(workspace)
     try:
         window.backup_profile_action.trigger()
         assert backup.is_file()
-        assert "not encrypted" in notices[0]
+        assert notices[0][1] == backup.resolve()
+        assert "not encrypted" in notices[0][2]
         with V2ProfileStore.open(workspace.profile_path) as store:
             store.rename_category_account("expense:food", "Changed")
         window.restore_profile_action.trigger()

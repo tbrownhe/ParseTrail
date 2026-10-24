@@ -323,9 +323,9 @@ posted Coffee row, choose Travel, enter a different reason and confirm. The
 source facts remain unchanged. Select the card source to inspect the inline
 abbreviated-match preference. Select the older-Citi source and open Preview
 evidence to see its unclassified dollar-line count.
-Its status line gives the path of another synthetic file
-for testing Import source and a second test-signed release folder for testing
-Install signed catalog. Closing the window removes the temporary workspace.
+Its copyable path fields show another synthetic file for testing Import source
+and a second test-signed release folder for testing Install signed catalog.
+Closing the window removes the temporary workspace.
 The real `--v2` entry requires `--profile` and `--catalog-cache`; it opens an
 existing 2.x profile unless `--create-profile` is explicitly supplied. It will
 not import until that cache contains a verified catalog.
@@ -456,7 +456,10 @@ active reviewed non-opening journal entries, exact posting and source
 allocation lines, correction links and source coverage notes for an explicit
 date range. It
 does not claim unique source coverage, reconciled balances or cash flow.
-Offscreen checks pass; native Windows export acceptance remains open. Other
+Offscreen checks pass; the owner accepted the native Windows export. Some
+internal keys remain visible in this first workbook and may later be hidden
+for readability. Profile, backup and export paths, plus disposable demo file
+paths, now use selectable single-line fields instead of wrapping prose. Other
 1.x action deferrals in the inventory still need explicit decisions.
 
 ## Current stop/go decision

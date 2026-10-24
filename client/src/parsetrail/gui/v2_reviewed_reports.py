@@ -35,6 +35,7 @@ from parsetrail.core.v2_profile_store import (
 )
 from parsetrail.core.v2_report_export import ReportExportError, write_reviewed_journal_workbook
 from parsetrail.gui.v2_evidence_preview import _money
+from parsetrail.gui.v2_path_notice import show_path_notice
 
 
 class _CategoryModel(QAbstractTableModel):
@@ -277,10 +278,11 @@ class V2ReviewedReportsDialog(QDialog):
         except (ProfileFormatError, ReportExportError, sqlite3.Error, OSError) as exc:
             QMessageBox.warning(self, "Export was not saved", str(exc))
             return
-        QMessageBox.information(
+        show_path_notice(
             self,
             "Reviewed export saved",
-            f"Saved {len(report.entries)} active reviewed entries to {saved}. "
+            f"Saved {len(report.entries)} active reviewed entries.",
+            saved,
             "The workbook includes posting lines, source allocations, corrections and coverage notes. "
             "It contains financial data and is not encrypted by ParseTrail.",
         )

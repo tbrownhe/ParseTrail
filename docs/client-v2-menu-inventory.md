@@ -47,4 +47,5 @@ non-opening entries, posting lines, source allocations, correction links and sco
 workbook. It omits superseded entries and reversals from active rows while
 retaining correction links. The 2.0 workbook cannot certify unique source
 coverage, account balances or cash flow. The owner chose reviewed transaction
-rows for this first export; pivot and preset choices remain open.
+rows for this first export and accepted its native Windows behavior. Some
+internal keys remain visible for now; pivot and preset choices remain open.
