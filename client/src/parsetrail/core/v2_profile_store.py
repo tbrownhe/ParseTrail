@@ -30,7 +30,7 @@ from parsetrail.core.ledger import (
 from parsetrail.core.source_evidence import ActivityExportPayload, SourceEvidence, StatementPayload
 
 APPLICATION_ID = 0x50543230  # PT20
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_DEFINITION_BYTES = 64 * 1024
 MAX_EVIDENCE_BYTES = 32 * 1024 * 1024
@@ -68,6 +68,11 @@ TABLE_COLUMNS = {
         ("purpose", "TEXT", 1, 0),
         ("institution_key", "TEXT", 0, 0),
         ("full_account_number", "TEXT", 0, 0),
+    ),
+    "CategoryBudgetRates": (
+        ("category_id", "TEXT", 1, 1),
+        ("effective_month", "TEXT", 1, 2),
+        ("amount_minor", "INTEGER", 0, 0),
     ),
     "FileAccountAssertions": (
         ("source_sha256", "TEXT", 0, 1),
@@ -107,6 +112,7 @@ FOREIGN_KEYS = {
     "EvidenceSnapshots": (("definition_sha256", "Definitions", "sha256"), ("source_sha256", "Sources", "sha256")),
     "SourceObservations": (("source_sha256", "Sources", "sha256"),),
     "Accounts": (),
+    "CategoryBudgetRates": (("category_id", "Accounts", "id"),),
     "FileAccountAssertions": (("ledger_account_id", "Accounts", "id"), ("source_sha256", "Sources", "sha256")),
     "RowAccountAssignments": (
         ("ledger_account_id", "Accounts", "id"),
@@ -162,6 +168,22 @@ class CategoryAccount:
     id: str
     name: str
     kind: Literal["expense", "income"]
+
+
+@dataclass(frozen=True)
+class CategoryBudgetRate:
+    category_id: str
+    effective_month: date
+    amount_minor: int | None
+
+
+@dataclass(frozen=True)
+class CategoryBudgetTarget:
+    category_id: str
+    name: str
+    kind: Literal["expense", "income"]
+    effective_month: date | None
+    amount_minor: int | None
 
 
 @dataclass(frozen=True)
@@ -355,6 +377,12 @@ class V2ProfileStore:
                         OR (role='internal' AND institution_key IS NULL AND full_account_number IS NULL)
                     )
                 );
+                CREATE TABLE CategoryBudgetRates (
+                    category_id TEXT NOT NULL REFERENCES Accounts(id),
+                    effective_month TEXT NOT NULL,
+                    amount_minor INTEGER CHECK(amount_minor>=0),
+                    PRIMARY KEY(category_id,effective_month)
+                );
                 CREATE TABLE FileAccountAssertions (
                     source_sha256 TEXT PRIMARY KEY REFERENCES Sources(sha256),
                     ledger_account_id TEXT NOT NULL REFERENCES Accounts(id)
@@ -539,6 +567,66 @@ class V2ProfileStore:
         )
         if cursor.rowcount != 1:
             raise ProfileFormatError("category_account_missing")
+
+    @staticmethod
+    def _budget_month(month: date) -> str:
+        if type(month) is not date or month.day != 1:
+            raise ProfileFormatError("budget_effective_month_invalid")
+        return month.isoformat()[:7]
+
+    def set_category_budget_rate(self, category_id: str, effective_month: date, amount_minor: int | None) -> None:
+        """Set a monthly target from one month until the next authored change."""
+        self._require_writable()
+        month_key = self._budget_month(effective_month)
+        if amount_minor is not None and (
+            type(amount_minor) is not int or not 0 <= amount_minor < 9_000_000_000_000_000
+        ):
+            raise ProfileFormatError("budget_amount_invalid")
+        if (
+            self.connection.execute("SELECT 1 FROM Accounts WHERE id=? AND role='category'", (category_id,)).fetchone()
+            is None
+        ):
+            raise ProfileFormatError("category_account_missing")
+        self.connection.execute(
+            "INSERT INTO CategoryBudgetRates(category_id,effective_month,amount_minor) VALUES (?,?,?) "
+            "ON CONFLICT(category_id,effective_month) DO UPDATE SET amount_minor=excluded.amount_minor",
+            (category_id, month_key, amount_minor),
+        )
+
+    def category_budget_history(self, category_id: str) -> tuple[CategoryBudgetRate, ...]:
+        if (
+            self.connection.execute("SELECT 1 FROM Accounts WHERE id=? AND role='category'", (category_id,)).fetchone()
+            is None
+        ):
+            raise ProfileFormatError("category_account_missing")
+        return tuple(
+            CategoryBudgetRate(category_id, date.fromisoformat(month_key + "-01"), amount_minor)
+            for month_key, amount_minor in self.connection.execute(
+                "SELECT effective_month,amount_minor FROM CategoryBudgetRates "
+                "WHERE category_id=? ORDER BY effective_month",
+                (category_id,),
+            )
+        )
+
+    def category_budget_targets(self, month: date) -> tuple[CategoryBudgetTarget, ...]:
+        month_key = self._budget_month(month)
+        active: dict[str, tuple[date, int | None]] = {}
+        for category_id, effective_key, amount_minor in self.connection.execute(
+            "SELECT category_id,effective_month,amount_minor FROM CategoryBudgetRates "
+            "WHERE effective_month<=? ORDER BY category_id,effective_month",
+            (month_key,),
+        ):
+            active[category_id] = (date.fromisoformat(effective_key + "-01"), amount_minor)
+        return tuple(
+            CategoryBudgetTarget(
+                category.id,
+                category.name,
+                category.kind,
+                active[category.id][0] if category.id in active else None,
+                active[category.id][1] if category.id in active else None,
+            )
+            for category in self.category_accounts()
+        )
 
     def _cash_expense_source(self, row_id: str):
         source_row = self.connection.execute(

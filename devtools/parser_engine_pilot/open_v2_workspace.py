@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import tempfile
+from datetime import date
 from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
@@ -120,6 +121,7 @@ def main(argv: list[str] | None = None) -> int:
             store.add_financial_account(FinancialAccount("citi-card", "Citi Card", "liability", "citi"))
             store.add_category_account("category:food", "Food", "expense")
             store.add_category_account("category:travel", "Travel", "expense")
+            store.set_category_budget_rate("category:food", date(2026, 10, 1), 10_000)
             for evidence in (citi_evidence, citi_overlap):
                 account = evidence.payload.accounts[0]
                 store.bind_source_account(
@@ -134,7 +136,7 @@ def main(argv: list[str] | None = None) -> int:
             "correct it to Travel. Deposit stays pending. "
             "Select the card source to review its last-four match. "
             "Older Citi sources: inspect the period-overlap warning; one source previews an unclassified dollar line. "
-            "Categories: rename Food or add a category. "
+            "Categories: rename Food, add a category, or change Food's October $100 target. "
             f"Import source: {more_path}\nInstall signed catalog: {next_release}"
         )
         window.show()

@@ -406,7 +406,11 @@ flow, but observed a clipped renamed account and
 a raw error on attempted reassignment after posting. The cash and accountless
 review tables now size account columns to contents, and the account review
 dialogs show posted-history locks and disable conflicting assignment controls.
-The owner confirmed these presentation fixes on native Windows.
+The owner confirmed these presentation fixes on native Windows. Pre-release
+schema revision 8 adds effective-month category budget targets to the same
+profile. The category dialog can save a new target or clear one from a selected
+month forward while preserving prior months. These planning values do not post
+journal entries. Offscreen checks pass; native Windows acceptance is pending.
 
 A first read-only Spending summary in the 2.0 workspace uses reviewed expense
 journal postings for a selected half-open date range. Reversal and replacement
@@ -419,7 +423,8 @@ financial-account journal changes. It presents assets as changes in value and
 liabilities as changes in amount owed, separates opening postings, and labels
 missing openings Not established. It does not calculate account balances or
 certify cash flow. Offscreen checks pass; native Windows acceptance of this tab
-remains open. Budget, cash classification and export cutover remain V2-5 work.
+remains open. Budget reporting, cash classification and export cutover remain
+V2-5 work.
 
 ## Current stop/go decision
 

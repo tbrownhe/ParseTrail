@@ -482,8 +482,8 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   database; the provisional financial-only `LedgerAccounts` table has been
   replaced by `Accounts` in pre-release schema revision 7. Earlier disposable
   pilot profiles are refused and recreated, with no migration layer. The
-  [unified store direction](docs/client-v2-unified-store.md) leaves reviewed
-  journal persistence and category/budget authoring as V2-4 work. An isolated
+  [unified store direction](docs/client-v2-unified-store.md) guides reviewed
+  journal persistence and category/budget authoring in V2-4. An isolated
   accountless-export review dialog now
   presents a six-row disposable MOHELA-shaped demo and saves either explicit
   file or selected-row decisions. Offscreen interaction tests pass; the owner
@@ -530,7 +530,11 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   renamed account and a raw lock error when trying to reassign a posted row.
   Review tables now size account columns to contents; posted assignments show
   an explanatory lock and disable reassignment controls. The owner confirmed
-  these presentation fixes on native Windows. Manual values, budgets,
+  these presentation fixes on native Windows. Pre-release schema revision 8
+  stores monthly category targets by effective month in the same user database;
+  the category dialog saves, clears and displays target history. Earlier months
+  retain their targets after a later change. Offscreen checks pass; native
+  Windows acceptance of budget editing remains open. Manual values,
   closures and unsupported accounting remain explicit. Owner Windows
   integration gate.
 - [ ] **V2-5a–b — Report cutover:** shared ledger spending/cash/balance/budget queries,

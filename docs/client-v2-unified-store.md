@@ -49,7 +49,7 @@ formats cannot be combined by opening both stores on one file.
    then remove obsolete 1.x runtime financial paths and freeze the released
    2.0 schema.
 
-A bounded proof toward the first two steps is in pre-release schema revision 7:
+A bounded proof toward the first two steps began in pre-release schema revision 7:
 a single `Accounts` table replaces the conflicting pilot account table, and
 one reviewed asset outflow can create an immutable, balanced expense journal
 entry with a source-row allocation in the same database transaction. It requires
@@ -63,3 +63,12 @@ journal history cannot be changed. A narrow desktop review now posts and
 recategorizes eligible asset outflows from activity exports; general journal
 workflow remains open. Earlier disposable pilot profiles are refused, not
 migrated.
+
+Pre-release schema revision 8 adds `CategoryBudgetRates` to the same profile.
+Each authored category has at most one monthly target per effective month; the
+latest rate at or before a report month applies until another is saved. An
+explicit empty target clears later months without changing prior targets. Zero
+is a valid target. These planning values do not post journal entries or infer
+transaction categories. The category dialog edits and displays this history.
+As with other pilot schema revisions, earlier disposable profiles are refused
+and recreated; there is no migration path.
