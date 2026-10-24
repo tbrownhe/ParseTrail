@@ -122,6 +122,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   MOHELA CSV (29 rows) in the successful archive without routing/extraction
   failure; Synchrony has a separate ten-source fixture. This is execution
   coverage, not full-page capture, legacy parity or accounting acceptance.
+  The same 957 distinct sources also imported through the verified-catalog
+  service into one disposable 2.0 profile, with zero failures; the complete
+  profile reopened read-only with 957 saved sources before removal. Ledger
+  posting and production-signed trust remain separate gates.
   Inventory all current parsers, archive layouts,
   repeated extraction/normalization/checks, source provenance, developer tools and
   release coupling. Produce a family/fixture matrix and explicit custom-operation needs.

@@ -242,6 +242,11 @@ interpretation or production-signed installed-client trust. A separate queued
 folder has six bank transaction-export CSVs and 21 Amazon-related CSVs that
 match neither current CSV declaration; these are outside the successful-archive
 replay and do not add a shipped parser family.
+The same 957 distinct sources then passed the verified-catalog import service
+into one disposable 2.0 profile: 957 new imports, zero retries or failures.
+Each import saved and reloaded its evidence, and the complete profile reopened
+read-only with 957 sources. The temporary profile was removed. This checks
+cross-source storage and schema integrity, not ledger posting or accounting.
 Installed-client trust remains open.
 
 The local [catalog artifact builder](../client/scripts/v2_catalog_release.py)
