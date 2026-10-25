@@ -485,7 +485,17 @@ unbound or non-account-total rows remain pending. A correction can change the
 category or accounting date by reversing the original at its old date and
 posting a replacement at the chosen date. Source evidence stays immutable and
 one active allocation consumes the row. Synthetic service and offscreen GUI
-checks pass; native card-review acceptance is open.
+checks pass; the owner accepted native card review.
+A 2.0 transfer review now shows equal opposite movements on distinct bound
+owned accounts as candidates, with competing matches visible. A selected pair
+can be explicitly confirmed as an asset transfer or card repayment. The store
+posts one same-day entry or two source-dated entries through an asset clearing
+account, consuming each observation once and creating no category amount.
+Assumed card dates require the global choice. Synthetic service and offscreen
+GUI checks pass; native transfer review acceptance remains open. Duplicate
+source overlap, partial settlement, fees, dismissal and correction are still
+outside this slice. The owner accepted native card review and requested a
+broader UI/UX pass once features are settled.
 A repeat read-only source-to-evidence replay after the date changes routed and
 parsed all 956 successful-archive PDFs with zero failures; it made no live
 profile or source-file writes.

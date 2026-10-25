@@ -48,6 +48,7 @@ from parsetrail.gui.v2_path_notice import show_data_locations, show_path_notice
 from parsetrail.gui.v2_reviewed_reports import V2ReviewedReportsDialog
 from parsetrail.gui.v2_source_account_review import V2SourceAccountReview
 from parsetrail.gui.v2_statement_coverage import V2StatementCoverageDialog
+from parsetrail.gui.v2_transfer_review import V2TransferReview
 
 
 class V2ImportWorker(QThread):
@@ -199,6 +200,9 @@ class V2WorkspaceWindow(QMainWindow):
         self.card_review_button = QPushButton("Review card purchases")
         self.card_review_button.clicked.connect(self._review_card_purchases)
         controls.addWidget(self.card_review_button)
+        self.transfer_review_button = QPushButton("Review transfers")
+        self.transfer_review_button.clicked.connect(self._review_transfers)
+        controls.addWidget(self.transfer_review_button)
         self.reports_button = QPushButton("Reviewed reports")
         self.reports_button.clicked.connect(self._open_reviewed_reports)
         controls.addWidget(self.reports_button)
@@ -531,6 +535,13 @@ class V2WorkspaceWindow(QMainWindow):
             self.assumed_posting_action.setChecked(self.workspace.preferences().allow_assumed_posting_dates)
             self.assumed_posting_action.blockSignals(False)
             self.refresh(select_source=source_id)
+
+    def _review_transfers(self) -> None:
+        V2TransferReview(self.workspace, self).exec()
+        self.assumed_posting_action.blockSignals(True)
+        self.assumed_posting_action.setChecked(self.workspace.preferences().allow_assumed_posting_dates)
+        self.assumed_posting_action.blockSignals(False)
+        self.refresh()
 
     def _open_reviewed_reports(self) -> None:
         V2ReviewedReportsDialog(self.workspace.profile_path, self).exec()

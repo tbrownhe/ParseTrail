@@ -270,6 +270,29 @@ class CardPurchaseReviewRow:
 
 
 @dataclass(frozen=True)
+class TransferMovement:
+    row_id: str
+    source_sha256: str
+    account_id: str
+    account_name: str
+    account_kind: Literal["asset", "liability"]
+    posting_date: str
+    date_provenance: str
+    date_allowed: bool
+    amount_minor: int
+    description: str
+
+
+@dataclass(frozen=True)
+class TransferCandidate:
+    outgoing: TransferMovement
+    incoming: TransferMovement
+    kind: Literal["asset transfer", "card payment"]
+    day_gap: int
+    posting_allowed: bool
+
+
+@dataclass(frozen=True)
 class ReviewedCategoryTotal:
     category_id: str
     name: str
@@ -1084,6 +1107,218 @@ class V2ProfileStore:
                 )
             )
         return tuple(result)
+
+    def _transfer_movements(self, preferences: V2Preferences) -> tuple[TransferMovement, ...]:
+        if type(preferences) is not V2Preferences or type(preferences.allow_assumed_posting_dates) is not bool:
+            raise ProfileFormatError("transfer_preferences_invalid")
+        accounts = {account.id: account for account in self.financial_accounts()}
+        consumed = self._active_consumed()
+        movements = []
+        for source_sha256 in self.source_ids():
+            evidence = self.load_import(source_sha256).evidence
+            cash_scope = _cash_review_scopes(evidence)
+            card_scope = _card_review_scopes(evidence)
+            if not cash_scope and not card_scope:
+                continue
+            bindings = {binding.row_id: binding.ledger_account_id for binding in self.account_bindings(source_sha256)}
+            for row in _rows(evidence):
+                account_id = bindings.get(row.row_id)
+                account = accounts.get(account_id)
+                amount = row.amount.minor
+                if (
+                    account is None
+                    or row.row_role != "activity"
+                    or type(amount) is not int
+                    or amount == 0
+                    or row.amount.provenance != "observed"
+                    or consumed.get(row.row_id, 0)
+                ):
+                    continue
+                if account.kind == "asset" and cash_scope.get(row.row_id, False):
+                    if row.date_role != "posting_date" or row.date.iso is None:
+                        continue
+                    candidate = row.date
+                elif account.kind == "liability" and amount > 0 and card_scope.get(row.row_id, False):
+                    candidate = posting_date_candidate(row)
+                    if candidate is None:
+                        continue
+                else:
+                    continue
+                movements.append(
+                    TransferMovement(
+                        row.row_id,
+                        source_sha256,
+                        account.id,
+                        account.name,
+                        account.kind,
+                        candidate.iso,
+                        candidate.provenance,
+                        candidate.provenance != "assumed" or preferences.allow_assumed_posting_dates,
+                        amount,
+                        row.description.text or "Description not printed",
+                    )
+                )
+        return tuple(movements)
+
+    def transfer_candidates(self, *, preferences: V2Preferences, max_day_gap: int = 7) -> tuple[TransferCandidate, ...]:
+        """Suggest equal, opposite owned-account movements; never infer a link."""
+        if type(max_day_gap) is not int or not 0 <= max_day_gap <= 31:
+            raise ProfileFormatError("transfer_window_invalid")
+        movements = self._transfer_movements(preferences)
+        receiving: dict[int, list[TransferMovement]] = {}
+        for movement in movements:
+            if movement.amount_minor > 0:
+                receiving.setdefault(movement.amount_minor, []).append(movement)
+        candidates = []
+        for outgoing in movements:
+            if outgoing.account_kind != "asset" or outgoing.amount_minor >= 0:
+                continue
+            for incoming in receiving.get(-outgoing.amount_minor, ()):
+                if outgoing.account_id == incoming.account_id:
+                    continue
+                gap = abs((date.fromisoformat(outgoing.posting_date) - date.fromisoformat(incoming.posting_date)).days)
+                if gap <= max_day_gap:
+                    candidates.append(
+                        TransferCandidate(
+                            outgoing,
+                            incoming,
+                            "card payment" if incoming.account_kind == "liability" else "asset transfer",
+                            gap,
+                            outgoing.date_allowed and incoming.date_allowed,
+                        )
+                    )
+        return tuple(
+            sorted(
+                candidates, key=lambda pair: (pair.outgoing.posting_date, pair.outgoing.row_id, pair.incoming.row_id)
+            )
+        )
+
+    def post_reviewed_transfer(
+        self, outgoing_row_id: str, incoming_row_id: str, *, preferences: V2Preferences, reason: str
+    ) -> str:
+        """Confirm one whole-movement pair atomically, with source-dated clearing if needed."""
+        self._require_writable()
+        if type(reason) is not str or not 0 < len(reason.strip()) <= 500:
+            raise ProfileFormatError("transfer_reason_required")
+        if type(preferences) is not V2Preferences or type(preferences.allow_assumed_posting_dates) is not bool:
+            raise ProfileFormatError("transfer_preferences_invalid")
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            event_id = "review:transfer:" + _digest((outgoing_row_id + ":" + incoming_row_id).encode())
+            existing = tuple(
+                _decode_journal(payload)
+                for (payload,) in self.connection.execute(
+                    "SELECT payload FROM JournalEntries WHERE key IN (?,?,?) ORDER BY key",
+                    (event_id + ":same", event_id + ":out", event_id + ":in"),
+                )
+            )
+            if existing:
+                allocated = {
+                    allocation.observation_id
+                    for entry in existing
+                    for posting in entry.postings
+                    for allocation in posting.allocations
+                }
+                expected_keys = {event_id + ":same"} if len(existing) == 1 else {event_id + ":out", event_id + ":in"}
+                if (
+                    {entry.key for entry in existing} != expected_keys
+                    or allocated != {outgoing_row_id, incoming_row_id}
+                    or any(entry.reason != reason.strip() or entry.event_id != event_id for entry in existing)
+                ):
+                    raise ProfileFormatError("transfer_conflicts_with_prior_decision")
+                self.connection.execute("COMMIT")
+                return event_id
+            pair = next(
+                (
+                    candidate
+                    for candidate in self.transfer_candidates(preferences=preferences, max_day_gap=31)
+                    if candidate.outgoing.row_id == outgoing_row_id and candidate.incoming.row_id == incoming_row_id
+                ),
+                None,
+            )
+            if pair is None:
+                raise ProfileFormatError("transfer_pair_unavailable_or_already_posted")
+            if not pair.posting_allowed:
+                raise ProfileFormatError("transfer_assumed_date_disabled")
+            outgoing, incoming = pair.outgoing, pair.incoming
+            amount = -outgoing.amount_minor
+            out_date = date.fromisoformat(outgoing.posting_date)
+            in_date = date.fromisoformat(incoming.posting_date)
+            clearing_id = "internal:transfer-clearing:USD"
+            if out_date != in_date:
+                self.connection.execute(
+                    "INSERT OR IGNORE INTO Accounts VALUES (?,?,?,'USD','internal','clearing',NULL,NULL)",
+                    (clearing_id, "Transfer clearing", "asset"),
+                )
+            accounts = self._ledger_accounts()
+            observations = {
+                outgoing.row_id: Observation(outgoing.row_id, outgoing.account_id, -amount, out_date),
+                incoming.row_id: Observation(incoming.row_id, incoming.account_id, amount, in_date),
+            }
+            if out_date == in_date:
+                entries = (
+                    JournalEntry(
+                        event_id + ":same",
+                        event_id,
+                        out_date,
+                        "Reviewed owned-account transfer",
+                        (
+                            Posting(outgoing.account_id, -amount, (Allocation(outgoing.row_id, -amount),)),
+                            Posting(incoming.account_id, amount, (Allocation(incoming.row_id, amount),)),
+                        ),
+                        reviewed=True,
+                        reason=reason.strip(),
+                    ),
+                )
+            else:
+                entries = (
+                    JournalEntry(
+                        event_id + ":out",
+                        event_id,
+                        out_date,
+                        "Transfer sent",
+                        (
+                            Posting(outgoing.account_id, -amount, (Allocation(outgoing.row_id, -amount),)),
+                            Posting(clearing_id, amount),
+                        ),
+                        reviewed=True,
+                        reason=reason.strip(),
+                    ),
+                    JournalEntry(
+                        event_id + ":in",
+                        event_id,
+                        in_date,
+                        "Transfer received",
+                        (
+                            Posting(clearing_id, -amount),
+                            Posting(incoming.account_id, amount, (Allocation(incoming.row_id, amount),)),
+                        ),
+                        reviewed=True,
+                        reason=reason.strip(),
+                    ),
+                )
+            consumed = self._active_consumed()
+            for entry in entries:
+                usage = validate_entry(entry, accounts, observations, consumed)
+                for row_id, used in usage.items():
+                    consumed[row_id] = consumed.get(row_id, 0) + used
+            for entry in entries:
+                self.connection.execute(
+                    "INSERT INTO JournalEntries(key,payload) VALUES (?,?)", (entry.key, _journal_payload(entry))
+                )
+                for posting in entry.postings:
+                    for allocation in posting.allocations:
+                        self.connection.execute(
+                            "INSERT INTO JournalAllocations VALUES (?,?,?)",
+                            (entry.key, allocation.observation_id, allocation.amount_minor),
+                        )
+            self.connection.execute("COMMIT")
+            return event_id
+        except BaseException as exc:
+            self.connection.execute("ROLLBACK")
+            if isinstance(exc, LedgerError):
+                raise ProfileFormatError("transfer_posting_refused") from None
+            raise
 
     def _journal_entries_in_period(self, start: date, end: date):
         if type(start) is not date or type(end) is not date or start >= end:

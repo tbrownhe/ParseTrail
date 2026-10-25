@@ -596,7 +596,16 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   and header charges stay pending. Category or date corrections reverse the
   prior entry at its old date and replace it at the chosen date, leaving source
   evidence immutable and the active allocation unique. Offscreen service and
-  dialog checks pass; native card review acceptance is open.
+  dialog checks pass; the owner accepted native card review. A broader UI/UX pass
+  is deferred until the feature set is settled.
+  The 2.0 store now suggests equal opposite movements on different bound owned
+  accounts within a chosen 0-31 day window. It supports explicit whole-movement
+  checking/savings transfers and card repayments, with source-dated clearing
+  when dates differ. The candidate view shows other matches; assumed card dates
+  require the global choice. Posting atomically consumes both source rows and
+  creates no income or expense. Synthetic service and offscreen dialog checks
+  pass; native transfer review acceptance is open. Dismissal, transfer correction,
+  duplicate/overlap resolution, fees and partial settlements remain pending.
   A read-only signed-catalog scan routed all 956 PDFs in the two successful
   archives, then parsed the six bank families: 315 statements and 14,275 rows
   met the structural cash-review prerequisites before account binding, with

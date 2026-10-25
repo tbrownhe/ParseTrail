@@ -26,7 +26,7 @@ legacy window has been replaced. **Pending** means the owner has not approved a
 | Statements → Correct Discrepancies | Evidence preview and explicit journal correction exist for narrow cash activity. | General source/balance discrepancy review pending. |
 | Statements → Send for Plugin Development | No 2.0 action. | Server submission is pending decision; preserve local source files and evidence. |
 | Categories → Category Manager | Fresh category names/kinds and effective-month budgets are available. | Additional editing and hierarchy behavior, if needed, pending. |
-| Transactions → Review Transactions | Bound asset cash expense/income review and negative card expense review are available, with append-only category and card-date corrections. | Native card review acceptance; positive card movements, HSA cash components, transfers, loans, manual and other interpretations remain pending. |
+| Transactions → Review Transactions | Bound asset cash expense/income, negative card expense, and explicit whole-movement transfer/card-payment review are available. Category and card-date corrections are append-only. The owner accepted native card review. | Native transfer review acceptance; duplicate source overlap, partial settlements, fees, transfer corrections, HSA cash components, loans, manual and other interpretations remain pending. A broader UI/UX pass follows feature work. |
 | Transactions → Identify Recurring | No 2.0 counterpart. | Pending decision; forecasting is outside the initial 2.0 gate. |
 | Transactions → Insert Manually | No 2.0 counterpart. | Explicit manual journal/value workflow pending. |
 | Train Model → Train Model for Testing | No 2.0 counterpart. | Pending decision; category review remains explicit. |
