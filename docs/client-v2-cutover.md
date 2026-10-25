@@ -490,6 +490,12 @@ It makes no missing-activity, reconciliation, opening-posting or account-balance
 claim. Double-clicking a row opens its immutable evidence. Synthetic store and
 offscreen GUI checks pass; the owner confirmed the native Windows view and
 double-click on October 25, 2026.
+The same dialog now has a read-only Printed openings tab backed by the
+earliest-source inventory. It displays a candidate only when every tied
+earliest source has a matching observed account-total opening, and it keeps
+unknown periods, conflicts and source-timing review visible. Liability
+candidates are displayed as amounts owed; no opening journal is posted.
+Offscreen checks pass; native Windows tab acceptance is open.
 
 A first read-only Spending summary in the 2.0 workspace uses reviewed expense
 journal postings for a selected half-open date range. Reversal and replacement

@@ -165,19 +165,30 @@ def test_statement_overlap_uses_explicit_account_and_printed_period(tmp_path: Pa
             0,
         )
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from parsetrail.gui.v2_evidence_preview import _money
     from parsetrail.gui.v2_statement_coverage import V2StatementCoverageDialog
     from parsetrail.gui.v2_workspace_window import V2WorkspaceWindow
     from PySide6.QtCore import Qt
-    from PySide6.QtWidgets import QApplication, QLabel
+    from PySide6.QtWidgets import QApplication, QLabel, QTabWidget
 
     app = QApplication.instance() or QApplication([])
     workspace = V2Workspace.open(path, tmp_path / "catalog", preferences_path=tmp_path / "preferences.json")
     window = V2WorkspaceWindow(workspace)
     try:
         dialog = V2StatementCoverageDialog(path, window)
+        tabs = dialog.findChild(QTabWidget)
+        assert [tabs.tabText(index) for index in range(tabs.count())] == ["Saved periods", "Printed openings"]
         assert dialog.model.rowCount() == 5
         assert dialog.model.data(dialog.model.index(2, 2)) == "Adjacent dates"
         assert dialog.model.data(dialog.model.index(4, 2)) == "Calendar gap"
+        assert dialog.opening_model.rowCount() == 2
+        card_opening = next(index for index, row in enumerate(dialog.opening_model.rows) if row.account_id == "card")
+        candidate = dialog.opening_model.rows[card_opening]
+        assert candidate.printed_opening_minor is not None
+        assert dialog.opening_model.data(dialog.opening_model.index(card_opening, 4)) == _money(
+            -candidate.printed_opening_minor
+        )
+        assert "Source timing unreviewed" in dialog.opening_model.data(dialog.opening_model.index(card_opening, 5))
         assert "do not establish" in dialog.findChildren(QLabel)[1].text()
         dialog.close()
         for index in range(window.sources.count()):

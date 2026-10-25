@@ -586,6 +586,11 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   or reconciliation. Double-click opens the immutable evidence. Synthetic
   store and offscreen GUI checks pass; the owner confirmed the native Windows
   view and source-evidence double-click on October 25, 2026.
+  The same dialog now has a read-only Printed openings tab sourced from the
+  earliest-opening inventory. It shows natural asset value or liability amount
+  owed only for a consistent observed account-total candidate, with conflicts,
+  unknown periods and unreviewed source timing visible. No journal is posted.
+  Offscreen checks pass; native tab acceptance is open.
 - [ ] **V2-5a–b — Report cutover:** shared ledger spending/cash/balance/budget queries,
   then dashboard and export integration. A first read-only spending summary now
   nets reviewed expense postings, including reversal/replacement corrections,

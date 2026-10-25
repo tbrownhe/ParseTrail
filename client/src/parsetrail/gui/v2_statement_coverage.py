@@ -12,11 +12,13 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QTableView,
+    QTabWidget,
     QVBoxLayout,
+    QWidget,
 )
 
 from parsetrail.core.source_evidence import MoneyValue
-from parsetrail.core.v2_profile_store import StatementCoverageRow, V2ProfileStore
+from parsetrail.core.v2_profile_store import EarliestSourceOpening, StatementCoverageRow, V2ProfileStore
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview, _money
 
 
@@ -86,6 +88,65 @@ class _CoverageModel(QAbstractTableModel):
         return values[index.column()]
 
 
+class _OpeningModel(QAbstractTableModel):
+    HEADERS = (
+        "Financial account",
+        "Class",
+        "Earliest known start",
+        "Bound sections",
+        "Printed opening candidate",
+        "Review needed",
+        "Sources considered",
+    )
+    BLOCKERS = {
+        "no_bound_statement": "No bound statement",
+        "unknown_source_period": "Unknown source period",
+        "non_account_total_scope": "Not an account-total balance",
+        "printed_opening_unavailable": "Printed opening unavailable",
+        "conflicting_earliest_openings": "Conflicting printed openings",
+        "source_timing_unreviewed": "Source timing unreviewed",
+    }
+
+    def __init__(self, rows: tuple[EarliestSourceOpening, ...], parent=None):
+        super().__init__(parent)
+        self.rows = rows
+
+    def rowCount(self, _parent: QModelIndex = QModelIndex()) -> int:
+        return len(self.rows)
+
+    def columnCount(self, _parent: QModelIndex = QModelIndex()) -> int:
+        return len(self.HEADERS)
+
+    def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole):
+        if role == Qt.DisplayRole and orientation == Qt.Horizontal:
+            return self.HEADERS[section]
+        return None
+
+    def data(self, index: QModelIndex, role: int = Qt.DisplayRole):
+        if not index.isValid() or role not in {Qt.DisplayRole, Qt.ToolTipRole}:
+            return None
+        row = self.rows[index.row()]
+        natural_sign = 1 if row.account_kind == "asset" else -1
+        values = (
+            row.account_name,
+            row.account_kind.title(),
+            row.earliest_period_start.isoformat() if row.earliest_period_start else "Unknown",
+            str(row.bound_statement_sections),
+            _money(row.printed_opening_minor * natural_sign)
+            if row.printed_opening_minor is not None
+            else "Unavailable",
+            ", ".join(self.BLOCKERS[blocker] for blocker in row.blockers),
+            ", ".join(source[:12] for source in row.earliest_source_ids),
+        )
+        if role == Qt.ToolTipRole:
+            return (
+                f"Account ID: {row.account_id}\n"
+                f"Source IDs considered: {', '.join(row.earliest_source_ids) or 'None'}\n"
+                f"Review codes: {', '.join(row.blockers)}"
+            )
+        return values[index.column()]
+
+
 class V2StatementCoverageDialog(QDialog):
     """Show source facts and calendar relationships without reconciliation claims."""
 
@@ -96,6 +157,7 @@ class V2StatementCoverageDialog(QDialog):
         self.resize(1200, 560)
         with V2ProfileStore.open(profile, read_only=True) as store:
             rows = store.statement_coverage()
+            openings = store.earliest_source_openings()
             account_count = len(store.financial_accounts())
         layout = QVBoxLayout(self)
         bound_accounts = len({row.account_id for row in rows})
@@ -108,7 +170,7 @@ class V2StatementCoverageDialog(QDialog):
             "Calendar comparisons use saved, explicitly bound statements only. Source period dates may be derived; "
             "hover a row for provenance. A gap or adjacent dates do not establish missing or complete activity. "
             "Printed balances are source evidence, not posted account balances. "
-            "Double-click a row to inspect its source."
+            "In Saved periods, double-click a row to inspect its source."
         )
         scope.setWordWrap(True)
         layout.addWidget(scope)
@@ -121,7 +183,28 @@ class V2StatementCoverageDialog(QDialog):
             self.table.horizontalHeader().setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.table.doubleClicked.connect(self._preview)
-        layout.addWidget(self.table)
+        tabs = QTabWidget()
+        tabs.addTab(self.table, "Saved periods")
+        opening_panel = QWidget()
+        opening_layout = QVBoxLayout(opening_panel)
+        opening_scope = QLabel(
+            "A candidate needs matching observed account-total openings across all tied earliest sources. "
+            "Asset values and liability amounts owed are shown in their natural direction. "
+            "Source timing is unreviewed; no opening is posted here. Inspect source details in Saved periods."
+        )
+        opening_scope.setWordWrap(True)
+        opening_layout.addWidget(opening_scope)
+        self.opening_model = _OpeningModel(openings, self)
+        self.opening_table = QTableView()
+        self.opening_table.setModel(self.opening_model)
+        self.opening_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.opening_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        for column in range(len(_OpeningModel.HEADERS)):
+            self.opening_table.horizontalHeader().setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
+        self.opening_table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
+        opening_layout.addWidget(self.opening_table)
+        tabs.addTab(opening_panel, "Printed openings")
+        layout.addWidget(tabs)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)

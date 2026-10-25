@@ -174,6 +174,7 @@ def main(argv: list[str] | None = None) -> int:
             "Recent Citi source: Preview evidence > Unclassified page text shows its General notice. "
             "Import folder selects only CSV/PDF files immediately in this temporary folder. "
             "Statement coverage shows the explicitly bound older Citi overlap without claiming reconciliation. "
+            "Its Printed openings tab shows read-only earliest source candidates and timing blockers. "
             "Categories: rename Food, add a category, or change Food's October $100 target. "
             "Reviewed reports > Monthly budgets: October shows Food's $100 target and reviewed Coffee spending. "
             "Reviewed reports > Income: after explicitly posting the synthetic Deposit, October shows $10 income. "
