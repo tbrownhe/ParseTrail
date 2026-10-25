@@ -574,8 +574,22 @@ opens an explicit form for opening/closing origin, inclusive timing, posting-dat
 certainty and a source reference. Saving adds an assertion without changing
 source evidence or journals. Known assumed card dates cannot be declared
 reported, stale forms are refused, and an amended earliest-source review marks
-its opening decision stale. Offscreen service and dialog checks pass; native
-acceptance is open. Earlier disposable pilot profiles are recreated.
+its opening decision stale. Offscreen service and dialog checks pass; the owner
+accepted native later-source review. Earlier disposable pilot profiles are recreated.
+
+The read-only Reconciliation check tab evaluates each bound account-total
+statement from one committed SQLite snapshot. It compares printed opening and
+closing amounts with the journal at the inclusive period boundaries, checks the
+independent source equation, allocation and unbacked postings, and requires
+reviewed endpoint origins, period timing, reported posting dates, a current
+opening decision and verified page capture. It reports exact differences and
+blockers with a deterministic rule/input version. It writes no journal or review
+state. Calendar gaps, adjacent endpoint differences and source overlap are
+separate coverage facts; posted interpretation review is separate too. A
+reconciled period does not certify complete account history. `--demo --comparison`
+opens this tab with fully reviewed synthetic Savings A and pending Card A.
+Service and offscreen UI checks pass; native acceptance is pending. Real bank
+sources with incomplete page-capture evidence remain visibly blocked.
 
 A first read-only Spending summary in the 2.0 workspace uses reviewed expense
 journal postings for a selected half-open date range. Reversal and replacement

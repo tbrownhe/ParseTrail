@@ -310,6 +310,29 @@ class StatementJournalComparison:
 
 
 @dataclass(frozen=True)
+class StatementReconciliationCheck:
+    account_id: str
+    account_name: str
+    account_kind: Literal["asset", "liability"]
+    source_sha256: str
+    period_start: date | None
+    period_end: date
+    printed_opening_minor: int | None
+    journal_opening_minor: int | None
+    opening_difference_minor: int | None
+    printed_closing_minor: int | None
+    journal_closing_minor: int
+    closing_difference_minor: int | None
+    source_difference_minor: int | None
+    exceptions: tuple[str, ...]
+    coverage_warnings: tuple[str, ...]
+    posted_interpretations_reviewed: bool
+    reconciled: bool
+    rule: str
+    input_version: str
+
+
+@dataclass(frozen=True)
 class CashActivityReviewRow:
     row_id: str
     date: str | None
@@ -2455,6 +2478,191 @@ class V2ProfileStore:
                     allocations_outside_period,
                     outside_postings,
                     status,
+                )
+            )
+        return tuple(result)
+
+    def statement_reconciliation_checks(self) -> tuple[StatementReconciliationCheck, ...]:
+        """Check bound statements in one read snapshot; never change accounting state."""
+        if self.connection.in_transaction:
+            raise ProfileFormatError("reconciliation_requires_committed_snapshot")
+        self.connection.execute("BEGIN")
+        try:
+            result = self._statement_reconciliation_checks()
+        finally:
+            self.connection.execute("ROLLBACK")
+        return result
+
+    def _statement_reconciliation_checks(self) -> tuple[StatementReconciliationCheck, ...]:
+        rule = "v2-statement-reconciliation-1"
+        version_tables = (
+            ("Sources", "sha256"),
+            ("EvidenceSnapshots", "source_sha256,definition_sha256,sha256"),
+            ("SourceObservations", "*"),
+            ("Accounts", "*"),
+            ("SourceAccountBindings", "*"),
+            ("JournalEntries", "*"),
+            ("JournalAllocations", "*"),
+            ("JournalCorrections", "*"),
+            ("StatementSourceReviews", "*"),
+            ("OpeningDecisions", "*"),
+        )
+        digest = hashlib.sha256(rule.encode())
+        for table, columns in version_tables:
+            digest.update(table.encode())
+            rows = sorted(
+                self.connection.execute(f"SELECT {columns} FROM {table}").fetchall(),
+                key=lambda row: json.dumps(row, separators=(",", ":")),
+            )
+            for row in rows:
+                digest.update(json.dumps(row, separators=(",", ":")).encode())
+        version = digest.hexdigest()
+        coverage = self.statement_coverage()
+        comparisons = {(row.account_id, row.source_sha256): row for row in self.statement_journal_comparisons()}
+        entries = tuple(
+            _decode_journal(payload) for (payload,) in self.connection.execute("SELECT payload FROM JournalEntries")
+        )
+        inactive = {key for (key,) in self.connection.execute("SELECT original_key FROM JournalCorrections")}
+        inactive.update(key for (key,) in self.connection.execute("SELECT reversal_key FROM JournalCorrections"))
+        reviews = {
+            account.id: {review.source_sha256: review for review in self.statement_source_reviews(account.id)}
+            for account in self.financial_accounts()
+        }
+        decisions = {account_id: self.opening_decision(account_id) for account_id in reviews}
+        kinds = {account.id: account.kind for account in self.financial_accounts()}
+        result = []
+        for section in coverage:
+            comparison = comparisons[(section.account_id, section.source_sha256)]
+            _payload, source_section = self._bound_statement_section(section.account_id, section.source_sha256)
+            source_row_ids = {row.row_id for row in source_section.rows if row.row_role == "activity"}
+            review = reviews[section.account_id].get(section.source_sha256)
+            opening_decision = decisions[section.account_id]
+            printed_opening = (
+                section.opening.minor
+                if section.balance_scope == "account_total"
+                and section.opening is not None
+                and section.opening.provenance == "observed"
+                else None
+            )
+            printed_closing = (
+                section.closing.minor
+                if section.balance_scope == "account_total"
+                and section.closing is not None
+                and section.closing.provenance == "observed"
+                else None
+            )
+            journal_opening = None
+            if section.period_start is not None:
+                journal_opening = sum(
+                    posting.amount_minor
+                    for entry in entries
+                    if entry.posting_date < section.period_start
+                    for posting in entry.postings
+                    if posting.account_id == section.account_id
+                )
+            journal_closing = sum(
+                posting.amount_minor
+                for entry in entries
+                if entry.posting_date <= section.period_end
+                for posting in entry.postings
+                if posting.account_id == section.account_id
+            )
+            opening_difference = (
+                journal_opening - printed_opening
+                if journal_opening is not None and printed_opening is not None
+                else None
+            )
+            closing_difference = journal_closing - printed_closing if printed_closing is not None else None
+            source_difference = (
+                comparison.source_activity_change_minor - comparison.printed_change_minor
+                if comparison.source_activity_change_minor is not None and comparison.printed_change_minor is not None
+                else None
+            )
+            exceptions = []
+            if section.balance_scope != "account_total":
+                exceptions.append("account_total_scope_unavailable")
+            if section.period_start is None:
+                exceptions.append("source_period_start_unavailable")
+            if printed_opening is None or printed_closing is None:
+                exceptions.append("reported_balance_endpoints_unavailable")
+            if not section.independent_balance_verified or source_difference != 0:
+                exceptions.append("source_balance_equation_unverified")
+            if not section.capture_verified:
+                exceptions.append("source_capture_incomplete")
+            if comparison.unallocated_rows:
+                exceptions.append("unallocated_source_movements")
+            if comparison.allocations_outside_period:
+                exceptions.append("source_allocations_outside_period")
+            unsupported_postings = any(
+                entry.key not in inactive
+                and section.period_start is not None
+                and section.period_start <= entry.posting_date <= section.period_end
+                and (
+                    not posting.allocations
+                    or any(allocation.observation_id not in source_row_ids for allocation in posting.allocations)
+                )
+                for entry in entries
+                for posting in entry.postings
+                if posting.account_id == section.account_id
+            )
+            if unsupported_postings:
+                exceptions.append("postings_outside_statement_evidence")
+            if opening_difference is not None and opening_difference != 0:
+                exceptions.append("opening_balance_difference")
+            if closing_difference is not None and closing_difference != 0:
+                exceptions.append("closing_balance_difference")
+            if review is None or review.opening_origin != "reported" or review.closing_origin != "reported":
+                exceptions.append("source_endpoints_not_reviewed")
+            if review is None or not review.timing_confirmed:
+                exceptions.append("source_period_timing_unreviewed")
+            if review is None or review.posting_dates != "reported":
+                exceptions.append("posting_dates_not_reported")
+            if opening_decision is None or opening_decision.stale:
+                exceptions.append("opening_position_unverified_or_stale")
+            overlapping = any(
+                other.account_id == section.account_id
+                and other.source_sha256 != section.source_sha256
+                and section.period_start is not None
+                and other.period_start is not None
+                and section.period_start <= other.period_end
+                and other.period_start <= section.period_end
+                for other in coverage
+            )
+            warnings = []
+            if overlapping:
+                warnings.append("overlapping_bound_source_periods")
+            if section.relation_to_known_periods == "gap":
+                warnings.append("calendar_gap_before_source")
+            if section.endpoint_comparison == "different":
+                warnings.append("adjacent_printed_endpoints_differ")
+            unreviewed = any(
+                entry.key not in inactive
+                and entry.posting_date <= section.period_end
+                and not entry.reviewed
+                and any(posting.account_id == section.account_id for posting in entry.postings)
+                for entry in entries
+            )
+            result.append(
+                StatementReconciliationCheck(
+                    section.account_id,
+                    section.account_name,
+                    kinds[section.account_id],
+                    section.source_sha256,
+                    section.period_start,
+                    section.period_end,
+                    printed_opening,
+                    journal_opening,
+                    opening_difference,
+                    printed_closing,
+                    journal_closing,
+                    closing_difference,
+                    source_difference,
+                    tuple(exceptions),
+                    tuple(warnings),
+                    not unreviewed,
+                    not exceptions,
+                    rule,
+                    version,
                 )
             )
         return tuple(result)

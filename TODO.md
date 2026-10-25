@@ -633,7 +633,16 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   Known assumed card posting dates cannot be asserted reported,
   and a stale review form cannot overwrite another window's saved revision.
   Saved periods now exposes Review selected source and a recorded/not-recorded
-  status. Service and offscreen UI checks pass; native acceptance is open.
+  status. Service and offscreen UI checks pass; the owner accepted native
+  later-source review.
+  A read-only Reconciliation check now combines exact printed and journal
+  opening/closing positions, source equation, allocation, reviewed provenance,
+  current opening decision and verified page capture in one SQLite read snapshot.
+  It returns a deterministic input version; corrections and source-review changes
+  change that version. Interpretation review and coverage warnings stay separate.
+  The disposable `--demo --comparison` workspace shows a fully reviewed synthetic
+  Savings A beside pending Card A. Service and offscreen UI checks pass; native
+  acceptance of this new tab is pending.
   Revision 9 disposable pilot profiles are recreated, not migrated.
   A read-only signed-catalog scan routed all 956 PDFs in the two successful
   archives, then parsed the six bank families: 315 statements and 14,275 rows

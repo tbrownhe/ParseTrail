@@ -25,6 +25,7 @@ from parsetrail.core.v2_profile_store import (
     EarliestSourceOpening,
     StatementCoverageRow,
     StatementJournalComparison,
+    StatementReconciliationCheck,
     V2ProfileStore,
 )
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview, _money
@@ -241,6 +242,97 @@ class _JournalComparisonModel(QAbstractTableModel):
         return values[index.column()]
 
 
+class _ReconciliationModel(QAbstractTableModel):
+    HEADERS = (
+        "Financial\naccount",
+        "Source\nperiod",
+        "Check\nresult",
+        "Opening\ndifference",
+        "Closing\ndifference",
+        "Source equation\ndifference",
+        "Separate\ncoverage facts",
+        "Source",
+    )
+    REASONS = {
+        "account_total_scope_unavailable": "Source is not an account-total balance",
+        "source_period_start_unavailable": "Source period start unavailable",
+        "reported_balance_endpoints_unavailable": "Reported printed endpoints unavailable",
+        "source_balance_equation_unverified": "Printed source equation unverified",
+        "source_capture_incomplete": "Source page capture incomplete",
+        "unallocated_source_movements": "Source movements awaiting allocation",
+        "source_allocations_outside_period": "Allocated source movement dated outside period",
+        "postings_outside_statement_evidence": "Journal posting outside this source evidence",
+        "opening_balance_difference": "Journal opening differs from printed opening",
+        "closing_balance_difference": "Journal closing differs from printed closing",
+        "source_endpoints_not_reviewed": "Printed endpoint origins need source review",
+        "source_period_timing_unreviewed": "Inclusive source period timing needs review",
+        "posting_dates_not_reported": "Posting dates are estimated or unverified",
+        "opening_position_unverified_or_stale": "Opening decision missing or stale",
+        "overlapping_bound_source_periods": "Bound source periods overlap",
+        "calendar_gap_before_source": "Calendar gap before this source",
+        "adjacent_printed_endpoints_differ": "Adjacent printed endpoints differ",
+    }
+
+    def __init__(self, rows: tuple[StatementReconciliationCheck, ...], parent=None):
+        super().__init__(parent)
+        self.rows = rows
+
+    def replace(self, rows: tuple[StatementReconciliationCheck, ...]) -> None:
+        self.beginResetModel()
+        self.rows = rows
+        self.endResetModel()
+
+    def rowCount(self, _parent: QModelIndex = QModelIndex()) -> int:
+        return len(self.rows)
+
+    def columnCount(self, _parent: QModelIndex = QModelIndex()) -> int:
+        return len(self.HEADERS)
+
+    def headerData(self, section: int, orientation: Qt.Orientation, role: int = Qt.DisplayRole):
+        if role == Qt.DisplayRole and orientation == Qt.Horizontal:
+            return self.HEADERS[section]
+        return None
+
+    def data(self, index: QModelIndex, role: int = Qt.DisplayRole):
+        if not index.isValid() or role not in {Qt.DisplayRole, Qt.ToolTipRole}:
+            return None
+        row = self.rows[index.row()]
+        natural = 1 if row.account_kind == "asset" else -1
+
+        def difference(value: int | None) -> str:
+            return _money(value * natural) if value is not None else "Unavailable"
+
+        values = (
+            row.account_name,
+            f"{row.period_start.isoformat() if row.period_start else 'Unknown'}\n{row.period_end.isoformat()}",
+            "Reconciled" if row.reconciled else f"Needs review ({len(row.exceptions)})",
+            difference(row.opening_difference_minor),
+            difference(row.closing_difference_minor),
+            difference(row.source_difference_minor),
+            ", ".join(self.REASONS[reason] for reason in row.coverage_warnings) or "None identified",
+            row.source_sha256[:16],
+        )
+        if role == Qt.ToolTipRole:
+            return self.details(row)
+        return values[index.column()]
+
+    @classmethod
+    def details(cls, row: StatementReconciliationCheck) -> str:
+        natural = 1 if row.account_kind == "asset" else -1
+
+        def amount(value: int | None) -> str:
+            return _money(value * natural) if value is not None else "Unavailable"
+
+        return (
+            f"Printed opening {amount(row.printed_opening_minor)}; journal opening {amount(row.journal_opening_minor)}. "
+            f"Printed closing {amount(row.printed_closing_minor)}; journal closing {amount(row.journal_closing_minor)}.\n"
+            f"Check blockers: {', '.join(cls.REASONS[reason] for reason in row.exceptions) or 'None'}.\n"
+            f"Separate coverage facts: {', '.join(cls.REASONS[reason] for reason in row.coverage_warnings) or 'None identified'}. "
+            f"Posted interpretation review: {'Complete' if row.posted_interpretations_reviewed else 'Pending'}.\n"
+            f"Source: {row.source_sha256}; rule: {row.rule}; input version: {row.input_version}"
+        )
+
+
 class V2StatementCoverageDialog(QDialog):
     """Show source facts and calendar relationships without reconciliation claims."""
 
@@ -253,6 +345,7 @@ class V2StatementCoverageDialog(QDialog):
             rows = store.statement_coverage()
             openings = store.earliest_source_openings()
             comparisons = store.statement_journal_comparisons()
+            reconciliation = store.statement_reconciliation_checks()
             accounts = store.financial_accounts()
             reviewed = frozenset(
                 (account.id, review.source_sha256)
@@ -349,6 +442,35 @@ class V2StatementCoverageDialog(QDialog):
         self.comparison_table.doubleClicked.connect(self._preview_comparison)
         comparison_layout.addWidget(self.comparison_table)
         tabs.addTab(comparison_panel, "Journal comparison")
+        reconciliation_panel = QWidget()
+        reconciliation_layout = QVBoxLayout(reconciliation_panel)
+        reconciliation_scope = QLabel(
+            "Reconciled requires matching printed and journal opening/closing balances, complete source allocation, "
+            "reviewed source provenance, a current opening decision and complete page capture. "
+            "Coverage facts and posted interpretation review remain separate. Select a row for exact blockers and values."
+        )
+        reconciliation_scope.setWordWrap(True)
+        reconciliation_layout.addWidget(reconciliation_scope)
+        self.reconciliation_model = _ReconciliationModel(reconciliation, self)
+        self.reconciliation_table = QTableView()
+        self.reconciliation_table.setModel(self.reconciliation_model)
+        self.reconciliation_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.reconciliation_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.reconciliation_table.setWordWrap(True)
+        reconciliation_header = self.reconciliation_table.horizontalHeader()
+        reconciliation_header.setFixedHeight(max(46, reconciliation_header.fontMetrics().lineSpacing() * 2 + 12))
+        for column, width in enumerate((150, 120, 140, 100, 100, 120, 260)):
+            reconciliation_header.setSectionResizeMode(column, QHeaderView.Interactive)
+            self.reconciliation_table.setColumnWidth(column, width)
+        reconciliation_header.setSectionResizeMode(7, QHeaderView.Stretch)
+        self.reconciliation_table.verticalHeader().setDefaultSectionSize(50)
+        self.reconciliation_table.selectionModel().currentRowChanged.connect(self._show_reconciliation_details)
+        self.reconciliation_details = QLabel("Select a statement to see its printed and journal endpoints.")
+        self.reconciliation_details.setWordWrap(True)
+        self.reconciliation_details.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        reconciliation_layout.addWidget(self.reconciliation_table)
+        reconciliation_layout.addWidget(self.reconciliation_details)
+        tabs.addTab(reconciliation_panel, "Reconciliation check")
         layout.addWidget(tabs)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         buttons.rejected.connect(self.reject)
@@ -378,6 +500,14 @@ class V2StatementCoverageDialog(QDialog):
         else:
             self.review_source_button.setText("Review selected source")
 
+    def _show_reconciliation_details(self, current: QModelIndex, _previous: QModelIndex) -> None:
+        if current.isValid():
+            self.reconciliation_details.setText(
+                self.reconciliation_model.details(self.reconciliation_model.rows[current.row()])
+            )
+        else:
+            self.reconciliation_details.setText("Select a statement to see its printed and journal endpoints.")
+
     def _review_selected_source(self) -> None:
         index = self.table.currentIndex()
         if not index.isValid():
@@ -393,6 +523,8 @@ class V2StatementCoverageDialog(QDialog):
                 for review in store.statement_source_reviews(account.id)
             )
             openings = store.earliest_source_openings()
+            reconciliation = store.statement_reconciliation_checks()
         self.model.set_reviewed(reviewed)
         self.opening_model.replace(openings)
+        self.reconciliation_model.replace(reconciliation)
         self._update_review_source_button()

@@ -142,6 +142,11 @@ def main(argv: list[str] | None = None) -> int:
             card_evidence = from_synchrony_table(CARD_DEFINITION, *card_channels())
             store.import_source(CARD_SOURCE, CARD_DEFINITION, card_evidence, suffix=".pdf")
             bank_evidence = from_anchored_bank(BANK_DEFINITION, *bank_channels(definition=BANK_DEFINITION, tail=True))
+            if args.comparison:
+                # This synthetic source is fully known to the demo, unlike real extracted pages.
+                bank_evidence = bank_evidence.model_copy(
+                    update={"payload": bank_evidence.payload.model_copy(update={"capture_verified": True})}
+                )
             store.import_source(BANK_SOURCE, BANK_DEFINITION, bank_evidence, suffix=".pdf")
             store.add_financial_account(FinancialAccount("loan-a", "Loan A", "liability", "mohela"))
             store.add_financial_account(FinancialAccount("loan-b", "Loan B", "liability", "mohela"))
@@ -162,6 +167,17 @@ def main(argv: list[str] | None = None) -> int:
                     bank_account.source_identity_form,
                     "savings-a",
                 )
+                store.record_statement_source_review(
+                    "savings-a",
+                    bank_evidence.source_sha256,
+                    expected_revision_id=None,
+                    opening_origin="reported",
+                    closing_origin="reported",
+                    timing_confirmed=True,
+                    posting_dates="reported",
+                    source_reference="Disposable synthetic statement summary and activity table",
+                )
+                store.post_reviewed_opening("savings-a")
                 interest, withdrawal = bank_account.rows
                 store.post_reviewed_cash_category(
                     interest.row_id, "category:cash-income", reason="Disposable reviewed interest"
@@ -216,12 +232,12 @@ def main(argv: list[str] | None = None) -> int:
         window.show()
         if args.comparison:
             window.status.setText(
-                "Disposable Journal comparison sample: Savings A has reviewed source movements; "
-                "Card A remains pending. The separate Statement coverage window is open on Journal comparison. "
+                "Disposable statement check: Savings A has reviewed source, opening and movements; "
+                "Card A remains pending. The separate Statement coverage window is open on Reconciliation check. "
                 "In Saved periods, select Savings A or Card A and click Review selected source to inspect provenance."
             )
             comparison = V2StatementCoverageDialog(workspace.profile_path, window)
-            comparison.findChild(QTabWidget).setCurrentIndex(2)
+            comparison.findChild(QTabWidget).setCurrentIndex(3)
             comparison.show()
             window._comparison_preview = comparison
         return app.exec()

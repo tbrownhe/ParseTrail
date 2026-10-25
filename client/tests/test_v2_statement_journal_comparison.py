@@ -12,8 +12,12 @@ from devtools.parser_engine_pilot.test_table_bank_source_output import DEFINITIO
 from devtools.parser_engine_pilot.test_table_bank_source_output import evidence as bank_channels
 
 
-def _profile(path: Path):
+def _profile(path: Path, *, capture_verified: bool = False):
     evidence = from_anchored_bank(DEFINITION, *bank_channels())
+    if capture_verified:
+        evidence = evidence.model_copy(
+            update={"payload": evidence.payload.model_copy(update={"capture_verified": True})}
+        )
     with V2ProfileStore.create(path) as store:
         store.import_source(SOURCE, DEFINITION, evidence, suffix=".pdf")
         store.add_financial_account(FinancialAccount("cash", "Savings", "asset", "lendingclub"))
