@@ -36,6 +36,8 @@ from parsetrail.core.source_evidence import (
     StatementAccount,
     StatementPayload,
 )
+from parsetrail.core.v2_preferences import V2Preferences
+from parsetrail.core.v2_review_dates import permitted_posting_date, posting_date_candidate
 
 APPLICATION_ID = 0x50543230  # PT20
 SCHEMA_VERSION = 8
@@ -253,6 +255,21 @@ class CashActivityReviewRow:
 
 
 @dataclass(frozen=True)
+class CardPurchaseReviewRow:
+    row_id: str
+    source_date: str | None
+    posting_candidate: str | None
+    date_provenance: Literal["observed", "derived", "assumed", "unknown"] | None
+    effective_date: str | None
+    description: str | None
+    amount_minor: int | None
+    financial_account: str | None
+    status: str
+    entry_key: str | None = None
+    category_id: str | None = None
+
+
+@dataclass(frozen=True)
 class ReviewedCategoryTotal:
     category_id: str
     name: str
@@ -351,12 +368,33 @@ BANK_CASH_STATEMENT_PARSERS = frozenset(
         "wells_business_table_pilot",
     }
 )
+CARD_STATEMENT_PARSERS = frozenset(
+    {
+        "chase_card_line_pilot",
+        "pdf_citicc_201505",
+        "pdf_citicc_202506",
+        "pdf_citicc_202511",
+        "pdf_occucc_201904",
+        "pdf_usbankreicc_201405",
+        "synchrony_amazon_store_card",
+    }
+)
 
 
 def _cash_review_scopes(evidence: SourceEvidence) -> dict[str, bool]:
     if isinstance(evidence.payload, ActivityExportPayload):
         return {row.row_id: True for row in evidence.payload.rows}
     if isinstance(evidence.payload, StatementPayload) and evidence.parser_id in BANK_CASH_STATEMENT_PARSERS:
+        return {
+            row.row_id: account.balance_scope == "account_total"
+            for account in evidence.payload.accounts
+            for row in account.rows
+        }
+    return {}
+
+
+def _card_review_scopes(evidence: SourceEvidence) -> dict[str, bool]:
+    if isinstance(evidence.payload, StatementPayload) and evidence.parser_id in CARD_STATEMENT_PARSERS:
         return {
             row.row_id: account.balance_scope == "account_total"
             for account in evidence.payload.accounts
@@ -812,8 +850,11 @@ class V2ProfileStore:
         financial = self.connection.execute("SELECT kind,role FROM Accounts WHERE id=?", (financial_id,)).fetchone()
         if financial != ("asset", "financial"):
             raise ProfileFormatError("cash_category_requires_asset_account")
+        return row, financial_id, self._ledger_accounts()
+
+    def _ledger_accounts(self) -> dict[str, LedgerAccount]:
         account_rows = self.connection.execute("SELECT id,name,kind,currency,role,purpose FROM Accounts").fetchall()
-        accounts = {
+        return {
             account_id: LedgerAccount(
                 account_id,
                 name,
@@ -824,7 +865,39 @@ class V2ProfileStore:
             )
             for account_id, name, kind, currency, role, purpose in account_rows
         }
-        return row, financial_id, accounts
+
+    def _card_purchase_source(self, row_id: str):
+        source_row = self.connection.execute(
+            "SELECT source_sha256,row_role,date_role,observed_date,amount_minor FROM SourceObservations WHERE row_id=?",
+            (row_id,),
+        ).fetchone()
+        if source_row is None:
+            raise ProfileFormatError("source_observation_missing")
+        saved = self.load_import(source_row[0])
+        if not _card_review_scopes(saved.evidence).get(row_id, False):
+            raise ProfileFormatError("card_purchase_unsupported_source_scope")
+        row = next((item for item in _rows(saved.evidence) if item.row_id == row_id), None)
+        bindings = {binding.row_id: binding.ledger_account_id for binding in self.account_bindings(source_row[0])}
+        financial_id = bindings.get(row_id)
+        if (
+            row is None
+            or row.row_role != "activity"
+            or row.amount.minor is None
+            or row.amount.minor >= 0
+            or row.amount.provenance != "observed"
+            or not row.description.text
+            or financial_id is None
+        ):
+            raise ProfileFormatError("card_purchase_requires_bound_negative_movement")
+        if source_row[1:] != (row.row_role, row.date_role, row.date.iso, row.amount.minor):
+            raise ProfileFormatError("source_observation_index_mismatch")
+        financial = self.connection.execute("SELECT kind,role FROM Accounts WHERE id=?", (financial_id,)).fetchone()
+        if financial != ("liability", "financial"):
+            raise ProfileFormatError("card_purchase_requires_liability_account")
+        candidate = posting_date_candidate(row)
+        if candidate is None:
+            raise ProfileFormatError("card_purchase_posting_date_unavailable")
+        return row, financial_id, self._ledger_accounts(), candidate
 
     def _active_consumed(self, *, excluding: str | None = None) -> dict[str, int]:
         query = (
@@ -868,14 +941,7 @@ class V2ProfileStore:
             account_id: (name, kind, role)
             for account_id, name, kind, role in self.connection.execute("SELECT id,name,kind,role FROM Accounts")
         }
-        active: dict[str, list[JournalEntry]] = {}
-        for row_id, payload in self.connection.execute(
-            "SELECT a.row_id,e.payload FROM JournalAllocations a JOIN JournalEntries e ON e.key=a.entry_key "
-            "JOIN SourceObservations o ON o.row_id=a.row_id "
-            "WHERE o.source_sha256=? AND a.entry_key NOT IN (SELECT original_key FROM JournalCorrections)",
-            (source_sha256,),
-        ):
-            active.setdefault(row_id, []).append(_decode_journal(payload))
+        active = self._active_reviewed_entries(source_sha256)
         result = []
         for row in _rows(saved.evidence):
             account_id = bindings.get(row.row_id)
@@ -921,6 +987,97 @@ class V2ProfileStore:
                     row.description.text,
                     row.amount.minor,
                     account_name,
+                    status,
+                    entry_key,
+                    category_id,
+                )
+            )
+        return tuple(result)
+
+    def _active_reviewed_entries(self, source_sha256: str) -> dict[str, list[JournalEntry]]:
+        active: dict[str, list[JournalEntry]] = {}
+        for row_id, payload in self.connection.execute(
+            "SELECT a.row_id,e.payload FROM JournalAllocations a JOIN JournalEntries e ON e.key=a.entry_key "
+            "JOIN SourceObservations o ON o.row_id=a.row_id "
+            "WHERE o.source_sha256=? AND a.entry_key NOT IN (SELECT original_key FROM JournalCorrections)",
+            (source_sha256,),
+        ):
+            active.setdefault(row_id, []).append(_decode_journal(payload))
+        return active
+
+    def card_purchase_review_rows(
+        self, source_sha256: str, *, preferences: V2Preferences
+    ) -> tuple[CardPurchaseReviewRow, ...]:
+        """List card source rows without interpreting positive movements as income."""
+        if type(preferences) is not V2Preferences or type(preferences.allow_assumed_posting_dates) is not bool:
+            raise ProfileFormatError("card_purchase_preferences_invalid")
+        saved = self.load_import(source_sha256)
+        scopes = _card_review_scopes(saved.evidence)
+        bindings = {binding.row_id: binding.ledger_account_id for binding in self.account_bindings(source_sha256)}
+        accounts = {
+            account_id: (name, kind, role)
+            for account_id, name, kind, role in self.connection.execute("SELECT id,name,kind,role FROM Accounts")
+        }
+        active = self._active_reviewed_entries(source_sha256)
+        result = []
+        for row in _rows(saved.evidence):
+            account_id = bindings.get(row.row_id)
+            financial = accounts.get(account_id) if account_id is not None else None
+            candidate = posting_date_candidate(row)
+            entries = active.get(row.row_id, ())
+            entry_key = None
+            category_id = None
+            effective_date = None
+            if entries:
+                status = "Already posted to the ledger"
+                if len(entries) == 1:
+                    entry = entries[0]
+                    if (
+                        entry.origin == "imported"
+                        and entry.reviewed
+                        and len(entry.postings) == 2
+                        and entry.postings[0].account_id == account_id
+                        and entry.postings[0].allocations == (Allocation(row.row_id, row.amount.minor),)
+                        and accounts.get(entry.postings[1].account_id, (None, None, None))[1:]
+                        == ("expense", "category")
+                    ):
+                        entry_key = entry.key
+                        category_id = entry.postings[1].account_id
+                        effective_date = entry.posting_date.isoformat()
+                        status = "Posted: " + accounts[category_id][0]
+            elif not scopes.get(row.row_id, False):
+                status = "Outside supported card statement scope"
+            elif row.row_role != "activity":
+                status = "Header or summary charge needs separate review"
+            elif row.amount.minor is None or row.amount.minor == 0:
+                status = "Amount unavailable or zero"
+            elif row.amount.minor > 0:
+                status = "Payment, refund or other positive movement pending"
+            elif row.amount.provenance != "observed":
+                status = "Source amount not observed"
+            elif candidate is None:
+                status = "Posting date unavailable"
+            elif account_id is None:
+                status = "Assign a financial account first"
+            elif financial is None or financial[1:] != ("liability", "financial"):
+                status = "Requires a bound card liability account"
+            elif not row.description.text:
+                status = "Description needs review"
+            elif permitted_posting_date(row, preferences) is None:
+                status = "Enable assumed dates or enter a corrected date"
+            else:
+                status = "Ready for expense review"
+            source_date = row.transaction_date or row.date
+            result.append(
+                CardPurchaseReviewRow(
+                    row.row_id,
+                    source_date.iso,
+                    candidate.iso if candidate is not None else None,
+                    candidate.provenance if candidate is not None else None,
+                    effective_date,
+                    row.description.text,
+                    row.amount.minor,
+                    financial[0] if financial is not None else None,
                     status,
                     entry_key,
                     category_id,
@@ -1105,6 +1262,36 @@ class V2ProfileStore:
             sum(entry.reviewed and entry.origin == "opening" for entry in period_entries),
         )
 
+    def _insert_reviewed_category(
+        self,
+        entry: JournalEntry,
+        row_id: str,
+        financial_id: str,
+        amount: int,
+        accounts: dict[str, LedgerAccount],
+        *,
+        refusal_prefix: str,
+    ) -> str:
+        payload = _journal_payload(entry)
+        prior = self.connection.execute("SELECT payload FROM JournalEntries WHERE key=?", (entry.key,)).fetchone()
+        if prior is not None:
+            if self.connection.execute(
+                "SELECT 1 FROM JournalCorrections WHERE original_key=?", (entry.key,)
+            ).fetchone():
+                raise ProfileFormatError(f"{refusal_prefix}_already_corrected")
+            if prior[0] != payload:
+                raise ProfileFormatError(f"{refusal_prefix}_conflicts_with_prior_entry")
+            return entry.key
+        validate_entry(
+            entry,
+            accounts,
+            {row_id: Observation(row_id, financial_id, amount, entry.posting_date)},
+            self._active_consumed(),
+        )
+        self.connection.execute("INSERT INTO JournalEntries(key,payload) VALUES (?,?)", (entry.key, payload))
+        self.connection.execute("INSERT INTO JournalAllocations VALUES (?,?,?)", (entry.key, row_id, amount))
+        return entry.key
+
     def post_reviewed_cash_category(self, row_id: str, category_id: str, *, reason: str) -> str:
         """Post one explicitly classified asset cash movement with source evidence."""
         self._require_writable()
@@ -1130,32 +1317,119 @@ class V2ProfileStore:
                 reviewed=True,
                 reason=reason.strip(),
             )
-            payload = _journal_payload(entry)
-            prior = self.connection.execute("SELECT payload FROM JournalEntries WHERE key=?", (entry.key,)).fetchone()
-            if prior is not None:
-                if self.connection.execute(
-                    "SELECT 1 FROM JournalCorrections WHERE original_key=?", (entry.key,)
-                ).fetchone():
-                    raise ProfileFormatError("cash_review_already_corrected")
-                if prior[0] != payload:
-                    raise ProfileFormatError("cash_review_conflicts_with_prior_entry")
-                self.connection.execute("COMMIT")
-                return entry.key
-            validate_entry(
-                entry,
-                accounts,
-                {row_id: Observation(row_id, financial_id, amount, entry.posting_date)},
-                self._active_consumed(),
+            key = self._insert_reviewed_category(
+                entry, row_id, financial_id, amount, accounts, refusal_prefix="cash_review"
             )
-            self.connection.execute("INSERT INTO JournalEntries(key,payload) VALUES (?,?)", (entry.key, payload))
-            self.connection.execute("INSERT INTO JournalAllocations VALUES (?,?,?)", (entry.key, row_id, amount))
             self.connection.execute("COMMIT")
-            return entry.key
+            return key
         except BaseException as exc:
             self.connection.execute("ROLLBACK")
             if isinstance(exc, LedgerError):
                 raise ProfileFormatError("cash_review_refused") from None
             raise
+
+    def post_reviewed_card_purchase(
+        self,
+        row_id: str,
+        category_id: str,
+        *,
+        reason: str,
+        preferences: V2Preferences,
+        accounting_date: date | None = None,
+    ) -> str:
+        """Post one classified negative card movement; a date override is explicit."""
+        self._require_writable()
+        if type(reason) is not str or not 0 < len(reason.strip()) <= 500:
+            raise ProfileFormatError("card_purchase_reason_required")
+        if (
+            type(preferences) is not V2Preferences
+            or type(preferences.allow_assumed_posting_dates) is not bool
+            or (accounting_date is not None and type(accounting_date) is not date)
+        ):
+            raise ProfileFormatError("card_purchase_date_decision_invalid")
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            category = self.connection.execute("SELECT kind,role FROM Accounts WHERE id=?", (category_id,)).fetchone()
+            if category != ("expense", "category"):
+                raise ProfileFormatError("card_purchase_requires_expense_category")
+            row, financial_id, accounts, candidate = self._card_purchase_source(row_id)
+            permitted = permitted_posting_date(row, preferences)
+            if accounting_date is None:
+                if permitted is None:
+                    raise ProfileFormatError("card_purchase_assumed_date_disabled")
+                posting_date = date.fromisoformat(permitted.iso)
+            else:
+                if permitted is None and accounting_date.isoformat() == candidate.iso:
+                    raise ProfileFormatError("card_purchase_assumed_date_disabled")
+                posting_date = accounting_date
+            amount = row.amount.minor
+            entry = JournalEntry(
+                key=f"review:card:expense:{row_id}",
+                event_id=f"source:{row_id}",
+                posting_date=posting_date,
+                description=row.description.text,
+                postings=(
+                    Posting(financial_id, amount, (Allocation(row_id, amount),)),
+                    Posting(category_id, -amount),
+                ),
+                reviewed=True,
+                reason=reason.strip(),
+            )
+            key = self._insert_reviewed_category(
+                entry, row_id, financial_id, amount, accounts, refusal_prefix="card_purchase"
+            )
+            self.connection.execute("COMMIT")
+            return key
+        except BaseException as exc:
+            self.connection.execute("ROLLBACK")
+            if isinstance(exc, LedgerError):
+                raise ProfileFormatError("card_purchase_refused") from None
+            raise
+
+    def _insert_reviewed_correction(
+        self,
+        original: JournalEntry,
+        replacement: JournalEntry,
+        row_id: str,
+        financial_id: str,
+        amount: int,
+        accounts: dict[str, LedgerAccount],
+        *,
+        reason: str,
+        refusal_prefix: str,
+    ) -> str:
+        reversal = JournalEntry(
+            key="reversal:" + hashlib.sha256(original.key.encode()).hexdigest(),
+            event_id=original.event_id,
+            posting_date=original.posting_date,
+            description="Reversal: " + original.description,
+            postings=tuple(Posting(posting.account_id, -posting.amount_minor) for posting in original.postings),
+            origin="reversal",
+            reviewed=True,
+            reason=reason,
+        )
+        if self.connection.execute(
+            "SELECT 1 FROM JournalEntries WHERE key IN (?,?)", (reversal.key, replacement.key)
+        ).fetchone():
+            raise ProfileFormatError(f"{refusal_prefix}_key_conflict")
+        validate_entry(
+            replacement,
+            accounts,
+            {row_id: Observation(row_id, financial_id, amount, replacement.posting_date)},
+            self._active_consumed(excluding=original.key),
+        )
+        self.connection.execute(
+            "INSERT INTO JournalEntries(key,payload) VALUES (?,?)", (reversal.key, _journal_payload(reversal))
+        )
+        self.connection.execute(
+            "INSERT INTO JournalEntries(key,payload) VALUES (?,?)", (replacement.key, _journal_payload(replacement))
+        )
+        self.connection.execute("INSERT INTO JournalAllocations VALUES (?,?,?)", (replacement.key, row_id, amount))
+        self.connection.execute(
+            "INSERT INTO JournalCorrections(original_key,reversal_key,replacement_key,reason) VALUES (?,?,?,?)",
+            (original.key, reversal.key, replacement.key, reason),
+        )
+        return replacement.key
 
     def correct_reviewed_cash_category(self, original_key: str, category_id: str, *, reason: str) -> str:
         """Atomically reverse and recategorize an active reviewed cash movement."""
@@ -1219,16 +1493,6 @@ class V2ProfileStore:
                 or category_id == old_category_id
             ):
                 raise ProfileFormatError("cash_correction_requires_new_same_kind_category")
-            reversal = JournalEntry(
-                key="reversal:" + hashlib.sha256(original_key.encode()).hexdigest(),
-                event_id=original.event_id,
-                posting_date=original.posting_date,
-                description="Reversal: " + original.description,
-                postings=tuple(Posting(posting.account_id, -posting.amount_minor) for posting in original.postings),
-                origin="reversal",
-                reviewed=True,
-                reason=reason,
-            )
             replacement = JournalEntry(
                 key=replacement_key,
                 event_id=original.event_id,
@@ -1241,33 +1505,124 @@ class V2ProfileStore:
                 reviewed=True,
                 reason=reason,
             )
-            if self.connection.execute(
-                "SELECT 1 FROM JournalEntries WHERE key IN (?,?)", (reversal.key, replacement.key)
-            ).fetchone():
-                raise ProfileFormatError("cash_correction_key_conflict")
-            validate_entry(
+            key = self._insert_reviewed_correction(
+                original,
                 replacement,
+                row_id,
+                financial_id,
+                amount,
                 accounts,
-                {row_id: Observation(row_id, financial_id, amount, replacement.posting_date)},
-                self._active_consumed(excluding=original_key),
-            )
-            self.connection.execute(
-                "INSERT INTO JournalEntries(key,payload) VALUES (?,?)", (reversal.key, _journal_payload(reversal))
-            )
-            self.connection.execute(
-                "INSERT INTO JournalEntries(key,payload) VALUES (?,?)", (replacement.key, _journal_payload(replacement))
-            )
-            self.connection.execute("INSERT INTO JournalAllocations VALUES (?,?,?)", (replacement.key, row_id, amount))
-            self.connection.execute(
-                "INSERT INTO JournalCorrections(original_key,reversal_key,replacement_key,reason) VALUES (?,?,?,?)",
-                (original_key, reversal.key, replacement.key, reason),
+                reason=reason,
+                refusal_prefix="cash_correction",
             )
             self.connection.execute("COMMIT")
-            return replacement.key
+            return key
         except BaseException as exc:
             self.connection.execute("ROLLBACK")
             if isinstance(exc, LedgerError):
                 raise ProfileFormatError("cash_correction_refused") from None
+            raise
+
+    def correct_reviewed_card_purchase(
+        self, original_key: str, category_id: str, *, reason: str, accounting_date: date | None = None
+    ) -> str:
+        """Reverse and replace one card expense when its category or accounting date changes."""
+        self._require_writable()
+        if (
+            type(original_key) is not str
+            or not original_key.startswith(("review:card:expense:", "review:card:correction:"))
+            or type(category_id) is not str
+            or not category_id
+            or (accounting_date is not None and type(accounting_date) is not date)
+        ):
+            raise ProfileFormatError("card_correction_identity_required")
+        if type(reason) is not str or not 0 < len(reason.strip()) <= 500:
+            raise ProfileFormatError("card_correction_reason_required")
+        reason = reason.strip()
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            original_row = self.connection.execute(
+                "SELECT payload FROM JournalEntries WHERE key=?", (original_key,)
+            ).fetchone()
+            if original_row is None:
+                raise ProfileFormatError("card_correction_original_missing")
+            original = _decode_journal(original_row[0])
+            chosen_date = accounting_date or original.posting_date
+            replacement_key = (
+                "review:card:correction:"
+                + hashlib.sha256(
+                    f"{original_key}\0{category_id}\0{chosen_date.isoformat()}\0{reason}".encode()
+                ).hexdigest()
+            )
+            prior = self.connection.execute(
+                "SELECT replacement_key,reason FROM JournalCorrections WHERE original_key=?", (original_key,)
+            ).fetchone()
+            if prior is not None:
+                if prior == (replacement_key, reason):
+                    self.connection.execute("COMMIT")
+                    return replacement_key
+                raise ProfileFormatError("card_correction_conflicts_with_prior_decision")
+            allocations = self.connection.execute(
+                "SELECT row_id,amount_minor FROM JournalAllocations WHERE entry_key=?", (original_key,)
+            ).fetchall()
+            if (
+                original.key != original_key
+                or original.origin != "imported"
+                or not original.reviewed
+                or len(original.postings) != 2
+                or len(allocations) != 1
+                or original.postings[0].amount_minor != allocations[0][1]
+                or original.postings[0].amount_minor >= 0
+                or original.postings[0].allocations != (Allocation(*allocations[0]),)
+                or original.postings[1].amount_minor != -allocations[0][1]
+            ):
+                raise ProfileFormatError("card_correction_original_invalid")
+            row_id, amount = allocations[0]
+            row, financial_id, accounts, _candidate = self._card_purchase_source(row_id)
+            old_category_id = original.postings[1].account_id
+            old_category = self.connection.execute(
+                "SELECT kind,role FROM Accounts WHERE id=?", (old_category_id,)
+            ).fetchone()
+            new_category = self.connection.execute(
+                "SELECT kind,role FROM Accounts WHERE id=?", (category_id,)
+            ).fetchone()
+            if (
+                original.postings[0].account_id != financial_id
+                or original.event_id != f"source:{row_id}"
+                or original.description != row.description.text
+                or old_category != ("expense", "category")
+                or new_category != ("expense", "category")
+                or (category_id == old_category_id and chosen_date == original.posting_date)
+            ):
+                raise ProfileFormatError("card_correction_requires_changed_category_or_date")
+            replacement = JournalEntry(
+                key=replacement_key,
+                event_id=original.event_id,
+                posting_date=chosen_date,
+                description=original.description,
+                postings=(
+                    Posting(financial_id, amount, (Allocation(row_id, amount),)),
+                    Posting(category_id, -amount),
+                ),
+                reviewed=True,
+                reason=reason,
+            )
+            key = self._insert_reviewed_correction(
+                original,
+                replacement,
+                row_id,
+                financial_id,
+                amount,
+                accounts,
+                reason=reason,
+                refusal_prefix="card_correction",
+            )
+            self.connection.execute("COMMIT")
+            return key
+        except BaseException as exc:
+            self.connection.execute("ROLLBACK")
+            if isinstance(exc, LedgerError):
+                raise ProfileFormatError("card_correction_refused") from None
             raise
 
     def source_account_bindings(self, source_sha256: str) -> tuple[SourceAccountBinding, ...]:

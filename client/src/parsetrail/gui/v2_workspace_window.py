@@ -30,11 +30,17 @@ from PySide6.QtWidgets import (
 )
 
 from parsetrail.core.source_evidence import ActivityExportPayload, StatementPayload
-from parsetrail.core.v2_profile_store import FinancialAccount, ProfileFormatError, V2ProfileStore
+from parsetrail.core.v2_profile_store import (
+    CARD_STATEMENT_PARSERS,
+    FinancialAccount,
+    ProfileFormatError,
+    V2ProfileStore,
+)
 from parsetrail.core.v2_source_import import ImportCancelled, SourceImportResult
 from parsetrail.core.v2_workspace import V2Workspace, WorkspaceError, folder_source_files
 from parsetrail.gui.v2_account_binding_review import V2AccountBindingReview
 from parsetrail.gui.v2_batch_import import V2BatchImportReport, V2BatchImportWorker
+from parsetrail.gui.v2_card_purchase_review import V2CardPurchaseReview
 from parsetrail.gui.v2_cash_activity_review import V2CashActivityReview
 from parsetrail.gui.v2_categories import V2CategoryDialog
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
@@ -190,6 +196,9 @@ class V2WorkspaceWindow(QMainWindow):
         self.cash_review_button = QPushButton("Review cash activity")
         self.cash_review_button.clicked.connect(self._review_cash_activity)
         controls.addWidget(self.cash_review_button)
+        self.card_review_button = QPushButton("Review card purchases")
+        self.card_review_button.clicked.connect(self._review_card_purchases)
+        controls.addWidget(self.card_review_button)
         self.reports_button = QPushButton("Reviewed reports")
         self.reports_button.clicked.connect(self._open_reviewed_reports)
         controls.addWidget(self.reports_button)
@@ -253,10 +262,12 @@ class V2WorkspaceWindow(QMainWindow):
         source_id = self._selected_source()
         self.preview_button.setEnabled(source_id is not None)
         self.cash_review_button.setEnabled(source_id is not None)
+        self.card_review_button.setEnabled(False)
         unidentified_rows = False
         identified_accounts = False
         if source_id is not None:
             evidence = self.workspace.saved_import(source_id).evidence
+            self.card_review_button.setEnabled(evidence.parser_id in CARD_STATEMENT_PARSERS)
             payload = evidence.payload
             rows = (
                 sum(len(account.rows) for account in payload.accounts)
@@ -510,6 +521,15 @@ class V2WorkspaceWindow(QMainWindow):
         source_id = self._selected_source()
         if source_id is not None:
             V2CashActivityReview(self.workspace.profile_path, source_id, self).exec()
+            self.refresh(select_source=source_id)
+
+    def _review_card_purchases(self) -> None:
+        source_id = self._selected_source()
+        if source_id is not None:
+            V2CardPurchaseReview(self.workspace, source_id, self).exec()
+            self.assumed_posting_action.blockSignals(True)
+            self.assumed_posting_action.setChecked(self.workspace.preferences().allow_assumed_posting_dates)
+            self.assumed_posting_action.blockSignals(False)
             self.refresh(select_source=source_id)
 
     def _open_reviewed_reports(self) -> None:

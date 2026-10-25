@@ -575,8 +575,8 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   closures and unsupported accounting remain explicit. The owner approved the
   same explicit expense/income review for bound asset bank-statement rows with
   source posting dates. A narrow account-total scope now admits those rows from
-  the six supported bank parser families; HSA cash components, cards, loans,
-  investment summaries and uncertain-date rows stay pending. Synthetic bank
+  the six supported bank parser families; HSA cash components, card rows, loans,
+  investment summaries and uncertain-date rows stay outside this cash flow. Synthetic bank
   posting, correction and GUI checks pass; the owner accepted native Windows
   review of this extension.
   For card dates, the owner chose a parser guess instead of per-row mandatory
@@ -585,10 +585,18 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   deterministic year resolution of printed Post dates as `derived`. The global
   assumed-posting-date choice defaults off; a shared gate can allow the guessed
   date after the user enables it. The preview displays the source and candidate
-  provenance. Card purchase posting and append-only date correction are still
-  pending, and the native toggle/preview presentation needs acceptance. A
-  read-only replay after the date change routed and parsed all 956 successful
+  provenance. The owner accepted the native toggle and preview presentation.
+  A read-only replay after the date change routed and parsed all 956 successful
   archive PDFs with zero failures; live financial data remained untouched.
+  A narrow card expense review now covers negative activity rows from all seven
+  current card parser families when the account is explicitly bound to a
+  liability, the source amount is observed and an expense category is chosen.
+  Printed Post dates work with the toggle off; assumed dates require the global
+  toggle or an explicitly different accounting date. Positive card movements
+  and header charges stay pending. Category or date corrections reverse the
+  prior entry at its old date and replace it at the chosen date, leaving source
+  evidence immutable and the active allocation unique. Offscreen service and
+  dialog checks pass; native card review acceptance is open.
   A read-only signed-catalog scan routed all 956 PDFs in the two successful
   archives, then parsed the six bank families: 315 statements and 14,275 rows
   met the structural cash-review prerequisites before account binding, with

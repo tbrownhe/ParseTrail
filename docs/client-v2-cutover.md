@@ -464,8 +464,8 @@ native Windows.
 The owner approved extending that explicit cash review to bound asset bank
 statement rows with source posting dates. The service now limits statement
 eligibility to six supported bank families and account-total balance scope.
-HSA cash components, cards, loans, investment summaries and other date roles
-stay pending; positive receipts still require explicit income confirmation.
+HSA cash components, card rows, loans, investment summaries and other date roles
+stay outside this cash flow; positive receipts still require explicit income confirmation.
 Synthetic bank posting, correction and dialog checks pass. The owner accepted
 the bank-statement review extension on native Windows.
 The owner subsequently chose low-friction card-date review: parsers should use
@@ -474,10 +474,18 @@ assumed. The source model now distinguishes these cases. Chase, single-date
 Citi and Synchrony produce assumed candidates; dual-date Citi and other
 printed Post columns retain a deterministic year resolution. Synchrony's
 original activity date stays separate from its posting candidate. A global
-Settings choice defaults off and gates future use of assumed candidates; the
-evidence preview shows the provenance. Reviewed card purchase posting and
-append-only accounting-date correction remain future ledger/UI work. The
-source snapshot is never rewritten by the setting.
+Settings choice defaults off and gates use of assumed candidates; the evidence
+preview shows the provenance. The owner accepted the native toggle and preview.
+The separate card review now admits only negative observed-amount activity
+from account-total statements in the seven current card parser families,
+explicitly bound to a liability account and classified as an expense. It uses
+the printed Post date or an allowed assumed candidate; a deliberately different
+accounting date can be entered instead. Positive movements, header charges and
+unbound or non-account-total rows remain pending. A correction can change the
+category or accounting date by reversing the original at its old date and
+posting a replacement at the chosen date. Source evidence stays immutable and
+one active allocation consumes the row. Synthetic service and offscreen GUI
+checks pass; native card-review acceptance is open.
 A repeat read-only source-to-evidence replay after the date changes routed and
 parsed all 956 successful-archive PDFs with zero failures; it made no live
 profile or source-file writes.

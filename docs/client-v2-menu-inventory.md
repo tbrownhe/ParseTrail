@@ -8,7 +8,7 @@ legacy window has been replaced. **Pending** means the owner has not approved a
 
 | 1.x action | Current 2.0 state | Remaining release decision or work |
 | --- | --- | --- |
-| File → Preferences | Global abbreviated-account matching and assumed-posting-date toggles are available, both default off. | Assumed-date card posting and later date correction remain pending; inventory other 1.x preferences. |
+| File → Preferences | Global abbreviated-account matching and assumed-posting-date toggles are available, both default off. | Native card-review acceptance and inventory of other 1.x preferences remain. |
 | File → Open Database | Profile → Open 2.0 profile accepts only a verified `.db`. | Native profile switching accepted; no old-profile activation. |
 | File → Database Location and Privacy | Profile → Data locations and privacy shows copyable profile, signed-catalog cache and global-preference paths, plus storage and encryption limits. | Native presentation accepted. |
 | File → Back Up Database | Profile → Back up current profile creates a verified new 2.0 snapshot. | Native backup accepted. |
@@ -26,7 +26,7 @@ legacy window has been replaced. **Pending** means the owner has not approved a
 | Statements → Correct Discrepancies | Evidence preview and explicit journal correction exist for narrow cash activity. | General source/balance discrepancy review pending. |
 | Statements → Send for Plugin Development | No 2.0 action. | Server submission is pending decision; preserve local source files and evidence. |
 | Categories → Category Manager | Fresh category names/kinds and effective-month budgets are available. | Additional editing and hierarchy behavior, if needed, pending. |
-| Transactions → Review Transactions | Explicit bound asset expense/income review and same-kind corrections are available for activity exports and supported account-total bank statements. | HSA cash components, cards, liability, transfer, loan, manual and other interpretations pending. |
+| Transactions → Review Transactions | Bound asset cash expense/income review and negative card expense review are available, with append-only category and card-date corrections. | Native card review acceptance; positive card movements, HSA cash components, transfers, loans, manual and other interpretations remain pending. |
 | Transactions → Identify Recurring | No 2.0 counterpart. | Pending decision; forecasting is outside the initial 2.0 gate. |
 | Transactions → Insert Manually | No 2.0 counterpart. | Explicit manual journal/value workflow pending. |
 | Train Model → Train Model for Testing | No 2.0 counterpart. | Pending decision; category review remains explicit. |
