@@ -49,9 +49,9 @@ Test-signing with an ephemeral fixture key does not establish production trust.
 Production starter-catalog packaging and installed/offline acceptance remain
 [P2-5](../ROADMAP.md#p2-5) work. Server storage, transport and publication belong
 to separately scoped [P2-S](../ROADMAP.md#p2-s) work after the client handoff.
-Whether local catalog installation suffices before that publication is an open
-[DEC-2](../ROADMAP.md#dec-2) release decision. No server table design, publishing
-UI, deployment or deferral is authorized by this contract. Preserve the independent
+[DEC-2](../ROADMAP.md#dec-2), resolved October 25, permits local signed-catalog
+installation for the first release and defers the service to separate later work.
+No server table design, publishing UI or deployment is authorized here. Preserve the independent
 1.4 bytecode catalog and installer trust contract for fallback.
 
 ## Initial code findings

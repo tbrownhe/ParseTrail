@@ -102,7 +102,11 @@ Reports use common ledger reads with explicit scope, correction handling and
 pending evidence. Reconciliation is a versioned read over one committed SQLite
 snapshot; capture, arithmetic, allocations, interpretation, coverage and
 freshness remain independent dimensions. A journal sum is not automatically a
-current account balance.
+current account balance. Inclusive as-of account positions/history use one read
+snapshot and distinguish recorded postings from an opening-based journal position;
+missing/stale/future/conflicting openings remain unknown. Per-account pending rows
+cover all dates; unbound rows and transfer clearing are separately visible. Source
+dates and live reconciliation cutoffs do not establish complete bank balances.
 
 SQLite profile snapshots contain embedded sources, authored data, journals and
 all review history. They are verified before publication at a new path; restore

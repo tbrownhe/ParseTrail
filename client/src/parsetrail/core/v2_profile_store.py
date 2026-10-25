@@ -465,6 +465,50 @@ class FinancialJournalSummary:
 
 
 @dataclass(frozen=True)
+class AccountPositionHistoryRow:
+    posting_date: date
+    entry_key: str
+    event_id: str
+    description: str
+    origin: str
+    debit_change_minor: int
+    recorded_debit_minor: int
+    position_debit_minor: int | None
+    correction_role: Literal["original", "reversal", "replacement", "superseded_replacement"] | None
+
+
+@dataclass(frozen=True)
+class AccountPosition:
+    account_id: str
+    name: str
+    kind: Literal["asset", "liability"]
+    currency: str
+    recorded_debit_minor: int
+    position_debit_minor: int | None
+    opening_status: Literal["missing", "stale", "future", "conflict", "valid"]
+    opening_cutoff: date | None
+    opening_minor: int | None
+    latest_source_cutoff: date | None
+    latest_activity_date: date | None
+    pending_activity_rows: int
+    excluded_unreviewed_entries: int
+    live_reconciled_cutoff: date | None
+    coverage_warnings: tuple[str, ...]
+    history: tuple[AccountPositionHistoryRow, ...]
+
+
+@dataclass(frozen=True)
+class AccountPositionsSummary:
+    as_of: date
+    currency: str
+    accounts: tuple[AccountPosition, ...]
+    unbound_activity_rows: int
+    activity_rows_without_full_allocation: int
+    sources_with_incomplete_activity: int
+    transfer_clearing_debit_minor: int
+
+
+@dataclass(frozen=True)
 class JournalExportAccount:
     id: str
     name: str
@@ -1894,6 +1938,186 @@ class V2ProfileStore:
             unresolved_rows,
             unresolved_sources,
             excluded_unreviewed,
+        )
+
+    def account_positions(self, *, as_of: date) -> AccountPositionsSummary:
+        """Read current reviewed books through an inclusive accounting-date cutoff.
+
+        Positions are opening-based journal amounts, never certified bank balances.
+        Pending evidence counts cover all saved dates and include supporting repeats.
+        Each history uses deterministic date/key order; same-day running totals do
+        not imply intraday source timing. Corrections restate accounting-date history,
+        rather than reconstructing what the user knew at a past date.
+        """
+        if type(as_of) is not date:
+            raise ProfileFormatError("report_as_of_invalid")
+        if self.connection.in_transaction:
+            raise ProfileFormatError("positions_requires_committed_snapshot")
+        self.connection.execute("BEGIN")
+        try:
+            return self._account_positions(as_of)
+        finally:
+            self.connection.execute("ROLLBACK")
+
+    def _account_positions(self, as_of: date) -> AccountPositionsSummary:
+        accounts = self.financial_accounts()
+        entries = tuple(
+            sorted(
+                (
+                    _decode_journal(payload)
+                    for (payload,) in self.connection.execute("SELECT payload FROM JournalEntries")
+                ),
+                key=lambda entry: (entry.posting_date, entry.key),
+            )
+        )
+        originals, reversals, replacements = set(), set(), set()
+        for original, reversal, replacement in self.connection.execute(
+            "SELECT original_key,reversal_key,replacement_key FROM JournalCorrections"
+        ):
+            originals.add(original)
+            reversals.add(reversal)
+            replacements.add(replacement)
+        inactive = originals | reversals
+        consumed = self._active_consumed()
+        pending = dict.fromkeys((account.id for account in accounts), 0)
+        latest_activity: dict[str, date] = {}
+        unbound = 0
+        for source_id in self.source_ids():
+            bindings = {binding.row_id: binding.ledger_account_id for binding in self.account_bindings(source_id)}
+            for row in _rows(self.load_import(source_id).evidence):
+                if row.row_role != "activity":
+                    continue
+                account_id = bindings.get(row.row_id)
+                if account_id not in pending:
+                    unbound += 1
+                    continue
+                if row.date.iso is not None:
+                    observed = date.fromisoformat(row.date.iso)
+                    latest_activity[account_id] = max(latest_activity.get(account_id, observed), observed)
+                if row.row_id not in consumed or consumed[row.row_id] != row.amount.minor:
+                    pending[account_id] += 1
+        coverage = self.statement_coverage()
+        checks = self._statement_reconciliation_checks()
+        result = []
+        for account in accounts:
+            decision = self.opening_decision(account.id)
+            if decision is None:
+                status = "missing"
+            elif decision.stale:
+                status = "stale"
+            elif decision.cutoff_date > as_of:
+                status = "future"
+            elif any(
+                entry.key != decision.entry_key
+                and entry.key not in inactive
+                and entry.posting_date <= decision.cutoff_date
+                and any(posting.account_id == account.id for posting in entry.postings)
+                for entry in entries
+            ):
+                status = "conflict"
+            else:
+                status = "valid"
+            history = []
+            recorded = 0
+            excluded = 0
+            for entry in entries:
+                if entry.posting_date > as_of:
+                    continue
+                postings = tuple(posting for posting in entry.postings if posting.account_id == account.id)
+                if not postings:
+                    continue
+                if not entry.reviewed:
+                    excluded += 1
+                    continue
+                change = sum(posting.amount_minor for posting in postings)
+                recorded += change
+                role = None
+                if entry.key in originals:
+                    role = "superseded_replacement" if entry.key in replacements else "original"
+                elif entry.key in reversals:
+                    role = "reversal"
+                elif entry.key in replacements:
+                    role = "replacement"
+                history.append(
+                    AccountPositionHistoryRow(
+                        entry.posting_date,
+                        entry.key,
+                        entry.event_id,
+                        entry.description,
+                        entry.origin,
+                        change,
+                        recorded,
+                        recorded if status == "valid" and entry.posting_date >= decision.cutoff_date else None,
+                        role,
+                    )
+                )
+            sections = tuple(section for section in coverage if section.account_id == account.id)
+            source_cutoff = max((section.period_end for section in sections), default=None)
+            warnings = []
+            if not sections:
+                warnings.append("no_statement_coverage")
+            if any(
+                section.period_start is not None
+                and section.period_start <= as_of
+                and section.relation_to_known_periods == "gap"
+                for section in sections
+            ):
+                warnings.append("source_period_gap")
+            if any(
+                section.period_start is not None
+                and section.period_start <= as_of
+                and section.relation_to_known_periods == "overlap"
+                for section in sections
+            ):
+                warnings.append("source_period_overlap")
+            if any(not section.capture_verified for section in sections):
+                warnings.append("source_capture_incomplete")
+            if source_cutoff is not None and source_cutoff < as_of:
+                warnings.append("source_cutoff_before_as_of")
+            if source_cutoff is not None and source_cutoff > as_of:
+                warnings.append("source_period_extends_after_as_of")
+            live_cutoff = max(
+                (
+                    check.period_end
+                    for check in checks
+                    if status == "valid"
+                    and check.account_id == account.id
+                    and check.reconciled
+                    and check.posted_interpretations_reviewed
+                    and check.period_end <= as_of
+                ),
+                default=None,
+            )
+            result.append(
+                AccountPosition(
+                    account.id,
+                    account.name,
+                    account.kind,
+                    "USD",
+                    recorded,
+                    recorded if status == "valid" else None,
+                    status,
+                    decision.cutoff_date if decision is not None else None,
+                    decision.amount_minor if decision is not None else None,
+                    source_cutoff,
+                    latest_activity.get(account.id),
+                    pending[account.id],
+                    excluded,
+                    live_cutoff,
+                    tuple(warnings),
+                    tuple(history),
+                )
+            )
+        unresolved_rows, unresolved_sources = self._unallocated_activity_counts()
+        clearing = sum(
+            posting.amount_minor
+            for entry in entries
+            if entry.reviewed and entry.posting_date <= as_of
+            for posting in entry.postings
+            if posting.account_id == "internal:transfer-clearing:USD"
+        )
+        return AccountPositionsSummary(
+            as_of, "USD", tuple(result), unbound, unresolved_rows, unresolved_sources, clearing
         )
 
     def reviewed_journal_export(self, *, start: date, end: date) -> ReviewedJournalExport:

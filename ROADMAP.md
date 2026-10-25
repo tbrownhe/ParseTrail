@@ -5,9 +5,10 @@ release gates. [TODO](TODO.md) identifies selected work; [work records](docs/wor
 hold plans, decisions and verification. Component contracts define financial and
 technical behavior. Historical plans do not select new work.
 
-The owner approved this consolidation on October 25, 2026. It preserves the
-existing local spending/cash-planning program and fresh-profile 2.0 decisions;
-it does not select the next product packet or approve pending omissions.
+The owner approved this roadmap on October 25, 2026, selected V2-5 account
+positions/history first, and authorized continued development until only human
+review/action gates remain. Pending product decisions and release actions retain
+their explicit boundaries.
 
 ## Product direction and boundaries
 
@@ -48,7 +49,7 @@ its dependencies allow; the table is not a requirement to restart completed slic
 | <a id="v2-2"></a>V2-2 | **Implemented pre-release:** one marked, verified profile; incompatible formats refused before writes. | Freeze the released schema/lifecycle after remaining workflows; follow [single-store rules](docs/client-v2-unified-store.md). |
 | <a id="v2-3"></a>V2-3 | **Partial:** signed-catalog selected-file/batch CSV/PDF imports, immutable snapshots, binding, retry/cancellation and bounded repeat review. | Daily import/archive recovery; wider revised/overlapping-export review; correcting bindings fixed by occurrence history. Coordinate with V2-4 and P2-4/5. |
 | <a id="v2-4"></a>V2-4 | **Partial:** accounts/categories/budgets, cash income/expense, card purchases, whole transfers/payments, openings, corrections and source/reconciliation review. | Transfer dismissal/correction, opening-decision correction, durable reconciliation cutoff/input-version history, fees/partial settlements, refunds/negative income adjustments, supported loan/HSA/investment interpretations, manual values and closures. Unsupported cases stay pending. DEC-1/3 constrain breadth. |
-| <a id="v2-5"></a>V2-5 | **Partial:** common reviewed spending/income, account movement, monthly budgets and journal workbook export. | Account positions/history with explicit as-of/opening validity, last reconciled cutoff and pending scope; cash-flow classification and truthful drill-down/report integration. Depends on relevant V2-3/4 safeguards; DEC-3 settles optional presentation. |
+| <a id="v2-5"></a>V2-5 | **Partial:** common reviewed spending/income, account movement, monthly budgets, journal workbook export and [inclusive as-of positions/history](docs/work/2026-10-25-v2-account-positions.md) with opening validity, pending scope and live checks. | Durable last saved reconciliation cutoff depends on V2-4 history; cash-flow classification and truthful drill-down/report integration remain. Relevant V2-3/4 safeguards still apply; optional presentation deferred by DEC-3. |
 | <a id="v2-6"></a>V2-6 | **Core implemented:** verified profile backup, restore-as-new, switching and storage/privacy presentation. | Final daily lifecycle/onboarding and recovery failure paths through V2-UX/7; backups exclude separate catalog/preferences. No old-profile activation. |
 | <a id="v2-ux"></a>V2-UX | **Open:** consolidated owner daily-workflow UI/UX pass after functional agent-verified workflows. | Disposable end-to-end import, binding, review/correction, reports and backup/reopen; pending/error states, navigation, wording and layout. Record feedback and disposition. Does not block unrelated development. |
 | <a id="v2-7"></a>V2-7 | **Open:** final runtime cutover, packaging and release readiness. | Finish release checklist below, remove obsolete runtime paths after integration, then separately authorize version/signing/publication. Depends on initial-release decisions and V2/P2 gates. |
@@ -72,14 +73,14 @@ remain required for the first 2.0 release.
 | <a id="p2-3"></a>P2-3 | **Partial:** client-owned finite handlers and bounded fixed decoder workers. | Remaining family/source capture/parity dispositions and targeted Intel native resource-limit checks; XLSX has synthetic decoder evidence only and is not a workspace import format. |
 | <a id="p2-4"></a>P2-4 | **Partial:** current family definitions and installed-package signed routing/import path. | Finish family readiness against the inventory and packaged-client admission; execution replay alone is not source parity or accounting acceptance. |
 | <a id="p2-5"></a>P2-5 | **Partial:** local verifier/cache, atomic activation, catalog tooling and signed-release install interaction. | Production-signed starter catalog and installed offline/rollback/compatibility checks, under explicit signing/release authorization. |
-| <a id="p2-s"></a>P2-S | **Open, separate service handoff:** immutable declaration-catalog API/storage/publication contract. | Reviewed design, accepted client integration and documented separate-branch handoff. DEC-2 must settle first-release dependence; no implied server deferral or deployment authorization. |
+| <a id="p2-s"></a>P2-S | **Deferred from first release by DEC-2, separate service handoff:** immutable declaration-catalog API/storage/publication contract. | Reviewed design, accepted client integration and documented separate-branch handoff. Local signed-catalog installation suffices initially; service work remains required later and separately scoped. |
 
 ### Release checklist
 
 - Complete or explicitly disposition the selected initial-release V2/P2 outcomes;
   invalid journals and misleading financial claims block release. Incomplete
   historical reconstruction can remain visibly unresolved under the contracts.
-- Resolve DEC-1/2/3 and retain every remaining 1.x action's disposition in the
+- Apply resolved DEC-1/2/3 and retain every remaining 1.x action's disposition in the
   [action inventory](docs/client-v2-menu-inventory.md).
 - Complete the required supported-family, signed-starter-catalog and installed
   offline checks, plus Windows/targeted Intel decoder, packaging and OS integration.
@@ -101,9 +102,9 @@ or permission to reconstruct that history.
 
 | ID | Decision needed | Dependent scope |
 | --- | --- | --- |
-| <a id="dec-1"></a>DEC-1 | Determine arbitrary manual-journal breadth beyond reviewed openings/values, with explicit origin and review. | V2-4/7; no guessed accounting semantics. |
-| <a id="dec-2"></a>DEC-2 | Settle whether local signed-catalog installation suffices for first 2.0 release or P2-S must precede it. | P2-5/S and V2-7. Existing documents differ; this cleanup does not decide it. |
-| <a id="dec-3"></a>DEC-3 | Approve individual remaining 1.x action implementations or deliberate release omissions. | [Action inventory](docs/client-v2-menu-inventory.md), V2-4/5/6/7. Proposed omissions remain unapproved. |
+| <a id="dec-1"></a>DEC-1 | **Resolved October 25:** reviewed openings/dated values only; arbitrary manual journals are outside scope. Owner use cases are missing opening information on new loans and missing final statements on recently closed loans. [Decision record](docs/work/2026-10-25-v2-account-positions.md#scope-and-controlling-decisions). | V2-4/7; retain explicit origin/review and unknown settlement facts; closing metadata cannot invent a payment or zero a balance. |
+| <a id="dec-2"></a>DEC-2 | **Resolved October 25:** local signed-catalog installation suffices for first 2.0 release; the catalog service follows separately. [Decision record](docs/work/2026-10-25-v2-account-positions.md#scope-and-controlling-decisions). | P2-5/7 remain initial-release work; P2-S is later separate scope. Production signing/publication remain specifically authorized actions. |
+| <a id="dec-3"></a>DEC-3 | **Resolved October 25:** defer the listed legacy capabilities for now, preserving them as important future product work, preferably in a future context run. [Action dispositions](docs/client-v2-menu-inventory.md#approved-initial-release-deferrals). | ML training, recurring detector, appreciation calculator, separate configuration export, standalone backup test, export presets/pivots, dashboard charts, server sign-out/contribution. First-release omission approved; permanent removal is not approved. |
 
 ## Later local spending and cash planning
 

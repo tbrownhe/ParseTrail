@@ -6,36 +6,31 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-**None.** DOCS-1 is complete; its [work record](docs/work/2026-10-25-roadmap-consolidation.md)
-contains the consolidation scope, checks and review. Select a bounded product
-packet from the roadmap with the owner before treating a candidate as active.
-No implementation is waiting for a per-feature human checkpoint.
+**None.** The account positions/history packet completed development and
+independent verification. Continued roadmap development is owner-authorized;
+durable reconciliation history is next. No per-feature human checkpoint is due.
 
 ## Next candidates
 
-1. [V2-5 account positions/history](ROADMAP.md#v2-5): define explicit as-of,
-   opening validity, pending scope and last reconciled cutoff using the completed
-   bounded overlap safeguard. [Starting points](.agents/skills/parsetrail-workflow/references/code-and-checks.md#account-positions-and-history).
-   Candidate only; distinguish live reconciliation checks from saved cutoffs.
-2. [V2-3/4 remaining review safeguards](ROADMAP.md#v2-3): broader source matches,
+1. [V2-3/4 remaining review safeguards](ROADMAP.md#v2-3): broader source matches,
    reviewed-binding repair and existing double-posting/transfer corrections;
    select a bounded outcome before implementation.
    [Starting points](.agents/skills/parsetrail-workflow/references/code-and-checks.md#remaining-review-safeguards).
-3. [P2-3/4/5 readiness](ROADMAP.md#p2-3): remaining family/platform/catalog work;
+2. [P2-3/4/5 readiness](ROADMAP.md#p2-3): remaining family/platform/catalog work;
    choose checks or implementation appropriate to available platforms and scope.
    [Starting points](.agents/skills/parsetrail-workflow/references/code-and-checks.md#parser-and-catalog-readiness).
 
 ## Most recent product packet
 
-[Cross-source occurrence safeguard](docs/work/2026-10-25-v2-source-overlap.md),
-committed at `d9dab3e`, completed development verification. Its matcher and
-binding-history limitations remain linked in the roadmap. Consolidated human
-UI/UX review remains open; this is not 2.0 release acceptance.
+[Account positions/history](docs/work/2026-10-25-v2-account-positions.md) completed
+development and independent review. Consolidated human UI/UX review remains open;
+this is not 2.0 release acceptance.
 
 ## Decisions and gates
 
-- [DEC-1/2/3](ROADMAP.md#unresolved-owner-decisions): manual breadth, catalog/service
-  release dependence and remaining 1.x action dispositions. Block only dependent work.
+- [DEC-1/2/3](ROADMAP.md#unresolved-owner-decisions) resolved October 25: reviewed
+  openings/dated values only; local signed catalog suffices initially; listed
+  legacy capabilities deferred to future work, not retired.
 - [V2-UX](ROADMAP.md#v2-ux) and the [release checklist](ROADMAP.md#release-checklist)
   retain their own gates; they do not create per-feature human checkpoints.
 

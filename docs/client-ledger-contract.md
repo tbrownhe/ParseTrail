@@ -70,6 +70,10 @@ not merge immutable observations or allocate additional money.
   memberships are references, not extra money. Partial allocations stay visible.
 - A source-independent manual entry requires explicit origin and review. Never
   fabricate an imported counterpart or source statement to make an entry balance.
+  The owner's October 25 DEC-1 limits manual entry to reviewed openings and dated
+  values, including missing new-loan opening information and missing final
+  statements on recently closed loans. Arbitrary manual journals are outside the
+  initial scope. A reviewed value does not establish an unsupported settlement.
 
 ## Dates, transfers, and incomplete evidence
 
@@ -188,6 +192,23 @@ coverage, and stale inputs must remain visible. Statement coverage cannot
 establish accounting correctness by itself. A reviewed journal sum must not be
 labeled a current bank balance or complete net worth without the required
 opening, source cutoff, pending-activity and coverage qualifications.
+
+`account_positions(as_of=...)` reads current reviewed books through an inclusive
+USD accounting-date cutoff in one committed SQLite read snapshot. It retains
+debit signs; desktop presentation multiplies liabilities by -1 to show amounts
+owed. Recorded sums and opening-based journal positions are distinct. Missing,
+stale, future or conflicting opening decisions leave the position unknown;
+a valid zero opening is known zero. Pending source counts cover all dates,
+including supporting repeats, with unbound rows separately identified. Source
+period ends/activity dates, coverage/capture warnings and live successful checks
+remain separate qualifications. A live-check cutoff is computed now, not a saved
+reconciliation decision or proof of complete history.
+
+Account history includes originals, reversals and replacements, restating the
+books by accounting date as they stand now rather than reconstructing what was
+known in the past. Same-day date/key running order does not establish intraday
+source timing. Different-date transfers retain their clearing amount at interim
+cutoffs. These reads do not certify a bank balance or complete net worth.
 
 ## Fresh-profile rollout
 
