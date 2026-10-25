@@ -615,14 +615,15 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   saved period. It counts unallocated row remainders by absolute amount,
   allocations dated outside the period and other financial postings. Equal
   movement is explicitly short of reconciliation or coverage certification.
-  Synthetic service and offscreen dialog tests pass; native acceptance is open.
+  Synthetic service and offscreen dialog tests pass; the owner accepted the
+  native comparison after the status-column layout correction.
   The existing disposable workspace launcher accepts `--demo --comparison` and
   opens the comparison tab with reviewed Savings A and pending Card A rows. The
   first sandbox-launched preview was not visible on the owner's desktop, so use
   the owner-launched demo command for this walkthrough.
   The owner found the Comparison status column clipped. The tab now uses
   two-line headers, an early 260-pixel wrapped status column and compact initial
-  widths; native recheck is open.
+  widths; the owner accepted the revised native table.
   A read-only signed-catalog scan routed all 956 PDFs in the two successful
   archives, then parsed the six bank families: 315 statements and 14,275 rows
   met the structural cash-review prerequisites before account binding, with
