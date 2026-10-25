@@ -162,6 +162,8 @@ class _AccountPositionModel(QAbstractTableModel):
         "Pending rows\n(all dates)",
         "Live check\nthrough",
         "Latest source\nperiod end",
+        "Latest saved\ncutoff",
+        "Saved cutoff\n(current inputs)",
     )
     OPENING_STATES = {
         "missing": "Not established",
@@ -202,6 +204,7 @@ class _AccountPositionModel(QAbstractTableModel):
                 f"{row.name} ({row.account_id}); {row.currency}. "
                 "Positive means asset value or liability owed. Recorded totals include reviewed postings only. "
                 "A live successful check is computed now; it is not a saved reconciliation decision. "
+                "Latest saved cutoff includes historical decisions; the current-input cutoff excludes stale decisions. "
                 "Pending rows cover all dates and may include supporting repeats."
             )
         if role != Qt.DisplayRole:
@@ -214,8 +217,16 @@ class _AccountPositionModel(QAbstractTableModel):
             _money(sign * row.position_debit_minor) if row.position_debit_minor is not None else "Unknown",
             self.OPENING_STATES[row.opening_status],
             str(row.pending_activity_rows),
-            row.live_reconciled_cutoff.isoformat() if row.live_reconciled_cutoff else "None passing",
+            (
+                row.live_reconciled_cutoff.isoformat()
+                if row.live_reconciled_cutoff
+                else "Unavailable"
+                if "live_reconciliation_unavailable" in row.coverage_warnings
+                else "None passing"
+            ),
             row.latest_source_cutoff.isoformat() if row.latest_source_cutoff else "Unavailable",
+            row.latest_saved_reconciled_cutoff.isoformat() if row.latest_saved_reconciled_cutoff else "None saved",
+            row.current_saved_reconciled_cutoff.isoformat() if row.current_saved_reconciled_cutoff else "None current",
         )
         return values[index.column()]
 
@@ -394,7 +405,7 @@ class V2ReviewedReportsDialog(QDialog):
         self.positions_table.setSelectionMode(QAbstractItemView.SingleSelection)
         header = self.positions_table.horizontalHeader()
         header.setMinimumHeight(header.fontMetrics().lineSpacing() * 2 + 16)
-        for column, width in enumerate((180, 80, 130, 150, 185, 115, 125, 125)):
+        for column, width in enumerate((180, 80, 130, 150, 185, 115, 125, 125, 130, 150)):
             header.setSectionResizeMode(column, QHeaderView.Interactive)
             self.positions_table.setColumnWidth(column, width)
         self.positions_table.setMinimumHeight(120)
@@ -486,14 +497,20 @@ class V2ReviewedReportsDialog(QDialog):
             "source_capture_incomplete": "Source page capture unverified",
             "source_cutoff_before_as_of": "Latest source period ends before the as-of date",
             "source_period_extends_after_as_of": "A source period extends beyond the as-of date",
+            "live_reconciliation_unavailable": "Live reconciliation unavailable; review bound source sections",
         }
         limits = "; ".join(warning_labels.get(reason, reason.replace("_", " ")) for reason in row.coverage_warnings)
+        latest_saved = row.latest_saved_reconciled_cutoff.isoformat() if row.latest_saved_reconciled_cutoff else "none"
+        current_saved = (
+            row.current_saved_reconciled_cutoff.isoformat() if row.current_saved_reconciled_cutoff else "none"
+        )
         self.position_details.setText(
             f"Opening: {opening}; {_AccountPositionModel.OPENING_STATES[row.opening_status].lower()}. "
             f"Latest source activity date: {latest_activity}. "
             f"{row.pending_activity_rows} pending source row(s) across all dates; "
             f"{row.excluded_unreviewed_entries} unreviewed journal entry(s) excluded through the as-of date. "
             f"Evidence / coverage limits: {limits or 'none identified'}. "
+            f"Latest saved cutoff: {latest_saved}; saved cutoff matching current inputs: {current_saved}. "
             "The live check is computed now and is not a saved reconciliation cutoff. "
             "History includes original, reversal and replacement entries as the reviewed books stand now."
         )

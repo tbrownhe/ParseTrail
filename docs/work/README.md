@@ -9,6 +9,7 @@ contracts own lasting behavior. Start with those documents, not historical logs.
 
 | Record | Roadmap scope | Implementation / evidence |
 | --- | --- | --- |
+| [Durable reconciliation history](2026-10-25-v2-reconciliation-history.md) | V2-4/5 | Completed development and independent review; saved/current/live cutoffs and recoverable pending states. |
 | [Account positions and history](2026-10-25-v2-account-positions.md) | V2-5, DEC-1/2/3 | Completed development and independent review; owner scope decisions recorded; integrated UX remains open. |
 | [Initial-release readiness audit](2026-10-25-v2-readiness-audit.md) | P2-3/4/5, V2-3/6/7 | Completed read-only code and synthetic verification audit; remaining development and external gates distinguished. |
 | [Roadmap and instruction consolidation](2026-10-25-roadmap-consolidation.md) | DOCS-1, cross-cutting documentation | Complete; preservation, links, configuration and independent pickup review recorded. |

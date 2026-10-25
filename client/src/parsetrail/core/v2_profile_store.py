@@ -12,7 +12,7 @@ import os
 import re
 import sqlite3
 import tempfile
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from datetime import date
 from pathlib import Path
 from typing import Literal
@@ -47,7 +47,7 @@ from parsetrail.core.v2_source_overlap import (
 )
 
 APPLICATION_ID = 0x50543230  # PT20
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_DEFINITION_BYTES = 64 * 1024
 MAX_EVIDENCE_BYTES = 32 * 1024 * 1024
@@ -152,6 +152,19 @@ TABLE_COLUMNS = {
         ("reason", "TEXT", 1, 0),
         ("created_at", "TEXT", 1, 0),
     ),
+    "ReconciliationDecisions": (
+        ("decision_id", "INTEGER", 0, 1),
+        ("account_id", "TEXT", 1, 0),
+        ("source_sha256", "TEXT", 1, 0),
+        ("cutoff_date", "TEXT", 1, 0),
+        ("rule", "TEXT", 1, 0),
+        ("input_version", "TEXT", 1, 0),
+        ("check_payload", "TEXT", 1, 0),
+        ("journal_versions", "TEXT", 1, 0),
+        ("snapshot_sha256", "TEXT", 1, 0),
+        ("reason", "TEXT", 1, 0),
+        ("created_at", "TEXT", 1, 0),
+    ),
 }
 FOREIGN_KEYS = {
     "Sources": (),
@@ -183,6 +196,7 @@ FOREIGN_KEYS = {
         ("right_row_id", "SourceObservations", "row_id"),
         ("left_row_id", "SourceObservations", "row_id"),
     ),
+    "ReconciliationDecisions": (("source_sha256", "Sources", "sha256"), ("account_id", "Accounts", "id")),
 }
 
 IMMUTABLE_TABLES = (
@@ -196,6 +210,7 @@ IMMUTABLE_TABLES = (
     "StatementSourceReviews",
     "OpeningDecisions",
     "SourceOverlapReviews",
+    "ReconciliationDecisions",
 )
 
 
@@ -356,6 +371,28 @@ class StatementReconciliationCheck:
 
 
 @dataclass(frozen=True)
+class ReconciliationDecision:
+    decision_id: int
+    account_id: str
+    source_sha256: str
+    cutoff_date: date
+    rule: str
+    input_version: str
+    check: StatementReconciliationCheck
+    journal_versions: tuple[tuple[str, str], ...]
+    reason: str
+    created_at: str
+    stale: bool
+
+
+@dataclass(frozen=True)
+class ReconciliationSnapshot:
+    checks: tuple[StatementReconciliationCheck, ...]
+    history: tuple[ReconciliationDecision, ...]
+    unavailable_reason: str | None = None
+
+
+@dataclass(frozen=True)
 class CashActivityReviewRow:
     row_id: str
     date: str | None
@@ -495,6 +532,8 @@ class AccountPosition:
     live_reconciled_cutoff: date | None
     coverage_warnings: tuple[str, ...]
     history: tuple[AccountPositionHistoryRow, ...]
+    latest_saved_reconciled_cutoff: date | None = None
+    current_saved_reconciled_cutoff: date | None = None
 
 
 @dataclass(frozen=True)
@@ -620,6 +659,88 @@ def _decode_journal(payload: str) -> JournalEntry:
         )
     except (KeyError, TypeError, ValueError):
         raise ProfileFormatError("journal_entry_invalid") from None
+
+
+def _reconciliation_payload(check: StatementReconciliationCheck) -> str:
+    payload = asdict(check)
+    payload["period_start"] = check.period_start.isoformat() if check.period_start is not None else None
+    payload["period_end"] = check.period_end.isoformat()
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
+
+RECONCILIATION_WARNINGS = frozenset(
+    {
+        "confirmed_repeated_supporting_evidence",
+        "cross_source_occurrence_review_pending",
+        "source_capture_incomplete",
+        "overlapping_bound_source_periods",
+        "calendar_gap_before_source",
+        "adjacent_printed_endpoints_differ",
+    }
+)
+
+
+def _reconciliation_snapshot_digest(check_payload: str, journal_versions: str) -> str:
+    """Detect accidental snapshot changes; this is not database authentication."""
+    canonical = json.dumps(
+        {"check": json.loads(check_payload), "journal_versions": json.loads(journal_versions)},
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return _digest(canonical.encode())
+
+
+def _decode_reconciliation_check(payload: str) -> StatementReconciliationCheck:
+    try:
+        data = json.loads(payload)
+        for field in ("account_id", "account_name", "source_sha256", "rule", "input_version"):
+            if type(data[field]) is not str or not data[field]:
+                raise ValueError
+        if data["account_kind"] not in {"asset", "liability"}:
+            raise ValueError
+        for field in (
+            "printed_opening_minor",
+            "journal_opening_minor",
+            "opening_difference_minor",
+            "printed_closing_minor",
+            "closing_difference_minor",
+            "source_difference_minor",
+        ):
+            if data[field] is not None and type(data[field]) is not int:
+                raise ValueError
+        if type(data["journal_closing_minor"]) is not int:
+            raise ValueError
+        for field in ("posted_interpretations_reviewed", "reconciled"):
+            if type(data[field]) is not bool:
+                raise ValueError
+        for field in ("exceptions", "coverage_warnings"):
+            if type(data[field]) is not list or any(type(item) is not str for item in data[field]):
+                raise ValueError
+            data[field] = tuple(data[field])
+        data["period_start"] = date.fromisoformat(data["period_start"]) if data["period_start"] is not None else None
+        data["period_end"] = date.fromisoformat(data["period_end"])
+        check = StatementReconciliationCheck(**data)
+        if (
+            not check.reconciled
+            or not check.posted_interpretations_reviewed
+            or check.exceptions
+            or check.period_start is None
+            or check.period_start >= check.period_end
+            or check.printed_opening_minor is None
+            or check.journal_opening_minor != check.printed_opening_minor
+            or check.printed_closing_minor != check.journal_closing_minor
+            or check.opening_difference_minor != 0
+            or check.closing_difference_minor != 0
+            or check.source_difference_minor != 0
+            or not set(check.coverage_warnings) <= RECONCILIATION_WARNINGS
+            or len(set(check.coverage_warnings)) != len(check.coverage_warnings)
+            or re.fullmatch(r"[0-9a-f]{64}", check.source_sha256) is None
+            or re.fullmatch(r"[0-9a-f]{64}", check.input_version) is None
+        ):
+            raise ValueError
+        return check
+    except (KeyError, TypeError, ValueError):
+        raise ProfileFormatError("saved_reconciliation_integrity") from None
 
 
 def _check_format(connection: sqlite3.Connection) -> None:
@@ -782,6 +903,16 @@ class V2ProfileStore:
                         AND retained_row_id IN (left_row_id,right_row_id))
                         OR (decision<>'repeat' AND retained_row_id IS NULL))
                 );
+                CREATE TABLE ReconciliationDecisions (
+                    decision_id INTEGER PRIMARY KEY,
+                    account_id TEXT NOT NULL REFERENCES Accounts(id),
+                    source_sha256 TEXT NOT NULL REFERENCES Sources(sha256),
+                    cutoff_date TEXT NOT NULL, rule TEXT NOT NULL, input_version TEXT NOT NULL,
+                    check_payload TEXT NOT NULL, journal_versions TEXT NOT NULL, snapshot_sha256 TEXT NOT NULL,
+                    reason TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+                    UNIQUE(account_id,source_sha256,rule,input_version)
+                );
                 COMMIT;
             """)
             for table in IMMUTABLE_TABLES:
@@ -853,6 +984,7 @@ class V2ProfileStore:
                         verified.load_import(source_id)
                     for (payload,) in verified.connection.execute("SELECT payload FROM JournalEntries"):
                         _decode_journal(payload)
+                    verified._reconciliation_history(None)
                 try:
                     os.link(partial, destination)
                 except FileExistsError:
@@ -1997,7 +2129,8 @@ class V2ProfileStore:
                 if row.row_id not in consumed or consumed[row.row_id] != row.amount.minor:
                     pending[account_id] += 1
         coverage = self.statement_coverage()
-        checks = self._statement_reconciliation_checks()
+        checks, reconciliation_unavailable = self._available_reconciliation_checks()
+        saved_checks = self._reconciliation_history(checks)
         result = []
         for account in accounts:
             decision = self.opening_decision(account.id)
@@ -2054,6 +2187,8 @@ class V2ProfileStore:
             sections = tuple(section for section in coverage if section.account_id == account.id)
             source_cutoff = max((section.period_end for section in sections), default=None)
             warnings = []
+            if reconciliation_unavailable is not None:
+                warnings.append("live_reconciliation_unavailable")
             if not sections:
                 warnings.append("no_statement_coverage")
             if any(
@@ -2106,6 +2241,22 @@ class V2ProfileStore:
                     live_cutoff,
                     tuple(warnings),
                     tuple(history),
+                    max(
+                        (
+                            saved.cutoff_date
+                            for saved in saved_checks
+                            if saved.account_id == account.id and saved.cutoff_date <= as_of
+                        ),
+                        default=None,
+                    ),
+                    max(
+                        (
+                            saved.cutoff_date
+                            for saved in saved_checks
+                            if saved.account_id == account.id and saved.cutoff_date <= as_of and not saved.stale
+                        ),
+                        default=None,
+                    ),
                 )
             )
         unresolved_rows, unresolved_sources = self._unallocated_activity_counts()
@@ -3063,7 +3214,8 @@ class V2ProfileStore:
             self.connection.execute("ROLLBACK")
         return result
 
-    def _statement_reconciliation_checks(self) -> tuple[StatementReconciliationCheck, ...]:
+    def _reconciliation_rule_and_version(self) -> tuple[str, str]:
+        """Hash inputs without requiring any source to be ready for reconciliation."""
         rule = "v2-statement-reconciliation-3"
         version_tables = (
             ("Sources", "sha256"),
@@ -3087,7 +3239,10 @@ class V2ProfileStore:
             )
             for row in rows:
                 digest.update(json.dumps(row, separators=(",", ":")).encode())
-        version = digest.hexdigest()
+        return rule, digest.hexdigest()
+
+    def _statement_reconciliation_checks(self) -> tuple[StatementReconciliationCheck, ...]:
+        rule, version = self._reconciliation_rule_and_version()
         coverage = self.statement_coverage()
         comparisons = {(row.account_id, row.source_sha256): row for row in self.statement_journal_comparisons()}
         entries = tuple(
@@ -3240,6 +3395,213 @@ class V2ProfileStore:
                     not exceptions,
                     rule,
                     version,
+                )
+            )
+        return tuple(result)
+
+    def save_reconciliation_decision(
+        self,
+        account_id: str,
+        source_sha256: str,
+        *,
+        expected_input_version: str,
+        reason: str,
+    ) -> ReconciliationDecision:
+        """Explicitly retain a successful current check, without posting any money."""
+        self._require_writable()
+        if type(reason) is not str or not 0 < len(reason.strip()) <= 500:
+            raise ProfileFormatError("reconciliation_reason_required")
+        if type(expected_input_version) is not str or re.fullmatch(r"[0-9a-f]{64}", expected_input_version) is None:
+            raise ProfileFormatError("reconciliation_input_version_required")
+        if self.connection.in_transaction:
+            raise ProfileFormatError("reconciliation_requires_committed_snapshot")
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            self._require_financial_account(account_id)
+            checks = self._statement_reconciliation_checks()
+            check = next(
+                (item for item in checks if item.account_id == account_id and item.source_sha256 == source_sha256),
+                None,
+            )
+            if check is None:
+                raise ProfileFormatError("reconciliation_check_missing")
+            if check.input_version != expected_input_version:
+                raise ProfileFormatError("reconciliation_changed_since_selection")
+            if not check.reconciled or check.exceptions or not check.posted_interpretations_reviewed:
+                raise ProfileFormatError("reconciliation_check_not_successful")
+            prior = self.connection.execute(
+                "SELECT decision_id FROM ReconciliationDecisions "
+                "WHERE account_id=? AND source_sha256=? AND rule=? AND input_version=?",
+                (account_id, source_sha256, check.rule, check.input_version),
+            ).fetchone()
+            if prior is None:
+                journal_versions = tuple(
+                    (key, _digest(payload.encode()))
+                    for key, payload in self.connection.execute("SELECT key,payload FROM JournalEntries ORDER BY key")
+                )
+                check_payload = _reconciliation_payload(check)
+                _decode_reconciliation_check(check_payload)
+                versions_payload = json.dumps(journal_versions, separators=(",", ":"))
+                cursor = self.connection.execute(
+                    "INSERT INTO ReconciliationDecisions "
+                    "(account_id,source_sha256,cutoff_date,rule,input_version,check_payload,journal_versions,snapshot_sha256,reason) "
+                    "VALUES (?,?,?,?,?,?,?,?,?)",
+                    (
+                        account_id,
+                        source_sha256,
+                        check.period_end.isoformat(),
+                        check.rule,
+                        check.input_version,
+                        check_payload,
+                        versions_payload,
+                        _reconciliation_snapshot_digest(check_payload, versions_payload),
+                        reason.strip(),
+                    ),
+                )
+                decision_id = cursor.lastrowid
+            else:
+                decision_id = prior[0]
+            saved = next(
+                item for item in self._reconciliation_history(checks, account_id) if item.decision_id == decision_id
+            )
+            self.connection.execute("COMMIT")
+            return saved
+        except BaseException:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def reconciliation_history(self, account_id: str | None = None) -> tuple[ReconciliationDecision, ...]:
+        """Read immutable saved checks and their conservative current/stale status."""
+        if self.connection.in_transaction:
+            raise ProfileFormatError("reconciliation_requires_committed_snapshot")
+        self.connection.execute("BEGIN")
+        try:
+            if account_id is not None:
+                self._require_financial_account(account_id)
+            query = "SELECT 1 FROM ReconciliationDecisions"
+            parameters = ()
+            if account_id is not None:
+                query += " WHERE account_id=?"
+                parameters = (account_id,)
+            if self.connection.execute(query + " LIMIT 1", parameters).fetchone() is None:
+                return ()
+            checks, _unavailable = self._available_reconciliation_checks()
+            return self._reconciliation_history(checks, account_id)
+        finally:
+            self.connection.execute("ROLLBACK")
+
+    def _available_reconciliation_checks(self) -> tuple[tuple[StatementReconciliationCheck, ...], str | None]:
+        try:
+            return self._statement_reconciliation_checks(), None
+        except ProfileFormatError as exc:
+            if str(exc) != "statement_review_requires_one_bound_section":
+                raise
+            return (), str(exc)
+
+    def reconciliation_snapshot(self) -> ReconciliationSnapshot:
+        """Read live checks and saved status from the same committed profile view."""
+        if self.connection.in_transaction:
+            raise ProfileFormatError("reconciliation_requires_committed_snapshot")
+        self.connection.execute("BEGIN")
+        try:
+            checks, unavailable = self._available_reconciliation_checks()
+            return ReconciliationSnapshot(checks, self._reconciliation_history(checks), unavailable)
+        finally:
+            self.connection.execute("ROLLBACK")
+
+    def _reconciliation_history(
+        self, checks: tuple[StatementReconciliationCheck, ...] | None, account_id: str | None = None
+    ) -> tuple[ReconciliationDecision, ...]:
+        live = {(check.account_id, check.source_sha256): check for check in checks or ()}
+        current_rule, current_version = self._reconciliation_rule_and_version()
+        journal_versions = {
+            key: _digest(payload.encode())
+            for key, payload in self.connection.execute("SELECT key,payload FROM JournalEntries")
+        }
+        query = (
+            "SELECT decision_id,account_id,source_sha256,cutoff_date,rule,input_version,"
+            "check_payload,journal_versions,snapshot_sha256,reason,created_at FROM ReconciliationDecisions"
+        )
+        parameters = ()
+        if account_id is not None:
+            query += " WHERE account_id=?"
+            parameters = (account_id,)
+        result = []
+        for (
+            decision_id,
+            account,
+            source,
+            cutoff,
+            rule,
+            version,
+            payload,
+            versions,
+            snapshot_sha256,
+            reason,
+            created,
+        ) in self.connection.execute(query + " ORDER BY decision_id DESC", parameters):
+            check = _decode_reconciliation_check(payload)
+            try:
+                if _reconciliation_snapshot_digest(payload, versions) != snapshot_sha256:
+                    raise ValueError
+                cutoff_date = date.fromisoformat(cutoff)
+                decoded_versions = json.loads(versions)
+                if type(decoded_versions) is not list:
+                    raise ValueError
+                entry_versions = []
+                seen = set()
+                for item in decoded_versions:
+                    if (
+                        type(item) is not list
+                        or len(item) != 2
+                        or type(item[0]) is not str
+                        or type(item[1]) is not str
+                        or re.fullmatch(r"[0-9a-f]{64}", item[1]) is None
+                        or item[0] in seen
+                        or journal_versions.get(item[0]) != item[1]
+                    ):
+                        raise ValueError
+                    seen.add(item[0])
+                    entry_versions.append(tuple(item))
+                if (
+                    check.account_id != account
+                    or check.source_sha256 != source
+                    or check.period_end != cutoff_date
+                    or check.rule != rule
+                    or check.input_version != version
+                    or not check.reconciled
+                    or check.exceptions
+                    or not check.posted_interpretations_reviewed
+                    or not reason.strip()
+                ):
+                    raise ValueError
+            except (TypeError, ValueError):
+                raise ProfileFormatError("saved_reconciliation_integrity") from None
+            current = live.get((account, source))
+            stale = (
+                current is None
+                or current.rule != rule
+                or current.input_version != version
+                or not current.reconciled
+                or not current.posted_interpretations_reviewed
+            )
+            if (not stale and check != current) or (
+                rule == current_rule and version == current_version and dict(entry_versions) != journal_versions
+            ):
+                raise ProfileFormatError("saved_reconciliation_integrity")
+            result.append(
+                ReconciliationDecision(
+                    decision_id,
+                    account,
+                    source,
+                    cutoff_date,
+                    rule,
+                    version,
+                    check,
+                    tuple(entry_versions),
+                    reason,
+                    created,
+                    stale,
                 )
             )
         return tuple(result)

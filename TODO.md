@@ -6,9 +6,8 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-**None.** The account positions/history packet completed development and
-independent verification. Continued roadmap development is owner-authorized;
-durable reconciliation history is next. No per-feature human checkpoint is due.
+**None.** Durable reconciliation history completed development and independent
+verification. Continued roadmap development remains owner-authorized.
 
 ## Next candidates
 
@@ -22,7 +21,7 @@ durable reconciliation history is next. No per-feature human checkpoint is due.
 
 ## Most recent product packet
 
-[Account positions/history](docs/work/2026-10-25-v2-account-positions.md) completed
+[Durable reconciliation history](docs/work/2026-10-25-v2-reconciliation-history.md) completed
 development and independent review. Consolidated human UI/UX review remains open;
 this is not 2.0 release acceptance.
 

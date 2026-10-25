@@ -56,6 +56,15 @@ The owner's deferral of Wells Fargo personal-loan parser changes remains a scope
 boundary. Existing finite evidence does not authorize additional legacy-parser
 changes, historical loan reconstruction or principal/interest postings.
 
+The [October 25 source-fact disposition audit](work/2026-10-25-v2-readiness-audit.md#family-source-fact-dispositions)
+maps every family to already-recorded comparison evidence and intentional
+differences. It completes that inventory step without new private-source replay
+or full-page/installed acceptance. In particular, the older Citi monetary
+inventory retains 1,944 explicitly unclassified lines across 133 sources;
+supported-dollar-token lines remain located, visible and unposted under the
+owner-approved bounded review policy. Do not turn admitted definitions or expected
+source-refusal tests into claims of successful packaged import for every family.
+
 ## Shared engine and repeated behavior
 
 Current V2 extraction uses the client-owned finite operations selected through

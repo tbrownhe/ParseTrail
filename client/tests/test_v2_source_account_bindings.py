@@ -210,6 +210,7 @@ def test_statement_overlap_uses_explicit_account_and_printed_period(tmp_path: Pa
             "Printed openings",
             "Journal comparison",
             "Reconciliation check",
+            "Saved reconciliations",
         ]
         assert dialog.model.rowCount() == 5
         assert dialog.model.data(dialog.model.index(2, 2)) == "Adjacent dates"

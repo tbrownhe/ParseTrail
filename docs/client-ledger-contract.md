@@ -177,10 +177,15 @@ amounts. Enforce consistent account/currency ownership on statement links. Treat
 overlapping exports as repeated observations, not additive activity. A
 reconciliation result identifies its cutoff, deterministic rule and input
 version; changing relevant entries or review assertions changes that version.
-The accounting target also retains a reconciliation's cutoff and the versions
-of the entries it validated as durable history. The current V2 check is a
-read-only versioned query; durable reconciliation history remains explicit
-[V2-4 work](../ROADMAP.md#v2-4), not an implemented persistence claim.
+Explicit confirmation can retain a successful check's cutoff, rule, input version,
+exact result and journal payload versions as append-only durable history. The
+save revalidates its expected input version atomically and requires reviewed
+posted interpretations. Failed or stale checks cannot be saved. Capture and
+coverage qualifications remain part of the saved result, not implied acceptance.
+Identical saves reuse the original record. Later profile-wide input changes
+conservatively mark saved decisions stale; originals remain inspectable. Saving
+history does not itself invalidate the live version. Latest saved, currently
+valid saved and newly computed live cutoffs are separate report fields.
 A supporting-repeat decision does not stand in for a source-row allocation.
 
 Expense/income accounts support spending reports; selected financial-account
@@ -201,8 +206,8 @@ stale, future or conflicting opening decisions leave the position unknown;
 a valid zero opening is known zero. Pending source counts cover all dates,
 including supporting repeats, with unbound rows separately identified. Source
 period ends/activity dates, coverage/capture warnings and live successful checks
-remain separate qualifications. A live-check cutoff is computed now, not a saved
-reconciliation decision or proof of complete history.
+remain separate qualifications. A live-check cutoff is computed now, independently
+of saved reconciliation decisions; neither proves complete history.
 
 Account history includes originals, reversals and replacements, restating the
 books by accounting date as they stand now rather than reconstructing what was

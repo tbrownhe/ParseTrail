@@ -29,7 +29,7 @@ evidence belong in [packet records](work/README.md).
 
 ## Profile format and lifecycle
 
-The current pre-release profile schema is revision 11; check `SCHEMA_VERSION`
+The current pre-release profile schema is revision 12; check `SCHEMA_VERSION`
 in `v2_profile_store.py` when opening a packet. Format markers, exact table and
 foreign-key shapes, append-only triggers and SQLite integrity are checked before
 writable use. Older disposable pilots, 1.x, unknown, damaged and newer shapes
@@ -107,6 +107,20 @@ snapshot and distinguish recorded postings from an opening-based journal positio
 missing/stale/future/conflicting openings remain unknown. Per-account pending rows
 cover all dates; unbound rows and transfer clearing are separately visible. Source
 dates and live reconciliation cutoffs do not establish complete bank balances.
+
+`ReconciliationDecisions` is append-only saved successful-check history. Explicit
+confirmation revalidates the expected live input version inside one write
+transaction and retains the exact check, cutoff, rule, reason and immutable
+journal payload digests. Failed or unreviewed checks and stale forms cannot save.
+Identical account/source/rule/version saves reuse the original decision without
+changing its reason. Saving history does not alter its own input version.
+History reads retain old checks and report current/stale status conservatively
+against profile-wide input versions. Positions distinguish latest saved cutoff,
+currently valid saved cutoff and a newly computed live cutoff. Snapshot backup
+validates this retained history independently of current reconciliation availability
+before publishing a new copy. A saved snapshot digest detects accidental changes;
+it does not authenticate a profile against hostile modification. Earlier disposable
+schema-11 pilots must be recreated, without a migration or 1.x alias.
 
 SQLite profile snapshots contain embedded sources, authored data, journals and
 all review history. They are verified before publication at a new path; restore

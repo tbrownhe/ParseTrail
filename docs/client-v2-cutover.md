@@ -76,8 +76,9 @@ admitted workspace format. The [parser contract](client-v2-parsing.md) and
 Native worker limits, packaged pipes, source parity, full-page capture and
 installed/offline trust are separate claims. Record only platforms actually
 checked. Keep client work on the active client branch; a service interface needs
-the documented reviewed design and separate-branch handoff. DEC-2 in the roadmap
-retains the unresolved first-release catalog/server dependency.
+the documented reviewed design and separate-branch handoff. The owner's October
+25 DEC-2 permits local signed-catalog installation for the first release and
+defers its service to separate later work.
 
 ## Implementation chunks
 
@@ -99,13 +100,14 @@ records distinguish automated/agent verification from actual owner acceptance.
 Development within selected V2/P2 scope may continue under the repository review
 policy. The application is not release-ready. Use the roadmap's
 [release checklist](../ROADMAP.md#release-checklist) for current unmet gates,
-including unresolved scope decisions, consolidated UX, supported-platform,
+including the resolved scope dispositions, consolidated UX, supported-platform,
 production-catalog and installed/offline acceptance. Historical pilot success
 never authorizes daily-profile activation or public release.
 
 Forecasting, new ML insights and complete historical loan reconstruction are
-later work. Pending 1.x action omissions remain explicit decisions in the
-[action inventory](client-v2-menu-inventory.md), not silently approved cuts.
+later work. The owner's October 25 legacy-action deferrals remain visible in the
+[action inventory](client-v2-menu-inventory.md); they are important future
+capabilities, not permanently retired features.
 
 <a id="client-20-clean-profile-cutover-plan"></a>
 Earlier heading links are retained for the historical snapshot linked above.
