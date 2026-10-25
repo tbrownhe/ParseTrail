@@ -39,6 +39,13 @@ class V2TransferReview(QDialog):
         self.setWindowTitle("2.0 transfer and card payment review")
         self.resize(1250, 650)
         layout = QVBoxLayout(self)
+        profile_row = QHBoxLayout()
+        profile_row.addWidget(QLabel("Profile:"))
+        self.profile_path = QLineEdit(str(workspace.profile_path))
+        self.profile_path.setReadOnly(True)
+        self.profile_path.setCursorPosition(0)
+        profile_row.addWidget(self.profile_path)
+        layout.addLayout(profile_row)
         note = QLabel(
             "Equal and opposite movements are suggestions only. Confirm the pair from both sources. "
             "A card repayment moves cash to the card liability and does not add spending. "
@@ -93,7 +100,13 @@ class V2TransferReview(QDialog):
         pair = self._current()
         self.confirm.setEnabled(pair is not None and pair.posting_allowed)
         if pair is None:
-            self.status.setText(f"{len(self.candidates)} candidate pair(s). Select one to inspect and confirm.")
+            if self.candidates:
+                self.status.setText(f"{len(self.candidates)} candidate pair(s). Select one to inspect and confirm.")
+            else:
+                self.status.setText(
+                    "No candidate pairs in this profile and date window. Import both sources, assign their "
+                    "financial accounts, or widen the date gap. Unmatched movements remain pending."
+                )
         elif not pair.posting_allowed:
             self.status.setText(
                 "This pair includes an assumed card date. Enable best guess posting dates to confirm it."

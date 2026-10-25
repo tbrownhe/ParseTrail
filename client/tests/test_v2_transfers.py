@@ -196,6 +196,7 @@ def test_transfer_dialog_requires_selection_and_confirmation(tmp_path: Path, mon
         dialog.show()
         app.processEvents()
         assert dialog.table.rowCount() == 1
+        assert dialog.profile_path.text() == str(path)
         assert not dialog.confirm.isEnabled()
         dialog.table.selectRow(0)
         assert dialog.confirm.isEnabled()
@@ -203,6 +204,8 @@ def test_transfer_dialog_requires_selection_and_confirmation(tmp_path: Path, mon
         assert len(questions) == 1
         assert "No income or expense is created" in questions[0]
         assert dialog.table.rowCount() == 0
+        dialog.refresh()
+        assert "No candidate pairs in this profile" in dialog.status.text()
         with V2ProfileStore.open(path, read_only=True) as store:
             assert store._active_consumed() == {cash_id: -2000, card_id: 2000}
     finally:

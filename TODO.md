@@ -606,6 +606,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   creates no income or expense. Synthetic service and offscreen dialog checks
   pass; native transfer review acceptance is open. Dismissal, transfer correction,
   duplicate/overlap resolution, fees and partial settlements remain pending.
+  The owner accepted the review panel but saw no candidates in the workspace
+  opened during the walkthrough. The disposable preview profile independently
+  contains three pairs; the panel now displays its profile path and explains an
+  empty result, so a different or incompletely bound profile is distinguishable.
   A read-only signed-catalog scan routed all 956 PDFs in the two successful
   archives, then parsed the six bank families: 315 statements and 14,275 rows
   met the structural cash-review prerequisites before account binding, with
