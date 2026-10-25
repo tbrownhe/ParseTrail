@@ -176,34 +176,31 @@ exclude statement archives; back up the managed folders separately.
 
 ## Application service boundaries
 
-The approved double-entry foundation is being developed under the
-[ledger contract](../docs/client-ledger-contract.md). Current databases still use
-the existing transaction/category model; no ledger migration or report cutover
-has occurred. Imported evidence, reviewed interpretations, journal balance, and
-statement reconciliation will remain distinct. The
-[migration auditor](../devtools/ledger_audit/README.md) creates a disposable,
-read-only snapshot without loading application settings.
+Ordinary startup still runs the published 1.x application and its independent
+transaction/category database. The explicit `--v2 --profile <new.db>
+--catalog-cache <directory>` path opens the fresh V2 workspace before legacy
+bootstrap; `--create-profile` deliberately creates a new profile. Development
+writes use disposable profiles, never the owner's daily profile.
 
-The [recovery tool](../devtools/recovery/README.md) verifies a complete managed
-statement/database bundle and disposable restore. The
-[isolated ledger kernel](../docs/client-ledger-kernel.md) implements exact posting,
-evidence allocation, corrections and reconciliation on a separate SQLite file.
-It is not wired into current imports, reports or the active application database.
-The [shadow conversion and review guide](../devtools/ledger_audit/SHADOW.md) describes
-the first disposable legacy conversion and its read-only Windows acceptance window.
-The [fresh rebuild guide](../devtools/ledger_audit/REBUILD.md) records an earlier
-disposable archive replay and category-preservation experiment. It does not
-define the current 2.0 release path; active imports and reports have not
-switched formats.
+V2 uses the [single authoritative store](../docs/client-v2-unified-store.md) and
+[ledger contract](../docs/client-ledger-contract.md). It already supports narrow
+reviewed posting/correction, transfer/opening/source review, common reports and
+profile recovery. Imported evidence, interpretations, allocations, reconciliation
+and coverage remain separate. V2 source imports use the finite
+[signed parser catalog](../docs/client-v2-parsing.md), not the 1.x bytecode loader.
+These implemented slices do not establish 2.0 release readiness.
 
-The [client 2.0 cutover plan](../docs/client-v2-cutover.md) creates a clean new
-profile. The owner will re-enter authored state; no 1.x database updater or
-automatic category carry-forward is planned. The old profile remains independent.
-Version numbers and current database behavior remain unchanged until
-implementation and release acceptance are complete.
-The [2.0 parsing plan](../docs/client-v2-parsing.md) also includes engine review
-and a signed declarative catalog, replacing normal downloaded bytecode execution.
-This is a planned distribution/interface change, not the current plugin behavior.
+The [cutover contract](../docs/client-v2-cutover.md) requires a clean profile and
+new authored decisions, with no 1.x updater or category carry-forward. The
+[legacy kernel](../docs/client-ledger-kernel.md), [recovery tool](../devtools/recovery/README.md),
+[shadow conversion](../devtools/ledger_audit/SHADOW.md) and
+[rebuild experiment](../devtools/ledger_audit/REBUILD.md) retain historical
+development evidence; their separate stores are not another V2 runtime.
+
+Read [ROADMAP](../ROADMAP.md) for remaining scope/gates and [TODO](../TODO.md) for
+selected work. Plans, commands/results and acceptance belong in
+[packet records](../docs/work/README.md), while the service table below describes
+the ordinary 1.x services. Keep runtime-specific claims explicit.
 
 ### Statement coverage and freshness
 

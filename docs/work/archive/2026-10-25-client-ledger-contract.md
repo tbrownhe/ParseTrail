@@ -1,0 +1,230 @@
+> Historical snapshot of `docs/client-ledger-contract.md` at `d9dab3e`, archived October 25, 2026.
+> Original wording is retained; relative Markdown links are rebased for this location.
+> This snapshot does not select work or override [the current roadmap](../../../ROADMAP.md),
+> [current work](../../../TODO.md), or current component contracts.
+
+# Client double-entry ledger contract
+
+Status: authorized September 27, 2026; recovery rehearsal and an isolated kernel
+are implemented. The first approved shadow conversion is complete; unresolved
+interpretations remain open before posting them or changing reports. The
+[October 13 clean-profile decision](2026-10-25-client-v2-cutover.md) supersedes every
+legacy database migration and category carry-forward instruction below: 2.0
+starts with a new profile and the owner re-enters authored state. Legacy audits
+and disposable conversions remain historical development evidence only.
+This is the implementation target, not a claim that the current database is a ledger. The
+active sequence and acceptance gates are in [TODO](2026-10-25-TODO.md). All work remains
+local and client-only on `feature/client-financial-insights`.
+
+The initial authorized audit is complete; L1 remains open for correction of
+source-parser omissions and explicit migration mappings. Source investigation
+identified HealthEquity cash activity continuing after a page-one interest table,
+plus extraction underscores before some continuation rows/balance labels. The
+legacy parser stops early and derives its closing balance from incomplete rows.
+The corrected source parser now reads the complete cash section and validates
+printed running/closing balances. The private correction preview preserves all
+existing transactions and identifies omitted rows. Separate differences between
+consecutive printed statement balances remain unresolved; do not convert them
+into automatic journal adjustments. The owner approved using corrected HSA evidence
+only in the disposable shadow conversion, with remaining gaps explicit. Live
+historical correction has not been applied.
+The standalone [auditor](../../../devtools/ledger_audit/README.md)
+reproduces structural checks without loading application settings or opening the
+live database through a writable connection.
+
+The [recovery tool](../../../devtools/recovery/README.md) has verified a database/archive
+bundle and independent disposable restore. The [isolated kernel](../../client-ledger-kernel.md)
+implements posting, evidence allocation, correction and statement-reconciliation
+rules against synthetic fixtures. It does not migrate live history or drive reports.
+Wells Fargo personal-loan parser changes are deferred at the owner's request;
+legacy synthetic loan entries require explicit migration provenance rather than
+being silently treated as observed disbursements.
+The [first shadow converter and read-only review](../../../devtools/ledger_audit/SHADOW.md)
+preserve the legacy database byte-for-byte, bind HSA corrections to the approved
+preview, and leave unknown counterparts/openings unposted. Existing supported
+income/expense categories are provisional, unreviewed accounting interpretations.
+Legacy Verified flags are retained, not promoted to confirmed transfers or reviewed
+journals. Other historical balance endpoints remain unverified until source review.
+
+## Evidence and books
+
+Keep three separate layers:
+
+1. Imported evidence: statements, their declared intervals/balances, normalized
+   transaction observations, and source membership. New 2.x imports retain source
+   bytes, hashes, exact money, dates, descriptions and locations. The historical
+   1.x rows are not guaranteed to be verbatim bank records: parser-computed
+   balances and edits may lack separate provenance.
+2. Accounting interpretation: ledger accounts, economic-event groups, journal
+   entries, postings, evidence allocations, and review/correction history.
+3. Derived views: spending, account cash movement, net worth, coverage, and
+   forecasts. Forecasts, hypothetical valuations, and ML suggestions never enter
+   posted historical books merely because they were calculated.
+
+Many statement memberships can support one existing transaction observation.
+Many observations can support one economic event (such as two banks reporting a
+transfer). One observation can support multiple accounting allocations (such as
+principal plus interest). Importing evidence twice must not book an event twice.
+
+## Account and journal invariants
+
+- Ledger account classes are Asset, Liability, Equity, Income, and Expense.
+  Imported financial accounts map to ledger accounts through explicit identity
+  mappings. Category names may map to income/expense accounts; a Transfer
+  category does not become an expense account or establish a destination.
+- Represent postings with exact signed amounts: debit positive, credit negative.
+  Assets/expenses normally have debit balances; liabilities/equity/income normally
+  have credit balances. UI display conventions do not alter stored signs.
+  Verify source financial-account sign conventions on import; do not infer
+  them solely from whether an observed balance is positive or negative.
+- Every posted journal entry has at least two nonzero postings and debits equal
+  credits exactly. Accounts exist and accept the relevant denomination. All
+  postings, evidence allocations, state changes, and idempotency records commit
+  atomically. Invalid/incomplete entries can be drafts, never posted entries.
+- Exact single-currency entries are the first kernel scope. Amount storage uses
+  currency precision, not binary floats. Different currencies cannot cancel
+  numerically; cross-currency posting stays blocked until explicit quantities,
+  valuations, exchange rates, rounding, and FX clearing rules are implemented.
+  Account/commodity identity must allow a later exact-quantity securities model;
+  cash transfers alone do not model investment performance or cost basis.
+- Evidence allocations exactly account for each finalized observation, preserving
+  its sign, denomination, and financial account effect. No observed amount may
+  be consumed twice in active interpretations. Supporting duplicate statement
+  memberships are references, not extra money. Partial allocations stay visible.
+- A source-independent manual entry requires explicit origin and review. Never
+  fabricate an imported counterpart or source statement to make an entry balance.
+
+## Dates, transfers, and incomplete evidence
+
+For initial statement-derived books prefer the financial account's printed
+posting date, resolving a printed month/day against its statement period when
+needed. When no posting date is printed, retain the original activity or
+transaction date and mark the parser's posting candidate `assumed`. A global
+choice defaults off; enabling it permits reviewed entries to use these guesses
+without per-row date entry. Corrections to an accounting date use an append-only
+reversal and replacement rather than changing source evidence. Effective
+accounting date, source posting date, creation time, and reconciliation cutoff
+remain distinct facts.
+Source-specific opening/closing balance timing must be established before using
+a statement as an opening anchor.
+
+A same-day confirmed card payment debits the card liability and credits checking.
+The two source observations support that entry without duplicating the payment.
+For different posting dates, use two dated balanced entries in a shared economic
+event: checking to transfer clearing, then clearing to the card. Clearing retains
+the amount in transit at intermediate cutoffs. No forced common posting date.
+Transfers within owned assets and card repayments create no second expense.
+
+Matching equal and opposite amounts in the same currency on different accounts
+within a date window produces candidates only. Category labels and legacy
+Verified flags are supporting evidence, not confirmed links. Resolve multiple
+matches, duplicates, fees, partial settlements, and multiple-leg transfers before
+posting. A match never overwrites imported dates or amounts.
+
+Unknown purpose can remain a draft; where representing a known account movement
+requires a posted entry, use an explicitly identified suspense account with an
+unresolved review state. The 2.x accounting policy must specify its account class
+and presentation. Suspense must not disappear from reports, stand in for income
+or expense without qualification, or mark history reconciled/classified by fiat.
+Do not infer whether a missing counterpart is an owned account, an external
+payment, or a missing import merely from a Transfer label.
+
+Opening positions use an evidenced, dated opening-equity entry. An opening card
+debt is not current-period spending, and an initial checking balance is not
+income. A later unexplained balance difference is a reconciliation exception,
+not another opening balance or an automatic plug to equity. Gaps in coverage
+remain gaps even when observed endpoints balance.
+
+The owner confirmed that the audited legacy manual account-closure entries were
+bookkeeping instructions to zero closed accounts, not actual money movements.
+Preserve these rows and that review decision, but classify them as legacy control
+evidence excluded from cash-posting allocation. Their intent maps to account
+lifecycle/tracking metadata. The recorded date is not proof of a bank settlement
+date. Closing/stopping tracking must not zero a ledger balance or manufacture an
+expense, payment, or equity adjustment. Any residual historical balance without
+settlement evidence remains an explicit reconciliation exception; a closed status
+must not make incomplete net-worth or liquidity figures look fully reconciled.
+Other manual entries require their own interpretation and are not covered by
+this confirmation.
+
+## Splits and reversals
+
+| Evidence/event | Debit | Credit |
+| --- | --- | --- |
+| Card grocery purchase 100 | Grocery expense 100 | Card liability 100 |
+| Card repayment 100 | Card liability 100 | Checking 100 |
+| Loan payment 500 with evidenced breakdown | Loan liability 400; interest expense 100 | Checking 500 |
+| Savings contribution 300 | Savings 300 | Checking 300 |
+| Grocery refund 20 to a card | Card liability 20 | Grocery expense 20 |
+
+Split totals equal the source amount exactly. Interest, fees, and principal must
+come from evidence or an explicit reviewed allocation, not an estimated schedule
+silently substituted for actual history. Avoid recognizing interest twice if the
+loan register already has a separate interest charge. Loan proceeds reduce no
+expense and are not salary. Personal consumption, asset purchases, reimbursements,
+and external payments require their actual interpretation; payment rails such as
+ACH or peer-to-peer transfers do not determine it.
+
+Drafts can change. Posted entries retain an audit trail through explicit reversal
+and replacement entries linked to the original, including reason and provenance.
+Built-in categories have stable semantic keys in a code-owned catalog, with fixed
+names and income/expense types. User-defined categories occupy a separate identity
+namespace and can extend the catalog without overriding a built-in. The first is
+`builtin:loan-interest`, displayed as **Loan interest**. A loan-interest workflow
+must post to that built-in; arbitrary expense recategorization is not available
+for its interest component. Ordinary expense classification can select built-ins
+or user categories and split across them. A matching custom display name neither
+establishes built-in identity nor merges previously verified history. Account mappings
+are created atomically with posting, while catalog reads remain read-only.
+
+Changing a category's name/type must not rewrite historical postings. Prevent
+reusing evidence between an original and its active replacement. Reconciliation
+must be invalidated or reopened explicitly when a correction changes its result.
+
+## Review, reconciliation, and report contracts
+
+Track independently: balanced/posted state, interpretation review, evidence
+allocation completeness, statement reconciliation, and coverage/freshness. A
+legacy Verified flag supplies only the historical category-review assertion.
+
+Reconcile account-level ledger movements against statement membership and opening
+and closing balances. Retain unresolved differences with evidence and exact
+amounts. Enforce consistent account/currency ownership on statement links. Treat
+overlapping exports as repeated observations, not additive activity. Persist a
+reconciliation's cutoff and the versions of the entries it validated.
+
+Expense/income accounts support spending reports; selected financial-account
+postings support cash movement. Net worth derives from assets and liabilities,
+with unresolved/valuation limits visible. Account selection does not transform
+an internal transfer into income or personal spending. Contributions can be
+shown separately in liquidity views. Incomplete classifications, scope, currencies,
+coverage, and stale inputs must remain visible. CF1 supplies statement coverage;
+it cannot establish accounting correctness by itself.
+
+## Fresh-profile rollout
+
+Client 2.0 creates a new ledger profile. It does not migrate or open the 1.x
+database for writable initialization, restore old category verification, or
+retain old identity aliases. The owner re-enters accounts, categories, budgets,
+manual values and transaction decisions. Original documents chosen for 2.0
+are imported as new evidence and reviewed under the accounting rules above.
+The 1.4.2 database, archive and application remain separate and untouched.
+
+The [current 2.0 cutover plan](2026-10-25-client-v2-cutover.md) governs format detection,
+import integration, reports, backup/restore and native acceptance. The
+[disposable rebuild guide](../../../devtools/ledger_audit/REBUILD.md) and earlier
+shadow conversion document an abandoned migration approach; they are read-only
+research records, not 2.0 implementation requirements.
+
+Kernel tests cover atomic rollback, imbalance rejection, exact splits,
+duplicate evidence/imports, correction history, month-crossing transfers,
+partial settlements, fees, unknown counterparts, currency rejection, opening
+equity and statement reconciliation with overlapping/missing history. New
+profile recovery checks source and restore bytes. Routine development never
+migrates the live database in place.
+
+References informing the design: [GnuCash entry concepts](https://www.gnucash.org/docs/v5/C/gnucash-guide/basics-entry1.html),
+[accounts](https://www.gnucash.org/docs/v5/C/gnucash-guide/chapter_accts.html),
+[opening balances](https://www.gnucash.org/docs/v5/C/gnucash-guide/cbook-accounts1.html),
+and [Actual's transfer/date treatment](https://actualbudget.org/docs/transactions/transfers/).
+The accounting and provenance rules above are ParseTrail design decisions.

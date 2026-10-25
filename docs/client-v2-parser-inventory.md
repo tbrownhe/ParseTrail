@@ -1,471 +1,131 @@
 # P2-1 parser and engine review
 
-The October 13, 2026 clean-profile decision makes this a read-only research
-inventory. It does not require 2.0 to replay every 1.x archive source or carry
-old parser IDs. The owner subsequently requested **all 22 currently shipped
-parser families** in the first 2.0 release. Each family therefore needs an
-accepted 2.0 extraction path; historical documents remain accessible through
-the retained 1.4.2 profile while conversion is under way.
+This is a dated technical family map from the October 25, 2026 checkout review.
+The parser IDs, source versions and family labels below identify the independent
+1.x reference implementations; they are not V2 catalog IDs or a guarantee that
+installed artifacts equal this checkout. The owner requires every current parser
+family, including recent Citi, in the first V2 release. The
+[parser contract](client-v2-parsing.md) owns enduring engine/evidence rules;
+[ROADMAP.md](../ROADMAP.md) owns priorities, selected scope and release gates.
 
-Started October 4, 2026 on `feature/client-financial-insights`. This records
-source-code and synthetic-test coverage for the [declarative parser plan](client-v2-parsing.md).
-An authorized closed-copy replay and installed signed-catalog verification have
-since been completed. This review identifies conversion and fixture gates; it
-does not claim declarative parity for unconverted families.
+The [archived inventory](work/archive/2026-10-25-client-v2-parser-inventory.md)
+contains the original fixture counts, comparisons, operation-cost estimates and
+chronology. Those are dated observations, not new execution instructions. Use
+[packet records](work/README.md) for subsequent verification. No private fixtures
+were replayed to consolidate this document.
 
 ## Shipped parser and fixture matrix
 
-All 22 modules below define `Parser(IParser)` in `client/src/parsetrail/plugins`:
-21 PDF and one CSV. There is an XLSX router and a synthetic router test, but no
-shipped XLSX parser. “Targeted” means a test names the parser and exercises its
-output/behavior; it does not imply full private-archive regression coverage.
+The snapshot contains 22 source parser families: 21 PDF and one CSV. V2 may use
+different admitted definition/operation identities. The matrix preserves useful
+evidence distinctions and observed limits without duplicating validation logs.
 
-| Parser ID (source filename without `.py`) | Source version | Family/layout | Current targeted evidence | Pilot operation or gap |
-| --- | --- | --- | --- | --- |
-| `csv_mohela_202411` | 0.2.1 | Life-of-loan account-history CSV | Two authorized account-history files, 78 source rows; one detailed export, 299 rows | Separate 2.0 definitions retain detailed loan identities or explicitly unknown account identity; neither invents statement endpoints. |
-| `pdf_capitaloneauto_202402` | 0.2.2 | Auto loan PDF with payment components | All 26 archive PDFs compared read-only with 1.x | Legacy synthetic origination and reconstructed opening prevent direct parity; V2 keeps these unknown pending accounting review. |
-| `pdf_chasecc_202602` | 0.1.0 | Section/line credit-card PDF | All five archive PDFs pass read-only source-fact parity | Printed balance equations now pass independently; dated auxiliary lines and page capture remain visible limits. |
-| `pdf_citicc_201505` | 0.3.1 | Older Citi line credit-card PDF | Finite V2 pilot and synthetic continuation tests | All 135 routed archive sources pass 1,740-row and printed-balance parity; complete page capture remains open. |
-| `pdf_citicc_202506` | 0.3.1 | Citi table credit-card PDF | Generic anchored-table pilot and synthetic refusal tests | Eight routed archive PDFs pass 323-row and printed-balance parity; all 1,311 raw table rows are used or located as dispositions, including 21 classified monetary tails. Full page capture remains open. |
-| `pdf_citicc_202511` | 0.4.0 | Citi table plus text/fee recovery PDF | Missing-table-row and multiline-fee tests | Dynamic headers; compare table/text occurrences without double counting. |
-| `pdf_fidelity401k_201810` | 0.2.1 | Retirement PDF, wrapped account labels | All 94 archive PDFs compared read-only with 1.x | The old dated rows match V2 source facts when period-summary rows are included; V2 marks them non-activity. Investment posting remains undecided. |
-| `pdf_fidelityhsa_202001` | 0.2.0 | HSA line PDF | All 59 archive PDFs compared read-only with 1.x | Account identity and printed endpoints match; the old dated rows match V2 when non-activity period summaries are included. HSA accounting remains undecided. |
-| `pdf_happenbank_202606` | 0.1.0 | Savings line PDF | Both archive PDFs pass read-only source-fact parity | Printed balances and line activity match; distinguish from older LendingClub layout. |
-| `pdf_hehsa_201810` | 0.2.1 | HealthEquity cash and continuation PDF | All 60 archive PDFs compared read-only with 1.x | 53 match directly; seven source rows have no printed description, where 1.x substituted “Interest” and V2 keeps unknown. Financial facts and independent cash checks match. |
-| `pdf_lendingclublus_202506` | 0.2.0 | Older savings table PDF | Finite V2 table pilot and synthetic refusal tests | All seven routed archive PDFs pass 18-row, running-balance and summary parity; 28 monetary tail rows now have declared, located dispositions. Full-page capture remains open. |
-| `pdf_lendingclubsavings_202601` | 0.1.1 | Savings line PDF | All five routed line-layout archive PDFs pass read-only source-fact parity | The shared filename prefix also contains seven older table-layout PDFs; signed routing separates them. |
-| `pdf_occubank_201409` | 0.2.0 | Multi-account bank PDF | Finite V2 pilot and synthetic refusal tests | All 113 archived sources pass two-account row and running-balance parity; 78 periods use bounded first-page annotations. Other account sections remain outside capture. |
-| `pdf_occucc_201904` | 0.2.0 | Credit-card line PDF | Finite V2 pilot and synthetic refusal tests | All 32 archived sources pass accepted-row and printed-balance parity; header interest is a separate located charge. Complete page capture remains open. |
-| `pdf_synchrony-amzncc_202501` | 0.3.0 | Store-card table PDF | Ten authorized PDFs outside the imported archive; 97 accepted rows | Declared page-top anchored geometry, single-date card evidence and shared continuation; four pre-period activity dates stay unposted. |
-| `pdf_transamerica_202104` | 0.2.0 | Retirement line PDF | Finite V2 period-summary pilot and synthetic refusal tests | All 12 routed archive PDFs pass 49-component printed-value parity; full page capture remains open. |
-| `pdf_usbankreicc_201405` | 0.2.0 | Credit-card line PDF | All 97 archive PDFs pass read-only source-fact parity | Account identity, dated activity, descriptions, printed endpoints and balance equations match; page capture remains open. |
-| `pdf_vanguard_202210` | 0.2.0 | Retirement line PDF | All 10 archive PDFs compared read-only with 1.x | The old dated rows match V2 source facts when period-summary rows are included; V2 marks them non-activity. Investment posting remains undecided. |
-| `pdf_wfbankbus_202110` | 0.2.0 | Business bank dynamic table PDF | Read-only parity on all 29 routed archive PDFs | V2 retains account identity, 225 dated activity rows, descriptions and printed endpoints; complete page capture remains open. |
-| `pdf_wfbankper_202105` | 0.2.0 | Personal bank table PDF | Finite V2 table pilot and synthetic refusal tests | All 148 routed archive PDFs pass 6,618-row and printed-balance parity; full page capture remains open. |
-| `pdf_wfloanper_202306` | 0.2.1 | Personal-loan line PDF | Finite V2 source-allocation pilot and synthetic refusal tests | All 45 routed archive PDFs pass printed-principal parity; the 1.x 31-day period and synthetic origination rows are absent from V2 evidence. |
-| `pdf_yamahafin_202306` | 0.2.0 | Auto-loan line PDF | All 37 archive PDFs pass read-only source-fact parity | Account identity, dated activity, descriptions, printed endpoints and balance equations match; loan posting remains separate. |
+| 1.x parser ID | Dated source version | Reference family/layout | V2 evidence distinction or observed limit |
+| --- | --- | --- | --- |
+| `csv_mohela_202411` | 0.2.1 | Life-of-loan account-history CSV | Activity-export rows preserve loan components and duplicate occurrences; unavailable principal stays unknown, with no invented statement endpoints. |
+| `pdf_capitaloneauto_202402` | 0.2.2 | Auto loan PDF with payment components | Printed closing principal and source-native components are retained; unprinted opening and synthetic legacy origination remain unknown/unposted. |
+| `pdf_chasecc_202602` | 0.1.0 | Section/line credit-card PDF | Activity dates and assumed posting candidates remain separate; printed balance equations do not establish page capture. |
+| `pdf_citicc_201505` | 0.3.1 | Older Citi line credit-card PDF | Finite line/continuation evidence retains source occurrences and dispositions; complete page capture remains unverified. |
+| `pdf_citicc_202506` | 0.3.1 | Citi table credit-card PDF | Anchored-table evidence retains wrapped/foreign-transaction detail and monetary-tail dispositions separately from activity. |
+| `pdf_citicc_202511` | 0.4.0 | Citi table plus text/fee recovery PDF | Table/text/fee copies use finite occurrence reconciliation with exact locations; unclassified page text remains visible and capture unverified. |
+| `pdf_fidelity401k_201810` | 0.2.1 | Retirement PDF, wrapped account labels | Printed value components are period_summary rows with derived statement-period-end dates; investment posting remains unresolved. |
+| `pdf_fidelityhsa_202001` | 0.2.0 | HSA line PDF | Account-value summaries are non-activity components; source facts do not decide HSA accounting or investment values. |
+| `pdf_happenbank_202606` | 0.1.0 | Savings line PDF | Located savings activity and independently printed balances remain distinct from capture/coverage claims. |
+| `pdf_hehsa_201810` | 0.2.1 | HealthEquity cash and continuation PDF | Cash-component scope excludes investment sections; blank printed descriptions stay unknown rather than being relabeled Interest. |
+| `pdf_lendingclublus_202506` | 0.2.0 | Older savings table PDF | Anchored bank rows, printed running balances and located monetary tails remain separate evidence. |
+| `pdf_lendingclubsavings_202601` | 0.1.1 | Savings line PDF | Signed routing distinguishes the line layout from the older table layout; date substitution retains derived provenance. |
+| `pdf_occubank_201409` | 0.2.0 | Multi-account bank PDF | Checking/savings sections retain printed or first-page-annotation date locations; personal credit-line sections remain outside the captured scope. |
+| `pdf_occucc_201904` | 0.2.0 | Credit-card line PDF | Dated activity and printed header_charge interest retain distinct roles and locations; account identity is last_four. |
+| `pdf_synchrony-amzncc_202501` | 0.3.0 | Store-card table PDF | Anchored card rows retain shared continuations; pre-period activity dates and separate assumed posting candidates require the ordinary date gate. |
+| `pdf_transamerica_202104` | 0.2.0 | Retirement line PDF | Opaque plan identity and period-summary value changes remain evidence; they do not establish cash movements or accounting interpretation. |
+| `pdf_usbankreicc_201405` | 0.2.0 | Credit-card line PDF | Bounded extraction retains printed posting dates and unknown transaction dates where absent; capture remains unverified. |
+| `pdf_vanguard_202210` | 0.2.0 | Retirement line PDF | Period-summary value changes keep derived period-end dates; they do not become cash activity or approved valuation postings. |
+| `pdf_wfbankbus_202110` | 0.2.0 | Business bank dynamic table PDF | Located table activity, optional printed row balances and after-stop dispositions remain separate; missing balances are not filled as source facts. |
+| `pdf_wfbankper_202105` | 0.2.0 | Personal bank table PDF | Anchored table rows retain printed debit/credit and running-balance provenance; retained activity is not a claim of complete page capture. |
+| `pdf_wfloanper_202306` | 0.2.1 | Personal-loan line PDF | Printed principal/interest allocations and closing principal are retained; period start stays unknown and legacy synthetic origination is omitted. |
+| `pdf_yamahafin_202306` | 0.2.0 | Auto-loan line PDF | The finite two-date operation preserves transaction/Post dates and declared sign syntax; source parity does not approve loan interpretation. |
 
-The matrix is a coverage map, not a claim that every source instance fits its
-family. A signed installed catalog can differ from this checkout's parser
-versions. P2-1 must join actual legacy `Plugins`/`Statements` references to
-verified installed artifacts and archived source families before conversion.
+Source-fact comparison, routing execution, full-page capture, accounting review,
+ledger allocation, reconciliation and period coverage are separate claims.
+A dated parity result is scoped to its tested sources. No row in this matrix
+requires replaying every historical source or joining legacy database IDs before
+using a fresh V2 profile. Original 1.x data remains available through the
+independent fallback application.
 
-The October 24 read-only source-to-evidence replay of the two successful-archive
-folders passed all 956 PDFs (20 represented PDF families, 20,095 evidence rows)
-and one MOHELA account-history CSV (29 rows) through the 23 current declarations
-in a locally test-signed catalog. Synchrony is absent from those folders and has
-a separate ten-source fixture. This result proves those files execute through
-the current bounded pipeline; it does not prove all-page capture or corrected
-legacy parity. A separate queued folder contains six bank transaction-export
-CSVs and 21 Amazon-related CSVs with no matching current CSV declaration.
-On October 25, bounded read-only comparisons selected Wells Fargo business,
-US Bank REI, Yamaha, Fidelity HSA, Fidelity 401(k), and Vanguard PDFs by their
-archive filename conventions and verified the signed V2 route on each. All
-29, 97, and 37 Wells business, US Bank, and Yamaha sources respectively matched
-the current 1.x parser on account identity, dated activity amount and normalized
-description, printed opening/closing values and independent balance equations.
-For all 59 Fidelity HSA, 94 Fidelity 401(k), and 10 Vanguard PDFs, the old dated
-rows match the complete V2 source rows, but V2 classifies printed period totals
-as non-activity; the 1.x activity-only comparison therefore intentionally fails.
-These checks do not certify full-page capture, source-period continuity or
-ledger interpretation.
-Further October 25 comparisons found direct source-fact parity on Happen (2),
-Chase (5), and the five newer LendingClub savings PDFs. The latter share a
-filename prefix with seven older table PDFs; all twelve were recognized by
-the appropriate signed route. The Chase line parser now computes the printed
-balance equation from observed endpoints and rows. Its five archive equations
-passed; capture remains unverified. HealthEquity cash matched directly on 53
-of 60 PDFs. The other seven matched date, amount, account identity, running
-and endpoint balances, but their printed descriptions were blank: 1.x supplied
-“Interest” while V2 retains an unknown description. All 26 Capital One Auto
-PDFs show the known synthetic-origination/opening difference between 1.x and
-V2; no invented opening was added for parity.
-The October 25 card-date pass separated printed Post month/day values from
-fallback guesses. OCCU and US Bank card layouts print Post dates; the three
-Citi layouts contain printed Post values on dual-date rows and assumed
-posting dates on single-date rows. Chase has only a transaction date and
-retains its bounded statement-period posting proxy as assumed. Synchrony
-keeps its printed activity date as the source date and adds a separate assumed
-posting candidate, clamped to the printed period for pre-period activity.
-These are source-provenance labels and candidates, not approved journal dates.
-The subsequent read-only source-to-evidence replay of both successful-archive
-folders again routed and parsed all 956 PDFs with zero failures after these
-date changes. The source files and live financial database were not written.
-
-An authorized closed-copy replay subsequently parsed every referenced archive
-source with current checkout code; all resulting account statements retained
-their expected source membership. One shipped parser had no referenced fixture
-in that archive, so synthetic coverage remains its only available check. The
-source database remained byte-identical and no SQLite sidecars were created.
-The active installed bytecode catalog also passed signature and artifact
-verification in a separate read-only check. These checks do not establish
-declarative-engine parity or treat old parser IDs as one-to-one names for the
-current implementations. Private source counts and identifiers remain outside Git.
-The verified installed catalog and checkout contain the same 22 parser names.
-An authorized source-by-source binding check found no unresolved historical
-statement, but one historical Citi name **and version** routes to two current
-layout parsers. Therefore a historical name/version is not a safe replacement
-key: retain the original reference and bind each source through its hashed
-bytes, recognized layout, current parser version and replay result. The
-read-only replay probe now reports these bindings and ambiguous revisions.
+The owner's deferral of Wells Fargo personal-loan parser changes remains a scope
+boundary. Existing finite evidence does not authorize additional legacy-parser
+changes, historical loan reconstruction or principal/interest postings.
 
 ## Shared engine and repeated behavior
 
-| Current path | Reusable operation or change needed |
+Current V2 extraction uses the client-owned finite operations selected through
+[v2_source_pipeline.py](../client/src/parsetrail/core/v2_source_pipeline.py) and
+[v2_catalog_admission.py](../client/src/parsetrail/core/v2_catalog_admission.py):
+
+| Shared boundary | Current responsibility |
 | --- | --- |
-| `core/parse.py`: PDF `pdfplumber` reader, UTF-8-SIG CSV row reader and `openpyxl` workbook reader | Retain bounded byte readers and explicit suffix routing. Preserve PDF page/word, CSV row/column and XLSX sheet/cell references in new evidence. Today the routers pass extracted objects without durable source locations. |
-| `core/parser_classification.py`, `parser_routing.py`, `search_expression.py` | Keep normalized metadata/header/body recognition and unique-match refusal. Declarations require strict syntax and finite capabilities; routing must not execute arbitrary expressions. |
-| `core/interfaces.py`, `validation.py` | Replace class-returned `Statement` as the sole output with typed statement/export/observation evidence. Current `Account` requires numeric opening and closing balances. Unknown balance must remain null, not zero. |
-| `core/parse.py` calling `Account.sort_and_compute_balances()` | Split printed/observed from calculated balances. If one row lacks a balance, today's helper recalculates every row in that account. Do not overwrite or mislabel printed source evidence. |
-| Parser-specific line searches, regex captures, date rollover, amount signs and account sections | Candidate declarative operations: unique section marker; bounded row pattern; table-row continuation/inherited date; exact money/sign format; account-group key; required end marker; explicit ignored/unresolved row. Citi, Synchrony, LendingClub and Wells share continuation shapes. |
-| Parser-specific `pdfplumber` word coordinates/crops/tables (Citi, Synchrony, Wells Fargo) | Candidate finite table operation with page-local header anchors and bounded geometry. Exact occurrence reconciliation between table/text channels is an engine-operation candidate. Only layout-specific Citi geometry/fee selection and OCCU annotation fallback may need named built-in extraction if a small operation cannot express them. No downloaded code hook. |
-| LendingClub savings, HealthEquity and MOHELA detailed checks | Centralize independently printed endpoint, row running-balance and component-equation checks. A derived endpoint cannot validate the same rows independently. Missing independent source evidence is an explicit uncertainty. |
-| `core/accounting_contracts.py` and detailed `core/mohela_export.py` | Preserve statement/export kind, component roles, source signs, unknown balances, source hash and per-row occurrence. Declarations emit evidence; they never authorize journals, completeness or reconciliation. |
+| Bounded decode and routing | Fixed PDF text/layout, annotation and table workers expose capped evidence to unique signed-definition routing; declarations cannot launch modules. |
+| Exact normalization | Finite money, partial-date and source-sign rules retain raw strings, source locations and observed/derived/assumed/unknown provenance. |
+| Section/table extraction | Declared line windows and anchored geometry retain rows, continuations, printed endpoints and explicit non-activity dispositions. |
+| Occurrence/channel handling | Shared continuation and occurrence operations preserve distinct occurrences and table/text/fee locations without counting source copies as additional money. |
+| Strict output | source_evidence.py distinguishes statement/export payloads, endpoint scopes, activity/period_summary/header_charge roles and diagnostics; it contains no accounting decisions. |
 
-`core/mohela_export.py` already preserves loan identity, principal/interest/fee,
-raw row, row number, duplicate occurrence and `Unavailable` principal as null.
-Its activity span is not statement coverage. It should be the CSV pilot's
-comparison baseline; the older CSV plugin is retained as legacy provenance.
+Named built-in handlers are shipped client code selected from a fixed registry;
+a definition cannot download an executable exception. Prefer shared finite
+operations and record genuinely new operation scope in its packet. Changes to
+engine capabilities require a client release; supported definition changes use
+the signed catalog and fixture review.
 
-The source review found specific synthetic/derived behavior that declarations
-must label rather than promote to observed balances or activity:
-
-| Parser | Current behavior | P2 evidence rule |
-| --- | --- | --- |
-| `csv_mohela_202411` | Uses zero as opening, builds running balances from export rows and uses the last row as closing; splits interest into a second legacy transaction. | Treat these endpoints and split rows as legacy adaptation, not printed statement evidence. Detailed export components and unknown principal belong in one source row. |
-| `pdf_capitaloneauto_202402` | Reads a printed closing principal but derives opening principal from parsed components because no opening is printed. | Retain closing as printed, opening as derived, and component equations separately. |
-| `pdf_wfloanper_202306` | For an empty activity section, emits a loan-origination row and sets opening to zero. | Retain the source boundary and inferred origination separately; do not silently post it as cash or certified history. |
-| `pdf_occucc_201904` | Creates an interest transaction from a printed header amount rather than an activity-line row. | Keep header location and evidence role; verify that it is included once. |
-| Shared balance filling | Recomputes all row balances when any row lacks one. | Preserve every printed balance independently and store calculations in a separate field. |
+Historical findings about 1.x balance filling, loan synthetic rows and CSV
+adaptation remain in the
+[archived shared-behavior review](work/archive/2026-10-25-client-v2-parser-inventory.md#shared-engine-and-repeated-behavior).
+They are not current V2 behavior. Unknown endpoints and descriptions must stay
+unknown; summary rows, header charges and component breakdowns retain their
+explicit roles instead of being promoted to ordinary activity.
 
 ## Representative PDF operation cost review
 
-These are source-code cost estimates, not accepted declaration designs. A
-corrected archive comparison must check every extracted, ignored and unresolved
-row, page/line location and independently printed value before any operation is
-frozen. A new engine operation requires a client release; changing values in an
-already supported declaration can use a signed catalog release.
-
-| Family and source behavior | Minimum reusable operation and evidence rule | Cost or exception gate |
-| --- | --- | --- |
-| Chase card: whole-page line matches, printed range/account/endpoints, two-digit transaction dates and a posting-date proxy clamped to the statement range | Unique printed header fields, bounded candidate lines, explicit year resolution and liability sign; label the clamped posting date derived. Require a disposition for every transaction-shaped line and refuse ambiguous printed labels. | Medium engine work. The current parser takes the first matching balance label and scans all page text, so parity alone cannot prove complete capture. |
-| HealthEquity HSA: unique beginning/ending cash balances around continuation pages, dated lines amid rate tables, printed running balances and a later investment section | Ordered unique cash boundary anchors, bounded cross-page line window, dated cash candidates and independent running/closing equations. Keep the portfolio outside cash scope and record ignored rate/continuation lines. | Medium engine work. Existing synthetic tests prove that missing or duplicate boundaries, truncated cash rows and running-balance mismatches must fail. |
-| Wells Fargo business bank: per-page word-header anchors define crop/column coordinates, then a text-strategy table yields wrapped descriptions and optional row balances | Page-local anchored geometry with bounded coordinate offsets, row cells and continuation, plus a required table-end disposition. Printed row balances stay separate from later calculations. | High engine/adapter work. No direct targeted fixture test was found; the current parser stops at the first empty/ending row, so archived final-row coverage is a gate. |
-| Citi 2025 card: partial word-header recovery, dynamic geometry, table rows, simple-text recovery, multiline fee section and occurrence subtraction | Use shared bounded row continuation and exact occurrence reconciliation; keep table/text/fee source locations and require section/end checks before merging. | High extraction cost. Date/amount-only recovery keys are insufficient to certify identity. A named built-in is limited to geometry or fee selection that remains layout-specific after shared-operation trials. |
-
-The Chase and HSA shapes appear suitable for a small finite line/section pilot.
-Wells Fargo needs a bounded PDF table adapter before declarations can express its
-layout. Citi combines extraction channels; try that combination as a finite
-engine operation before declaring an exception. None of these cost estimates
-authorizes a transaction, inferred posting date or statement reconciliation.
-
-A later read-only pass over all referenced Wells Fargo business sources found
-that each retained table row was either a dated row or a wrapped description
-row. The current first-empty/`Ending` stop left no date-looking first-column
-row after the stop in this archive. Many dated rows have no printed row balance;
-that absence must remain unknown evidence even if the accepted reader later
-calculates a balance. These observations make a finite page-local geometry
-pilot plausible, but do not prove complete capture, justify discarding other
-post-stop content or settle how the client should bound PDF word/table work.
-The referenced source files remained unchanged. A subsequent isolated
-[geometry pilot](../devtools/parser_engine_pilot/README.md) emitted raw table
-cells and page/row regions, with explicit dated, continuation, terminator and
-post-stop dispositions. Its retained cells and dated-candidate counts matched
-the accepted reader on every referenced Wells Fargo business source. This is
-extractor parity only: PDF decoding/table-finding budgets, independent capture
-checks and optional printed-balance evidence still need work.
-
-The bounded business-statement operation now combines those table cells with
-bounded page lines. It declares account, period, summary labels, partial-date
-and exact-money formats, and the shared description continuation rule. On all
-29 business PDFs referenced by the authorized closed-copy profile, account,
-period, printed balances and all 225 transaction rows matched the accepted
-reader. A temporary V2 profile reopened all 225 rows and 1,073 table terminator
-or after-stop dispositions; source hashes were unchanged. This is still pilot
-evidence: after-stop dispositions and full-page capture need review before
-normal admission, and native Mac acceptance remains open.
-
-A read-only archive check selected representative sources for all four families;
-each routed and parsed with checkout code, and source bytes were unchanged. A
-cross-page HealthEquity source and a Chase source were then compared with the
-[page/line provenance pilot](../devtools/parser_engine_pilot/README.md). For
-those two fixtures, the pilot's flattened text matched the accepted PDF reader
-and each transaction-shaped candidate had a unique page/line location. The
-candidate counts matched the current parsers' rows. This is a location and
-legacy-parser comparison, not proof that the parsers captured every financial
-row or that printed balances were independently preserved by the pilot.
-
-The isolated [card-line pilot](../devtools/parser_engine_pilot/README.md)
-subsequently matched every Chase-referenced source in the authorized closed
-archive on account, period, printed balances and rows. It retained the
-date-prefixed three-letter detail lines as uninterpreted auxiliary evidence;
-the current parser omits them from its transactions. This is deliberate source
-retention, not a currency conversion or a claim of complete activity coverage.
-The PDF decoder and final section/row disposition rules remain open.
-The bounded Chase path now emits the strict V2 envelope from its finite line
-pilot on all five authorized Chase archive PDFs: 139 rows and 99 dated
-auxiliary dispositions with unchanged source hashes. Full capture and native
-release acceptance remain separate gates.
-The finite savings-line operation also emits strict V2 evidence for both
-referenced Happen PDFs. It matched the accepted reader's account, period,
-printed endpoints and eight located rows with running balances. The 11
-dispositions include repeated headers, balance-line tails and activity markers;
-full-page capture is still unverified.
-Its second finite operation covers the older LendingClub savings line layout.
-All five referenced archive PDFs matched the accepted reader on account,
-period, printed endpoints and 24 rows; their 20 located dispositions preserve
-balance-forward and section headers. The printed six-value summary and running
-chain check independently. The inherited date and period-end interest date
-remain derived, and complete page capture is still unverified.
-The HealthEquity cash pilot now maps to strict V2 evidence with explicit
-`cash_component` balance scope. A bounded read-only pass over all 60 referenced
-PDFs produced 236 rows and retained 489 unclassified lines between printed
-cash boundaries; 260 of these contain decimal values. The old parser's cash
-fields already matched the finite pilot, but the unclassified monetary lines
-must be dispositioned before normal import admission. Investment valuation
-remains outside the cash statement scope.
-
-A finite Fidelity HSA account-value summary operation now uses bounded lines
-and a checked-in definition. All 59 referenced PDFs matched the accepted
-reader on account, period, printed endpoints and 133 summary components; each
-printed account-value equation passed. Temporary V2 storage reopened the 59
-sources with 133 explicitly tagged `period_summary` rows and 472 located
-year-to-date or summary-window-tail dispositions; source hashes were
-unchanged. The date assigned to each component is explicitly derived from the
-statement end. Investment-value change remains a summary component.
-Full-page capture and accounting review remain gates.
-
-The finite two-date card operation also covers the Yamaha layout. All 37
-referenced PDFs matched the accepted reader's masked account, derived period,
-printed endpoints, and 74 rows; every printed liability equation passed.
-The operation preserves transaction and post dates separately and applies the
-declared trailing-minus credit sign. The archive happens to print equal dates
-in both columns; a synthetic fixture tests the distinct-date case. A temporary
-V2 profile reopened all 37 sources, 74 rows and 74 located header
-dispositions with unchanged source hashes. Complete capture and native
-admission remain open.
-
-Capital One auto now has a finite bounded history operation. All 26 referenced
-PDFs matched the accepted reader on full account, printed activity range and
-closing principal; their 26 printed rows contain 51 principal or interest
-components. The legacy 51 split ledger-shaped rows were reproduced for
-comparison, while V2 retains the single printed source row and an unknown
-opening principal. The printed date is labeled `activity_date`; signed amounts
-and the closing principal stay in source-native form. Temporary V2 storage
-reopened all 26 sources, 26 rows and 104 located history dispositions with
-unchanged source hashes. Full-page capture and accounting review remain open.
-
-The US Bank REI card pilot now joins bounded fixed-tolerance layout text with
-bounded simple text under one finite definition. On all 97 referenced PDFs,
-account, period, printed balances and 2,137 posting-date rows matched the
-accepted reader; all printed balance equations passed. Nine interest-period
-headers that resemble dated rows have explicit located dispositions. A
-temporary V2 profile reopened 97 sources, 2,137 rows and 150 dispositions
-with unchanged source hashes. Seventy-seven rows without a printed transaction
-date retain that date as unknown. Full-page capture, signed routing and native
-worker acceptance remain open.
-
-Vanguard now has a finite single-column account-value summary operation. All
-ten referenced PDFs matched the accepted reader on opaque plan identifier,
-period, printed balances and 45 summary components; all ten printed equations
-passed. Extra column values and unlabeled summary lines remain in 65 located
-dispositions. Temporary V2 storage reopened all ten sources and 45 explicitly
-tagged period-summary rows with unchanged hashes. Market gain/loss has a
-derived period-end date and requires accounting review before any posting.
-Full-page capture and native acceptance remain open.
-
-Fidelity 401(k) now uses a finite plan-label account-value summary operation
-with recognized printed, browser and headerless variants. On all 107
-referenced PDFs, plan label, period, printed balances and 194 summary
-components matched the accepted reader; all 107 printed equations passed.
-Temporary V2 storage reopened the 107 sources, 194 tagged period-summary rows
-and 55 located blank summary lines with unchanged hashes. The plan label is an
-opaque source identity. Later fund sections, complete page capture,
-accounting review and native acceptance remain open.
-
-OCCU NICE card now uses a bounded default-layout text operation. Its distinct
-header `InterestCharged` amount becomes a located `header_charge` observation
-dated by the printed statement end, while dated transaction lines remain
-`activity` observations. The account identifier is an explicitly abbreviated
-last four. All 32 archived PDFs matched the accepted reader on account,
-period, printed balances and 219 rows (187 dated, 32 header charges); all 32
-printed equations passed. A temporary V2 profile reopened 32 sources, 219
-observations and 96 located rewards, repeated-balance or interest-heading dispositions
-with unchanged source hashes. Complete page capture, signed routing and native
-worker acceptance remain open.
-
-OCCU checking and savings now use bounded simple text plus an explicit
-first-page annotation date fallback. The 35 text-dated sources retain printed
-line locations; the other 78 retain `pdf_annotation` ordinals, raw dates and
-field names. Across all 113 archived PDFs, 226 account balances and 6,427
-dated rows matched the accepted reader, including printed running balances;
-every account's balance chain passed. Six dated ATM balance inquiries contain
-only a displayed balance, so they remain nonfinancial dispositions. A
-temporary V2 profile reopened 113 sources, 6,427 observations and 295 located
-dispositions without altering the PDFs. An optional personal credit line
-section is recorded as a boundary, outside this two-account pilot. Complete
-page capture, signed routing and native acceptance remain open.
-
-The older Citi layout now has its own bounded default-layout text operation.
-It uses the printed `Amount` column edge, up to five same-page continuation
-lines, and refusal if a new dated start arrives before an amount. The two
-direct fixtures and 133 historical sources routed to this layout all matched
-the accepted reader on account, period, printed balances and 1,740 dated
-rows; every printed equation passed. Five statements with no activity retain
-zero rows only when the printed balances agree. Repeated balance/header text
-and parallel column tails account for 547 located dispositions. All 135 source
-snapshots reopened from a temporary V2 profile with unchanged hashes.
-Complete monetary-line dispositions, page capture, signed routing and native
-acceptance remain open.
-
-The middle Citi layout now uses a generic declaration-driven header-anchor
-table worker with finite column edge and midpoint rules. On all eight routed
-archive PDFs its 1,311 located raw rows exactly reproduced the accepted
-table cells. The card operation admitted 323 dated observations using 382
-table source rows; it retained the other 929 as located dispositions, including
-empty extraction rows, post-amount detail and nonactivity table material.
-A foreign transaction crossing a page break keeps its continuation while the
-repeated table header is separately dispositioned. All eight account, period,
-row and printed-balance comparisons passed. A temporary V2 profile reopened
-all eight sources and snapshots with unchanged source hashes. The 21
-dollar-bearing table tails now match four declared source shapes: seven fee
-totals, seven interest totals, five standard APR disclosures and two APR
-continuations. Unmatched dollar-bearing tails refuse extraction. They remain
-summary/disclosure evidence and do not create activity rows. Complete page
-capture, production-signed routing and native acceptance remain open.
-
-The older LendingClub layout reuses that header-anchor worker with seven
-printed header words locating five table columns. A finite bank operation
-checks the full account number, period, six printed summary values, each dated
-debit or credit and its running balance. All seven routed archive PDFs matched
-the accepted reader on 18 rows and printed endpoints; every running-balance
-chain and summary equation passed. A temporary V2 profile reopened all seven
-sources, 18 observations and 225 located table dispositions with unchanged source hashes.
-The 28 money-bearing rows after activity now have four declared table/text
-dispositions per source: prior-period average balance, printed summary values,
-interest-earned summary and savings-rate disclosure. Each requires an ordered
-table fragment and a unique same-page text label; an unfamiliar monetary tail
-refuses extraction for an unfamiliar dollar-bearing tail. All seven sources still
-produce 18 activity rows; the 225
-table dispositions now include the 28 classified tails, and 28 located text
-copies bring the total to 253. Complete page capture, production-signed routing
-and native acceptance remain open.
-
-Wells personal checking/savings also uses the generic header-anchor worker.
-Its five header words locate six data columns, including the printed narrow
-number column. A complete-line header selector handles repeated `balance`
-words without guessing between two complete headers. The declared 3-point
-vertical snap matches the accepted text rows. All 148 routed archive PDFs
-matched 6,618 accepted transactions, account, period and printed endpoints;
-1,512 printed row balances and all closing equations passed. The pilot keeps
-5,473 table terminators and later rows as located dispositions. A temporary
-V2 profile reopened all 148 sources with unchanged hashes; complete page
-capture, signed routing and native acceptance remain open.
-
-Transamerica retirement statements now use a bounded single-column account-
-value summary operation. The 12 routed archive PDFs matched the accepted
-reader on period, printed endpoints and 49 value components; all printed
-equations passed. The six-digit prefix near the plan title is retained as an
-opaque identity, and `Gain/Loss` is a period summary rather than cash activity.
-Temporary V2 storage reopened all 12 sources, 49 observations and 92 located
-interleaved-text dispositions with unchanged hashes. Full page capture,
-account-identity review, signed routing and native acceptance remain open.
-
-Wells personal loan evidence now leaves the period start unknown because the
-PDF prints only a statement date. It retains each printed interest or principal
-allocation separately and checks prior-to-ending principal using only the
-principal components. All 45 routed archive PDFs matched the accepted reader
-on account, statement end and printed closing principal; 41 also matched its
-opening principal. The other four have no printed activity and the 1.x reader
-replaced their printed opening with zero to invent a loan-origination row.
-The pilot retains 84 source rows (41 interest, 43 principal); 1.x emits 86
-transformed rows after its synthetic origination and payment grouping. A
-temporary V2 profile reopened all 45 sources, 84 observations and 45 located
-repeated-account dispositions with unchanged hashes. Ledger treatment of
-interest and principal remains an accounting review decision; source evidence
-does not post either allocation.
+The earlier representative cost estimates and their subsequent pilot results are
+preserved in the
+[archived review](work/archive/2026-10-25-client-v2-parser-inventory.md#representative-pdf-operation-cost-review).
+Current work uses the source/evidence contract and roadmap rather than those
+historical estimates. This heading preserves existing links.
 
 ## Remaining family operation costs
 
-These estimates complete the source-code review for the other 18 modules in
-the matrix. They group shared operations; each listed parser still needs its own
-fixture and accepted evidence comparison under P2-3/P2-4. A "high" cost is a
-conversion priority signal, not permission to embed Python in a declaration.
-
-| Parser families | Candidate finite operations and source-evidence rule | Cost and conversion gate |
-| --- | --- | --- |
-| `csv_mohela_202411` | Strict CSV header/column mapping, account-group key, component equation, located duplicate occurrences; emit an activity export with unknown principal where printed `Unavailable`. | Low engine cost; high accounting review. Never carry the legacy invented zero opening or split interest rows into observed evidence. |
-| `pdf_capitaloneauto_202402`, `pdf_yamahafin_202306`, `pdf_wfloanper_202306` | Bounded loan history section, row components, exact principal and interest signs, printed principal endpoint, full versus partial transaction dates. | Wells loan now passes 45-source printed-allocation parity while leaving its period start unknown and omitting 1.x synthetic rows. Ledger treatment remains open. Preserve raw components before posting. |
-| `pdf_citicc_201505` | Bounded default-layout column edge and up to five same-page continuation lines; exact dated-start and liability-sign checks. | All 135 routed archive PDFs pass finite evidence parity; complete page capture remains open. |
-| `pdf_citicc_202506` | Generic declared header-anchor geometry, table-cell continuation and liability sign with located tail dispositions. | Eight routed archive PDFs pass finite evidence parity with 21 monetary tails classified; full page capture remains open. |
-| `pdf_fidelity401k_201810`, `pdf_fidelityhsa_202001`, `pdf_transamerica_202104`, `pdf_vanguard_202210` | Unique period/plan or account anchors, bounded balance sections, amount-bearing lines, explicit cash versus investment scope and a source-labeled date role. | Transamerica passes 12-source account-value parity; its plan prefix remains opaque. Preserve derived period-end dates and keep investment valuation changes separate from cash activity. |
-| `pdf_happenbank_202606`, `pdf_lendingclubsavings_202601` | Bounded text sections, exact dates and amounts, optional inherited transaction date, printed running balances and independent closing equation. | Low to medium. LendingClub's `Interest Paid` date substitution is derived; require explicit row and tail dispositions and preserve printed source date. |
-| `pdf_lendingclublus_202506`, `pdf_wfbankper_202105` | Page-local anchored table geometry, debit/credit cells, continuation descriptions, optional printed running balance and exact partial-date resolution. | Older LendingClub passes seven-source parity with its monetary tails classified; Wells personal passes 148-source parity with 6,618 rows. Full page capture remains open. |
-| `pdf_occubank_201409` | Bounded simple lines, text dates before first-page annotation fallback, two located account sections and running balance chains. | Finite pilot passed 113 archived sources; personal credit line and full page capture remain open. |
-| `pdf_occucc_201904` | Bounded default-layout lines, dated card activity and a separately tagged header charge. | Finite pilot passed 32 archived sources; full page capture and native acceptance remain open. |
-| `pdf_synchrony-amzncc_202501` | Bounded partial-word table header recognition, page-local geometry, dated row continuation and liability sign. | High. Existing parser silently skips unmatched rows and pages; require full candidate and post-table dispositions before acceptance. |
-| `pdf_usbankreicc_201405` | Use one bounded simple-text representation for both routing and extraction; optional second date and explicit `CR` sign, with unique printed account/period/balance anchors. | Medium. Current reader deliberately selects simple text because layout text breaks credit indicators; archive fixtures must cover that difference. |
-
-Together with the four representative rows above, these entries cover every
-shipped parser. No named built-in exception has been
-approved. Reusable finite section, row continuation, geometry, annotation and
-channel-reconciliation operations should be tried before a layout-specific
-built-in is accepted.
+The original family-cost table is preserved in the
+[archive](work/archive/2026-10-25-client-v2-parser-inventory.md#remaining-family-operation-costs).
+Its candidate operations and conversion gates describe the earlier design stage;
+they do not select new work or establish current runtime admission. Current
+family limits are summarized above and tracked under P2 in the roadmap.
 
 ## Archive layouts and developer/release coupling
 
-- The managed archive is derived from the database stem. Root files are a drop
-  zone; `SUCCESS` holds canonical imported originals, `FAIL` failed imports and
-  `DUPLICATE` duplicate inputs. Companion ZIP/text exports may be present. One
-  archived source can be linked to multiple accounts/statements; a ledger row
-  can appear in overlapping statement memberships. P2 must replay all referenced
-  `SUCCESS` bytes and retain other files as opaque history.
-- The authorized closed-copy database has no referenced XLSX statement. An
-  unreferenced workbook remains part of the archive and must be retained as
-  opaque history. A read-only adapter now decodes synthetic XLSX workbooks
-  under ZIP expansion and sheet limits, retaining sheet/cell locations. There
-  is no archive parity fixture; formula and typed numeric/date cells are
-  refused, and XML decoder time/cancellation limits remain open before future
-  XLSX imports.
-- `devtools/local_statements/batch_plugin_tester.py` compiles checkout parsers
-  into a temporary directory and runs headless local fixtures. Its default
-  output uses short digests. The ledger audit/rebuild tools compare historical
-  sources, category annotations and MOHELA replacements. Developer previews
-  need source-location and declaration-revision diagnostics under P2-4.
-- `devtools/v2_inventory/replay_probe.py` loads checkout parser classes without
-  the writable application settings module, replays referenced archive files
-  against a closed database copy and reports aggregate parse/category-match
-  counts plus historical-to-current parser revision bindings. It flags a
-  historical revision that routes to multiple current layouts and produces no
-  evidence database. It does not validate installed release trust; use the
-  separate signed-release verifier for that check.
-- `build_plugins.py`, `scripts/plugin_release.py`, `core/plugin_manifest.py`,
-  `plugin_store.py`, `plugin_manager.py` and `plugin_loader.py` compile/load
-  `.pyc` under a signed whole-catalog manifest. Artifact metadata includes
-  Python tag/magic, hashes and compatibility. A 2.x data catalog must keep
-  signature, sequence, offline cache, atomic activation and rollback checks,
-  while separating its wire contract from the 1.4 bytecode catalog.
-- The client pins `pdfplumber==0.11.10` and uses `openpyxl` for XLSX. Engine and
-  extraction-library versions belong in replay provenance. The client release
-  is required for new built-in extraction operations; definition-only layout
-  fixes can follow the signed catalog after verification.
+The retained 1.x managed archive may contain drop-zone, SUCCESS, FAIL and DUPLICATE
+files plus unreferenced companion exports. It remains independent/read-only in
+V2 development. A selected original document can be imported afresh; there is no
+full-SUCCESS replay or legacy-ID reconstruction gate. Preserve private source
+paths, bytes and comparison reports outside Git and routine output.
+
+The original inventory found no referenced XLSX parity fixture. A synthetic
+XLSX adapter now uses the fixed bounded worker with ZIP/XML, input/output,
+page/sheet/row, deadline, cancellation and OS memory limits as applicable. That
+isolated decoder is not admitted to the workspace's CSV/PDF imports. Synthetic
+parity does not establish archived-workbook, Intel or installed acceptance.
+
+Legacy batch/replay tools compare specifically authorized read-only inputs and
+can bind historical artifacts; they do not authorize broader source discovery,
+profile writes or old-data carry-forward. The 1.4 bytecode catalog retains its
+own trust contract. V2 uses signed data snapshots and atomic offline activation.
+Engine and extraction-library versions belong in saved evidence; installed
+source/worker checks and publication remain separately recorded gates.
 
 ## Conversion and release gates after P2-1
 
-1. Repeat source/package binding on the frozen cutover snapshot, including the
-   ambiguous historical Citi revision. Keep original parser references and
-   source bytes; do not substitute parser names. Keep source names, paths and
-   financial examples private.
-2. Detailed MOHELA CSV, Chase card, HealthEquity cash, Wells Fargo business
-   table and recent Citi pilots have tested evidence. The recent Citi path
-   accounts for 486 dated starts and 2,940 located dispositions across ten
-   archive PDFs, but full-page capture and native worker acceptance remain
-   open. Synthetic XLSX decoding has no referenced archive fixture.
-3. Convert all 22 families using the operations above; for each, compare all
-   extracted, ignored and unresolved rows and independently printed values.
-   Record any necessary client-built exception with a fixture, reason and
-   engine release cost. Do not encode Python, SQL or eval in JSON definitions.
-4. The strict V2 evidence shape and fresh source store now preserve source,
-   definition, engine/extractor versions and diagnostics. Before freezing a
-   released schema, prove reparse comparison without rewriting old decisions,
-   account mapping and ledger review in the unified user-database service.
+The sole current conversion/catalog/release plan is
+[ROADMAP.md](../ROADMAP.md#initial-20-milestones), especially P2-3/P2-4 family and
+worker evidence, P2-5 offline catalog acceptance and separately scoped P2-S.
+[DEC-2](../ROADMAP.md#dec-2) retains the unresolved local-catalog versus service
+publication dependency. The
+[archived gate list](work/archive/2026-10-25-client-v2-parser-inventory.md#conversion-and-release-gates-after-p2-1)
+preserves the old sequence; this heading is a redirect, not a second queue.

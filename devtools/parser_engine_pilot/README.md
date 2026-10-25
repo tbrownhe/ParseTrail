@@ -1,13 +1,23 @@
 # P2-2 bounded declaration and evidence pilot
 
-This is the development evidence for the [2.0 parser plan](../../docs/client-v2-parsing.md).
-The finite parser operations, bounded adapters and source pipeline now live in
-the client package. This directory retains tests, comparison tools and checked-in
-example definitions. The verified-catalog service now routes CSV and PDF imports;
-ordinary desktop import is not connected. All catalog tests use local test keys,
-so this is not a released signed catalog. The sections below record the pilot's
-incremental results; [the cutover plan](../../docs/client-v2-cutover.md) tracks
-current gates.
+This directory retains synthetic tests, comparison tools and example definitions.
+Finite operations, bounded adapters and the source pipeline live in the client
+package. The explicit fresh V2 workspace already imports CSV/PDF through its
+verified catalog; ordinary 1.x startup remains independent. XLSX has an isolated
+bounded decoder and synthetic checks, not workspace import admission.
+
+[ROADMAP](../../ROADMAP.md#parser-and-catalog-track) owns current scope and gates;
+the [parser contract](../../docs/client-v2-parsing.md) and
+[family map](../../docs/client-v2-parser-inventory.md) describe current boundaries.
+Catalog tests use local test keys and do not establish production-signed trust.
+Record new plans, commands/results and acceptance in [work records](../../docs/work/README.md).
+
+## Historical pilot chronology
+
+The incremental narrative below describes earlier pilot stages. Its old open-work,
+runtime and gate statements are historical, not a competing current plan. Use the
+current documents above when selecting work; do not repeat a completed slice or
+append another validation narrative here.
 
 The installed [`v2_parser_engine.py`](../../client/src/parsetrail/core/v2_parser_engine.py)
 accepts an exact JSON declaration under

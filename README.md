@@ -93,13 +93,15 @@ from routing diagnostics.
 
 ## Start here
 
+- [Roadmap and release gates](ROADMAP.md), [current work](TODO.md), and
+  [packet plans and verification](docs/work/README.md)
 - [Contributor setup and local development](development.md)
 - [Desktop architecture, tests, and releases](client/README.md)
 - [Backend operations and tests](backend/README.md)
 - [Server deployment runbook](deployment.md)
 - [Security policy](SECURITY.md)
 - [Engineering contracts](development.md#engineering-contracts) and
-  [accepted release/migration evidence](docs/engineering-acceptance.md)
+  [historical acceptance index](docs/engineering-acceptance.md)
 
 The active desktop release targets are Windows x64 and Intel macOS (x86_64).
 Native Apple Silicon (arm64) development and release acceptance are deferred

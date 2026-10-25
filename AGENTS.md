@@ -6,17 +6,24 @@ financial data and analysis local.
 
 ## Workflow and context
 
-Read `README.md`, `development.md`, the relevant `TODO.md` scope and component
-contracts before substantive work. Use
+Read `README.md` and `development.md` for orientation/setup, then
+[ROADMAP.md](ROADMAP.md) for authoritative milestones, scope and release gates,
+and [TODO.md](TODO.md) for selected work. Read its linked packet record and the
+relevant component contracts before substantive work. Use
 [parsetrail-workflow](.agents/skills/parsetrail-workflow/SKILL.md) for substantive
-implementation, integration and repository review. Handle simple edits directly.
-The skill owns detailed role routing, work-packet guidance and verification.
+implementation, integration and repository review; handle simple edits directly.
+The skill owns role routing, packet execution and verification.
 
-For V2 work, consult `docs/client-v2-cutover.md` and
-`docs/client-v2-unified-store.md`, adding the ledger or parser contract as
-needed. Check current code and dated owner decisions before relying on roadmap
-prose. Handovers and superseded migration experiments are historical context,
-not new implementation authorization.
+For V2, the cutover, unified-store, ledger and parsing documents are component
+contracts, not parallel roadmaps. Check current code and dated owner decisions.
+A recommended candidate, historical checkbox or handover does not select work.
+
+Substantial packets use one `docs/work/YYYY-MM-DD-<packet>.md` record for scope,
+implementation, decisions and verification; see [the template](docs/work/README.md).
+At closeout update that record, affected contracts and roadmap status, then clear
+the selected TODO entry. Small edits can use a concise entry in an existing record.
+Keep validation logs out of ROADMAP/TODO. Historical acceptance/handover archives
+remain evidence; do not append new work there or create a competing CURRENT file.
 
 ## V2 development and human review
 

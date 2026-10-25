@@ -1,17 +1,9 @@
 # One 2.0 user database for source evidence and ledger work
 
-Status: **approved by the owner on October 24, 2026**. This replaces the
-temporary assumption that the isolated ledger prototype database can be attached
-to the 2.0 source profile as-is. It does not change the 1.x application or data.
-
-## Collision to remove
-
-The pre-release 2.0 source profile calls its financial-account table
-`LedgerAccounts` and stores name, asset/liability kind, institution and full
-account number. The isolated ledger prototype also calls a different table
-`LedgerAccounts`; it stores a serialized account model and a source ID. Its
-rebuild and review helpers create additional tables on demand. The two database
-formats cannot be combined by opening both stores on one file.
+This is the current single-store contract approved by the owner on October 24,
+2026. The [roadmap](../ROADMAP.md) owns sequencing and remaining scope;
+[TODO](../TODO.md) identifies selected work. Implementation and verification
+evidence belong in [packet records](work/README.md).
 
 ## Target boundary
 
@@ -23,85 +15,106 @@ formats cannot be combined by opening both stores on one file.
   institution metadata; a category has an income/expense kind. Source-account
   bindings refer to the account ID. Account identity and display fields are not
   copied into a second ledger account table.
-- Keep the pure double-entry checks in `ledger.py`, but have the 2.0 user-database
-  service own its journal tables and transactions. The isolated ledger store and
-  rebuild schema remain development evidence until the 2.0 workflows replace
-  them; they are not a second runtime database or a migration target.
+- Pure double-entry checks remain in `ledger.py`; `v2_profile_store.py` owns
+  profile journal tables and transactions. The isolated legacy ledger/rebuild
+  stores are historical development evidence, not another runtime database or
+  an attachable migration target.
 - Immutable source rows remain separate from authored interpretations. A review
-  decision supplies the financial account and any posting date that the source
-  did not establish. Journal allocations point to admitted source rows and are
-  checked against their signed amount. No category, transfer or posting is
-  inferred merely from a parser row or account binding.
-- This is a pre-release schema replacement. Disposable pilot profiles are
-  recreated; no 1.x or pilot-profile migration/alias layer is added. Reopen
-  checks must refuse an older shape before a write.
+  supplies the financial account and any permitted accounting-date decision.
+  Journal allocations point to admitted source rows and preserve their signed
+  amounts. Parser output and account binding do not authorize postings.
+- The 1.x application, database and archive remain independent and untouched.
+  The [cutover contract](client-v2-cutover.md) defines the fresh-profile boundary;
+  the [ledger contract](client-ledger-contract.md) defines financial meaning.
 
-## Implementation order
+## Profile format and lifecycle
 
-1. Replace the provisional account table with the single account shape and
-   retain the existing explicit binding and abbreviated-match behavior.
-2. Add reviewed journal storage and account/observation adapters in the same
-   user-database service. Exercise one synthetic import-to-expense review and
-   correction without opening a second database.
-3. Add fresh category and budget authoring, then connect the daily review UI.
-   Keep unsupported interpretation and unknown posting dates pending.
-4. Use the same journal reads for spending, cash, balances and exports; only
-   then remove obsolete 1.x runtime financial paths and freeze the released
-   2.0 schema.
+The current pre-release profile schema is revision 11; check `SCHEMA_VERSION`
+in `v2_profile_store.py` when opening a packet. Format markers, exact table and
+foreign-key shapes, append-only triggers and SQLite integrity are checked before
+writable use. Older disposable pilots, 1.x, unknown, damaged and newer shapes
+are refused. Earlier pilot profiles are recreated without migration or aliases.
+Ordinary migrations apply only between released 2.x revisions.
 
-A bounded proof toward the first two steps began in pre-release schema revision 7:
-a single `Accounts` table replaces the conflicting pilot account table, and
-one reviewed asset outflow can create an immutable, balanced expense journal
-entry with a source-row allocation in the same database transaction. It requires
-an explicit account binding and source posting-date role. A liability row, an
-activity-date-only row, an unknown interpretation or a missing category remains
-pending. A reviewed expense can be corrected to a different expense category:
-the service saves an inverse reversal, a replacement entry and a correction
-record atomically. The old entry and source allocation remain as history, while
-only the active allocation counts toward evidence use. Account assignments with
-journal history cannot be changed. A narrow desktop review now posts and
-recategorizes eligible asset outflows and explicitly classified positive income
-receipts from activity exports; general journal workflow remains open. Earlier
-disposable pilot profiles are refused, not
-migrated.
+Imports atomically retain source bytes and digest, exact declaration, immutable
+strict evidence, and source observation identities. An identical source retry
+returns saved evidence; a reparse is a comparison, not an overwrite. Revised
+bytes remain a separate pending source. Failure/cancellation must preserve
+completed imports and leave no partial new source.
 
-Pre-release schema revision 8 adds `CategoryBudgetRates` to the same profile.
-Each authored category has at most one monthly target per effective month; the
-latest rate at or before a report month applies until another is saved. An
-explicit empty target clears later months without changing prior targets. Zero
-is a valid target. These planning values do not post journal entries or infer
-transaction categories. The category dialog edits and displays this history.
-As with other pilot schema revisions, earlier disposable profiles are refused
-and recreated; there is no migration path.
+## Authored accounts and decisions
 
-Pre-release revision 9 keeps source-opening reviews and opening decisions in
-this same database. Reviews are append-only assertions about printed origin,
-inclusive-period timing and a source reference; they do not change evidence.
-The latest review of every tied earliest source must support a confirmed
-opening. A nonzero position posts through an internal opening-equity account
-at the prior-day cutoff; zero saves a decision without a journal. A changed
-source review marks the decision stale and calls for later correction rather
-than rewriting the original entry. Revision 8 pilot profiles are refused and
-recreated.
+Explicit printed-account bindings, whole-file assertions for accountless exports,
+and row assignments for mixed exports remain separate from imported facts.
+Whole-file and row-assignment modes cannot coexist for one source. Abbreviated
+automatic matching requires the global default-off choice and admitted signed
+parser context; a match never posts a journal entry.
+An abbreviated number can select only one full-number suffix match within the
+same institution and asset/liability class. With the choice off, show the unique
+candidate as a suggestion and offer the inline enable control. Ambiguous matches
+always require explicit review. An observed full number may match exactly without
+enabling abbreviated matching; an opaque identity is not a suffix number.
 
-Pre-release revision 10 broadens that single append-only history to all bound
-statement sections. Each review separately records opening and closing origin,
-inclusive-period timing, posting-date certainty, a source reference and an
-optional note. The earliest-source opening workflow reads this same history.
-Known assumed card posting dates cannot be asserted reported; source facts are
-never rewritten. A changed earliest-source assertion marks its opening
-decision stale; a later period's review does not. Revision 9 disposable
-profiles are recreated, without a migration path.
+Financial display/identity edits retain the account ID and ledger class.
+Account assignments with journal history cannot be changed. Any saved occurrence
+review also fixes the affected rows' account bindings, even after returning its
+pair to pending; history must not silently reactivate under a changed account.
 
-Pre-release revision 11 adds append-only `SourceOverlapReviews` to the same
-profile. Explicit distinct/repeat/pending decisions retain both original
-source occurrences and their locations; a supporting repeat is a reference,
-never an additional allocation. New cash/card/transfer postings check all
-detected unresolved candidates and repeat references inside their write
-transaction. Saving any occurrence review fixes the reviewed rows' account
-bindings, including after a later pending decision, so a historical relation
-cannot silently reactivate under a changed account. Existing journal corrections
-remain available. Profile snapshots include this history automatically.
-Revision 10 disposable profiles are refused and recreated. See the
-[bounded occurrence-review contract](client-v2-source-overlap.md) for matching,
-multiplicity, posted-conflict and report limits.
+`CategoryBudgetRates` stores at most one target per category and effective month.
+The latest rate at or before the report month applies until another rate is
+saved. An empty target clears later months without changing earlier targets;
+zero is a valid target. These planning values do not post money or infer
+categories. Category display-name edits retain historical account references.
+
+## Journal and review history
+
+Supported reviewed cash/card/transfer workflows atomically validate and save
+balanced journal entries and signed source allocations. Cash-category and
+card-category/date corrections save inverse reversals, replacements and their
+links together; original entries and allocations remain history, and only active
+allocations consume evidence. Transfer and opening-decision correction are
+separate work. Unsupported interpretations and unknown posting dates remain
+pending.
+
+`StatementSourceReviews` is one append-only assertion history for bound statement
+sections. Opening/closing origin, inclusive-period timing, posting-date certainty,
+source reference and note are separate assertions. Known assumed card dates
+cannot be asserted reported. A stale form cannot overwrite another revision.
+
+An opening decision requires matching observed account-total openings across all
+tied earliest sources and their latest reported-origin/timing reviews. Nonzero
+openings post through internal opening equity at the prior-day cutoff; zero
+saves a decision without a journal. A changed relevant earliest-source assertion
+makes the decision stale without rewriting its entry. Later unrelated reviews
+do not change that opening basis.
+
+`SourceOverlapReviews` saves append-only distinct/repeat/pending decisions.
+Supporting repeats are references, never additional money. New cash/card/transfer
+postings check the full detected occurrence index inside their write transaction.
+The [bounded occurrence-review contract](client-v2-source-overlap.md) defines
+matching, multiplicity, binding locks, posted conflicts and display limits.
+Existing retained-row corrections remain available. Repeat review does not
+replace source-row allocation or certify reconciliation or coverage.
+
+## Common reads and recovery
+
+Reports use common ledger reads with explicit scope, correction handling and
+pending evidence. Reconciliation is a versioned read over one committed SQLite
+snapshot; capture, arithmetic, allocations, interpretation, coverage and
+freshness remain independent dimensions. A journal sum is not automatically a
+current account balance.
+
+SQLite profile snapshots contain embedded sources, authored data, journals and
+all review history. They are verified before publication at a new path; restore
+validates a new profile before switching. Failure leaves the current profile in
+place. The separate signed catalog cache and global preferences are outside the
+database snapshot. The profile and its backups are unencrypted local files.
+
+## Historical design
+
+<a id="collision-to-remove"></a>
+<a id="implementation-order"></a>
+
+The old table-name collision, implementation sequence and schema-revision
+chronology are preserved in the
+[archived contract](work/archive/2026-10-25-client-v2-unified-store.md).

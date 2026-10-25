@@ -12,24 +12,29 @@ the relevant checks in the primary agent.
 
 ## Establish current behavior
 
-Read `README.md`, `development.md`, the relevant part of `TODO.md`, and the
-component contract. For V2, start with `docs/client-v2-cutover.md` and
-`docs/client-v2-unified-store.md`; add `docs/client-ledger-contract.md` for
-financial semantics or `docs/client-v2-parsing.md` for extraction/catalog work.
-Use [the code and verification map](references/code-and-checks.md) selectively.
+Read `README.md` and `development.md` for orientation/setup, then `ROADMAP.md`
+for milestones, scope and release gates and `TODO.md` for selected work. Read the
+linked packet record and relevant component contract. For V2, use
+`docs/client-v2-cutover.md` and `docs/client-v2-unified-store.md`; add the ledger
+or parsing contract for those claims. Use [the code and verification map](references/code-and-checks.md)
+selectively. Dated records live under `docs/work/`; the old acceptance monolith,
+handovers and proposals are historical indexes, not startup instructions.
 
 Check branch, working-tree changes, runtime entry point and current code.
-Distinguish published 1.x behavior, isolated legacy ledger experiments and the
-fresh V2 workspace. Current owner decisions supersede historical migration and
-category-carry-forward notes. TODO checkboxes can cover unfinished integration
-even when individual pilot slices are accepted. Do not repeat those slices.
+Distinguish published 1.x, isolated historical experiments and the fresh V2
+workspace. Current owner decisions supersede old migration/category preservation.
+Do not repeat implemented slices or select a task from an old checkbox. If no
+packet is selected, use the current user request to establish scope; recommended
+queue entries alone do not authorize product implementation.
 
 ## Define one work packet
 
 State the outcome, non-goals, controlling decisions, relevant symbols, owned
 files, data/write boundary, financial claims, verification and remaining gate.
-For substantial work, record this in a concise task note; a small packet can use
-the conversation. Do not require a new planning artifact for every edit.
+For substantial work, create or update one `docs/work/YYYY-MM-DD-<packet>.md`
+record using `docs/work/README.md`. It begins with scope and becomes the same
+packet's closeout; do not create separate plan/acceptance/handover logs. Small
+edits can use a concise entry in an appropriate existing record.
 
 Make system and interaction design choices within the selected scope and agreed
 product/accounting contracts autonomously. Ask the owner only when an unresolved
@@ -58,8 +63,8 @@ through the primary. Parallelize disjoint work and read-only investigation.
 Do not start a full team by default or let specialists recursively delegate.
 
 Give each specialist the packet outcome, exact write set, required contracts,
-allowed data, verification and return format. Primary retains shared TODO,
-contract and acceptance-record ownership. Specialists report boundary changes
+allowed data, verification and return format. Primary retains shared ROADMAP, TODO,
+contract and packet-record ownership. Specialists report boundary changes
 rather than silently expanding their assignment. Use the existing checkout
 unless a task actually needs isolation; do not switch branches under other work.
 
@@ -149,8 +154,14 @@ confirmation of account bindings, source assertions or accounting postings.
 Return behavior, changed files, commands/results, review findings/resolution,
 limits and the precise remaining decision. Distinguish implemented, automated
 verified, independently reviewed, owner accepted and release authorized.
-Update lasting component behavior and dated verification evidence; label agent
-verification separately from actual owner acceptance. Close implementation work
+Update the packet record with exact commands/platform/results, review findings,
+actual owner decisions/acceptance and untested limits. Update affected contracts
+and ROADMAP status/dependencies, link the record, and clear the selected TODO
+entry. Do not copy validation narratives into ROADMAP/TODO, append new work to
+historical acceptance archives, or generate another current-work handover.
+Record substantive owner decisions in that packet record and apply their current
+rule in the relevant contract/roadmap. Label agent verification separately from actual owner
+acceptance. Close implementation work
 when its development checks pass while leaving aggregate UX/release milestones
 open until their own gates pass. Report a commit ID only if a commit was made
 within the authorized task. Do not equate a pilot with release.

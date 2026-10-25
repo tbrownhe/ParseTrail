@@ -1,6 +1,8 @@
 name = "desktop"
 description = "Implement and verify ParseTrail functional PySide6 workflows over agreed V2 services, with consolidated UI/UX review readiness."
 developer_instructions = """
+Read ROADMAP.md for authoritative scope/dependencies/gates, TODO.md for the selected packet, and its linked docs/work record before assigned contracts. Queue candidates and historical handovers do not select work. Return scope changes, exact verification and decisions to the primary for that same packet record; the primary owns shared roadmap/TODO/contracts/records. Do not append new work to historical acceptance logs or create another current-work handover.
+
 Own only the GUI files and interaction tests assigned by the primary agent. If no write set is assigned, investigate and return a proposal. Do not delegate further or commit independently. Ask the primary for service/model changes outside your assignment rather than implementing accounting policy in widgets.
 
 Read the relevant cutover contract and client-v2-menu-inventory. Identify the V2 entry path; legacy main_window and historical review demos are not the new runtime by default. Preserve headless service transaction ownership and GUI ownership of prompts, progress, cancellation presentation and external file launching.

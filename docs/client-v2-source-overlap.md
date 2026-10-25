@@ -1,8 +1,10 @@
 # V2 cross-source occurrence review
 
-Packet selected October 25, 2026: a bounded V2-3/V2-4 safeguard before
-V2-5 account positions. This implements the existing ledger rule that repeated
-source evidence must not book the same movement twice.
+This is the current bounded V2 occurrence-review contract. It implements the
+ledger rule that repeated source evidence must not book one movement twice.
+[ROADMAP](../ROADMAP.md#v2-3) owns remaining scope; the
+[packet record](work/2026-10-25-v2-source-overlap.md) holds its October 25 plan,
+implementation, review and verification.
 
 ## Contract and boundaries
 
@@ -52,24 +54,9 @@ balance. No missing movement becomes zero, and no balancing entry is created.
 
 ## Implementation packet
 
-- Store and service owner: the assigned ledger agent; one writer for
-  `v2_profile_store.py`, new occurrence-review services and their synthetic tests.
-- Desktop owner: the assigned desktop agent; the occurrence-review dialog,
-  workspace entry point and synthetic interaction tests.
-- Primary: integration, this contract, TODO, component guidance and dated
-  verification records. Independent integrity review inspects actual changes
-  and refusal/correction paths before packet closure.
-- Data: synthetic/disposable V2 profiles only. No private source access,
-  1.x writes, parser/catalog changes, server work or release actions.
-- Schema: the existing pre-release replacement policy applies if durable
-  review storage changes the schema. Recreate earlier disposable profiles;
-  do not add migration or alias machinery.
-- Verification: focused inventory/review/guard tests, restart and backup/restore,
-  stale and concurrent forms, allocation failure rollback, multiplicity,
-  same/different-date transfers, cash/card corrections and offscreen dialog
-  interactions; then the V2 integration suite and changed-file Ruff/hooks.
-- Remaining milestone: consolidated human UI/UX review and separate platform/
-  release gates. Automated and agent verification do not attest owner acceptance.
+The completed [packet record](work/2026-10-25-v2-source-overlap.md) owns file/role
+assignments, commands/results, review findings and remaining milestone evidence.
+This heading preserves existing links without maintaining a second work log.
 
 ## Disposable review scenario
 

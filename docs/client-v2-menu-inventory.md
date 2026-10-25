@@ -1,81 +1,76 @@
 # 1.x desktop action inventory for the 2.0 cutover
 
-This inventory comes from `client/src/parsetrail/gui/main_window.py`. It records
-the current 1.x menu actions and adjacent dashboard tabs. A 2.0 implementation
-listed here is limited to the fresh-profile workspace; it does not imply the
-legacy window has been replaced. **Pending** means the owner has not approved a
-2.0 implementation or a release deferral. No pending action is silently dropped.
+This compatibility inventory maps `client/src/parsetrail/gui/main_window.py`
+actions and adjacent dashboard tabs to the fresh V2 workspace. Ordinary startup
+still uses the independent 1.x window. The inventory does not select work or
+approve release omissions: [ROADMAP.md](../ROADMAP.md) owns those decisions and
+[TODO.md](../TODO.md) identifies the current packet.
 
-| 1.x action | Current 2.0 state | Remaining release decision or work |
+Current behavior below includes the completed bounded source-overlap safeguard.
+Historical native acceptance remains recorded in the
+[work-record index](work/README.md); implementation/agent verification is not
+owner native acceptance. The [archived inventory](work/archive/2026-10-25-client-v2-menu-inventory.md)
+retains the earlier snapshot and proposal wording.
+
+| 1.x action | Current 2.0 behavior | Remaining scope / roadmap |
 | --- | --- | --- |
-| File → Preferences | Global abbreviated-account matching and assumed-posting-date toggles are available, both default off. | Native card-review acceptance and inventory of other 1.x preferences remain. |
-| File → Open Database | Profile → Open 2.0 profile accepts only a verified `.db`. | Native profile switching accepted; no old-profile activation. |
-| File → Database Location and Privacy | Profile → Data locations and privacy shows copyable profile, signed-catalog cache and global-preference paths, plus storage and encryption limits. | Native presentation accepted. |
-| File → Back Up Database | Profile → Back up current profile creates a verified new 2.0 snapshot. | Native backup accepted. |
-| File → Test Database Backup | Restore validates a copy before switching. | Decide whether a separate read-only restore test is still useful. Pending. |
-| File → Restore Database | Profile → Restore backup as new profile creates a new `.db`, then switches. | Native restore accepted; no overwrite or migration. |
-| File → Export Account Configuration | Accounts live in the fresh 2.0 profile and its backup. | Separate account-config export pending decision. |
-| File → Sign Out of Server | The pilot uses a local signed catalog. | Server-account behavior and any 2.0 action are pending; no server change in this branch. |
-| Plugins → Plugin Manager | Signed catalog install is available. | Full catalog management/update UI pending. |
-| Plugins → Troubleshoot Parsing | Saved evidence preview is available. | Parser diagnostics workflow pending. |
-| Accounts → Edit Accounts | Fresh financial-account creation and identity editing are available. | Closures, manual values and wider account review remain pending. |
-| Accounts → Appreciation Calculator | No 2.0 counterpart. | Pending decision; investment values are not invented from activity. |
-| Statements → Import All | Multi-file and shallow folder batch import are available and accepted on native Windows. | Archive recovery and daily-workflow acceptance with real data remain pending. |
-| Statements → Pick File for Import | Selected CSV/PDF import through the verified catalog is available. | Supported-family rollout and native acceptance remain release work. |
-| Statements → Completeness Grid | Statement coverage shows bound periods, overlap/gap hints, printed balances, journal movement comparison and a read-only versioned reconciliation check. Saved periods can record source provenance for any bound statement; a separate reviewed-opening dialog can confirm a printed opening through equity. The owner accepted the native check, revised page-capture wording, source and opening flows. | Missing-statement conclusions remain pending. |
-| Statements → Correct Discrepancies | Evidence preview and explicit journal correction exist for narrow cash activity. | General source/balance discrepancy review pending. |
-| Statements → Send for Plugin Development | No 2.0 action. | Server submission is pending decision; preserve local source files and evidence. |
-| Categories → Category Manager | Fresh category names/kinds and effective-month budgets are available. | Additional editing and hierarchy behavior, if needed, pending. |
-| Transactions → Review Transactions | Bound asset cash expense/income, negative card expense, and explicit whole-movement transfer/card-payment review are available. Category and card-date corrections are append-only. The owner accepted native card and transfer review. | Duplicate source overlap, partial settlements, fees, transfer corrections, HSA cash components, loans, manual and other interpretations remain pending. A broader UI/UX pass follows feature work. |
-| Transactions → Identify Recurring | No 2.0 counterpart. | Pending decision; forecasting is outside the initial 2.0 gate. |
-| Transactions → Insert Manually | No 2.0 counterpart. | Explicit manual journal/value workflow pending. |
-| Train Model → Train Model for Testing | No 2.0 counterpart. | Pending decision; category review remains explicit. |
-| Train Model → Train Model for Deployment | No 2.0 counterpart. | Pending decision; no trained-model compatibility layer is planned. |
-| Reports → Export Three Months | Reviewed journal workbook export uses an explicit date range. | Time presets, if desired, pending; no claim of complete transaction coverage. |
-| Reports → Export One Year | Same explicit-range export. | Time preset pending. |
-| Reports → Export All Time | Same explicit-range export. | An all-time selection/preset is pending. |
-| Help → About | No 2.0 counterpart in the pilot shell. | Release metadata presentation pending. |
-| Help → Getting Started | Synthetic demo and cutover documentation exist. | Final onboarding pending. |
-| Help → Check for Updates | No 2.0 counterpart in the pilot shell. | Client/catalog update workflow pending; no server change here. |
-| Balance History dashboard tab | Account movement shows reviewed changes and confirmed source-backed openings when available. | Reconciled balances and balance history pending. |
-| Category Spending dashboard tab | Reviewed Spending report shows category totals and incomplete scope. | Chart/drill-down decision pending. |
-| Budgets dashboard tab | Monthly budgets table compares effective targets with reviewed spending. | Chart/variance behavior beyond the current table pending. |
+| File → Preferences | Global abbreviated-account matching and assumed-posting-date toggles are available, both default off; their recorded native acceptance remains valid. | Inventory other preferences under [DEC-3](../ROADMAP.md#dec-3); integrated [V2-UX](../ROADMAP.md#v2-ux). |
+| File → Open Database | Profile → Open 2.0 profile accepts only a verified `.db`; native switching was accepted. | Final profile lifecycle [V2-6](../ROADMAP.md#v2-6); no 1.x activation/migration. |
+| File → Database Location and Privacy | Copyable profile, signed-catalog cache and preference paths explain storage/encryption limits; native presentation was accepted. | Integrated [V2-UX](../ROADMAP.md#v2-ux). |
+| File → Back Up Database | A verified new profile snapshot includes source evidence and authored/reviewed data; native backup was accepted. | Final lifecycle/restore checks [V2-6](../ROADMAP.md#v2-6). |
+| File → Test Database Backup | Restore validates a copy before switching. | Separate read-only backup-test action remains an unapproved omission under [DEC-3](../ROADMAP.md#dec-3). |
+| File → Restore Database | Restore creates a new verified `.db`, then switches; native restore was accepted. | [V2-6](../ROADMAP.md#v2-6); no overwrite or legacy migration. |
+| File → Export Account Configuration | Profile backup already retains account configuration. | Separate configuration export remains undecided [DEC-3](../ROADMAP.md#dec-3). |
+| File → Sign Out of Server | The pilot uses a local verified catalog and has no server sign-out action. | Client/server disposition [DEC-2](../ROADMAP.md#dec-2)/[DEC-3](../ROADMAP.md#dec-3); separately scoped [P2-S](../ROADMAP.md#p2-s). |
+| Plugins → Plugin Manager | Signed catalog installation is available. | Offline starter/update behavior [P2-5](../ROADMAP.md#p2-5), service boundary [DEC-2](../ROADMAP.md#dec-2). |
+| Plugins → Troubleshoot Parsing | Immutable saved-evidence preview is available. | Diagnostics/authoring scope [P2-4](../ROADMAP.md#p2-4); integrated [V2-UX](../ROADMAP.md#v2-ux). |
+| Accounts → Edit Accounts | Fresh financial-account creation and identity editing are available. | Closures, manual values and wider account review [V2-4](../ROADMAP.md#v2-4), manual breadth [DEC-1](../ROADMAP.md#dec-1). |
+| Accounts → Appreciation Calculator | No V2 counterpart; activity does not establish investment values. | Omission remains undecided [DEC-3](../ROADMAP.md#dec-3). |
+| Statements → Import All | Multi-file and shallow-folder CSV/PDF batch import are available; native batch presentation was accepted. | Archive recovery [V2-3](../ROADMAP.md#v2-3), consolidated daily-workflow [V2-UX](../ROADMAP.md#v2-ux). |
+| Statements → Pick File for Import | Selected CSV/PDF import uses a verified catalog; narrow shell/import flows have recorded native acceptance. | Family/installed checks [P2-3](../ROADMAP.md#p2-3)/[P2-4](../ROADMAP.md#p2-4), final imports [V2-3](../ROADMAP.md#v2-3). |
+| Statements → Completeness Grid | Statement coverage shows bound periods, overlap/gap hints, printed endpoints, journal movement and a versioned reconciliation check. Bound source provenance and source-backed openings have explicit review; their native flows were accepted. | Coverage conclusions and balance/report integration [V2-5](../ROADMAP.md#v2-5); retain independent capture/reconciliation limits. |
+| Statements → Correct Discrepancies | Evidence preview and append-only category/card-date corrections exist for supported rows. | Wider source/balance discrepancies and correction paths [V2-4](../ROADMAP.md#v2-4). |
+| Statements → Send for Plugin Development | No V2 action; ordinary imports remain local. | Submission disposition remains undecided [DEC-3](../ROADMAP.md#dec-3); any service work stays separately scoped [P2-S](../ROADMAP.md#p2-s). |
+| Categories → Category Manager | Fresh category names/kinds and effective-month budgets are available. | Additional editing/hierarchy scope, if needed, [V2-4](../ROADMAP.md#v2-4)/[DEC-3](../ROADMAP.md#dec-3). |
+| Transactions → Review Transactions | Bound asset cash expense/income, negative card expense and whole-movement transfer/card-payment review are available. Category/card-date corrections are append-only; native card/transfer review was accepted. Repeated-row review now guards detected unresolved or supporting repeats. | Broader overlap, repair of double postings/review-locked bindings, fees, partial settlements, transfer corrections, HSA/loan/manual interpretations [V2-3](../ROADMAP.md#v2-3)/[V2-4](../ROADMAP.md#v2-4); consolidated [V2-UX](../ROADMAP.md#v2-ux). |
+| Transactions → Identify Recurring | No V2 counterpart; forecasting remains outside the initial release gate. | Later CF4 scope and unapproved omission [DEC-3](../ROADMAP.md#dec-3). |
+| Transactions → Insert Manually | Reviewed source openings exist; arbitrary manual journals/values do not. | Manual breadth [DEC-1](../ROADMAP.md#dec-1), implementation [V2-4](../ROADMAP.md#v2-4). |
+| Train Model → Train Model for Testing | No V2 counterpart; category review remains explicit. | Omission undecided [DEC-3](../ROADMAP.md#dec-3). |
+| Train Model → Train Model for Deployment | No V2 counterpart or automatic trained-model compatibility layer. | Omission undecided [DEC-3](../ROADMAP.md#dec-3). |
+| Reports → Export Three Months | Reviewed journal workbook export accepts an explicit date range; native export was accepted. | Date presets and pivot presentation remain undecided [DEC-3](../ROADMAP.md#dec-3); reports [V2-5](../ROADMAP.md#v2-5). |
+| Reports → Export One Year | The same explicit-range reviewed journal export is available. | Date preset [DEC-3](../ROADMAP.md#dec-3). |
+| Reports → Export All Time | The same explicit-range reviewed journal export is available. | All-time selection/preset [DEC-3](../ROADMAP.md#dec-3). |
+| Help → About | No V2 counterpart in the pilot shell. | Final build metadata [V2-7](../ROADMAP.md#v2-7). |
+| Help → Getting Started | Disposable demos and technical documentation exist. | Final onboarding [V2-7](../ROADMAP.md#v2-7), integrated [V2-UX](../ROADMAP.md#v2-ux). |
+| Help → Check for Updates | No V2 counterpart in the pilot shell. | Client/catalog update scope [P2-5](../ROADMAP.md#p2-5)/[DEC-2](../ROADMAP.md#dec-2); service work stays separate. |
+| Balance History dashboard tab | Account movement shows reviewed changes and confirmed source-backed openings separately. | Account positions/balance history [V2-5](../ROADMAP.md#v2-5); no current bank-balance claim. |
+| Category Spending dashboard tab | Reviewed Spending reports exact category totals with incomplete scope. | Chart/drill-down scope [V2-5](../ROADMAP.md#v2-5)/[DEC-3](../ROADMAP.md#dec-3), later CF3 comparisons. |
+| Budgets dashboard tab | Monthly targets are compared with reviewed spending in a table. | Further chart/variance scope [V2-5](../ROADMAP.md#v2-5)/[DEC-3](../ROADMAP.md#dec-3). |
 
-The 1.x Reports menu writes an `.xlsx` workbook with transaction rows and two
-category pivots. The first 2.0 export instead records active reviewed journal
-non-opening entries, posting lines, source allocations, correction links and scope in one
-workbook. It omits superseded entries and reversals from active rows while
-retaining correction links. The 2.0 workbook cannot certify unique source
-coverage, account balances or cash flow. The owner chose reviewed transaction
-rows for this first export and accepted its native Windows behavior. Some
-internal keys remain visible for now; pivot and preset choices remain open.
+The V2 workbook contains active reviewed non-opening entries, exact posting and
+source-allocation lines, correction links and scope for its selected date range.
+Active rows omit superseded entries and reversals while preserving correction
+links. It does not certify unique source coverage, reconciled balances or cash
+flow. Presets, category pivots and hiding internal keys remain separate
+presentation choices rather than missing export implementation.
 
 ## Proposed cutover scope for owner review
 
-The first 2.0 release should be usable as a fresh daily profile, without
-recreating the 1.x menu structure. The proposed launch work is:
+The [roadmap](../ROADMAP.md) is the single launch and later-work plan. This
+inventory preserves the decisions needed to reconcile the old menu with it:
 
-- A verified offline starter catalog covering every current parser, with a
-  selected-file import path and clear pending status for unsupported accounting.
-- Explicit account binding, category and budget editing, ordinary bank/card
-  review, transfers, loan interpretation, manual opening/value decisions, and
-  corrections. Unknown source facts must stay visible and unposted.
-- Statement-period overlap and reconciliation review before any balance claim;
-  Spending, Income, budgets, account movement and transaction-row export must
-  keep their incomplete-source scope visible.
-- A clean profile lifecycle with verified backup/restore, visible storage and
-  privacy information, and a minimal About/Getting Started path for the final
-  build. Native Windows and targeted Intel Mac acceptance remain release gates.
+- [DEC-1](../ROADMAP.md#dec-1): whether arbitrary manual journals are needed in
+  addition to reviewed openings and values.
+- [DEC-2](../ROADMAP.md#dec-2): whether local signed-catalog installation suffices
+  until separate server publication, and the resulting client/service boundary.
+- [DEC-3](../ROADMAP.md#dec-3): deliberate omissions or replacements for remaining
+  1.x actions. Proposed omissions include the trained-model actions, recurring
+  detector, appreciation calculator, separate configuration export, standalone
+  backup-test action, export presets/pivots and dashboard charts. Server sign-out
+  and source submission also need an explicit disposition.
 
-The proposed deliberate omissions are the 1.x trained-model actions,
-recurring-transaction detector, appreciation calculator, separate account
-configuration export, standalone backup-test button, export date-preset
-buttons, pivot sheets and dashboard charts. The verified profile backup already
-contains account configuration; the explicit date range and tabular reports
-cover the immediate reporting use. Server sign-out and source submission do
-not belong in the local-only client cutover; server publication has its own
-later gate. None of these omissions has owner approval yet.
-
-Two choices still affect implementation order: whether users need arbitrary manual journal
-entries in addition to reviewed openings and values, and whether a local
-catalog-install action is sufficient until the separate server publication.
+These omissions remain **unapproved**. A profile backup retaining configuration
+or a table covering immediate reporting needs supplies rationale for a decision,
+not implicit owner agreement. Selecting an implementation packet does not decide
+all pending actions or authorize server deployment, signing, release or live
+profile activation. Unknown accounting evidence stays visible and unposted.

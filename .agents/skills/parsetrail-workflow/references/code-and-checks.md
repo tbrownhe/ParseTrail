@@ -5,16 +5,20 @@ packet and confirm that symbols and commands still exist before use.
 
 ## Runtime and contracts
 
+- `ROADMAP.md`: sole ordered milestones, scope decisions and release gates.
+  `TODO.md`: selected packet and a short candidate queue. `docs/work/README.md`:
+  standard packet plans, decisions and verification; read the linked record.
+
 - `client/src/parsetrail/main.py`: fixed parser worker dispatch, explicit
   `--v2` workspace path, then legacy runtime bootstrap.
-- `docs/client-v2-cutover.md`: current fresh-profile launch boundary and dated
-  pilot/native acceptance. `docs/client-v2-unified-store.md`: single store.
+- `docs/client-v2-cutover.md`: current fresh-profile launch boundary. `docs/client-v2-unified-store.md`: single store.
 - `docs/client-ledger-contract.md`: signs, review, dates, corrections and claims.
 - `docs/client-v2-menu-inventory.md`: implemented actions and undecided deferrals.
 - `docs/client-v2-parsing.md` and `docs/client-v2-parser-inventory.md`: finite
   engine design, family/source evidence and remaining admission gates.
-- `development.md`, component READMEs and `docs/engineering-acceptance.md`:
-  test isolation, platform policy and accepted release evidence.
+- `development.md` and component READMEs: setup, test isolation and platform
+  policy. `docs/work/`: current packet evidence. `docs/engineering-acceptance.md`
+  and `docs/agent-workflow-*.md`: historical indexes, not new work queues.
 
 ## Evidence and catalog
 
@@ -62,6 +66,70 @@ wording. Agents verify the first functional UI and continue development without
 per-feature human acceptance. Accumulate useful scenarios for the later integrated
 UI/UX pass; prepare its disposable end-to-end launch at that milestone. Preserve
 specifically identified native/platform and release gates.
+
+## Candidate starting points
+
+These are technical entry points, not another queue or authorization. Use TODO
+to establish selected scope and create its packet record before substantial work.
+Code remains authoritative; recheck schema/runtime and existing checks at pickup.
+Here `core/` and `gui/` are under `client/src/parsetrail/`.
+
+### Account positions and history
+
+- Read the ledger report contract, single-store contract and occurrence-review
+  contract, plus `docs/work/2026-10-25-v2-source-overlap.md` for the completed
+  safeguard and its limits. Current `financial_journal_summary` is period
+  movement with openings separate, not an as-of balance.
+- Start in `core/v2_profile_store.py`: `financial_journal_summary`,
+  `opening_decision`, `statement_reconciliation_checks`, correction reads and
+  conservative unallocated-source counts; UI in `gui/v2_reviewed_reports.py`.
+- Define the selected report contract before UI: explicit as-of/currency,
+  recorded journal versus source-supported position, natural asset/liability
+  direction, absent/stale openings as unknown, correction arithmetic, overlap,
+  pending/unreviewed scope and freshness. Include exact synthetic sign/date cases.
+- Current reconciliation is computed live with a rule/input version. A previously
+  saved cutoff requires V2-4 durable reconciliation history. A positions view can
+  proceed with truthful live-check wording; it cannot claim that history exists.
+- Focused starting tests under `client/tests/`: `test_v2_category_reports.py`,
+  `test_v2_reviewed_openings.py`, `test_v2_source_openings.py`,
+  `test_v2_statement_reconciliation.py`, `test_v2_reviewed_reports_dialog.py` and
+  `test_v2_source_overlap.py`. Add meaningful as-of/unknown/correction cases.
+
+### Remaining review safeguards
+
+- Read the occurrence-review, ledger and single-store contracts and the completed
+  overlap record first. The current matcher uses exact bound account, signed
+  amount, source date and date role across sources; supporting repeats are not
+  allocations. Saved review history currently locks account bindings.
+- Select one outcome: wider matching, history-locked binding repair, existing
+  double-posting correction, or transfer correction. These are distinct packets;
+  do not turn them into a general import rewrite or erase prior review/journals.
+- Start at store `source_overlap_inventory`, `record_source_overlap_review`,
+  `source_overlap_posting_blocks`, account-binding mutation guards,
+  `transfer_candidates` and `post_reviewed_transfer`; GUI adapters are the
+  overlap, source/account-binding and transfer review dialogs.
+- Starting tests: `test_v2_source_overlap.py`, `test_v2_source_overlap_dialog.py`,
+  `test_v2_source_overlap_binding_dialog.py`, `test_v2_transfers.py`,
+  `test_v2_reviewed_journal.py` and `test_v2_profile_snapshot.py`. Preserve
+  one occurrence per source, stale-form refusal, atomic failure, unique active
+  allocation and original/reversal/replacement history.
+
+### Parser and catalog readiness
+
+- Read the current parsing contract and family map. The pilot README is a test/
+  tool entry point with historical chronology, not another current work queue.
+- Start at `core/v2_source_pipeline.py`, `core/v2_catalog_admission.py`,
+  `core/v2_data_catalog.py`, `core/v2_worker_limits.py` and `client/scripts/v2_catalog_release.py`.
+  Choose a family/operation/platform or catalog outcome before running broad checks.
+- Starting client tests: `test_v2_catalog_import.py`, `test_v2_data_catalog.py`,
+  `test_v2_catalog_release.py` and `test_v2_worker_entry.py`; include the affected
+  synthetic `devtools/parser_engine_pilot/` modules. Client `-k v2` alone does
+  not exercise that directory; inspect isolation before running its tools.
+- CSV/PDF workspace admission exists; XLSX remains isolated. Keep execution,
+  source parity, capture, accounting, Windows/Intel limits and installed/offline
+  trust distinct. Existing fixture authorization does not require broad private
+  replay. Production signing/service publication needs its own scope; DEC-2
+  settles the first-release service dependency and blocks only dependent work.
 
 ## Windows source verification
 

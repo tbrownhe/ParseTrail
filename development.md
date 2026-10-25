@@ -41,12 +41,14 @@ task; this authorization does not let automated suites load production database
 settings. Use copied client databases for mutating acceptance, and commit only
 synthetic fixtures or redacted evidence.
 
-Use focused branches, commit and push reviewable chunks, and prepare candidate
-artifacts/isolated profiles before requesting owner GUI or platform testing.
-The September 26 client roadmap uses the owner's explicitly requested long-running
-`feature/client-financial-insights` branch with focused commits. If client work
-requires a server interface change, stop, merge accepted client work first, and
-use a separate short-lived server branch; see [the active roadmap](TODO.md#active-client-roadmap--local-spending-and-cash-planning).
+Read [ROADMAP](ROADMAP.md) for the authoritative milestones, scope decisions and
+release gates, then [TODO](TODO.md) for the selected packet. Read its linked
+[work record](docs/work/README.md) and relevant component contracts; old proposals
+and handovers are historical evidence. Candidate priority does not select work.
+Use focused, reviewable chunks on `feature/client-financial-insights` for current
+client development. If a client feature requires a server interface change,
+stop at that boundary, merge accepted client work first, and use the documented
+separate service-branch handoff. Server P0 remains closed.
 For ongoing V2 development, agents design and implement a first functional UI
 and complete development packets using appropriate automated checks and agent
 review. Human UI/UX review is consolidated at a later integrated milestone;
@@ -55,18 +57,18 @@ Follow the [current review policy](AGENTS.md#v2-development-and-human-review),
 which supersedes older per-slice GUI gates. Preserve specifically identified
 native decoder, packaging, installed/offline and release checks, requesting
 targeted Intel/native testing where needed. Record platforms actually tested.
-Keep [TODO](TODO.md) limited to unfinished work; move lasting behavior into the
-component guides and dated verification into the
-[engineering acceptance record](docs/engineering-acceptance.md) when a task closes.
-Server P0 acceptance is complete. Client development should touch the server only
-when it exposes an interface requirement; unrelated infrastructure stays separate.
+Use one [packet record](docs/work/README.md#packet-template) for substantial scope,
+work, commands/results, review findings and actual owner decisions/acceptance.
+At closeout update that record, affected contracts and roadmap status, then clear
+the selected TODO entry. Keep validation narratives out of TODO and the roadmap;
+do not append new work to the historical acceptance monolith or create another
+current-work handover. Small edits can use a concise entry in an existing record.
 
-The current implementation approval covers the local spending/cash-planning
-roadmap in TODO, beginning with C1 and C2a. Unselected correctness/cleanup and
-F1-F4 proposals remain pending; do not treat earlier release/offline acceptance
-as permission to add those features. Stop only work dependent on an unresolved
-owner decision or a specifically identified acceptance gate; pending consolidated
-UI/UX review does not block ongoing authorized implementation.
+The roadmap distinguishes approved program outcomes, selected packets, unselected
+proposals and deferred work. Historical C1/C2a, migration experiments and 1.4.2
+acceptance do not select new features. Stop only work dependent on an unresolved
+owner decision or specifically identified gate; pending consolidated UI/UX review
+does not block unrelated authorized implementation.
 
 ## Prerequisites
 
@@ -308,7 +310,7 @@ export OPENSSL_DIR="$(brew --prefix openssl@3)"
 
 The OpenSSL setting is a build input only; a released application must not require
 Homebrew at runtime. The release preflight will be strengthened further under the
-remaining reproducibility work in `TODO.md`.
+remaining reproducibility work in [the roadmap](ROADMAP.md#release-checklist).
 
 ## Private fixtures and server submissions
 

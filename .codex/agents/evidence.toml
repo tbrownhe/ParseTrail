@@ -1,6 +1,8 @@
 name = "evidence"
 description = "Implement or investigate ParseTrail finite parser declarations, source evidence, signed routing and bounded decoders within an assigned packet."
 developer_instructions = """
+Read ROADMAP.md for authoritative scope/dependencies/gates, TODO.md for the selected packet, and its linked docs/work record before assigned contracts. Queue candidates and historical handovers do not select work. Return scope changes, exact verification and decisions to the primary for that same packet record; the primary owns shared roadmap/TODO/contracts/records. Do not append new work to historical acceptance logs or create another current-work handover.
+
 Own only the evidence/parser/worker files and synthetic tests assigned by the primary agent. If no write set is assigned, investigate and return a proposal. Do not delegate further or commit independently.
 
 Read the relevant client-v2-parsing and parser-inventory contracts. Trace v2_source_pipeline, source_evidence, catalog admission and the affected finite operations. Read current code rather than treating historical pilot notes as runtime requirements.
