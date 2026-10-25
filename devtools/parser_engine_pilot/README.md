@@ -522,7 +522,7 @@ loaded by [`citi_authoring.py`](citi_authoring.py), while the installed
 [`v2_citi_layout.py`](../../client/src/parsetrail/core/v2_citi_layout.py)
 has no bundled-definition dependency. Its
 [shared output adapter](../../client/src/parsetrail/core/v2_citi_source_output.py) reopens all ten statements from
-strict JSON with 486 observations and 803 located source dispositions,
+strict JSON with 486 observations and 2,940 located source dispositions,
 including 36 supplemental detail rows. It leaves capture verification false
 and creates no accounting postings or profile writes.
 
@@ -538,15 +538,17 @@ The read-only [`audit_recent_citi_capture.py`](audit_recent_citi_capture.py)
 checks line locations against the bounded simple-text channel for explicitly
 selected recent-layout PDFs. Pass each source with `--source`; it prints only
 aggregate counts and redacted failure reasons. On the ten signed-catalog-routed
-archive files, 909 of 3,046 nonblank lines had line locations. None of the
-2,137 remaining lines matched the declaration's supported dollar-token or
-dated-start patterns. A line location does not prove that the parser captured
-every page region or assigned financial meaning, and `capture_verified` stays
+archive files, 909 of 3,046 nonblank lines initially had line locations. None
+of the 2,137 remaining lines matched the declaration's supported dollar-token
+or dated-start patterns. The owner approved visible incomplete capture; those
+lines now become located `unclassified_page_text` dispositions, so all 3,046
+nonblank simple-text lines have line locations. This does not prove capture of
+every PDF page region or assign financial meaning; `capture_verified` stays
 false. The audit reads source bytes again after parsing to confirm their hashes
 are unchanged.
 The Citi definition's `usd_symbol_minor_v1` operation now rejects undeclared
 money spellings and computes integer cents directly. All ten recent-layout
-archive PDFs retain 486 rows and 803 dispositions under pilot revision 2.
+archive PDFs retain 486 rows and 2,940 dispositions under pilot revision 2.
 
 [`v2_bounded_pdf_text.py`](../../client/src/parsetrail/core/v2_bounded_pdf_text.py) starts a separate PDF text worker
 with source, output, page, line and extracted-text limits plus a wall-clock

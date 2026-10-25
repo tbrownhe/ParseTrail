@@ -206,10 +206,13 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   balance evidence.
   A separate read-only simple-text location audit of the ten routed recent-Citi
   PDFs checked 56 pages and 3,046 nonblank extracted lines. All lines matching
-  the supported dollar-token or dated-start patterns have evidence line
-  locations; 2,137 other lines have none. Their source PDFs remain intact.
-  This measures line locations, not full PDF-page capture, so capture stays
-  unverified.
+  the supported dollar-token or dated-start patterns had evidence line
+  locations; 2,137 other lines initially had none. The owner approved visible
+  incomplete capture. Those 2,137 lines are now retained as located,
+  unclassified page-text dispositions and shown in a separate preview tab.
+  A read-only replay reopened all ten sources with 486 rows and 2,940 total
+  dispositions. `capture_verified` remains false because this is simple-text
+  line retention, not complete PDF-page capture.
   A deterministic partial-date operation now refuses invalid, distant and
   ambiguous `MM/DD` years while retaining ten-statement Citi parity. The
   [upstream boundary review](docs/client-v2-upstream-boundary-review.md) orders
@@ -219,7 +222,7 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   export payloads, typed locations, raw values and unknown/derived provenance.
   A synthetic CSV and ten recent Citi statements round-trip through it. The
   Citi path now uses a finite pilot definition without importing 1.x parser
-  methods; 486 rows and 803 located dispositions are retained, including 36
+  methods; 486 rows and 2,940 located dispositions are retained, including 36
   supplemental details. The bounded source pipeline and fresh 2.0
   SQLite source store now save exact source, definition and strict evidence in
   one transaction; ten Citi PDFs reopened in a temporary profile with unchanged
@@ -498,7 +501,12 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   catalog, reads a chosen CSV/PDF without moving it, and saves pending evidence.
   Missing catalog, unsupported/oversized files, cancellation and 1.x profile
   refusal leave no source import. The owner accepted the native Windows shell
-  on October 23, 2026. A further slice stores reversible, explicit bindings
+  on October 23, 2026. Batch import now accepts multiple selected CSV/PDF files
+  or immediate files from a selected folder. Each uses the signed-catalog
+  path and stays pending review. The result lists imported, already saved,
+  failed, cancelled and not-attempted files; cancellation keeps completed
+  sources. Offscreen checks pass; native Windows acceptance is open. A further
+  slice stores reversible, explicit bindings
   for source-identified statement and export accounts, and offers separate
   review for printed identities and accountless rows. Offscreen tests pass;
   the owner accepted the native review dialog on October 24, 2026. Signed parser

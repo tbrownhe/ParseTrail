@@ -79,10 +79,12 @@ acceptance still require their own evidence. Six queued bank transaction CSVs
 and 21 Amazon-related CSVs have headers outside the two current declarations.
 An additional read-only recent-Citi line-location audit selected ten PDFs by
 the signed catalog route. Across 56 pages, 909 of 3,046 nonblank simple-text
-lines had evidence line locations. The other 2,137 matched neither the
-supported dollar-token nor dated transaction-start patterns. This is a gap
-inventory, not complete page-capture verification; the original PDFs remain
-read-only and `capture_verified` remains false.
+lines initially had evidence line locations. The other 2,137 matched neither
+the supported dollar-token nor dated transaction-start patterns. The owner
+approved visible incomplete capture, so those lines are now retained as
+located, unclassified page text and all 3,046 nonblank simple-text lines have
+line locations. This is not complete PDF-page capture verification; the
+original PDFs remain read-only and `capture_verified` remains false.
 
 The local [catalog artifact builder](../client/scripts/v2_catalog_release.py)
 validates every checked-in definition, signs a deterministic snapshot with an
@@ -192,7 +194,8 @@ the router/model changes before storage. A strict shared evidence contract
 accepts statement and activity-export payloads; a synthetic CSV adapter
 round-trips raw cells and an unknown balance. The recent Citi pilot now uses a
 checked-in finite definition and maps the ten archived statements into the
-same strict output, retaining all 486 rows and 803 source dispositions.
+same strict output, retaining all 486 rows and 2,940 source dispositions after
+the owner-approved unclassified page-text retention.
 Bounded runtime admission into that contract remains open.
 
 The isolated [P2-2 table pilot](../devtools/parser_engine_pilot/README.md)

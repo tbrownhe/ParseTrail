@@ -118,6 +118,43 @@ def test_window_imports_pending_evidence_and_reuses_exact_source(tmp_path: Path,
     assert len(workspace.source_ids()) == 1
 
 
+def test_window_batch_import_shows_per_file_report_and_retains_successes(tmp_path: Path, monkeypatch) -> None:
+    app = _app()
+    from parsetrail.gui.v2_batch_import import V2BatchImportReport
+    from parsetrail.gui.v2_workspace_window import V2WorkspaceWindow
+    from PySide6.QtWidgets import QFileDialog
+
+    workspace = _workspace(tmp_path)
+    good = tmp_path / "cash.csv"
+    bad = tmp_path / "bad.csv"
+    good.write_bytes(SOURCE)
+    bad.write_bytes(b"not a supported statement")
+    monkeypatch.setattr(QFileDialog, "getOpenFileNames", lambda *_args, **_kwargs: ([str(good), str(bad)], ""))
+    reports = []
+
+    def capture_report(dialog):
+        reports.append([dialog.files.item(index).text() for index in range(dialog.files.count())])
+        assert dialog.selected_path.text() == str(good)
+
+    monkeypatch.setattr(V2BatchImportReport, "exec", capture_report)
+    window = V2WorkspaceWindow(workspace)
+    try:
+        window.import_button.click()
+        worker = window.import_worker
+        assert worker is not None
+        _wait_finished(worker, app)
+        assert window.sources.count() == 1
+        assert window.import_button.isEnabled()
+        assert window.import_folder_button.isEnabled()
+        assert len(reports) == 1
+        assert "imported" in reports[0][0]
+        assert "failed" in reports[0][1]
+        assert "1 imported, 1 failed" in window.status.text()
+    finally:
+        window.close()
+        app.processEvents()
+
+
 def test_profile_menu_backs_up_restores_and_keeps_failed_selection_on_current_profile(
     tmp_path: Path, monkeypatch
 ) -> None:

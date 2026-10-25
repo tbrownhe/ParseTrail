@@ -3,19 +3,71 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from parsetrail.core.source_evidence import StatementPayload
 from parsetrail.core.v2_account_matching import LedgerAccountCandidate, match_verified_source_account
 from parsetrail.core.v2_catalog_admission import admit_pilot_definition
 from parsetrail.core.v2_data_catalog import CatalogCache, VerifiedCatalog, load_trusted_catalog_keys
 from parsetrail.core.v2_preferences import V2Preferences, default_preferences_path, load_preferences, save_preferences
-from parsetrail.core.v2_profile_store import MAX_SOURCE_BYTES, AccountBinding, SavedImport, V2ProfileStore
-from parsetrail.core.v2_source_import import ImportCancelled, SourceImportResult, import_catalog_source
+from parsetrail.core.v2_profile_store import (
+    MAX_SOURCE_BYTES,
+    AccountBinding,
+    ProfileFormatError,
+    SavedImport,
+    V2ProfileStore,
+)
+from parsetrail.core.v2_source_import import (
+    CatalogImportError,
+    ImportCancelled,
+    SourceImportResult,
+    import_catalog_source,
+)
+from parsetrail.core.v2_source_pipeline import SourcePipelineError
 
 
 class WorkspaceError(ValueError):
     """A 2.0 workspace cannot import this local source."""
+
+
+MAX_BATCH_FILES = 2_000
+
+
+@dataclass(frozen=True)
+class BatchFileResult:
+    path: Path
+    status: Literal["imported", "already_imported", "failed", "cancelled", "not_attempted"]
+    source_sha256: str | None = None
+    error_code: str | None = None
+
+
+@dataclass(frozen=True)
+class BatchImportResult:
+    files: tuple[BatchFileResult, ...]
+    cancelled: bool
+
+
+def folder_source_files(folder: Path) -> tuple[Path, ...]:
+    """List only immediate CSV/PDF children of a deliberately selected folder."""
+    if folder.is_symlink() or not folder.is_dir():
+        raise WorkspaceError("source_folder_unavailable")
+    try:
+        paths = tuple(
+            sorted(
+                path
+                for path in folder.iterdir()
+                if path.suffix.lower() in {".csv", ".pdf"} and path.is_file() and not path.is_symlink()
+            )
+        )
+    except OSError:
+        raise WorkspaceError("source_folder_unavailable") from None
+    if not paths:
+        raise WorkspaceError("source_folder_has_no_supported_files")
+    if len(paths) > MAX_BATCH_FILES:
+        raise WorkspaceError("source_batch_limit")
+    return paths
 
 
 def _read_source(path: Path) -> tuple[bytes, str]:
@@ -171,3 +223,43 @@ class V2Workspace:
         source, suffix = _read_source(source_path)
         with V2ProfileStore.open(self.profile_path) as store:
             return import_catalog_source(store, source, catalog=catalog, suffix=suffix, cancelled=cancelled)
+
+    def import_files(
+        self,
+        paths: tuple[Path, ...],
+        *,
+        cancelled: Callable[[], bool] | None = None,
+        progress: Callable[[int, BatchFileResult], None] | None = None,
+    ) -> BatchImportResult:
+        """Continue after per-file failures; cancellation keeps completed imports."""
+        if not paths or len(paths) > MAX_BATCH_FILES or any(not isinstance(path, Path) for path in paths):
+            raise WorkspaceError("source_batch_selection_invalid")
+        if self.catalog_cache.load_current() is None:
+            raise WorkspaceError("verified_catalog_missing")
+        files = []
+        was_cancelled = False
+        for index, path in enumerate(paths):
+            if cancelled is not None and cancelled():
+                was_cancelled = True
+                files.extend(BatchFileResult(remaining, "not_attempted") for remaining in paths[index:])
+                break
+            try:
+                imported = self.import_file(path, cancelled=cancelled)
+                result = BatchFileResult(path, imported.status, imported.source_sha256)
+            except ImportCancelled:
+                result = BatchFileResult(path, "cancelled")
+                was_cancelled = True
+            except Exception as exc:
+                code = (
+                    str(exc)
+                    if isinstance(exc, (WorkspaceError, CatalogImportError, ProfileFormatError, SourcePipelineError))
+                    else type(exc).__name__
+                )
+                result = BatchFileResult(path, "failed", error_code=code)
+            files.append(result)
+            if progress is not None:
+                progress(index + 1, result)
+            if was_cancelled:
+                files.extend(BatchFileResult(remaining, "not_attempted") for remaining in paths[index + 1 :])
+                break
+        return BatchImportResult(tuple(files), was_cancelled)

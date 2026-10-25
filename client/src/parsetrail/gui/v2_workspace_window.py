@@ -32,8 +32,9 @@ from PySide6.QtWidgets import (
 from parsetrail.core.source_evidence import ActivityExportPayload, StatementPayload
 from parsetrail.core.v2_profile_store import FinancialAccount, ProfileFormatError, V2ProfileStore
 from parsetrail.core.v2_source_import import ImportCancelled, SourceImportResult
-from parsetrail.core.v2_workspace import V2Workspace
+from parsetrail.core.v2_workspace import V2Workspace, WorkspaceError, folder_source_files
 from parsetrail.gui.v2_account_binding_review import V2AccountBindingReview
+from parsetrail.gui.v2_batch_import import V2BatchImportReport, V2BatchImportWorker
 from parsetrail.gui.v2_cash_activity_review import V2CashActivityReview
 from parsetrail.gui.v2_categories import V2CategoryDialog
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
@@ -116,7 +117,7 @@ class V2WorkspaceWindow(QMainWindow):
     def __init__(self, workspace: V2Workspace, parent=None):
         super().__init__(parent)
         self.workspace = workspace
-        self.import_worker: V2ImportWorker | None = None
+        self.import_worker: V2ImportWorker | V2BatchImportWorker | None = None
         self.progress: QProgressDialog | None = None
         self._close_after_import = False
         self.setWindowTitle("ParseTrail 2.0 workspace")
@@ -167,6 +168,9 @@ class V2WorkspaceWindow(QMainWindow):
         self.import_button = QPushButton("Import source…")
         self.import_button.clicked.connect(self._choose_import)
         controls.addWidget(self.import_button)
+        self.import_folder_button = QPushButton("Import folder…")
+        self.import_folder_button.clicked.connect(self._choose_import_folder)
+        controls.addWidget(self.import_folder_button)
         self.preview_button = QPushButton("Preview evidence")
         self.preview_button.clicked.connect(self._preview)
         controls.addWidget(self.preview_button)
@@ -208,6 +212,7 @@ class V2WorkspaceWindow(QMainWindow):
             else "No verified catalog installed. Choose Install signed catalog to enable import."
         )
         self.import_button.setEnabled(catalog is not None and self.import_worker is None)
+        self.import_folder_button.setEnabled(catalog is not None and self.import_worker is None)
         for action in (self.open_profile_action, self.backup_profile_action, self.restore_profile_action):
             action.setEnabled(self.import_worker is None)
         prior = select_source or self._selected_source()
@@ -264,15 +269,28 @@ class V2WorkspaceWindow(QMainWindow):
         self.source_review_button.setEnabled(identified_accounts)
 
     def _choose_import(self) -> None:
-        source, _filter = QFileDialog.getOpenFileName(
+        sources, _filter = QFileDialog.getOpenFileNames(
             self,
-            "Select a statement or export",
+            "Select statements or exports",
             "",
             "Supported sources (*.csv *.pdf);;CSV exports (*.csv);;PDF statements (*.pdf)",
             options=QFileDialog.ReadOnly,
         )
-        if source:
-            self.start_import(Path(source))
+        if len(sources) == 1:
+            self.start_import(Path(sources[0]))
+        elif sources:
+            self.start_batch_import(tuple(Path(source) for source in sources))
+
+    def _choose_import_folder(self) -> None:
+        directory = QFileDialog.getExistingDirectory(self, "Select a folder of statements or exports")
+        if not directory:
+            return
+        try:
+            paths = folder_source_files(Path(directory))
+        except WorkspaceError as exc:
+            QMessageBox.warning(self, "Folder was not imported", str(exc))
+            return
+        self.start_batch_import(paths)
 
     def _choose_catalog_release(self) -> None:
         directory = QFileDialog.getExistingDirectory(self, "Select a signed catalog release folder")
@@ -383,10 +401,34 @@ class V2WorkspaceWindow(QMainWindow):
         self.progress.setMinimumDuration(0)
         self.progress.canceled.connect(self.import_worker.cancel)
         self.import_button.setEnabled(False)
+        self.import_folder_button.setEnabled(False)
         for action in (self.open_profile_action, self.backup_profile_action, self.restore_profile_action):
             action.setEnabled(False)
         self.progress.show()
         self.import_worker.start()
+
+    def start_batch_import(self, paths: tuple[Path, ...]) -> None:
+        if self.import_worker is not None or not paths:
+            return
+        self.import_worker = V2BatchImportWorker(self.workspace, paths, self)
+        self.import_worker.progressed.connect(self._batch_progress)
+        self.import_worker.finished.connect(self._import_finished)
+        self.progress = QProgressDialog("Importing source evidence…", "Cancel remaining imports", 0, len(paths), self)
+        self.progress.setWindowTitle("ParseTrail 2.0 batch import")
+        self.progress.setWindowModality(Qt.WindowModal)
+        self.progress.setMinimumDuration(0)
+        self.progress.canceled.connect(self.import_worker.cancel)
+        self.import_button.setEnabled(False)
+        self.import_folder_button.setEnabled(False)
+        for action in (self.open_profile_action, self.backup_profile_action, self.restore_profile_action):
+            action.setEnabled(False)
+        self.progress.show()
+        self.import_worker.start()
+
+    def _batch_progress(self, count: int, filename: str) -> None:
+        if self.progress is not None:
+            self.progress.setLabelText(f"Processed {count} source(s); last: {filename}")
+            self.progress.setValue(count)
 
     def _import_finished(self) -> None:
         worker = self.import_worker
@@ -404,6 +446,20 @@ class V2WorkspaceWindow(QMainWindow):
         if self._close_after_import:
             QTimer.singleShot(0, self.close)
             return
+        if isinstance(worker, V2BatchImportWorker):
+            if result is None:
+                self.refresh()
+                self.status.setText("Batch import could not start.")
+                QMessageBox.warning(self, "Batch import failed", str(error or "Unknown import error"))
+                return
+            imported = [item for item in result.files if item.status == "imported"]
+            self.refresh(select_source=imported[-1].source_sha256 if imported else None)
+            failures = sum(item.status == "failed" for item in result.files)
+            self.status.setText(
+                f"Batch finished: {len(imported)} imported, {failures} failed; saved evidence is pending review."
+            )
+            V2BatchImportReport(result, self).exec()
+            return
         if result is not None:
             self.refresh(select_source=result.source_sha256)
             self.status.setText(
@@ -414,9 +470,11 @@ class V2WorkspaceWindow(QMainWindow):
         elif isinstance(error, ImportCancelled):
             self.status.setText("Import cancelled; no new source saved.")
             self.import_button.setEnabled(self.workspace.catalog_cache.load_current() is not None)
+            self.import_folder_button.setEnabled(self.import_button.isEnabled())
         else:
             self.status.setText("Import failed; no new source saved.")
             self.import_button.setEnabled(self.workspace.catalog_cache.load_current() is not None)
+            self.import_folder_button.setEnabled(self.import_button.isEnabled())
             QMessageBox.warning(self, "Import failed", str(error or "Unknown import error"))
 
     def _preview(self, *_args) -> None:

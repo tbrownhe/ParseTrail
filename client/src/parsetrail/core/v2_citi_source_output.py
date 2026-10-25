@@ -22,12 +22,14 @@ from parsetrail.core.source_evidence import (
 from parsetrail.core.v2_citi_evidence import CitiEvidence
 from parsetrail.core.v2_citi_layout import (
     AMOUNT,
+    DATE_PREFIX,
     EVIDENCE_ENGINE_VERSION,
     TEXT_TRANSACTION,
     load_definition,
 )
 from parsetrail.core.v2_citi_table import CitiTableRow
 from parsetrail.core.v2_money_operations import usd_symbol_minor_v1
+from parsetrail.core.v2_pdf_line_inventory import PDFLineInventoryError, unlocated_text_lines
 
 
 class CitiOutputError(ValueError):
@@ -203,6 +205,23 @@ def from_citi(evidence: CitiEvidence, definition_bytes: bytes) -> SourceEvidence
     period_location = PdfChars(kind="pdf_chars", page=1, start=char_start, end=char_end)
     if not raw_period:
         raise CitiOutputError("period_source_missing")
+    try:
+        extra_text = unlocated_text_lines(
+            evidence.simple_text_pages,
+            (
+                *(fragment.location for row in observations for fragment in row.fragments),
+                *(item.location for item in dispositions),
+                *(PdfLine(kind="pdf_line", page=page, line=line) for page, line in header.account_locations),
+                PdfLine(kind="pdf_line", page=header.previous_balance.page, line=header.previous_balance.line),
+                PdfLine(kind="pdf_line", page=header.new_balance.page, line=header.new_balance.line),
+            ),
+            code="unclassified_page_text",
+        )
+    except PDFLineInventoryError:
+        raise CitiOutputError("source_line_location_invalid") from None
+    if any(AMOUNT.search(item.raw_values[0]) or DATE_PREFIX.match(item.raw_values[0]) for item in extra_text):
+        raise CitiOutputError("unlocated_financial_text_line")
+    dispositions.extend(extra_text)
     payload = StatementPayload(
         kind="statement",
         start=DateValue(

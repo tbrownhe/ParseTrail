@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import tempfile
+from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from parsetrail.core.v2_citi_source_output import from_citi
 from parsetrail.core.v2_data_catalog import key_id_for_public_key
 from parsetrail.core.v2_legacy_citi_lines import parse_legacy_citi
 from parsetrail.core.v2_profile_store import FinancialAccount, V2ProfileStore
@@ -19,8 +22,10 @@ from parsetrail.gui.v2_workspace_window import V2WorkspaceWindow
 from PySide6.QtWidgets import QApplication, QFormLayout, QLineEdit
 from scripts.v2_catalog_release import signed_catalog_bytes
 
+from devtools.parser_engine_pilot.citi_authoring import DEFINITION_BYTES as RECENT_CITI_DEFINITION
 from devtools.parser_engine_pilot.review_accountless_export import DEFINITION as MOHELA_DEFINITION
 from devtools.parser_engine_pilot.review_accountless_export import SOURCE as MOHELA_SOURCE
+from devtools.parser_engine_pilot.test_citi_source_output import sample as recent_citi_sample
 from devtools.parser_engine_pilot.test_legacy_citi_lines import DEFINITION as CITI_DEFINITION
 from devtools.parser_engine_pilot.test_legacy_citi_lines import lines as citi_lines
 from devtools.parser_engine_pilot.test_synchrony_source_output import DEFINITION as CARD_DEFINITION
@@ -41,6 +46,7 @@ CASH_SOURCE = (
 MORE_CASH = b"Date,Account,Description,Amount,ReportedBalance\n10/02/2026,Checking A,Tea,-$3.00,$993.00\n"
 CITI_SOURCE = b"%PDF-older-citi-synthetic"
 CITI_OVERLAP_SOURCE = b"%PDF-older-citi-overlap-synthetic"
+RECENT_CITI_SOURCE = b"%PDF-recent-citi-synthetic"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -56,6 +62,7 @@ def main(argv: list[str] | None = None) -> int:
         (definitions / CASH_DEFINITION.name).write_bytes(CASH_DEFINITION.read_bytes())
         (definitions / "synchrony-card-definition.json").write_bytes(CARD_DEFINITION)
         (definitions / "older-citi-definition.json").write_bytes(CITI_DEFINITION)
+        (definitions / "recent-citi-definition.json").write_bytes(RECENT_CITI_DEFINITION)
         (definitions / "lendingclub-table-definition.json").write_bytes(BANK_DEFINITION)
         (definitions / "account-contexts.json").write_text(
             '{"synchrony_amazon_store_card":{"institution_key":"synchrony","kind":"liability"},'
@@ -114,6 +121,22 @@ def main(argv: list[str] | None = None) -> int:
                 citi_overlap,
                 suffix=".pdf",
             )
+            recent = recent_citi_sample()
+            recent = replace(
+                recent,
+                source_sha256=hashlib.sha256(RECENT_CITI_SOURCE).hexdigest(),
+                simple_text_pages=("01/02 01/02 SHOP $10.00\nGeneral notice",),
+                table_evidence=replace(
+                    recent.table_evidence,
+                    source_sha256=hashlib.sha256(RECENT_CITI_SOURCE).hexdigest(),
+                ),
+            )
+            store.import_source(
+                RECENT_CITI_SOURCE,
+                RECENT_CITI_DEFINITION,
+                from_citi(recent, RECENT_CITI_DEFINITION),
+                suffix=".pdf",
+            )
             store.import_source(
                 CARD_SOURCE,
                 CARD_DEFINITION,
@@ -148,6 +171,8 @@ def main(argv: list[str] | None = None) -> int:
             "the demo offers two income categories for that review. "
             "Select the card source to review its last-four match. "
             "Older Citi sources: inspect the period-overlap warning; one source previews an unclassified dollar line. "
+            "Recent Citi source: Preview evidence > Unclassified page text shows its General notice. "
+            "Import folder selects only CSV/PDF files immediately in this temporary folder. "
             "Categories: rename Food, add a category, or change Food's October $100 target. "
             "Reviewed reports > Monthly budgets: October shows Food's $100 target and reviewed Coffee spending. "
             "Reviewed reports > Income: after explicitly posting the synthetic Deposit, October shows $10 income. "
@@ -156,7 +181,11 @@ def main(argv: list[str] | None = None) -> int:
             "Profile menu: back up this disposable profile, restore to a new .db, then reopen the original. "
         )
         demo_paths = QFormLayout()
-        for label, path in (("Import source:", more_path), ("Install signed catalog:", next_release)):
+        for label, path in (
+            ("Import source:", more_path),
+            ("Import folder:", root),
+            ("Install signed catalog:", next_release),
+        ):
             path_field = QLineEdit(str(path))
             path_field.setReadOnly(True)
             path_field.setCursorPosition(0)

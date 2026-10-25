@@ -82,6 +82,20 @@ def test_statement_output_roundtrip_preserves_source_copies() -> None:
     assert [item.code for item in output.payload.dispositions] == ["dated_simple_text"]
 
 
+def test_other_page_text_is_visible_but_unknown_money_or_dated_starts_refuse() -> None:
+    source = replace(sample(), simple_text_pages=("01/02 01/02 SHOP $10.00\nGeneral notice",))
+    output = from_citi(source, DEFINITION_BYTES)
+    assert output.payload.capture_verified is False
+    assert [(item.code, item.location.line, item.raw_values) for item in output.payload.dispositions] == [
+        ("dated_simple_text", 1, ("01/02 01/02 SHOP $10.00",)),
+        ("unclassified_page_text", 2, ("General notice",)),
+    ]
+    for extra in ("Offer $2.00", "01/03 Unresolved detail"):
+        source = replace(sample(), simple_text_pages=(f"01/02 01/02 SHOP $10.00\n{extra}",))
+        with pytest.raises(CitiOutputError, match="unlocated_financial_text_line"):
+            from_citi(source, DEFINITION_BYTES)
+
+
 def test_changed_printed_amount_is_refused() -> None:
     source = sample()
     changed = replace(

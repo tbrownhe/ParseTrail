@@ -153,8 +153,19 @@ subtotals are visibly garbled by simple-text extraction; their amounts are not
 used as transaction or balance evidence.
 A separate read-only line-location audit of those ten recent-layout PDFs found
 line locations for every supported dollar-token and dated-start text line.
-Across 56 pages, 2,137 other nonblank simple-text lines lack line locations.
-This does not verify full-page capture, so `capture_verified` remains false.
+Across 56 pages, 2,137 other nonblank simple-text lines initially lacked line
+locations. The owner approved visible incomplete capture. The parser now keeps
+those lines as located, unclassified page-text dispositions, and the preview
+shows their count and exact text in a separate tab. All 3,046 nonblank
+simple-text lines are now located; complete PDF-page capture is still
+unverified, so `capture_verified` remains false.
+The 2.0 workspace now accepts selected CSV/PDF files together or the immediate
+CSV/PDF files in a chosen folder, capped at 2,000 per batch. Each file takes the
+existing authenticated import path and stays pending review. A result dialog
+lists every selected file as imported, already saved, failed, cancelled or not
+attempted. Cancellation preserves completed imports and leaves later files
+untouched. Offscreen service and GUI checks pass; native Windows acceptance is
+still open.
 The XLSX adapter also runs in a fixed, bounded worker and matches the
 in-process synthetic evidence. It has no referenced archive workbook and
 still needs Intel Mac native checks before runtime admission. The shared table
@@ -189,7 +200,8 @@ Recent Citi remains in the 2.0 import contract without a 1.x database migration.
 The first [fresh 2.0 SQLite source store](../client/src/parsetrail/core/v2_profile_store.py)
 now saves exact source, definition, strict evidence and unposted observation IDs
 atomically. A temporary profile reopened ten recent Citi PDFs with 486 rows and
-803 dispositions; the originals were read-only and their hashes unchanged.
+2,940 dispositions after the visible unclassified-text addition; the originals
+were read-only and their hashes unchanged.
 The fresh profile now also stores user-authored financial accounts and explicit
 accountless-export decisions. A whole-file assertion says every row belongs to
 one account; a mixed export uses row assignments. The modes cannot coexist for
@@ -332,8 +344,12 @@ bind its printed account to Savings A under Review source accounts, and open
 Review cash activity. Its interest and withdrawal are separate pending rows;
 choose an income category only for confirmed interest and an expense category
 only for a confirmed expense. A correction retains its reversal and replacement.
-Its copyable path fields show another synthetic file for testing Import source
-and a second test-signed release folder for testing Install signed catalog.
+Its copyable path fields show another synthetic file for testing Import source,
+the temporary folder for testing Import folder, and a second test-signed release
+folder for testing Install signed catalog. The temporary folder includes two
+already saved CSVs and one new CSV; the batch report should show those outcomes.
+The synthetic recent Citi source in the saved list has a General notice in
+Preview evidence > Unclassified page text.
 Closing the window removes the temporary workspace.
 The real `--v2` entry requires `--profile` and `--catalog-cache`; it opens an
 existing 2.x profile unless `--create-profile` is explicitly supplied. It will

@@ -15,7 +15,7 @@ def test_counts_unlocated_text_by_shape_and_refuses_invalid_location() -> None:
         sample(),
         simple_text_pages=("01/02 01/02 SHOP $10.00\nOffer $2.00\n01/03 OTHER\nFooter",),
     )
-    output = from_citi(source, DEFINITION_BYTES)
+    output = from_citi(sample(), DEFINITION_BYTES)
     assert line_location_counts(source, output) == {
         "all_text_lines": 4,
         "line_located": 1,

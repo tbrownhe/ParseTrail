@@ -118,6 +118,9 @@ class V2EvidencePreview(QDialog):
         coverage = payload.capture_verified if isinstance(payload, StatementPayload) else payload.coverage_verified
         unclassified_money = sum(item.code == "unclassified_monetary_line" for item in payload.dispositions)
         unclassified_note = f" · Unclassified dollar lines: {unclassified_money}" if unclassified_money else ""
+        unclassified_page_text = tuple(item for item in payload.dispositions if item.code == "unclassified_page_text")
+        if unclassified_page_text:
+            unclassified_note += f" · Unclassified page text lines: {len(unclassified_page_text)}"
         balance = (
             (
                 "Printed balance equation passed"
@@ -138,7 +141,11 @@ class V2EvidencePreview(QDialog):
         tabs = QTabWidget()
         self.rows_model = _RowsModel(rows, self)
         self.dispositions_model = _DispositionsModel(payload.dispositions, self)
-        for title, model in (("Observations", self.rows_model), ("Other source lines", self.dispositions_model)):
+        models = [("Observations", self.rows_model), ("Other source lines", self.dispositions_model)]
+        if unclassified_page_text:
+            self.unclassified_text_model = _DispositionsModel(unclassified_page_text, self)
+            models.append(("Unclassified page text", self.unclassified_text_model))
+        for title, model in models:
             view = QTableView()
             view.setModel(model)
             view.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)

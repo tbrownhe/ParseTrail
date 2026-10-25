@@ -4,16 +4,20 @@ from __future__ import annotations
 
 import hashlib
 import os
+from dataclasses import replace
 from pathlib import Path
 
+from parsetrail.core.v2_citi_source_output import from_citi
 from parsetrail.core.v2_legacy_citi_lines import parse_legacy_citi
-from parsetrail.core.v2_profile_store import V2ProfileStore
+from parsetrail.core.v2_profile_store import SavedImport, V2ProfileStore
 from parsetrail.core.v2_source_pipeline import build_source_evidence
 from parsetrail.core.v2_synchrony_source_output import from_synchrony_table
-from parsetrail.gui.v2_evidence_preview import preview_saved_source
+from parsetrail.gui.v2_evidence_preview import V2EvidencePreview, preview_saved_source
 from PySide6.QtWidgets import QApplication, QLabel, QTabWidget
 
 from devtools.parser_engine_pilot.preview_source import main as preview_main
+from devtools.parser_engine_pilot.test_citi_source_output import DEFINITION_BYTES as RECENT_CITI_DEFINITION
+from devtools.parser_engine_pilot.test_citi_source_output import sample as recent_citi_sample
 from devtools.parser_engine_pilot.test_legacy_citi_lines import DEFINITION as CITI_DEFINITION
 from devtools.parser_engine_pilot.test_legacy_citi_lines import lines as citi_lines
 from devtools.parser_engine_pilot.test_synchrony_source_output import DEFINITION as CARD_DEFINITION
@@ -95,6 +99,23 @@ def test_preview_surfaces_unclassified_dollar_lines(tmp_path: Path) -> None:
     try:
         assert any("Unclassified dollar lines: 1" in label.text() for label in dialog.findChildren(QLabel))
         assert dialog.dispositions_model.rowCount() >= 1
+    finally:
+        dialog.close()
+        app.processEvents()
+
+
+def test_preview_separates_recent_citi_unclassified_page_text() -> None:
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    app = QApplication.instance() or QApplication([])
+    source = replace(recent_citi_sample(), simple_text_pages=("01/02 01/02 SHOP $10.00\nGeneral notice",))
+    evidence = from_citi(source, RECENT_CITI_DEFINITION)
+    dialog = V2EvidencePreview(SavedImport(b"synthetic", RECENT_CITI_DEFINITION, evidence, ".pdf"))
+    try:
+        assert any("Unclassified page text lines: 1" in label.text() for label in dialog.findChildren(QLabel))
+        assert dialog.unclassified_text_model.rowCount() == 1
+        assert dialog.unclassified_text_model.data(dialog.unclassified_text_model.index(0, 2)) == "General notice"
+        tabs = dialog.findChild(QTabWidget)
+        assert tabs.tabText(2) == "Unclassified page text"
     finally:
         dialog.close()
         app.processEvents()

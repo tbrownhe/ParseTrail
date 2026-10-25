@@ -102,6 +102,9 @@ def audit(sources: tuple[Path, ...]) -> dict[str, object]:
             totals.update(line_location_counts(parsed, output))
             totals["parsed_sources"] += 1
             totals["activity_rows"] += sum(len(account.rows) for account in output.payload.accounts)
+            totals["unclassified_page_text_lines"] += sum(
+                item.code == "unclassified_page_text" for item in output.payload.dispositions
+            )
         except Exception as exc:
             reason = (
                 str(exc)

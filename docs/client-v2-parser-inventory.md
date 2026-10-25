@@ -425,7 +425,7 @@ built-in is accepted.
    financial examples private.
 2. Detailed MOHELA CSV, Chase card, HealthEquity cash, Wells Fargo business
    table and recent Citi pilots have tested evidence. The recent Citi path
-   accounts for 486 dated starts and 803 located dispositions across ten
+   accounts for 486 dated starts and 2,940 located dispositions across ten
    archive PDFs, but full-page capture and native worker acceptance remain
    open. Synthetic XLSX decoding has no referenced archive fixture.
 3. Convert all 22 families using the operations above; for each, compare all

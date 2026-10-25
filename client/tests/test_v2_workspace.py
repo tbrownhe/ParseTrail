@@ -12,7 +12,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from parsetrail.core.v2_data_catalog import MAX_CATALOG_BYTES, CatalogError, CatalogRollbackError, key_id_for_public_key
 from parsetrail.core.v2_profile_store import MAX_SOURCE_BYTES, ProfileFormatError
 from parsetrail.core.v2_source_import import ImportCancelled
-from parsetrail.core.v2_workspace import V2Workspace, WorkspaceError
+from parsetrail.core.v2_workspace import V2Workspace, WorkspaceError, folder_source_files
 from scripts.v2_catalog_release import signed_catalog_bytes
 
 DEFINITION = (
@@ -51,6 +51,57 @@ def test_verified_file_import_reopens_without_modifying_source(tmp_path: Path) -
     )
     assert reopened.source_ids() == (first.source_sha256,)
     assert reopened.saved_import(first.source_sha256).evidence == first.evidence
+
+
+def test_batch_import_keeps_successes_and_reports_each_selected_file(tmp_path: Path) -> None:
+    workspace = _workspace(tmp_path)
+    first = tmp_path / "first.csv"
+    second = tmp_path / "second.csv"
+    missing = tmp_path / "missing.pdf"
+    first.write_bytes(SOURCE)
+    second.write_bytes(SOURCE.replace(b"Coffee", b"Tea"))
+    progress = []
+    result = workspace.import_files(
+        (first, missing, first, second), progress=lambda count, item: progress.append((count, item.status))
+    )
+    assert [item.status for item in result.files] == ["imported", "failed", "already_imported", "imported"]
+    assert result.files[1].error_code == "source_unavailable"
+    assert progress == [(1, "imported"), (2, "failed"), (3, "already_imported"), (4, "imported")]
+    assert not result.cancelled
+    assert len(workspace.source_ids()) == 2
+    assert first.read_bytes() == SOURCE
+
+
+def test_batch_cancellation_keeps_completed_files_and_marks_rest_untouched(tmp_path: Path) -> None:
+    workspace = _workspace(tmp_path)
+    sources = tuple(tmp_path / f"{index}.csv" for index in range(3))
+    for index, source in enumerate(sources):
+        source.write_bytes(SOURCE.replace(b"Coffee", f"Coffee {index}".encode()))
+    completed = []
+    result = workspace.import_files(
+        sources,
+        cancelled=lambda: bool(completed),
+        progress=lambda _count, item: completed.append(item.status),
+    )
+    assert [item.status for item in result.files] == ["imported", "not_attempted", "not_attempted"]
+    assert result.cancelled
+    assert len(workspace.source_ids()) == 1
+
+
+def test_folder_batch_selection_is_shallow_and_supports_only_source_files(tmp_path: Path) -> None:
+    folder = tmp_path / "selected"
+    folder.mkdir()
+    (folder / "b.PDF").write_bytes(b"pdf")
+    (folder / "a.csv").write_bytes(SOURCE)
+    (folder / "note.txt").write_text("ignored")
+    nested = folder / "nested"
+    nested.mkdir()
+    (nested / "not-selected.csv").write_bytes(SOURCE)
+    assert [path.name for path in folder_source_files(folder)] == ["a.csv", "b.PDF"]
+    empty = folder / "empty"
+    empty.mkdir()
+    with pytest.raises(WorkspaceError, match="source_folder_has_no_supported_files"):
+        folder_source_files(empty)
 
 
 def test_missing_catalog_leaves_profile_empty(tmp_path: Path) -> None:
