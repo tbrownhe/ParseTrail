@@ -478,6 +478,9 @@ Settings choice defaults off and gates future use of assumed candidates; the
 evidence preview shows the provenance. Reviewed card purchase posting and
 append-only accounting-date correction remain future ledger/UI work. The
 source snapshot is never rewritten by the setting.
+A repeat read-only source-to-evidence replay after the date changes routed and
+parsed all 956 successful-archive PDFs with zero failures; it made no live
+profile or source-file writes.
 A separate read-only scan routed all 956 PDFs in the two successful archives
 through the locally test-signed catalog and parsed the six eligible bank
 families. All 315 statements and 14,275 activity rows met the account-total,

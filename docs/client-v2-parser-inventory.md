@@ -88,6 +88,9 @@ retains its bounded statement-period posting proxy as assumed. Synchrony
 keeps its printed activity date as the source date and adds a separate assumed
 posting candidate, clamped to the printed period for pre-period activity.
 These are source-provenance labels and candidates, not approved journal dates.
+The subsequent read-only source-to-evidence replay of both successful-archive
+folders again routed and parsed all 956 PDFs with zero failures after these
+date changes. The source files and live financial database were not written.
 
 An authorized closed-copy replay subsequently parsed every referenced archive
 source with current checkout code; all resulting account statements retained

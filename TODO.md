@@ -586,7 +586,9 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   assumed-posting-date choice defaults off; a shared gate can allow the guessed
   date after the user enables it. The preview displays the source and candidate
   provenance. Card purchase posting and append-only date correction are still
-  pending, and the native toggle/preview presentation needs acceptance.
+  pending, and the native toggle/preview presentation needs acceptance. A
+  read-only replay after the date change routed and parsed all 956 successful
+  archive PDFs with zero failures; live financial data remained untouched.
   A read-only signed-catalog scan routed all 956 PDFs in the two successful
   archives, then parsed the six bank families: 315 statements and 14,275 rows
   met the structural cash-review prerequisites before account binding, with
