@@ -346,13 +346,17 @@ $env:PYTHONPATH='.;client/src;client'
 & .\client\.venv\Scripts\python.exe -m devtools.parser_engine_pilot.open_v2_workspace --demo
 ```
 
-The demo signs a temporary four-definition catalog with a generated key,
-creates a temporary profile, and saves synthetic last-four card and older-Citi
-statements, a six-row accountless export, and a one-row identified cash export.
-The demo initially selects a three-row cash export. Open Review source accounts
-and explicitly bind Checking A to the existing asset account. Then open Review
-cash expenses: Coffee and Tea are eligible for reviewed expense posting, while
-Deposit remains outside that workflow. Select Coffee, choose Food, enter a
+For the Journal comparison walkthrough, add `--comparison` to that command.
+It seeds reviewed savings rows and a pending card statement, then opens
+Statement coverage on the comparison tab. Run it from your own PowerShell
+session; no profile file selection is needed.
+
+The default demo signs a temporary catalog with a generated key, creates a
+temporary profile, and saves synthetic cash, card, Citi, MOHELA and LendingClub
+sources. It initially selects a three-row cash export. Open Review source
+accounts and explicitly bind Checking A to the existing asset account. Then open
+Review cash activity: Coffee and Tea are eligible for expense review, while
+Deposit needs an explicit income decision. Select Coffee, choose Food, enter a
 reason and confirm the posting. To inspect append-only correction, select the
 posted Coffee row, choose Travel, enter a different reason and confirm. The
 source facts remain unchanged. Select the card source to inspect the inline
@@ -527,8 +531,8 @@ earliest source needs a reported balance and confirmed inclusive-period timing
 with a source reference. A nonzero decision posts at the prior-day cutoff
 through opening equity; zero records no journal. Earlier financial postings
 block confirmation, and a later source assertion marks the saved decision
-stale. Synthetic service and offscreen GUI tests pass; native review acceptance
-is open. Earlier disposable pilot profiles are recreated. Synthetic reopen
+stale. Synthetic service and offscreen GUI tests pass; the owner accepted native
+opening review. Earlier disposable pilot profiles are recreated. Synthetic reopen
 tests pass.
 A read-only Statement coverage dialog now groups explicitly bound statement
 sections by financial account. It shows source periods, overlap and calendar-gap
@@ -551,6 +555,15 @@ amounts as source facts only. Missing/derived values, multiple prior endpoints,
 gaps and overlaps stay uncomparable; equality does not establish reconciliation
 or complete source coverage. Offscreen checks pass; the owner accepted the
 native comparison column on October 25, 2026.
+A read-only Journal comparison tab now shows each bound statement's printed
+account-total change, observed activity sum and reviewed journal movement for
+its period. It separately shows the exact journal difference, unallocated row
+count and absolute remainder, allocations dated outside the period and other
+financial postings. Its status never certifies reconciliation or complete
+coverage. Synthetic service and offscreen GUI checks pass; native acceptance
+is open. The existing disposable workspace launcher accepts `--demo
+--comparison` and opens this tab with reviewed savings and pending card rows;
+the owner launches it in their Windows session for the walkthrough.
 
 A first read-only Spending summary in the 2.0 workspace uses reviewed expense
 journal postings for a selected half-open date range. Reversal and replacement

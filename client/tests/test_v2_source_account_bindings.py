@@ -205,7 +205,11 @@ def test_statement_overlap_uses_explicit_account_and_printed_period(tmp_path: Pa
     try:
         dialog = V2StatementCoverageDialog(path, window)
         tabs = dialog.findChild(QTabWidget)
-        assert [tabs.tabText(index) for index in range(tabs.count())] == ["Saved periods", "Printed openings"]
+        assert [tabs.tabText(index) for index in range(tabs.count())] == [
+            "Saved periods",
+            "Printed openings",
+            "Journal comparison",
+        ]
         assert dialog.model.rowCount() == 5
         assert dialog.model.data(dialog.model.index(2, 2)) == "Adjacent dates"
         assert dialog.model.data(dialog.model.index(4, 2)) == "Calendar gap"
@@ -219,7 +223,7 @@ def test_statement_overlap_uses_explicit_account_and_printed_period(tmp_path: Pa
             -candidate.printed_opening_minor
         )
         assert "Source timing unreviewed" in dialog.opening_model.data(dialog.opening_model.index(card_opening, 5))
-        assert "do not establish" in dialog.findChildren(QLabel)[1].text()
+        assert any("do not establish" in label.text() for label in dialog.findChildren(QLabel))
         dialog.close()
         for index in range(window.sources.count()):
             if window.sources.item(index).data(Qt.UserRole) == first_evidence.source_sha256:

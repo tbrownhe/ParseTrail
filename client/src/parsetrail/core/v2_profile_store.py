@@ -286,6 +286,26 @@ class StatementCoverageRow:
 
 
 @dataclass(frozen=True)
+class StatementJournalComparison:
+    account_id: str
+    account_name: str
+    account_kind: Literal["asset", "liability"]
+    source_sha256: str
+    period_start: date | None
+    period_end: date
+    printed_change_minor: int | None
+    source_activity_change_minor: int | None
+    journal_change_minor: int | None
+    difference_minor: int | None
+    activity_rows: int
+    unallocated_rows: int
+    unallocated_magnitude_minor: int
+    allocations_outside_period: int
+    outside_postings: int
+    status: str
+
+
+@dataclass(frozen=True)
 class CashActivityReviewRow:
     row_id: str
     date: str | None
@@ -2293,6 +2313,145 @@ class V2ProfileStore:
                 elif start is not None and end == latest_end:
                     latest_closers.append((source_id, payload, account))
         return tuple(rows)
+
+    def statement_journal_comparisons(self) -> tuple[StatementJournalComparison, ...]:
+        """Compare printed period movement with journal movement without certifying reconciliation."""
+        coverage = self.statement_coverage()
+        consumed = self._active_consumed()
+        journal = tuple(
+            _decode_journal(payload) for (payload,) in self.connection.execute("SELECT payload FROM JournalEntries")
+        )
+        reversal_keys = {key for (key,) in self.connection.execute("SELECT reversal_key FROM JournalCorrections")}
+        inactive_keys = {key for (key,) in self.connection.execute("SELECT original_key FROM JournalCorrections")}
+        active_dates: dict[str, list[date]] = {}
+        for entry in journal:
+            if entry.key in inactive_keys or entry.key in reversal_keys:
+                continue
+            for posting in entry.postings:
+                for allocation in posting.allocations:
+                    active_dates.setdefault(allocation.observation_id, []).append(entry.posting_date)
+        account_kinds = {account.id: account.kind for account in self.financial_accounts()}
+        result = []
+        for section in coverage:
+            payload = self.load_import(section.source_sha256).evidence.payload
+            if not isinstance(payload, StatementPayload):
+                raise ProfileFormatError("statement_comparison_source_invalid")
+            identities = {
+                (identity, form)
+                for identity, form in self.connection.execute(
+                    "SELECT source_identity,source_identity_form FROM SourceAccountBindings "
+                    "WHERE source_sha256=? AND ledger_account_id=?",
+                    (section.source_sha256, section.account_id),
+                )
+            }
+            matched = [
+                account
+                for account in payload.accounts
+                if (account.source_identity, account.source_identity_form) in identities
+            ]
+            account = matched[0] if len(matched) == 1 else None
+            activity = tuple(row for row in account.rows if row.row_role == "activity") if account else ()
+            row_ids = {row.row_id for row in activity}
+            remaining = tuple(
+                row.amount.minor - consumed.get(row.row_id, 0) for row in activity if row.amount.minor is not None
+            )
+            unallocated_rows = sum(amount != 0 for amount in remaining)
+            unallocated_magnitude = sum(abs(amount) for amount in remaining)
+            allocations_outside_period = (
+                sum(
+                    any(
+                        not section.period_start <= used_date <= section.period_end
+                        for used_date in active_dates.get(row.row_id, ())
+                    )
+                    for row in activity
+                )
+                if section.period_start is not None
+                else 0
+            )
+            source_change = (
+                sum(row.amount.minor for row in activity)
+                if account is not None
+                and all(row.amount.minor is not None and row.amount.provenance == "observed" for row in activity)
+                else None
+            )
+            printed_change = (
+                account.closing.minor - account.opening.minor
+                if account is not None
+                and account.balance_scope == "account_total"
+                and account.opening is not None
+                and account.closing is not None
+                and account.opening.provenance == "observed"
+                and account.closing.provenance == "observed"
+                and account.opening.minor is not None
+                and account.closing.minor is not None
+                else None
+            )
+            journal_change = None
+            outside_postings = 0
+            if section.period_start is not None:
+                journal_change = 0
+                for entry in journal:
+                    if section.period_start <= entry.posting_date <= section.period_end:
+                        for posting in entry.postings:
+                            if posting.account_id != section.account_id:
+                                continue
+                            journal_change += posting.amount_minor
+                            if entry.key not in reversal_keys and (
+                                not entry.reviewed
+                                or not posting.allocations
+                                or any(allocation.observation_id not in row_ids for allocation in posting.allocations)
+                            ):
+                                outside_postings += 1
+            difference = (
+                journal_change - printed_change if journal_change is not None and printed_change is not None else None
+            )
+            if account is None:
+                status = "Bound source section is ambiguous"
+            elif account.balance_scope != "account_total":
+                status = "Outside account-total balance scope"
+            elif section.period_start is None:
+                status = "Source period start unavailable"
+            elif printed_change is None:
+                status = "Printed account endpoints unavailable"
+            elif source_change is None:
+                status = "Observed source activity incomplete"
+            elif source_change != printed_change or not payload.independent_balance_verified:
+                status = "Printed source balance equation unresolved"
+            elif unallocated_rows:
+                status = "Source movements awaiting allocation"
+            elif allocations_outside_period:
+                status = "Source allocations use dates outside this period"
+            elif outside_postings:
+                status = "Journal has postings outside this statement evidence"
+            elif difference:
+                status = "Journal differs from printed change"
+            elif section.relation_to_known_periods == "overlap":
+                status = "Movement agrees; source periods overlap"
+            elif not payload.capture_verified:
+                status = "Movement agrees; source capture incomplete"
+            else:
+                status = "Movement agrees; reconciliation still pending"
+            result.append(
+                StatementJournalComparison(
+                    section.account_id,
+                    section.account_name,
+                    account_kinds[section.account_id],
+                    section.source_sha256,
+                    section.period_start,
+                    section.period_end,
+                    printed_change,
+                    source_change,
+                    journal_change,
+                    difference,
+                    len(activity),
+                    unallocated_rows,
+                    unallocated_magnitude,
+                    allocations_outside_period,
+                    outside_postings,
+                    status,
+                )
+            )
+        return tuple(result)
 
     def opening_source_reviews(self, account_id: str) -> tuple[OpeningSourceReview, ...]:
         """Return the latest append-only assertion for each source on an account."""

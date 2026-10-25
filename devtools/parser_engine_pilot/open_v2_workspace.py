@@ -18,8 +18,9 @@ from parsetrail.core.v2_profile_store import FinancialAccount, V2ProfileStore
 from parsetrail.core.v2_synchrony_source_output import from_synchrony_table
 from parsetrail.core.v2_table_bank_source_output import from_anchored_bank
 from parsetrail.core.v2_workspace import V2Workspace
+from parsetrail.gui.v2_statement_coverage import V2StatementCoverageDialog
 from parsetrail.gui.v2_workspace_window import V2WorkspaceWindow
-from PySide6.QtWidgets import QApplication, QFormLayout, QLineEdit
+from PySide6.QtWidgets import QApplication, QFormLayout, QLineEdit, QTabWidget
 from scripts.v2_catalog_release import signed_catalog_bytes
 
 from devtools.parser_engine_pilot.citi_authoring import DEFINITION_BYTES as RECENT_CITI_DEFINITION
@@ -52,7 +53,8 @@ RECENT_CITI_SOURCE = b"%PDF-recent-citi-synthetic"
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--demo", action="store_true", required=True)
-    parser.parse_args(argv)
+    parser.add_argument("--comparison", action="store_true", help="Open a prefilled statement journal comparison")
+    args = parser.parse_args(argv)
     app = QApplication.instance() or QApplication([])
     with tempfile.TemporaryDirectory(prefix="parsetrail-v2-workspace-") as temporary:
         root = Path(temporary)
@@ -137,12 +139,8 @@ def main(argv: list[str] | None = None) -> int:
                 from_citi(recent, RECENT_CITI_DEFINITION),
                 suffix=".pdf",
             )
-            store.import_source(
-                CARD_SOURCE,
-                CARD_DEFINITION,
-                from_synchrony_table(CARD_DEFINITION, *card_channels()),
-                suffix=".pdf",
-            )
+            card_evidence = from_synchrony_table(CARD_DEFINITION, *card_channels())
+            store.import_source(CARD_SOURCE, CARD_DEFINITION, card_evidence, suffix=".pdf")
             bank_evidence = from_anchored_bank(BANK_DEFINITION, *bank_channels(definition=BANK_DEFINITION, tail=True))
             store.import_source(BANK_SOURCE, BANK_DEFINITION, bank_evidence, suffix=".pdf")
             store.add_financial_account(FinancialAccount("loan-a", "Loan A", "liability", "mohela"))
@@ -156,6 +154,28 @@ def main(argv: list[str] | None = None) -> int:
             store.add_category_account("category:cash-income", "Demo income", "income")
             store.add_category_account("category:other-income", "Other income", "income")
             store.set_category_budget_rate("category:food", date(2026, 10, 1), 10_000)
+            if args.comparison:
+                bank_account = bank_evidence.payload.accounts[0]
+                store.bind_source_account(
+                    bank_evidence.source_sha256,
+                    bank_account.source_identity,
+                    bank_account.source_identity_form,
+                    "savings-a",
+                )
+                interest, withdrawal = bank_account.rows
+                store.post_reviewed_cash_category(
+                    interest.row_id, "category:cash-income", reason="Disposable reviewed interest"
+                )
+                store.post_reviewed_cash_category(
+                    withdrawal.row_id, "category:travel", reason="Disposable reviewed withdrawal"
+                )
+                card_account = card_evidence.payload.accounts[0]
+                store.bind_source_account(
+                    card_evidence.source_sha256,
+                    card_account.source_identity,
+                    card_account.source_identity_form,
+                    "card-a",
+                )
             for evidence in (citi_evidence, citi_overlap):
                 account = evidence.payload.accounts[0]
                 store.bind_source_account(
@@ -194,6 +214,15 @@ def main(argv: list[str] | None = None) -> int:
             demo_paths.addRow(label, path_field)
         window.centralWidget().layout().addLayout(demo_paths)
         window.show()
+        if args.comparison:
+            window.status.setText(
+                "Disposable Journal comparison sample: Savings A has reviewed source movements; "
+                "Card A remains pending. The separate Statement coverage window is open on Journal comparison."
+            )
+            comparison = V2StatementCoverageDialog(workspace.profile_path, window)
+            comparison.findChild(QTabWidget).setCurrentIndex(2)
+            comparison.show()
+            window._comparison_preview = comparison
         return app.exec()
 
 

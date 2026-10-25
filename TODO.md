@@ -610,6 +610,16 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   The owner first saw an empty panel in another profile. The disposable preview
   contained three pairs; the panel now displays its profile path and explains
   an empty result, so a different or incompletely bound profile is distinguishable.
+  A read-only Journal comparison tab now compares each bound statement's observed
+  account-total change and activity sum with reviewed journal movement in the
+  saved period. It counts unallocated row remainders by absolute amount,
+  allocations dated outside the period and other financial postings. Equal
+  movement is explicitly short of reconciliation or coverage certification.
+  Synthetic service and offscreen dialog tests pass; native acceptance is open.
+  The existing disposable workspace launcher accepts `--demo --comparison` and
+  opens the comparison tab with reviewed Savings A and pending Card A rows. The
+  first sandbox-launched preview was not visible on the owner's desktop, so use
+  the owner-launched demo command for this walkthrough.
   A read-only signed-catalog scan routed all 956 PDFs in the two successful
   archives, then parsed the six bank families: 315 statements and 14,275 rows
   met the structural cash-review prerequisites before account binding, with
@@ -623,7 +633,7 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   decision without a journal. Earlier financial postings block an opening,
   exact retries are idempotent, and later source-review changes mark the
   decision stale without rewriting it. Synthetic service and offscreen dialog
-  tests pass; native opening review acceptance is open. Disposable pilot profiles
+  tests pass; the owner accepted native opening review. Disposable pilot profiles
   from revision 8 are recreated, not migrated.
   A first read-only earliest-opening inventory now examines explicitly bound
   statement accounts in the same 2.0 store. Tied earliest sources must agree on
