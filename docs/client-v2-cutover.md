@@ -273,6 +273,15 @@ Fidelity HSA (59), Fidelity 401(k) (94), and Vanguard (10) retained every 1.x
 dated row as matching V2 source facts, while V2 marked printed period totals
 as non-activity evidence. This conservative role change awaits separate
 investment and HSA accounting decisions; it is not a missing-row result.
+Further read-only checks passed both Happen PDFs, all five Chase PDFs and the
+five newer LendingClub savings PDFs on source facts. Signed routing separated
+seven older LendingClub table PDFs sharing the filename prefix. Chase now
+records a passing printed balance equation on all five, while page capture
+remains unverified. HealthEquity cash matched 53 of 60 statements directly;
+the other seven had blank printed descriptions that 1.x labeled “Interest”
+and V2 leaves unknown, with dates and monetary facts preserved. Capital One
+Auto's 26 direct-parity differences reflect legacy synthetic origination and
+reconstructed opening values, which V2 does not adopt as observed evidence.
 That full replay used the older LendingClub and middle Citi table definitions
 at revision 1. Their later revision 2 declarations were rechecked on all seven
 and eight matching PDFs respectively, retaining 18 and 323 activity rows and

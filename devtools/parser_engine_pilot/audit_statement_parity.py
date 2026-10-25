@@ -91,7 +91,17 @@ def compare(source: bytes, *, registry, definition: bytes, legacy_parser_id: str
     if old_balances != new_balances:
         reasons.append("opening_closing_values")
     if not payload.independent_balance_verified:
-        reasons.append("balance_equation_unverified")
+        arithmetic_passes = all(
+            account.balance_scope == "account_total"
+            and account.opening is not None
+            and account.closing is not None
+            and account.opening.provenance == "observed"
+            and account.closing.provenance == "observed"
+            and all(row.amount.provenance == "observed" for row in account.rows)
+            and account.opening.minor + sum(row.amount.minor for row in account.rows) == account.closing.minor
+            for account in payload.accounts
+        )
+        reasons.append("equation_passes_but_unverified" if arithmetic_passes else "balance_equation_unverified")
     return tuple(reasons)
 
 

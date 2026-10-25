@@ -125,7 +125,7 @@ def from_card(evidence: CardStatementEvidence, lines: PDFLineEvidence) -> Source
         ),
         dispositions=dispositions,
         capture_verified=False,
-        independent_balance_verified=False,
+        independent_balance_verified=evidence.printed_balance_equation_passed,
     )
     return SourceEvidence(
         schema_version=2,

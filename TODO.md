@@ -134,6 +134,15 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   source facts. Fidelity HSA (59), Fidelity 401(k) (94), and Vanguard (10) retain
   all 1.x dated rows with matching source facts, but V2 marks printed period
   totals as non-activity. Investment/HSA posting is still undecided.
+  October 25 checks also passed Happen (2), Chase (5), and the five newer
+  LendingClub savings PDFs on source facts; signed routing separated seven
+  older table-layout LendingClub PDFs sharing the filename prefix. Chase now
+  records its independently passing printed balance equation while page
+  capture stays unverified. HealthEquity matched 53 of 60 directly; seven
+  blank source descriptions were labeled “Interest” by 1.x and stay unknown
+  in V2, with monetary facts unchanged. Capital One Auto's 26 direct-parity
+  failures reflect legacy synthetic origination and reconstructed openings;
+  V2 keeps the opening unknown pending accounting review.
   Inventory all current parsers, archive layouts,
   repeated extraction/normalization/checks, source provenance, developer tools and
   release coupling. Produce a family/fixture matrix and explicit custom-operation needs.
@@ -237,8 +246,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   source hashes. Full capture and native admission remain open.
   The finite Chase line pilot now maps into the shared V2 evidence envelope;
   the exact checked-in definition passed the bounded path on five archive PDFs
-  (139 rows, 99 dated auxiliary dispositions) with unchanged hashes. Capture,
-  signed routing and Intel Mac worker acceptance remain open.
+  (139 rows, 99 dated auxiliary dispositions) with unchanged hashes. Full-page
+  capture and Intel Mac worker acceptance remain open; signed routing admits this
+  family. Its printed equation passes on all five archived statements, while
+  the source-date proxy and incomplete page capture remain visible.
   The finite Happen savings line operation now matches both referenced archive
   statements on printed endpoints and all eight rows, including running
   balances. Bounded strict evidence reopened in a temporary profile with 11

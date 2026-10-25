@@ -129,7 +129,7 @@ class CardStatementEvidence:
     rows: tuple[CardRow, ...]
     auxiliary_lines: tuple[AuxiliaryLine, ...]
     coverage_verified: Literal[False]
-    balance_reconciled: Literal[False]
+    printed_balance_equation_passed: bool
 
 
 def load_definition(data: bytes) -> tuple[CardDefinition, str]:
@@ -285,6 +285,8 @@ def parse_card_lines(
                 source_sign,
             )
         )
+    opening_minor = -_money(opening["amount"], summary=True, location=opening_line)
+    closing_minor = -_money(closing["amount"], summary=True, location=closing_line)
     return CardStatementEvidence(
         output_schema_version=1,
         source_sha256=lines.source_sha256,
@@ -297,14 +299,11 @@ def parse_card_lines(
         account_identity=_field(account["number"], account["number"], "printed", account_line),
         period_start=_field(period["start"], start.isoformat(), "printed", period_line),
         period_end=_field(period["end"], end.isoformat(), "printed", period_line),
-        opening_minor=_field(
-            opening["amount"], -_money(opening["amount"], summary=True, location=opening_line), "printed", opening_line
-        ),
-        closing_minor=_field(
-            closing["amount"], -_money(closing["amount"], summary=True, location=closing_line), "printed", closing_line
-        ),
+        opening_minor=_field(opening["amount"], opening_minor, "printed", opening_line),
+        closing_minor=_field(closing["amount"], closing_minor, "printed", closing_line),
         rows=tuple(rows),
         auxiliary_lines=tuple(auxiliaries),
         coverage_verified=False,
-        balance_reconciled=False,
+        printed_balance_equation_passed=opening_minor + sum(int(row.amount.normalized) for row in rows)
+        == closing_minor,
     )

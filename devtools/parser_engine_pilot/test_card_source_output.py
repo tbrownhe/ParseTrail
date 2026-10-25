@@ -24,7 +24,16 @@ def test_card_statement_round_trips_with_printed_and_derived_provenance() -> Non
     assert output.payload.accounts[0].rows[0].fragments[0].raw_values[0].startswith("03/15")
     assert output.payload.dispositions[0].code == "dated_auxiliary_uninterpreted"
     assert output.payload.capture_verified is False
+    assert output.payload.independent_balance_verified is True
+
+
+def test_card_statement_keeps_mismatched_printed_equation_unverified() -> None:
+    changed = pages()
+    changed[0] = changed[0].replace("New Balance $30.00", "New Balance $31.00")
+    lines = page_lines(b"%PDF-synthetic", changed, extraction_library="synthetic-pdf-1")
+    output = from_card(parse_card_lines(DEFINITION, lines), lines)
     assert output.payload.independent_balance_verified is False
+    assert output.payload.capture_verified is False
 
 
 def test_card_adapter_refuses_changed_source_lines() -> None:

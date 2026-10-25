@@ -23,17 +23,17 @@ output/behavior; it does not imply full private-archive regression coverage.
 | Parser ID (source filename without `.py`) | Source version | Family/layout | Current targeted evidence | Pilot operation or gap |
 | --- | --- | --- | --- | --- |
 | `csv_mohela_202411` | 0.2.1 | Life-of-loan account-history CSV | Two authorized account-history files, 78 source rows; one detailed export, 299 rows | Separate 2.0 definitions retain detailed loan identities or explicitly unknown account identity; neither invents statement endpoints. |
-| `pdf_capitaloneauto_202402` | 0.2.2 | Auto loan PDF with payment components | Accounting and balance-evidence tests | Preserve principal/interest and printed principal; distinguish origination and missing activity. |
-| `pdf_chasecc_202602` | 0.1.0 | Section/line credit-card PDF | Chase synthetic tests | Simple card pilot, section boundaries, fee/payment rows and date handling. |
+| `pdf_capitaloneauto_202402` | 0.2.2 | Auto loan PDF with payment components | All 26 archive PDFs compared read-only with 1.x | Legacy synthetic origination and reconstructed opening prevent direct parity; V2 keeps these unknown pending accounting review. |
+| `pdf_chasecc_202602` | 0.1.0 | Section/line credit-card PDF | All five archive PDFs pass read-only source-fact parity | Printed balance equations now pass independently; dated auxiliary lines and page capture remain visible limits. |
 | `pdf_citicc_201505` | 0.3.1 | Older Citi line credit-card PDF | Finite V2 pilot and synthetic continuation tests | All 135 routed archive sources pass 1,740-row and printed-balance parity; complete page capture remains open. |
 | `pdf_citicc_202506` | 0.3.1 | Citi table credit-card PDF | Generic anchored-table pilot and synthetic refusal tests | Eight routed archive PDFs pass 323-row and printed-balance parity; all 1,311 raw table rows are used or located as dispositions, including 21 classified monetary tails. Full page capture remains open. |
 | `pdf_citicc_202511` | 0.4.0 | Citi table plus text/fee recovery PDF | Missing-table-row and multiline-fee tests | Dynamic headers; compare table/text occurrences without double counting. |
 | `pdf_fidelity401k_201810` | 0.2.1 | Retirement PDF, wrapped account labels | All 94 archive PDFs compared read-only with 1.x | The old dated rows match V2 source facts when period-summary rows are included; V2 marks them non-activity. Investment posting remains undecided. |
 | `pdf_fidelityhsa_202001` | 0.2.0 | HSA line PDF | All 59 archive PDFs compared read-only with 1.x | Account identity and printed endpoints match; the old dated rows match V2 when non-activity period summaries are included. HSA accounting remains undecided. |
-| `pdf_happenbank_202606` | 0.1.0 | Savings line PDF | Savings-layout routing/parser test | Printed balances and line activity; distinguish from older LendingClub layout. |
-| `pdf_hehsa_201810` | 0.2.1 | HealthEquity cash and continuation PDF | Continuation, boundary and running-balance tests | Continuation pilot and independent printed cash checks; retain unresolved investment scope. |
+| `pdf_happenbank_202606` | 0.1.0 | Savings line PDF | Both archive PDFs pass read-only source-fact parity | Printed balances and line activity match; distinguish from older LendingClub layout. |
+| `pdf_hehsa_201810` | 0.2.1 | HealthEquity cash and continuation PDF | All 60 archive PDFs compared read-only with 1.x | 53 match directly; seven source rows have no printed description, where 1.x substituted “Interest” and V2 keeps unknown. Financial facts and independent cash checks match. |
 | `pdf_lendingclublus_202506` | 0.2.0 | Older savings table PDF | Finite V2 table pilot and synthetic refusal tests | All seven routed archive PDFs pass 18-row, running-balance and summary parity; 28 monetary tail rows now have declared, located dispositions. Full-page capture remains open. |
-| `pdf_lendingclubsavings_202601` | 0.1.1 | Savings line PDF | Savings/balance-evidence tests | Printed summary and row balances; reject truncated tail. |
+| `pdf_lendingclubsavings_202601` | 0.1.1 | Savings line PDF | All five routed line-layout archive PDFs pass read-only source-fact parity | The shared filename prefix also contains seven older table-layout PDFs; signed routing separates them. |
 | `pdf_occubank_201409` | 0.2.0 | Multi-account bank PDF | Finite V2 pilot and synthetic refusal tests | All 113 archived sources pass two-account row and running-balance parity; 78 periods use bounded first-page annotations. Other account sections remain outside capture. |
 | `pdf_occucc_201904` | 0.2.0 | Credit-card line PDF | Finite V2 pilot and synthetic refusal tests | All 32 archived sources pass accepted-row and printed-balance parity; header interest is a separate located charge. Complete page capture remains open. |
 | `pdf_synchrony-amzncc_202501` | 0.3.0 | Store-card table PDF | Ten authorized PDFs outside the imported archive; 97 accepted rows | Declared page-top anchored geometry, single-date card evidence and shared continuation; four pre-period activity dates stay unposted. |
@@ -69,6 +69,17 @@ rows match the complete V2 source rows, but V2 classifies printed period totals
 as non-activity; the 1.x activity-only comparison therefore intentionally fails.
 These checks do not certify full-page capture, source-period continuity or
 ledger interpretation.
+Further October 25 comparisons found direct source-fact parity on Happen (2),
+Chase (5), and the five newer LendingClub savings PDFs. The latter share a
+filename prefix with seven older table PDFs; all twelve were recognized by
+the appropriate signed route. The Chase line parser now computes the printed
+balance equation from observed endpoints and rows. Its five archive equations
+passed; capture remains unverified. HealthEquity cash matched directly on 53
+of 60 PDFs. The other seven matched date, amount, account identity, running
+and endpoint balances, but their printed descriptions were blank: 1.x supplied
+“Interest” while V2 retains an unknown description. All 26 Capital One Auto
+PDFs show the known synthetic-origination/opening difference between 1.x and
+V2; no invented opening was added for parity.
 
 An authorized closed-copy replay subsequently parsed every referenced archive
 source with current checkout code; all resulting account statements retained

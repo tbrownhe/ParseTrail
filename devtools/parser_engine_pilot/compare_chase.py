@@ -50,7 +50,8 @@ def compare(source: bytes, definition: bytes) -> dict[str, bool]:
         == (to_minor_units(account.start_balance), to_minor_units(account.end_balance)),
         "rows_equal": observed_rows == expected_rows,
         "dated_lines_dispositioned": dated_lines == len(pilot.rows) + len(pilot.auxiliary_lines),
-        "uncertainty_retained": pilot.coverage_verified is False and pilot.balance_reconciled is False,
+        "capture_uncertainty_retained": pilot.coverage_verified is False,
+        "printed_balance_equation_passed": pilot.printed_balance_equation_passed,
     }
 
 

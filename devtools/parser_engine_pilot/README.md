@@ -73,9 +73,11 @@ keeps their page/line locations; records the source sign before liability
 normalization; and labels transaction year and clamped posting date as derived.
 Dated three-letter detail lines are retained as uninterpreted auxiliary evidence.
 Any other unmatched dated line, duplicate printed field or oversized candidate
-fails the whole parse. Parsing checks cancellation per line. Coverage and balance
-reconciliation remain false; the auxiliary details authorize no conversion or
-posting.
+fails the whole parse. Parsing checks cancellation per line. The parser now
+checks the printed opening plus observed rows against the printed closing;
+all five archived equations pass. A synthetic mismatch remains unverified.
+Full-page capture stays false, and auxiliary details authorize no conversion
+or posting.
 
 `card_source_output.py` now maps that finite Chase result into the shared strict
 V2 statement envelope. The bounded source pipeline admits only the exact checked
@@ -83,8 +85,8 @@ in Chase pilot definition, retains each printed balance and row line, marks
 year/posting proxies as derived, and carries dated auxiliary lines as located
 dispositions. In a read-only pass, all five authorized Chase archive PDFs
 produced 139 rows and 99 auxiliary dispositions; source hashes stayed unchanged.
-Capture remains false, and this is still a development pilot without signed
-catalog routing or Intel Mac native worker acceptance.
+Capture remains false. Signed-catalog routing now admits this development
+pilot; Intel Mac native worker acceptance remains open.
 
 `savings_lines.py` adds a strict finite PDF line operation for the Happen Bank
 LevelUp savings layout, under
@@ -738,3 +740,10 @@ Fidelity HSA (59), Fidelity 401(k) (94), and Vanguard (10) reported
 `legacy_rows_now_nonactivity` because their 1.x dated rows equal the complete
 V2 source rows while V2 treats printed period totals as non-activity. The audit
 reports that distinction rather than calling it an extraction loss.
+Happen (2), Chase (5), and the five newer LendingClub savings PDFs also passed
+source-fact parity. A shared `LEND-HYSA` filename prefix contains seven older
+table-layout PDFs; their different signed route is reported rather than parsed
+under the line declaration. HealthEquity cash had seven blank printed
+descriptions where 1.x supplied “Interest”; V2 keeps them unknown. Capital One
+Auto retains its known synthetic-origination and opening differences, so this
+audit does not label those 26 files as direct parity.
