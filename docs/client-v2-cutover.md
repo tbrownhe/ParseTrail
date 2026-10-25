@@ -593,7 +593,7 @@ Service and offscreen UI checks pass; the owner accepted the native tab. An
 immediate contract check found that all current real parsers leave page capture
 unverified, while the earlier accepted reconciliation contract treats capture
 as a separate limitation. The check now shows incomplete capture without
-blocking exact balance reconciliation; native wording recheck is pending.
+blocking exact balance reconciliation; the owner accepted the revised native wording.
 
 A first read-only Spending summary in the 2.0 workspace uses reviewed expense
 journal postings for a selected half-open date range. Reversal and replacement

@@ -646,7 +646,8 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   acceptance of this tab passed. An immediate contract check then corrected the
   initial page-capture gate: every current real parser reports capture unverified,
   while the accepted reconciliation contract keeps that limitation visible and
-  independent of exact balance reconciliation. Native wording recheck is pending.
+  independent of exact balance reconciliation. The owner accepted the revised
+  native wording.
   Revision 9 disposable pilot profiles are recreated, not migrated.
   A read-only signed-catalog scan routed all 956 PDFs in the two successful
   archives, then parsed the six bank families: 315 statements and 14,275 rows
