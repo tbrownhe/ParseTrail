@@ -521,8 +521,15 @@ The same 2.0 store now offers a read-only earliest-opening inventory for
 explicitly bound statement accounts. It keeps all tied earliest sources,
 rejects conflicting or unknown printed openings and an unknown period start,
 and leaves source timing unreviewed even when the printed amounts agree. This
-is not an opening journal or an account balance; review and posting controls
-remain future work. Synthetic reopen tests pass.
+is not an opening journal or an account balance. Revision 9 adds a separate
+append-only source review and opening decision to the same store. Every tied
+earliest source needs a reported balance and confirmed inclusive-period timing
+with a source reference. A nonzero decision posts at the prior-day cutoff
+through opening equity; zero records no journal. Earlier financial postings
+block confirmation, and a later source assertion marks the saved decision
+stale. Synthetic service and offscreen GUI tests pass; native review acceptance
+is open. Earlier disposable pilot profiles are recreated. Synthetic reopen
+tests pass.
 A read-only Statement coverage dialog now groups explicitly bound statement
 sections by financial account. It shows source periods, overlap and calendar-gap
 hints among known saved periods, opening and closing value provenance, statement

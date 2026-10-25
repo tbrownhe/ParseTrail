@@ -22,7 +22,7 @@ legacy window has been replaced. **Pending** means the owner has not approved a
 | Accounts → Appreciation Calculator | No 2.0 counterpart. | Pending decision; investment values are not invented from activity. |
 | Statements → Import All | Multi-file and shallow folder batch import are available and accepted on native Windows. | Archive recovery and daily-workflow acceptance with real data remain pending. |
 | Statements → Pick File for Import | Selected CSV/PDF import through the verified catalog is available. | Supported-family rollout and native acceptance remain release work. |
-| Statements → Completeness Grid | Read-only statement coverage now shows explicitly bound periods, calendar overlap/gap hints, printed balances and evidence limits; the owner accepted the native interaction. | Reconciliation and missing-statement conclusions remain pending. |
+| Statements → Completeness Grid | Read-only statement coverage shows bound periods, overlap/gap hints and printed balances. A separate reviewed-opening dialog records source timing and can confirm a printed opening through equity. | Native opening review acceptance; reconciliation and missing-statement conclusions remain pending. |
 | Statements → Correct Discrepancies | Evidence preview and explicit journal correction exist for narrow cash activity. | General source/balance discrepancy review pending. |
 | Statements → Send for Plugin Development | No 2.0 action. | Server submission is pending decision; preserve local source files and evidence. |
 | Categories → Category Manager | Fresh category names/kinds and effective-month budgets are available. | Additional editing and hierarchy behavior, if needed, pending. |
@@ -37,7 +37,7 @@ legacy window has been replaced. **Pending** means the owner has not approved a
 | Help → About | No 2.0 counterpart in the pilot shell. | Release metadata presentation pending. |
 | Help → Getting Started | Synthetic demo and cutover documentation exist. | Final onboarding pending. |
 | Help → Check for Updates | No 2.0 counterpart in the pilot shell. | Client/catalog update workflow pending; no server change here. |
-| Balance History dashboard tab | Account movement shows reviewed changes with unknown opening positions visible. | Reconciled balances and balance history pending. |
+| Balance History dashboard tab | Account movement shows reviewed changes and confirmed source-backed openings when available. | Reconciled balances and balance history pending. |
 | Category Spending dashboard tab | Reviewed Spending report shows category totals and incomplete scope. | Chart/drill-down decision pending. |
 | Budgets dashboard tab | Monthly budgets table compares effective targets with reviewed spending. | Chart/variance behavior beyond the current table pending. |
 

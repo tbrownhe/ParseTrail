@@ -114,6 +114,7 @@ class _OpeningModel(QAbstractTableModel):
         "non_account_total_scope": "Not an account-total balance",
         "printed_opening_unavailable": "Printed opening unavailable",
         "conflicting_earliest_openings": "Conflicting printed openings",
+        "duplicate_earliest_source_sections": "Multiple earliest sections from one source",
         "source_timing_unreviewed": "Source timing unreviewed",
     }
 
@@ -202,7 +203,8 @@ class V2StatementCoverageDialog(QDialog):
         opening_scope = QLabel(
             "A candidate needs matching observed account-total openings across all tied earliest sources. "
             "Asset values and liability amounts owed are shown in their natural direction. "
-            "Source timing is unreviewed; no opening is posted here. Inspect source details in Saved periods."
+            "Source timing needs explicit review in Review openings. This tab is a read-only source inventory; "
+            "inspect details in Saved periods and use Review openings to record a decision."
         )
         opening_scope.setWordWrap(True)
         opening_layout.addWidget(opening_scope)

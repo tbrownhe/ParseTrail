@@ -615,12 +615,22 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   met the structural cash-review prerequisites before account binding, with
   no routing or selected-family parsing failures. This does not decide source
   overlap, income/expense classification or reconciliation.
+  Pre-release schema revision 9 adds append-only source-opening reviews and
+  opening decisions to the same 2.0 store. An account-total printed opening is
+  postable only after each tied earliest source has an explicit reported-origin
+  and inclusive-period timing assertion with a source reference. A nonzero
+  opening posts at the prior-day cutoff through opening equity; zero records a
+  decision without a journal. Earlier financial postings block an opening,
+  exact retries are idempotent, and later source-review changes mark the
+  decision stale without rewriting it. Synthetic service and offscreen dialog
+  tests pass; native opening review acceptance is open. Disposable pilot profiles
+  from revision 8 are recreated, not migrated.
   A first read-only earliest-opening inventory now examines explicitly bound
   statement accounts in the same 2.0 store. Tied earliest sources must agree on
   an observed account-total opening; conflicting balances and unknown starts
   remain blockers. Even an agreed printed amount still needs source-timing
-  review. No opening decision, journal or account balance is created; a GUI and
-  posting workflow remain open.
+  review. The inventory itself makes no opening decision; the separate reviewed
+  workflow now controls journal posting. Broader reconciliation remains open.
   A read-only Statement coverage dialog now lists explicitly bound statement
   sections by financial account, source period, printed balance provenance,
   balance-equation and page-capture status. It flags overlaps, calendar gaps and

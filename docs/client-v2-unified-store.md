@@ -73,3 +73,13 @@ is a valid target. These planning values do not post journal entries or infer
 transaction categories. The category dialog edits and displays this history.
 As with other pilot schema revisions, earlier disposable profiles are refused
 and recreated; there is no migration path.
+
+Pre-release revision 9 keeps source-opening reviews and opening decisions in
+this same database. Reviews are append-only assertions about printed origin,
+inclusive-period timing and a source reference; they do not change evidence.
+The latest review of every tied earliest source must support a confirmed
+opening. A nonzero position posts through an internal opening-equity account
+at the prior-day cutoff; zero saves a decision without a journal. A changed
+source review marks the decision stale and calls for later correction rather
+than rewriting the original entry. Revision 8 pilot profiles are refused and
+recreated.

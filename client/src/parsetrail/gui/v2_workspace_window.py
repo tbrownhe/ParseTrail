@@ -44,6 +44,7 @@ from parsetrail.gui.v2_card_purchase_review import V2CardPurchaseReview
 from parsetrail.gui.v2_cash_activity_review import V2CashActivityReview
 from parsetrail.gui.v2_categories import V2CategoryDialog
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
+from parsetrail.gui.v2_opening_review import V2OpeningReview
 from parsetrail.gui.v2_path_notice import show_data_locations, show_path_notice
 from parsetrail.gui.v2_reviewed_reports import V2ReviewedReportsDialog
 from parsetrail.gui.v2_source_account_review import V2SourceAccountReview
@@ -227,6 +228,9 @@ class V2WorkspaceWindow(QMainWindow):
         self.categories_button = QPushButton("Categories")
         self.categories_button.clicked.connect(self._edit_categories)
         account_controls.addWidget(self.categories_button)
+        self.openings_button = QPushButton("Review openings")
+        self.openings_button.clicked.connect(self._review_openings)
+        account_controls.addWidget(self.openings_button)
         account_controls.addStretch()
         layout.addLayout(account_controls)
         self.status = QLabel()
@@ -616,6 +620,9 @@ class V2WorkspaceWindow(QMainWindow):
 
     def _edit_categories(self) -> None:
         V2CategoryDialog(self.workspace.profile_path, self).exec()
+
+    def _review_openings(self) -> None:
+        V2OpeningReview(self.workspace, self).exec()
 
     def closeEvent(self, event) -> None:
         if self.import_worker is not None:
