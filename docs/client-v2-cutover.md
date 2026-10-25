@@ -264,6 +264,15 @@ into one disposable 2.0 profile: 957 new imports, zero retries or failures.
 Each import saved and reloaded its evidence, and the complete profile reopened
 read-only with 957 sources. The temporary profile was removed. This checks
 cross-source storage and schema integrity, not ledger posting or accounting.
+An October 25 read-only comparison of all 29 Wells Fargo business archive PDFs
+matched the current 1.x parser and V2 evidence on account identities, 225 dated
+activity rows and normalized descriptions, printed endpoints, and independent
+balance equations. Complete page capture and ledger interpretation remain open.
+The same bounded read-only check passed all 97 US Bank REI and 37 Yamaha PDFs.
+Fidelity HSA (59), Fidelity 401(k) (94), and Vanguard (10) retained every 1.x
+dated row as matching V2 source facts, while V2 marked printed period totals
+as non-activity evidence. This conservative role change awaits separate
+investment and HSA accounting decisions; it is not a missing-row result.
 That full replay used the older LendingClub and middle Citi table definitions
 at revision 1. Their later revision 2 declarations were rechecked on all seven
 and eight matching PDFs respectively, retaining 18 and 323 activity rows and
@@ -479,7 +488,8 @@ hints among known saved periods, opening and closing value provenance, statement
 balance-equation status and page-capture status. Unknown starts remain visible.
 It makes no missing-activity, reconciliation, opening-posting or account-balance
 claim. Double-clicking a row opens its immutable evidence. Synthetic store and
-offscreen GUI checks pass; native Windows acceptance is open.
+offscreen GUI checks pass; the owner confirmed the native Windows view and
+double-click on October 25, 2026.
 
 A first read-only Spending summary in the 2.0 workspace uses reviewed expense
 journal postings for a selected half-open date range. Reversal and replacement

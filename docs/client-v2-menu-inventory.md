@@ -22,7 +22,7 @@ legacy window has been replaced. **Pending** means the owner has not approved a
 | Accounts → Appreciation Calculator | No 2.0 counterpart. | Pending decision; investment values are not invented from activity. |
 | Statements → Import All | Multi-file and shallow folder batch import are available and accepted on native Windows. | Archive recovery and daily-workflow acceptance with real data remain pending. |
 | Statements → Pick File for Import | Selected CSV/PDF import through the verified catalog is available. | Supported-family rollout and native acceptance remain release work. |
-| Statements → Completeness Grid | Read-only statement coverage now shows explicitly bound periods, calendar overlap/gap hints, printed balances and evidence limits. | Reconciliation and missing-statement conclusions remain pending; native coverage-view acceptance is open. |
+| Statements → Completeness Grid | Read-only statement coverage now shows explicitly bound periods, calendar overlap/gap hints, printed balances and evidence limits; the owner accepted the native interaction. | Reconciliation and missing-statement conclusions remain pending. |
 | Statements → Correct Discrepancies | Evidence preview and explicit journal correction exist for narrow cash activity. | General source/balance discrepancy review pending. |
 | Statements → Send for Plugin Development | No 2.0 action. | Server submission is pending decision; preserve local source files and evidence. |
 | Categories → Category Manager | Fresh category names/kinds and effective-month budgets are available. | Additional editing and hierarchy behavior, if needed, pending. |

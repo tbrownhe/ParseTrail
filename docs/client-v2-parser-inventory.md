@@ -28,8 +28,8 @@ output/behavior; it does not imply full private-archive regression coverage.
 | `pdf_citicc_201505` | 0.3.1 | Older Citi line credit-card PDF | Finite V2 pilot and synthetic continuation tests | All 135 routed archive sources pass 1,740-row and printed-balance parity; complete page capture remains open. |
 | `pdf_citicc_202506` | 0.3.1 | Citi table credit-card PDF | Generic anchored-table pilot and synthetic refusal tests | Eight routed archive PDFs pass 323-row and printed-balance parity; all 1,311 raw table rows are used or located as dispositions, including 21 classified monetary tails. Full page capture remains open. |
 | `pdf_citicc_202511` | 0.4.0 | Citi table plus text/fee recovery PDF | Missing-table-row and multiline-fee tests | Dynamic headers; compare table/text occurrences without double counting. |
-| `pdf_fidelity401k_201810` | 0.2.1 | Retirement PDF, wrapped account labels | Fidelity synthetic test | Multiple account identity/section handling and noncash activity scope. |
-| `pdf_fidelityhsa_202001` | 0.2.0 | HSA line PDF | No parser-specific test found | Archive fixture and identity/balance evidence required. |
+| `pdf_fidelity401k_201810` | 0.2.1 | Retirement PDF, wrapped account labels | All 94 archive PDFs compared read-only with 1.x | The old dated rows match V2 source facts when period-summary rows are included; V2 marks them non-activity. Investment posting remains undecided. |
+| `pdf_fidelityhsa_202001` | 0.2.0 | HSA line PDF | All 59 archive PDFs compared read-only with 1.x | Account identity and printed endpoints match; the old dated rows match V2 when non-activity period summaries are included. HSA accounting remains undecided. |
 | `pdf_happenbank_202606` | 0.1.0 | Savings line PDF | Savings-layout routing/parser test | Printed balances and line activity; distinguish from older LendingClub layout. |
 | `pdf_hehsa_201810` | 0.2.1 | HealthEquity cash and continuation PDF | Continuation, boundary and running-balance tests | Continuation pilot and independent printed cash checks; retain unresolved investment scope. |
 | `pdf_lendingclublus_202506` | 0.2.0 | Older savings table PDF | Finite V2 table pilot and synthetic refusal tests | All seven routed archive PDFs pass 18-row, running-balance and summary parity; 28 monetary tail rows now have declared, located dispositions. Full-page capture remains open. |
@@ -38,12 +38,12 @@ output/behavior; it does not imply full private-archive regression coverage.
 | `pdf_occucc_201904` | 0.2.0 | Credit-card line PDF | Finite V2 pilot and synthetic refusal tests | All 32 archived sources pass accepted-row and printed-balance parity; header interest is a separate located charge. Complete page capture remains open. |
 | `pdf_synchrony-amzncc_202501` | 0.3.0 | Store-card table PDF | Ten authorized PDFs outside the imported archive; 97 accepted rows | Declared page-top anchored geometry, single-date card evidence and shared continuation; four pre-period activity dates stay unposted. |
 | `pdf_transamerica_202104` | 0.2.0 | Retirement line PDF | Finite V2 period-summary pilot and synthetic refusal tests | All 12 routed archive PDFs pass 49-component printed-value parity; full page capture remains open. |
-| `pdf_usbankreicc_201405` | 0.2.0 | Credit-card line PDF | No parser-specific test found | Metadata/line extraction and row-boundary coverage. |
-| `pdf_vanguard_202210` | 0.2.0 | Retirement line PDF | No parser-specific test found | Quarterly period, account identity and activity semantics. |
-| `pdf_wfbankbus_202110` | 0.2.0 | Business bank dynamic table PDF | No parser-specific test found | Layout/table pilot: word coordinates create per-page table boundaries. |
+| `pdf_usbankreicc_201405` | 0.2.0 | Credit-card line PDF | All 97 archive PDFs pass read-only source-fact parity | Account identity, dated activity, descriptions, printed endpoints and balance equations match; page capture remains open. |
+| `pdf_vanguard_202210` | 0.2.0 | Retirement line PDF | All 10 archive PDFs compared read-only with 1.x | The old dated rows match V2 source facts when period-summary rows are included; V2 marks them non-activity. Investment posting remains undecided. |
+| `pdf_wfbankbus_202110` | 0.2.0 | Business bank dynamic table PDF | Read-only parity on all 29 routed archive PDFs | V2 retains account identity, 225 dated activity rows, descriptions and printed endpoints; complete page capture remains open. |
 | `pdf_wfbankper_202105` | 0.2.0 | Personal bank table PDF | Finite V2 table pilot and synthetic refusal tests | All 148 routed archive PDFs pass 6,618-row and printed-balance parity; full page capture remains open. |
 | `pdf_wfloanper_202306` | 0.2.1 | Personal-loan line PDF | Finite V2 source-allocation pilot and synthetic refusal tests | All 45 routed archive PDFs pass printed-principal parity; the 1.x 31-day period and synthetic origination rows are absent from V2 evidence. |
-| `pdf_yamahafin_202306` | 0.2.0 | Auto-loan line PDF | Loan-readiness tests reference it | Interest/principal evidence and printed endpoint checks. |
+| `pdf_yamahafin_202306` | 0.2.0 | Auto-loan line PDF | All 37 archive PDFs pass read-only source-fact parity | Account identity, dated activity, descriptions, printed endpoints and balance equations match; loan posting remains separate. |
 
 The matrix is a coverage map, not a claim that every source instance fits its
 family. A signed installed catalog can differ from this checkout's parser
@@ -58,6 +58,17 @@ a separate ten-source fixture. This result proves those files execute through
 the current bounded pipeline; it does not prove all-page capture or corrected
 legacy parity. A separate queued folder contains six bank transaction-export
 CSVs and 21 Amazon-related CSVs with no matching current CSV declaration.
+On October 25, bounded read-only comparisons selected Wells Fargo business,
+US Bank REI, Yamaha, Fidelity HSA, Fidelity 401(k), and Vanguard PDFs by their
+archive filename conventions and verified the signed V2 route on each. All
+29, 97, and 37 Wells business, US Bank, and Yamaha sources respectively matched
+the current 1.x parser on account identity, dated activity amount and normalized
+description, printed opening/closing values and independent balance equations.
+For all 59 Fidelity HSA, 94 Fidelity 401(k), and 10 Vanguard PDFs, the old dated
+rows match the complete V2 source rows, but V2 classifies printed period totals
+as non-activity; the 1.x activity-only comparison therefore intentionally fails.
+These checks do not certify full-page capture, source-period continuity or
+ledger interpretation.
 
 An authorized closed-copy replay subsequently parsed every referenced archive
 source with current checkout code; all resulting account statements retained

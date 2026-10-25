@@ -712,3 +712,29 @@ Use `--suffix .csv` for CSVs; the default is `.pdf`. An empty source set fails.
 The audit proves current routing and source-to-evidence execution, including
 source and declaration hash binding. It does not assert full-page capture,
 legacy row parity, ledger interpretation or production catalog trust.
+
+For one bounded statement family, `audit_statement_parity.py` compares
+the current 1.x parser with the signed V2 route and evidence on a bounded
+archive candidate set. It checks account identities, dated activity rows and
+normalized descriptions, printed endpoints and the independent balance
+equation. It prints counts only; optional source-level findings contain short
+hashes and reason codes in a private report outside this repository:
+
+```powershell
+client/.venv/Scripts/python.exe -m devtools.parser_engine_pilot.audit_statement_parity `
+  --archive C:\private\successful-archive `
+  --candidate-glob 'WFBUS-*.pdf' `
+  --v2-parser-id wells_business_table_pilot `
+  --legacy-parser-id pdf_wfbankbus_202110 `
+  --private-report "$env:TEMP\parsetrail-wf-business-parity.json"
+```
+
+The candidate filename convention narrows the scan; every candidate still
+must pass the signed route. All 29 archived candidates passed this comparison
+on October 25, 2026. Page capture, statement continuity and accounting remain
+separate gates.
+US Bank REI (97) and Yamaha (37) also passed the same source-fact comparison.
+Fidelity HSA (59), Fidelity 401(k) (94), and Vanguard (10) reported
+`legacy_rows_now_nonactivity` because their 1.x dated rows equal the complete
+V2 source rows while V2 treats printed period totals as non-activity. The audit
+reports that distinction rather than calling it an extraction loss.

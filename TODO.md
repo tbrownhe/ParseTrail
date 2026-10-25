@@ -126,6 +126,14 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   service into one disposable 2.0 profile, with zero failures; the complete
   profile reopened read-only with 957 saved sources before removal. Ledger
   posting and production-signed trust remain separate gates.
+  An October 25 read-only Wells Fargo business comparison matched all 29
+  archive PDFs on account identities, 225 dated activity rows and descriptions,
+  printed endpoints and independent balance equations. Full-page capture and
+  accounting acceptance remain open.
+  The same bounded comparison passed all 97 US Bank REI and 37 Yamaha PDFs on
+  source facts. Fidelity HSA (59), Fidelity 401(k) (94), and Vanguard (10) retain
+  all 1.x dated rows with matching source facts, but V2 marks printed period
+  totals as non-activity. Investment/HSA posting is still undecided.
   Inventory all current parsers, archive layouts,
   repeated extraction/normalization/checks, source provenance, developer tools and
   release coupling. Produce a family/fixture matrix and explicit custom-operation needs.
@@ -576,7 +584,8 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   balance-equation and page-capture status. It flags overlaps, calendar gaps and
   unknown starts among known saved periods without declaring missing activity
   or reconciliation. Double-click opens the immutable evidence. Synthetic
-  store and offscreen GUI checks pass; owner native acceptance is open.
+  store and offscreen GUI checks pass; the owner confirmed the native Windows
+  view and source-evidence double-click on October 25, 2026.
 - [ ] **V2-5a–b — Report cutover:** shared ledger spending/cash/balance/budget queries,
   then dashboard and export integration. A first read-only spending summary now
   nets reviewed expense postings, including reversal/replacement corrections,
