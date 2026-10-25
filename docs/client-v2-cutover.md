@@ -164,8 +164,9 @@ CSV/PDF files in a chosen folder, capped at 2,000 per batch. Each file takes the
 existing authenticated import path and stays pending review. A result dialog
 lists every selected file as imported, already saved, failed, cancelled or not
 attempted. Cancellation preserves completed imports and leaves later files
-untouched. Offscreen service and GUI checks pass; native Windows acceptance is
-still open.
+untouched. Offscreen service and GUI checks pass; the owner accepted the native
+Windows batch dialog and recent-Citi unclassified-text preview on October 24,
+2026. The owner expects the workflow to become clearer with real data.
 The XLSX adapter also runs in a fixed, bounded worker and matches the
 in-process synthetic evidence. It has no referenced archive workbook and
 still needs Intel Mac native checks before runtime admission. The shared table
@@ -472,6 +473,13 @@ rejects conflicting or unknown printed openings and an unknown period start,
 and leaves source timing unreviewed even when the printed amounts agree. This
 is not an opening journal or an account balance; review and posting controls
 remain future work. Synthetic reopen tests pass.
+A read-only Statement coverage dialog now groups explicitly bound statement
+sections by financial account. It shows source periods, overlap and calendar-gap
+hints among known saved periods, opening and closing value provenance, statement
+balance-equation status and page-capture status. Unknown starts remain visible.
+It makes no missing-activity, reconciliation, opening-posting or account-balance
+claim. Double-clicking a row opens its immutable evidence. Synthetic store and
+offscreen GUI checks pass; native Windows acceptance is open.
 
 A first read-only Spending summary in the 2.0 workspace uses reviewed expense
 journal postings for a selected half-open date range. Reversal and replacement

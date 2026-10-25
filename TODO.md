@@ -505,7 +505,8 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   or immediate files from a selected folder. Each uses the signed-catalog
   path and stays pending review. The result lists imported, already saved,
   failed, cancelled and not-attempted files; cancellation keeps completed
-  sources. Offscreen checks pass; native Windows acceptance is open. A further
+  sources. Offscreen checks pass; the owner accepted the native Windows batch
+  dialog and recent-Citi unclassified-text preview on October 24, 2026. A further
   slice stores reversible, explicit bindings
   for source-identified statement and export accounts, and offers separate
   review for printed identities and accountless rows. Offscreen tests pass;
@@ -570,6 +571,12 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   remain blockers. Even an agreed printed amount still needs source-timing
   review. No opening decision, journal or account balance is created; a GUI and
   posting workflow remain open.
+  A read-only Statement coverage dialog now lists explicitly bound statement
+  sections by financial account, source period, printed balance provenance,
+  balance-equation and page-capture status. It flags overlaps, calendar gaps and
+  unknown starts among known saved periods without declaring missing activity
+  or reconciliation. Double-click opens the immutable evidence. Synthetic
+  store and offscreen GUI checks pass; owner native acceptance is open.
 - [ ] **V2-5a–b — Report cutover:** shared ledger spending/cash/balance/budget queries,
   then dashboard and export integration. A first read-only spending summary now
   nets reviewed expense postings, including reversal/replacement corrections,

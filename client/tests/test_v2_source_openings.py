@@ -72,6 +72,14 @@ def test_earliest_bound_opening_preserves_conflicts_and_unknown_periods(tmp_path
         assert uncertain.earliest_period_start is None
         assert uncertain.printed_opening_minor is None
         assert uncertain.blockers == ("unknown_source_period", "source_timing_unreviewed")
+        coverage = store.statement_coverage()
+        assert [row.relation_to_known_periods for row in coverage] == [
+            "first_known",
+            "overlap",
+            "unknown_start",
+        ]
+        assert coverage[-1].period_start is None
+        assert coverage[-1].period_start_provenance == "unknown"
         assert store.connection.execute("SELECT COUNT(*) FROM JournalEntries").fetchone() == (0,)
     with V2ProfileStore.open(profile, read_only=True) as store:
         assert store.earliest_source_openings()[1] == uncertain

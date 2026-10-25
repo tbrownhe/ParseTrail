@@ -41,6 +41,7 @@ from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
 from parsetrail.gui.v2_path_notice import show_path_notice
 from parsetrail.gui.v2_reviewed_reports import V2ReviewedReportsDialog
 from parsetrail.gui.v2_source_account_review import V2SourceAccountReview
+from parsetrail.gui.v2_statement_coverage import V2StatementCoverageDialog
 
 
 class V2ImportWorker(QThread):
@@ -180,6 +181,9 @@ class V2WorkspaceWindow(QMainWindow):
         self.reports_button = QPushButton("Reviewed reports")
         self.reports_button.clicked.connect(self._open_reviewed_reports)
         controls.addWidget(self.reports_button)
+        self.coverage_button = QPushButton("Statement coverage")
+        self.coverage_button.clicked.connect(self._open_statement_coverage)
+        controls.addWidget(self.coverage_button)
         controls.addStretch()
         layout.addLayout(controls)
         account_controls = QHBoxLayout()
@@ -490,6 +494,9 @@ class V2WorkspaceWindow(QMainWindow):
 
     def _open_reviewed_reports(self) -> None:
         V2ReviewedReportsDialog(self.workspace.profile_path, self).exec()
+
+    def _open_statement_coverage(self) -> None:
+        V2StatementCoverageDialog(self.workspace.profile_path, self).exec()
 
     def _review_account(self) -> None:
         source_id = self._selected_source()

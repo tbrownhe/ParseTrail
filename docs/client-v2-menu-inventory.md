@@ -20,9 +20,9 @@ legacy window has been replaced. **Pending** means the owner has not approved a
 | Plugins → Troubleshoot Parsing | Saved evidence preview is available. | Parser diagnostics workflow pending. |
 | Accounts → Edit Accounts | Fresh financial-account creation and identity editing are available. | Closures, manual values and wider account review remain pending. |
 | Accounts → Appreciation Calculator | No 2.0 counterpart. | Pending decision; investment values are not invented from activity. |
-| Statements → Import All | Selected-file import is available. | Batch import and recovery pending. |
+| Statements → Import All | Multi-file and shallow folder batch import are available and accepted on native Windows. | Archive recovery and daily-workflow acceptance with real data remain pending. |
 | Statements → Pick File for Import | Selected CSV/PDF import through the verified catalog is available. | Supported-family rollout and native acceptance remain release work. |
-| Statements → Completeness Grid | Source overlap warning and incomplete allocation counts are available. | Statement-period coverage and reconciliation view pending. |
+| Statements → Completeness Grid | Read-only statement coverage now shows explicitly bound periods, calendar overlap/gap hints, printed balances and evidence limits. | Reconciliation and missing-statement conclusions remain pending; native coverage-view acceptance is open. |
 | Statements → Correct Discrepancies | Evidence preview and explicit journal correction exist for narrow cash activity. | General source/balance discrepancy review pending. |
 | Statements → Send for Plugin Development | No 2.0 action. | Server submission is pending decision; preserve local source files and evidence. |
 | Categories → Category Manager | Fresh category names/kinds and effective-month budgets are available. | Additional editing and hierarchy behavior, if needed, pending. |
@@ -76,7 +76,6 @@ cover the immediate reporting use. Server sign-out and source submission do
 not belong in the local-only client cutover; server publication has its own
 later gate. None of these omissions has owner approval yet.
 
-Three choices still affect implementation order: whether folder/batch import
-is needed for the first release, whether users need arbitrary manual journal
+Two choices still affect implementation order: whether users need arbitrary manual journal
 entries in addition to reviewed openings and values, and whether a local
 catalog-install action is sufficient until the separate server publication.

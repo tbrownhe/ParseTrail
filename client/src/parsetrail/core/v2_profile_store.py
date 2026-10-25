@@ -29,7 +29,13 @@ from parsetrail.core.ledger import (
     Posting,
     validate_entry,
 )
-from parsetrail.core.source_evidence import ActivityExportPayload, SourceEvidence, StatementAccount, StatementPayload
+from parsetrail.core.source_evidence import (
+    ActivityExportPayload,
+    MoneyValue,
+    SourceEvidence,
+    StatementAccount,
+    StatementPayload,
+)
 
 APPLICATION_ID = 0x50543230  # PT20
 SCHEMA_VERSION = 8
@@ -212,6 +218,24 @@ class EarliestSourceOpening:
     earliest_source_ids: tuple[str, ...]
     printed_opening_minor: int | None
     blockers: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class StatementCoverageRow:
+    account_id: str
+    account_name: str
+    source_sha256: str
+    parser_id: str
+    period_start: date | None
+    period_end: date
+    period_start_provenance: Literal["observed", "derived", "unknown"]
+    period_end_provenance: Literal["observed", "derived", "unknown"]
+    relation_to_known_periods: Literal["first_known", "adjacent", "overlap", "gap", "unknown_start"]
+    balance_scope: Literal["account_total", "cash_component", "principal_component"]
+    opening: MoneyValue | None
+    closing: MoneyValue | None
+    independent_balance_verified: bool
+    capture_verified: bool
 
 
 @dataclass(frozen=True)
@@ -1517,6 +1541,74 @@ class V2ProfileStore:
     def source_ids(self) -> tuple[str, ...]:
         """List saved imports in their original insertion order, newest first."""
         return tuple(row[0] for row in self.connection.execute("SELECT sha256 FROM Sources ORDER BY rowid DESC"))
+
+    def statement_coverage(self) -> tuple[StatementCoverageRow, ...]:
+        """Compare printed periods on explicitly bound statements, without certifying coverage."""
+        sections: dict[str, list[tuple[str, SourceEvidence, StatementPayload, StatementAccount]]] = {}
+        saved: dict[str, SourceEvidence] = {}
+        for source_id, identity, form, account_id in self.connection.execute(
+            "SELECT source_sha256,source_identity,source_identity_form,ledger_account_id "
+            "FROM SourceAccountBindings ORDER BY source_sha256,source_identity"
+        ):
+            evidence = saved.get(source_id)
+            if evidence is None:
+                evidence = self.load_import(source_id).evidence
+                saved[source_id] = evidence
+            payload = evidence.payload
+            if not isinstance(payload, StatementPayload):
+                continue
+            account = next(
+                (
+                    item
+                    for item in payload.accounts
+                    if (item.source_identity, item.source_identity_form) == (identity, form)
+                ),
+                None,
+            )
+            if account is None:
+                raise ProfileFormatError("coverage_bound_source_account_missing")
+            sections.setdefault(account_id, []).append((source_id, evidence, payload, account))
+        rows = []
+        for financial in self.financial_accounts():
+            bound = sorted(
+                sections.get(financial.id, ()),
+                key=lambda item: (item[2].start.iso or "9999-12-31", item[2].end.iso, item[0]),
+            )
+            latest_end: date | None = None
+            for source_id, evidence, payload, account in bound:
+                start = date.fromisoformat(payload.start.iso) if payload.start.iso is not None else None
+                end = date.fromisoformat(payload.end.iso)
+                if start is None:
+                    relation = "unknown_start"
+                elif latest_end is None:
+                    relation = "first_known"
+                elif start <= latest_end:
+                    relation = "overlap"
+                elif (start - latest_end).days > 1:
+                    relation = "gap"
+                else:
+                    relation = "adjacent"
+                if start is not None and (latest_end is None or end > latest_end):
+                    latest_end = end
+                rows.append(
+                    StatementCoverageRow(
+                        financial.id,
+                        financial.name,
+                        source_id,
+                        evidence.parser_id,
+                        start,
+                        end,
+                        payload.start.provenance,
+                        payload.end.provenance,
+                        relation,
+                        account.balance_scope,
+                        account.opening,
+                        account.closing,
+                        payload.independent_balance_verified,
+                        payload.capture_verified,
+                    )
+                )
+        return tuple(rows)
 
     def earliest_source_openings(self) -> tuple[EarliestSourceOpening, ...]:
         """Inventory earliest explicitly bound statement openings without posting them."""

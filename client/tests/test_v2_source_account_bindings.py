@@ -111,14 +111,18 @@ def test_statement_overlap_uses_explicit_account_and_printed_period(tmp_path: Pa
 
     first, first_evidence = source_variant(b" first")
     overlapping, overlapping_evidence = source_variant(b" overlapping", starts="2026-01-15", ends="2026-02-15")
+    adjacent, adjacent_evidence = source_variant(b" adjacent", starts="2026-02-16", ends="2026-02-28")
     disjoint, disjoint_evidence = source_variant(b" disjoint", starts="2026-03-01", ends="2026-03-31")
+    gapped, gapped_evidence = source_variant(b" gapped", starts="2026-04-02", ends="2026-04-30")
     with V2ProfileStore.create(path) as store:
         store.add_financial_account(FinancialAccount("card", "Card", "liability", "synchrony"))
         store.add_financial_account(FinancialAccount("other", "Other card", "liability", "synchrony"))
         for source, evidence in (
             (first, first_evidence),
             (overlapping, overlapping_evidence),
+            (adjacent, adjacent_evidence),
             (disjoint, disjoint_evidence),
+            (gapped, gapped_evidence),
         ):
             store.import_source(source, CARD_DEFINITION, evidence, suffix=".pdf")
         identity = account.source_identity
@@ -128,8 +132,28 @@ def test_statement_overlap_uses_explicit_account_and_printed_period(tmp_path: Pa
         store.bind_source_account(overlapping_evidence.source_sha256, identity, form, "other")
         assert store.overlapping_statement_sources(first_evidence.source_sha256) == ()
         store.bind_source_account(overlapping_evidence.source_sha256, identity, form, "card")
+        store.bind_source_account(adjacent_evidence.source_sha256, identity, form, "card")
         store.bind_source_account(disjoint_evidence.source_sha256, identity, form, "card")
+        store.bind_source_account(gapped_evidence.source_sha256, identity, form, "card")
     with V2ProfileStore.open(path, read_only=True) as store:
+        coverage = store.statement_coverage()
+        assert [row.relation_to_known_periods for row in coverage] == [
+            "first_known",
+            "overlap",
+            "adjacent",
+            "adjacent",
+            "gap",
+        ]
+        assert [row.source_sha256 for row in coverage] == [
+            first_evidence.source_sha256,
+            overlapping_evidence.source_sha256,
+            adjacent_evidence.source_sha256,
+            disjoint_evidence.source_sha256,
+            gapped_evidence.source_sha256,
+        ]
+        assert coverage[0].period_start.isoformat() == "2026-01-01"
+        assert coverage[0].opening == account.opening
+        assert all(not row.independent_balance_verified for row in coverage)
         assert store.overlapping_statement_sources(first_evidence.source_sha256) == (
             overlapping_evidence.source_sha256,
         )
@@ -141,14 +165,21 @@ def test_statement_overlap_uses_explicit_account_and_printed_period(tmp_path: Pa
             0,
         )
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    from parsetrail.gui.v2_statement_coverage import V2StatementCoverageDialog
     from parsetrail.gui.v2_workspace_window import V2WorkspaceWindow
     from PySide6.QtCore import Qt
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QLabel
 
     app = QApplication.instance() or QApplication([])
     workspace = V2Workspace.open(path, tmp_path / "catalog", preferences_path=tmp_path / "preferences.json")
     window = V2WorkspaceWindow(workspace)
     try:
+        dialog = V2StatementCoverageDialog(path, window)
+        assert dialog.model.rowCount() == 5
+        assert dialog.model.data(dialog.model.index(2, 2)) == "Adjacent dates"
+        assert dialog.model.data(dialog.model.index(4, 2)) == "Calendar gap"
+        assert "do not establish" in dialog.findChildren(QLabel)[1].text()
+        dialog.close()
         for index in range(window.sources.count()):
             if window.sources.item(index).data(Qt.UserRole) == first_evidence.source_sha256:
                 window.sources.setCurrentRow(index)
