@@ -556,6 +556,12 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   met the structural cash-review prerequisites before account binding, with
   no routing or selected-family parsing failures. This does not decide source
   overlap, income/expense classification or reconciliation.
+  A first read-only earliest-opening inventory now examines explicitly bound
+  statement accounts in the same 2.0 store. Tied earliest sources must agree on
+  an observed account-total opening; conflicting balances and unknown starts
+  remain blockers. Even an agreed printed amount still needs source-timing
+  review. No opening decision, journal or account balance is created; a GUI and
+  posting workflow remain open.
 - [ ] **V2-5a–b — Report cutover:** shared ledger spending/cash/balance/budget queries,
   then dashboard and export integration. A first read-only spending summary now
   nets reviewed expense postings, including reversal/replacement corrections,

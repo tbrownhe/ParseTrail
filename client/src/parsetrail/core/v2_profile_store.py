@@ -29,7 +29,7 @@ from parsetrail.core.ledger import (
     Posting,
     validate_entry,
 )
-from parsetrail.core.source_evidence import ActivityExportPayload, SourceEvidence, StatementPayload
+from parsetrail.core.source_evidence import ActivityExportPayload, SourceEvidence, StatementAccount, StatementPayload
 
 APPLICATION_ID = 0x50543230  # PT20
 SCHEMA_VERSION = 8
@@ -200,6 +200,18 @@ class SourceAccountBinding:
     source_identity: str
     source_identity_form: Literal["full", "last_four", "opaque"]
     ledger_account_id: str | None
+
+
+@dataclass(frozen=True)
+class EarliestSourceOpening:
+    account_id: str
+    account_name: str
+    account_kind: Literal["asset", "liability"]
+    bound_statement_sections: int
+    earliest_period_start: date | None
+    earliest_source_ids: tuple[str, ...]
+    printed_opening_minor: int | None
+    blockers: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -1505,6 +1517,93 @@ class V2ProfileStore:
     def source_ids(self) -> tuple[str, ...]:
         """List saved imports in their original insertion order, newest first."""
         return tuple(row[0] for row in self.connection.execute("SELECT sha256 FROM Sources ORDER BY rowid DESC"))
+
+    def earliest_source_openings(self) -> tuple[EarliestSourceOpening, ...]:
+        """Inventory earliest explicitly bound statement openings without posting them."""
+        sections: dict[str, list[tuple[str, date | None, StatementAccount]]] = {}
+        saved: dict[str, SourceEvidence] = {}
+        for source_id, identity, form, account_id in self.connection.execute(
+            "SELECT source_sha256,source_identity,source_identity_form,ledger_account_id "
+            "FROM SourceAccountBindings ORDER BY source_sha256,source_identity"
+        ):
+            evidence = saved.get(source_id)
+            if evidence is None:
+                evidence = self.load_import(source_id).evidence
+                saved[source_id] = evidence
+            payload = evidence.payload
+            if not isinstance(payload, StatementPayload):
+                continue
+            source_account = next(
+                (
+                    account
+                    for account in payload.accounts
+                    if (account.source_identity, account.source_identity_form) == (identity, form)
+                ),
+                None,
+            )
+            if source_account is None:
+                raise ProfileFormatError("opening_bound_source_account_missing")
+            sections.setdefault(account_id, []).append(
+                (
+                    source_id,
+                    date.fromisoformat(payload.start.iso) if payload.start.iso is not None else None,
+                    source_account,
+                )
+            )
+        result = []
+        for financial in self.financial_accounts():
+            bound = sections.get(financial.id, [])
+            if not bound:
+                result.append(
+                    EarliestSourceOpening(
+                        financial.id, financial.name, financial.kind, 0, None, (), None, ("no_bound_statement",)
+                    )
+                )
+                continue
+            if any(start is None for _source_id, start, _account in bound):
+                result.append(
+                    EarliestSourceOpening(
+                        financial.id,
+                        financial.name,
+                        financial.kind,
+                        len(bound),
+                        None,
+                        tuple(sorted({source_id for source_id, _start, _account in bound})),
+                        None,
+                        ("unknown_source_period", "source_timing_unreviewed"),
+                    )
+                )
+                continue
+            earliest = min(start for _source_id, start, _account in bound if start is not None)
+            tied = [(source_id, account) for source_id, start, account in bound if start == earliest]
+            blockers = []
+            if any(account.balance_scope != "account_total" for _source_id, account in tied):
+                blockers.append("non_account_total_scope")
+            if any(
+                account.opening is None or account.opening.provenance != "observed" or account.opening.minor is None
+                for _source_id, account in tied
+            ):
+                blockers.append("printed_opening_unavailable")
+            amounts = {
+                account.opening.minor
+                for _source_id, account in tied
+                if account.opening is not None and account.opening.provenance == "observed"
+            }
+            if len(amounts) > 1:
+                blockers.append("conflicting_earliest_openings")
+            result.append(
+                EarliestSourceOpening(
+                    financial.id,
+                    financial.name,
+                    financial.kind,
+                    len(bound),
+                    earliest,
+                    tuple(sorted({source_id for source_id, _account in tied})),
+                    next(iter(amounts)) if not blockers and len(amounts) == 1 else None,
+                    (*blockers, "source_timing_unreviewed"),
+                )
+            )
+        return tuple(result)
 
     def overlapping_statement_sources(self, source_sha256: str) -> tuple[str, ...]:
         """Find period overlaps only for explicitly linked ledger accounts."""

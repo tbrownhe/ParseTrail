@@ -450,6 +450,12 @@ posting-date, amount and description prerequisites before account binding:
 The scan found no routing or selected-family parsing failure. These are
 structural candidates only: account binding, overlap review, categorization
 and reconciliation remain separate. No source or live profile was written.
+The same 2.0 store now offers a read-only earliest-opening inventory for
+explicitly bound statement accounts. It keeps all tied earliest sources,
+rejects conflicting or unknown printed openings and an unknown period start,
+and leaves source timing unreviewed even when the printed amounts agree. This
+is not an opening journal or an account balance; review and posting controls
+remain future work. Synthetic reopen tests pass.
 
 A first read-only Spending summary in the 2.0 workspace uses reviewed expense
 journal postings for a selected half-open date range. Reversal and replacement
