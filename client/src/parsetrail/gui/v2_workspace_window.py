@@ -141,6 +141,8 @@ class V2WorkspaceWindow(QMainWindow):
         self.backup_profile_action.triggered.connect(self._backup_profile)
         self.restore_profile_action = profile_menu.addAction("Restore backup as new profile…")
         self.restore_profile_action.triggered.connect(self._restore_profile)
+        self.recover_source_action = profile_menu.addAction("Save selected source original…")
+        self.recover_source_action.triggered.connect(self._recover_source_original)
         settings_menu = self.menuBar().addMenu("Settings")
         self.abbreviated_matching_action = QAction(
             "Allow abbreviated account numbers to automatically match to ledger", self
@@ -272,6 +274,7 @@ class V2WorkspaceWindow(QMainWindow):
 
     def _update_controls(self, *_args) -> None:
         source_id = self._selected_source()
+        self.recover_source_action.setEnabled(source_id is not None and self.import_worker is None)
         self.preview_button.setEnabled(source_id is not None)
         self.cash_review_button.setEnabled(source_id is not None)
         self.card_review_button.setEnabled(False)
@@ -384,6 +387,31 @@ class V2WorkspaceWindow(QMainWindow):
             self.workspace.preferences_path,
         )
 
+    def _recover_source_original(self) -> None:
+        source_id = self._selected_source()
+        if source_id is None or self.import_worker is not None:
+            return
+        try:
+            saved_import = self.workspace.saved_import(source_id)
+            proposed = self.workspace.profile_path.with_name(f"source-{source_id[:16]}{saved_import.suffix}")
+            selected, _filter = QFileDialog.getSaveFileName(
+                self, "Save selected source original", str(proposed), "All files (*)"
+            )
+            if not selected:
+                return
+            saved = self.workspace.recover_source_original(source_id, Path(selected))
+        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
+            QMessageBox.warning(self, "Source original was not saved", str(exc))
+            return
+        show_path_notice(
+            self,
+            "Source original saved",
+            "Saved the exact original document retained in this profile:",
+            saved,
+            "This file contains financial data and is not encrypted by ParseTrail. "
+            "The profile and its saved evidence were not changed.",
+        )
+
     def _backup_profile(self) -> None:
         if self.import_worker is not None:
             return
@@ -449,6 +477,7 @@ class V2WorkspaceWindow(QMainWindow):
         self.progress.canceled.connect(self.import_worker.cancel)
         self.import_button.setEnabled(False)
         self.import_folder_button.setEnabled(False)
+        self.recover_source_action.setEnabled(False)
         for action in (self.open_profile_action, self.backup_profile_action, self.restore_profile_action):
             action.setEnabled(False)
         self.progress.show()
@@ -467,6 +496,7 @@ class V2WorkspaceWindow(QMainWindow):
         self.progress.canceled.connect(self.import_worker.cancel)
         self.import_button.setEnabled(False)
         self.import_folder_button.setEnabled(False)
+        self.recover_source_action.setEnabled(False)
         for action in (self.open_profile_action, self.backup_profile_action, self.restore_profile_action):
             action.setEnabled(False)
         self.progress.show()
@@ -488,6 +518,7 @@ class V2WorkspaceWindow(QMainWindow):
             self.progress = None
         self.import_worker = None
         worker.deleteLater()
+        self.recover_source_action.setEnabled(self._selected_source() is not None)
         for action in (self.open_profile_action, self.backup_profile_action, self.restore_profile_action):
             action.setEnabled(True)
         if self._close_after_import:

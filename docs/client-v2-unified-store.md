@@ -128,6 +128,12 @@ validates a new profile before switching. Failure leaves the current profile in
 place. The separate signed catalog cache and global preferences are outside the
 database snapshot. The profile and its backups are unencrypted local files.
 
+Selected source originals can be recovered from the verified embedded bytes to
+a new file, including without a catalog or the old selected import path. Recovery
+does not reparse, post, move the original or change the profile. Publication is
+atomic and refuses existing/racing destinations; failures remove the temporary
+copy. Recovered documents are ordinary unencrypted local financial files.
+
 ## Historical design
 
 <a id="collision-to-remove"></a>

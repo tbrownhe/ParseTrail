@@ -151,6 +151,12 @@ class V2Workspace:
         with V2ProfileStore.open(self.profile_path, read_only=True) as store:
             return store.load_import(source_sha256)
 
+    def recover_source_original(self, source_sha256: str, destination: Path) -> Path:
+        """Save verified original bytes from this profile at a new destination."""
+        from parsetrail.core.v2_source_recovery import recover_source_original
+
+        return recover_source_original(self.profile_path, source_sha256, destination)
+
     def overlapping_statement_sources(self, source_sha256: str) -> tuple[str, ...]:
         with V2ProfileStore.open(self.profile_path, read_only=True) as store:
             return store.overlapping_statement_sources(source_sha256)

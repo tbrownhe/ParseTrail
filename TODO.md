@@ -6,7 +6,7 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-**None.** Durable reconciliation history completed development and independent
+**None.** Embedded-original recovery completed development and independent
 verification. Continued roadmap development remains owner-authorized.
 
 ## Next candidates
@@ -21,7 +21,7 @@ verification. Continued roadmap development remains owner-authorized.
 
 ## Most recent product packet
 
-[Durable reconciliation history](docs/work/2026-10-25-v2-reconciliation-history.md) completed
+[Embedded-original recovery](docs/work/2026-10-25-v2-source-recovery.md) completed
 development and independent review. Consolidated human UI/UX review remains open;
 this is not 2.0 release acceptance.
 
