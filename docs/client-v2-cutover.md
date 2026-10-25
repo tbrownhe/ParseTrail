@@ -504,7 +504,14 @@ earliest-source inventory. It displays a candidate only when every tied
 earliest source has a matching observed account-total opening, and it keeps
 unknown periods, conflicts and source-timing review visible. Liability
 candidates are displayed as amounts owed; no opening journal is posted.
-Offscreen checks pass; native Windows tab acceptance is open.
+Offscreen checks pass; the owner accepted the native Windows tab on October 25,
+2026. The Saved periods tab now also compares printed account-total closing
+and opening amounts on adjacent dated periods of the same bound account, when
+both amounts and period boundaries are observed. It shows equal and differing
+amounts as source facts only. Missing/derived values, multiple prior endpoints,
+gaps and overlaps stay uncomparable; equality does not establish reconciliation
+or complete source coverage. Offscreen checks pass; native presentation of the
+new comparison column remains open.
 
 A first read-only Spending summary in the 2.0 workspace uses reviewed expense
 journal postings for a selected half-open date range. Reversal and replacement

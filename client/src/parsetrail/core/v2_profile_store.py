@@ -236,6 +236,8 @@ class StatementCoverageRow:
     closing: MoneyValue | None
     independent_balance_verified: bool
     capture_verified: bool
+    endpoint_comparison: Literal["not_adjacent", "unavailable", "ambiguous_prior", "same", "different"]
+    compared_source_sha256: str | None
 
 
 @dataclass(frozen=True)
@@ -1575,6 +1577,7 @@ class V2ProfileStore:
                 key=lambda item: (item[2].start.iso or "9999-12-31", item[2].end.iso, item[0]),
             )
             latest_end: date | None = None
+            latest_closers: list[tuple[str, StatementPayload, StatementAccount]] = []
             for source_id, evidence, payload, account in bound:
                 start = date.fromisoformat(payload.start.iso) if payload.start.iso is not None else None
                 end = date.fromisoformat(payload.end.iso)
@@ -1588,8 +1591,31 @@ class V2ProfileStore:
                     relation = "gap"
                 else:
                     relation = "adjacent"
-                if start is not None and (latest_end is None or end > latest_end):
-                    latest_end = end
+                comparison = "not_adjacent"
+                compared_source = None
+                if relation == "adjacent":
+                    if len(latest_closers) != 1:
+                        comparison = "ambiguous_prior"
+                    else:
+                        previous_source, previous_payload, previous_account = latest_closers[0]
+                        compared_source = previous_source
+                        if (
+                            payload.start.provenance != "observed"
+                            or previous_payload.end.provenance != "observed"
+                            or account.balance_scope != "account_total"
+                            or previous_account.balance_scope != "account_total"
+                            or account.opening is None
+                            or previous_account.closing is None
+                            or account.opening.provenance != "observed"
+                            or previous_account.closing.provenance != "observed"
+                            or account.opening.minor is None
+                            or previous_account.closing.minor is None
+                        ):
+                            comparison = "unavailable"
+                        else:
+                            comparison = (
+                                "same" if previous_account.closing.minor == account.opening.minor else "different"
+                            )
                 rows.append(
                     StatementCoverageRow(
                         financial.id,
@@ -1606,8 +1632,15 @@ class V2ProfileStore:
                         account.closing,
                         payload.independent_balance_verified,
                         payload.capture_verified,
+                        comparison,
+                        compared_source,
                     )
                 )
+                if start is not None and (latest_end is None or end > latest_end):
+                    latest_end = end
+                    latest_closers = [(source_id, payload, account)]
+                elif start is not None and end == latest_end:
+                    latest_closers.append((source_id, payload, account))
         return tuple(rows)
 
     def earliest_source_openings(self) -> tuple[EarliestSourceOpening, ...]:

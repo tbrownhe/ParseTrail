@@ -98,12 +98,29 @@ def test_statement_overlap_uses_explicit_account_and_printed_period(tmp_path: Pa
         update={"accounts": (account.model_copy(update={"rows": ()}),), "independent_balance_verified": False}
     )
 
-    def source_variant(label: bytes, *, starts: str = "2026-01-01", ends: str = "2026-01-31"):
+    def source_variant(
+        label: bytes, *, starts: str = "2026-01-01", ends: str = "2026-01-31", opening_minor: int | None = None
+    ):
         source = CARD_SOURCE + label
         period = payload.model_copy(
             update={
                 "start": payload.start.model_copy(update={"iso": starts, "raw": starts}),
                 "end": payload.end.model_copy(update={"iso": ends, "raw": ends}),
+                "accounts": (
+                    account.model_copy(
+                        update={
+                            "rows": (),
+                            "opening": account.opening.model_copy(
+                                update={
+                                    "minor": opening_minor,
+                                    "raw": f"${abs(opening_minor) // 100}.{abs(opening_minor) % 100:02d}",
+                                }
+                            )
+                            if opening_minor is not None
+                            else account.opening,
+                        }
+                    ),
+                ),
             }
         )
         evidence = original.model_copy(update={"source_sha256": sha256(source).hexdigest(), "payload": period})
@@ -112,7 +129,9 @@ def test_statement_overlap_uses_explicit_account_and_printed_period(tmp_path: Pa
     first, first_evidence = source_variant(b" first")
     overlapping, overlapping_evidence = source_variant(b" overlapping", starts="2026-01-15", ends="2026-02-15")
     adjacent, adjacent_evidence = source_variant(b" adjacent", starts="2026-02-16", ends="2026-02-28")
-    disjoint, disjoint_evidence = source_variant(b" disjoint", starts="2026-03-01", ends="2026-03-31")
+    disjoint, disjoint_evidence = source_variant(
+        b" disjoint", starts="2026-03-01", ends="2026-03-31", opening_minor=account.closing.minor
+    )
     gapped, gapped_evidence = source_variant(b" gapped", starts="2026-04-02", ends="2026-04-30")
     with V2ProfileStore.create(path) as store:
         store.add_financial_account(FinancialAccount("card", "Card", "liability", "synchrony"))
@@ -154,6 +173,15 @@ def test_statement_overlap_uses_explicit_account_and_printed_period(tmp_path: Pa
         assert coverage[0].period_start.isoformat() == "2026-01-01"
         assert coverage[0].opening == account.opening
         assert all(not row.independent_balance_verified for row in coverage)
+        assert [row.endpoint_comparison for row in coverage] == [
+            "not_adjacent",
+            "not_adjacent",
+            "different",
+            "same",
+            "not_adjacent",
+        ]
+        assert coverage[2].compared_source_sha256 == overlapping_evidence.source_sha256
+        assert coverage[3].compared_source_sha256 == adjacent_evidence.source_sha256
         assert store.overlapping_statement_sources(first_evidence.source_sha256) == (
             overlapping_evidence.source_sha256,
         )
@@ -181,6 +209,8 @@ def test_statement_overlap_uses_explicit_account_and_printed_period(tmp_path: Pa
         assert dialog.model.rowCount() == 5
         assert dialog.model.data(dialog.model.index(2, 2)) == "Adjacent dates"
         assert dialog.model.data(dialog.model.index(4, 2)) == "Calendar gap"
+        assert dialog.model.data(dialog.model.index(2, 8)) == "Different printed amounts"
+        assert dialog.model.data(dialog.model.index(3, 8)) == "Same printed amount"
         assert dialog.opening_model.rowCount() == 2
         card_opening = next(index for index, row in enumerate(dialog.opening_model.rows) if row.account_id == "card")
         candidate = dialog.opening_model.rows[card_opening]

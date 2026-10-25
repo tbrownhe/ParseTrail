@@ -601,7 +601,13 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   earliest-opening inventory. It shows natural asset value or liability amount
   owed only for a consistent observed account-total candidate, with conflicts,
   unknown periods and unreviewed source timing visible. No journal is posted.
-  Offscreen checks pass; native tab acceptance is open.
+  Offscreen checks pass; the owner accepted the native Windows tab on October
+  25, 2026. Saved periods now also compares observed account-total closing and
+  opening amounts of adjacent dated statements bound to one financial account.
+  It shows equal or different printed amounts without certifying reconciliation,
+  source coverage or an account balance; gaps, overlaps, derived or unavailable
+  values do not produce a comparison. Offscreen checks pass; native presentation
+  of this column remains open.
 - [ ] **V2-5a–b — Report cutover:** shared ledger spending/cash/balance/budget queries,
   then dashboard and export integration. A first read-only spending summary now
   nets reviewed expense postings, including reversal/replacement corrections,

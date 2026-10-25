@@ -40,6 +40,7 @@ class _CoverageModel(QAbstractTableModel):
         "Scope",
         "Balance equation",
         "Page capture",
+        "Printed endpoint comparison",
         "Source",
     )
     RELATIONS = {
@@ -48,6 +49,13 @@ class _CoverageModel(QAbstractTableModel):
         "overlap": "Overlapping dates",
         "gap": "Calendar gap",
         "unknown_start": "Unknown start",
+    }
+    ENDPOINTS = {
+        "not_adjacent": "Not compared",
+        "unavailable": "Observed values unavailable",
+        "ambiguous_prior": "Multiple prior endpoints",
+        "same": "Same printed amount",
+        "different": "Different printed amounts",
     }
 
     def __init__(self, rows: tuple[StatementCoverageRow, ...], parent=None):
@@ -78,12 +86,14 @@ class _CoverageModel(QAbstractTableModel):
             row.balance_scope.replace("_", " "),
             "Passed" if row.independent_balance_verified else "Not independently verified",
             "Verified" if row.capture_verified else "Incomplete",
+            self.ENDPOINTS[row.endpoint_comparison],
             row.source_sha256[:16],
         )
         if role == Qt.ToolTipRole:
             return (
                 f"Source: {row.source_sha256}\nParser: {row.parser_id}\n"
-                f"Period start: {row.period_start_provenance}; end: {row.period_end_provenance}"
+                f"Period start: {row.period_start_provenance}; end: {row.period_end_provenance}\n"
+                f"Compared closing source: {row.compared_source_sha256 or 'None'}"
             )
         return values[index.column()]
 
@@ -169,6 +179,8 @@ class V2StatementCoverageDialog(QDialog):
         scope = QLabel(
             "Calendar comparisons use saved, explicitly bound statements only. Source period dates may be derived; "
             "hover a row for provenance. A gap or adjacent dates do not establish missing or complete activity. "
+            "Printed endpoint comparisons use observed account-total amounts on adjacent dated periods only; "
+            "equal amounts do not certify reconciliation or complete coverage. "
             "Printed balances are source evidence, not posted account balances. "
             "In Saved periods, double-click a row to inspect its source."
         )
