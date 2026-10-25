@@ -510,8 +510,8 @@ and opening amounts on adjacent dated periods of the same bound account, when
 both amounts and period boundaries are observed. It shows equal and differing
 amounts as source facts only. Missing/derived values, multiple prior endpoints,
 gaps and overlaps stay uncomparable; equality does not establish reconciliation
-or complete source coverage. Offscreen checks pass; native presentation of the
-new comparison column remains open.
+or complete source coverage. Offscreen checks pass; the owner accepted the
+native comparison column on October 25, 2026.
 
 A first read-only Spending summary in the 2.0 workspace uses reviewed expense
 journal postings for a selected half-open date range. Reversal and replacement
@@ -544,6 +544,12 @@ place. The snapshot contains the embedded source evidence, authored accounts,
 budgets and reviewed journal. The separately installed signed catalog cache and
 global preferences are outside the database snapshot. Offscreen checks passed;
 the owner accepted backup, restore and profile switching on native Windows.
+The Profile menu now also opens a read-only location and privacy dialog with
+copyable paths for the active profile, signed catalog cache and global
+preferences. It explains that imported source bytes and authored/reviewed data
+reside in the unencrypted profile, and that a profile backup excludes the
+separate cache and preferences. An offscreen menu interaction check passes;
+native presentation acceptance is open.
 
 The [1.x desktop action inventory](client-v2-menu-inventory.md) lists every
 menu action and dashboard tab with its current 2.0 status. The owner selected

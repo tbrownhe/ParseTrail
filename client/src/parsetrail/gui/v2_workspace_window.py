@@ -38,7 +38,7 @@ from parsetrail.gui.v2_batch_import import V2BatchImportReport, V2BatchImportWor
 from parsetrail.gui.v2_cash_activity_review import V2CashActivityReview
 from parsetrail.gui.v2_categories import V2CategoryDialog
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
-from parsetrail.gui.v2_path_notice import show_path_notice
+from parsetrail.gui.v2_path_notice import show_data_locations, show_path_notice
 from parsetrail.gui.v2_reviewed_reports import V2ReviewedReportsDialog
 from parsetrail.gui.v2_source_account_review import V2SourceAccountReview
 from parsetrail.gui.v2_statement_coverage import V2StatementCoverageDialog
@@ -126,6 +126,8 @@ class V2WorkspaceWindow(QMainWindow):
         profile_menu = self.menuBar().addMenu("Profile")
         self.open_profile_action = profile_menu.addAction("Open 2.0 profile…")
         self.open_profile_action.triggered.connect(self._choose_profile)
+        self.data_locations_action = profile_menu.addAction("Data locations and privacy…")
+        self.data_locations_action.triggered.connect(self._show_data_locations)
         self.backup_profile_action = profile_menu.addAction("Back up current profile…")
         self.backup_profile_action.triggered.connect(self._backup_profile)
         self.restore_profile_action = profile_menu.addAction("Restore backup as new profile…")
@@ -340,6 +342,14 @@ class V2WorkspaceWindow(QMainWindow):
                 QMessageBox.warning(self, "Profile was not opened", "Choose a .db profile. Restore .dbb backups first.")
                 return
             self._switch_profile(Path(selected))
+
+    def _show_data_locations(self) -> None:
+        show_data_locations(
+            self,
+            self.workspace.profile_path,
+            self.workspace.catalog_cache.root,
+            self.workspace.preferences_path,
+        )
 
     def _backup_profile(self) -> None:
         if self.import_worker is not None:

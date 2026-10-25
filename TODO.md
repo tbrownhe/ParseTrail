@@ -606,8 +606,8 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   opening amounts of adjacent dated statements bound to one financial account.
   It shows equal or different printed amounts without certifying reconciliation,
   source coverage or an account balance; gaps, overlaps, derived or unavailable
-  values do not produce a comparison. Offscreen checks pass; native presentation
-  of this column remains open.
+  values do not produce a comparison. Offscreen checks pass; the owner accepted
+  the native column on October 25, 2026.
 - [ ] **V2-5a–b — Report cutover:** shared ledger spending/cash/balance/budget queries,
   then dashboard and export integration. A first read-only spending summary now
   nets reviewed expense postings, including reversal/replacement corrections,
@@ -645,7 +645,10 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   corrupt sources are refused without changing the active profile. Source
   evidence is embedded in the snapshot; the separate signed catalog cache and
   global preferences are not. Disposable-profile offscreen checks passed; the
-  owner accepted backup, restore and profile switching on native Windows.
+  owner accepted backup, restore and profile switching on native Windows. The
+  Profile menu now also shows copyable active profile, signed-catalog cache and
+  global-preference paths with explicit unencrypted-storage and backup scope.
+  Offscreen checks pass; native presentation acceptance is open.
 - [ ] **V2-7 — Release:** remove obsolete runtime paths after integration, set the major
   version when ready, then packaged Windows/targeted Intel acceptance and a separately
   approved publication. Include the P2 declaration-catalog release gate; installer

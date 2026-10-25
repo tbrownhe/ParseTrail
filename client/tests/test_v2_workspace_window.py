@@ -209,6 +209,38 @@ def test_profile_menu_backs_up_restores_and_keeps_failed_selection_on_current_pr
         app.processEvents()
 
 
+def test_profile_menu_shows_current_copyable_data_locations_and_privacy(tmp_path: Path, monkeypatch) -> None:
+    app = _app()
+    from parsetrail.gui.v2_workspace_window import V2WorkspaceWindow
+    from PySide6.QtWidgets import QDialog, QLabel, QLineEdit
+
+    workspace = _workspace(tmp_path)
+    shown = []
+    monkeypatch.setattr(QDialog, "exec", lambda dialog: shown.append(dialog) or 0)
+    window = V2WorkspaceWindow(workspace)
+    try:
+        window.data_locations_action.trigger()
+        fields = shown[-1].findChildren(QLineEdit)
+        assert [field.text() for field in fields] == [
+            str(workspace.profile_path),
+            str(workspace.catalog_cache.root),
+            str(workspace.preferences_path),
+        ]
+        assert all(field.isReadOnly() for field in fields)
+        privacy = " ".join(label.text() for label in shown[-1].findChildren(QLabel))
+        assert "does not encrypt" in privacy
+        assert "not the separate signed catalog cache" in privacy
+        second = tmp_path / "second.db"
+        with V2ProfileStore.create(second):
+            pass
+        window._switch_profile(second)
+        window.data_locations_action.trigger()
+        assert shown[-1].findChildren(QLineEdit)[0].text() == str(second.resolve())
+    finally:
+        window.close()
+        app.processEvents()
+
+
 def test_window_cancel_reaches_worker_and_saves_nothing(tmp_path: Path, monkeypatch) -> None:
     app = _app()
     from parsetrail.gui.v2_workspace_window import V2WorkspaceWindow

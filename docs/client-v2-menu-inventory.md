@@ -10,7 +10,7 @@ legacy window has been replaced. **Pending** means the owner has not approved a
 | --- | --- | --- |
 | File → Preferences | Global abbreviated-account matching toggle is available. | Inventory other 1.x preferences against the final 2.0 profile and catalog settings. Pending. |
 | File → Open Database | Profile → Open 2.0 profile accepts only a verified `.db`. | Native profile switching accepted; no old-profile activation. |
-| File → Database Location and Privacy | Active profile path is visible; backup text discloses that files are not encrypted. | Dedicated location/privacy presentation pending. |
+| File → Database Location and Privacy | Profile → Data locations and privacy shows copyable profile, signed-catalog cache and global-preference paths, plus storage and encryption limits. | Native presentation acceptance pending. |
 | File → Back Up Database | Profile → Back up current profile creates a verified new 2.0 snapshot. | Native backup accepted. |
 | File → Test Database Backup | Restore validates a copy before switching. | Decide whether a separate read-only restore test is still useful. Pending. |
 | File → Restore Database | Profile → Restore backup as new profile creates a new `.db`, then switches. | Native restore accepted; no overwrite or migration. |
