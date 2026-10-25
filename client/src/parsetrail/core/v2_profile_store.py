@@ -40,7 +40,7 @@ from parsetrail.core.v2_preferences import V2Preferences
 from parsetrail.core.v2_review_dates import permitted_posting_date, posting_date_candidate
 
 APPLICATION_ID = 0x50543230  # PT20
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_DEFINITION_BYTES = 64 * 1024
 MAX_EVIDENCE_BYTES = 32 * 1024 * 1024
@@ -115,12 +115,14 @@ TABLE_COLUMNS = {
         ("reason", "TEXT", 1, 0),
         ("created_at", "TEXT", 1, 0),
     ),
-    "OpeningSourceReviews": (
+    "StatementSourceReviews": (
         ("revision_id", "INTEGER", 0, 1),
         ("account_id", "TEXT", 1, 0),
         ("source_sha256", "TEXT", 1, 0),
         ("opening_origin", "TEXT", 1, 0),
+        ("closing_origin", "TEXT", 1, 0),
         ("timing_confirmed", "INTEGER", 1, 0),
+        ("posting_dates", "TEXT", 1, 0),
         ("source_reference", "TEXT", 1, 0),
         ("note", "TEXT", 1, 0),
         ("created_at", "TEXT", 1, 0),
@@ -157,7 +159,7 @@ FOREIGN_KEYS = {
         ("reversal_key", "JournalEntries", "key"),
         ("original_key", "JournalEntries", "key"),
     ),
-    "OpeningSourceReviews": (("source_sha256", "Sources", "sha256"), ("account_id", "Accounts", "id")),
+    "StatementSourceReviews": (("source_sha256", "Sources", "sha256"), ("account_id", "Accounts", "id")),
     "OpeningDecisions": (("entry_key", "JournalEntries", "key"), ("account_id", "Accounts", "id")),
 }
 
@@ -169,7 +171,7 @@ IMMUTABLE_TABLES = (
     "JournalEntries",
     "JournalAllocations",
     "JournalCorrections",
-    "OpeningSourceReviews",
+    "StatementSourceReviews",
     "OpeningDecisions",
 )
 
@@ -245,12 +247,14 @@ class EarliestSourceOpening:
 
 
 @dataclass(frozen=True)
-class OpeningSourceReview:
+class StatementSourceReview:
     revision_id: int
     account_id: str
     source_sha256: str
     opening_origin: Literal["reported", "unestablished"]
+    closing_origin: Literal["reported", "unestablished"]
     timing_confirmed: bool
+    posting_dates: Literal["reported", "estimated", "unverified"]
     source_reference: str
     note: str
 
@@ -655,12 +659,14 @@ class V2ProfileStore:
                     reason TEXT NOT NULL,
                     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
                 );
-                CREATE TABLE OpeningSourceReviews (
+                CREATE TABLE StatementSourceReviews (
                     revision_id INTEGER PRIMARY KEY,
                     account_id TEXT NOT NULL REFERENCES Accounts(id),
                     source_sha256 TEXT NOT NULL REFERENCES Sources(sha256),
                     opening_origin TEXT NOT NULL CHECK(opening_origin IN ('reported','unestablished')),
+                    closing_origin TEXT NOT NULL CHECK(closing_origin IN ('reported','unestablished')),
                     timing_confirmed INTEGER NOT NULL CHECK(timing_confirmed IN (0,1)),
+                    posting_dates TEXT NOT NULL CHECK(posting_dates IN ('reported','estimated','unverified')),
                     source_reference TEXT NOT NULL,
                     note TEXT NOT NULL,
                     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
@@ -2453,20 +2459,148 @@ class V2ProfileStore:
             )
         return tuple(result)
 
-    def opening_source_reviews(self, account_id: str) -> tuple[OpeningSourceReview, ...]:
+    def statement_source_reviews(self, account_id: str) -> tuple[StatementSourceReview, ...]:
         """Return the latest append-only assertion for each source on an account."""
         self._require_financial_account(account_id)
         return tuple(
-            OpeningSourceReview(revision, account, source, origin, bool(timing), reference, note)
-            for revision, account, source, origin, timing, reference, note in self.connection.execute(
-                "SELECT r.revision_id,r.account_id,r.source_sha256,r.opening_origin,"
-                "r.timing_confirmed,r.source_reference,r.note FROM OpeningSourceReviews r "
+            StatementSourceReview(revision, account, source, opening, closing, bool(timing), dates, reference, note)
+            for revision, account, source, opening, closing, timing, dates, reference, note in self.connection.execute(
+                "SELECT r.revision_id,r.account_id,r.source_sha256,r.opening_origin,r.closing_origin,"
+                "r.timing_confirmed,r.posting_dates,r.source_reference,r.note FROM StatementSourceReviews r "
                 "WHERE r.account_id=? AND r.revision_id=(SELECT MAX(later.revision_id) "
-                "FROM OpeningSourceReviews later WHERE later.account_id=r.account_id "
+                "FROM StatementSourceReviews later WHERE later.account_id=r.account_id "
                 "AND later.source_sha256=r.source_sha256) ORDER BY r.source_sha256",
                 (account_id,),
             )
         )
+
+    def _bound_statement_section(
+        self, account_id: str, source_sha256: str
+    ) -> tuple[StatementPayload, StatementAccount]:
+        self._require_financial_account(account_id)
+        payload = self.load_import(source_sha256).evidence.payload
+        if not isinstance(payload, StatementPayload):
+            raise ProfileFormatError("statement_review_requires_bound_statement")
+        identities = {
+            (identity, form)
+            for identity, form in self.connection.execute(
+                "SELECT source_identity,source_identity_form FROM SourceAccountBindings "
+                "WHERE source_sha256=? AND ledger_account_id=?",
+                (source_sha256, account_id),
+            )
+        }
+        sections = [
+            section
+            for section in payload.accounts
+            if (section.source_identity, section.source_identity_form) in identities
+        ]
+        if len(sections) != 1:
+            raise ProfileFormatError("statement_review_requires_one_bound_section")
+        return payload, sections[0]
+
+    def record_statement_source_review(
+        self,
+        account_id: str,
+        source_sha256: str,
+        *,
+        expected_revision_id: int | None,
+        opening_origin: Literal["reported", "unestablished"],
+        closing_origin: Literal["reported", "unestablished"],
+        timing_confirmed: bool,
+        posting_dates: Literal["reported", "estimated", "unverified"],
+        source_reference: str,
+        note: str = "",
+    ) -> int:
+        """Append a reviewed source assertion; printed evidence stays immutable."""
+        self._require_writable()
+        if (
+            opening_origin not in {"reported", "unestablished"}
+            or closing_origin not in {"reported", "unestablished"}
+            or type(timing_confirmed) is not bool
+            or posting_dates not in {"reported", "estimated", "unverified"}
+            or type(source_reference) is not str
+            or not 0 < len(source_reference.strip()) <= 500
+            or type(note) is not str
+            or len(note.strip()) > 500
+        ):
+            raise ProfileFormatError("statement_source_review_invalid")
+        payload, section = self._bound_statement_section(account_id, source_sha256)
+        if opening_origin == "reported" and (
+            section.balance_scope != "account_total"
+            or section.opening is None
+            or section.opening.provenance != "observed"
+            or section.opening.minor is None
+        ):
+            raise ProfileFormatError("opening_reported_balance_unavailable")
+        if closing_origin == "reported" and (
+            section.balance_scope != "account_total"
+            or section.closing is None
+            or section.closing.provenance != "observed"
+            or section.closing.minor is None
+        ):
+            raise ProfileFormatError("closing_reported_balance_unavailable")
+        if posting_dates == "reported" and any(
+            (candidate := posting_date_candidate(row)) is None or candidate.provenance not in {"observed", "derived"}
+            for row in section.rows
+            if row.row_role == "activity"
+        ):
+            raise ProfileFormatError("reported_posting_dates_unavailable")
+        if timing_confirmed and (payload.start.iso is None or payload.end.iso is None):
+            raise ProfileFormatError("statement_period_timing_unavailable")
+        values = (
+            opening_origin,
+            closing_origin,
+            timing_confirmed,
+            posting_dates,
+            source_reference.strip(),
+            note.strip(),
+        )
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            latest = next(
+                (
+                    review
+                    for review in self.statement_source_reviews(account_id)
+                    if review.source_sha256 == source_sha256
+                ),
+                None,
+            )
+            if (latest.revision_id if latest else None) != expected_revision_id:
+                raise ProfileFormatError("statement_source_review_changed_since_selection")
+            if (
+                latest is not None
+                and (
+                    latest.opening_origin,
+                    latest.closing_origin,
+                    latest.timing_confirmed,
+                    latest.posting_dates,
+                    latest.source_reference,
+                    latest.note,
+                )
+                == values
+            ):
+                self.connection.execute("COMMIT")
+                return latest.revision_id
+            cursor = self.connection.execute(
+                "INSERT INTO StatementSourceReviews "
+                "(account_id,source_sha256,opening_origin,closing_origin,timing_confirmed,posting_dates,source_reference,note) "
+                "VALUES (?,?,?,?,?,?,?,?)",
+                (
+                    account_id,
+                    source_sha256,
+                    opening_origin,
+                    closing_origin,
+                    int(timing_confirmed),
+                    posting_dates,
+                    source_reference.strip(),
+                    note.strip(),
+                ),
+            )
+            self.connection.execute("COMMIT")
+            return cursor.lastrowid
+        except BaseException:
+            self.connection.execute("ROLLBACK")
+            raise
 
     def record_opening_source_review(
         self,
@@ -2479,73 +2613,37 @@ class V2ProfileStore:
         note: str = "",
     ) -> int:
         """Record a source inspection without altering its printed evidence."""
-        self._require_writable()
-        if (
-            opening_origin not in {"reported", "unestablished"}
-            or type(timing_confirmed) is not bool
-            or type(source_reference) is not str
-            or not 0 < len(source_reference.strip()) <= 500
-            or type(note) is not str
-            or len(note.strip()) > 500
-        ):
-            raise ProfileFormatError("opening_source_review_invalid")
         candidate = next((item for item in self.earliest_source_openings() if item.account_id == account_id), None)
         if candidate is None or source_sha256 not in candidate.earliest_source_ids:
             raise ProfileFormatError("opening_source_not_earliest_bound")
-        if opening_origin == "reported":
-            payload = self.load_import(source_sha256).evidence.payload
-            identities = {
-                (identity, form)
-                for identity, form in self.connection.execute(
-                    "SELECT source_identity,source_identity_form FROM SourceAccountBindings "
-                    "WHERE source_sha256=? AND ledger_account_id=?",
-                    (source_sha256, account_id),
-                )
-            }
-            source_accounts = (
-                [
-                    account
-                    for account in payload.accounts
-                    if (account.source_identity, account.source_identity_form) in identities
-                ]
-                if isinstance(payload, StatementPayload)
-                else []
-            )
-            if (
-                len(source_accounts) != 1
-                or source_accounts[0].balance_scope != "account_total"
-                or source_accounts[0].opening is None
-                or source_accounts[0].opening.provenance != "observed"
-                or source_accounts[0].opening.minor is None
-            ):
-                raise ProfileFormatError("opening_reported_balance_unavailable")
         latest = next(
-            (review for review in self.opening_source_reviews(account_id) if review.source_sha256 == source_sha256),
+            (review for review in self.statement_source_reviews(account_id) if review.source_sha256 == source_sha256),
             None,
         )
-        if latest is not None and (
-            latest.opening_origin,
-            latest.timing_confirmed,
-            latest.source_reference,
-            latest.note,
-        ) == (opening_origin, timing_confirmed, source_reference.strip(), note.strip()):
-            return latest.revision_id
-        cursor = self.connection.execute(
-            "INSERT INTO OpeningSourceReviews "
-            "(account_id,source_sha256,opening_origin,timing_confirmed,source_reference,note) "
-            "VALUES (?,?,?,?,?,?)",
-            (account_id, source_sha256, opening_origin, int(timing_confirmed), source_reference.strip(), note.strip()),
+        return self.record_statement_source_review(
+            account_id,
+            source_sha256,
+            expected_revision_id=latest.revision_id if latest else None,
+            opening_origin=opening_origin,
+            closing_origin=latest.closing_origin if latest else "unestablished",
+            timing_confirmed=timing_confirmed,
+            posting_dates=latest.posting_dates if latest else "unverified",
+            source_reference=source_reference,
+            note=note,
         )
-        return cursor.lastrowid
 
     @staticmethod
-    def _opening_basis(candidate: EarliestSourceOpening, reviews: tuple[OpeningSourceReview, ...]) -> str:
+    def _opening_basis(candidate: EarliestSourceOpening, reviews: tuple[StatementSourceReview, ...]) -> str:
         data = {
             "account_id": candidate.account_id,
             "period_start": candidate.earliest_period_start.isoformat() if candidate.earliest_period_start else None,
             "sources": candidate.earliest_source_ids,
             "amount_minor": candidate.printed_opening_minor,
-            "reviews": [(review.source_sha256, review.revision_id) for review in reviews],
+            "reviews": [
+                (review.source_sha256, review.revision_id)
+                for review in reviews
+                if review.source_sha256 in candidate.earliest_source_ids
+            ],
         }
         return _digest(json.dumps(data, sort_keys=True, separators=(",", ":")).encode())
 
@@ -2558,7 +2656,7 @@ class V2ProfileStore:
         if saved is None:
             return None
         candidate = next(item for item in self.earliest_source_openings() if item.account_id == account_id)
-        reviews = self.opening_source_reviews(account_id)
+        reviews = self.statement_source_reviews(account_id)
         stale = bool(candidate.blockers) or saved[0] != self._opening_basis(candidate, reviews)
         return OpeningDecision(account_id, saved[0], saved[1], date.fromisoformat(saved[2]), saved[3], stale)
 
@@ -2566,7 +2664,7 @@ class V2ProfileStore:
         candidate = next((item for item in self.earliest_source_openings() if item.account_id == account_id), None)
         if candidate is None:
             raise ProfileFormatError("financial_account_missing")
-        return self._opening_basis(candidate, self.opening_source_reviews(account_id))
+        return self._opening_basis(candidate, self.statement_source_reviews(account_id))
 
     def earliest_source_openings(self) -> tuple[EarliestSourceOpening, ...]:
         """Inventory earliest explicitly bound statement openings without posting them."""
@@ -2644,7 +2742,7 @@ class V2ProfileStore:
             if len(tied) != len({source_id for source_id, _account in tied}):
                 blockers.append("duplicate_earliest_source_sections")
             printed_opening = next(iter(amounts)) if not blockers and len(amounts) == 1 else None
-            reviews = {review.source_sha256: review for review in self.opening_source_reviews(financial.id)}
+            reviews = {review.source_sha256: review for review in self.statement_source_reviews(financial.id)}
             if any(
                 (review := reviews.get(source_id)) is None
                 or review.opening_origin != "reported"
@@ -2679,7 +2777,7 @@ class V2ProfileStore:
             amount = candidate.printed_opening_minor
             if amount is None:
                 raise ProfileFormatError("opening_review_blocked")
-            reviews = self.opening_source_reviews(account_id)
+            reviews = self.statement_source_reviews(account_id)
             basis = self._opening_basis(candidate, reviews)
             if expected_basis_sha256 is not None and basis != expected_basis_sha256:
                 raise ProfileFormatError("opening_review_changed_since_selection")

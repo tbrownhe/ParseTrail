@@ -83,3 +83,12 @@ at the prior-day cutoff; zero saves a decision without a journal. A changed
 source review marks the decision stale and calls for later correction rather
 than rewriting the original entry. Revision 8 pilot profiles are refused and
 recreated.
+
+Pre-release revision 10 broadens that single append-only history to all bound
+statement sections. Each review separately records opening and closing origin,
+inclusive-period timing, posting-date certainty, a source reference and an
+optional note. The earliest-source opening workflow reads this same history.
+Known assumed card posting dates cannot be asserted reported; source facts are
+never rewritten. A changed earliest-source assertion marks its opening
+decision stale; a later period's review does not. Revision 9 disposable
+profiles are recreated, without a migration path.

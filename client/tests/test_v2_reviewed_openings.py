@@ -62,7 +62,7 @@ def test_reviewed_printed_opening_posts_equity_and_tracks_stale_review(tmp_path:
         )
         candidate = store.earliest_source_openings()[0]
         assert candidate.blockers == ()
-        reviews = store.opening_source_reviews("cash")
+        reviews = store.statement_source_reviews("cash")
         basis = store._opening_basis(candidate, reviews)
         with pytest.raises(ProfileFormatError, match="opening_review_changed_since_selection"):
             store.post_reviewed_opening("cash", expected_basis_sha256="stale")

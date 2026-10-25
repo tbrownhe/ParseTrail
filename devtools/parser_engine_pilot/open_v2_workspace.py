@@ -217,7 +217,8 @@ def main(argv: list[str] | None = None) -> int:
         if args.comparison:
             window.status.setText(
                 "Disposable Journal comparison sample: Savings A has reviewed source movements; "
-                "Card A remains pending. The separate Statement coverage window is open on Journal comparison."
+                "Card A remains pending. The separate Statement coverage window is open on Journal comparison. "
+                "In Saved periods, select Savings A or Card A and click Review selected source to inspect provenance."
             )
             comparison = V2StatementCoverageDialog(workspace.profile_path, window)
             comparison.findChild(QTabWidget).setCurrentIndex(2)

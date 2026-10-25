@@ -167,7 +167,7 @@ class V2OpeningReview(QDialog):
             return
         with V2ProfileStore.open(self.workspace.profile_path, read_only=True) as store:
             self.candidate = next(item for item in store.earliest_source_openings() if item.account_id == account_id)
-            self.reviews = {review.source_sha256: review for review in store.opening_source_reviews(account_id)}
+            self.reviews = {review.source_sha256: review for review in store.statement_source_reviews(account_id)}
             self.decision = store.opening_decision(account_id)
             self.basis = store.opening_review_basis(account_id)
         candidate = self.candidate

@@ -568,6 +568,14 @@ the owner launches it in their Windows session for the walkthrough.
 The first native look found the Comparison status column clipped. The table now
 wraps two-line headers and gives status a wider, wrapped column near the left;
 the owner accepted it in a fresh `--demo --comparison` launch.
+Pre-release revision 10 extends the one source-review history to later bound
+statements. The Saved periods tab shows whether a source review is recorded and
+opens an explicit form for opening/closing origin, inclusive timing, posting-date
+certainty and a source reference. Saving adds an assertion without changing
+source evidence or journals. Known assumed card dates cannot be declared
+reported, stale forms are refused, and an amended earliest-source review marks
+its opening decision stale. Offscreen service and dialog checks pass; native
+acceptance is open. Earlier disposable pilot profiles are recreated.
 
 A first read-only Spending summary in the 2.0 workspace uses reviewed expense
 journal postings for a selected half-open date range. Reversal and replacement

@@ -624,6 +624,17 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   The owner found the Comparison status column clipped. The tab now uses
   two-line headers, an early 260-pixel wrapped status column and compact initial
   widths; the owner accepted the revised native table.
+  Pre-release schema revision 10 replaces the opening-only source-review table
+  with one append-only statement source-review history for bound sections.
+  Opening and closing balance origin, inclusive period timing, posting-date
+  certainty, source reference and note are separate assertions. The opening
+  workflow uses the same history; an amended earliest-source review can mark
+  its opening decision stale. A review of an unrelated later period cannot.
+  Known assumed card posting dates cannot be asserted reported,
+  and a stale review form cannot overwrite another window's saved revision.
+  Saved periods now exposes Review selected source and a recorded/not-recorded
+  status. Service and offscreen UI checks pass; native acceptance is open.
+  Revision 9 disposable pilot profiles are recreated, not migrated.
   A read-only signed-catalog scan routed all 956 PDFs in the two successful
   archives, then parsed the six bank families: 315 statements and 14,275 rows
   met the structural cash-review prerequisites before account binding, with

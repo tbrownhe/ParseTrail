@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QLabel,
     QLineEdit,
+    QPushButton,
     QTableView,
     QTabWidget,
     QVBoxLayout,
@@ -27,6 +28,7 @@ from parsetrail.core.v2_profile_store import (
     V2ProfileStore,
 )
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview, _money
+from parsetrail.gui.v2_statement_source_review import V2StatementSourceReview
 
 
 def _balance(value: MoneyValue | None) -> str:
@@ -49,6 +51,7 @@ class _CoverageModel(QAbstractTableModel):
         "Page capture",
         "Printed endpoint comparison",
         "Source",
+        "Source review",
     )
     RELATIONS = {
         "first_known": "First known period",
@@ -65,9 +68,15 @@ class _CoverageModel(QAbstractTableModel):
         "different": "Different printed amounts",
     }
 
-    def __init__(self, rows: tuple[StatementCoverageRow, ...], parent=None):
+    def __init__(self, rows: tuple[StatementCoverageRow, ...], reviewed: frozenset[tuple[str, str]], parent=None):
         super().__init__(parent)
         self.rows = rows
+        self.reviewed = reviewed
+
+    def set_reviewed(self, reviewed: frozenset[tuple[str, str]]) -> None:
+        self.reviewed = reviewed
+        if self.rows:
+            self.dataChanged.emit(self.index(0, 10), self.index(len(self.rows) - 1, 10))
 
     def rowCount(self, _parent: QModelIndex = QModelIndex()) -> int:
         return len(self.rows)
@@ -95,6 +104,7 @@ class _CoverageModel(QAbstractTableModel):
             "Verified" if row.capture_verified else "Incomplete",
             self.ENDPOINTS[row.endpoint_comparison],
             row.source_sha256[:16],
+            "Recorded" if (row.account_id, row.source_sha256) in self.reviewed else "Not recorded",
         )
         if role == Qt.ToolTipRole:
             return (
@@ -128,6 +138,11 @@ class _OpeningModel(QAbstractTableModel):
     def __init__(self, rows: tuple[EarliestSourceOpening, ...], parent=None):
         super().__init__(parent)
         self.rows = rows
+
+    def replace(self, rows: tuple[EarliestSourceOpening, ...]) -> None:
+        self.beginResetModel()
+        self.rows = rows
+        self.endResetModel()
 
     def rowCount(self, _parent: QModelIndex = QModelIndex()) -> int:
         return len(self.rows)
@@ -238,7 +253,13 @@ class V2StatementCoverageDialog(QDialog):
             rows = store.statement_coverage()
             openings = store.earliest_source_openings()
             comparisons = store.statement_journal_comparisons()
-            account_count = len(store.financial_accounts())
+            accounts = store.financial_accounts()
+            reviewed = frozenset(
+                (account.id, review.source_sha256)
+                for account in accounts
+                for review in store.statement_source_reviews(account.id)
+            )
+            account_count = len(accounts)
         layout = QVBoxLayout(self)
         profile_row = QHBoxLayout()
         profile_row.addWidget(QLabel("Profile:"))
@@ -263,7 +284,7 @@ class V2StatementCoverageDialog(QDialog):
         )
         scope.setWordWrap(True)
         layout.addWidget(scope)
-        self.model = _CoverageModel(rows, self)
+        self.model = _CoverageModel(rows, reviewed, self)
         self.table = QTableView()
         self.table.setModel(self.model)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -272,8 +293,15 @@ class V2StatementCoverageDialog(QDialog):
             self.table.horizontalHeader().setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         self.table.doubleClicked.connect(self._preview)
+        saved_panel = QWidget()
+        saved_layout = QVBoxLayout(saved_panel)
+        saved_layout.addWidget(self.table)
+        self.review_source_button = QPushButton("Review selected source")
+        self.review_source_button.clicked.connect(self._review_selected_source)
+        self.table.selectionModel().currentRowChanged.connect(self._update_review_source_button)
+        saved_layout.addWidget(self.review_source_button)
         tabs = QTabWidget()
-        tabs.addTab(self.table, "Saved periods")
+        tabs.addTab(saved_panel, "Saved periods")
         opening_panel = QWidget()
         opening_layout = QVBoxLayout(opening_panel)
         opening_scope = QLabel(
@@ -325,6 +353,7 @@ class V2StatementCoverageDialog(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+        self._update_review_source_button()
 
     def _preview(self, index: QModelIndex) -> None:
         if not index.isValid():
@@ -339,3 +368,31 @@ class V2StatementCoverageDialog(QDialog):
         with V2ProfileStore.open(self.profile, read_only=True) as store:
             saved = store.load_import(self.comparison_model.rows[index.row()].source_sha256)
         V2EvidencePreview(saved, self).exec()
+
+    def _update_review_source_button(self, *_args) -> None:
+        index = self.table.currentIndex()
+        self.review_source_button.setEnabled(index.isValid())
+        if index.isValid():
+            status = self.model.data(self.model.index(index.row(), 10))
+            self.review_source_button.setText(f"Review selected source ({status})")
+        else:
+            self.review_source_button.setText("Review selected source")
+
+    def _review_selected_source(self) -> None:
+        index = self.table.currentIndex()
+        if not index.isValid():
+            return
+        section = self.model.rows[index.row()]
+        if V2StatementSourceReview(self.profile, section, self).exec() != QDialog.Accepted:
+            return
+        with V2ProfileStore.open(self.profile, read_only=True) as store:
+            accounts = store.financial_accounts()
+            reviewed = frozenset(
+                (account.id, review.source_sha256)
+                for account in accounts
+                for review in store.statement_source_reviews(account.id)
+            )
+            openings = store.earliest_source_openings()
+        self.model.set_reviewed(reviewed)
+        self.opening_model.replace(openings)
+        self._update_review_source_button()
