@@ -48,6 +48,7 @@ from parsetrail.gui.v2_opening_review import V2OpeningReview
 from parsetrail.gui.v2_path_notice import show_data_locations, show_path_notice
 from parsetrail.gui.v2_reviewed_reports import V2ReviewedReportsDialog
 from parsetrail.gui.v2_source_account_review import V2SourceAccountReview
+from parsetrail.gui.v2_source_overlap_review import V2SourceOverlapReview
 from parsetrail.gui.v2_statement_coverage import V2StatementCoverageDialog
 from parsetrail.gui.v2_transfer_review import V2TransferReview
 
@@ -216,6 +217,9 @@ class V2WorkspaceWindow(QMainWindow):
         self.source_review_button = QPushButton("Review source accounts")
         self.source_review_button.clicked.connect(self._review_source_account)
         account_controls.addWidget(self.source_review_button)
+        self.overlap_review_button = QPushButton("Review repeated rows")
+        self.overlap_review_button.clicked.connect(self._review_source_overlap)
+        account_controls.addWidget(self.overlap_review_button)
         self.review_button = QPushButton("Review unidentified rows")
         self.review_button.clicked.connect(self._review_account)
         account_controls.addWidget(self.review_button)
@@ -564,6 +568,10 @@ class V2WorkspaceWindow(QMainWindow):
         if source_id is not None:
             V2SourceAccountReview(self.workspace, source_id, self).exec()
             self.refresh(select_source=source_id)
+
+    def _review_source_overlap(self) -> None:
+        V2SourceOverlapReview(self.workspace.profile_path, self).exec()
+        self.refresh()
 
     def _set_abbreviated_matching(self, enabled: bool) -> None:
         try:

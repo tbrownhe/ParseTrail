@@ -6,6 +6,60 @@ Dates, release IDs, and evidence locations are retained as recorded; old runtime
 identifiers are historical references, not instructions to reactivate them.
 Current unfinished work belongs in [TODO](../TODO.md).
 
+## V2 cross-source occurrence safeguard — October 25, 2026
+
+Implemented the selected bounded V2-3/V2-4 packet on
+`feature/client-financial-insights`: read-only cross-source candidates, explicit
+distinct/repeat/pending history, and transaction-owned cash/card/transfer guards.
+The [occurrence-review contract](client-v2-source-overlap.md) records the exact
+matcher, multiplicity rules, account-binding locks and remaining limits.
+Pre-release schema 11 refuses earlier disposable profiles without migration.
+
+Final Windows source/offscreen integration command from the repository root:
+
+```powershell
+$env:PYTHONPATH='.;client/src;client'
+$env:QT_QPA_PLATFORM='offscreen'
+& .\client\.venv\Scripts\python.exe -m pytest -p no:cacheprovider client/tests -k v2 -q
+```
+
+Result: **167 passed, 1,107 deselected in 56.66 seconds**. This includes 21 new
+service checks, five repeated-row dialog checks and two account-binding adapter
+checks. Focused service verification separately passed all 21 tests using
+`client/tests/test_v2_source_overlap.py -q`. Cases include original evidence
+preservation, same-source multiplicity, distinct/repeat contradictions, stale
+forms, corrected retained rows, card dates, different-date transfer clearing,
+injected write rollback, independent snapshot/reopen, display truncation and
+full posting guards, schema refusal and SQLite NULL constraint enforcement.
+
+Independent integrity review inspected the integrated diff and ran focused
+synthetic checks. It found and resolved occurrence collapse, misleading
+same-movement labels across separate retained groups, unreachable pending work
+beyond the display cap, and binding-control presentation issues. Final review
+found no remaining actionable defects within the inspected scope. The primary
+also hardened the repeat constraint against NULL retained IDs. Two rendered
+offscreen views were inspected for wording, layout and readable controls; the
+render used a registered Windows Segoe UI font because the offscreen host lacked
+a default font. No product font setting changed.
+
+Ruff `check` and `format --check` passed for all ten changed Python files;
+`git diff --check` passed. Manual changed-file checks passed for file size,
+UTF-8 BOM, final newline, mixed line endings, whitespace and merge markers.
+During initial verification the pre-commit runner was unavailable in the client
+environment and the offline `uvx` fallback could not access its existing cache.
+At the owner's subsequently authorized commit, the installed Git hook ran
+successfully: large-file, case-conflict, merge-conflict, final-newline,
+whitespace, line-ending, BOM, Ruff check and Ruff format hooks passed. TOML,
+YAML and Biome hooks had no applicable changed files.
+
+Writes used synthetic/disposable V2 profiles only. No private statement replay,
+1.x/live-profile writes, parser changes, server operations, signing, packaging,
+publication was performed. This is automated and agent verification;
+owner native acceptance, Intel checks and release authorization are unperformed.
+Consolidated UI/UX review remains pending. Shifted dates/different date roles,
+repairing existing double postings, and correcting bindings fixed by review
+history remain unfinished; account positions are a later separate packet.
+
 ## MOHELA detailed-export replacement — October 4, 2026
 
 The owner selected MOHELA-only evidence and authorized replacing the old aggregate

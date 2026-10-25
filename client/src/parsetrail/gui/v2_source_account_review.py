@@ -82,6 +82,7 @@ class V2SourceAccountReview(QDialog):
             self.bindings = store.source_account_bindings(self.source_sha256)
             accounts = store.financial_accounts()
             posted_rows = store.journal_history_row_ids(self.source_sha256)
+            overlap_rows = store.source_overlap_history_row_ids(self.source_sha256)
         catalog = self.workspace.catalog_cache.load_current()
         preferences = self.workspace.preferences()
         self.abbreviated_matching_button.blockSignals(True)
@@ -114,7 +115,12 @@ class V2SourceAccountReview(QDialog):
             else payload.rows
         )
         counts = Counter((row.source_account, row.source_account_form) for row in rows)
-        self.locked_keys = {(row.source_account, row.source_account_form) for row in rows if row.row_id in posted_rows}
+        self.overlap_locked_keys = {
+            (row.source_account, row.source_account_form) for row in rows if row.row_id in overlap_rows
+        }
+        self.locked_keys = {
+            (row.source_account, row.source_account_form) for row in rows if row.row_id in posted_rows
+        } | self.overlap_locked_keys
         names = {account.id: account.name for account in accounts}
         self.account_combo.clear()
         self.account_combo.addItem("Choose a ledger account…", None)
@@ -136,7 +142,13 @@ class V2SourceAccountReview(QDialog):
             locked = (binding.source_identity, binding.source_identity_form) in self.locked_keys
             item = QListWidgetItem(
                 f"{binding.source_identity} ({binding.source_identity_form}) · {count} row(s) · {assigned}"
-                + (" · Locked by posted entries" if locked else "")
+                + (
+                    " · Locked by source-row review"
+                    if (binding.source_identity, binding.source_identity_form) in self.overlap_locked_keys
+                    else " · Locked by posted entries"
+                    if locked
+                    else ""
+                )
             )
             item.setToolTip(item.text())
             self.identities.addItem(item)
@@ -165,7 +177,10 @@ class V2SourceAccountReview(QDialog):
         self.assign_button.setEnabled(selected and not locked and self.account_combo.currentData() is not None)
         self.clear_button.setEnabled(selected and not locked and self.bindings[index].ledger_account_id is not None)
         self.lock_notice.setText(
-            "This account assignment is locked because a row has posted journal history. "
+            "This account assignment has saved repeated-row review history and cannot be reassigned. "
+            "Returning a pair to pending preserves that history and its account identity."
+            if locked and self._selected_key() in self.overlap_locked_keys
+            else "This account assignment is locked because a row has posted journal history. "
             "Review or correct the entry; its source account cannot be reassigned."
             if locked
             else ""
@@ -198,7 +213,9 @@ class V2SourceAccountReview(QDialog):
             self._reload()
         except (ProfileFormatError, sqlite3.Error, OSError) as exc:
             message = (
-                "This account assignment is locked because a row has posted journal history. "
+                "This account assignment has saved repeated-row review history and cannot be reassigned."
+                if str(exc) == "account_binding_has_overlap_review_history"
+                else "This account assignment is locked because a row has posted journal history. "
                 "Review or correct the entry; its source account cannot be reassigned."
                 if str(exc) == "account_binding_has_journal_history"
                 else str(exc)

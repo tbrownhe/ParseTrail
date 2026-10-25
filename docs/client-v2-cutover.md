@@ -658,6 +658,30 @@ for readability. Profile, backup and export paths, plus disposable demo file
 paths, now use selectable single-line fields instead of wrapping prose. Other
 1.x action deferrals in the inventory still need explicit decisions.
 
+## Cross-source occurrence safeguard — October 25, 2026
+
+The selected V2-3/V2-4 packet adds a read-only inventory and explicit
+[repeated-row review](client-v2-source-overlap.md). Equal signed amounts with
+the same source date and date role on one explicitly bound financial account
+are candidates across different sources. Distinct occurrences, a retained row
+with supporting repeats and pending decisions remain separate from imported
+evidence and journal money. Occurrence multiplicities are preserved.
+
+Pre-release schema 11 saves append-only review history; earlier disposable
+profiles must be recreated. Unresolved detected candidates and supporting
+repeats block new cash/card/transfer allocations. Retained rows remain usable
+after explicit review, and their existing category/date correction paths keep
+the repeat relationship. Existing double postings remain visible conflicts;
+this packet does not cancel or rewrite them. Date-shifted/different-date-role
+matching and broader source resolution remain open. Conservative unallocated
+counts and reconciliation/coverage limits remain visible.
+
+The workspace opens a global repeated-row review with both source locations,
+allocation history and immutable evidence previews. Saved review history fixes
+the affected account bindings; the assignment dialogs explain those locks.
+The implementation has automated and agent review; owner integrated UI/UX
+review remains at its consolidated milestone. This is no release authorization.
+
 ## Current stop/go decision
 
 **Go** for fresh-profile service integration and finite parser work. The

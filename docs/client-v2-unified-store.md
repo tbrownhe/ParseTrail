@@ -92,3 +92,16 @@ Known assumed card posting dates cannot be asserted reported; source facts are
 never rewritten. A changed earliest-source assertion marks its opening
 decision stale; a later period's review does not. Revision 9 disposable
 profiles are recreated, without a migration path.
+
+Pre-release revision 11 adds append-only `SourceOverlapReviews` to the same
+profile. Explicit distinct/repeat/pending decisions retain both original
+source occurrences and their locations; a supporting repeat is a reference,
+never an additional allocation. New cash/card/transfer postings check all
+detected unresolved candidates and repeat references inside their write
+transaction. Saving any occurrence review fixes the reviewed rows' account
+bindings, including after a later pending decision, so a historical relation
+cannot silently reactivate under a changed account. Existing journal corrections
+remain available. Profile snapshots include this history automatically.
+Revision 10 disposable profiles are refused and recreated. See the
+[bounded occurrence-review contract](client-v2-source-overlap.md) for matching,
+multiplicity, posted-conflict and report limits.

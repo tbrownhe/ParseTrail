@@ -157,6 +157,7 @@ class V2AccountBindingReview(QDialog):
             )
             self._file_eligible = len(rows) == len(payload.rows)
             self.posted_row_ids = store.journal_history_row_ids(self.source_sha256)
+            self.overlap_row_ids = store.source_overlap_history_row_ids(self.source_sha256)
         selected_account = self.account_combo.currentData()
         self.account_combo.clear()
         for account in accounts:
@@ -188,8 +189,9 @@ class V2AccountBindingReview(QDialog):
         selected_bindings = (self.model.bindings[index.row()] for index in self.table.selectionModel().selectedRows())
         file_mode = any(binding.basis == "file" for binding in self.model.bindings)
         row_mode = any(binding.basis == "row" for binding in self.model.bindings)
-        file_locked = file_mode and bool(self.posted_row_ids)
-        selected_locked = any(row_id in self.posted_row_ids for row_id in selected)
+        locked_rows = self.posted_row_ids | self.overlap_row_ids
+        file_locked = file_mode and bool(locked_rows)
+        selected_locked = any(row_id in locked_rows for row_id in selected)
         account_available = self.account_combo.currentData() is not None
         self.file_button.setEnabled(
             account_available and self._file_eligible and bool(self.model.rows) and not row_mode and not file_locked
@@ -202,7 +204,9 @@ class V2AccountBindingReview(QDialog):
             not file_mode and not selected_locked and any(binding.basis == "row" for binding in selected_bindings)
         )
         self.lock_notice.setText(
-            "Posted journal history locks the whole-file account assertion. Review or correct the entry first."
+            "Saved repeated-row review history locks this account assignment, including after returning a pair to pending."
+            if (file_locked and self.overlap_row_ids) or any(row_id in self.overlap_row_ids for row_id in selected)
+            else "Posted journal history locks the whole-file account assertion. Review or correct the entry first."
             if file_locked
             else "Selected posted rows have locked account assignments. Review or correct their entries first."
             if selected_locked
@@ -216,7 +220,9 @@ class V2AccountBindingReview(QDialog):
             self._reload()
         except (ProfileFormatError, OSError) as exc:
             message = (
-                "This account assignment is locked because a row has posted journal history. "
+                "This account assignment has saved repeated-row review history and cannot be reassigned."
+                if str(exc) == "account_binding_has_overlap_review_history"
+                else "This account assignment is locked because a row has posted journal history. "
                 "Review or correct the entry; its source account cannot be reassigned."
                 if str(exc) == "account_binding_has_journal_history"
                 else str(exc)

@@ -626,7 +626,12 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   creates no income or expense. Synthetic service and offscreen dialog checks
   pass; the owner accepted native transfer review after selecting the correct
   disposable profile and seeing three candidates. Dismissal, transfer correction,
-  duplicate/overlap resolution, fees and partial settlements remain pending.
+  broader duplicate/overlap resolution, fees and partial settlements remain pending.
+  The bounded [cross-source occurrence safeguard](docs/client-v2-source-overlap.md)
+  now reviews equal-date/role/amount rows on the same bound account and guards
+  new postings. Date-shifted/different-date-role matches, repair of existing
+  double postings, correction of account bindings fixed by saved occurrence
+  reviews and consolidated daily-workflow UX review remain unfinished.
   The owner first saw an empty panel in another profile. The disposable preview
   contained three pairs; the panel now displays its profile path and explains
   an empty result, so a different or incompletely bound profile is distinguishable.
