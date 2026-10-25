@@ -581,15 +581,19 @@ The read-only Reconciliation check tab evaluates each bound account-total
 statement from one committed SQLite snapshot. It compares printed opening and
 closing amounts with the journal at the inclusive period boundaries, checks the
 independent source equation, allocation and unbacked postings, and requires
-reviewed endpoint origins, period timing, reported posting dates, a current
-opening decision and verified page capture. It reports exact differences and
+reviewed endpoint origins, period timing, reported posting dates and a current
+opening decision. It reports exact differences and
 blockers with a deterministic rule/input version. It writes no journal or review
-state. Calendar gaps, adjacent endpoint differences and source overlap are
-separate coverage facts; posted interpretation review is separate too. A
+state. Incomplete page capture, calendar gaps, adjacent endpoint differences
+and source overlap are separate evidence/coverage facts; posted interpretation
+review is separate too. A
 reconciled period does not certify complete account history. `--demo --comparison`
 opens this tab with fully reviewed synthetic Savings A and pending Card A.
-Service and offscreen UI checks pass; native acceptance is pending. Real bank
-sources with incomplete page-capture evidence remain visibly blocked.
+Service and offscreen UI checks pass; the owner accepted the native tab. An
+immediate contract check found that all current real parsers leave page capture
+unverified, while the earlier accepted reconciliation contract treats capture
+as a separate limitation. The check now shows incomplete capture without
+blocking exact balance reconciliation; native wording recheck is pending.
 
 A first read-only Spending summary in the 2.0 workspace uses reviewed expense
 journal postings for a selected half-open date range. Reversal and replacement

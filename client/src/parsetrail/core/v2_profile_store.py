@@ -2494,7 +2494,7 @@ class V2ProfileStore:
         return result
 
     def _statement_reconciliation_checks(self) -> tuple[StatementReconciliationCheck, ...]:
-        rule = "v2-statement-reconciliation-1"
+        rule = "v2-statement-reconciliation-2"
         version_tables = (
             ("Sources", "sha256"),
             ("EvidenceSnapshots", "source_sha256,definition_sha256,sha256"),
@@ -2587,8 +2587,6 @@ class V2ProfileStore:
                 exceptions.append("reported_balance_endpoints_unavailable")
             if not section.independent_balance_verified or source_difference != 0:
                 exceptions.append("source_balance_equation_unverified")
-            if not section.capture_verified:
-                exceptions.append("source_capture_incomplete")
             if comparison.unallocated_rows:
                 exceptions.append("unallocated_source_movements")
             if comparison.allocations_outside_period:
@@ -2629,6 +2627,8 @@ class V2ProfileStore:
                 for other in coverage
             )
             warnings = []
+            if not section.capture_verified:
+                warnings.append("source_capture_incomplete")
             if overlapping:
                 warnings.append("overlapping_bound_source_periods")
             if section.relation_to_known_periods == "gap":

@@ -250,7 +250,7 @@ class _ReconciliationModel(QAbstractTableModel):
         "Opening\ndifference",
         "Closing\ndifference",
         "Source equation\ndifference",
-        "Separate\ncoverage facts",
+        "Evidence / coverage\nlimits",
         "Source",
     )
     REASONS = {
@@ -327,7 +327,7 @@ class _ReconciliationModel(QAbstractTableModel):
             f"Printed opening {amount(row.printed_opening_minor)}; journal opening {amount(row.journal_opening_minor)}. "
             f"Printed closing {amount(row.printed_closing_minor)}; journal closing {amount(row.journal_closing_minor)}.\n"
             f"Check blockers: {', '.join(cls.REASONS[reason] for reason in row.exceptions) or 'None'}.\n"
-            f"Separate coverage facts: {', '.join(cls.REASONS[reason] for reason in row.coverage_warnings) or 'None identified'}. "
+            f"Evidence / coverage limits: {', '.join(cls.REASONS[reason] for reason in row.coverage_warnings) or 'None identified'}. "
             f"Posted interpretation review: {'Complete' if row.posted_interpretations_reviewed else 'Pending'}.\n"
             f"Source: {row.source_sha256}; rule: {row.rule}; input version: {row.input_version}"
         )
@@ -446,8 +446,9 @@ class V2StatementCoverageDialog(QDialog):
         reconciliation_layout = QVBoxLayout(reconciliation_panel)
         reconciliation_scope = QLabel(
             "Reconciled requires matching printed and journal opening/closing balances, complete source allocation, "
-            "reviewed source provenance, a current opening decision and complete page capture. "
-            "Coverage facts and posted interpretation review remain separate. Select a row for exact blockers and values."
+            "reviewed source provenance and a current opening decision. "
+            "Page capture, period coverage and posted interpretation review remain separate. "
+            "Select a row for exact blockers and values."
         )
         reconciliation_scope.setWordWrap(True)
         reconciliation_layout.addWidget(reconciliation_scope)

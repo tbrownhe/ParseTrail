@@ -29,7 +29,7 @@ def _review_and_post(store: V2ProfileStore, evidence) -> None:
 
 def test_reconciliation_needs_positions_provenance_and_allocation(tmp_path: Path):
     path = tmp_path / "reconciliation.db"
-    evidence = _profile(path, capture_verified=True)
+    evidence = _profile(path)
     with V2ProfileStore.open(path) as store:
         pending = store.statement_reconciliation_checks()[0]
         assert not pending.reconciled
@@ -39,6 +39,7 @@ def test_reconciliation_needs_positions_provenance_and_allocation(tmp_path: Path
         _review_and_post(store, evidence)
         checked = store.statement_reconciliation_checks()[0]
         assert checked.reconciled and checked.exceptions == (), checked.exceptions
+        assert checked.coverage_warnings == ("source_capture_incomplete",)
         assert checked.printed_opening_minor == checked.journal_opening_minor == 10_000
         assert checked.printed_closing_minor == checked.journal_closing_minor == 9_000
         assert checked.source_difference_minor == 0
@@ -54,7 +55,7 @@ def test_reconciliation_needs_positions_provenance_and_allocation(tmp_path: Path
 
 def test_later_statement_needs_its_own_source_review_but_not_new_opening(tmp_path: Path):
     path = tmp_path / "later-reconciliation.db"
-    evidence = _profile(path, capture_verified=True)
+    evidence = _profile(path)
     with V2ProfileStore.open(path) as store:
         _review_and_post(store, evidence)
         later = _later_source(store, evidence)

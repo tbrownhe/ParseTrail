@@ -637,12 +637,16 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   later-source review.
   A read-only Reconciliation check now combines exact printed and journal
   opening/closing positions, source equation, allocation, reviewed provenance,
-  current opening decision and verified page capture in one SQLite read snapshot.
+  current opening decision in one SQLite read snapshot.
   It returns a deterministic input version; corrections and source-review changes
-  change that version. Interpretation review and coverage warnings stay separate.
+  change that version. Interpretation review, incomplete page capture and
+  coverage warnings stay separate.
   The disposable `--demo --comparison` workspace shows a fully reviewed synthetic
   Savings A beside pending Card A. Service and offscreen UI checks pass; native
-  acceptance of this new tab is pending.
+  acceptance of this tab passed. An immediate contract check then corrected the
+  initial page-capture gate: every current real parser reports capture unverified,
+  while the accepted reconciliation contract keeps that limitation visible and
+  independent of exact balance reconciliation. Native wording recheck is pending.
   Revision 9 disposable pilot profiles are recreated, not migrated.
   A read-only signed-catalog scan routed all 956 PDFs in the two successful
   archives, then parsed the six bank families: 315 statements and 14,275 rows

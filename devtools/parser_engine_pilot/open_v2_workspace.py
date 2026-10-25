@@ -142,11 +142,6 @@ def main(argv: list[str] | None = None) -> int:
             card_evidence = from_synchrony_table(CARD_DEFINITION, *card_channels())
             store.import_source(CARD_SOURCE, CARD_DEFINITION, card_evidence, suffix=".pdf")
             bank_evidence = from_anchored_bank(BANK_DEFINITION, *bank_channels(definition=BANK_DEFINITION, tail=True))
-            if args.comparison:
-                # This synthetic source is fully known to the demo, unlike real extracted pages.
-                bank_evidence = bank_evidence.model_copy(
-                    update={"payload": bank_evidence.payload.model_copy(update={"capture_verified": True})}
-                )
             store.import_source(BANK_SOURCE, BANK_DEFINITION, bank_evidence, suffix=".pdf")
             store.add_financial_account(FinancialAccount("loan-a", "Loan A", "liability", "mohela"))
             store.add_financial_account(FinancialAccount("loan-b", "Loan B", "liability", "mohela"))
