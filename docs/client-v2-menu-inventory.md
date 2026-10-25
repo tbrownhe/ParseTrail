@@ -49,3 +49,34 @@ retaining correction links. The 2.0 workbook cannot certify unique source
 coverage, account balances or cash flow. The owner chose reviewed transaction
 rows for this first export and accepted its native Windows behavior. Some
 internal keys remain visible for now; pivot and preset choices remain open.
+
+## Proposed cutover scope for owner review
+
+The first 2.0 release should be usable as a fresh daily profile, without
+recreating the 1.x menu structure. The proposed launch work is:
+
+- A verified offline starter catalog covering every current parser, with a
+  selected-file import path and clear pending status for unsupported accounting.
+- Explicit account binding, category and budget editing, ordinary bank/card
+  review, transfers, loan interpretation, manual opening/value decisions, and
+  corrections. Unknown source facts must stay visible and unposted.
+- Statement-period overlap and reconciliation review before any balance claim;
+  Spending, Income, budgets, account movement and transaction-row export must
+  keep their incomplete-source scope visible.
+- A clean profile lifecycle with verified backup/restore, visible storage and
+  privacy information, and a minimal About/Getting Started path for the final
+  build. Native Windows and targeted Intel Mac acceptance remain release gates.
+
+The proposed deliberate omissions are the 1.x trained-model actions,
+recurring-transaction detector, appreciation calculator, separate account
+configuration export, standalone backup-test button, export date-preset
+buttons, pivot sheets and dashboard charts. The verified profile backup already
+contains account configuration; the explicit date range and tabular reports
+cover the immediate reporting use. Server sign-out and source submission do
+not belong in the local-only client cutover; server publication has its own
+later gate. None of these omissions has owner approval yet.
+
+Three choices still affect implementation order: whether folder/batch import
+is needed for the first release, whether users need arbitrary manual journal
+entries in addition to reviewed openings and values, and whether a local
+catalog-install action is sufficient until the separate server publication.
