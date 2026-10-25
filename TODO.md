@@ -620,6 +620,9 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   opens the comparison tab with reviewed Savings A and pending Card A rows. The
   first sandbox-launched preview was not visible on the owner's desktop, so use
   the owner-launched demo command for this walkthrough.
+  The owner found the Comparison status column clipped. The tab now uses
+  two-line headers, an early 260-pixel wrapped status column and compact initial
+  widths; native recheck is open.
   A read-only signed-catalog scan routed all 956 PDFs in the two successful
   archives, then parsed the six bank families: 315 statements and 14,275 rows
   met the structural cash-review prerequisites before account binding, with

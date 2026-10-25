@@ -66,9 +66,11 @@ def test_coverage_dialog_shows_journal_comparison_without_reconciliation_claim(t
         app.processEvents()
         assert dialog.profile_path.text() == str(path)
         assert dialog.comparison_model.rowCount() == 1
-        assert dialog.comparison_model.data(dialog.comparison_model.index(0, 2)) == "-$10.00"
-        assert dialog.comparison_model.data(dialog.comparison_model.index(0, 6)) == "2"
-        assert "awaiting allocation" in dialog.comparison_model.data(dialog.comparison_model.index(0, 10))
+        assert "\n" in dialog.comparison_model.HEADERS[0]
+        assert dialog.comparison_table.columnWidth(2) >= 260
+        assert dialog.comparison_model.data(dialog.comparison_model.index(0, 3)) == "-$10.00"
+        assert dialog.comparison_model.data(dialog.comparison_model.index(0, 7)) == "2"
+        assert "awaiting allocation" in dialog.comparison_model.data(dialog.comparison_model.index(0, 2))
     finally:
         dialog.close()
         app.processEvents()

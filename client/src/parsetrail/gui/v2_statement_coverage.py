@@ -167,17 +167,17 @@ class _OpeningModel(QAbstractTableModel):
 
 class _JournalComparisonModel(QAbstractTableModel):
     HEADERS = (
-        "Financial account",
-        "Source period",
-        "Printed change",
-        "Source activity",
-        "Journal change",
-        "Journal minus printed",
-        "Unallocated rows",
-        "Unallocated amount",
-        "Allocations outside period",
-        "Other postings",
-        "Comparison status",
+        "Financial\naccount",
+        "Source\nperiod",
+        "Comparison\nstatus",
+        "Printed\nchange",
+        "Source\nactivity",
+        "Journal\nchange",
+        "Journal minus\nprinted",
+        "Unallocated\nrows",
+        "Unallocated\namount",
+        "Allocations\noutside period",
+        "Other\npostings",
         "Source",
     )
 
@@ -203,7 +203,8 @@ class _JournalComparisonModel(QAbstractTableModel):
         natural = 1 if row.account_kind == "asset" else -1
         values = (
             row.account_name,
-            f"{row.period_start.isoformat() if row.period_start else 'Unknown'} to {row.period_end.isoformat()}",
+            f"{row.period_start.isoformat() if row.period_start else 'Unknown'}\n{row.period_end.isoformat()}",
+            row.status,
             _money(row.printed_change_minor * natural) if row.printed_change_minor is not None else "Unavailable",
             _money(row.source_activity_change_minor * natural)
             if row.source_activity_change_minor is not None
@@ -214,12 +215,11 @@ class _JournalComparisonModel(QAbstractTableModel):
             _money(row.unallocated_magnitude_minor),
             str(row.allocations_outside_period),
             str(row.outside_postings),
-            row.status,
             row.source_sha256[:16],
         )
         if role == Qt.ToolTipRole:
             return (
-                f"Source: {row.source_sha256}\nAccount: {row.account_id} ({row.account_kind})\n"
+                f"{row.status}\nSource: {row.source_sha256}\nAccount: {row.account_id} ({row.account_kind})\n"
                 f"{row.activity_rows} source activity rows; unresolved amount is the sum of absolute row remainders.\n"
                 "Signed changes are displayed as asset value or liability owed. This is not reconciliation certification."
             )
@@ -233,7 +233,7 @@ class V2StatementCoverageDialog(QDialog):
         super().__init__(parent)
         self.profile = profile
         self.setWindowTitle("2.0 statement coverage")
-        self.resize(1200, 560)
+        self.resize(1320, 600)
         with V2ProfileStore.open(profile, read_only=True) as store:
             rows = store.statement_coverage()
             openings = store.earliest_source_openings()
@@ -310,9 +310,14 @@ class V2StatementCoverageDialog(QDialog):
         self.comparison_table.setModel(self.comparison_model)
         self.comparison_table.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.comparison_table.setSelectionBehavior(QAbstractItemView.SelectRows)
-        for column in range(len(_JournalComparisonModel.HEADERS)):
-            self.comparison_table.horizontalHeader().setSectionResizeMode(column, QHeaderView.ResizeToContents)
-        self.comparison_table.horizontalHeader().setSectionResizeMode(10, QHeaderView.Stretch)
+        self.comparison_table.setWordWrap(True)
+        comparison_header = self.comparison_table.horizontalHeader()
+        comparison_header.setFixedHeight(max(46, comparison_header.fontMetrics().lineSpacing() * 2 + 12))
+        for column, width in enumerate((135, 105, 260, 88, 88, 88, 94, 78, 90, 94, 76)):
+            comparison_header.setSectionResizeMode(column, QHeaderView.Interactive)
+            self.comparison_table.setColumnWidth(column, width)
+        comparison_header.setSectionResizeMode(11, QHeaderView.Stretch)
+        self.comparison_table.verticalHeader().setDefaultSectionSize(56)
         self.comparison_table.doubleClicked.connect(self._preview_comparison)
         comparison_layout.addWidget(self.comparison_table)
         tabs.addTab(comparison_panel, "Journal comparison")

@@ -564,6 +564,9 @@ coverage. Synthetic service and offscreen GUI checks pass; native acceptance
 is open. The existing disposable workspace launcher accepts `--demo
 --comparison` and opens this tab with reviewed savings and pending card rows;
 the owner launches it in their Windows session for the walkthrough.
+The first native look found the Comparison status column clipped. The table now
+wraps two-line headers and gives status a wider, wrapped column near the left;
+the owner will recheck it in a fresh `--demo --comparison` launch.
 
 A first read-only Spending summary in the 2.0 workspace uses reviewed expense
 journal postings for a selected half-open date range. Reversal and replacement
