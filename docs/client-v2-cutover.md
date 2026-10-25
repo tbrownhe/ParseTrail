@@ -492,7 +492,8 @@ can be explicitly confirmed as an asset transfer or card repayment. The store
 posts one same-day entry or two source-dated entries through an asset clearing
 account, consuming each observation once and creating no category amount.
 Assumed card dates require the global choice. Synthetic service and offscreen
-GUI checks pass; native transfer review acceptance remains open. Duplicate
+GUI checks pass; the owner accepted native transfer review after viewing three
+candidates in the correct disposable profile. Duplicate
 source overlap, partial settlement, fees, dismissal and correction are still
 outside this slice. The owner accepted native card review and requested a
 broader UI/UX pass once features are settled.

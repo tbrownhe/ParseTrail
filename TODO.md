@@ -604,12 +604,12 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   when dates differ. The candidate view shows other matches; assumed card dates
   require the global choice. Posting atomically consumes both source rows and
   creates no income or expense. Synthetic service and offscreen dialog checks
-  pass; native transfer review acceptance is open. Dismissal, transfer correction,
+  pass; the owner accepted native transfer review after selecting the correct
+  disposable profile and seeing three candidates. Dismissal, transfer correction,
   duplicate/overlap resolution, fees and partial settlements remain pending.
-  The owner accepted the review panel but saw no candidates in the workspace
-  opened during the walkthrough. The disposable preview profile independently
-  contains three pairs; the panel now displays its profile path and explains an
-  empty result, so a different or incompletely bound profile is distinguishable.
+  The owner first saw an empty panel in another profile. The disposable preview
+  contained three pairs; the panel now displays its profile path and explains
+  an empty result, so a different or incompletely bound profile is distinguishable.
   A read-only signed-catalog scan routed all 956 PDFs in the two successful
   archives, then parsed the six bank families: 315 statements and 14,275 rows
   met the structural cash-review prerequisites before account binding, with
