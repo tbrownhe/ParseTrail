@@ -147,6 +147,16 @@ sheet/cell. Observed balances and derived balances are different fields; unknown
 is not zero. Multi-account and multi-loan identities must survive without counting
 both an aggregate and its components as separate economic movements.
 
+For dates, `derived` means the parser resolves a date deterministically from
+source facts, such as a printed Post month/day and the statement period.
+`assumed` means the PDF did not print
+a posting date and the parser offers a best guess from an activity or
+transaction date. Keep the printed source date separately and show the
+assumption in review. A global preference, off by default, permits a reviewed
+entry to use an assumed date without asking for each row. Changing that
+preference never rewrites source evidence; a later accounting-date correction
+must reverse and replace its journal entry.
+
 Separate field validity, internal arithmetic, independent source checks, accounting
 review and ledger reconciliation. Activity spans, requested export ranges and
 capture times do not establish statement coverage. Missing independent evidence

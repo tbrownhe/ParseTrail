@@ -468,6 +468,16 @@ HSA cash components, cards, loans, investment summaries and other date roles
 stay pending; positive receipts still require explicit income confirmation.
 Synthetic bank posting, correction and dialog checks pass. The owner accepted
 the bank-statement review extension on native Windows.
+The owner subsequently chose low-friction card-date review: parsers should use
+printed Post dates where available and mark an unprinted posting-date guess as
+assumed. The source model now distinguishes these cases. Chase, single-date
+Citi and Synchrony produce assumed candidates; dual-date Citi and other
+printed Post columns retain a deterministic year resolution. Synchrony's
+original activity date stays separate from its posting candidate. A global
+Settings choice defaults off and gates future use of assumed candidates; the
+evidence preview shows the provenance. Reviewed card purchase posting and
+append-only accounting-date correction remain future ledger/UI work. The
+source snapshot is never rewritten by the setting.
 A separate read-only scan routed all 956 PDFs in the two successful archives
 through the locally test-signed catalog and parsed the six eligible bank
 families. All 315 statements and 14,275 activity rows met the account-total,
@@ -549,7 +559,7 @@ copyable paths for the active profile, signed catalog cache and global
 preferences. It explains that imported source bytes and authored/reviewed data
 reside in the unencrypted profile, and that a profile backup excludes the
 separate cache and preferences. An offscreen menu interaction check passes;
-native presentation acceptance is open.
+the owner accepted the native presentation on October 25, 2026.
 
 The [1.x desktop action inventory](client-v2-menu-inventory.md) lists every
 menu action and dashboard tab with its current 2.0 status. The owner selected

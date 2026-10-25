@@ -13,6 +13,7 @@ from pathlib import Path
 @dataclass(frozen=True)
 class V2Preferences:
     allow_abbreviated_account_matching: bool = False
+    allow_assumed_posting_dates: bool = False
 
 
 def default_preferences_path() -> Path:
@@ -36,15 +37,21 @@ def load_preferences(path: Path) -> V2Preferences:
         raise ValueError("v2_preferences_shape") from None
     if (
         type(raw) is not dict
-        or set(raw) != {"allow_abbreviated_account_matching"}
+        or "allow_abbreviated_account_matching" not in raw
+        or set(raw) - {"allow_abbreviated_account_matching", "allow_assumed_posting_dates"}
         or type(raw["allow_abbreviated_account_matching"]) is not bool
+        or type(raw.get("allow_assumed_posting_dates", False)) is not bool
     ):
         raise ValueError("v2_preferences_shape")
-    return V2Preferences(raw["allow_abbreviated_account_matching"])
+    return V2Preferences(raw["allow_abbreviated_account_matching"], raw.get("allow_assumed_posting_dates", False))
 
 
 def save_preferences(path: Path, preferences: V2Preferences) -> None:
-    if not isinstance(preferences, V2Preferences) or type(preferences.allow_abbreviated_account_matching) is not bool:
+    if (
+        not isinstance(preferences, V2Preferences)
+        or type(preferences.allow_abbreviated_account_matching) is not bool
+        or type(preferences.allow_assumed_posting_dates) is not bool
+    ):
         raise ValueError("v2_preferences_shape")
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.is_symlink():
@@ -52,7 +59,13 @@ def save_preferences(path: Path, preferences: V2Preferences) -> None:
     descriptor, name = tempfile.mkstemp(prefix="v2-preferences-", suffix=".tmp", dir=path.parent)
     try:
         with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
-            json.dump({"allow_abbreviated_account_matching": preferences.allow_abbreviated_account_matching}, stream)
+            json.dump(
+                {
+                    "allow_abbreviated_account_matching": preferences.allow_abbreviated_account_matching,
+                    "allow_assumed_posting_dates": preferences.allow_assumed_posting_dates,
+                },
+                stream,
+            )
             stream.flush()
             os.fsync(stream.fileno())
         os.replace(name, path)

@@ -57,7 +57,9 @@ def test_bounded_continuation_and_liability_equation() -> None:
         ("2026-01-05", 2000, "AUTOPAY AUTO-PMT"),
         ("2026-01-09", -1000, "FOREIGN PURCHASE LOCATION"),
     ]
-    assert account.rows[0].transaction_date is None
+    assert account.rows[0].date.provenance == "assumed"
+    assert account.rows[0].transaction_date.iso == "2026-01-05"
+    assert account.rows[1].date.provenance == "derived"
     assert account.rows[1].transaction_date.iso == "2026-01-10"
     assert len(account.rows[1].fragments) == 2
     assert account.rows[1].date.locations[0].end_line == 9

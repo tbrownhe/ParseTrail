@@ -140,6 +140,16 @@ class V2WorkspaceWindow(QMainWindow):
         self.abbreviated_matching_action.setChecked(workspace.preferences().allow_abbreviated_account_matching)
         self.abbreviated_matching_action.toggled.connect(self._set_abbreviated_matching)
         settings_menu.addAction(self.abbreviated_matching_action)
+        self.assumed_posting_action = QAction(
+            "Allow best guess posting dates when a statement does not print one", self
+        )
+        self.assumed_posting_action.setCheckable(True)
+        self.assumed_posting_action.setChecked(workspace.preferences().allow_assumed_posting_dates)
+        self.assumed_posting_action.setToolTip(
+            "This applies to reviewed accounting entries. Saved source evidence does not change."
+        )
+        self.assumed_posting_action.toggled.connect(self._set_assumed_posting_dates)
+        settings_menu.addAction(self.assumed_posting_action)
         central = QWidget()
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)
@@ -527,6 +537,15 @@ class V2WorkspaceWindow(QMainWindow):
             self.abbreviated_matching_action.blockSignals(True)
             self.abbreviated_matching_action.setChecked(not enabled)
             self.abbreviated_matching_action.blockSignals(False)
+            QMessageBox.warning(self, "Preference was not saved", str(exc))
+
+    def _set_assumed_posting_dates(self, enabled: bool) -> None:
+        try:
+            self.workspace.set_allow_assumed_posting_dates(enabled)
+        except (OSError, ValueError) as exc:
+            self.assumed_posting_action.blockSignals(True)
+            self.assumed_posting_action.setChecked(not enabled)
+            self.assumed_posting_action.blockSignals(False)
             QMessageBox.warning(self, "Preference was not saved", str(exc))
 
     def _add_account(self) -> None:

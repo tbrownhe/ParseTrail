@@ -230,6 +230,13 @@ def test_statement_allows_observed_activity_date_without_posting_claim() -> None
     )
     assert account.rows[0].date_role == "activity_date"
 
+    guess = DateValue(raw=None, iso="2026-01-15", provenance="assumed", locations=(line(2),))
+    assert ObservationEvidence(**(values | {"posting_date_guess": guess})).posting_date_guess == guess
+    with pytest.raises(ValidationError, match="posting guess requires"):
+        ObservationEvidence(**(values | {"date_role": "posting_date", "posting_date_guess": guess}))
+    with pytest.raises(ValidationError, match="inferred date needs inputs"):
+        DateValue(raw="01/15", iso="2026-01-15", provenance="assumed", locations=(line(2),))
+
     outside = row.model_copy(update={"date": printed_date("12/31/2025", "2025-12-31", 2)})
     statement_payload = StatementPayload(
         kind="statement",

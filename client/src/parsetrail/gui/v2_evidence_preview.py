@@ -5,10 +5,20 @@ from __future__ import annotations
 from pathlib import Path
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
-from PySide6.QtWidgets import QAbstractItemView, QDialog, QDialogButtonBox, QLabel, QTableView, QTabWidget, QVBoxLayout
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QDialog,
+    QDialogButtonBox,
+    QHeaderView,
+    QLabel,
+    QTableView,
+    QTabWidget,
+    QVBoxLayout,
+)
 
 from parsetrail.core.source_evidence import ObservationEvidence, SourceDisposition, StatementPayload
 from parsetrail.core.v2_profile_store import SavedImport, V2ProfileStore
+from parsetrail.core.v2_review_dates import posting_date_candidate
 
 
 def _money(minor: int | None) -> str:
@@ -36,7 +46,16 @@ def _location(location) -> str:
 
 
 class _RowsModel(QAbstractTableModel):
-    HEADERS = ("Source date", "Date role", "Source account", "Description", "Amount", "Running balance", "Location")
+    HEADERS = (
+        "Source date",
+        "Date role",
+        "Posting candidate",
+        "Source account",
+        "Description",
+        "Amount",
+        "Running balance",
+        "Location",
+    )
 
     def __init__(self, rows: tuple[ObservationEvidence, ...], parent=None):
         super().__init__(parent)
@@ -58,9 +77,27 @@ class _RowsModel(QAbstractTableModel):
             return None
         row = self.rows[index.row()]
         location = _location(row.fragments[0].location)
+        source_date = row.transaction_date or row.date
+        source_role = (
+            "Transaction date" if row.transaction_date is not None else row.date_role.replace("_", " ").title()
+        )
+        date_suffix = {
+            "observed": "",
+            "derived": " (derived from source)",
+            "assumed": " (assumed)",
+            "unknown": "",
+        }[source_date.provenance]
+        posting = posting_date_candidate(row)
         values = (
-            (row.date.iso or "Unknown") + (" (year inferred)" if row.date.provenance == "derived" else ""),
-            row.date_role.replace("_", " ").title(),
+            (source_date.iso or "Unknown") + date_suffix,
+            source_role,
+            (
+                f"{posting.iso} ({posting.provenance})"
+                if posting is not None and posting.provenance == "assumed"
+                else posting.iso
+                if posting is not None
+                else "Not available"
+            ),
             row.source_account or "Not identified by source",
             row.description.text or "Description not printed",
             _money(row.amount.minor),
@@ -112,9 +149,12 @@ class V2EvidencePreview(QDialog):
         self.setWindowTitle("2.0 source evidence preview")
         self.resize(1100, 700)
         layout = QVBoxLayout(self)
-        layout.addWidget(
-            QLabel("This preview shows saved source evidence. Review cash activity for row posting status.")
+        introduction = QLabel(
+            "This preview shows saved source evidence. Assumed posting dates are parser guesses; "
+            "Settings controls whether a review workflow may use them. This preview never posts entries."
         )
+        introduction.setWordWrap(True)
+        layout.addWidget(introduction)
         coverage = payload.capture_verified if isinstance(payload, StatementPayload) else payload.coverage_verified
         unclassified_money = sum(item.code == "unclassified_monetary_line" for item in payload.dispositions)
         unclassified_note = f" · Unclassified dollar lines: {unclassified_money}" if unclassified_money else ""
@@ -150,7 +190,15 @@ class V2EvidencePreview(QDialog):
             view.setModel(model)
             view.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
             view.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-            view.horizontalHeader().setStretchLastSection(True)
+            header = view.horizontalHeader()
+            header.setStretchLastSection(False)
+            for column in range(model.columnCount()):
+                header.setSectionResizeMode(
+                    column,
+                    QHeaderView.ResizeMode.Stretch
+                    if column == (4 if model is self.rows_model else model.columnCount() - 1)
+                    else QHeaderView.ResizeMode.ResizeToContents,
+                )
             tabs.addTab(view, title)
         layout.addWidget(tabs)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)

@@ -20,7 +20,7 @@ def test_card_statement_round_trips_with_printed_and_derived_provenance() -> Non
     assert output.payload.kind == "statement"
     assert output.payload.accounts[0].source_identity_form == "last_four"
     assert output.payload.accounts[0].opening.minor == -2500
-    assert output.payload.accounts[0].rows[0].date.provenance == "derived"
+    assert output.payload.accounts[0].rows[0].date.provenance == "assumed"
     assert output.payload.accounts[0].rows[0].fragments[0].raw_values[0].startswith("03/15")
     assert output.payload.dispositions[0].code == "dated_auxiliary_uninterpreted"
     assert output.payload.capture_verified is False

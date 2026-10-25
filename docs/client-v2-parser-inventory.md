@@ -80,6 +80,14 @@ and endpoint balances, but their printed descriptions were blank: 1.x supplied
 “Interest” while V2 retains an unknown description. All 26 Capital One Auto
 PDFs show the known synthetic-origination/opening difference between 1.x and
 V2; no invented opening was added for parity.
+The October 25 card-date pass separated printed Post month/day values from
+fallback guesses. OCCU and US Bank card layouts print Post dates; the three
+Citi layouts contain printed Post values on dual-date rows and assumed
+posting dates on single-date rows. Chase has only a transaction date and
+retains its bounded statement-period posting proxy as assumed. Synchrony
+keeps its printed activity date as the source date and adds a separate assumed
+posting candidate, clamped to the printed period for pre-period activity.
+These are source-provenance labels and candidates, not approved journal dates.
 
 An authorized closed-copy replay subsequently parsed every referenced archive
 source with current checkout code; all resulting account statements retained

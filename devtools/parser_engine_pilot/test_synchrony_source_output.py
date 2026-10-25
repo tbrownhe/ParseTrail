@@ -70,6 +70,8 @@ def test_single_date_card_keeps_earlier_date_without_posting_claim(tmp_path: Pat
     assert account.rows[0].date.iso == "2025-12-31"
     assert account.rows[0].date_role == "activity_date"
     assert account.rows[0].transaction_date is None
+    assert account.rows[0].posting_date_guess.iso == "2026-01-01"
+    assert account.rows[0].posting_date_guess.provenance == "assumed"
     assert account.rows[0].amount.minor == -1000
     assert len(output.payload.dispositions) == 4
     assert any(item.code == "interest_fee_summary_row" for item in output.payload.dispositions)

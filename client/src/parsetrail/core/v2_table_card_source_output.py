@@ -194,7 +194,7 @@ def from_anchored_card(definition_bytes: bytes, table: AnchoredTableEvidence, te
                 date=DateValue(
                     raw=None,
                     iso=posting.isoformat(),
-                    provenance="derived",
+                    provenance="derived" if posting_raw else "assumed",
                     locations=(_location(first), first_page_span),
                 ),
                 transaction_date=(
@@ -204,7 +204,7 @@ def from_anchored_card(definition_bytes: bytes, table: AnchoredTableEvidence, te
                         provenance="derived",
                         locations=(_location(first), first_page_span),
                     )
-                    if transaction_raw and posting_raw
+                    if transaction_raw
                     else None
                 ),
                 description=TextValue(

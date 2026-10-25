@@ -225,6 +225,8 @@ def from_synchrony_table(
         occurrence = occurrences[key]
         occurrences[key] += 1
         locations = tuple(_row(item) for item in sources)
+        posting_guess = min(max(activity_date, start), end)
+        date_locations = (locations[0], _line(balances["opening"][0]), _line(balances["closing"][0]))
         rows.append(
             ObservationEvidence(
                 row_role="activity",
@@ -240,9 +242,12 @@ def from_synchrony_table(
                     raw=None,
                     iso=activity_date.isoformat(),
                     provenance="derived",
-                    locations=(locations[0], _line(balances["opening"][0]), _line(balances["closing"][0])),
+                    locations=date_locations,
                 ),
                 transaction_date=None,
+                posting_date_guess=DateValue(
+                    raw=None, iso=posting_guess.isoformat(), provenance="assumed", locations=date_locations
+                ),
                 description=TextValue(raw=description, text=description, provenance="observed", locations=locations),
                 amount=MoneyValue(raw=amount_raw, minor=amount, provenance="observed", locations=(locations[-1],)),
                 running_balance=None,

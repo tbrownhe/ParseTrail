@@ -91,9 +91,15 @@ principal plus interest). Importing evidence twice must not book an event twice.
 
 ## Dates, transfers, and incomplete evidence
 
-For initial statement-derived books use the financial account's observed posting
-date, retaining original transaction dates separately. Effective accounting date,
-source posting date, creation time, and reconciliation cutoff are distinct fields.
+For initial statement-derived books prefer the financial account's printed
+posting date, resolving a printed month/day against its statement period when
+needed. When no posting date is printed, retain the original activity or
+transaction date and mark the parser's posting candidate `assumed`. A global
+choice defaults off; enabling it permits reviewed entries to use these guesses
+without per-row date entry. Corrections to an accounting date use an append-only
+reversal and replacement rather than changing source evidence. Effective
+accounting date, source posting date, creation time, and reconciliation cutoff
+remain distinct facts.
 Source-specific opening/closing balance timing must be established before using
 a statement as an opening anchor.
 

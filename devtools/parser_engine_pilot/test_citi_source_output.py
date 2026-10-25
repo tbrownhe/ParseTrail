@@ -82,6 +82,26 @@ def test_statement_output_roundtrip_preserves_source_copies() -> None:
     assert [item.code for item in output.payload.dispositions] == ["dated_simple_text"]
 
 
+def test_single_printed_date_is_an_assumed_posting_date() -> None:
+    source = sample()
+    cells = ("01/02", "", "SHOP", "$10.00")
+    source = replace(
+        source,
+        simple_text_pages=("01/02 SHOP $10.00",),
+        table_evidence=replace(
+            source.table_evidence,
+            rows=(replace(source.table_evidence.rows[0], raw_cells=cells),),
+        ),
+        table_candidates=replace(
+            source.table_candidates,
+            groups=(JoinedTableRow((RawTableRow(1, 1, cells),), "SHOP", "$10.00"),),
+        ),
+    )
+    row = from_citi(source, DEFINITION_BYTES).payload.accounts[0].rows[0]
+    assert row.date.iso == "2026-01-02" and row.date.provenance == "assumed"
+    assert row.transaction_date.iso == "2026-01-02"
+
+
 def test_other_page_text_is_visible_but_unknown_money_or_dated_starts_refuse() -> None:
     source = replace(sample(), simple_text_pages=("01/02 01/02 SHOP $10.00\nGeneral notice",))
     output = from_citi(source, DEFINITION_BYTES)

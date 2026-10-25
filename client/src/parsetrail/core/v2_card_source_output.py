@@ -58,7 +58,7 @@ def from_card(evidence: CardStatementEvidence, lines: PDFLineEvidence) -> Source
                 source_account_form="last_four",
                 date_role="posting_date",
                 date=DateValue(
-                    raw=None, iso=str(row.posting_date.normalized), provenance="derived", locations=(location,)
+                    raw=None, iso=str(row.posting_date.normalized), provenance="assumed", locations=(location,)
                 ),
                 transaction_date=DateValue(
                     raw=None, iso=str(row.transaction_date.normalized), provenance="derived", locations=(location,)

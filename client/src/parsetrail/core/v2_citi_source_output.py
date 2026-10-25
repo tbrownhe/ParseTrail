@@ -25,6 +25,7 @@ from parsetrail.core.v2_citi_layout import (
     DATE_PREFIX,
     EVIDENCE_ENGINE_VERSION,
     TEXT_TRANSACTION,
+    TRANSACTION_DATE,
     load_definition,
 )
 from parsetrail.core.v2_citi_table import CitiTableRow
@@ -77,6 +78,7 @@ def from_citi(evidence: CitiEvidence, definition_bytes: bytes) -> SourceEvidence
         fragments = []
         amount_raw = None
         amount_location = None
+        posting_printed = False
         for source in resolved.sources:
             if source.page is None or source.line is None:
                 raise CitiOutputError("candidate_location")
@@ -84,6 +86,7 @@ def from_citi(evidence: CitiEvidence, definition_bytes: bytes) -> SourceEvidence
                 group = groups.get((source.page, source.line))
                 if group is None:
                     raise CitiOutputError("table_group_missing")
+                posting_printed |= TRANSACTION_DATE.search(group.sources[0].cells[1]) is not None
                 for item in group.sources:
                     raw = raw_tables.get((item.page, item.ordinal))
                     if raw is None or raw.raw_cells != item.cells:
@@ -98,11 +101,13 @@ def from_citi(evidence: CitiEvidence, definition_bytes: bytes) -> SourceEvidence
                 lines = tuple(_raw_line(evidence, source.page, line) for line in range(source.line, last + 1))
                 location = PdfLine(kind="pdf_line", page=source.page, line=source.line, end_line=source.end_line)
                 fragments.append(SourceFragment(channel=source.channel, location=location, raw_values=lines))
+                if source.channel == "text":
+                    match = TEXT_TRANSACTION.match(lines[0])
+                    if match is None:
+                        raise CitiOutputError("text_source_changed")
+                    posting_printed |= match["posting_date"] is not None
                 if source is representative:
                     if source.channel == "text":
-                        match = TEXT_TRANSACTION.match(lines[0])
-                        if match is None:
-                            raise CitiOutputError("text_source_changed")
                         amount_raw = match["amount"]
                         amount_location = location
                     else:
@@ -142,7 +147,7 @@ def from_citi(evidence: CitiEvidence, definition_bytes: bytes) -> SourceEvidence
                 date=DateValue(
                     raw=None,
                     iso=representative.posting_date.isoformat(),
-                    provenance="derived",
+                    provenance="derived" if posting_printed else "assumed",
                     locations=locations,
                 ),
                 transaction_date=DateValue(

@@ -579,6 +579,14 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   investment summaries and uncertain-date rows stay pending. Synthetic bank
   posting, correction and GUI checks pass; the owner accepted native Windows
   review of this extension.
+  For card dates, the owner chose a parser guess instead of per-row mandatory
+  date entry when no Post date is printed. Source evidence now labels these
+  candidates `assumed`, keeps printed activity dates separate, and retains
+  deterministic year resolution of printed Post dates as `derived`. The global
+  assumed-posting-date choice defaults off; a shared gate can allow the guessed
+  date after the user enables it. The preview displays the source and candidate
+  provenance. Card purchase posting and append-only date correction are still
+  pending, and the native toggle/preview presentation needs acceptance.
   A read-only signed-catalog scan routed all 956 PDFs in the two successful
   archives, then parsed the six bank families: 315 statements and 14,275 rows
   met the structural cash-review prerequisites before account binding, with
@@ -648,7 +656,8 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   owner accepted backup, restore and profile switching on native Windows. The
   Profile menu now also shows copyable active profile, signed-catalog cache and
   global-preference paths with explicit unencrypted-storage and backup scope.
-  Offscreen checks pass; native presentation acceptance is open.
+  Offscreen checks pass; the owner accepted the native presentation on October
+  25, 2026.
 - [ ] **V2-7 — Release:** remove obsolete runtime paths after integration, set the major
   version when ready, then packaged Windows/targeted Intel acceptance and a separately
   approved publication. Include the P2 declaration-catalog release gate; installer

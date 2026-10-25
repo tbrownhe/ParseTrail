@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
 
@@ -161,7 +161,12 @@ class V2Workspace:
     def set_allow_abbreviated_account_matching(self, enabled: bool) -> None:
         if type(enabled) is not bool:
             raise ValueError("invalid_abbreviated_matching_preference")
-        save_preferences(self.preferences_path, V2Preferences(enabled))
+        save_preferences(self.preferences_path, replace(self.preferences(), allow_abbreviated_account_matching=enabled))
+
+    def set_allow_assumed_posting_dates(self, enabled: bool) -> None:
+        if type(enabled) is not bool:
+            raise ValueError("invalid_assumed_posting_date_preference")
+        save_preferences(self.preferences_path, replace(self.preferences(), allow_assumed_posting_dates=enabled))
 
     def account_bindings(self, source_sha256: str) -> tuple[AccountBinding, ...]:
         """Resolve automatic suggestions at read time; explicit decisions win."""

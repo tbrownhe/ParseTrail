@@ -118,9 +118,11 @@ class MoneyValue(EvidenceModel):
 
 
 class DateValue(EvidenceModel):
+    """Observed is printed, derived follows source facts, assumed estimates an unprinted date."""
+
     raw: str | None = Field(max_length=80)
     iso: str | None = Field(max_length=10)
-    provenance: Literal["observed", "derived", "unknown"]
+    provenance: Literal["observed", "derived", "assumed", "unknown"]
     locations: tuple[SourceLocation, ...] = Field(max_length=16)
 
     @model_validator(mode="after")
@@ -133,8 +135,10 @@ class DateValue(EvidenceModel):
                 raise ValueError("invalid evidence date") from None
         if self.provenance == "observed" and (self.raw is None or self.iso is None or not self.locations):
             raise ValueError("observed date needs source and value")
-        if self.provenance == "derived" and (self.raw is not None or self.iso is None or not self.locations):
-            raise ValueError("derived date needs inputs")
+        if self.provenance in {"derived", "assumed"} and (
+            self.raw is not None or self.iso is None or not self.locations
+        ):
+            raise ValueError("inferred date needs inputs")
         if self.provenance == "unknown" and self.iso is not None:
             raise ValueError("unknown date cannot have a value")
         return self
@@ -195,6 +199,7 @@ class ObservationEvidence(EvidenceModel):
     date_role: Literal["posting_date", "activity_date", "statement_period_end"]
     date: DateValue
     transaction_date: DateValue | None = None
+    posting_date_guess: DateValue | None = None
     description: TextValue
     amount: MoneyValue
     running_balance: MoneyValue | None = None
@@ -205,6 +210,10 @@ class ObservationEvidence(EvidenceModel):
     def consistent(self) -> ObservationEvidence:
         if (self.row_role in {"period_summary", "header_charge"}) != (self.date_role == "statement_period_end"):
             raise ValueError("period-end row date role")
+        if self.posting_date_guess is not None and (
+            self.date_role != "activity_date" or self.posting_date_guess.provenance != "assumed"
+        ):
+            raise ValueError("posting guess requires an activity date and assumed provenance")
         if (self.source_account is None) != (self.source_account_form is None):
             raise ValueError("source account identity pair")
         if self.source_account_form == "last_four" and (

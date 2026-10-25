@@ -241,17 +241,16 @@ def parse_legacy_citi(definition_bytes: bytes, lines: PDFLineEvidence) -> Source
                 source_account_form="last_four",
                 date_role="posting_date",
                 date=DateValue(
-                    raw=None, iso=posting.isoformat(), provenance="derived", locations=(span, _location(period_line))
+                    raw=None,
+                    iso=posting.isoformat(),
+                    provenance="derived" if match["posting"] else "assumed",
+                    locations=(span, _location(period_line)),
                 ),
-                transaction_date=(
-                    DateValue(
-                        raw=None,
-                        iso=transaction.isoformat(),
-                        provenance="derived",
-                        locations=(span, _location(period_line)),
-                    )
-                    if match["posting"]
-                    else None
+                transaction_date=DateValue(
+                    raw=None,
+                    iso=transaction.isoformat(),
+                    provenance="derived",
+                    locations=(span, _location(period_line)),
                 ),
                 description=TextValue(raw=description_raw, text=description, provenance="observed", locations=(span,)),
                 amount=MoneyValue(raw=match["amount"], minor=amount, provenance="observed", locations=(span,)),

@@ -76,12 +76,20 @@ def test_table_card_source_rows_and_cross_page_continuation() -> None:
         ("2026-01-09", -1000, "FOREIGN PURCHASE"),
     ]
     assert account.rows[1].transaction_date.iso == "2026-01-10"
+    assert all(row.date.provenance == "derived" for row in account.rows)
     assert len(account.rows[1].fragments) == 2
     assert {item.code for item in output.payload.dispositions} == {
         "nonactivity_table_row",
         "repeated_table_header",
         "blank_table_row",
     }
+
+
+def test_single_printed_transaction_date_has_assumed_posting_date() -> None:
+    output = from_anchored_card(DEFINITION, *evidence({0: ("01/05", "", "Payment", "-$20.00")}))
+    row = output.payload.accounts[0].rows[0]
+    assert row.date.iso == "2026-01-05" and row.date.provenance == "assumed"
+    assert row.transaction_date.iso == "2026-01-05" and row.transaction_date.provenance == "derived"
 
 
 def test_new_start_before_amount_or_unbalanced_statement_refuses() -> None:

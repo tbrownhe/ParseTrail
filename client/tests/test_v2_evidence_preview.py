@@ -47,8 +47,8 @@ def test_preview_reopens_unknown_account_without_writing_profile(tmp_path: Path)
         assert any("This preview shows saved source evidence" in label.text() for label in labels)
         assert any("Source capture needs review" in label.text() for label in labels)
         assert dialog.rows_model.rowCount() == 1
-        assert dialog.rows_model.data(dialog.rows_model.index(0, 2)) == "Not identified by source"
-        assert dialog.rows_model.data(dialog.rows_model.index(0, 4)) == "-$100.00"
+        assert dialog.rows_model.data(dialog.rows_model.index(0, 3)) == "Not identified by source"
+        assert dialog.rows_model.data(dialog.rows_model.index(0, 5)) == "-$100.00"
         assert dialog.findChild(QTabWidget).count() == 2
     finally:
         dialog.close()
@@ -82,7 +82,8 @@ def test_preview_shows_statement_balance_check_and_dispositions(tmp_path: Path) 
         assert any("Printed balance equation passed" in label.text() for label in dialog.findChildren(QLabel))
         assert dialog.rows_model.rowCount() == 1
         assert dialog.dispositions_model.rowCount() == 4
-        assert dialog.rows_model.data(dialog.rows_model.index(0, 0)) == "2025-12-31 (year inferred)"
+        assert dialog.rows_model.data(dialog.rows_model.index(0, 0)) == "2025-12-31 (derived from source)"
+        assert dialog.rows_model.data(dialog.rows_model.index(0, 2)) == "2026-01-01 (assumed)"
     finally:
         dialog.close()
         app.processEvents()
