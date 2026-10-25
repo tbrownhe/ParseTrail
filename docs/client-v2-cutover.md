@@ -433,6 +433,23 @@ HSA cash components, cards, loans, investment summaries and other date roles
 stay pending; positive receipts still require explicit income confirmation.
 Synthetic bank posting, correction and dialog checks pass. The owner accepted
 the bank-statement review extension on native Windows.
+A separate read-only scan routed all 956 PDFs in the two successful archives
+through the locally test-signed catalog and parsed the six eligible bank
+families. All 315 statements and 14,275 activity rows met the account-total,
+posting-date, amount and description prerequisites before account binding:
+
+| Bank family | Sources | Candidate rows |
+| --- | ---: | ---: |
+| Happen savings | 2 | 8 |
+| LendingClub savings lines | 5 | 24 |
+| LendingClub savings tables | 7 | 18 |
+| OCCU bank | 113 | 6,427 |
+| Wells Fargo personal bank | 159 | 7,573 |
+| Wells Fargo business bank | 29 | 225 |
+
+The scan found no routing or selected-family parsing failure. These are
+structural candidates only: account binding, overlap review, categorization
+and reconciliation remain separate. No source or live profile was written.
 
 A first read-only Spending summary in the 2.0 workspace uses reviewed expense
 journal postings for a selected half-open date range. Reversal and replacement

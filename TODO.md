@@ -551,6 +551,11 @@ explicit client-built extraction handlers instead of downloaded Python bytecode.
   investment summaries and uncertain-date rows stay pending. Synthetic bank
   posting, correction and GUI checks pass; the owner accepted native Windows
   review of this extension.
+  A read-only signed-catalog scan routed all 956 PDFs in the two successful
+  archives, then parsed the six bank families: 315 statements and 14,275 rows
+  met the structural cash-review prerequisites before account binding, with
+  no routing or selected-family parsing failures. This does not decide source
+  overlap, income/expense classification or reconciliation.
 - [ ] **V2-5a–b — Report cutover:** shared ledger spending/cash/balance/budget queries,
   then dashboard and export integration. A first read-only spending summary now
   nets reviewed expense postings, including reversal/replacement corrections,
