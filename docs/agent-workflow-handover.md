@@ -8,6 +8,33 @@ This is a handover for designing an agent-as-code or BMAD-style workflow. It
 describes the current work and proposes roles; it does not activate a new agent
 runner, grant access to private data, or change the release process.
 
+## Context-window transfer note
+
+This handover records the V2 implementation baseline. The later
+[`parsetrail-workflow` skill](../.agents/skills/parsetrail-workflow/SKILL.md), its
+[code and verification map](../.agents/skills/parsetrail-workflow/references/code-and-checks.md),
+and the [workflow proposal](agent-workflow-proposal.md) describe the installed
+workflow and six short agent names. Use those files for current role routing;
+the role briefs below explain the design intent. They do not select the next
+roadmap packet.
+
+At the October 25 workflow audit, the branch was still
+`feature/client-financial-insights` at `ed0a2ef`. The skill, six TOML agent
+configs in `.codex/agents/`, and workflow proposal were **untracked**. Preserve
+those in-progress files when switching contexts; check `git status --short` and
+the current HEAD again before editing or committing. Do not infer that they were
+committed merely because they are visible in the workspace.
+
+In a new context, first read this handover, the skill and workflow proposal,
+then the relevant current contract. Confirm the runtime in
+`client/src/parsetrail/main.py`: ordinary startup still follows 1.x, while
+`--v2` opens the fresh workspace before legacy bootstrap. No V2 implementation
+packet is currently in progress. Account positions below are a candidate, not
+a selected task; establish scope with the owner before treating them as the next
+assignment. The 139-test V2 result below predates workflow installation.
+Parser changes also require relevant `devtools/parser_engine_pilot/` checks;
+`client/tests -k v2` does not cover that suite.
+
 ## Where work stands
 
 ParseTrail 1.4.2 is the published desktop release. Client 2.0 is a fresh-profile

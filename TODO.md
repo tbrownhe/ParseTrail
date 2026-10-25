@@ -24,13 +24,33 @@ The completed Mac results are in the [Intel return note](docs/intel-mac-return-n
 The [signed Windows candidate record](docs/engineering-acceptance.md#signed-windows-candidate-september-19-2026)
 identifies the preserved installer used for Windows native acceptance.
 
+## V2 review policy — October 25, 2026
+
+The owner approved autonomous system design and first-pass functional UI
+implementation within the selected scope, verified by tests and agent review.
+New features and UI changes do not require per-feature human acceptance. A later
+integrated UI/UX pass retains human review; unresolved product/accounting decisions
+and specifically identified native/platform and release gates remain separate.
+See [AGENTS.md](AGENTS.md#v2-development-and-human-review). This policy supersedes
+older per-slice GUI gate wording below, without rewriting historical acceptance.
+Implementation packets may close after development verification while aggregate
+UX/release milestones remain open.
+
+- [ ] **V2-UX — Integrated human UI/UX pass:** after the selected daily workflows
+  are functional and agent-verified, prepare a disposable end-to-end walkthrough
+  of import, account binding, review/correction, reports and backup/reopen.
+  Include pending/error states, navigation, wording and layout; record owner
+  feedback and resolve or explicitly defer issues before final 2.0 UX/release
+  acceptance. This milestone does not block ongoing feature implementation.
+
 ## Active client roadmap — local spending and cash planning
 
 Start from `main`, checkpoint `stable-1.4.2` (`effced9`), on the long-running
 `feature/client-financial-insights` branch. Keep changes in small, tested,
-reviewable commits on this branch. Stop when a product decision is ambiguous or
-owner native GUI/platform acceptance is needed; prepare isolated profiles,
-candidate code/artifacts, and concrete walkthroughs before that handoff.
+reviewable commits on this branch. Continue authorized implementation after
+automated/agent verification. Stop only work dependent on an unresolved owner
+decision or a specifically identified native/platform or release gate. Prepare
+isolated profiles and a consolidated walkthrough for the integrated UI/UX pass.
 
 This branch contains client features and their supporting tests/documentation.
 Server P0 stays closed. If a client feature requires a server interface change,
@@ -741,12 +761,13 @@ new ML insights and complete historical loan reconstruction are not 2.0 launch g
 
 ### Existing ledger and insight implementation sequence
 
-Each service/calculation chunk precedes its GUI chunk. Windows x64 owner GUI
-acceptance is sufficient for routine client features; do not require a separate
-Intel walkthrough for every feature. Retain supported-platform automated checks
-and request targeted native cross-platform testing when dependencies, packaging,
-OS integration, or evidence of platform-specific behavior warrants it. Record
-only platforms actually tested; this does not claim Intel acceptance by inference.
+Each service/calculation chunk precedes its GUI chunk. For ongoing V2 work,
+automated checks and agent review complete first-pass development packets;
+human UI/UX review is consolidated under the current review policy above.
+Retain supported-platform checks and specifically identified native gates for
+dependencies, decoder limits, packaging, OS integration and release acceptance.
+Record only platforms actually tested; Windows results do not establish Intel
+acceptance by inference.
 
 L2 recovery preparation and L3 isolated kernel passed automated acceptance on
 September 27; see the [verification record](docs/engineering-acceptance.md#ledger-recovery-and-isolated-kernel--september-27-2026)
@@ -963,7 +984,9 @@ counts that were never stored remain unknown. C2b precedes larger import flows.
 F3 rules remain behind the first insights; split deterministic read-only preview
 from atomic application/provenance. F4 should split verified bundle creation from
 disposable restore. F1 offline onboarding and C3 dependency cleanup remain lower
-priority proposals. New/unscoped features still require a design discussion.
+priority proposals. Unselected features require a scope decision; unresolved product/accounting
+choices require owner input. System and interaction design within selected scope
+and existing contracts proceeds autonomously under the V2 review policy.
 
 ## P1.5 — Client release reliability
 

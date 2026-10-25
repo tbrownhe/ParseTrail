@@ -6,6 +6,18 @@ automatic preservation plan. Keep development on
 `feature/client-financial-insights`; do not change the application version,
 server or live financial data during these pilots.
 
+## Development review update — October 25, 2026
+
+The owner approved autonomous system design and first-pass functional UI
+implementation within agreed scope, with tests and agent review. Consolidate
+human UI/UX review into a later integrated milestone rather than requiring owner
+acceptance for every new feature or UI change. The
+[current review policy](../AGENTS.md#v2-development-and-human-review) supersedes
+older per-slice GUI gates in this plan. Historical acceptance remains evidence;
+unresolved product/accounting decisions and specifically identified native/platform,
+installed/offline and release gates remain separate. Pending integrated human
+review does not block unrelated development.
+
 ## Release boundary
 
 Client 2.0 uses the double-entry ledger as its only accounting model. It creates

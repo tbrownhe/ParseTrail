@@ -47,11 +47,14 @@ The September 26 client roadmap uses the owner's explicitly requested long-runni
 `feature/client-financial-insights` branch with focused commits. If client work
 requires a server interface change, stop, merge accepted client work first, and
 use a separate short-lived server branch; see [the active roadmap](TODO.md#active-client-roadmap--local-spending-and-cash-planning).
-For routine client features, owner Windows GUI acceptance is sufficient. Request
-targeted Intel/native cross-platform testing for dependency, packaging, or OS
-integration changes, or concrete compatibility concerns; do not block each
-feature on duplicate walkthroughs. Keep supported-platform automated checks and
-record which platforms were actually tested.
+For ongoing V2 development, agents design and implement a first functional UI
+and complete development packets using appropriate automated checks and agent
+review. Human UI/UX review is consolidated at a later integrated milestone;
+new features and UI changes do not require per-feature owner walkthroughs.
+Follow the [current review policy](AGENTS.md#v2-development-and-human-review),
+which supersedes older per-slice GUI gates. Preserve specifically identified
+native decoder, packaging, installed/offline and release checks, requesting
+targeted Intel/native testing where needed. Record platforms actually tested.
 Keep [TODO](TODO.md) limited to unfinished work; move lasting behavior into the
 component guides and dated verification into the
 [engineering acceptance record](docs/engineering-acceptance.md) when a task closes.
@@ -61,7 +64,9 @@ when it exposes an interface requirement; unrelated infrastructure stays separat
 The current implementation approval covers the local spending/cash-planning
 roadmap in TODO, beginning with C1 and C2a. Unselected correctness/cleanup and
 F1-F4 proposals remain pending; do not treat earlier release/offline acceptance
-as permission to add those features. Stop at ambiguity or owner native acceptance.
+as permission to add those features. Stop only work dependent on an unresolved
+owner decision or a specifically identified acceptance gate; pending consolidated
+UI/UX review does not block ongoing authorized implementation.
 
 ## Prerequisites
 
