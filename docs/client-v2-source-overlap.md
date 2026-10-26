@@ -10,13 +10,14 @@ implementation, review and verification.
 
 The fresh V2 store provides a read-only inventory of activity-row candidates
 from different saved sources explicitly bound to the same financial account.
-The first matcher requires the same signed exact amount, source date and date
-role. Descriptions and source locations remain available for review; matching
-values never establish that two occurrences are the same movement. Equal rows
-within one source retain their separate occurrence identities. Date-shifted,
-different-date-role, unbound and otherwise nonmatching rows are outside this
-first matcher. Period-overlap warnings continue to describe source coverage,
-independently of row review.
+Overlap rule 2 requires the same signed exact amount and immutable source dates
+within three calendar days. Activity/posting date-role differences are permitted
+as candidates; source dates and assumed accounting-date candidates stay separate.
+Descriptions and source locations remain available for review; matching values
+never establish that two occurrences are the same movement. Equal rows within
+one source retain separate occurrence identities. Changed amounts/signs, unknown
+dates, unbound and otherwise nonmatching rows remain outside this bounded rule.
+Period-overlap warnings describe source coverage independently of row review.
 The inventory displays up to 2,000 pairs and prioritizes unresolved work so a
 refresh exposes later pending candidates. Posting checks inspect the full
 candidate index independently of that display limit.
@@ -25,6 +26,13 @@ Each live repeat group contains at most one occurrence from each source. Two
 equal purchases in one source cannot both be folded into one row in another
 source. Retained representatives and supporting repeats form one-level groups;
 chained aliases and cycles are refused.
+Every member must also remain pairwise date-window eligible; proximity cannot
+extend through a chain of nearby dates. A root's posting checks include outsider
+edges found through every supporting member. Distinct review applies to its
+actual row pair only; it never certifies all edges between two groups. Direct
+saved repeat edges can be replaced by explicit distinct/pending review. Implicit
+within-group pairs cannot clear a different edge. Saved edge navigation uses a
+coherent uncapped pair read, even beyond the ordinary inventory display limit.
 
 An explicit review either establishes distinct occurrences or chooses one
 retained row and identifies the other as repeated supporting evidence. Save the
@@ -75,6 +83,9 @@ balance. No missing movement becomes zero, and no balancing entry is created.
 The completed [packet record](work/2026-10-25-v2-source-overlap.md) owns file/role
 assignments, commands/results, review findings and remaining milestone evidence.
 This heading preserves existing links without maintaining a second work log.
+The [wider-matching packet](work/2026-10-25-v2-wider-source-matching.md) records
+rule-2 integration and group/full-index verification. Reconciliation rule 4 keeps
+prior-rule saved decisions as stale history; no old check is silently relabeled.
 
 ## Disposable review scenario
 
@@ -87,6 +98,7 @@ $env:PYTHONPATH='.;client/src;client'
 ```
 
 Compare the locations. Retaining the single copy cannot collapse both original
-occurrences into one. A shifted-date deposit is deliberately outside this matcher.
+occurrences into one. Date shifts up to three days can now produce candidates;
+they remain explicit review, not automatic identity or accounting-date changes.
 Closing the demo removes its temporary profile. This is an optional reproducible
 scenario for the later integrated UX pass, without a per-feature owner gate.

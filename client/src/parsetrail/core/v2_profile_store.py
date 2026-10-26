@@ -40,10 +40,12 @@ from parsetrail.core.v2_preferences import V2Preferences
 from parsetrail.core.v2_review_dates import permitted_posting_date, posting_date_candidate
 from parsetrail.core.v2_source_overlap import (
     OVERLAP_RULE,
+    NearbySourceIndex,
     SourceOverlapCandidate,
     SourceOverlapInventory,
     SourceOverlapRow,
-    bucket_key,
+    nearby_source_pair,
+    pairwise_source_group,
 )
 
 APPLICATION_ID = 0x50543230  # PT20
@@ -1475,6 +1477,7 @@ class V2ProfileStore:
                     verified._validate_source_interpretation_history()
                     verified._read_binding_corrections()
                     verified._validate_common_journal_read()
+                    verified._source_overlap_index()
                     verified._reconciliation_history(None)
                 try:
                     os.link(partial, destination)
@@ -1893,7 +1896,7 @@ class V2ProfileStore:
         )
 
     def _source_overlap_index(self):
-        """Build full finite row buckets. Inventory caps never weaken posting checks."""
+        """Build the full finite date-window index, retaining supporting rows."""
         accounts = {account.id: account for account in self.financial_accounts()}
         consumed = self._active_consumed()
         proven_support = set()
@@ -1902,7 +1905,6 @@ class V2ProfileStore:
             proven_support = {repair.redundant_row_id for repair in repairs}
         history = {row[0] for row in self.connection.execute("SELECT DISTINCT row_id FROM JournalAllocations")}
         rows = {}
-        buckets = {}
         for source_id in self.source_ids():
             evidence = self.load_import(source_id).evidence
             bindings = {binding.row_id: binding.ledger_account_id for binding in self.account_bindings(source_id)}
@@ -1926,9 +1928,6 @@ class V2ProfileStore:
                     row.row_id in proven_support and not consumed.get(row.row_id, 0),
                 )
                 rows[item.row_id] = item
-                buckets.setdefault(bucket_key(item), []).append(item.row_id)
-        for group in buckets.values():
-            group.sort()
         reviews = {}
         for revision, left, right, decision, retained in self.connection.execute(
             "SELECT revision_id,left_row_id,right_row_id,decision,retained_row_id "
@@ -1939,8 +1938,36 @@ class V2ProfileStore:
         for (left, right), (revision, decision, retained) in reviews.items():
             if decision == "repeat":
                 excluded = right if retained == left else left
+                if excluded in aliases or retained not in (left, right):
+                    raise ProfileFormatError("source_overlap_history_integrity")
                 aliases[excluded] = (retained, revision)
-        return rows, buckets, reviews, aliases
+        groups = self._source_overlap_groups(rows, aliases)
+        for root, members in groups.items():
+            if any(member in aliases for member in (root,)) or any(member not in rows for member in members):
+                raise ProfileFormatError("source_overlap_history_integrity")
+            if not pairwise_source_group(rows[member] for member in members):
+                raise ProfileFormatError("source_overlap_history_integrity")
+            if any(review[1] == "distinct" and set(pair) <= set(members) for pair, review in reviews.items()):
+                raise ProfileFormatError("source_overlap_history_integrity")
+        for excluded in aliases:
+            if rows[excluded].active_allocated_minor or (
+                rows[excluded].has_journal_history
+                and not rows[excluded].repeat_support_history_validated
+                and not self._source_interpretation_mutating
+            ):
+                raise ProfileFormatError("source_overlap_history_integrity")
+        try:
+            index = NearbySourceIndex(rows.values())
+        except ValueError:
+            raise ProfileFormatError("source_overlap_history_integrity") from None
+        return rows, index, reviews, aliases
+
+    @staticmethod
+    def _source_overlap_groups(rows, aliases):
+        groups = {row: {row} for row in rows if row not in aliases}
+        for excluded, (root, _revision) in aliases.items():
+            groups.setdefault(root, {root}).add(excluded)
+        return groups
 
     def _source_overlap_basis(self) -> str:
         self._read_binding_corrections()
@@ -1981,17 +2008,53 @@ class V2ProfileStore:
     def _source_overlap_candidate(left, right, reviews, aliases, basis):
         review = reviews.get((left.row_id, right.row_id))
         revision, decision, retained = review if review else (None, "pending", None)
-        if left.row_id in aliases or right.row_id in aliases:
-            alias = aliases.get(left.row_id) or aliases[right.row_id]
-            left_root = aliases.get(left.row_id, (left.row_id, None))[0]
-            right_root = aliases.get(right.row_id, (right.row_id, None))[0]
-            if left_root == right_root:
-                decision, retained, revision = "repeat", left_root, alias[1]
-            elif decision != "distinct":
-                decision, retained, revision = "supporting", alias[0], alias[1]
+        left_root = aliases.get(left.row_id, (left.row_id, None))[0]
+        right_root = aliases.get(right.row_id, (right.row_id, None))[0]
+        left_group = {left_root} | {row for row, (root, _revision) in aliases.items() if root == left_root}
+        right_group = {right_root} | {row for row, (root, _revision) in aliases.items() if root == right_root}
+        edges = tuple(
+            sorted(
+                tuple(sorted((row, root)))
+                for row, (root, _revision) in aliases.items()
+                if root in {left_root, right_root}
+            )
+        )
+        if left_root == right_root:
+            decision, retained = "repeat", left_root
+            if review is None or review[1] != "repeat":
+                revision = (aliases.get(left.row_id) or aliases[right.row_id])[1]
         elif decision != "distinct" and left.active_allocated_minor and right.active_allocated_minor:
             decision = "posted_conflict"
-        return SourceOverlapCandidate(left, right, decision, retained, revision, basis)
+        return SourceOverlapCandidate(
+            left,
+            right,
+            decision,
+            retained,
+            revision,
+            basis,
+            left_root,
+            right_root,
+            tuple(sorted(left_group)),
+            tuple(sorted(right_group)),
+            edges,
+        )
+
+    def source_overlap_pair(self, left_row_id: str, right_row_id: str) -> SourceOverlapCandidate:
+        """Read an actual eligible pair, including saved root edges beyond list caps."""
+        if type(left_row_id) is not str or type(right_row_id) is not str or left_row_id == right_row_id:
+            raise ProfileFormatError("source_overlap_pair_unavailable")
+        if self.connection.in_transaction:
+            raise ProfileFormatError("source_overlap_requires_committed_snapshot")
+        self.connection.execute("BEGIN")
+        try:
+            rows, _index, reviews, aliases = self._source_overlap_index()
+            left_id, right_id = sorted((left_row_id, right_row_id))
+            left, right = rows.get(left_id), rows.get(right_id)
+            if left is None or right is None or not nearby_source_pair(left, right):
+                raise ProfileFormatError("source_overlap_pair_unavailable")
+            return self._source_overlap_candidate(left, right, reviews, aliases, self._source_overlap_basis())
+        finally:
+            self.connection.execute("ROLLBACK")
 
     def source_overlap_inventory(
         self, *, source_sha256: str | None = None, max_pairs: int = 2000
@@ -2005,51 +2068,23 @@ class V2ProfileStore:
         try:
             if source_sha256 is not None:
                 self.load_import(source_sha256)
-            rows, buckets, reviews, aliases = self._source_overlap_index()
+            rows, index, reviews, aliases = self._source_overlap_index()
             basis = self._source_overlap_basis()
             candidates = []
-            total = 0
-            for key in sorted(buckets):
-                group = buckets[key]
-                source_counts = {}
-                for row_id in group:
-                    source = rows[row_id].source_sha256
-                    source_counts[source] = source_counts.get(source, 0) + 1
-                if source_sha256 is None:
-                    total += (len(group) ** 2 - sum(count**2 for count in source_counts.values())) // 2
-                else:
-                    selected = source_counts.get(source_sha256, 0)
-                    total += selected * (len(group) - selected)
-
-            def pairs(group):
-                by_source = {}
-                for row_id in group:
-                    by_source.setdefault(rows[row_id].source_sha256, []).append(row_id)
-                sources = sorted(by_source)
-                for offset, first in enumerate(sources):
-                    for second in sources[offset + 1 :]:
-                        if source_sha256 is not None and source_sha256 not in (first, second):
-                            continue
-                        for first_id in by_source[first]:
-                            for second_id in by_source[second]:
-                                yield tuple(sorted((first_id, second_id)))
+            total = index.count_pairs(source_sha256=source_sha256)
 
             # Resolve the visible pending work, refresh, and the next pending pairs
             # become reachable even when the complete inventory exceeds the cap.
             for resolved in (False, True):
-                for key in sorted(buckets):
-                    group = buckets[key]
-                    if not resolved:
-                        group = [row_id for row_id in group if row_id not in aliases]
-                    for left_id, right_id in pairs(group):
-                        candidate = self._source_overlap_candidate(
-                            rows[left_id], rows[right_id], reviews, aliases, basis
-                        )
-                        if (candidate.state in {"distinct", "repeat", "supporting"}) != resolved:
-                            continue
-                        candidates.append(candidate)
-                        if len(candidates) == max_pairs:
-                            break
+                for left_id, right_id in index.pairs(source_sha256=source_sha256):
+                    same_group = aliases.get(left_id, (left_id, None))[0] == aliases.get(right_id, (right_id, None))[0]
+                    is_resolved = (
+                        same_group or reviews.get((left_id, right_id), (None, "pending", None))[1] == "distinct"
+                    )
+                    if is_resolved != resolved:
+                        continue
+                    candidate = self._source_overlap_candidate(rows[left_id], rows[right_id], reviews, aliases, basis)
+                    candidates.append(candidate)
                     if len(candidates) == max_pairs:
                         break
                 if len(candidates) == max_pairs:
@@ -2060,7 +2095,7 @@ class V2ProfileStore:
                 self.connection.execute("ROLLBACK")
 
     def source_overlap_posting_blocks(self, row_ids: tuple[str, ...]) -> dict[str, str]:
-        """Return unresolved/repeated-row guards using every candidate in the buckets."""
+        """Guard every nearby edge from every member of a retained group."""
         owns_snapshot = not self.connection.in_transaction
         if owns_snapshot:
             self.connection.execute("BEGIN")
@@ -2071,14 +2106,8 @@ class V2ProfileStore:
                 self.connection.execute("ROLLBACK")
 
     def _source_overlap_posting_blocks(self, row_ids: tuple[str, ...]) -> dict[str, str]:
-        rows, buckets, reviews, aliases = self._source_overlap_index()
-        eligible_sources = {}
-        for key, group in buckets.items():
-            by_source = {}
-            for row_id in group:
-                if row_id not in aliases:
-                    by_source.setdefault(rows[row_id].source_sha256, []).append(row_id)
-            eligible_sources[key] = by_source
+        rows, index, reviews, aliases = self._source_overlap_index()
+        groups = self._source_overlap_groups(rows, aliases)
         blocks = {}
         for row_id in row_ids:
             if row_id in aliases:
@@ -2087,15 +2116,14 @@ class V2ProfileStore:
             row = rows.get(row_id)
             if row is None:
                 continue
-            for source_id, other_rows in eligible_sources[bucket_key(row)].items():
-                if source_id == row.source_sha256:
-                    continue
-                if any(
-                    reviews.get(tuple(sorted((row_id, other_id))), (None, "pending", None))[1] != "distinct"
-                    for other_id in other_rows
-                ):
-                    blocks[row_id] = "Cross-source occurrence needs review"
-                    break
+            members = groups[row_id]
+            if any(
+                other_id not in members
+                and reviews.get(tuple(sorted((member, other_id))), (None, "pending", None))[1] != "distinct"
+                for member in members
+                for other_id in index.neighbors(member)
+            ):
+                blocks[row_id] = "Cross-source occurrence needs review"
         return blocks
 
     def _require_source_overlap_postable(self, row_ids: tuple[str, ...]) -> None:
@@ -2155,19 +2183,25 @@ class V2ProfileStore:
                 raise ProfileFormatError("source_overlap_changed_since_selection")
             rows, _buckets, reviews, aliases = self._source_overlap_index()
             left, right = rows.get(left_id), rows.get(right_id)
-            if (
-                left is None
-                or right is None
-                or left.source_sha256 == right.source_sha256
-                or bucket_key(left) != bucket_key(right)
-            ):
+            if left is None or right is None or not nearby_source_pair(left, right):
                 raise ProfileFormatError("source_overlap_pair_unavailable")
             old = reviews.get((left_id, right_id))
+            left_root = aliases.get(left_id, (left_id, None))[0]
+            right_root = aliases.get(right_id, (right_id, None))[0]
+            direct_repeat = old is not None and old[1] == "repeat"
+            if left_root == right_root:
+                if not direct_repeat:
+                    raise ProfileFormatError("source_overlap_clear_repeat_first")
             # Remove only this pair's old edge when checking a replacement decision.
             effective = dict(aliases)
             if old is not None and old[1] == "repeat":
                 old_excluded = right_id if old[2] == left_id else left_id
                 effective.pop(old_excluded, None)
+            if (
+                decision == "distinct"
+                and effective.get(left_id, (left_id, None))[0] == effective.get(right_id, (right_id, None))[0]
+            ):
+                raise ProfileFormatError("source_overlap_clear_repeat_first")
             if decision == "repeat":
                 excluded = right_id if retained_row_id == left_id else left_id
                 proven = self._has_posted_repeat_proof(excluded) or (
@@ -2193,13 +2227,13 @@ class V2ProfileStore:
                 sources = [rows[row_id].source_sha256 for row_id in group]
                 if len(set(sources)) != len(sources):
                     raise ProfileFormatError("source_overlap_occurrence_multiplicity")
+                if not pairwise_source_group(rows[row_id] for row_id in group):
+                    raise ProfileFormatError("source_overlap_group_not_pairwise_eligible")
                 if any(
                     pair != (left_id, right_id) and review[1] == "distinct" and set(pair) <= group
                     for pair, review in reviews.items()
                 ):
                     raise ProfileFormatError("source_overlap_conflicts_with_distinct")
-            elif decision == "distinct" and (left_id in effective or right_id in effective):
-                raise ProfileFormatError("source_overlap_clear_repeat_first")
             prior_reason = (
                 self.connection.execute(
                     "SELECT reason FROM SourceOverlapReviews WHERE revision_id=?", (old[0],)
@@ -2453,14 +2487,9 @@ class V2ProfileStore:
                     or review_sha != _transfer_record_digest(*review)
                 ):
                     raise ValueError
-                immutable_rows = self.connection.execute(
-                    "SELECT row_id,source_sha256,date_role,observed_date,amount_minor FROM SourceObservations WHERE row_id IN (?,?)",
-                    (retained, redundant),
-                ).fetchall()
-                if (
-                    len(immutable_rows) != 2
-                    or immutable_rows[0][1] == immutable_rows[1][1]
-                    or immutable_rows[0][2:] != immutable_rows[1][2:]
+                if not nearby_source_pair(
+                    self._historical_overlap_row(retained, retained_entry.postings[0].account_id),
+                    self._historical_overlap_row(redundant, redundant_entry.postings[0].account_id),
                 ):
                     raise ValueError
             except (ProfileFormatError, TypeError, ValueError):
@@ -2487,6 +2516,32 @@ class V2ProfileStore:
     def _validate_source_interpretation_history(self) -> None:
         if not self._source_interpretation_mutating:
             self._read_source_interpretation_history()
+
+    def _historical_overlap_row(self, row_id: str, account_id: str) -> SourceOverlapRow:
+        """Use immutable source dates and the recorded journal account, never today's binding."""
+        source = self.connection.execute(
+            "SELECT source_sha256 FROM SourceObservations WHERE row_id=?", (row_id,)
+        ).fetchone()
+        if source is None:
+            raise ProfileFormatError("source_interpretation_history_integrity")
+        evidence = self.load_import(source[0]).evidence
+        row = next((row for row in _rows(evidence) if row.row_id == row_id), None)
+        if row is None or row.row_role != "activity":
+            raise ProfileFormatError("source_interpretation_history_integrity")
+        return SourceOverlapRow(
+            row_id,
+            source[0],
+            account_id,
+            account_id,
+            row.date.iso,
+            row.date_role,
+            row.date.provenance,
+            row.amount.minor,
+            row.description.text or "",
+            (),
+            0,
+            True,
+        )
 
     def _validate_common_journal_read(self) -> None:
         """Validate recorded money without invoking report or active-read helpers.
@@ -2740,8 +2795,7 @@ class V2ProfileStore:
             if (
                 retained is None
                 or redundant is None
-                or retained.source_sha256 == redundant.source_sha256
-                or bucket_key(retained) != bucket_key(redundant)
+                or not nearby_source_pair(retained, redundant)
                 or retained.active_allocated_minor != retained.amount_minor
                 or redundant.active_allocated_minor != redundant.amount_minor
             ):
@@ -5613,7 +5667,7 @@ class V2ProfileStore:
         self._validate_transfer_history()
         self._validate_source_interpretation_history()
         self._validate_common_journal_read()
-        rule = "v2-statement-reconciliation-3"
+        rule = "v2-statement-reconciliation-4"
         version_tables = (
             ("Sources", "sha256"),
             ("EvidenceSnapshots", "source_sha256,definition_sha256,sha256"),

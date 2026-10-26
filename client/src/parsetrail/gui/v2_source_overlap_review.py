@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 
 from parsetrail.core.v2_preferences import V2Preferences
 from parsetrail.core.v2_profile_store import ProfileFormatError, V2ProfileStore
+from parsetrail.core.v2_source_overlap import nearby_source_reason
 from parsetrail.gui.v2_cash_activity_review import _interpretation_effects, _money
 from parsetrail.gui.v2_evidence_preview import _location, preview_saved_source
 
@@ -94,9 +95,10 @@ class V2SourceOverlapReview(QDialog):
 
     HEADERS = (
         "Account",
-        "Source date",
+        "A source date",
         "Signed amount",
         "Review state",
+        "B source date",
         "Source A description",
         "Source B description",
     )
@@ -120,10 +122,11 @@ class V2SourceOverlapReview(QDialog):
         profile_row.addWidget(self.refresh_button)
         layout.addLayout(profile_row)
         self.note = QLabel(
-            "Candidates share an explicitly bound account, signed amount, source date and date role across different sources. "
+            "Candidates share an explicitly bound account and exact signed amount across different sources, with source dates "
+            "at most three calendar days apart. Activity and posting date roles may differ; descriptions may be revised. "
             "Matching values do not prove a repeated movement. Unresolved candidates block new postings. "
             "Review the source evidence and choose distinct movements or retain one occurrence of the same movement. "
-            "Shifted dates, different date roles and unbound rows are outside this matcher; an empty list does not establish "
+            "Unknown dates, changed amounts and unbound rows are outside this matcher; an empty list does not establish "
             "unique or complete source coverage. Period overlap and reconciliation remain separate."
         )
         self.note.setWordWrap(True)
@@ -138,10 +141,10 @@ class V2SourceOverlapReview(QDialog):
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setSortingEnabled(True)
         header = self.table.horizontalHeader()
-        for column, width in enumerate((150, 100, 105, 215)):
+        for column, width in enumerate((140, 105, 105, 200, 105)):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.Interactive)
             self.table.setColumnWidth(column, width)
-        for column in (4, 5):
+        for column in (5, 6):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.Stretch)
         self.table.itemSelectionChanged.connect(self._selected)
         layout.addWidget(self.table, 2)
@@ -149,6 +152,16 @@ class V2SourceOverlapReview(QDialog):
         self.details_state.setWordWrap(True)
         self.details_state.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(self.details_state)
+        group_row = QHBoxLayout()
+        group_row.addWidget(QLabel("Saved group relationships:"))
+        self.saved_pair = QComboBox()
+        self.saved_pair.setMinimumContentsLength(24)
+        self.saved_pair.setSizeAdjustPolicy(QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        group_row.addWidget(self.saved_pair, 1)
+        self.open_saved_pair = QPushButton("Open saved retained pair")
+        self.open_saved_pair.clicked.connect(self._open_saved_pair)
+        group_row.addWidget(self.open_saved_pair)
+        layout.addLayout(group_row)
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self.left_details = QPlainTextEdit()
         self.right_details = QPlainTextEdit()
@@ -215,19 +228,30 @@ class V2SourceOverlapReview(QDialog):
         try:
             with V2ProfileStore.open(self.profile, read_only=True) as store:
                 inventory = store.source_overlap_inventory()
+                direct = (
+                    store.source_overlap_pair(*selected_ids)
+                    if selected_ids is not None
+                    and not any((item.left.row_id, item.right.row_id) == selected_ids for item in inventory.candidates)
+                    else None
+                )
         except (ProfileFormatError, sqlite3.Error, OSError):
             self.candidates = ()
             self.table.setRowCount(0)
             self.summary.setText("Candidate inventory could not be read. Refresh after checking the profile.")
             self._selected()
             return
-        self.candidates = inventory.candidates
+        self.candidates = inventory.candidates + ((direct,) if direct is not None else ())
         summary = f"{inventory.total_pairs} candidate pair(s); {len(self.candidates)} shown."
         if inventory.truncated:
             summary += (
                 " Display limit reached. Additional pairs are still checked before posting; this list is incomplete."
             )
+        if direct is not None:
+            summary += " The selected saved pair is also opened directly outside the inventory list."
         self.summary.setText(summary)
+        self._populate(selected_ids)
+
+    def _populate(self, selected_ids=None) -> None:
         self.table.setSortingEnabled(False)
         self.table.setRowCount(len(self.candidates))
         selected_row = None
@@ -237,6 +261,7 @@ class V2SourceOverlapReview(QDialog):
                 candidate.left.source_date,
                 _money(candidate.left.amount_minor),
                 STATE_LABELS.get(candidate.state, candidate.state),
+                candidate.right.source_date,
                 candidate.left.description or "Not printed",
                 candidate.right.description or "Not printed",
             )
@@ -252,6 +277,27 @@ class V2SourceOverlapReview(QDialog):
         self.table.setSortingEnabled(True)
         self._selected()
 
+    def _open_saved_pair(self) -> None:
+        edge = self.saved_pair.currentData()
+        if edge is None:
+            return
+        try:
+            with V2ProfileStore.open(self.profile, read_only=True) as store:
+                pair = store.source_overlap_pair(*edge)
+        except (ProfileFormatError, sqlite3.Error, OSError):
+            self.refresh()
+            self.status.setText(
+                "Saved relationship could not be opened. Inspect the refreshed group; its context may have changed."
+            )
+            return
+        self.candidates = tuple(
+            item for item in self.candidates if {item.left.row_id, item.right.row_id} != set(edge)
+        ) + (pair,)
+        self._populate((pair.left.row_id, pair.right.row_id))
+        self.summary.setText(
+            self.summary.text() + " Saved retained pair opened directly, independently of the display limit."
+        )
+
     def _selected(self) -> None:
         pair = self._current()
         self.repair_preview = None
@@ -259,12 +305,28 @@ class V2SourceOverlapReview(QDialog):
         self.reason.clear()
         self.preview_left.setEnabled(pair is not None)
         self.preview_right.setEnabled(pair is not None)
-        indirect = pair is not None and (
-            pair.state == "supporting"
-            or (pair.state == "repeat" and pair.retained_row_id not in {pair.left.row_id, pair.right.row_id})
-        )
-        self.decision.setEnabled(pair is not None and not indirect)
-        self.reason.setEnabled(pair is not None and not indirect)
+        self.saved_pair.clear()
+        if pair is not None:
+            known_rows = {row.row_id: row for candidate in self.candidates for row in (candidate.left, candidate.right)}
+            roots = {pair.left_root_row_id, pair.right_root_row_id}
+
+            def edge_label(row_id):
+                row = known_rows.get(row_id)
+                role = "Retained" if row_id in roots else "Supporting"
+                return (
+                    f"{role}: {row.source_date}, {row.description or 'description not printed'}"
+                    if row is not None
+                    else f"{role} row {row_id[:16]}… (open for source context)"
+                )
+
+            for index, edge in enumerate(pair.repeat_edges, start=1):
+                label = f"{edge_label(edge[0])} / {edge_label(edge[1])}"
+                self.saved_pair.addItem(label, edge)
+                self.saved_pair.setItemData(index - 1, label + "\n" + "\n".join(edge), Qt.ItemDataRole.ToolTipRole)
+        self.saved_pair.setEnabled(self.saved_pair.count() > 0)
+        self.open_saved_pair.setEnabled(self.saved_pair.count() > 0)
+        self.decision.setEnabled(pair is not None)
+        self.reason.setEnabled(pair is not None)
         if pair is None:
             self.left_details.clear()
             self.right_details.clear()
@@ -278,6 +340,14 @@ class V2SourceOverlapReview(QDialog):
             self.left_details.setPlainText(_row_details(pair.left))
             self.right_details.setPlainText(_row_details(pair.right))
             detail = STATE_LABELS.get(pair.state, pair.state)
+            detail += (
+                f"; {nearby_source_reason(pair.left, pair.right)}. Candidate proximity does not establish identity."
+            )
+            detail += (
+                f"\nA group: {len(pair.left_group_row_ids) or 1} occurrence(s), retained row "
+                f"{pair.left_root_row_id or pair.left.row_id}; B group: {len(pair.right_group_row_ids) or 1} occurrence(s), "
+                f"retained row {pair.right_root_row_id or pair.right.row_id}."
+            )
             if pair.revision_id is not None:
                 detail += f"; saved review revision {pair.revision_id}"
             if pair.retained_row_id is not None:
@@ -295,12 +365,19 @@ class V2SourceOverlapReview(QDialog):
                 if pair.left.has_journal_history and pair.right.has_journal_history
                 else "A repeated row becomes supporting evidence and cannot post independently. This review posts no money."
             )
-            if indirect:
+            if pair.repeat_edges:
                 self.status.setText(
-                    "One or both rows already support a retained occurrence in another pair. "
-                    "This pair cannot change that decision. Select the pair containing the retained row to review it."
+                    "Saved repeat groups require every member pair to stay within the three-day rule and one row per source. "
+                    "Distinct or pending applies only to this actual pair across different groups. To change a supporting "
+                    "row's group, open its saved retained pair above and clear that relationship first."
                 )
-            elif (
+                if pair.left_root_row_id == pair.right_root_row_id:
+                    blocked = self._choice_blocker(pair, "pending")
+                    self.status.setText(
+                        blocked
+                        or "This is a saved direct repeat relationship. Pending removes this supporting row; distinct converts this exact relationship. Other saved relationships remain."
+                    )
+            if (
                 pair.left.active_allocated_minor == pair.left.amount_minor
                 and pair.right.active_allocated_minor == pair.right.amount_minor
             ):
@@ -311,6 +388,30 @@ class V2SourceOverlapReview(QDialog):
                         "choose the occurrence to retain and use Repair posted repeat. Ordinary evidence review cannot retire money."
                     )
         self._update_action()
+
+    @staticmethod
+    def _choice_blocker(pair, choice) -> str | None:
+        left_root = pair.left_root_row_id or pair.left.row_id
+        right_root = pair.right_root_row_id or pair.right.row_id
+        direct = any(set(edge) == {pair.left.row_id, pair.right.row_id} for edge in pair.repeat_edges)
+        if left_root == right_root:
+            if not direct:
+                return "This is an implicit group relationship. Open a saved retained pair above; pending here cannot clear the group."
+            if choice in {"pending", "distinct"}:
+                return None
+            if choice in {"retain_left", "retain_right"}:
+                retained = pair.left.row_id if choice == "retain_left" else pair.right.row_id
+                if retained == left_root or len(pair.left_group_row_ids) <= 2:
+                    return None
+            return "Clear this saved repeat relationship before changing its retained occurrence."
+        if choice in {"distinct", "pending"}:
+            return None
+        if left_root != pair.left.row_id or right_root != pair.right.row_id:
+            return "A selected row supports another retained occurrence. Open its saved pair and clear that relationship before joining a group."
+        excluded_group = pair.right_group_row_ids if choice == "retain_left" else pair.left_group_row_ids
+        if len(excluded_group) > 1:
+            return "The proposed supporting row retains other occurrences. Clear its saved repeat relationships before joining another group."
+        return None
 
     def _load_repair_preview(self, pair):
         try:
@@ -338,6 +439,11 @@ class V2SourceOverlapReview(QDialog):
         pair = self._current()
         choice = self.decision.currentData()
         supported = pair is not None and choice is not None and self.decision.isEnabled()
+        blocker = self._choice_blocker(pair, choice) if supported else None
+        for index in range(1, self.decision.count()):
+            item = self.decision.model().item(index)
+            item.setEnabled(pair is not None and self._choice_blocker(pair, self.decision.itemData(index)) is None)
+        supported = supported and blocker is None
         if supported and choice == "retain_left":
             supported = not pair.right.has_journal_history or (
                 pair.right.repeat_support_history_validated and pair.right.active_allocated_minor == 0
@@ -350,14 +456,18 @@ class V2SourceOverlapReview(QDialog):
         self.repair_button.setEnabled(
             self.repair_preview is not None
             and self.decision.isEnabled()
+            and blocker is None
             and choice in {"retain_left", "retain_right"}
             and bool(self.reason.text().strip())
         )
+        if blocker is not None:
+            self.status.setText(blocker)
         if (
             pair is not None
             and self.decision.isEnabled()
             and choice in {"retain_left", "retain_right"}
             and not supported
+            and blocker is None
         ):
             self.status.setText(
                 "The supporting row has journal history and cannot be excluded by ordinary evidence review. "
@@ -393,8 +503,12 @@ class V2SourceOverlapReview(QDialog):
         message = (
             self.decision.currentText()
             + "?\n\n"
+            + f"Account: {pair.left.account_name}; exact signed source amount: {_money(pair.left.amount_minor)}\n"
+            + f"A: {pair.left.source_date} ({pair.left.date_role}, {pair.left.date_provenance}); {pair.left.description}\n"
+            + f"B: {pair.right.source_date} ({pair.right.date_role}, {pair.right.date_provenance}); {pair.right.description}\n\n"
             + reason
-            + "\n\nSource evidence and existing journal entries remain unchanged."
+            + "\n\nThis decision applies to the selected relationship. Pending on a saved direct repeat edge removes only that supporting relationship. "
+            + "Source dates, evidence and existing journal entries remain unchanged."
         )
         if QMessageBox.question(self, "Confirm source-row review", message) != QMessageBox.StandardButton.Yes:
             return
@@ -408,10 +522,16 @@ class V2SourceOverlapReview(QDialog):
                     reason=reason,
                     expected_basis_sha256=pair.basis_sha256,
                 )
-        except (ProfileFormatError, sqlite3.Error, OSError):
+        except (ProfileFormatError, sqlite3.Error, OSError) as error:
             self.refresh()
+            explanation = {
+                "source_overlap_group_not_pairwise_eligible": "The resulting group would exceed the three-day window between some members. Date proximity cannot be extended through a chain. ",
+                "source_overlap_clear_repeat_first": "Another saved repeat relationship must be cleared first. Open its saved retained pair to inspect it. ",
+            }.get(str(error), "")
             self.status.setText(
-                "Review was not saved. The source bindings, allocations or another review may have changed, "
+                "Review was not saved. "
+                + explanation
+                + "The source bindings, allocations or another review may have changed, "
                 "or this decision conflicts with journal history or another retained occurrence. "
                 "Inspect the refreshed pair before trying again."
             )

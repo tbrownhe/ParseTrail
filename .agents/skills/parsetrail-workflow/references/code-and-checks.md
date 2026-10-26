@@ -98,9 +98,11 @@ Here `core/` and `gui/` are under `client/src/parsetrail/`.
 ### Remaining review safeguards
 
 - Read the occurrence-review, ledger and single-store contracts and the completed
-  overlap record first. The current matcher uses exact bound account, signed
-  amount, source date and date role across sources; supporting repeats are not
-  allocations. Saved review history currently locks account bindings.
+  overlap record first. The current matcher uses exact bound account/signed
+  amount and source dates within three calendar days across sources, permitting
+  activity/posting role differences. Supporting repeats are not allocations.
+  Ordinary bindings retain history locks; explicit reviewed correction requires
+  zero active consumption and no opening anchor, retaining/invalidation history.
 - Select one outcome: wider matching, history-locked binding repair, existing
   double-posting correction, or transfer correction. These are distinct packets;
   do not turn them into a general import rewrite or erase prior review/journals.

@@ -233,6 +233,9 @@ def test_multiplicity_one_occurrence_per_source_and_independent_two_by_two(tmp_p
         with pytest.raises(ProfileFormatError, match="occurrence_multiplicity"):
             review(store, a2, b1, retained=b1)
         review(store, a2, b2, retained=b2)
+        assert set(store.source_overlap_posting_blocks((a1, a2, b1, b2))) == {a1, a2, b1, b2}
+        review(store, a1, b2, "distinct")
+        review(store, a2, b1, "distinct")
         assert store.source_overlap_posting_blocks((a1, a2, b1, b2)).keys() == {a1, a2}
         store.post_reviewed_cash_category(b1, "expense:food", reason="Occurrence one")
         store.post_reviewed_cash_category(b2, "expense:food", reason="Occurrence two")
@@ -302,15 +305,15 @@ def test_inventory_cap_advances_pending_and_guard_covers_hidden_pairs(tmp_path):
         assert store.source_overlap_inventory(max_pairs=1).candidates[0].state == "distinct"
 
 
-def test_unbound_other_account_date_role_and_zero_are_not_matched(tmp_path):
+def test_unbound_other_account_far_date_and_zero_are_not_matched(tmp_path):
     with V2ProfileStore.create(tmp_path / "fresh.db") as store:
         setup(store)
         account(store, "other")
         first = source(store, "First")
         source(store, "Other account", account_id="other")
-        source(store, "Other date", source_date="10/02/2026")
+        source(store, "Other date", source_date="10/05/2026")
         source(store, "Zero", amount="$0.00")
-        source(store, "Other date role", date_role="activity_date")
+        source(store, "Other sign", amount="$4.00")
         second = source(store, "Unbound")
         store.clear_source_account_binding(second.source_sha256, "Checking A", "opaque")
         assert store.source_overlap_inventory().total_pairs == 0
@@ -423,7 +426,7 @@ def test_failed_review_and_posting_rollback_leave_no_partial_decision_or_money(t
         assert b in store.source_overlap_posting_blocks((b,))
 
 
-def test_different_retained_roots_are_supporting_not_a_false_repeat_claim(tmp_path):
+def test_different_retained_roots_remain_pending_actual_pairs_not_a_false_repeat_claim(tmp_path):
     with V2ProfileStore.create(tmp_path / "fresh.db") as store:
         setup(store)
         first, second = source(store, "First", count=2), source(store, "Second", count=2)
@@ -433,7 +436,7 @@ def test_different_retained_roots_are_supporting_not_a_false_repeat_claim(tmp_pa
         review(store, a2, b2, retained=b2)
         inventory = store.source_overlap_inventory()
         for pair in inventory.candidates:
-            expected = "repeat" if {pair.left.row_id, pair.right.row_id} in ({a1, b1}, {a2, b2}) else "supporting"
+            expected = "repeat" if {pair.left.row_id, pair.right.row_id} in ({a1, b1}, {a2, b2}) else "pending"
             assert pair.state == expected
 
 
@@ -501,5 +504,5 @@ def test_reconciliation_versions_review_and_keeps_support_distinct_from_allocati
         assert "unallocated_source_movements" in checked.exceptions
         assert not checked.reconciled
         assert checked.input_version != before[repeated.source_sha256].input_version
-        assert checked.rule == "v2-statement-reconciliation-3"
+        assert checked.rule == "v2-statement-reconciliation-4"
         assert not store._active_consumed()

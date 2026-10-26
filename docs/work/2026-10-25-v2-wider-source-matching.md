@@ -2,9 +2,9 @@
 
 Date: 2026-10-25. Roadmap IDs: V2-3/4.
 Authorization: approved roadmap and continued development.
-Implementation: active pure-matcher preparation; store integration serialized after binding corrections.
-Automated verification: pure index and existing overlap checks passed; live integration pending.
-Independent review: pure matcher complete, no actionable findings; live integration pending.
+Implementation: complete.
+Automated verification: service/UI and broader affected checks passed.
+Independent review: integrated financial/GUI review and final metadata optimization complete; no findings.
 Owner acceptance: pending consolidated V2-UX.
 Release authorization: not authorized.
 
@@ -26,10 +26,17 @@ from one pair. Never silently discard alias-only neighbors or widen a date windo
 through a chain. A new group member introduces its own candidate edges and review
 requirements. Keep explicit decisions scoped to retained source context.
 
-Primary owns pure `v2_source_overlap.py` matcher/index and new focused tests
-initially. Ledger retains sole store/export ownership while binding work runs;
-the subsequent integration write set will be assigned before edits. GUI work is
-serialized with its existing owner. Documentation remains primary-owned.
+Primary owns `v2_source_overlap.py`, pure tests, documentation and integration.
+Ledger now owns `v2_profile_store.py` and focused service tests; desktop owns
+`v2_source_overlap_review.py` and focused interaction tests. No writer overlaps.
+Replace equality assumptions in discovery/counting, full posting guards,
+repeat-group admission, posted-repeat repair and persisted repair validation.
+Expose current group roots/relationships for truthful controls and direct
+navigation to saved repeat edges, including beyond the ordinary display cap.
+Alias-to-outsider distinct review is per actual row pair; it never resolves
+unreviewed edges from another group member. Joining/changing a group requires
+explicit clearing of conflicting saved repeat edges first. Bump live overlap and
+reconciliation rules together so old forms/checks cannot certify a changed rule.
 Synthetic/disposable profiles only; independent integrity review is required
 before integration closeout. No private data, 1.x mutation or release actions.
 
@@ -63,6 +70,56 @@ and all neighbors matched its oracle across year boundaries, roles, unknowns,
 signs, accounts, multiplicity and journal-history flags. It verified the new
 helpers have no live callers and the current exact rule remains unchanged.
 Repository hooks and whitespace checks passed for this preparatory commit.
+
+## Integrated result
+
+Overlap rule 2 now uses this index for inventory, exact counts, review admission,
+uncapped direct-pair navigation and full posting guards. Reconciliation rule 4
+retains prior rule-3 decisions as stale history without relabeling their checks.
+Schema remains 16. Group metadata exposes current roots/members and actual saved
+repeat edges. Each root's posting guard inspects every member's outsider edges;
+one distinct decision cannot resolve another member's unreviewed relationship.
+Repeat admission enforces all-pairs date eligibility and one occurrence per
+source. Implicit within-group pairs cannot pretend to clear a group; direct
+saved edges can be replaced atomically by an explicit distinct decision.
+
+Posted-repeat repair and retained proof use immutable source dates/roles and
+original journal accounts, preserving old effective card dates and recoverability
+after later binding changes. Stale forms, failed retirement writes and malformed
+history retain existing refusal/rollback behavior. No source fact or accounting
+date changes merely because the matcher found a nearby candidate.
+
+The GUI shows both dates, roles/provenance, exact account/amount and candidate
+reason. Alias-to-outsider direct review is reachable, and saved root edges can
+be opened through a coherent direct-pair read beyond the inventory cap. Per-choice
+controls prevent implicit clearing and alias joining without clearing conflicting
+edges. Original ordinary direct-repeat-to-distinct review remains usable.
+
+Dense inventory scans classify pending/resolved pairs before constructing group
+metadata for displayed rows. A 12-member group plus outsider retains 78 candidate
+pairs, shows pending work first and constructs only one metadata result at a
+one-row display cap, both before and after resolving every actual outsider edge.
+This changes no full posting guard or count semantics.
+
+Windows 11 AMD64/Python 3.13.15/Qt offscreen: final service integration passed
+173 checks in 204.57 seconds before this metadata optimization; final wider and
+existing overlap checks passed 36 in 25.90 seconds afterward. GUI/ordinary repair
+interaction checks passed 32 in 24.30 seconds. Independent review passed 22
+current service/GUI checks in 27.68 seconds, then reran all 36 affected service
+checks after the optimization (35.84 seconds). Its separate 20-scenario/120-row
+public-store oracle matched inventory counts and every root/support posting
+guard, including genuine same-source occurrences. An earlier independent run
+passed 99 and hit one test-only attribute typo; the corrected case is included
+in the final checks. No actionable financial/provenance/UI findings remain.
+
+Agent/primary review preserved explicit direct-edge-to-distinct behavior when
+effective groups are recomputed after removing that edge. It did not add a
+redundant pending-review step. The final 1180-by-760 UI was inspected offscreen
+with temporary Segoe UI loading; controls and qualified source details fit.
+Final V2 integration passed 512 checks, 1,107 deselected, in 317.74 seconds.
+Changed-file Ruff check/format, whitespace and local links passed; repository
+hooks passed after normalizing line endings in the new GUI test. No owner/native/
+Intel/installed acceptance is claimed.
 
 ## Verification
 

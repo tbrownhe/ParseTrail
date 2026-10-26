@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Literal
 
-OVERLAP_RULE = "v2-source-overlap-1"
+OVERLAP_RULE = "v2-source-overlap-2"
 SOURCE_DATE_WINDOW_DAYS = 3
 
 
@@ -37,6 +37,11 @@ class SourceOverlapCandidate:
     retained_row_id: str | None
     revision_id: int | None
     basis_sha256: str
+    left_root_row_id: str | None = None
+    right_root_row_id: str | None = None
+    left_group_row_ids: tuple[str, ...] = ()
+    right_group_row_ids: tuple[str, ...] = ()
+    repeat_edges: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)

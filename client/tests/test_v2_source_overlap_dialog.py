@@ -122,7 +122,7 @@ def test_repeat_requires_reason_confirmation_and_persists_without_posting(tmp_pa
         assert "Repeated supporting" in store.source_overlap_posting_blocks((pair.right.row_id,))[pair.right.row_id]
 
 
-def test_supporting_pair_does_not_claim_same_movement_or_edit_indirect_review(tmp_path: Path):
+def test_supporting_outsider_pair_remains_pending_with_explicit_distinct_review(tmp_path: Path):
     app = _app()
     from parsetrail.gui.v2_source_overlap_review import V2SourceOverlapReview
     from PySide6.QtCore import Qt
@@ -156,14 +156,20 @@ def test_supporting_pair_does_not_claim_same_movement_or_edit_indirect_review(tm
             == {independent, supporting}
         )
         dialog.table.selectRow(index)
-        assert dialog._current().state == "supporting"
-        assert "Supporting evidence involved" in dialog.details_state.text()
-        assert "no same-movement assertion" in dialog.details_state.text()
+        assert dialog._current().state == "pending"
+        assert "Pending review" in dialog.details_state.text()
+        assert "does not establish identity" in dialog.details_state.text()
         assert retained in dialog.details_state.text()
-        assert not dialog.decision.isEnabled()
+        assert dialog.decision.isEnabled()
         assert not dialog.save_button.isEnabled()
         assert dialog.preview_left.isEnabled()
-        assert "Select the pair containing the retained row" in dialog.status.text()
+        assert dialog.open_saved_pair.isEnabled()
+        assert "open its saved retained pair" in dialog.status.text()
+        dialog.decision.setCurrentIndex(dialog.decision.findData("distinct"))
+        dialog.reason.setText("These actual rows describe distinct movements")
+        assert dialog.save_button.isEnabled()
+        dialog.decision.setCurrentIndex(dialog.decision.findData("retain_left"))
+        assert not dialog.save_button.isEnabled()
     finally:
         dialog.close()
         app.processEvents()
