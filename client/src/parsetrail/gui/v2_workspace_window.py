@@ -51,6 +51,7 @@ from parsetrail.gui.v2_source_account_review import V2SourceAccountReview
 from parsetrail.gui.v2_source_overlap_review import V2SourceOverlapReview
 from parsetrail.gui.v2_statement_coverage import V2StatementCoverageDialog
 from parsetrail.gui.v2_transfer_review import V2TransferReview
+from parsetrail.gui.v2_workspace_help import show_workspace_about, show_workspace_help
 
 
 class V2ImportWorker(QThread):
@@ -161,6 +162,11 @@ class V2WorkspaceWindow(QMainWindow):
         )
         self.assumed_posting_action.toggled.connect(self._set_assumed_posting_dates)
         settings_menu.addAction(self.assumed_posting_action)
+        help_menu = self.menuBar().addMenu("Help")
+        self.getting_started_action = help_menu.addAction("Getting started…")
+        self.getting_started_action.triggered.connect(lambda: show_workspace_help(self))
+        self.about_action = help_menu.addAction("About this workspace…")
+        self.about_action.triggered.connect(lambda: show_workspace_about(self))
         central = QWidget()
         self.setCentralWidget(central)
         layout = QVBoxLayout(central)

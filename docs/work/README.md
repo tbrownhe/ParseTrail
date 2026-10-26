@@ -9,6 +9,7 @@ contracts own lasting behavior. Start with those documents, not historical logs.
 
 | Record | Roadmap scope | Implementation / evidence |
 | --- | --- | --- |
+| [Workspace guidance/build identity](2026-10-25-v2-workspace-guidance.md) | V2-6/7 | Completed small primary-verified change: local workflow help and unchanged pilot version disclosure. |
 | [Correct reviewed openings](2026-10-25-v2-opening-corrections.md) | V2-4/5 | Completed development and independent review; append-only retirement/revision and integrated report/export history. |
 | [Recover embedded source originals](2026-10-25-v2-source-recovery.md) | V2-3/6 | Completed development and independent review; originals recover without catalog/import path, preserving profile bytes. |
 | [Durable reconciliation history](2026-10-25-v2-reconciliation-history.md) | V2-4/5 | Completed development and independent review; saved/current/live cutoffs and recoverable pending states. |

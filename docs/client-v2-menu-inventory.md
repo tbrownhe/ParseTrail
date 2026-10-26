@@ -40,8 +40,8 @@ retains the earlier snapshot and proposal wording.
 | Reports → Export Three Months | Reviewed journal workbook export accepts an explicit date range; native export was accepted. | Date presets and pivot presentation are deferred under [DEC-3](../ROADMAP.md#dec-3); reports [V2-5](../ROADMAP.md#v2-5). |
 | Reports → Export One Year | The same explicit-range reviewed journal export is available. | Date preset deferred under [DEC-3](../ROADMAP.md#dec-3). |
 | Reports → Export All Time | The same explicit-range reviewed journal export is available. | All-time selection/preset deferred under [DEC-3](../ROADMAP.md#dec-3). |
-| Help → About | No V2 counterpart in the pilot shell. | Final build metadata [V2-7](../ROADMAP.md#v2-7). |
-| Help → Getting Started | Disposable demos and technical documentation exist. | Final onboarding [V2-7](../ROADMAP.md#v2-7), integrated [V2-UX](../ROADMAP.md#v2-ux). |
+| Help → About | Help > About this workspace shows current build identity and explicit development-pilot status. | Final release identity [V2-7](../ROADMAP.md#v2-7); no version bump or 2.0 release claim. |
+| Help → Getting Started | Local daily-workflow guidance covers import, review, qualified reports and recovery. | Final integrated onboarding [V2-7](../ROADMAP.md#v2-7), [V2-UX](../ROADMAP.md#v2-ux). |
 | Help → Check for Updates | No V2 counterpart in the pilot shell. | Client/catalog update scope [P2-5](../ROADMAP.md#p2-5)/[DEC-2](../ROADMAP.md#dec-2); service work stays separate. |
 | Balance History dashboard tab | Account positions/history uses an explicit inclusive as-of date, opening validity, pending scope and separate live/historical/current saved reconciliation cutoffs. | Remaining [V2-5](../ROADMAP.md#v2-5) report integration; no current bank-balance claim. |
 | Category Spending dashboard tab | Reviewed Spending reports exact category totals with incomplete scope. | Charts deferred; truthful drill-down scope [V2-5](../ROADMAP.md#v2-5)/[DEC-3](../ROADMAP.md#dec-3), later CF3 comparisons. |
