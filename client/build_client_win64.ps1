@@ -146,7 +146,6 @@ try {
         --hidden-import="openpyxl.cell._writer" `
         --hidden-import="scipy._lib.array_api_compat.numpy.fft" `
         --hidden-import="scipy.special._special_ufuncs" `
-        --splash "assets\splash.png" `
         --icon "assets\parsetrail_128px.ico" `
         (Join-Path $srcDir "parsetrail\main.py")
     if ($LASTEXITCODE -ne 0) {

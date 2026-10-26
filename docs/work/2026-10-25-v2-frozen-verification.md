@@ -34,6 +34,8 @@ Primary owns docs and integration. Verification specialists are read-only.
 
 After a clean integrated commit, build a disposable onedir/windowed AMD64 probe
 with existing PyInstaller production dependency/data options and scratch paths.
+V2 Windows builds use Qt startup directly; the optional Tk splash is omitted as
+documented in the October 26 tooling finding below.
 Run architecture, all worker pipes and this fixed diagnostic using synthetic
 inputs. This is a test build without installer execution, release metadata, version
 change, production signing, upload or publication. Record source commit, command,
@@ -111,6 +113,28 @@ stopped before dependency sync, building or signing. Windows PowerShell executio
 policy was set to RemoteSigned only in that test process; no persistent policy
 changed. These checks establish entry/isolation and kernel regressions, not the
 actual frozen probe or installed/native acceptance.
+
+### October 26 exact build finding and correction
+
+After the integrated source checks passed, the exact windowed production-flag
+probe at clean `25294e29816c8adf745e3fb2861a8f301c34fd64` failed after 106.27s at
+PyInstaller's `--splash` requirement. Analysis/PYZ completed but no executable was
+produced. `_tkinter`, Tcl/Tk DLLs and script files exist, yet Tcl initialization
+cannot use `init.tcl`, including in the original environment and with explicit/
+copied public library paths. Build-home isolation was not the cause. No venv or
+third-party source was modified. Exact log/report remain under ignored
+`scratch/v2-frozen-25294e2`.
+
+The V2 application uses Qt and has no functional Tcl/Tk dependency. The primary
+removed the optional Windows `--splash` flag from the production builder rather
+than changing a managed interpreter or bypassing a required application check.
+Icon/Qt startup and the defensive close of any existing splash remain intact.
+No dependency cleanup, application version change or release action is included.
+The next clean freeze/probe uses that same corrected production option set;
+record the actual resulting revision and results before claiming a frozen pass.
+Focused release-bootstrap and native installation-identity checks after this
+one-option change: **35 passed in 2.85s**. Application/ledger/parser code is
+unchanged from the fully tested integration; native build verification follows.
 
 ## Remaining work
 
