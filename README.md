@@ -6,6 +6,12 @@ supports overlapping exports and multi-account statements, categorizes
 transactions with a local model, and provides account, budget, recurring-charge,
 and reporting workflows.
 
+The active client-development branch now starts the fresh V2 workspace by default.
+Its finite signed declaration catalog, reviewed ledger and independent 1.4.2
+fallback follow [ROADMAP](ROADMAP.md) and the [cutover contract](docs/client-v2-cutover.md).
+Published 1.x capabilities described here remain independent; initial V2 deferrals
+and outstanding human/platform/release gates are recorded in the roadmap.
+
 The public service at [parsetrail.com](https://parsetrail.com/) distributes the
 desktop installers and signed parser catalog. An account is needed for plugin
 downloads and for the optional statement-contribution workflow. Normal statement
@@ -60,6 +66,9 @@ bytecode is neither encryption nor obfuscation; signatures detect modification
 but do not prevent inspection or decompilation.
 
 ## Parser architecture
+
+V2 uses the [finite declaration/evidence pipeline](docs/client-v2-parsing.md).
+The executable-plugin interface below describes the retained published 1.x path.
 
 Source parsers live in `client/src/parsetrail/plugins` and implement the stable
 `IParser` interface. Routing is deterministic: suffix, optional PDF metadata,

@@ -88,10 +88,13 @@ def test_real_entrypoint_offline_session_ignores_existing_profile(tmp_path, mode
     assert report["passed"] is True
     assert report["frozen"] is False
     assert report["mode"] == mode
-    assert report["onboarding_pages"] == 5
+    assert report["runtime"] == "v2" and report["schema_version"] == 2
+    assert report["chooser_action"] == {"fresh": "create", "cached": "open", "network-failure": "restore"}[mode]
     assert report["heartbeat_ticks"] > 30
-    assert report["network_requests"] == (2 if mode == "network-failure" else 0)
-    assert report["local_import_and_model"] is (mode != "fresh")
+    assert report["network_requests"] == 0
+    assert report["local_import_and_review"] and report["import_retry"]
+    assert report["reviewed_expense_minor"] == 5743 and report["backup_reopen_recovery"]
+    assert all(report["paint_events"].values()) and report["display_suppressed"]
     assert canary.read_bytes() == b"existing data must be untouched"
     assert sorted(path.name for path in tmp_path.iterdir()) == ["existing.db", "report.json"]
 
@@ -121,7 +124,7 @@ def test_diagnostic_report_cannot_overwrite_an_existing_file(tmp_path):
 def test_offline_diagnostic_cannot_reuse_already_loaded_settings():
     # Other suite modules have already imported the isolated pytest settings.
     import parsetrail.core.settings  # noqa: F401
-    from parsetrail.core.offline_smoke import run_offline_session_smoke
+    from parsetrail.core.v2_offline_smoke import run_offline_session_smoke
 
     assert run_offline_session_smoke("fresh", lambda: pytest.fail("Must not run with loaded settings")) == 2
 
@@ -137,10 +140,10 @@ def test_startup_failure_unwinds_modal_dialogs_before_main_event_loop(tmp_path, 
 import sys
 from pathlib import Path
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
-from parsetrail.core.offline_smoke import run_offline_session_smoke
+from parsetrail.core.v2_offline_smoke import run_offline_session_smoke
 
 def entrypoint():
-    app = QApplication(sys.argv)
+    app = QApplication.instance() or QApplication(sys.argv)
     # Constructors can open another modal after the first one returns. Neither
     # that nested loop nor the subsequent main loop may lose the failed result.
     for title in ("Unexpected startup dialog", "Subsequent startup dialog"):
@@ -150,7 +153,7 @@ def entrypoint():
             dialog = QDialog()
             dialog.setWindowTitle(title)
         dialog.exec()
-    raise SystemExit(app.exec())
+    return app.exec()
 
 raise SystemExit(run_offline_session_smoke("fresh", entrypoint, report_path=Path(sys.argv[1])))
 """,
@@ -165,8 +168,8 @@ raise SystemExit(run_offline_session_smoke("fresh", entrypoint, report_path=Path
     expected_error = "Unexpected startup dialog" if dialog_type == "dialog" else "Unexpected startup message"
     assert expected_error in result["error"]
     log = report.with_name(report.name + ".log").read_text(encoding="utf-8")
-    assert f"GUI failure: {expected_error}" in log
-    assert "entering main event loop" not in log
+    assert "GUI failure:" in log and expected_error in log
+    assert "verify local signed catalog" not in log
 
 
 def test_stack_dump_does_not_depend_on_gui_event_loop(tmp_path):
@@ -179,7 +182,7 @@ def test_stack_dump_does_not_depend_on_gui_event_loop(tmp_path):
 import sys
 import threading
 from pathlib import Path
-from parsetrail.core import offline_smoke
+from parsetrail.core import v2_offline_smoke as offline_smoke
 
 offline_smoke.STACK_DUMP_SECONDS = 0.1
 with offline_smoke._Diagnostics(Path(sys.argv[1])) as diagnostics:

@@ -37,13 +37,23 @@ Keep the application version unchanged during pilots. A version bump, production
 signing, live-profile activation, installation/release, deployment or publication
 requires its specifically selected release scope and acceptance.
 
-Explicit `--v2` source launch can offer New/Open/Restore without mandatory profile
-or cache CLI paths. Existing explicit paths and deliberate `--create-profile`
+Ordinary source/frozen entry now opens V2 New/Open/Restore without mandatory profile
+or cache CLI paths. `--v2` remains an optional selector. Existing explicit paths and deliberate `--create-profile`
 automation remain available. A chooser never activates the last profile by
 default; cancellation writes nothing. Separate preferences/catalog configuration
 is checked before creating/restoring, invalid selections preserve the current
-workspace, and a failed staged refresh restores its prior selection. This does
-not change ordinary 1.x startup or authorize daily-profile activation/release.
+workspace, and a failed staged refresh restores its prior selection. Ordinary
+entry does not initialize legacy settings, auth or the 1.x window. The separately
+retained published application remains the independent 1.x runtime; this cutover
+does not authorize daily-profile activation or release.
+
+Worker, fixture-verification, offline and native dependency diagnostics dispatch
+before ordinary GUI startup. Unsupported options fail before V2 configuration/UI
+imports. The splash closes before the modal chooser, and icon/signal setup avoids
+legacy bootstrap. Offline diagnostics use synthetic disposable V2 data, scoped
+fixture trust and denied networking; native dependency checks are separately
+isolated and are not financial acceptance. See the
+[runtime packet](work/2026-10-26-v2-runtime-cutover.md).
 
 ## Evidence and accounting rules
 

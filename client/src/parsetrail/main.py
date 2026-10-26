@@ -1,3 +1,5 @@
+"""Ordinary fresh V2 startup and explicitly isolated diagnostics/workers."""
+
 import os
 import signal
 import sys
@@ -6,36 +8,19 @@ from platform import system
 
 RUNTIME_SMOKE_TEST_ARGUMENT = "--runtime-smoke-test"
 
-# Set Qt environment variables
-os.environ.setdefault("QT_API", "PySide6")  # Qt bindings
-os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"  # Enable HiDPI scaling
-
-# Platform-specific environment configurations
-system_name = system()
-if system_name == "Windows":
-    os.environ.setdefault("QT_QPA_PLATFORM", "windows")
-
 
 def handle_signal(_signal, _frame):
-    from parsetrail.core.logging import logger
-
-    logger.info("Application interrupted. Exiting...")
-    sys.exit(0)
+    """Interrupt without importing legacy settings or its file logger."""
+    raise SystemExit(0)
 
 
 def run_runtime_smoke_test() -> int:
-    """Exercise bootstrap and native libraries using synthetic in-memory inputs."""
+    """Native dependency/provenance operations, not V2 financial acceptance."""
     from parsetrail.core.runtime_smoke import check_build_provenance, check_native_operations
 
     if getattr(sys, "frozen", False):
         check_build_provenance()
-
-    for module_name in (
-        "_socket",
-        "socket",
-        "multiprocessing",
-        "parsetrail.core.credentials",
-    ):
+    for module_name in ("_socket", "socket", "multiprocessing", "parsetrail.core.credentials"):
         __import__(module_name)
     if system() in {"Windows", "Darwin"}:
         from parsetrail.core.credentials import credential_store
@@ -46,30 +31,88 @@ def run_runtime_smoke_test() -> int:
     return 0
 
 
+def _isolated_runtime_smoke(staging_url=None) -> int:
+    import tempfile
+    from contextlib import ExitStack
+    from pathlib import Path
+    from unittest.mock import patch
+
+    from parsetrail.core.profile import normalize_staging_server_url
+    from parsetrail.core.v2_offline_smoke import _deny_network
+
+    if staging_url is not None:
+        staging_url = normalize_staging_server_url(staging_url)
+    keep = {"PATH", "SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT", "TEMP", "TMP", "TMPDIR", "LANG", "LC_ALL"}
+    env = {key: value for key, value in os.environ.items() if key.upper() in keep or key.startswith(("_PYI", "QT_"))}
+    with tempfile.TemporaryDirectory(prefix="parsetrail-native-smoke-") as temporary, ExitStack() as patches:
+        root = Path(temporary)
+        env.update(
+            HOME=temporary,
+            USERPROFILE=temporary,
+            APPDATA=str(root / "appdata"),
+            XDG_CONFIG_HOME=str(root / "config"),
+            XDG_DATA_HOME=str(root / "data"),
+            XDG_CACHE_HOME=str(root / "cache"),
+            PARSETRAIL_PROFILE="staging" if staging_url else "default",
+        )
+        if staging_url:
+            env["PARSETRAIL_STAGING_SERVER_URL"] = staging_url
+        patches.enter_context(patch.dict(os.environ, env, clear=True))
+        attempts = []
+        _deny_network(patches, attempts)
+        result = run_runtime_smoke_test()
+        if attempts:
+            raise RuntimeError("Native dependency diagnostic attempted network access")
+        return result
+
+
 def create_application(argv):
+    os.environ.setdefault("QT_API", "PySide6")
+    os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
+    if system() == "Windows":
+        os.environ.setdefault("QT_QPA_PLATFORM", "windows")
     from PySide6.QtWidgets import QApplication
 
     return QApplication(argv)
 
 
-def run_v2_workspace(argv: list[str]) -> int:
-    """Launch the fresh-profile desktop path without initializing 1.x settings."""
-    import argparse
+def _prepare_application(app):
+    """Appearance uses a constant bundled asset, without legacy bootstrap imports."""
     from pathlib import Path
 
-    from parsetrail.core.v2_preferences import default_preferences_path
-    from parsetrail.core.v2_workspace import V2Workspace
+    from PySide6.QtGui import QIcon
 
-    parser = argparse.ArgumentParser(description="Open an explicit ParseTrail 2.0 workspace")
-    parser.add_argument("--v2", action="store_true", required=True)
+    base = Path(sys._MEIPASS) if hasattr(sys, "_MEIPASS") else Path(__file__).resolve().parents[2]
+    icon = base / "assets" / "parsetrail_128px.ico"
+    if icon.is_file():
+        app.setWindowIcon(QIcon(str(icon)))
+    with suppress(ImportError, OSError, RuntimeError):
+        import pyi_splash  # type: ignore
+
+        pyi_splash.close()
+
+
+def run_v2_workspace(argv: list[str]) -> int:
+    """Default desktop path; parse all options before GUI/configuration imports."""
+    import argparse
+    import sqlite3
+    from pathlib import Path
+
+    parser = argparse.ArgumentParser(description="Open a fresh ParseTrail 2.0 workspace")
+    parser.add_argument("--v2", action="store_true", help="Optional explicit selector for the current runtime")
     parser.add_argument("--profile", type=Path)
     parser.add_argument("--catalog-cache", type=Path)
     parser.add_argument("--preferences", type=Path)
     parser.add_argument("--create-profile", action="store_true")
     args = parser.parse_args(argv)
-    catalog = args.catalog_cache or default_preferences_path().parent / "v2-catalog"
     if args.create_profile and args.profile is None:
-        parser.error("--create-profile requires --profile; use --v2 alone for the profile chooser")
+        parser.error("--create-profile requires --profile; omit both to use the chooser")
+    from parsetrail.core.v2_preferences import default_preferences_path
+    from parsetrail.core.v2_workspace import V2Workspace
+
+    catalog = args.catalog_cache or default_preferences_path().parent / "v2-catalog"
+    previous_signal = signal.getsignal(signal.SIGINT)
+    signal.signal(signal.SIGINT, handle_signal)
     try:
         app = None
         if args.profile is None:
@@ -78,6 +121,7 @@ def run_v2_workspace(argv: list[str]) -> int:
             from parsetrail.gui.v2_profile_startup import V2ProfileStartupDialog
 
             app = QApplication.instance() or create_application(sys.argv[:1])
+            _prepare_application(app)
             startup = V2ProfileStartupDialog(catalog, preferences_path=args.preferences)
             if startup.exec() != QDialog.Accepted or startup.workspace is None:
                 return 0
@@ -95,108 +139,85 @@ def run_v2_workspace(argv: list[str]) -> int:
             from PySide6.QtWidgets import QApplication
 
             app = QApplication.instance() or create_application(sys.argv[:1])
-        with suppress(ModuleNotFoundError):
-            import pyi_splash  # type: ignore
-
-            pyi_splash.close()
+            _prepare_application(app)
         window = V2WorkspaceWindow(workspace)
         window.show()
         return app.exec()
-    except (OSError, ValueError) as exc:
-        print(f"ParseTrail 2.0 could not start: {exc}", file=sys.stderr)
+    except (OSError, ValueError, sqlite3.Error) as exc:
+        if sys.stderr is not None:
+            print(f"ParseTrail 2.0 could not start: {exc}", file=sys.stderr)
         return 2
+    finally:
+        signal.signal(signal.SIGINT, previous_signal)
 
 
-# Client entry point
 def main() -> int:
-    if sys.argv[1:2] == ["--v2-parser-worker"]:
-        if sys.argv[2:3] == ["annotation-period"]:
+    args = sys.argv[1:]
+    if args[:1] == ["--v2-parser-worker"]:
+        # Keep imports explicit so frozen analysis includes every worker entry.
+        if args[1:2] == ["annotation-period"]:
             from parsetrail.core.v2_pdf_annotation_worker import main as worker_main
 
-            return worker_main(sys.argv[3:])
-        if sys.argv[2:3] == ["xlsx-evidence"]:
+            return worker_main(args[2:])
+        if args[1:2] == ["xlsx-evidence"]:
             from parsetrail.core.v2_xlsx_worker import main as worker_main
 
-            return worker_main(sys.argv[3:])
-        if sys.argv[2:3] == ["anchored-table"]:
+            return worker_main(args[2:])
+        if args[1:2] == ["anchored-table"]:
             from parsetrail.core.v2_anchored_table_worker import main as worker_main
 
-            return worker_main(sys.argv[3:])
-        if sys.argv[2:3] == ["wells-table"]:
+            return worker_main(args[2:])
+        if args[1:2] == ["wells-table"]:
             from parsetrail.core.v2_wells_table_worker import main as worker_main
 
-            return worker_main(sys.argv[3:])
-        if sys.argv[2:3] == ["citi-table"]:
+            return worker_main(args[2:])
+        if args[1:2] == ["citi-table"]:
             from parsetrail.core.v2_citi_table_worker import main as worker_main
 
-            return worker_main(sys.argv[3:])
+            return worker_main(args[2:])
         from parsetrail.core.v2_pdf_text_worker import main as worker_main
 
-        return worker_main(sys.argv[2:])
-
-    if "--v2-verify-fixtures" in sys.argv[1:]:
+        return worker_main(args[1:])
+    if "--v2-verify-fixtures" in args:
         from parsetrail.core.v2_fixture_verification import main as fixture_main
 
-        return fixture_main(sys.argv[1:])
-
-    if "--offline-session-smoke-test" in sys.argv:
+        return fixture_main(args)
+    if "--offline-session-smoke-test" in args:
         import argparse
         from pathlib import Path
 
-        from parsetrail.core.offline_smoke import MODES, run_offline_session_smoke
-
-        parser = argparse.ArgumentParser(description="Run a synthetic offline session in a temporary profile")
-        parser.add_argument("--offline-session-smoke-test", choices=MODES, required=True)
+        parser = argparse.ArgumentParser(
+            description="Exercise a disposable V2 workspace with every network attempt denied"
+        )
+        parser.add_argument(
+            "--offline-session-smoke-test", choices=("fresh", "cached", "network-failure"), required=True
+        )
         parser.add_argument("--offline-smoke-report", type=Path)
-        args = parser.parse_args(sys.argv[1:])
+        selected = parser.parse_args(args)
+        from parsetrail.core.v2_offline_smoke import run_offline_session_smoke
+
         sys.argv[:] = sys.argv[:1]
-        return run_offline_session_smoke(args.offline_session_smoke_test, main, report_path=args.offline_smoke_report)
+        return run_offline_session_smoke(
+            selected.offline_session_smoke_test, main, report_path=selected.offline_smoke_report
+        )
+    if RUNTIME_SMOKE_TEST_ARGUMENT in args:
+        import argparse
 
-    if "--v2" in sys.argv[1:]:
-        return run_v2_workspace(sys.argv[1:])
-
-    from parsetrail.core.profile import ProfileError, configure_runtime_profile
-
-    try:
-        sys.argv[:] = configure_runtime_profile(sys.argv)
-    except ProfileError as exc:
-        print(f"ParseTrail could not start: {exc}", file=sys.stderr)
-        return 2
-
-    if RUNTIME_SMOKE_TEST_ARGUMENT in sys.argv:
-        return run_runtime_smoke_test()
-
-    # Imports that depend on settings
-    from PySide6.QtGui import QIcon
-
-    from parsetrail.core.logging import logger
-    from parsetrail.core.utils import resource_path
-    from parsetrail.gui.bootstrap import configure_ui_hooks
-    from parsetrail.gui.main_window import ParseTrail
-
-    # Handle system interrupts (e.g., Ctrl+C)
-    signal.signal(signal.SIGINT, handle_signal)
-
-    # Close the splash screen
-    with suppress(ModuleNotFoundError):
-        import pyi_splash  # type: ignore
-
-        pyi_splash.close()
-
-    # Kick off the GUI
-    try:
-        app = create_application(sys.argv)
-        icon = resource_path("assets/parsetrail_128px.ico")
-        app.setWindowIcon(QIcon(str(icon)))
-        configure_ui_hooks()  # bootstrap login ui to AuthManager
-        window = ParseTrail()
-        window.show()
-        sys.exit(app.exec())
-    except Exception:
-        logger.exception("An error occurred during application execution")
-        sys.exit(1)
-
-    return 0
+        parser = argparse.ArgumentParser(description="Isolated native dependency diagnostic; not financial acceptance")
+        parser.add_argument(RUNTIME_SMOKE_TEST_ARGUMENT, action="store_true", required=True)
+        parser.add_argument(
+            "--staging",
+            metavar="HTTPS_API_URL",
+            help="Explicit native-diagnostic credential-service context only; no network request",
+        )
+        selected = parser.parse_args(args)
+        try:
+            return _isolated_runtime_smoke(selected.staging)
+        except (OSError, ValueError, RuntimeError) as exc:
+            if sys.stderr is not None:
+                print(f"Native runtime diagnostic failed: {exc}", file=sys.stderr)
+            return 1
+    return run_v2_workspace(args)
 
 
 if __name__ == "__main__":

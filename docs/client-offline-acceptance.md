@@ -1,5 +1,48 @@
 # Offline client acceptance
 
+## Current V2 diagnostic and owner gate
+
+Ordinary startup now opens the fresh V2 New/Open/Restore chooser. From `client/`,
+run the real entry-point diagnostic with a new report path:
+
+```bash
+uv run --no-env-file --no-sync python src/parsetrail/main.py \
+  --offline-session-smoke-test fresh --offline-smoke-report NEW_REPORT.json
+```
+
+Repeat with `cached` and `network-failure`. A windowed frozen executable requires
+the report path. Every mode owns synthetic temporary state, denies networking and
+requires **zero** attempts. The modes exercise the actual chooser's create, open
+and restore paths respectively, then paint the workspace, cash review and reports.
+They verify a signed local fixture catalog, import/retry, exact reviewed expenses,
+backup/restore/reopen and original-source recovery. Fixture trust is scoped to this
+explicit diagnostic; normal startup's shipped trust is unchanged. The self-contained
+fixture needs neither a checkout/devtools directory nor a production signing key.
+
+Reports identify schema 2, V2 runtime, actual Qt platform, `frozen`, mode, observed
+paint/heartbeat timings and checked local operations. Autonomous native checks
+suppress window display; they are not owner UX acceptance. An existing Qt app or
+legacy-settings process is refused before the diagnostic can inspect its windows.
+Requested report/log destinations are exclusive; collisions or write failures fail
+the command while preserving existing bytes, including a collision during work.
+There is no V2 automatic update/network failure sequence to simulate.
+
+The independent native-library/provenance smoke remains a separate engineering
+check with its own isolated environment. Neither it nor the fixture modes prove
+production starter signing, native installation, OS firewall behavior, Intel
+support or release authorization. For final owner review, use the prepared
+[disposable integrated walkthrough](work/2026-10-26-v2-integrated-ui-review.md).
+For an installed candidate, also verify the distinct V2 installation identity,
+signed starter installation/offline/rollback, fresh profile lifecycle and exact
+Windows/Intel build evidence under the [roadmap gates](../ROADMAP.md#release-checklist).
+
+## Historical published 1.x reference
+
+The remainder preserves the earlier 1.x diagnostic/model/onboarding workflow and
+dated installed-candidate instructions. Use it only with the retained 1.x checkout
+or binary; its commands and acceptance are not current V2 claims. ML training,
+remote catalog service and contribution follow their approved later scope.
+
 Offline acceptance covers startup with an empty profile and local work when
 signed parsers and a trained model are already available. Bundling parsers for a
 new offline user is the separate F1 proposal; it is not implemented by this gate.

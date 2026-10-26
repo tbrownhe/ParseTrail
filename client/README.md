@@ -1,5 +1,11 @@
 # ParseTrail Client
 
+The active client-development branch starts the fresh V2 workspace by default.
+See [Application service boundaries](#application-service-boundaries) for its
+current local workflow. Published 1.x plugin/model/archive behavior below remains
+reference for the independently retained application; V2 scope/deferrals and
+release gates belong to [ROADMAP](../ROADMAP.md).
+
 ParseTrail is a Windows and macOS desktop application that parses financial
 statements, stores financial data in a local SQLite database, and talks to the
 FastAPI backend for authenticated plugin distribution, application updates, and
@@ -129,10 +135,16 @@ automated real-entry-point probes and the installed-app walkthrough. From
 `client/`, run `uv run --no-env-file --no-sync python src/parsetrail/main.py
 --offline-session-smoke-test fresh`, then repeat with `cached` and
 `network-failure`. Each diagnostic owns a temporary profile, denies real network
-access, drives onboarding, and reports its checks as JSON. Both native builders
+access, drives the V2 chooser/workspace and reports its checks as JSON. It verifies
+local signed fixture catalog/import/retry, explicit review, reports and recovery;
+all three modes require zero network attempts. Both native builders
 run all three modes against the frozen executable before packaging/signing.
 
 ## Imports and recovery
+
+The archive/move behavior below describes published 1.x. V2 retains immutable
+embedded originals and recovers them to new paths under its
+[single-store contract](../docs/client-v2-unified-store.md).
 
 One-off imports offer copy-to-archive, move-to-archive, and leave-in-place choices
 before changing the original. The default retains the selected original and
@@ -176,9 +188,9 @@ exclude statement archives; back up the managed folders separately.
 
 ## Application service boundaries
 
-Ordinary startup still runs the published 1.x application and its independent
-transaction/category database. Explicit `--v2` opens a New/Open/Restore chooser
-before legacy bootstrap; cancellation writes nothing and no last profile opens
+Ordinary startup opens the fresh V2 New/Open/Restore chooser; `--v2` is optional.
+It does not initialize the retained 1.x application. Cancellation writes no
+profile/catalog/preferences and no last profile opens
 automatically. `--profile <new.db> --catalog-cache <directory>` remains available
 for automation; `--create-profile` deliberately creates that new profile.
 Optional `--preferences <file>` provides a separate preferences path. Development

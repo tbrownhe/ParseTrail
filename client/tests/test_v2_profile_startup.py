@@ -211,6 +211,103 @@ def test_existing_explicit_cli_profile_paths_do_not_show_startup(tmp_path, monke
     assert shown == [profile.resolve()]
 
 
+@pytest.mark.parametrize("selection", ["create", "open", "restore"])
+def test_ordinary_main_chooser_new_open_restore_preserves_sources_and_separate_paths(
+    tmp_path, app, monkeypatch, selection
+):
+    import sys
+
+    from parsetrail import main as runtime
+    from parsetrail.gui.v2_workspace_window import V2WorkspaceWindow
+    from PySide6.QtWidgets import QApplication, QFileDialog
+
+    original, backup, destination = (tmp_path / name for name in ("original.db", "backup.dbb", "new.db"))
+    if selection != "create":
+        with V2ProfileStore.create(original) as store:
+            store.add_category_account("expense:retained", "Retained", "expense")
+        V2ProfileStore.snapshot_to(original, backup)
+        old_bytes, backup_bytes = original.read_bytes(), backup.read_bytes()
+    monkeypatch.setattr(
+        QFileDialog,
+        "getOpenFileName",
+        lambda *_args, **_kwargs: (str(backup if selection == "restore" else original), ""),
+    )
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *_args, **_kwargs: (str(destination), ""))
+
+    def choose(dialog):
+        getattr(
+            dialog, {"create": "create_button", "open": "open_button", "restore": "restore_button"}[selection]
+        ).click()
+        return dialog.result()
+
+    monkeypatch.setattr(V2ProfileStartupDialog, "exec", choose)
+    shown = []
+    monkeypatch.setattr(V2WorkspaceWindow, "show", lambda window: shown.append(window.workspace.profile_path))
+    monkeypatch.setattr(QApplication, "exec", lambda *_args: 31)
+    catalog, prefs = tmp_path / "catalog", tmp_path / "preferences.json"
+    monkeypatch.setattr(sys, "argv", ["parsetrail", "--catalog-cache", str(catalog), "--preferences", str(prefs)])
+    assert runtime.main() == 31
+    expected = original if selection == "open" else destination
+    assert shown == [expected.resolve()] and not catalog.exists() and not prefs.exists()
+    if selection != "create":
+        assert original.read_bytes() == old_bytes and backup.read_bytes() == backup_bytes
+        with V2ProfileStore.open(expected, read_only=True) as store:
+            assert store.category_accounts()[0].name == "Retained"
+    app.processEvents()
+
+
+def test_splash_and_safe_icon_precede_default_modal_chooser(tmp_path, app, monkeypatch):
+    import sys
+    from types import SimpleNamespace
+
+    from parsetrail import main as runtime
+    from PySide6.QtWidgets import QDialog
+
+    order = []
+    monkeypatch.setitem(sys.modules, "pyi_splash", SimpleNamespace(close=lambda: order.append("splash_closed")))
+
+    def cancel(_dialog):
+        assert order == ["splash_closed"]
+        assert not app.windowIcon().isNull()
+        order.append("chooser_entered")
+        return QDialog.Rejected
+
+    monkeypatch.setattr(V2ProfileStartupDialog, "exec", cancel)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["parsetrail", "--catalog-cache", str(tmp_path / "catalog"), "--preferences", str(tmp_path / "prefs")],
+    )
+    assert runtime.main() == 0 and order == ["splash_closed", "chooser_entered"]
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize("content", [b"not a sqlite profile", b"SQLite format 3\x00incomplete legacy header"])
+def test_invalid_explicit_ordinary_profile_is_unchanged_before_gui(tmp_path, monkeypatch, content):
+    import sys
+
+    from parsetrail import main as runtime
+
+    profile = tmp_path / "invalid.db"
+    profile.write_bytes(content)
+    monkeypatch.setattr(runtime, "create_application", lambda *_args: pytest.fail("Invalid profile created GUI"))
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "parsetrail",
+            "--profile",
+            str(profile),
+            "--catalog-cache",
+            str(tmp_path / "catalog"),
+            "--preferences",
+            str(tmp_path / "prefs"),
+        ],
+    )
+    assert runtime.main() == 2 and profile.read_bytes() == content
+    assert {path.name for path in tmp_path.iterdir()} == {"invalid.db"}
+
+
 def test_new_profile_menu_preserves_old_profile_and_is_disabled_during_import(tmp_path, app, monkeypatch):
     from parsetrail.core.v2_workspace import V2Workspace
     from parsetrail.gui.v2_workspace_window import V2WorkspaceWindow

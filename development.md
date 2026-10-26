@@ -103,10 +103,11 @@ uv run --frozen --python 3.13.15 pytest -q
 uv run --frozen --python 3.13.15 python src/parsetrail/main.py
 ```
 
-The default database is `~/Documents/ParseTrail/parsetrail.db`. Application
-configuration, logs, downloaded plugins, and cached public keys use the platform
-application-data directory. Long-lived API credentials use Windows Credential
-Locker or macOS Keychain rather than `config.json`.
+Source startup opens the V2 New/Open/Restore chooser. Choose a disposable fresh
+profile for development; catalog and preferences are separate from its database.
+The independently retained published 1.x app has its own database, configuration
+and OS-backed credentials. See the [cutover contract](docs/client-v2-cutover.md)
+for the runtime boundary and [roadmap](ROADMAP.md) for release gates.
 
 To test local parsers against a private fixture directory without importing:
 
