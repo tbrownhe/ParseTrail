@@ -184,7 +184,7 @@ def test_hsa_opening_reconciliation_scopes_staleness_and_withdrawal(tmp_path, hs
         )
         check = store.statement_reconciliation_checks()[0]
         assert check.reconciled and check.exceptions == ()
-        assert check.rule == "v2-statement-reconciliation-5"
+        assert check.rule == "v2-statement-reconciliation-6"
         assert check.balance_scope == check.tracking_scope == "cash_component"
         assert _decode_reconciliation_check(_reconciliation_payload(check)) == check
         missing_scope = json.loads(_reconciliation_payload(check))

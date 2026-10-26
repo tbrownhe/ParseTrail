@@ -9,6 +9,10 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from datetime import date
 from enum import StrEnum
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from parsetrail.core.v2_loan_payments import LoanComponentProof
 
 
 class LedgerError(ValueError):
@@ -119,6 +123,8 @@ def validate_entry(
     accounts: dict[str, LedgerAccount],
     observations: dict[str, Observation],
     consumed: dict[str, int],
+    *,
+    component_proofs: tuple[LoanComponentProof, ...] = (),
 ) -> dict[str, int]:
     """Return evidence usage only after all posting/ownership/allocation checks pass.
 
@@ -172,7 +178,20 @@ def validate_entry(
             raise LedgerError("An imported financial posting requires complete evidence allocation.")
     if sum(posting.amount_minor for posting in entry.postings) != 0:
         raise LedgerError("Debits and credits must balance exactly.")
-    if entry.origin == "imported" and not usage:
+    if component_proofs:
+        from parsetrail.core.v2_loan_payments import LoanComponentProof, validate_component_postings
+
+        if (
+            type(component_proofs) is not tuple
+            or len(component_proofs) != 1
+            or type(component_proofs[0]) is not LoanComponentProof
+        ):
+            raise LedgerError("A finite printed component proof is required.")
+        try:
+            validate_component_postings(component_proofs[0], entry, accounts)
+        except (TypeError, ValueError):
+            raise LedgerError("Printed component proof does not support this exact entry.") from None
+    if entry.origin == "imported" and not usage and not component_proofs:
         raise LedgerError("An imported entry needs source evidence.")
     if entry.origin == "opening":
         if "opening_equity" not in purposes or not kinds.issubset(

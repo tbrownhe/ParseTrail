@@ -65,6 +65,10 @@ def read_reviewed_entry_drilldown(profile: Path, account_id: str, *, start: date
             by_source_row: dict[str, set[str]] = {}
             for key, row_id in store.connection.execute("SELECT entry_key,row_id FROM JournalAllocations"):
                 by_source_row.setdefault(row_id, set()).add(key)
+            for link in report.loan_source_links:
+                by_source_row.setdefault(link.row_id, set()).add(link.entry_key)
+                if link.derived_observation_id is not None:
+                    by_source_row.setdefault(link.derived_observation_id, set()).add(link.entry_key)
             all_corrections = tuple(
                 JournalExportCorrection(*row)
                 for row in store.connection.execute(
@@ -80,6 +84,20 @@ def read_reviewed_entry_drilldown(profile: Path, account_id: str, *, start: date
                 )
             )
             adjacency: dict[str, set[str]] = {}
+            loan_events = {event.event_id: event for event in report.loan_events}
+            for event in loan_events.values():
+                keys = set(event.entry_keys)
+                for row_id in event.manifest.row_ids:
+                    keys.update(by_source_row.get(row_id, ()))
+                for key in keys:
+                    adjacency.setdefault(key, set()).update(keys)
+            for action in report.loan_actions:
+                if action.replacement_event_id is not None:
+                    keys = set(loan_events[action.event_id].entry_keys) | set(
+                        loan_events[action.replacement_event_id].entry_keys
+                    )
+                    for key in keys:
+                        adjacency.setdefault(key, set()).update(keys)
             for row in all_corrections:
                 keys = {row.original_key, row.reversal_key, row.replacement_key}
                 for key in keys:

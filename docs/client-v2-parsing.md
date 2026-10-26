@@ -148,6 +148,15 @@ Neither becomes an invented activity date. Preserve generic
 loan activity dates and unknown openings independently of printed closing
 principal; principal-component scope does not establish the total obligation.
 
+Bounded reviewed loan payments retain the complete raw row/component/location
+proof separately from canonical derived principal observations. Capital/MOHELA
+gross amounts are not principal allocations; Wells interest-only rows create no
+financial principal observation. The accounting layer may explicitly review an
+assumed activity-based date under the global default-off preference without
+changing an original activity date or adding a parser posting guess. Unsupported
+components and unknown endpoints remain unresolved. See the
+[loan-payment packet](work/2026-10-26-v2-loan-payments.md).
+
 The reviewed HealthEquity cash workflow admits only its finite cash activity
 family bound to an asset with cash-component tracking. Printed posting dates and
 unknown descriptions remain unchanged. The accounting layer may supply a generic

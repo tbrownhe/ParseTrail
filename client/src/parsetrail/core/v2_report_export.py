@@ -10,6 +10,7 @@ from pathlib import Path
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font
 
+from parsetrail.core.source_evidence import ObservationEvidence
 from parsetrail.core.v2_profile_store import ReviewedJournalExport
 
 
@@ -36,6 +37,173 @@ def _sheet(workbook: Workbook, name: str, headers: tuple[str, ...], rows: list[t
         letter = column[0].column_letter
         width = max(len(str(cell.value or "")) for cell in column)
         sheet.column_dimensions[letter].width = min(max(width + 2, 12), 64)
+
+
+def _loan_metadata(workbook: Workbook, report: ReviewedJournalExport, derived_allocations: list[tuple]) -> list[str]:
+    """Full raw-row use and derived principal support are distinct audit dimensions."""
+    if not report.loan_events:
+        return []
+    workbook["Scope"].append(
+        (
+            "Loan metadata",
+            "Loan event/source-use/component history covers all dates, including retired events. It adds no money "
+            "to the period's entries. Source Allocations retains raw financial rows; Derived Allocations identifies "
+            "canonical principal effects. Whole raw payment use must not be summed as principal allocation. "
+            "Lender accounting dates are explicitly reviewed assumptions based on retained activity dates.",
+        )
+    )
+    _sheet(
+        workbook,
+        "Derived Allocations",
+        (
+            "Entry key",
+            "Posting line",
+            "Derived observation ID",
+            "Parent source row ID",
+            "Source SHA-256",
+            "Signed principal USD",
+            "Signed principal minor units",
+            "Normalization rule",
+        ),
+        derived_allocations,
+    )
+    _sheet(
+        workbook,
+        "Loan Events",
+        (
+            "Event ID",
+            "State",
+            "Bank account ID",
+            "Bank source row ID",
+            "Bank source SHA-256",
+            "Bank date",
+            "Loan account ID",
+            "Captured loan name",
+            "Tracking scope",
+            "Gross payment minor units",
+            "Principal debit minor units",
+            "Interest expense minor units",
+            "Reference",
+            "Reason",
+            "Entry keys",
+            "Replacement event",
+            "Created at",
+            "Version",
+        ),
+        [
+            (
+                event.event_id,
+                event.status,
+                event.manifest.bank.account_id,
+                event.manifest.bank.row_id,
+                event.manifest.bank.source_sha256,
+                event.manifest.bank.posting_date,
+                event.manifest.components[0].account_id,
+                event.manifest.components[0].account_name,
+                event.manifest.components[0].tracking_scope,
+                str(-event.manifest.bank.amount_minor),
+                str(event.manifest.principal_minor),
+                str(event.manifest.interest_minor),
+                event.reference,
+                event.reason,
+                "\n".join(event.entry_keys),
+                event.replacement_event_id,
+                event.created_at,
+                event.version,
+            )
+            for event in report.loan_events
+        ],
+    )
+    _sheet(
+        workbook,
+        "Loan Source Uses",
+        (
+            "Event ID",
+            "Entry key",
+            "Raw source row ID",
+            "Source SHA-256",
+            "Loan account ID",
+            "Active use",
+            "Raw signed payment minor units",
+            "Derived principal observation ID",
+            "Principal debit minor units",
+            "Interest expense minor units",
+            "Source activity date",
+            "Accounting date",
+            "Accounting date provenance",
+            "Parser ID",
+            "Sign factor",
+            "Tracking scope",
+        ),
+        [
+            (
+                link.event_id,
+                link.entry_key,
+                link.row_id,
+                link.source_sha256,
+                link.account_id,
+                link.active,
+                str(link.raw_amount_minor),
+                link.derived_observation_id,
+                str(link.principal_minor),
+                str(link.interest_minor),
+                link.activity_date,
+                link.effective_date,
+                link.date_provenance,
+                link.proof.parser_id,
+                link.proof.sign_factor,
+                link.proof.tracking_scope,
+            )
+            for link in report.loan_source_links
+        ],
+    )
+    component_rows, locations = [], []
+    for link in report.loan_source_links:
+        row = ObservationEvidence.model_validate_json(link.proof.row_evidence)
+        fields = (("raw payment", row.amount), *((part.role, part.amount) for part in row.components))
+        for field, money in fields:
+            component_rows.append(
+                (link.event_id, link.row_id, field, str(money.minor), money.raw, money.provenance, "USD")
+            )
+        for field, value in (*fields, ("activity date", row.date), ("description", row.description)):
+            for ordinal, location in enumerate(value.locations, start=1):
+                locations.append((link.event_id, link.row_id, field, ordinal, location.model_dump_json()))
+    _sheet(
+        workbook,
+        "Loan Components",
+        ("Event ID", "Source row ID", "Field", "Raw signed minor units", "Printed text", "Provenance", "Currency"),
+        component_rows,
+    )
+    _sheet(
+        workbook,
+        "Loan Source Locations",
+        ("Event ID", "Source row ID", "Field", "Location ordinal", "Exact location JSON"),
+        locations,
+    )
+    _sheet(
+        workbook,
+        "Loan Actions",
+        ("Action ID", "Event ID", "Expected event version", "Replacement event", "Reason", "Created at"),
+        [
+            (
+                row.action_id,
+                row.event_id,
+                row.expected_event_version,
+                row.replacement_event_id,
+                row.reason,
+                row.created_at,
+            )
+            for row in report.loan_actions
+        ],
+    )
+    return [
+        "Derived Allocations",
+        "Loan Events",
+        "Loan Source Uses",
+        "Loan Components",
+        "Loan Source Locations",
+        "Loan Actions",
+    ]
 
 
 def _value_metadata(workbook: Workbook, report: ReviewedJournalExport, accounts: dict) -> list[str]:
@@ -200,9 +368,15 @@ def write_reviewed_journal_workbook(report: ReviewedJournalExport, destination_p
         raise ReportExportError("report_destination_parent_missing")
     accounts = {account.id: account for account in report.accounts}
     source_rows = dict(report.source_rows)
+    derived_sources = {
+        link.derived_observation_id: link
+        for link in report.loan_source_links
+        if link.derived_observation_id is not None
+    }
     entries = []
     postings = []
     allocations = []
+    derived_allocations = []
     for entry in report.entries:
         expense_minor = sum(
             posting.amount_minor for posting in entry.postings if accounts[posting.account_id].kind == "expense"
@@ -239,6 +413,25 @@ def write_reviewed_journal_workbook(report: ReviewedJournalExport, destination_p
                 )
             )
             for allocation in posting.allocations:
+                if allocation.observation_id in derived_sources:
+                    link = derived_sources[allocation.observation_id]
+                    if link.entry_key != entry.key or link.account_id != posting.account_id:
+                        raise ReportExportError("loan_allocation_source_mismatch")
+                    derived_allocations.append(
+                        (
+                            entry.key,
+                            line_number,
+                            allocation.observation_id,
+                            link.row_id,
+                            link.source_sha256,
+                            allocation.amount_minor / 100,
+                            str(allocation.amount_minor),
+                            f"{link.proof.parser_id}: printed principal x {link.proof.sign_factor}",
+                        )
+                    )
+                    continue
+                if allocation.observation_id not in source_rows:
+                    raise ReportExportError("allocation_source_missing")
                 allocations.append(
                     (
                         entry.key,
@@ -551,6 +744,7 @@ def write_reviewed_journal_workbook(report: ReviewedJournalExport, destination_p
             ],
         )
         expected_sheets.extend(("Settlement Events", "Settlement Legs", "Settlement Fees"))
+    expected_sheets.extend(_loan_metadata(workbook, report, derived_allocations))
     expected_sheets.extend(_value_metadata(workbook, report, accounts))
     descriptor, partial_name = tempfile.mkstemp(
         prefix=f".{destination.name}.partial.", suffix=".xlsx", dir=destination.parent

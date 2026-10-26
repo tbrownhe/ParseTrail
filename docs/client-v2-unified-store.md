@@ -29,7 +29,7 @@ evidence belong in [packet records](work/README.md).
 
 ## Profile format and lifecycle
 
-The current pre-release profile schema is revision 20; check `SCHEMA_VERSION`
+The current pre-release profile schema is revision 21; check `SCHEMA_VERSION`
 in `v2_profile_store.py` when opening a packet. Format markers, exact table and
 foreign-key shapes, append-only triggers and SQLite integrity are checked before
 writable use. Older disposable pilots, 1.x, unknown, damaged and newer shapes
@@ -123,6 +123,36 @@ can identify a reviewed entry without claiming printed merchant/interest text.
 Printed openings and reconciliation admit that same exact component rule. Other
 HSA/retirement summary rows remain nonposting; existing account-total opening rules
 remain available. Scope metadata survives correction, withdrawal and history.
+
+Schema 21 retains bounded reviewed loan payments in `LoanEvents`,
+`LoanEventActions`, `LoanSourceUses`, `DerivedFinancialObservations` and
+`JournalDerivedAllocations`. An explicitly selected observed asset outflow must
+exactly equal one printed Capital/MOHELA principal/interest payment or selected
+Wells component rows from one source/loan account. Nonzero fees, incomplete/mixed
+components, disbursements, capitalization and missing bank counterparts stay
+pending. These are principal-component liability interpretations; Yamaha's
+account-total register is a separate shape.
+
+Raw loan source use consumes the complete signed raw row exactly once. A separate
+canonical derived financial observation allocates only the normalized nonzero
+principal effect. Ordinary raw `JournalAllocations` retain their original meaning.
+Typed finite component proof supports evidenced interest expense, including an
+interest-only expense/clearing entry with no financial observation or zero posting.
+The pure ledger retains financial-only observations and normal allocation rules;
+manual origin is never a component-proof bypass. All common reads/backups validate
+exact manifests, retained raw evidence, component locations, original bindings,
+entry shapes/digests and both source-use dimensions.
+
+Original activity dates and absent parser posting guesses remain unchanged. Loan
+accounting separately records an explicitly reviewed assumed activity-date cutoff,
+gated by the global default-off preference for new postings. Subsequent preference
+changes do not invalidate historical review. Actual bank and assumed loan dates
+remain separate, with clearing between them. Whole withdrawal/replacement retains
+all original dated inverses and captured context, releases active raw/derived uses
+atomically, and preserves retry receipts without reviving retired money. Binding
+and scope history include interest-only proof even without a loan financial line.
+Ordinary single-entry correction/repeat repair refuses loan-event legs.
+See the [loan-payment packet](work/2026-10-26-v2-loan-payments.md).
 
 `StatementSourceReviews` is one append-only assertion history for bound statement
 sections. Opening/closing origin, inclusive-period timing, posting-date certainty,
@@ -275,14 +305,22 @@ before publishing a new copy. A saved snapshot digest detects accidental changes
 it does not authenticate a profile against hostile modification. Earlier disposable
 pilot schemas must be recreated, without a migration or 1.x alias.
 
-Reconciliation rule 5 retains balance/tracking scope explicitly and qualifies HSA
-success as cash-component only. Older saved rules 3/4 remain historical/stale with
-their original account-total defaults; current-rule missing/mismatched scope is
-refused. Capture, unclassified source text and portfolio completeness stay separate.
+Reconciliation rule 6 retains balance/tracking scope explicitly, compares loan
+principal using normalized printed components, and qualifies HSA success as
+cash-component only. Rule 5 retains its exact captured scopes and becomes stale;
+older saved rules 3/4 retain their original account-total defaults. Current-rule
+missing/mismatched scope is refused. Unknown loan openings/period starts stay
+unknown. Capture, unclassified source text and portfolio completeness stay separate.
 Cash reports disclose active expected receipts even when only the expected
 destination is selected: no observed destination activity means zero movement,
 alongside a missing-receipt warning. Workbook event metadata retains expectations
 separately from actual source legs and journal money.
+
+Loan cash-purpose classification splits only the actual selected bank outflow into
+principal and evidenced interest. It adds no expense posting; journal interest is
+recognized on the lender's reviewed date. Workbook and entry drill-down distinguish
+raw use, derived principal allocations and source component/location proof.
+All-date loan history provides context only and never adds to period money.
 
 SQLite profile snapshots contain embedded sources, authored data, journals and
 all review history. They are verified before publication at a new path; restore

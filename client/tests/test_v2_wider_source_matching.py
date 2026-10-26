@@ -407,7 +407,7 @@ def test_prior_reconciliation_rule_history_remains_exact_stale_and_recoverable(t
                 reason="Explicitly confirmed prior rule",
             )
         current = store.statement_reconciliation_checks()[0]
-        assert current.rule == "v2-statement-reconciliation-5"
+        assert current.rule == "v2-statement-reconciliation-6"
         history = store.reconciliation_history("cash")[0]
         assert history.stale and history.check == saved.check and history.journal_versions == saved.journal_versions
     V2ProfileStore.snapshot_to(path, tmp_path / "prior-rule-backup.db")

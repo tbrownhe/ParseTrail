@@ -205,6 +205,8 @@ class V2WorkspaceWindow(QMainWindow):
         self.transfer_review_action.triggered.connect(self._review_transfers)
         self.settlement_review_action = review_menu.addAction("Transfer fees and partial settlements…")
         self.settlement_review_action.triggered.connect(self._review_settlements)
+        self.loan_payment_action = review_menu.addAction("Evidenced loan principal and interest…")
+        self.loan_payment_action.triggered.connect(self._review_loan_payments)
         reports_menu = self.menuBar().addMenu("Reports")
         self.reviewed_reports_action = reports_menu.addAction("Reviewed reports…")
         self.reviewed_reports_action.triggered.connect(self._open_reviewed_reports)
@@ -315,6 +317,7 @@ class V2WorkspaceWindow(QMainWindow):
             self.restore_profile_action,
             self.transfer_review_action,
             self.settlement_review_action,
+            self.loan_payment_action,
             self.account_anchors_action,
             self.source_values_action,
         ):
@@ -710,6 +713,17 @@ class V2WorkspaceWindow(QMainWindow):
         from parsetrail.gui.v2_settlement_review import V2SettlementReview
 
         V2SettlementReview(self.workspace, parent=self).exec()
+        self.assumed_posting_action.blockSignals(True)
+        self.assumed_posting_action.setChecked(self.workspace.preferences().allow_assumed_posting_dates)
+        self.assumed_posting_action.blockSignals(False)
+        self.refresh()
+
+    def _review_loan_payments(self) -> None:
+        if self.import_worker is not None:
+            return
+        from parsetrail.gui.v2_loan_payment_review import V2LoanPaymentReview
+
+        V2LoanPaymentReview(self.workspace, parent=self).exec()
         self.assumed_posting_action.blockSignals(True)
         self.assumed_posting_action.setChecked(self.workspace.preferences().allow_assumed_posting_dates)
         self.assumed_posting_action.blockSignals(False)

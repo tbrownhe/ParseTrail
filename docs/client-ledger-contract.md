@@ -30,7 +30,10 @@ redundant counterpart atomically. Category/date corrections retain the original
 category class and exact source effect, which preserve purpose; changing purpose
 requires explicit withdrawal and fresh review. Whole transfers can be withdrawn
 or atomically replaced while retaining every dated leg and allocation history.
-General category splits, loan transactions, suspense and securities accounting require their own
+Bounded evidenced loan payments pair an observed owned asset outflow with printed
+Capital/MOHELA principal/interest or explicitly selected Wells components, retaining
+their separate dates and whole-event correction history. General category splits,
+other loan transactions, suspense and securities accounting require their own
 admitted workflows; examples below specify financial meaning rather than
 availability. Arbitrary manual journals remain outside DEC-1 scope.
 
@@ -184,6 +187,28 @@ loan register already has a separate interest charge. Loan proceeds reduce no
 expense and are not salary. Personal consumption, asset purchases, reimbursements,
 and external payments require their actual interpretation; payment rails such as
 ACH or peer-to-peer transfers do not determine it.
+
+The admitted component workflow requires exact gross equality to the explicitly
+selected observed bank outflow and complete printed principal/interest support.
+One Capital/MOHELA payment or selected Wells rows belongs to one source and loan
+account with principal-component liability tracking. Unsupported/nonzero fees,
+mixed/incomplete components, disbursements/capitalization and missing bank evidence
+stay pending. A raw gross loan payment is fully consumed once but is never allocated
+as principal. Canonical derived financial observations support only the normalized
+principal amount; typed component proofs support interest expense. An interest-only
+row creates no principal observation or zero posting. Printed zero interest creates
+no expense/category. Ordinary raw financial allocation rules remain intact.
+
+For Capital gross -22000, principal -20000 and interest -2000 minor units, the
+loan leg is liability +20000, interest expense +2000 and clearing -22000. The
+observed bank leg is -22000/+22000 clearing at its own date. Wells interest +100
+alone supports expense +100/clearing -100. Original activity dates remain observed
+source facts; separately reviewed assumed accounting dates require global opt-in
+for new interpretations. No parser posting guess, opening or statement start is
+invented. Whole-event retirement/replacement preserves exact dated history and
+releases both raw use and derived allocation; an ordinary single-leg repair cannot
+leave the other legs active. Cash-purpose reports split the bank outflow without
+recognizing another expense or changing the lender-date journal expense.
 
 Drafts can change. Posted entries retain an audit trail through explicit reversal
 and replacement entries linked to the original, including reason and provenance.

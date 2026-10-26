@@ -190,7 +190,44 @@ class V2ReviewedEntryDrilldown(QDialog):
             lines.append(
                 f"  {labels[account.id]} ({account.kind}, ID {account.id}): {side} {_money(abs(posting.amount_minor))}"
             )
-        source_ids = dict.fromkeys(source_rows[a.observation_id] for p in entry.postings for a in p.allocations)
+        derived_sources = {
+            link.derived_observation_id: link
+            for link in result.report.loan_source_links
+            if link.derived_observation_id is not None
+        }
+        source_ids = dict.fromkeys(
+            (
+                derived_sources[a.observation_id].source_sha256
+                if a.observation_id in derived_sources
+                else source_rows[a.observation_id]
+            )
+            for p in entry.postings
+            for a in p.allocations
+        )
+        loan_event = next((event for event in result.report.loan_events if event.event_id == entry.event_id), None)
+        if loan_event is not None:
+            source_ids[loan_event.manifest.bank.source_sha256] = None
+            lines.append(
+                "\nReviewed whole loan payment; these component facts are provenance, not additional money. "
+                f"Reference: {loan_event.reference}; event state: {loan_event.status}."
+            )
+            for link in result.report.loan_source_links:
+                if link.event_id != loan_event.event_id:
+                    continue
+                source_ids[link.source_sha256] = None
+                lines.append(
+                    f"  Raw source row {link.row_id}: signed amount {_money(link.raw_amount_minor)}; "
+                    f"principal debit {_money(link.principal_minor)}; interest expense {_money(link.interest_minor)}.\n"
+                    f"  Source activity date {link.activity_date}; accounting date {link.effective_date} "
+                    f"({link.date_provenance}, separately reviewed). Principal-component scope. "
+                    f"Captured loan account {link.proof.account_name} (ID {link.account_id}).\n"
+                    + (
+                        f"  Derived financial observation {link.derived_observation_id} uses printed principal "
+                        f"x {link.proof.sign_factor}; it is separate from whole raw payment use."
+                        if link.derived_observation_id is not None
+                        else "  No principal financial observation/posting: this is an evidenced interest-only component."
+                    )
+                )
         for source_id in source_ids:
             self.source.addItem(f"Source {source_id[:16]}…", source_id)
         self.preview.setEnabled(bool(source_ids))

@@ -25,6 +25,8 @@ MOVEMENT_LABELS = {
     "within_scope_transfer": "Owned transfer within selected scope",
     "owned_transfer": "Owned transfer across scope boundary",
     "card_payment": "Reviewed card payment",
+    "loan_payment": "Reviewed loan payment",
+    "loan_principal": "Reviewed loan principal payment",
     "unsettled_transfer": "Owned transfer with unresolved clearing",
     "mixed_settlement": "Owned settlement with reviewed fee",
     "unclassified": "Unclassified reviewed movement",
@@ -114,6 +116,7 @@ def read_cash_movement(
             # Full validated event context can place the counterpart leg outside
             # this period. Its money is still excluded from this period's rows.
             events = {event.event_id: event for event in store._read_transfer_history()[0] if event.status == "active"}
+            loans = {event.event_id: event for event in store.loan_history() if event.status == "active"}
             accounts = {account.id: account for account in journal.accounts}
             category_names = category_labels((account.id, account.name, account.kind) for account in journal.accounts)
             rows = []
@@ -134,6 +137,31 @@ def read_cash_movement(
                             else ("income" if amount > 0 else "income_adjustment")
                         )
                         note = f"Reviewed category: {category_names[categories[0].account_id]}."
+                elif entry.event_id in loans:
+                    event = loans[entry.event_id]
+                    payment = event.manifest
+                    if entry.key != event.entry_keys[0] or amount != payment.bank.amount_minor:
+                        raise ProfileFormatError("cash_loan_payment_integrity")
+                    classification = "loan_payment"
+                    components = tuple(
+                        CashMovementComponent(purpose, -value)
+                        for purpose, value in (
+                            ("loan_principal", payment.principal_minor),
+                            ("expense", payment.interest_minor),
+                        )
+                        if value
+                    )
+                    lender = payment.components[0]
+                    note = (
+                        f"Reviewed loan payment from {labels[payment.bank.account_id]} on {payment.bank.posting_date} "
+                        f"to {lender.account_name} (ID {lender.account_id}, principal component). "
+                        f"Principal {payment.principal_minor} and interest {payment.interest_minor} USD minor units. "
+                        "This is a cash-purpose split of the actual bank outflow; it adds no expense posting. "
+                        "Interest expense is recorded at the lender's separately reviewed assumed accounting date(s): "
+                        + ", ".join(sorted({part.effective_date for part in payment.components}))
+                        + ". Original lender activity dates and printed components remain source evidence. "
+                        "Dates outside this period add context only; different dates retain transfer clearing."
+                    )
                 elif entry.event_id in events:
                     event = events[entry.event_id]
                     pair = event.pair

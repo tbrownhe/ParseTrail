@@ -44,6 +44,25 @@ from parsetrail.core.v2_cash_source_policy import (
     cash_accounting_description,
     cash_tracking_scope,
 )
+from parsetrail.core.v2_loan_payments import (
+    LOAN_PARSERS,
+    LoanComponentReviewRow,
+    LoanEvent,
+    LoanEventAction,
+    LoanPaymentManifest,
+    LoanPaymentPreview,
+    LoanReviewSnapshot,
+    LoanSourceLink,
+    component_proof,
+    decode_manifest,
+    manifest_payload,
+    payment_entries,
+    principal_id,
+    validate_manifest,
+)
+from parsetrail.core.v2_loan_payments import (
+    digest as loan_digest,
+)
 from parsetrail.core.v2_preferences import V2Preferences
 from parsetrail.core.v2_review_dates import permitted_posting_date, posting_date_candidate
 from parsetrail.core.v2_settlements import (
@@ -81,7 +100,7 @@ from parsetrail.core.v2_source_values import (
 )
 
 APPLICATION_ID = 0x50543230  # PT20
-SCHEMA_VERSION = 20
+SCHEMA_VERSION = 21
 TRACKING_SCOPES = {"account_total", "principal_component", "cash_component"}
 CategoryPurpose = Literal["expense", "expense_refund", "income", "income_adjustment"]
 CATEGORY_PURPOSE_KINDS = {
@@ -362,6 +381,50 @@ TABLE_COLUMNS = {
         ("created_at", "TEXT", 1, 0),
     ),
 }
+TABLE_COLUMNS.update(
+    {
+        "LoanEvents": (
+            ("event_id", "TEXT", 0, 1),
+            ("sequence", "INTEGER", 1, 0),
+            ("manifest", "TEXT", 1, 0),
+            ("entry_versions", "TEXT", 1, 0),
+            ("reference", "TEXT", 1, 0),
+            ("reason", "TEXT", 1, 0),
+            ("request_basis", "TEXT", 1, 0),
+            ("record_sha256", "TEXT", 1, 0),
+            ("created_at", "TEXT", 1, 0),
+        ),
+        "LoanEventActions": (
+            ("action_id", "INTEGER", 0, 1),
+            ("event_id", "TEXT", 1, 0),
+            ("expected_version", "TEXT", 1, 0),
+            ("replacement_event_id", "TEXT", 0, 0),
+            ("reason", "TEXT", 1, 0),
+            ("request_basis", "TEXT", 1, 0),
+            ("record_sha256", "TEXT", 1, 0),
+            ("created_at", "TEXT", 1, 0),
+        ),
+        "LoanSourceUses": (
+            ("event_id", "TEXT", 1, 1),
+            ("entry_key", "TEXT", 1, 0),
+            ("row_id", "TEXT", 1, 2),
+            ("amount_minor", "INTEGER", 1, 0),
+        ),
+        "DerivedFinancialObservations": (
+            ("observation_id", "TEXT", 0, 1),
+            ("event_id", "TEXT", 1, 0),
+            ("row_id", "TEXT", 1, 0),
+            ("account_id", "TEXT", 1, 0),
+            ("amount_minor", "INTEGER", 1, 0),
+            ("effective_date", "TEXT", 1, 0),
+        ),
+        "JournalDerivedAllocations": (
+            ("entry_key", "TEXT", 1, 1),
+            ("observation_id", "TEXT", 1, 2),
+            ("amount_minor", "INTEGER", 1, 0),
+        ),
+    }
+)
 FOREIGN_KEYS = {
     "DatedValueWithdrawals": (("value_id", "AccountDatedValues", "value_id"),),
     "AccountDatedValues": (("corrects_value_id", "AccountDatedValues", "value_id"), ("account_id", "Accounts", "id")),
@@ -426,7 +489,36 @@ FOREIGN_KEYS = {
     ),
 }
 
+FOREIGN_KEYS.update(
+    {
+        "LoanEvents": (),
+        "LoanEventActions": (
+            ("replacement_event_id", "LoanEvents", "event_id"),
+            ("event_id", "LoanEvents", "event_id"),
+        ),
+        "LoanSourceUses": (
+            ("row_id", "SourceObservations", "row_id"),
+            ("entry_key", "JournalEntries", "key"),
+            ("event_id", "LoanEvents", "event_id"),
+        ),
+        "DerivedFinancialObservations": (
+            ("account_id", "Accounts", "id"),
+            ("row_id", "SourceObservations", "row_id"),
+            ("event_id", "LoanEvents", "event_id"),
+        ),
+        "JournalDerivedAllocations": (
+            ("observation_id", "DerivedFinancialObservations", "observation_id"),
+            ("entry_key", "JournalEntries", "key"),
+        ),
+    }
+)
+
 IMMUTABLE_TABLES = (
+    "LoanEvents",
+    "LoanEventActions",
+    "LoanSourceUses",
+    "DerivedFinancialObservations",
+    "JournalDerivedAllocations",
     "DatedValueWithdrawals",
     "AccountDatedValues",
     "AccountLifecycleDecisions",
@@ -1148,6 +1240,9 @@ class ReviewedJournalExport:
     settlements: tuple[ReviewedTransferEvent, ...] = ()
     dated_values: tuple[ReviewedDatedValue, ...] = ()
     dated_value_withdrawals: tuple[DatedValueWithdrawal, ...] = ()
+    loan_events: tuple[LoanEvent, ...] = ()
+    loan_actions: tuple[LoanEventAction, ...] = ()
+    loan_source_links: tuple[LoanSourceLink, ...] = ()
 
 
 BANK_CASH_STATEMENT_PARSERS = frozenset(
@@ -1381,7 +1476,10 @@ def _decode_reconciliation_check(payload: str) -> StatementReconciliationCheck:
                 data[field] = "account_total"
             if data.get(field) not in TRACKING_SCOPES:
                 raise ValueError
-        if data["rule"] == "v2-statement-reconciliation-5" and data["balance_scope"] != data["tracking_scope"]:
+        if (
+            data["rule"] in {"v2-statement-reconciliation-5", "v2-statement-reconciliation-6"}
+            and data["balance_scope"] != data["tracking_scope"]
+        ):
             raise ValueError
         for field in (
             "printed_opening_minor",
@@ -1469,6 +1567,7 @@ class V2ProfileStore:
         self.connection = connection
         self.read_only = read_only
         self._transfer_mutating = False
+        self._loan_mutating = False
         self._source_interpretation_mutating = False
         self._account_anchors_mutating = False
 
@@ -1551,6 +1650,34 @@ class V2ProfileStore:
                     row_id TEXT NOT NULL REFERENCES SourceObservations(row_id),
                     amount_minor INTEGER NOT NULL CHECK(amount_minor<>0),
                     PRIMARY KEY(entry_key,row_id)
+                );
+                CREATE TABLE LoanEvents (
+                    event_id TEXT PRIMARY KEY, sequence INTEGER NOT NULL UNIQUE,
+                    manifest TEXT NOT NULL, entry_versions TEXT NOT NULL,
+                    reference TEXT NOT NULL, reason TEXT NOT NULL, request_basis TEXT NOT NULL,
+                    record_sha256 TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE LoanEventActions (
+                    action_id INTEGER PRIMARY KEY, event_id TEXT NOT NULL UNIQUE REFERENCES LoanEvents(event_id),
+                    expected_version TEXT NOT NULL, replacement_event_id TEXT REFERENCES LoanEvents(event_id),
+                    reason TEXT NOT NULL, request_basis TEXT NOT NULL, record_sha256 TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+                );
+                CREATE TABLE LoanSourceUses (
+                    event_id TEXT NOT NULL REFERENCES LoanEvents(event_id),
+                    entry_key TEXT NOT NULL REFERENCES JournalEntries(key),
+                    row_id TEXT NOT NULL REFERENCES SourceObservations(row_id), amount_minor INTEGER NOT NULL,
+                    PRIMARY KEY(event_id,row_id)
+                );
+                CREATE TABLE DerivedFinancialObservations (
+                    observation_id TEXT PRIMARY KEY, event_id TEXT NOT NULL REFERENCES LoanEvents(event_id),
+                    row_id TEXT NOT NULL REFERENCES SourceObservations(row_id), account_id TEXT NOT NULL REFERENCES Accounts(id),
+                    amount_minor INTEGER NOT NULL, effective_date TEXT NOT NULL
+                );
+                CREATE TABLE JournalDerivedAllocations (
+                    entry_key TEXT NOT NULL REFERENCES JournalEntries(key),
+                    observation_id TEXT NOT NULL REFERENCES DerivedFinancialObservations(observation_id),
+                    amount_minor INTEGER NOT NULL, PRIMARY KEY(entry_key,observation_id)
                 );
                 CREATE TABLE JournalCorrections (
                     original_key TEXT PRIMARY KEY REFERENCES JournalEntries(key),
@@ -1907,6 +2034,8 @@ class V2ProfileStore:
             pair = _decode_transfer_pair(payload)
             if account_id in (pair.outgoing.account_id, pair.incoming.account_id):
                 return True
+        if any(p.account_id == account_id for e in self._read_loan_history()[0] for p in e.manifest.components):
+            return True
         for event in self._read_transfer_history()[0]:
             destination = event.settlement.expected_destination
             if destination is not None and destination.account_id == account_id:
@@ -2167,12 +2296,21 @@ class V2ProfileStore:
         if excluding is not None:
             query += " AND entry_key<>?"
             parameters = (excluding,)
-        return dict(self.connection.execute(query + " GROUP BY row_id", parameters))
+        result = dict(self.connection.execute(query + " GROUP BY row_id", parameters))
+        loan_query = (
+            f"SELECT row_id,SUM(amount_minor) FROM LoanSourceUses WHERE entry_key NOT IN ({_INACTIVE_JOURNAL_SQL})"
+        )
+        if excluding is not None:
+            loan_query += " AND entry_key<>?"
+        for row_id, amount in self.connection.execute(loan_query + " GROUP BY row_id", parameters):
+            result[row_id] = result.get(row_id, 0) + amount
+        return result
 
     def _inactive_journal_keys(self) -> frozenset[str]:
         self._validate_journal_retirements()
         self._validate_transfer_history()
         self._validate_source_interpretation_history()
+        self._validate_loan_history()
         return frozenset(key for (key,) in self.connection.execute(_INACTIVE_JOURNAL_SQL))
 
     def _validate_journal_retirements(self) -> None:
@@ -2212,6 +2350,14 @@ class V2ProfileStore:
                     or inverse.reason != reason
                     or self.connection.execute(
                         "SELECT 1 FROM JournalAllocations WHERE entry_key=? LIMIT 1", (inverse_key,)
+                    ).fetchone()
+                    is not None
+                    or self.connection.execute(
+                        "SELECT 1 FROM JournalDerivedAllocations WHERE entry_key=? LIMIT 1", (inverse_key,)
+                    ).fetchone()
+                    is not None
+                    or self.connection.execute(
+                        "SELECT 1 FROM LoanSourceUses WHERE entry_key=? LIMIT 1", (inverse_key,)
                     ).fetchone()
                     is not None
                     or len(original.postings) < 2
@@ -2262,7 +2408,8 @@ class V2ProfileStore:
             batch = row_ids[offset : offset + 500]
             placeholders = ",".join("?" for _ in batch)
             if self.connection.execute(
-                f"SELECT 1 FROM JournalAllocations WHERE row_id IN ({placeholders}) LIMIT 1", batch
+                f"SELECT 1 FROM JournalAllocations WHERE row_id IN ({placeholders}) UNION SELECT 1 FROM LoanSourceUses WHERE row_id IN ({placeholders}) LIMIT 1",
+                (*batch, *batch),
             ).fetchone():
                 raise ProfileFormatError("account_binding_has_journal_history")
             if self.connection.execute(
@@ -2342,7 +2489,15 @@ class V2ProfileStore:
         if not self._source_interpretation_mutating:
             _actions, repairs = self._read_source_interpretation_history()
             proven_support = {repair.redundant_row_id for repair in repairs}
-        history = {row[0] for row in self.connection.execute("SELECT DISTINCT row_id FROM JournalAllocations")}
+            proven_support.update(
+                p.row_id for e in self._read_loan_history()[0] if e.status != "active" for p in e.manifest.components
+            )
+        history = {
+            row[0]
+            for row in self.connection.execute(
+                "SELECT row_id FROM JournalAllocations UNION SELECT row_id FROM LoanSourceUses"
+            )
+        }
         rows = {}
         for source_id in self.source_ids():
             evidence = self.load_import(source_id).evidence
@@ -2376,6 +2531,20 @@ class V2ProfileStore:
         aliases = {}
         for (left, right), (revision, decision, retained) in reviews.items():
             if decision == "repeat":
+                raw_rows = {}
+                for selected in (left, right):
+                    source_id = self.connection.execute(
+                        "SELECT source_sha256 FROM SourceObservations WHERE row_id=?", (selected,)
+                    ).fetchone()[0]
+                    raw_rows[selected] = next(
+                        r for r in _rows(self.load_import(source_id).evidence) if r.row_id == selected
+                    )
+                if (
+                    any(r.components for r in raw_rows.values())
+                    and {tuple((p.role, p.amount.minor) for p in r.components) for r in raw_rows.values()}.__len__()
+                    != 1
+                ):
+                    raise ProfileFormatError("source_overlap_component_conflict")
                 excluded = right if retained == left else left
                 if excluded in aliases or retained not in (left, right):
                     raise ProfileFormatError("source_overlap_history_integrity")
@@ -2411,11 +2580,17 @@ class V2ProfileStore:
     def _source_overlap_basis(self) -> str:
         self._validate_account_metadata()
         self._read_binding_corrections()
+        self._validate_loan_history()
         self._validate_journal_retirements()
         self._validate_transfer_history()
         self._validate_source_interpretation_history()
         digest = hashlib.sha256(OVERLAP_RULE.encode())
         for table in (
+            "LoanEvents",
+            "LoanEventActions",
+            "LoanSourceUses",
+            "DerivedFinancialObservations",
+            "JournalDerivedAllocations",
             "EvidenceSnapshots",
             "SourceObservations",
             "Accounts",
@@ -2647,15 +2822,32 @@ class V2ProfileStore:
             ):
                 raise ProfileFormatError("source_overlap_clear_repeat_first")
             if decision == "repeat":
+                raw_components = []
+                for selected in (left_id, right_id):
+                    source_id = self.connection.execute(
+                        "SELECT source_sha256 FROM SourceObservations WHERE row_id=?", (selected,)
+                    ).fetchone()[0]
+                    row = next(r for r in _rows(self.load_import(source_id).evidence) if r.row_id == selected)
+                    raw_components.append(tuple((p.role, p.amount.minor) for p in row.components))
+                if raw_components[0] != raw_components[1]:
+                    raise ProfileFormatError("source_overlap_component_conflict")
                 excluded = right_id if retained_row_id == left_id else left_id
-                proven = self._has_posted_repeat_proof(excluded) or (
-                    _repair_proof
-                    and self._source_interpretation_mutating
-                    and self.connection.execute(
-                        "SELECT 1 FROM SourceInterpretationActions WHERE row_id=? AND kind='repeat_repair'", (excluded,)
-                    ).fetchone()
-                    is not None
-                    and not self._active_consumed().get(excluded, 0)
+                proven = (
+                    self._has_posted_repeat_proof(excluded)
+                    or any(
+                        e.status != "active" and any(p.row_id == excluded for p in e.manifest.components)
+                        for e in self._read_loan_history()[0]
+                    )
+                    or (
+                        _repair_proof
+                        and self._source_interpretation_mutating
+                        and self.connection.execute(
+                            "SELECT 1 FROM SourceInterpretationActions WHERE row_id=? AND kind='repeat_repair'",
+                            (excluded,),
+                        ).fetchone()
+                        is not None
+                        and not self._active_consumed().get(excluded, 0)
+                    )
                 )
                 if rows[excluded].has_journal_history and not proven:
                     raise ProfileFormatError("source_overlap_excluded_has_journal_history")
@@ -3011,6 +3203,7 @@ class V2ProfileStore:
         """
         self._validate_account_metadata()
         self._read_binding_corrections()
+        self._validate_loan_history()
         payloads = dict(self.connection.execute("SELECT key,payload FROM JournalEntries"))
         if not payloads:
             return
@@ -4724,6 +4917,658 @@ class V2ProfileStore:
         finally:
             self._transfer_mutating = False
 
+    def _validate_loan_history(self) -> None:
+        if not self._loan_mutating:
+            self._read_loan_history()
+
+    def _loan_validate_source(self, manifest: LoanPaymentManifest, *, active: bool) -> None:
+        self._validate_transfer_movements_source((manifest.bank,))
+        for proof in manifest.components:
+            saved = self.load_import(proof.source_sha256)
+            row = next((r for r in _rows(saved.evidence) if r.row_id == proof.row_id), None)
+            if (
+                saved.evidence.parser_id != proof.parser_id
+                or row is None
+                or row.model_dump_json() != proof.row_evidence
+                or self.connection.execute(
+                    "SELECT kind,role,tracking_scope,currency FROM Accounts WHERE id=?", (proof.account_id,)
+                ).fetchone()
+                != ("liability", "financial", "principal_component", "USD")
+            ):
+                raise ProfileFormatError("loan_history_integrity")
+            if isinstance(saved.evidence.payload, StatementPayload) and not any(
+                a.balance_scope == "principal_component" and row in a.rows for a in saved.evidence.payload.accounts
+            ):
+                raise ProfileFormatError("loan_history_integrity")
+        if active:
+            for source_id, row_id, account_id in (
+                (manifest.bank.source_sha256, manifest.bank.row_id, manifest.bank.account_id),
+                *((p.source_sha256, p.row_id, p.account_id) for p in manifest.components),
+            ):
+                if {b.row_id: b.ledger_account_id for b in self.account_bindings(source_id)}.get(row_id) != account_id:
+                    raise ProfileFormatError("loan_history_integrity")
+
+    def _read_loan_history(self) -> tuple[tuple[LoanEvent, ...], tuple[LoanEventAction, ...]]:
+        """Pure persisted-shape validation; never require current reconciliation readiness."""
+        if self._loan_mutating:
+            return (), ()
+        self._validate_journal_retirements()
+        events, actions = [], []
+        expected_uses, expected_derived, expected_allocations = set(), set(), set()
+        expected_keys, active_uses = set(), {}
+        accounts = self._ledger_accounts()
+        inactive = {key for (key,) in self.connection.execute(_INACTIVE_JOURNAL_SQL)}
+        action_records = {}
+        try:
+            for row in self.connection.execute(
+                "SELECT action_id,event_id,expected_version,replacement_event_id,reason,request_basis,record_sha256,created_at FROM LoanEventActions ORDER BY action_id"
+            ):
+                action_id, event_id, version, replacement, reason, basis, checksum, created = row
+                if (
+                    type(action_id) is not int
+                    or action_id <= 0
+                    or any(type(v) is not str or not v for v in (event_id, version, reason, basis, checksum, created))
+                    or (replacement is not None and (type(replacement) is not str or not replacement))
+                    or not 0 < len(reason.strip()) <= 500
+                    or re.fullmatch(r"[0-9a-f]{64}", basis) is None
+                    or checksum != loan_digest(row[:6] + row[7:])
+                ):
+                    raise ValueError
+                action_records[event_id] = row
+                actions.append(LoanEventAction(action_id, event_id, version, reason, replacement, created))
+            for row in self.connection.execute(
+                "SELECT event_id,sequence,manifest,entry_versions,reference,reason,request_basis,record_sha256,created_at FROM LoanEvents ORDER BY sequence"
+            ):
+                event_id, sequence, payload, versions, reference, reason, basis, checksum, created = row
+                if (
+                    type(sequence) is not int
+                    or sequence <= 0
+                    or any(
+                        type(v) is not str or not v
+                        for v in (event_id, payload, versions, reference, reason, basis, checksum, created)
+                    )
+                    or any(not 0 < len(v.strip()) <= 500 for v in (reference, reason))
+                    or re.fullmatch(r"[0-9a-f]{64}", basis) is None
+                    or checksum != loan_digest(row[:7] + row[8:])
+                    or event_id != f"review:loan:{sequence}:" + _digest(payload.encode())
+                ):
+                    raise ValueError
+                manifest = decode_manifest(payload)
+                entries = payment_entries(manifest, event_id, reason)
+                actual_versions = json.dumps(
+                    [[e.key, _digest(_journal_payload(e).encode())] for e in entries], separators=(",", ":")
+                )
+                if versions != actual_versions or not manifest.bank.date_allowed:
+                    raise ValueError
+                action = action_records.get(event_id)
+                if action is not None and action[2] != checksum:
+                    raise ValueError
+                active = action is None
+                self._loan_validate_source(manifest, active=active)
+                observations = {
+                    manifest.bank.row_id: Observation(
+                        manifest.bank.row_id,
+                        manifest.bank.account_id,
+                        manifest.bank.amount_minor,
+                        date.fromisoformat(manifest.bank.posting_date),
+                    )
+                }
+                for proof in manifest.components:
+                    key = event_id + ":loan:" + proof.row_id
+                    expected_uses.add((event_id, key, proof.row_id, proof.raw_amount_minor))
+                    if proof.principal_minor:
+                        oid = principal_id(event_id, proof.row_id)
+                        expected_derived.add(
+                            (oid, event_id, proof.row_id, proof.account_id, proof.principal_minor, proof.effective_date)
+                        )
+                        expected_allocations.add((key, oid, proof.principal_minor))
+                        observations[oid] = Observation(
+                            oid, proof.account_id, proof.principal_minor, date.fromisoformat(proof.effective_date)
+                        )
+                for index, entry in enumerate(entries):
+                    if (
+                        self.connection.execute(
+                            "SELECT payload FROM JournalEntries WHERE key=?", (entry.key,)
+                        ).fetchone()
+                        != (_journal_payload(entry),)
+                        or (entry.key in inactive) == active
+                    ):
+                        raise ValueError
+                    expected_keys.add(entry.key)
+                    indexed = self.connection.execute(
+                        "SELECT row_id,amount_minor FROM JournalAllocations WHERE entry_key=?", (entry.key,)
+                    ).fetchall()
+                    if indexed != ([(manifest.bank.row_id, manifest.bank.amount_minor)] if index == 0 else []):
+                        raise ValueError
+                    validate_entry(
+                        entry,
+                        accounts,
+                        observations,
+                        {},
+                        component_proofs=() if index == 0 else (manifest.components[index - 1],),
+                    )
+                    if action is not None and self.connection.execute(
+                        "SELECT reason FROM JournalRetirements WHERE original_key=?", (entry.key,)
+                    ).fetchone() != (action[4],):
+                        raise ValueError
+                if active:
+                    for rid, amount in (
+                        (manifest.bank.row_id, manifest.bank.amount_minor),
+                        *((p.row_id, p.raw_amount_minor) for p in manifest.components),
+                    ):
+                        if rid in active_uses:
+                            raise ValueError
+                        active_uses[rid] = amount
+                events.append(
+                    LoanEvent(
+                        event_id,
+                        manifest,
+                        tuple(e.key for e in entries),
+                        reference,
+                        reason,
+                        created,
+                        checksum,
+                        "active" if active else "replaced" if action[3] else "cancelled",
+                        action[3] if action else None,
+                    )
+                )
+            by_id = {e.event_id: e for e in events}
+            if set(action_records) - by_id.keys():
+                raise ValueError
+            for event in events:
+                if event.replacement_event_id is not None and (
+                    event.replacement_event_id not in by_id
+                    or by_id[event.replacement_event_id].event_id == event.event_id
+                    or list(by_id).index(event.replacement_event_id) <= list(by_id).index(event.event_id)
+                ):
+                    raise ValueError
+            if (
+                expected_uses
+                != set(self.connection.execute("SELECT event_id,entry_key,row_id,amount_minor FROM LoanSourceUses"))
+                or expected_derived
+                != set(
+                    self.connection.execute(
+                        "SELECT observation_id,event_id,row_id,account_id,amount_minor,effective_date FROM DerivedFinancialObservations"
+                    )
+                )
+                or expected_allocations
+                != set(
+                    self.connection.execute(
+                        "SELECT entry_key,observation_id,amount_minor FROM JournalDerivedAllocations"
+                    )
+                )
+            ):
+                raise ValueError
+            if {
+                key
+                for (key,) in self.connection.execute("SELECT key FROM JournalEntries WHERE key LIKE 'review:loan:%'")
+            } != expected_keys:
+                raise ValueError
+            # Active raw allocations and component uses are independent, exclusive authorities.
+            for rid in active_uses:
+                rows = self.connection.execute(
+                    f"SELECT entry_key FROM JournalAllocations WHERE row_id=? AND entry_key NOT IN ({_INACTIVE_JOURNAL_SQL})",
+                    (rid,),
+                ).fetchall()
+                expected_bank = [
+                    e.entry_keys[0] for e in events if e.status == "active" and e.manifest.bank.row_id == rid
+                ]
+                if rows != [(key,) for key in expected_bank]:
+                    raise ValueError
+        except (TypeError, ValueError, KeyError, RecursionError, LedgerError, ValidationError):
+            raise ProfileFormatError("loan_history_integrity") from None
+        return tuple(reversed(events)), tuple(reversed(actions))
+
+    def loan_history(self) -> tuple[LoanEvent, ...]:
+        if self.connection.in_transaction:
+            return self._read_loan_history()[0]
+        self.connection.execute("BEGIN")
+        try:
+            self._validate_journal_retirements()
+            return self._read_loan_history()[0]
+        finally:
+            self.connection.execute("ROLLBACK")
+
+    def loan_actions(self) -> tuple[LoanEventAction, ...]:
+        if self.connection.in_transaction:
+            return self._read_loan_history()[1]
+        self.connection.execute("BEGIN")
+        try:
+            self._validate_journal_retirements()
+            return self._read_loan_history()[1]
+        finally:
+            self.connection.execute("ROLLBACK")
+
+    def loan_source_links(self) -> tuple[LoanSourceLink, ...]:
+        return tuple(
+            LoanSourceLink(
+                e.event_id,
+                e.event_id + ":loan:" + p.row_id,
+                p.row_id,
+                p.source_sha256,
+                p.account_id,
+                p.activity_date,
+                p.effective_date,
+                p.date_provenance,
+                p.raw_amount_minor,
+                principal_id(e.event_id, p.row_id) if p.principal_minor else None,
+                p.principal_minor,
+                p.interest_minor,
+                e.status == "active",
+                p,
+            )
+            for e in self.loan_history()
+            for p in e.manifest.components
+        )
+
+    def _loan_component_rows(
+        self, preferences: V2Preferences, releasing: tuple[str, ...] = ()
+    ) -> tuple[LoanComponentReviewRow, ...]:
+        if type(preferences) is not V2Preferences or type(preferences.allow_assumed_posting_dates) is not bool:
+            raise ProfileFormatError("loan_preferences_invalid")
+        used = self._active_consumed()
+        for key in releasing:
+            for rid, amount in self.connection.execute(
+                "SELECT row_id,amount_minor FROM LoanSourceUses WHERE entry_key=?", (key,)
+            ):
+                used[rid] = used.get(rid, 0) - amount
+        accounts = {a.id: a for a in self.financial_accounts()}
+        result = []
+        for source_id in self.source_ids():
+            evidence = self.load_import(source_id).evidence
+            if evidence.parser_id not in LOAN_PARSERS:
+                continue
+            bindings = {b.row_id: b.ledger_account_id for b in self.account_bindings(source_id)}
+            for row in _rows(evidence):
+                blockers, proof = [], None
+                account = accounts.get(bindings.get(row.row_id))
+                if account is None:
+                    blockers.append("loan_account_assignment_required")
+                elif account.kind != "liability" or account.tracking_scope != "principal_component":
+                    blockers.append("loan_principal_scope_required")
+                else:
+                    try:
+                        proof = component_proof(
+                            row,
+                            source_sha256=source_id,
+                            parser_id=evidence.parser_id,
+                            account_id=account.id,
+                            account_name=account.name,
+                        )
+                    except (TypeError, ValueError):
+                        blockers.append("loan_component_unsupported")
+                if used.get(row.row_id, 0):
+                    blockers.append("loan_source_already_used")
+                if not preferences.allow_assumed_posting_dates:
+                    blockers.append("loan_assumed_date_disabled")
+                if self.source_overlap_posting_blocks((row.row_id,)):
+                    blockers.append("source_overlap_review_required")
+                result.append(
+                    LoanComponentReviewRow(
+                        row.row_id,
+                        source_id,
+                        row.description.text,
+                        row.amount.minor,
+                        proof,
+                        not blockers,
+                        tuple(blockers),
+                        row.date.iso,
+                        account.id if account else None,
+                        account.name if account else None,
+                        account.tracking_scope if account else None,
+                        row.model_dump_json(),
+                    )
+                )
+        return tuple(result)
+
+    def loan_review_snapshot(
+        self, preferences: V2Preferences, *, source_sha256: str | None = None, replacing_event_id: str | None = None
+    ) -> LoanReviewSnapshot:
+        if self.connection.in_transaction:
+            raise ProfileFormatError("loan_requires_committed_snapshot")
+        self.connection.execute("BEGIN")
+        try:
+            history, actions = self._read_loan_history()
+            event = next((e for e in history if e.event_id == replacing_event_id and e.status == "active"), None)
+            if replacing_event_id is not None and event is None:
+                raise ProfileFormatError("loan_event_not_active")
+            releasing = event.entry_keys if event else ()
+            rows = self._loan_component_rows(preferences, releasing)
+            bank = tuple(
+                m
+                for m in self._transfer_movements(preferences, releasing)
+                if m.account_kind == "asset" and m.amount_minor < 0
+            )
+            return LoanReviewSnapshot(
+                bank,
+                tuple(r for r in rows if source_sha256 is None or r.source_sha256 == source_sha256),
+                history,
+                self._source_overlap_basis(),
+                actions,
+                self.financial_accounts(),
+            )
+        finally:
+            self.connection.execute("ROLLBACK")
+
+    @staticmethod
+    def _loan_request(bank_row_id: str, loan_row_ids: tuple[str, ...]) -> tuple[str, tuple[str, ...]]:
+        if (
+            type(bank_row_id) is not str
+            or type(loan_row_ids) is not tuple
+            or not 1 <= len(loan_row_ids) <= 32
+            or any(type(r) is not str for r in loan_row_ids)
+            or len(set(loan_row_ids)) != len(loan_row_ids)
+        ):
+            raise ProfileFormatError("loan_selection_invalid")
+        return bank_row_id, tuple(sorted(loan_row_ids))
+
+    def _loan_build(self, request, preferences, releasing=()) -> LoanPaymentManifest:
+        bank_id, row_ids = request
+        rows = {r.row_id: r for r in self._loan_component_rows(preferences, releasing)}
+        bank = {
+            m.row_id: m
+            for m in self._transfer_movements(preferences, releasing)
+            if m.account_kind == "asset" and m.amount_minor < 0
+        }
+        try:
+            if any(not rows[rid].eligible for rid in row_ids) or not bank[bank_id].date_allowed:
+                raise ProfileFormatError("loan_selection_unavailable_or_date_disabled")
+            manifest = LoanPaymentManifest(bank[bank_id], tuple(rows[rid].proof for rid in row_ids))
+            validate_manifest(manifest)
+            manifest_payload(manifest)
+            self._loan_validate_source(manifest, active=True)
+            return manifest
+        except (KeyError, TypeError, ValueError):
+            raise ProfileFormatError("loan_selection_unavailable_or_component_mismatch") from None
+
+    def _loan_accounts(self, *, interest: bool, materialize: bool) -> dict[str, LedgerAccount]:
+        if materialize:
+            self._ensure_transfer_clearing()
+            if interest:
+                self.ensure_builtin_category("builtin:loan-interest")
+        accounts = self._ledger_accounts()
+        accounts.setdefault(
+            "internal:transfer-clearing:USD",
+            LedgerAccount("internal:transfer-clearing:USD", "Transfer clearing", AccountKind.ASSET, purpose="clearing"),
+        )
+        if interest:
+            accounts.setdefault(
+                "builtin:loan-interest", LedgerAccount("builtin:loan-interest", "Loan interest", AccountKind.EXPENSE)
+            )
+        return accounts
+
+    def _loan_validate_entries(self, manifest, entries, accounts) -> None:
+        observations = {
+            manifest.bank.row_id: Observation(
+                manifest.bank.row_id,
+                manifest.bank.account_id,
+                manifest.bank.amount_minor,
+                date.fromisoformat(manifest.bank.posting_date),
+            )
+        }
+        for proof in manifest.components:
+            if proof.principal_minor:
+                oid = principal_id(entries[0].event_id, proof.row_id)
+                observations[oid] = Observation(
+                    oid, proof.account_id, proof.principal_minor, date.fromisoformat(proof.effective_date)
+                )
+        for index, entry in enumerate(entries):
+            validate_entry(
+                entry,
+                accounts,
+                observations,
+                {},
+                component_proofs=() if index == 0 else (manifest.components[index - 1],),
+            )
+
+    def loan_payment_preview(
+        self,
+        bank_row_id: str,
+        loan_row_ids: tuple[str, ...],
+        *,
+        preferences: V2Preferences,
+        replacing_event_id: str | None = None,
+        expected_basis_sha256: str | None = None,
+    ) -> LoanPaymentPreview:
+        request = self._loan_request(bank_row_id, loan_row_ids)
+        if self.connection.in_transaction:
+            raise ProfileFormatError("loan_requires_committed_snapshot")
+        self.connection.execute("BEGIN")
+        try:
+            basis = self._source_overlap_basis()
+            if expected_basis_sha256 is not None and expected_basis_sha256 != basis:
+                raise ProfileFormatError("loan_changed_since_selection")
+            event = next(
+                (e for e in self._read_loan_history()[0] if e.event_id == replacing_event_id and e.status == "active"),
+                None,
+            )
+            if replacing_event_id is not None and event is None:
+                raise ProfileFormatError("loan_event_not_active")
+            manifest = self._loan_build(request, preferences, event.entry_keys if event else ())
+            entries = payment_entries(manifest, "preview:loan", "Preview only")
+            self._loan_validate_entries(
+                manifest, entries, self._loan_accounts(interest=bool(manifest.interest_minor), materialize=False)
+            )
+            return LoanPaymentPreview(manifest, entries, basis)
+        finally:
+            self.connection.execute("ROLLBACK")
+
+    def _loan_write_start(self, reason: str, reference: str | None = None) -> str:
+        self._require_writable()
+        if (
+            type(reason) is not str
+            or not 0 < len(reason.strip()) <= 500
+            or (reference is not None and (type(reference) is not str or not 0 < len(reference.strip()) <= 500))
+        ):
+            raise ProfileFormatError("loan_reason_reference_required")
+        if self.connection.in_transaction:
+            raise ProfileFormatError("loan_requires_committed_snapshot")
+        self.connection.execute("BEGIN IMMEDIATE")
+        return reason.strip()
+
+    def _loan_require_basis(self, basis: str) -> None:
+        if (
+            type(basis) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", basis) is None
+            or basis != self._source_overlap_basis()
+        ):
+            raise ProfileFormatError("loan_changed_since_selection")
+
+    def _loan_record(self, manifest, *, reference, reason, basis) -> str:
+        accounts = self._loan_accounts(interest=bool(manifest.interest_minor), materialize=True)
+        sequence = self.connection.execute("SELECT COALESCE(MAX(sequence),0)+1 FROM LoanEvents").fetchone()[0]
+        payload = manifest_payload(manifest)
+        event_id = f"review:loan:{sequence}:" + _digest(payload.encode())
+        entries = payment_entries(manifest, event_id, reason)
+        self._loan_validate_entries(manifest, entries, accounts)
+        versions = json.dumps([[e.key, _digest(_journal_payload(e).encode())] for e in entries], separators=(",", ":"))
+        created = self.connection.execute("SELECT CURRENT_TIMESTAMP").fetchone()[0]
+        values = (event_id, sequence, payload, versions, reference, reason, basis)
+        checksum = loan_digest(values + (created,))
+        self.connection.execute("INSERT INTO LoanEvents VALUES (?,?,?,?,?,?,?,?,?)", values + (checksum, created))
+        for index, entry in enumerate(entries):
+            self.connection.execute(
+                "INSERT INTO JournalEntries(key,payload) VALUES (?,?)", (entry.key, _journal_payload(entry))
+            )
+            if index == 0:
+                self.connection.execute(
+                    "INSERT INTO JournalAllocations VALUES (?,?,?)",
+                    (entry.key, manifest.bank.row_id, manifest.bank.amount_minor),
+                )
+                continue
+            proof = manifest.components[index - 1]
+            self.connection.execute(
+                "INSERT INTO LoanSourceUses VALUES (?,?,?,?)",
+                (event_id, entry.key, proof.row_id, proof.raw_amount_minor),
+            )
+            if proof.principal_minor:
+                oid = principal_id(event_id, proof.row_id)
+                self.connection.execute(
+                    "INSERT INTO DerivedFinancialObservations VALUES (?,?,?,?,?,?)",
+                    (oid, event_id, proof.row_id, proof.account_id, proof.principal_minor, proof.effective_date),
+                )
+                self.connection.execute(
+                    "INSERT INTO JournalDerivedAllocations VALUES (?,?,?)", (entry.key, oid, proof.principal_minor)
+                )
+        return event_id
+
+    def post_reviewed_loan_payment(
+        self,
+        bank_row_id: str,
+        loan_row_ids: tuple[str, ...],
+        *,
+        expected_basis_sha256: str,
+        preferences: V2Preferences,
+        reference: str,
+        reason: str,
+    ) -> LoanEvent:
+        request = self._loan_request(bank_row_id, loan_row_ids)
+        reason = self._loan_write_start(reason, reference)
+        try:
+            for event in self._read_loan_history()[0]:
+                prior_basis = self.connection.execute(
+                    "SELECT request_basis FROM LoanEvents WHERE event_id=?", (event.event_id,)
+                ).fetchone()[0]
+                if (
+                    prior_basis == expected_basis_sha256
+                    and (event.manifest.bank.row_id, tuple(p.row_id for p in event.manifest.components)) == request
+                    and event.reason == reason
+                    and event.reference == reference.strip()
+                ):
+                    self.connection.execute("COMMIT")
+                    return event
+            self._loan_require_basis(expected_basis_sha256)
+            manifest = self._loan_build(request, preferences)
+            self._loan_mutating = True
+            event_id = self._loan_record(
+                manifest, reference=reference.strip(), reason=reason, basis=expected_basis_sha256
+            )
+            self._loan_mutating = False
+            saved = next(e for e in self._read_loan_history()[0] if e.event_id == event_id)
+            self.connection.execute("COMMIT")
+            return saved
+        except BaseException:
+            self.connection.execute("ROLLBACK")
+            raise
+        finally:
+            self._loan_mutating = False
+
+    def _loan_record_action(self, event, *, replacement, reason, basis) -> None:
+        action_id = self.connection.execute("SELECT COALESCE(MAX(action_id),0)+1 FROM LoanEventActions").fetchone()[0]
+        created = self.connection.execute("SELECT CURRENT_TIMESTAMP").fetchone()[0]
+        values = (action_id, event.event_id, event.version, replacement, reason, basis)
+        self.connection.execute(
+            "INSERT INTO LoanEventActions VALUES (?,?,?,?,?,?,?,?)",
+            values + (loan_digest(values + (created,)), created),
+        )
+
+    def withdraw_reviewed_loan(self, event_id: str, *, expected_event_version: str, reason: str) -> LoanEventAction:
+        reason = self._loan_write_start(reason)
+        try:
+            events, actions = self._read_loan_history()
+            receipt = next(
+                (
+                    a
+                    for a in actions
+                    if a.event_id == event_id
+                    and a.expected_event_version == expected_event_version
+                    and a.reason == reason
+                    and a.replacement_event_id is None
+                ),
+                None,
+            )
+            if receipt:
+                self.connection.execute("COMMIT")
+                return receipt
+            event = next((e for e in events if e.event_id == event_id), None)
+            if event is None or event.status != "active" or event.version != expected_event_version:
+                raise ProfileFormatError("loan_event_changed_since_selection")
+            basis = self._source_overlap_basis()
+            self._loan_mutating = True
+            for key in event.entry_keys:
+                self._retire_journal_entry(
+                    _decode_journal(
+                        self.connection.execute("SELECT payload FROM JournalEntries WHERE key=?", (key,)).fetchone()[0]
+                    ),
+                    reason=reason,
+                )
+            self._loan_record_action(event, replacement=None, reason=reason, basis=basis)
+            self._loan_mutating = False
+            receipt = self._read_loan_history()[1][0]
+            self.connection.execute("COMMIT")
+            return receipt
+        except BaseException:
+            self.connection.execute("ROLLBACK")
+            raise
+        finally:
+            self._loan_mutating = False
+
+    def replace_reviewed_loan(
+        self,
+        event_id: str,
+        bank_row_id: str,
+        loan_row_ids: tuple[str, ...],
+        *,
+        expected_event_version: str,
+        expected_basis_sha256: str,
+        preferences: V2Preferences,
+        reference: str,
+        reason: str,
+    ) -> LoanEvent:
+        request = self._loan_request(bank_row_id, loan_row_ids)
+        reason = self._loan_write_start(reason, reference)
+        try:
+            events, actions = self._read_loan_history()
+            receipt = next(
+                (
+                    a
+                    for a in actions
+                    if a.event_id == event_id
+                    and a.expected_event_version == expected_event_version
+                    and a.reason == reason
+                    and a.replacement_event_id
+                ),
+                None,
+            )
+            if receipt:
+                result = next(e for e in events if e.event_id == receipt.replacement_event_id)
+                basis = self.connection.execute(
+                    "SELECT request_basis FROM LoanEventActions WHERE action_id=?", (receipt.action_id,)
+                ).fetchone()[0]
+                if (
+                    (result.manifest.bank.row_id, tuple(p.row_id for p in result.manifest.components)) == request
+                    and result.reference == reference.strip()
+                    and expected_basis_sha256 == basis
+                ):
+                    self.connection.execute("COMMIT")
+                    return result
+            event = next((e for e in events if e.event_id == event_id), None)
+            if event is None or event.status != "active" or event.version != expected_event_version:
+                raise ProfileFormatError("loan_event_changed_since_selection")
+            self._loan_require_basis(expected_basis_sha256)
+            manifest = self._loan_build(request, preferences, event.entry_keys)
+            self._loan_mutating = True
+            for key in event.entry_keys:
+                self._retire_journal_entry(
+                    _decode_journal(
+                        self.connection.execute("SELECT payload FROM JournalEntries WHERE key=?", (key,)).fetchone()[0]
+                    ),
+                    reason=reason,
+                )
+            replacement = self._loan_record(
+                manifest, reference=reference.strip(), reason=reason, basis=expected_basis_sha256
+            )
+            self._loan_record_action(event, replacement=replacement, reason=reason, basis=expected_basis_sha256)
+            self._loan_mutating = False
+            result = next(e for e in self._read_loan_history()[0] if e.event_id == replacement)
+            self.connection.execute("COMMIT")
+            return result
+        except BaseException:
+            self.connection.execute("ROLLBACK")
+            raise
+        finally:
+            self._loan_mutating = False
+
     def _journal_entries_in_period(self, start: date, end: date):
         self._validate_journal_retirements()
         self._validate_opening_decision_histories()
@@ -4738,17 +5583,15 @@ class V2ProfileStore:
                 yield entry
 
     def _unallocated_activity_counts(self) -> tuple[int, int]:
-        self._validate_journal_retirements()
-        self._validate_transfer_history()
-        self._validate_source_interpretation_history()
-        return self.connection.execute(
-            "SELECT COUNT(*),COUNT(DISTINCT o.source_sha256) FROM SourceObservations o "
-            "LEFT JOIN ("
-            "SELECT a.row_id,SUM(a.amount_minor) AS used FROM JournalAllocations a "
-            f"WHERE a.entry_key NOT IN ({_INACTIVE_JOURNAL_SQL}) GROUP BY a.row_id"
-            ") active ON active.row_id=o.row_id "
-            "WHERE o.row_role='activity' AND (active.used IS NULL OR active.used<>o.amount_minor)"
-        ).fetchone()
+        consumed = self._active_consumed()
+        rows = tuple(
+            (rid, source)
+            for rid, source, amount in self.connection.execute(
+                "SELECT row_id,source_sha256,amount_minor FROM SourceObservations WHERE row_role='activity'"
+            )
+            if consumed.get(rid, 0) != amount
+        )
+        return len(rows), len({source for _rid, source in rows})
 
     def reviewed_category_summary(
         self, *, kind: Literal["expense", "income"], start: date, end: date
@@ -5140,6 +5983,9 @@ class V2ProfileStore:
             self.connection.execute("SELECT row_id,source_sha256 FROM SourceObservations ORDER BY row_id")
         )
         source_ids = {row_id for row_id, _source_id in source_rows}
+        source_ids.update(
+            row[0] for row in self.connection.execute("SELECT observation_id FROM DerivedFinancialObservations")
+        )
         if any(
             allocation.observation_id not in source_ids
             for entry in entries
@@ -5166,6 +6012,9 @@ class V2ProfileStore:
             settlements,
             dated_values,
             dated_withdrawals,
+            self._read_loan_history()[0],
+            self._read_loan_history()[1],
+            self.loan_source_links(),
         )
 
     def _insert_reviewed_category(
@@ -6374,8 +7223,8 @@ class V2ProfileStore:
             row_id
             for (row_id,) in self.connection.execute(
                 "SELECT DISTINCT a.row_id FROM JournalAllocations a "
-                "JOIN SourceObservations o ON o.row_id=a.row_id WHERE o.source_sha256=?",
-                (source_sha256,),
+                "JOIN SourceObservations o ON o.row_id=a.row_id WHERE o.source_sha256=? UNION SELECT a.row_id FROM LoanSourceUses a JOIN SourceObservations o ON o.row_id=a.row_id WHERE o.source_sha256=?",
+                (source_sha256, source_sha256),
             )
         )
 
@@ -6507,13 +7356,21 @@ class V2ProfileStore:
             _decode_journal(payload) for (payload,) in self.connection.execute("SELECT payload FROM JournalEntries")
         )
         inactive_keys = self._inactive_journal_keys()
+        derived_parents = dict(
+            self.connection.execute("SELECT observation_id,row_id FROM DerivedFinancialObservations")
+        )
         active_dates: dict[str, list[date]] = {}
         for entry in journal:
             if entry.key in inactive_keys:
                 continue
             for posting in entry.postings:
                 for allocation in posting.allocations:
-                    active_dates.setdefault(allocation.observation_id, []).append(entry.posting_date)
+                    active_dates.setdefault(
+                        derived_parents.get(allocation.observation_id, allocation.observation_id), []
+                    ).append(entry.posting_date)
+        for link in self.loan_source_links():
+            if link.active:
+                active_dates.setdefault(link.row_id, []).append(date.fromisoformat(link.effective_date))
         financial_accounts = {account.id: account for account in self.financial_accounts()}
         account_kinds = {account.id: account.kind for account in financial_accounts.values()}
         result = []
@@ -6559,6 +7416,17 @@ class V2ProfileStore:
                 and all(row.amount.minor is not None and row.amount.provenance == "observed" for row in activity)
                 else None
             )
+            if (
+                account is not None
+                and account.balance_scope == "principal_component"
+                and self.load_import(section.source_sha256).evidence.parser_id in LOAN_PARSERS
+            ):
+                factor = (
+                    1 if self.load_import(section.source_sha256).evidence.parser_id == "pdf_wfloanper_202306" else -1
+                )
+                source_change = factor * sum(
+                    p.amount.minor for row in activity for p in row.components if p.role == "principal"
+                )
             printed_change = (
                 account.closing.minor - account.opening.minor
                 if account is not None
@@ -6584,7 +7452,11 @@ class V2ProfileStore:
                             if entry.key not in inactive_keys and (
                                 not entry.reviewed
                                 or not posting.allocations
-                                or any(allocation.observation_id not in row_ids for allocation in posting.allocations)
+                                or any(
+                                    derived_parents.get(allocation.observation_id, allocation.observation_id)
+                                    not in row_ids
+                                    for allocation in posting.allocations
+                                )
                             ):
                                 outside_postings += 1
             difference = (
@@ -6655,8 +7527,13 @@ class V2ProfileStore:
         self._validate_transfer_history()
         self._validate_source_interpretation_history()
         self._validate_common_journal_read()
-        rule = "v2-statement-reconciliation-5"
+        rule = "v2-statement-reconciliation-6"
         version_tables = (
+            ("LoanEvents", "*"),
+            ("LoanEventActions", "*"),
+            ("LoanSourceUses", "*"),
+            ("DerivedFinancialObservations", "*"),
+            ("JournalDerivedAllocations", "*"),
             ("Sources", "sha256"),
             ("EvidenceSnapshots", "source_sha256,definition_sha256,sha256"),
             ("SourceObservations", "*"),
@@ -6707,6 +7584,9 @@ class V2ProfileStore:
         }
         decisions = {account_id: self.opening_decision(account_id) for account_id in reviews}
         kinds = {account.id: account.kind for account in self.financial_accounts()}
+        derived_parents = dict(
+            self.connection.execute("SELECT observation_id,row_id FROM DerivedFinancialObservations")
+        )
         overlap_rows, _buckets, _reviews, overlap_aliases = self._source_overlap_index()
         overlap_blocks = self.source_overlap_posting_blocks(tuple(overlap_rows))
         result = []
@@ -6776,7 +7656,10 @@ class V2ProfileStore:
                 and section.period_start <= entry.posting_date <= section.period_end
                 and (
                     not posting.allocations
-                    or any(allocation.observation_id not in source_row_ids for allocation in posting.allocations)
+                    or any(
+                        derived_parents.get(allocation.observation_id, allocation.observation_id) not in source_row_ids
+                        for allocation in posting.allocations
+                    )
                 )
                 for entry in entries
                 for posting in entry.postings
@@ -7188,6 +8071,12 @@ class V2ProfileStore:
         financial = self.connection.execute(
             "SELECT kind,tracking_scope FROM Accounts WHERE id=? AND role='financial'", (account_id,)
         ).fetchone()
+        if (
+            financial == ("liability", "principal_component")
+            and section.balance_scope == "principal_component"
+            and self.load_import(source_id).evidence.parser_id == "pdf_wfloanper_202306"
+        ):
+            return True
         return financial is not None and admitted_statement_scope(
             self.load_import(source_id).evidence.parser_id, section.balance_scope, financial[0], financial[1]
         )

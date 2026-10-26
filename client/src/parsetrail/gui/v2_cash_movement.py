@@ -206,7 +206,8 @@ class V2CashMovementDialog(QDialog):
             f"from {journal.sources_with_incomplete_activity} source(s) lack full allocation. "
             f"{journal.excluded_unreviewed_entries} unreviewed and {journal.excluded_opening_entries} opening record(s) "
             "were excluded in this period. Card purchases alone are not cash movement. "
-            "A settlement with a fee can appear in two purpose counts; those counts are not additive. "
+            "A loan payment or settlement with interest or fees can appear in multiple purpose counts; "
+            "those counts are not additive. "
             f"Across all dates, {report.expected_receipts_without_source} reviewed owned outflow(s) involving selected "
             "accounts have no receipt evidence. Expected amounts add no destination movement. "
             "Unallocated counts may include supporting repeats. Pending evidence and source capture/coverage gaps "
@@ -275,7 +276,11 @@ class V2CashMovementDialog(QDialog):
         lines.extend(("", f"Entry: {row.entry.key}", f"Event: {row.entry.event_id}"))
         self.details.setPlainText("\n".join(lines))
         source_rows = dict(self.report.journal.source_rows)
-        for source in dict.fromkeys(source_rows[a.observation_id] for p in row.entry.postings for a in p.allocations):
+        sources = dict.fromkeys(source_rows[a.observation_id] for p in row.entry.postings for a in p.allocations)
+        for event in self.report.journal.loan_events:
+            if event.event_id == row.entry.event_id:
+                sources.update((part.source_sha256, None) for part in event.manifest.components)
+        for source in sources:
             self.sources.addItem(f"Source {source[:16]}…", source)
         self.preview.setEnabled(self.sources.count() > 0)
 
