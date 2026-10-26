@@ -134,6 +134,11 @@ def main() -> int:
 
         return worker_main(sys.argv[2:])
 
+    if "--v2-verify-fixtures" in sys.argv[1:]:
+        from parsetrail.core.v2_fixture_verification import main as fixture_main
+
+        return fixture_main(sys.argv[1:])
+
     if "--offline-session-smoke-test" in sys.argv:
         import argparse
         from pathlib import Path
