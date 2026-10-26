@@ -5,7 +5,7 @@ Authorization: continuing roadmap development; owner offered an early UI/UX pass
 Implementation: final six-source walkthrough and pinned launcher prepared; Windows catalog handoff corrected.
 Automated verification: signed imports, pinned reopening/startup and cross-principal ACL propagation passed.
 Independent review: acceptance specialist prepared and verified synthetic artifacts.
-Owner acceptance: not performed; owner supplied final launcher traceback, repaired artifact awaits visible retry.
+Owner acceptance: walkthrough otherwise worked; step-12 cash-movement discrepancy reported, exact owner settings unconfirmed.
 Release authorization: not authorized.
 
 ## Scope and controlling decisions
@@ -163,9 +163,49 @@ checks repair and verify access; they do not establish visible owner acceptance.
 Python documents the [Windows mode-0700 restriction](https://docs.python.org/3.13/library/os.html#os.mkdir);
 Microsoft documents [enabling inherited ACLs](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/icacls).
 
+## Owner walkthrough feedback and cash-movement instructions
+
+The owner reported: everything worked except step 12; other transactions appeared
+instead of the specified payment, and the demo otherwise seemed to work fine.
+This establishes successful visible startup and the remainder of the consolidated
+walkthrough as reported. It does not establish successful owner verification of
+step 12, native Intel/installed acceptance or release authorization.
+
+Primary and independent acceptance review read the existing owner-edited demo
+through the pinned runtime without changing profile bytes. With only the
+`payment-checking` checkbox checked, both the common service and actual offscreen
+dialog show exactly one January 14 bank record -22000 minor units (principal
+-20000/expense -2000) for January 1–February 1, 2026, and exactly one February 9
+record -2000 for February 1–March 1, classified as whole-liability repayment.
+No missing-entry report defect was reproduced; the owner's exact screen/settings
+and the cause of the differing result remain unknown.
+
+The original instructions omitted exact control, table and year details. Report
+scope uses checked account boxes, not row highlighting or the Inspect account
+selector. January's upper summary has two purpose totals while the middle table
+has one cash record; the lower details carry the split. Full-source previews show
+all original statement rows regardless of report period. January offers bank and
+Capital previews; February offers the bank preview and retains the Yamaha
+counterpart date in details. The earlier claim of both previews for each month
+was too broad.
+
+Step 12 now names the precise menu, checkbox, 2026 inclusive/exclusive dates,
+middle-table descriptions/dates/amounts and detail/source expectations. The
+existing `WALKTHROUGH.txt` is updated in place; no runtime, catalog, profile or
+financial-report code is changed. A prepared-demo GUI regression covers that
+exact path, including switching away from a previously checked HSA scope.
+Windows AMD64/Python 3.13.15, `PYTHONPATH=.;client/src;client`, Qt offscreen:
+`client/.venv/Scripts/python.exe -m pytest -p no:cacheprovider
+devtools/v2_review_demo -q --tb=short`: **8 passed in 39.68s**. The new test uses
+actual pinned-runtime GUI checkbox/date controls, verifies highlighted versus
+checked scope, the single bank record and exact purposes in each month, source
+choices/counterpart context and unchanged profile bytes. Independent read-only
+service/GUI reproduction agrees on the owner-edited artifact. Primary's ignored
+`scratch/review-cash-step12.json` retains exact rows, totals, details and limits.
+Changed-file Ruff check/format, local document links and whitespace checks passed.
+
 ## Remaining work
 
-Owner confirms visible startup and reviews import/binding, explicit review and
-correction, reports/budgets/positions, unknown/pending/error states, backup/reopen
-and layout/wording. Record feedback and disposition here. Initial authorized
-development is complete; platform and release gates remain separately tracked.
+The rest of the owner walkthrough worked as reported. Owner confirmation of the
+clarified step 12 remains open; initial authorized development is complete and
+platform/release gates remain separately tracked.

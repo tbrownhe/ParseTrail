@@ -71,6 +71,61 @@ def test_prepare_exact_books_sources_and_pinned_reopen(prepared):
     assert hashlib.sha256((destination / "review.db").read_bytes()).hexdigest() == before
 
 
+def test_walkthrough_cash_scope_dates_and_record_details(prepared):
+    destination, _ = prepared
+    before = hashlib.sha256((destination / "review.db").read_bytes()).hexdigest()
+    helper = destination / "runtime/devtools/v2_review_demo/prepare_demo.py"
+    code = """import importlib.util,json,sys
+from pathlib import Path
+helper,root=map(Path,sys.argv[1:])
+spec=importlib.util.spec_from_file_location('pinned_demo',helper)
+tool=importlib.util.module_from_spec(spec);spec.loader.exec_module(tool);tool.isolate(root)
+from PySide6.QtCore import QDate,Qt
+from PySide6.QtWidgets import QApplication
+from parsetrail.gui.v2_cash_movement import V2CashMovementDialog
+app=QApplication([]);dialog=V2CashMovementDialog(root/'review.db')
+items={dialog.accounts.item(i).data(Qt.UserRole):dialog.accounts.item(i) for i in range(dialog.accounts.count())}
+items['payment-checking'].setSelected(True)
+assert dialog.report is None
+items['hsa'].setCheckState(Qt.Checked)
+for key,item in items.items():item.setCheckState(Qt.Checked if key=='payment-checking' else Qt.Unchecked)
+assert dialog._selected_ids()==('payment-checking',)
+dialog.start.setDate(QDate(2026,1,1));dialog.end.setDate(QDate(2026,2,1))
+assert dialog.entries.rowCount()==1 and dialog.summary.rowCount()==2
+assert [dialog.entries.item(0,c).text() for c in (0,2,3)]==['2026-01-14','-$220.00','Reviewed loan payment cash outflow']
+assert dialog.report.total_minor==-22000
+assert [(p.classification,p.amount_minor) for p in dialog.report.rows[0].components]==[('loan_principal',-20000),('expense',-2000)]
+assert 'Reviewed loan principal payment: -$200.00' in dialog.details.toPlainText()
+assert 'Reviewed cash expense: -$20.00' in dialog.details.toPlainText()
+assert dialog.sources.count()==2
+dialog.start.setDate(QDate(2026,2,1));dialog.end.setDate(QDate(2026,3,1))
+assert dialog.entries.rowCount()==1 and dialog.summary.rowCount()==1
+assert [dialog.entries.item(0,c).text() for c in (0,2,3)]==['2026-02-09','-$20.00','Transfer sent']
+assert dialog.report.total_minor==-2000
+assert [(p.classification,p.amount_minor) for p in dialog.report.rows[0].components]==[('liability_payment',-2000)]
+assert '2026-02-10' in dialog.details.toPlainText()
+assert dialog.sources.count()==1
+dialog.close();app.processEvents()
+print(json.dumps({'walkthrough_cash_screen':'passed'}))
+"""
+    environment = os.environ.copy()
+    environment["QT_QPA_PLATFORM"] = "offscreen"
+    result = subprocess.run(
+        [sys.executable, "-B", "-c", code, str(helper), str(destination)],
+        cwd=destination / "runtime",
+        capture_output=True,
+        text=True,
+        env=environment,
+        timeout=60,
+        check=True,
+    )
+    assert json.loads(result.stdout)["walkthrough_cash_screen"] == "passed"
+    assert hashlib.sha256((destination / "review.db").read_bytes()).hexdigest() == before
+    walkthrough = (destination / "WALKTHROUGH.txt").read_text(encoding="utf-8")
+    assert "2026-01-14, Reviewed loan payment cash outflow, -$220.00" in walkthrough
+    assert "2026-02-09, Transfer sent, -$20.00" in walkthrough
+
+
 def test_backup_restore_recovery_retains_six_sources_and_histories(prepared, tmp_path):
     destination, _ = prepared
     spec = importlib.util.spec_from_file_location("final_review_candidate", TOOL)

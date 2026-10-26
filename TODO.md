@@ -6,16 +6,16 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None active. Initial V2/P2 development and available Windows verification are
-complete within the approved scope. The [owner-demo catalog handoff correction](docs/work/2026-10-26-v2-integrated-ui-review.md#owner-startup-traceback-and-windows-handoff-correction)
-is implemented and verified; the existing demo is repaired at the same path.
-The [frozen Windows record](docs/work/2026-10-25-v2-frozen-verification.md)
-identifies the tested application freeze; the devtool correction does not change it.
+None active. The [walkthrough cash-movement check](docs/work/2026-10-26-v2-integrated-ui-review.md#owner-walkthrough-feedback-and-cash-movement-instructions)
+reproduced the expected records and clarified the instructions; the owner's exact
+discrepancy remains unconfirmed. Initial approved development is complete within
+scope; the tested application freeze is unchanged.
 
 ## Remaining review and action gates
 
-1. [V2-UX](docs/work/2026-10-26-v2-integrated-ui-review.md): final pinned disposable
-   walkthrough ready for the consolidated owner pass requested at the end.
+1. [V2-UX](docs/work/2026-10-26-v2-integrated-ui-review.md): owner reports the
+   walkthrough otherwise worked; confirmation of clarified cash-movement step 12
+   remains open.
 2. [Platform/release checks](ROADMAP.md#release-checklist): targeted Intel,
    installed/offline/OS integration and no-build-toolchain environment acceptance.
 3. [Starter signing](docs/work/2026-10-26-v2-catalog-signing-inputs.md), versioning
