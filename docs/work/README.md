@@ -9,7 +9,8 @@ contracts own lasting behavior. Start with those documents, not historical logs.
 
 | Record | Roadmap scope | Implementation / evidence |
 | --- | --- | --- |
-| [Wider source matching](2026-10-25-v2-wider-source-matching.md) | V2-3/4 | Active integration; finite index preparation completed and independently reviewed. |
+| [Explicit-scope cash movement](2026-10-25-v2-cash-movement.md) | V2-5, CF2 | Completed development/review for admitted shapes; exact scope, transfer timing and unknown classifications. |
+| [Wider source matching](2026-10-25-v2-wider-source-matching.md) | V2-3/4 | Completed development and independent review; pairwise groups, every-member guards and uncapped navigation. |
 | [Frozen V2 Windows verification](2026-10-25-v2-frozen-verification.md) | P2-3/4/5, V2-6/7 | Diagnostic implemented and reviewed; frozen probe awaits final integrated runtime. |
 | [Reviewed account-assignment correction](2026-10-25-v2-binding-corrections.md) | V2-3/4/5 | Completed development and independent review; exact prior context, review invalidation and old-account history preserved. |
 | [Reviewed-entry drill-down](2026-10-25-v2-reviewed-drilldown.md) | V2-5 | Completed development and independent review; current scope, immutable provenance and shared failure clearing. |

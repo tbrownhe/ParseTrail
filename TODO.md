@@ -6,18 +6,16 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-**V2-3 wider source occurrence review.** Integrate the verified finite date-window
-index with full posting guards, pairwise repeat groups and resolvable review of
-supporting-row relationships.
-[Scope and verification](docs/work/2026-10-25-v2-wider-source-matching.md).
+No development packet active at this closeout. The owner's continuing initial
+V2/P2 authorization remains in force; select and record the next bounded outcome.
 
 [Frozen Windows family/recovery tooling](docs/work/2026-10-25-v2-frozen-verification.md)
 is implemented and reviewed; the probe awaits the final integrated runtime freeze.
 
 ## Next candidates
 
-1. [V2-3/4 remaining review safeguards](ROADMAP.md#v2-3): broader source matches,
-   remaining opening and accounting interpretations;
+1. [V2-4 remaining review safeguards](ROADMAP.md#v2-4): opening withdrawal,
+   reviewed manual openings/dated values, closure metadata and accounting interpretations;
    select a bounded outcome before implementation.
    [Starting points](.agents/skills/parsetrail-workflow/references/code-and-checks.md#remaining-review-safeguards).
 2. [P2-3/4/5 readiness](ROADMAP.md#p2-3): remaining family/platform/catalog work;
@@ -26,9 +24,10 @@ is implemented and reviewed; the probe awaits the final integrated runtime freez
 
 ## Most recent product packet
 
-[Reviewed source-account correction](docs/work/2026-10-25-v2-binding-corrections.md)
-completed development and independent review. Consolidated human UI/UX review
-remains open; this is not 2.0 release acceptance.
+[Wider source review](docs/work/2026-10-25-v2-wider-source-matching.md) and
+[explicit-scope cash movement](docs/work/2026-10-25-v2-cash-movement.md) completed
+development and independent review. Consolidated human UI/UX review remains open;
+this is not 2.0 release acceptance.
 
 ## Decisions and gates
 

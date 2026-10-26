@@ -166,6 +166,14 @@ Immutable saved source previews remain separate from interpretations. Shared
 profile read failures clear every displayed report and disable inspection/export;
 budget month and inclusive position date remain independently scoped controls.
 
+Cash-movement reports use explicit financial asset IDs with no default selection,
+and retain common journal rows, financial labels and validated transfer metadata
+inside one read snapshot. Known categories/transfers/card payments classify actual
+selected effects; other reviewed shapes remain unclassified. Counterpart dates
+outside the selected period provide context only. Dated clearing effects, source
+allocation limits and noncash card purchases remain distinct from cash receipts
+and expenses. This adds no profile tables or postings.
+
 `ReconciliationDecisions` is append-only saved successful-check history. Explicit
 confirmation revalidates the expected live input version inside one write
 transaction and retains the exact check, cutoff, rule, reason and immutable

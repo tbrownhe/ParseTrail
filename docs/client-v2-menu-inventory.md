@@ -58,6 +58,14 @@ presentation choices rather than missing export implementation.
 
 ## Approved initial-release deferrals
 
+The workspace Reports menu also provides cash movement by reviewed purpose for
+an explicit selection of asset accounts. It separates admitted cash categories,
+owned transfers and card payments, preserving dates and unclassified/pending
+limits. This is table reporting with common entry/source inspection; charts and
+forecasts remain outside this action. Repeated-source review now supports the
+bounded nearby-date/role-difference policy in the
+[occurrence contract](client-v2-source-overlap.md).
+
 The [roadmap](../ROADMAP.md) is the single launch and later-work plan. This
 inventory records the owner's October 25 decisions. The table above follows these explicit dispositions:
 

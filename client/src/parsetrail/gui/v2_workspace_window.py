@@ -42,6 +42,7 @@ from parsetrail.gui.v2_account_binding_review import V2AccountBindingReview
 from parsetrail.gui.v2_batch_import import V2BatchImportReport, V2BatchImportWorker
 from parsetrail.gui.v2_card_purchase_review import V2CardPurchaseReview
 from parsetrail.gui.v2_cash_activity_review import V2CashActivityReview
+from parsetrail.gui.v2_cash_movement import V2CashMovementDialog
 from parsetrail.gui.v2_categories import V2CategoryDialog
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
 from parsetrail.gui.v2_opening_review import V2OpeningReview
@@ -165,6 +166,13 @@ class V2WorkspaceWindow(QMainWindow):
         )
         self.assumed_posting_action.toggled.connect(self._set_assumed_posting_dates)
         settings_menu.addAction(self.assumed_posting_action)
+        reports_menu = self.menuBar().addMenu("Reports")
+        self.reviewed_reports_action = reports_menu.addAction("Reviewed reports…")
+        self.reviewed_reports_action.triggered.connect(self._open_reviewed_reports)
+        self.cash_movement_action = reports_menu.addAction("Cash movement by reviewed purpose…")
+        self.cash_movement_action.triggered.connect(
+            lambda: V2CashMovementDialog(self.workspace.profile_path, self).exec()
+        )
         help_menu = self.menuBar().addMenu("Help")
         self.getting_started_action = help_menu.addAction("Getting started…")
         self.getting_started_action.triggered.connect(lambda: show_workspace_help(self))

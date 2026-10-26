@@ -180,6 +180,18 @@ must be invalidated or reopened explicitly when a correction changes its result.
 
 ## Review, reconciliation, and report contracts
 
+Cash-movement reporting requires an explicit set of financial asset accounts;
+asset kind alone does not choose cash scope. Common active reviewed non-opening
+postings determine exact movement, with known cash categories, owned transfers
+and card payments separately classified. Card purchases alone are spending,
+without selected-asset cash movement. Different transfer dates retain clearing
+and period-boundary effects. Unknown reviewed shapes remain unclassified;
+pending evidence, source overlap, capture and coverage prevent certification.
+Historical event context outside a report period adds no money. Account choices
+must distinguish permitted duplicate names; report refresh failures clear values.
+Later loan/split/refund workflows must extend classification before completeness
+is claimed. See the [cash-movement packet](work/2026-10-25-v2-cash-movement.md).
+
 Track independently: balanced/posted state, interpretation review, evidence
 allocation completeness, statement reconciliation, source capture, and
 coverage/freshness. An equal balance equation does not establish full-page
