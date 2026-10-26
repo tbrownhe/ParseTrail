@@ -6,23 +6,21 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-No development packet remains selected at this closeout. Default V2 startup and
-offline diagnostics follow under the owner's continuing initial V2/P2 authorization.
-
 [Frozen Windows family/recovery tooling](docs/work/2026-10-25-v2-frozen-verification.md)
-is implemented and reviewed; the probe awaits the final integrated runtime freeze.
+is active for the final clean source freeze and available Windows probe checks.
+Generate exact unsigned starter-catalog inputs and the disposable walkthrough at
+that revision. Production signing/publication and workstation installation remain
+outside the authorized development scope.
 
 ## Next candidates
 
-1. [V2-7 runtime cutover](ROADMAP.md#v2-7): default fresh V2 startup and matching
-   isolated offline diagnostics; select a bounded outcome before implementation.
-2. [P2-3/4/5 readiness](ROADMAP.md#p2-3): remaining family/platform/catalog work;
+1. [P2-3/4/5 readiness](ROADMAP.md#p2-3): remaining family/platform/catalog work;
    choose checks or implementation appropriate to available platforms and scope.
    [Starting points](.agents/skills/parsetrail-workflow/references/code-and-checks.md#parser-and-catalog-readiness).
 
 ## Most recent product packet
 
-[Account-total loan-register activity](docs/work/2026-10-26-v2-liability-register.md)
+[Default V2 startup and offline diagnostics](docs/work/2026-10-26-v2-runtime-cutover.md)
 completed development and independent review. Consolidated human UI/UX review
 remains open; this is not 2.0 release acceptance.
 

@@ -9,6 +9,9 @@ contracts own lasting behavior. Start with those documents, not historical logs.
 
 | Record | Roadmap scope | Implementation / evidence |
 | --- | --- | --- |
+| [Independent V2 installation identity](2026-10-26-v2-installation-identity.md) | V2-1/7 | Completed code/portable/native-compiler checks and independent review; actual installation acceptance remains open. |
+| [Starter-catalog signing inputs](2026-10-26-v2-catalog-signing-inputs.md) | P2-4/5, V2-7 | Preparation implemented/verified/reviewed; exact final-source unsigned candidate and owner signing gates remain. |
+| [Default V2 runtime and offline diagnostics](2026-10-26-v2-runtime-cutover.md) | V2-1/6/7, P2-3/4/5 | Completed development and independent review; default fresh V2 and isolated diagnostics, final frozen/owner gates remain. |
 | [Account-total loan-register activity](2026-10-26-v2-liability-register.md) | V2-4/5, CF2 | Completed development and independent review; finite Yamaha category review, exact source dates and neutral whole-liability repayment semantics. |
 | [Integrated disposable UI/UX review](2026-10-26-v2-integrated-ui-review.md) | V2-UX, V2-6/7 | Repeatable signed synthetic preparation, pinned runtime and startup diagnostics implemented; owner deferred walkthrough to the end. |
 | [Evidenced loan principal and interest payments](2026-10-26-v2-loan-payments.md) | V2-4/5, CF2 | Completed development and independent review; exact bank counterpart, printed component proof, canonical principal provenance and whole-event history. |
@@ -19,7 +22,7 @@ contracts own lasting behavior. Start with those documents, not historical logs.
 | [Reviewed openings, values and account lifecycle](2026-10-25-v2-account-anchors.md) | V2-4/5, DEC-1 | Completed development and independent review; unknown/zero, scopes, nonposting values and residual books preserved. |
 | [Explicit-scope cash movement](2026-10-25-v2-cash-movement.md) | V2-5, CF2 | Completed development/review for admitted shapes; exact scope, transfer timing and unknown classifications. |
 | [Wider source matching](2026-10-25-v2-wider-source-matching.md) | V2-3/4 | Completed development and independent review; pairwise groups, every-member guards and uncapped navigation. |
-| [Frozen V2 Windows verification](2026-10-25-v2-frozen-verification.md) | P2-3/4/5, V2-6/7 | Diagnostic implemented and reviewed; frozen probe awaits final integrated runtime. |
+| [Frozen V2 Windows verification](2026-10-25-v2-frozen-verification.md) | P2-3/4/5, V2-6/7 | Active final integrated Windows probe; source diagnostic implemented and independently reviewed. |
 | [Reviewed account-assignment correction](2026-10-25-v2-binding-corrections.md) | V2-3/4/5 | Completed development and independent review; exact prior context, review invalidation and old-account history preserved. |
 | [Reviewed-entry drill-down](2026-10-25-v2-reviewed-drilldown.md) | V2-5 | Completed development and independent review; current scope, immutable provenance and shared failure clearing. |
 | [Synthetic family source admission](2026-10-25-v2-family-source-admission.md) | P2-3/4 | Completed test-only packet and independent review; all current declarations through real bounded workers and test-signed catalog. |

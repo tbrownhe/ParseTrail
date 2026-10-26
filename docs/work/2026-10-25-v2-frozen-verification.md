@@ -2,7 +2,7 @@
 
 Date: 2026-10-25. Roadmap IDs: P2-3/4/5, V2-6/7.
 Authorization: approved roadmap and continued development; test-only probe.
-Implementation: diagnostic preparation complete; build awaits final integrated freeze.
+Implementation: diagnostic complete; October 26 integrated freeze/probe execution selected.
 Automated verification: source checks passed; frozen probe not yet performed.
 Independent review: diagnostic implementation complete, no actionable findings.
 Owner acceptance: not performed; UX/native/installed gates remain separate.
@@ -22,9 +22,10 @@ code, source filesystem paths, private inputs or current-profile options.
 All diagnostic profiles/catalogs/preferences/output intermediates are temporary.
 The structured report explicitly identifies test trust and source/frozen probe
 status; it does not manufacture release provenance or native owner acceptance.
-The diagnostic runs before legacy configuration and never activates a daily
-profile. Default startup, production trust, version and release scripts remain
-unchanged. New report destinations cannot overwrite existing files.
+The diagnostic runs before GUI configuration and never activates a daily
+profile. This diagnostic does not change ordinary trust/version; the separate
+[runtime cutover](2026-10-26-v2-runtime-cutover.md) now makes V2 the default.
+New report destinations cannot overwrite existing files.
 
 Evidence owns the new finite diagnostic module, narrowly assigned main dispatch,
 new fixture-manifest generator and focused synthetic tests. Ledger retains sole
@@ -34,17 +35,28 @@ Primary owns docs and integration. Verification specialists are read-only.
 After a clean integrated commit, build a disposable onedir/windowed AMD64 probe
 with existing PyInstaller production dependency/data options and scratch paths.
 Run architecture, all worker pipes and this fixed diagnostic using synthetic
-inputs. This is a test build without NSIS, installer, release metadata, version
+inputs. This is a test build without installer execution, release metadata, version
 change, production signing, upload or publication. Record source commit, command,
 binary identity, actual environment and limitations.
 
 ## Result and review
 
-Read-only preparation found Python 3.13.15 AMD64, PyInstaller 6.21.0, PySide6
+The October 25 read-only preparation found Python 3.13.15 AMD64, PyInstaller 6.21.0, PySide6
 6.11.2, pytest 9.1.1 and Windows PowerShell 5.1 available. NSIS and PowerShell 7
 are unavailable. The normal release script requires tagged release metadata and
-NSIS; it is outside this probe. Existing runtime smoke only admits one signed
-CSV and requires release provenance when frozen. Existing offline smoke is 1.x.
+NSIS; it is outside this probe. Native dependency smoke requires actual release
+provenance when frozen; the development probe must not fabricate it. Offline
+diagnostics were still 1.x then and have since been replaced by isolated V2 checks.
+
+October 26 continuation: all planned bounded accounting flows are integrated at
+schema 22; default V2/runtime diagnostics and unsigned catalog preparation passed
+the whole-client/parser/demo checks in their records. A portable NSIS compiler is
+now available under ignored scratch and V2 has a distinct installation identity.
+The final probe may also compile a clearly labeled unsigned development setup via
+explicit NSIS source/output overrides. No installer is executed, no source version
+is changed and no tagged/release metadata or production signature is invented.
+The separate installation record verifies compiler/identity handling. After the
+clean code commit, record its exact identity and all generated artifact hashes.
 
 Five assigned files implement the fixed diagnostic: new
 `core/v2_fixture_verification.py`, a five-line pre-legacy dispatch in `main.py`,
