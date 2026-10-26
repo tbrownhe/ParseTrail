@@ -148,6 +148,13 @@ missing/stale/future/conflicting openings remain unknown. Per-account pending ro
 cover all dates; unbound rows and transfer clearing are separately visible. Source
 dates and live reconciliation cutoffs do not establish complete bank balances.
 
+Reviewed-entry drill-down filters that common query by selected account and
+explicit period, using one read snapshot for current amounts and related audit
+records. Historical records provide provenance and never add to active totals.
+Immutable saved source previews remain separate from interpretations. Shared
+profile read failures clear every displayed report and disable inspection/export;
+budget month and inclusive position date remain independently scoped controls.
+
 `ReconciliationDecisions` is append-only saved successful-check history. Explicit
 confirmation revalidates the expected live input version inside one write
 transaction and retains the exact check, cutoff, rule, reason and immutable

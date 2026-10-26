@@ -42,6 +42,7 @@ from parsetrail.core.v2_profile_store import (
 from parsetrail.core.v2_report_export import ReportExportError, write_reviewed_journal_workbook
 from parsetrail.gui.v2_evidence_preview import _money
 from parsetrail.gui.v2_path_notice import show_path_notice
+from parsetrail.gui.v2_report_drilldown import V2ReviewedEntryDrilldown
 
 
 class _CategoryModel(QAbstractTableModel):
@@ -305,6 +306,7 @@ class V2ReviewedReportsDialog(QDialog):
         period_scope = QLabel(
             "Date range applies to Spending, Income and Account movement. "
             "Monthly budgets and Account positions use their own dates."
+            " Select a category or movement account, then Inspect entries to see its current reviewed rows."
         )
         period_scope.setWordWrap(True)
         layout.addWidget(period_scope)
@@ -358,6 +360,16 @@ class V2ReviewedReportsDialog(QDialog):
         self.scope.setWordWrap(True)
         layout.addWidget(self.scope)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        self.inspect_button = buttons.addButton("Inspect entries…", QDialogButtonBox.ActionRole)
+        self.inspect_button.clicked.connect(self._inspect_current)
+        self.inspect_button.setEnabled(False)
+        self.refresh_reports_button = buttons.addButton("Refresh reports", QDialogButtonBox.ActionRole)
+        self.refresh_reports_button.clicked.connect(self._refresh_all_reports)
+        for tab, table in enumerate((self.table, self.account_table, self.budget_table, self.income_table)):
+            table.setSelectionBehavior(QAbstractItemView.SelectRows)
+            table.setSelectionMode(QAbstractItemView.SingleSelection)
+            table.doubleClicked.connect(lambda index, selected_tab=tab: self._inspect_report_row(selected_tab, index))
+            table.selectionModel().currentRowChanged.connect(self._update_inspect_button)
         self.export_button = buttons.addButton("Export reviewed rows…", QDialogButtonBox.ActionRole)
         self.export_button.clicked.connect(self._export_reviewed_rows)
         buttons.rejected.connect(self.reject)
@@ -370,11 +382,55 @@ class V2ReviewedReportsDialog(QDialog):
         self.income_report: ReviewedCategorySummary | None = None
         self.account_report: FinancialJournalSummary | None = None
         self.budget_report: MonthlyBudgetSummary | None = None
+        self.report_error: str | None = None
+        self.budget_error: str | None = None
         self.positions_report: AccountPositionsSummary | None = None
         self.positions_error: str | None = None
         self.refresh()
         self._refresh_budget()
         self._refresh_positions()
+
+    def _refresh_all_reports(self) -> None:
+        self.refresh()
+        self._refresh_budget()
+        self._refresh_positions()
+
+    def _update_inspect_button(self, *_args) -> None:
+        tables = (self.table, self.account_table, self.budget_table, self.income_table)
+        tab = self.tabs.currentIndex()
+        self.inspect_button.setEnabled(tab < len(tables) and tables[tab].currentIndex().isValid())
+
+    def _inspect_current(self) -> None:
+        tables = (self.table, self.account_table, self.budget_table, self.income_table)
+        tab = self.tabs.currentIndex()
+        if tab < len(tables):
+            self._inspect_report_row(tab, tables[tab].currentIndex())
+
+    def _inspect_report_row(self, tab: int, index: QModelIndex) -> None:
+        models = (self.model, self.account_model, self.budget_model, self.income_model)
+        if not index.isValid() or not 0 <= tab < len(models) or not 0 <= index.row() < models[tab].rowCount():
+            return
+        start, end = self.start.date().toPython(), self.end.date().toPython()
+        if tab == 0 and self.spending_report is not None:
+            row = self.model.rows[index.row()]
+            account_id, expected = row.category_id, row.amount_minor
+        elif tab == 1 and self.account_report is not None:
+            row = self.account_model.rows[index.row()]
+            account_id = row.account_id
+            expected = row.nonopening_change_minor * (1 if row.kind == "asset" else -1)
+        elif tab == 2 and self.budget_report is not None:
+            row = self.budget_model.rows[index.row()]
+            account_id, expected = row.category_id, row.reviewed_spending_minor
+            start = self.budget_report.month
+            end = date(start.year + (start.month == 12), start.month % 12 + 1, 1)
+        elif tab == 3 and self.income_report is not None:
+            row = self.income_model.rows[index.row()]
+            account_id, expected = row.category_id, row.amount_minor
+        else:
+            return
+        V2ReviewedEntryDrilldown(
+            self.profile, account_id, start=start, end=end, expected_total_minor=expected, parent=self
+        ).exec()
 
     def _create_positions_panel(self, today: date) -> None:
         panel = QWidget()
@@ -450,12 +506,7 @@ class V2ReviewedReportsDialog(QDialog):
             with V2ProfileStore.open(self.profile, read_only=True) as store:
                 report = store.account_positions(as_of=self.as_of.date().toPython())
         except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            self.positions_report = None
-            self.positions_error = str(exc)
-            self.positions_model.replace(())
-            self.history_model.replace(())
-            self.position_details.setText("Account positions are unavailable. Refresh to retry.")
-            self.history_title.setText("Reviewed accounting history")
+            self._clear_unavailable_reports(exc)
         else:
             self.positions_report = report
             self.positions_error = None
@@ -515,6 +566,26 @@ class V2ReviewedReportsDialog(QDialog):
             "History includes original, reversal and replacement entries as the reviewed books stand now."
         )
 
+    def _clear_unavailable_reports(self, exc: Exception) -> None:
+        """A shared profile failure invalidates every previously displayed total."""
+        self.report_error = f"Reviewed reports are unavailable: {exc}"
+        self.budget_error = f"Monthly budgets are unavailable: {exc}"
+        self.positions_error = str(exc)
+        self.spending_report = self.income_report = self.account_report = None
+        self.budget_report = self.positions_report = None
+        for model in (
+            self.model,
+            self.income_model,
+            self.account_model,
+            self.budget_model,
+            self.positions_model,
+            self.history_model,
+        ):
+            model.replace(())
+        self.position_details.setText("Account positions are unavailable. Refresh to retry.")
+        self.history_title.setText("Reviewed accounting history")
+        self.export_button.setEnabled(False)
+
     def refresh(self, *_args) -> None:
         try:
             with V2ProfileStore.open(self.profile, read_only=True) as store:
@@ -522,18 +593,25 @@ class V2ReviewedReportsDialog(QDialog):
                 self.spending_report = store.reviewed_category_summary(kind="expense", start=start, end=end)
                 self.income_report = store.reviewed_category_summary(kind="income", start=start, end=end)
                 self.account_report = store.financial_journal_summary(start=start, end=end)
-        except ProfileFormatError as exc:
-            if str(exc) != "report_period_invalid":
-                raise
+        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
+            invalid_period = str(exc) == "report_period_invalid"
+            self.report_error = (
+                "Choose an end date after the start date."
+                if invalid_period
+                else f"Reviewed reports are unavailable: {exc}"
+            )
             self.model.replace(())
             self.income_model.replace(())
             self.account_model.replace(())
             self.spending_report = None
             self.income_report = None
             self.account_report = None
+            if not invalid_period:
+                self._clear_unavailable_reports(exc)
             self.export_button.setEnabled(False)
             self._show_selected_tab()
             return
+        self.report_error = None
         self.model.replace(self.spending_report.categories)
         self.income_model.replace(self.income_report.categories)
         self.account_model.replace(self.account_report.accounts)
@@ -572,12 +650,19 @@ class V2ReviewedReportsDialog(QDialog):
     def _refresh_budget(self, *_args) -> None:
         selected = self.budget_month.date()
         month = date(selected.year(), selected.month(), 1)
-        with V2ProfileStore.open(self.profile, read_only=True) as store:
-            self.budget_report = store.monthly_budget_summary(month)
+        try:
+            with V2ProfileStore.open(self.profile, read_only=True) as store:
+                self.budget_report = store.monthly_budget_summary(month)
+        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
+            self._clear_unavailable_reports(exc)
+            self._show_selected_tab()
+            return
+        self.budget_error = None
         self.budget_model.replace(self.budget_report.categories)
         self._show_selected_tab()
 
     def _show_selected_tab(self, *_args) -> None:
+        self._update_inspect_button()
         if self.tabs.currentIndex() == 4:
             positions = self.positions_report
             if positions is None:
@@ -602,6 +687,8 @@ class V2ReviewedReportsDialog(QDialog):
         if self.tabs.currentIndex() == 2:
             budget = self.budget_report
             if budget is None:
+                self.total.setText(self.budget_error or "Monthly budgets are unavailable.")
+                self.scope.clear()
                 return
             untargeted = sum(row.target_minor is None for row in budget.categories)
             if budget.total_target_minor is None:
@@ -624,7 +711,7 @@ class V2ReviewedReportsDialog(QDialog):
         if self.tabs.currentIndex() == 3:
             income = self.income_report
             if income is None:
-                self.total.setText("Choose an end date after the start date.")
+                self.total.setText(self.report_error or "Choose an end date after the start date.")
                 self.scope.clear()
                 return
             self.total.setText(f"Net reviewed income from posted journal entries: {_money(income.total_minor)}")
@@ -639,7 +726,7 @@ class V2ReviewedReportsDialog(QDialog):
             return
         report = self.spending_report
         if report is None:
-            self.total.setText("Choose an end date after the start date.")
+            self.total.setText(self.report_error or "Choose an end date after the start date.")
             self.scope.clear()
             return
         if self.tabs.currentIndex() == 1:

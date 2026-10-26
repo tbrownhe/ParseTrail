@@ -9,6 +9,9 @@ contracts own lasting behavior. Start with those documents, not historical logs.
 
 | Record | Roadmap scope | Implementation / evidence |
 | --- | --- | --- |
+| [Reviewed-entry drill-down](2026-10-25-v2-reviewed-drilldown.md) | V2-5 | Completed development and independent review; current scope, immutable provenance and shared failure clearing. |
+| [Synthetic family source admission](2026-10-25-v2-family-source-admission.md) | P2-3/4 | Completed test-only packet and independent review; all current declarations through real bounded workers and test-signed catalog. |
+| [Ordinary interpretation/repeat repair](2026-10-25-v2-source-interpretation-repair.md) | V2-3/4/5 | Completed development and independent review; withdrawal/repost, atomic posted-repeat repair and shared journal integrity. |
 | [Explicit profile startup](2026-10-25-v2-profile-startup.md) | V2-6/7 | Completed development and independent review; New/Open/Restore, safe configuration and switch-failure recovery. |
 | [Transfer review/correction](2026-10-25-v2-transfer-corrections.md) | V2-3/4/5 | Completed development and independent review; context-scoped suggestions, whole withdrawal/replacement and validated history. |
 | [Workspace guidance/build identity](2026-10-25-v2-workspace-guidance.md) | V2-6/7 | Completed small primary-verified change: local workflow help and unchanged pilot version disclosure. |

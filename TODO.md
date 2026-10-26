@@ -6,8 +6,8 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-**None.** Explicit profile startup completed development and independent
-verification. Continued roadmap development remains owner-authorized.
+No development packet active at this closeout. The owner's continuing initial
+V2/P2 authorization remains in force; select and record the next bounded outcome.
 
 ## Next candidates
 
@@ -21,9 +21,10 @@ verification. Continued roadmap development remains owner-authorized.
 
 ## Most recent product packet
 
-[Explicit profile startup](docs/work/2026-10-25-v2-profile-startup.md) completed
-development and independent review. Consolidated human UI/UX review remains open;
-this is not 2.0 release acceptance.
+[Reviewed-entry drill-down](docs/work/2026-10-25-v2-reviewed-drilldown.md) and
+[ordinary interpretation/posted-repeat repair](docs/work/2026-10-25-v2-source-interpretation-repair.md)
+completed development and independent review. Consolidated human UI/UX review
+remains open; this is not 2.0 release acceptance.
 
 ## Decisions and gates
 
