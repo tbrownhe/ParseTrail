@@ -22,7 +22,35 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from parsetrail.core.v2_builtin_categories import category_labels
 from parsetrail.core.v2_profile_store import CashActivityReviewRow, ProfileFormatError, V2ProfileStore
+
+PURPOSE_LABELS = {
+    "expense": "Expense",
+    "expense_refund": "Expense refund",
+    "income": "Income",
+    "income_adjustment": "Income adjustment",
+}
+PURPOSE_KINDS = {"expense": "expense", "expense_refund": "expense", "income": "income", "income_adjustment": "income"}
+PURPOSE_ASSERTIONS = {
+    "expense": "I confirm this movement is an expense.",
+    "expense_refund": "I confirm this is a refund of an expense; it reduces reviewed spending.",
+    "income": "I confirm this receipt is income.",
+    "income_adjustment": "I confirm this is an income adjustment; it reduces reviewed income.",
+}
+
+
+def _category_labels(categories):
+    return category_labels((category.id, category.name, category.kind) for category in categories)
+
+
+def _purpose_effects(purpose, amount_minor, *, financial_kind):
+    kind = PURPOSE_KINDS[purpose]
+    return (
+        f"{'Asset value' if financial_kind == 'asset' else 'Liability owed'} change: "
+        f"{_money(amount_minor * (1 if financial_kind == 'asset' else -1))}; "
+        f"reviewed {kind} change: {_money(-amount_minor * (1 if kind == 'expense' else -1))}."
+    )
 
 
 def _money(minor: int | None) -> str:
@@ -54,7 +82,7 @@ def _interpretation_effects(entry, row, categories, *, financial_kind: str) -> s
 
 
 class _ReviewModel(QAbstractTableModel):
-    HEADERS = ("Posting date", "Description", "Amount", "Financial account", "Review status")
+    HEADERS = ("Posting date", "Description", "Amount", "Financial account", "Review status", "Reviewed purpose")
 
     def __init__(self, rows: tuple[CashActivityReviewRow, ...], parent=None):
         super().__init__(parent)
@@ -86,6 +114,7 @@ class _ReviewModel(QAbstractTableModel):
             _money(row.amount_minor),
             row.financial_account or "Not assigned",
             row.status,
+            PURPOSE_LABELS.get(row.purpose, "Pending explicit review"),
         )
         return values[index.column()]
 
@@ -112,14 +141,18 @@ class V2CashActivityReview(QDialog):
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         header = self.table.horizontalHeader()
         header.setStretchLastSection(False)
-        for column in (0, 2, 3, 4):
+        for column in (0, 2, 3, 4, 5):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.table.selectionModel().currentRowChanged.connect(self._selected)
         layout.addWidget(self.table)
         form = QFormLayout()
+        self.purpose = QComboBox()
+        self.purpose.currentIndexChanged.connect(self._purpose_changed)
+        form.addRow("Reviewed purpose", self.purpose)
         self.category = QComboBox()
-        form.addRow("Expense or income category", self.category)
+        self.category.currentIndexChanged.connect(self._update_withdraw)
+        form.addRow("Category", self.category)
         self.reason = QLineEdit()
         self.reason.setMaxLength(500)
         self.reason.setPlaceholderText("Required review or correction reason")
@@ -157,30 +190,71 @@ class V2CashActivityReview(QDialog):
 
     def _selected(self, *_args) -> None:
         row = self._current()
-        kind = "expense" if row is not None and row.amount_minor is not None and row.amount_minor < 0 else "income"
         correcting = row is not None and row.entry_key is not None
-        prior_category = row.category_id if correcting else self.category.currentData()
+        self.purpose.blockSignals(True)
+        self.purpose.clear()
+        self.purpose.addItem("Choose a purpose; amount sign does not decide it", None)
+        purposes = (row.purpose,) if correcting else row.allowed_purposes if row is not None else ()
+        for purpose in purposes:
+            if purpose in PURPOSE_LABELS:
+                self.purpose.addItem(PURPOSE_LABELS[purpose], purpose)
+        self.purpose.setEnabled(row is not None and not correcting)
+        if correcting:
+            self.purpose.setCurrentIndex(max(0, self.purpose.findData(row.purpose)))
+        self.purpose.blockSignals(False)
+        self._purpose_changed()
+
+    def _purpose_changed(self, *_args) -> None:
+        row = self._current()
+        kind = PURPOSE_KINDS.get(self.purpose.currentData())
+        correcting = row is not None and row.entry_key is not None
+        self.category.blockSignals(True)
         self.category.clear()
+        self.category.addItem("Choose a category explicitly", None)
+        labels = _category_labels(self.categories)
         for category in self.categories:
             if category.kind == kind:
-                self.category.addItem(category.name, category.id)
-        if prior_category is not None:
-            category_index = self.category.findData(prior_category)
+                self.category.addItem(labels[category.id], category.id)
+        if correcting:
+            category_index = self.category.findData(row.category_id)
             if category_index >= 0:
                 self.category.setCurrentIndex(category_index)
-        self.action_button.setText(f"Correct {kind} category" if correcting else f"Post reviewed {kind}")
-        self.action_button.setEnabled(
-            row is not None and (correcting or row.status == f"Ready for {kind} review") and self.category.count() > 0
-        )
-        self.status.setText(
-            (row.status + (f"; add an {kind} category first" if self.category.count() == 0 else ""))
-            if row is not None
-            else f"{len(self.model.rows)} source row(s). Select one to review."
-        )
+        self.category.blockSignals(False)
         self._update_withdraw()
 
     def _update_withdraw(self, *_args) -> None:
         row = self._current()
+        purpose = self.purpose.currentData()
+        correcting = row is not None and row.entry_key is not None
+        label = PURPOSE_LABELS.get(purpose, "purpose")
+        self.action_button.setText(
+            f"Correct {label.lower()} category" if correcting else f"Post reviewed {label.lower()}"
+        )
+        self.action_button.setEnabled(
+            bool(
+                row is not None
+                and (correcting or row.status == "Ready for purpose review")
+                and purpose in PURPOSE_KINDS
+                and self.category.currentData() is not None
+                and (not correcting or (purpose == row.purpose and self.category.currentData() != row.category_id))
+                and self.basis is not None
+                and self.reason.text().strip()
+            )
+        )
+        self.status.setText(
+            row.status
+            + (
+                "; purpose and category class are retained; withdraw and freshly review to change purpose"
+                if correcting
+                else "; choose a purpose explicitly; transfers use their own review"
+                if purpose is None
+                else f"; add an {PURPOSE_KINDS[purpose]} category first"
+                if self.category.count() == 1
+                else ""
+            )
+            if row
+            else f"{len(self.model.rows)} source row(s). Select one to review."
+        )
         self.withdraw_button.setEnabled(
             row is not None
             and row.entry_key in self.entries
@@ -216,7 +290,8 @@ class V2CashActivityReview(QDialog):
         self.note.setText(
             "Select a row assigned to an asset account with a source posting date. "
             "Bank statement rows also need account-total scope; other statement rows stay pending. "
-            "Confirm a positive receipt is income before categorizing it; transfers and loan proceeds stay pending."
+            "Choose expense, expense refund, income or income adjustment explicitly when supported. Amount signs do not establish purpose. "
+            "Owned transfers, card repayments and loan proceeds require their own supported review; leave unsupported movements pending."
             + (
                 f" This statement has {len(overlaps)} possible overlapping saved source(s). Review before posting."
                 if overlaps
@@ -235,22 +310,39 @@ class V2CashActivityReview(QDialog):
         row = self._current()
         category_id = self.category.currentData()
         reason = self.reason.text().strip()
-        kind = "expense" if row is not None and row.amount_minor is not None and row.amount_minor < 0 else "income"
-        if row is None or category_id is None or not reason:
-            QMessageBox.warning(self, "Review is incomplete", "Select a row, category and review reason.")
+        purpose = self.purpose.currentData()
+        if (
+            row is None
+            or category_id is None
+            or purpose not in PURPOSE_KINDS
+            or not reason
+            or not self.action_button.isEnabled()
+        ):
             return
+        label = PURPOSE_LABELS[purpose].lower()
         correcting = row.entry_key is not None
         if correcting and category_id == row.category_id:
             QMessageBox.warning(self, "Choose another category", "A correction needs a different category.")
             return
-        action = f"Correct the posted {kind}" if correcting else f"Post this {kind}"
-        assertion = "\nI confirm this receipt is income." if kind == "income" and not correcting else ""
+        action = f"Correct the posted {label} category, preserving purpose" if correcting else f"Post this {label}"
+        effects = _purpose_effects(purpose, row.amount_minor, financial_kind="asset")
+        effects = (
+            "Replacement entry effects only:\n"
+            + effects
+            + "\nThe previous entry is reversed at its original accounting date. "
+            + f"This category-only correction adds $0.00 net account movement and leaves total reviewed {PURPOSE_KINDS[purpose]} unchanged. "
+            + "It reallocates the category amount; no second money movement is recorded."
+            if correcting
+            else "New entry effects:\n" + effects
+        )
         message = (
             f"{action}?\n\n{row.date or 'Unknown'}  {row.description}\n"
             f"{_money(row.amount_minor)}  {row.financial_account}\n"
-            f"Category: {self.category.currentText()}\nReason: {reason}{assertion}"
+            f"Purpose: {PURPOSE_LABELS[purpose]}\nCategory: {self.category.currentText()}\nReason: {reason}\n"
+            f"{effects}\n"
+            f"{PURPOSE_ASSERTIONS[purpose]} Owned transfers and card repayments use a separate review."
         )
-        if QMessageBox.question(self, f"Confirm reviewed {kind}", message) != QMessageBox.StandardButton.Yes:
+        if QMessageBox.question(self, f"Confirm reviewed {label}", message) != QMessageBox.StandardButton.Yes:
             return
         try:
             with V2ProfileStore.open(self.profile) as store:
@@ -260,7 +352,7 @@ class V2CashActivityReview(QDialog):
                     )
                 else:
                     store.post_reviewed_cash_category(
-                        row.row_id, category_id, reason=reason, expected_basis_sha256=self.basis
+                        row.row_id, category_id, purpose=purpose, reason=reason, expected_basis_sha256=self.basis
                     )
         except (ProfileFormatError, sqlite3.Error, OSError) as exc:
             QMessageBox.warning(self, "Cash activity was not saved", str(exc))
@@ -269,7 +361,9 @@ class V2CashActivityReview(QDialog):
         self.reason.clear()
         self.refresh(selected_row_id=row.row_id)
         self.status.setText(
-            "Correction saved with its reversal and replacement." if correcting else f"{kind.title()} posted."
+            "Correction saved with its reversal and replacement; purpose retained."
+            if correcting
+            else f"{label.title()} posted."
         )
 
     def _withdraw(self) -> None:

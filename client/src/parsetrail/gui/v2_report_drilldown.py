@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from parsetrail.core.v2_builtin_categories import category_labels
 from parsetrail.core.v2_profile_store import ProfileFormatError, V2ProfileStore
 from parsetrail.core.v2_report_drilldown import ReviewedEntryDrilldown, read_reviewed_entry_drilldown
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview, _money
@@ -82,6 +83,7 @@ class V2ReviewedEntryDrilldown(QDialog):
         self.resize(1040, 700)
         layout = QVBoxLayout(self)
         self.scope = QLabel()
+        self.scope.setTextFormat(Qt.PlainText)
         self.scope.setWordWrap(True)
         layout.addWidget(self.scope)
         self.total = QLabel()
@@ -129,6 +131,7 @@ class V2ReviewedEntryDrilldown(QDialog):
             self.drilldown = None
             self.model.replace(None)
             self.scope.setText(f"Entries are unavailable: {exc}")
+            self.scope.setToolTip("")
             self.total.clear()
             self.stale_note.clear()
             self._selected()
@@ -136,8 +139,10 @@ class V2ReviewedEntryDrilldown(QDialog):
         self.drilldown = result
         self.model.replace(result)
         report = result.report
+        labels = category_labels((account.id, account.name, account.kind) for account in report.accounts)
+        self.scope.setToolTip(f"Account ID: {result.account.id}")
         self.scope.setText(
-            f"{result.account.name}: {report.start.isoformat()} inclusive to {report.end.isoformat()} exclusive, USD. "
+            f"{labels[result.account.id]}: {report.start.isoformat()} inclusive to {report.end.isoformat()} exclusive, USD. "
             "Active reviewed non-opening entries only; corrections restate the books as they stand now. "
             "Positive means expense, income, asset value or liability owed in the selected account's natural direction."
         )
@@ -172,6 +177,7 @@ class V2ReviewedEntryDrilldown(QDialog):
             return
         result, entry = self.drilldown, self.drilldown.entries[index.row()]
         accounts = {account.id: account for account in result.report.accounts}
+        labels = category_labels((account.id, account.name, account.kind) for account in accounts.values())
         source_rows = dict(result.report.source_rows)
         lines = [
             f"{entry.description}\nAccounting date: {entry.posting_date}; origin: {entry.origin}.",
@@ -181,7 +187,9 @@ class V2ReviewedEntryDrilldown(QDialog):
         for posting in entry.postings:
             account = accounts[posting.account_id]
             side = "Debit" if posting.amount_minor > 0 else "Credit"
-            lines.append(f"  {account.name} ({account.kind}): {side} {_money(abs(posting.amount_minor))}")
+            lines.append(
+                f"  {labels[account.id]} ({account.kind}, ID {account.id}): {side} {_money(abs(posting.amount_minor))}"
+            )
         source_ids = dict.fromkeys(source_rows[a.observation_id] for p in entry.postings for a in p.allocations)
         for source_id in source_ids:
             self.source.addItem(f"Source {source_id[:16]}…", source_id)
@@ -206,7 +214,9 @@ class V2ReviewedEntryDrilldown(QDialog):
                 for posting in related.postings:
                     account = accounts[posting.account_id]
                     side = "Debit" if posting.amount_minor > 0 else "Credit"
-                    lines.append(f"    {account.name}: {side} {_money(abs(posting.amount_minor))}")
+                    lines.append(
+                        f"    {labels[account.id]} (ID {account.id}): {side} {_money(abs(posting.amount_minor))}"
+                    )
         lines.append(f"\nEntry reference: {entry.key}\nEvent reference: {entry.event_id}")
         self.details.setPlainText("\n".join(lines))
 

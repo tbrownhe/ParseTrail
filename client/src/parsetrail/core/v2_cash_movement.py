@@ -8,6 +8,7 @@ from datetime import date
 from pathlib import Path
 
 from parsetrail.core.ledger import JournalEntry
+from parsetrail.core.v2_builtin_categories import category_labels
 from parsetrail.core.v2_profile_store import (
     FinancialAccount,
     JournalExportAccount,
@@ -104,6 +105,7 @@ def read_cash_movement(
             # this period. Its money is still excluded from this period's rows.
             events = {event.event_id: event for event in store._read_transfer_history()[0] if event.status == "active"}
             accounts = {account.id: account for account in journal.accounts}
+            category_names = category_labels((account.id, account.name, account.kind) for account in journal.accounts)
             rows = []
             for entry in journal.entries:
                 effects = tuple((p.account_id, p.amount_minor) for p in entry.postings if p.account_id in selected)
@@ -120,7 +122,7 @@ def read_cash_movement(
                             if kind == "expense"
                             else ("income" if amount > 0 else "income_adjustment")
                         )
-                        note = f"Reviewed category: {accounts[categories[0].account_id].name}."
+                        note = f"Reviewed category: {category_names[categories[0].account_id]}."
                 elif entry.event_id in events:
                     pair = events[entry.event_id].pair
                     if pair.kind == "card payment":

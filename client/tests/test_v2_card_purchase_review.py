@@ -52,7 +52,8 @@ def test_assumed_card_date_requires_global_choice_or_explicit_different_date(tmp
         assert rows[0].posting_candidate == "2026-03-16"
         assert rows[0].date_provenance == "assumed"
         assert rows[0].status == "Enable assumed dates or enter a corrected date"
-        assert rows[1].status == "Payment, refund or other positive movement pending"
+        assert rows[1].status == "Enable assumed dates or enter a corrected date"
+        assert rows[1].purpose is None and rows[1].allowed_purposes == ("expense_refund", "income")
         with pytest.raises(ProfileFormatError, match="card_purchase_assumed_date_disabled"):
             store.post_reviewed_card_purchase(
                 purchase.row_id, "expense:food", reason="Reviewed charge", preferences=V2Preferences()
@@ -65,7 +66,7 @@ def test_assumed_card_date_requires_global_choice_or_explicit_different_date(tmp
                 preferences=V2Preferences(),
                 accounting_date=date(2026, 3, 16),
             )
-        with pytest.raises(ProfileFormatError, match="card_purchase_requires_bound_negative_movement"):
+        with pytest.raises(ProfileFormatError, match="card_category_purpose_invalid"):
             store.post_reviewed_card_purchase(
                 payment.row_id, "expense:food", reason="Wrong sign", preferences=V2Preferences(True, True)
             )
@@ -169,8 +170,8 @@ def test_printed_post_date_card_purchase_needs_no_assumption_toggle(tmp_path: Pa
             evidence.source_sha256, source_account.source_identity, source_account.source_identity_form, "card"
         )
         rows = store.card_purchase_review_rows(evidence.source_sha256, preferences=V2Preferences())
-        assert rows[0].status == "Payment, refund or other positive movement pending"
-        assert rows[1].date_provenance == "derived" and rows[1].status == "Ready for expense review"
+        assert rows[0].status == "Ready for purpose review" and rows[0].purpose is None
+        assert rows[1].date_provenance == "derived" and rows[1].status == "Ready for purpose review"
         key = store.post_reviewed_card_purchase(
             rows[1].row_id, "expense:travel", reason="Reviewed purchase", preferences=V2Preferences()
         )
@@ -193,7 +194,13 @@ def test_card_review_dialog_toggles_assumed_date_and_corrects_it(tmp_path: Path,
             evidence.source_sha256, source_account.source_identity, source_account.source_identity_form, "card"
         )
     workspace = V2Workspace.open(path, tmp_path / "catalog", trusted_keys={}, preferences_path=tmp_path / "prefs.json")
-    monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.StandardButton.Yes)
+    confirmations = []
+
+    def confirm(_parent, _title, message):
+        confirmations.append(message)
+        return QMessageBox.StandardButton.Yes
+
+    monkeypatch.setattr(QMessageBox, "question", confirm)
     window = V2WorkspaceWindow(workspace)
     dialog = V2CardPurchaseReview(workspace, evidence.source_sha256, window)
     try:
@@ -206,16 +213,25 @@ def test_card_review_dialog_toggles_assumed_date_and_corrects_it(tmp_path: Path,
         assert dialog.model.data(dialog.model.index(0, 1)) == "2026-03-16 (assumed)"
         dialog.assumed_dates.click()
         assert workspace.preferences().allow_assumed_posting_dates
-        assert dialog.action_button.isEnabled()
+        assert dialog.purpose.currentData() is None and dialog.category.currentData() is None
+        dialog.purpose.setCurrentIndex(dialog.purpose.findData("expense"))
+        dialog.category.setCurrentIndex(dialog.category.findData("expense:food"))
         dialog.reason.setText("Reviewed card charge")
+        assert dialog.action_button.isEnabled()
         dialog.action_button.click()
         assert dialog.model.rows[0].status == "Posted: Food"
-        assert dialog.model.rows[1].status == "Payment, refund or other positive movement pending"
+        assert dialog.model.rows[1].status == "Ready for purpose review" and dialog.model.rows[1].purpose is None
         dialog.accounting_date.setText("2026-03-17")
-        assert dialog.action_button.isEnabled()
         dialog.reason.setText("Corrected date")
+        assert dialog.action_button.isEnabled()
         dialog.action_button.click()
         assert dialog.model.rows[0].effective_date == "2026-03-17"
+        assert "Replacement entry effects only:" in confirmations[1]
+        assert "original accounting date (2026-03-16)" in confirmations[1]
+        assert "replacement is dated 2026-03-17" in confirmations[1]
+        assert "Individual dates and periods are restated" in confirmations[1]
+        assert "$0.00 net account movement" in confirmations[1]
+        assert "category-only correction" not in confirmations[1]
         dialog.table.selectRow(1)
         assert not dialog.action_button.isEnabled()
     finally:

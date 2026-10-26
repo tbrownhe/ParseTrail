@@ -25,11 +25,27 @@ from PySide6.QtWidgets import (
 
 from parsetrail.core.v2_profile_store import CardPurchaseReviewRow, ProfileFormatError, V2ProfileStore
 from parsetrail.core.v2_workspace import V2Workspace
-from parsetrail.gui.v2_cash_activity_review import _interpretation_effects, _money
+from parsetrail.gui.v2_cash_activity_review import (
+    PURPOSE_ASSERTIONS,
+    PURPOSE_KINDS,
+    PURPOSE_LABELS,
+    _category_labels,
+    _interpretation_effects,
+    _money,
+    _purpose_effects,
+)
 
 
 class _CardRowsModel(QAbstractTableModel):
-    HEADERS = ("Source date", "Posting candidate", "Description", "Amount", "Financial account", "Review status")
+    HEADERS = (
+        "Source date",
+        "Posting candidate",
+        "Description",
+        "Amount",
+        "Financial account",
+        "Review status",
+        "Reviewed purpose",
+    )
 
     def __init__(self, rows: tuple[CardPurchaseReviewRow, ...], parent=None):
         super().__init__(parent)
@@ -67,6 +83,7 @@ class _CardRowsModel(QAbstractTableModel):
             _money(row.amount_minor),
             row.financial_account or "Not assigned",
             row.status,
+            PURPOSE_LABELS.get(row.purpose, "Pending explicit review"),
         )
         return values[index.column()]
 
@@ -80,7 +97,7 @@ class V2CardPurchaseReview(QDialog):
         self.source_sha256 = source_sha256
         self.basis, self.entries, self.history, self.categories = None, {}, (), ()
         self.review_preferences = workspace.preferences()
-        self.setWindowTitle("2.0 card purchase review")
+        self.setWindowTitle("2.0 card category purpose review")
         self.resize(1200, 650)
         layout = QVBoxLayout(self)
         self.note = QLabel()
@@ -93,15 +110,18 @@ class V2CardPurchaseReview(QDialog):
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         header = self.table.horizontalHeader()
-        for column in (0, 1, 3, 4, 5):
+        for column in (0, 1, 3, 4, 5, 6):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.table.selectionModel().currentRowChanged.connect(self._selected)
         layout.addWidget(self.table)
         form = QFormLayout()
+        self.purpose = QComboBox()
+        self.purpose.currentIndexChanged.connect(self._purpose_changed)
+        form.addRow("Reviewed purpose", self.purpose)
         self.category = QComboBox()
         self.category.currentIndexChanged.connect(self._update_action)
-        form.addRow("Expense category", self.category)
+        form.addRow("Category", self.category)
         self.accounting_date = QLineEdit()
         self.accounting_date.setPlaceholderText("YYYY-MM-DD")
         self.accounting_date.setMaxLength(10)
@@ -110,6 +130,7 @@ class V2CardPurchaseReview(QDialog):
         self.reason = QLineEdit()
         self.reason.setMaxLength(500)
         self.reason.setPlaceholderText("Required review or correction reason")
+        self.reason.textChanged.connect(self._update_action)
         self.reason.textChanged.connect(self._update_action)
         form.addRow("Reason", self.reason)
         layout.addLayout(form)
@@ -147,20 +168,39 @@ class V2CardPurchaseReview(QDialog):
 
     def _selected(self, *_args) -> None:
         row = self._current()
+        correcting = row is not None and row.entry_key is not None
+        self.purpose.blockSignals(True)
+        self.purpose.clear()
+        self.purpose.addItem("Choose a purpose; a credit is not necessarily a refund", None)
+        purposes = (row.purpose,) if correcting else row.allowed_purposes if row is not None else ()
+        for purpose in purposes:
+            if purpose in PURPOSE_LABELS:
+                self.purpose.addItem(PURPOSE_LABELS[purpose], purpose)
+        self.purpose.setEnabled(row is not None and not correcting)
+        if correcting:
+            self.purpose.setCurrentIndex(max(0, self.purpose.findData(row.purpose)))
+        self.purpose.blockSignals(False)
+        self._purpose_changed()
+        self.accounting_date.blockSignals(True)
+        self.accounting_date.setText((row.effective_date or row.posting_candidate or "") if row else "")
+        self.accounting_date.blockSignals(False)
+        self._update_action()
+
+    def _purpose_changed(self, *_args) -> None:
+        row = self._current()
+        kind = PURPOSE_KINDS.get(self.purpose.currentData())
         self.category.blockSignals(True)
         self.category.clear()
+        self.category.addItem("Choose a category explicitly", None)
+        labels = _category_labels(self.categories)
         for category in self.categories:
-            if category.kind == "expense":
-                self.category.addItem(category.name, category.id)
+            if category.kind == kind:
+                self.category.addItem(labels[category.id], category.id)
         if row is not None and row.category_id is not None:
             index = self.category.findData(row.category_id)
             if index >= 0:
                 self.category.setCurrentIndex(index)
         self.category.blockSignals(False)
-        self.accounting_date.blockSignals(True)
-        self.accounting_date.setText((row.effective_date or row.posting_candidate or "") if row else "")
-        self.accounting_date.blockSignals(False)
-        self.action_button.setText("Correct card expense" if row is not None and row.entry_key else "Post card expense")
         self._update_action()
 
     def _update_action(self, *_args) -> None:
@@ -171,12 +211,15 @@ class V2CardPurchaseReview(QDialog):
         except ValueError:
             valid_date = False
         correction = row is not None and row.entry_key is not None
+        purpose = self.purpose.currentData()
+        label = PURPOSE_LABELS.get(purpose, "purpose").lower()
+        self.action_button.setText(f"Correct card {label}" if correction else f"Post card {label}")
         changed = row is not None and (
             selected_date != row.effective_date or self.category.currentData() != row.category_id
         )
         ready = row is not None and (
             correction
-            or row.status == "Ready for expense review"
+            or row.status == "Ready for purpose review"
             or (
                 row.status == "Enable assumed dates or enter a corrected date"
                 and selected_date != row.posting_candidate
@@ -185,9 +228,12 @@ class V2CardPurchaseReview(QDialog):
         self.action_button.setEnabled(
             ready
             and valid_date
-            and self.category.count() > 0
+            and purpose in PURPOSE_KINDS
+            and self.category.currentData() is not None
+            and (not correction or purpose == row.purpose)
             and (not correction or changed)
             and self.basis is not None
+            and bool(self.reason.text().strip())
         )
         self.withdraw_button.setEnabled(
             row is not None
@@ -207,7 +253,18 @@ class V2CardPurchaseReview(QDialog):
         if row is None:
             self.status.setText(f"{len(self.model.rows)} source row(s). Select one to review.")
         else:
-            self.status.setText(row.status + ("; add an expense category first" if self.category.count() == 0 else ""))
+            self.status.setText(
+                row.status
+                + (
+                    "; purpose and category class are retained; withdraw and freshly review to change purpose"
+                    if correction
+                    else "; choose purpose explicitly; owned card payments use transfer review"
+                    if purpose is None
+                    else f"; add an {PURPOSE_KINDS[purpose]} category first"
+                    if self.category.count() == 1
+                    else ""
+                )
+            )
 
     def refresh(self, selected_row_id: str | None = None) -> None:
         try:
@@ -229,8 +286,9 @@ class V2CardPurchaseReview(QDialog):
         self.review_preferences = snapshot.preferences
         rows, self.categories, overlaps = snapshot.rows, snapshot.categories, snapshot.overlapping_source_ids
         self.note.setText(
-            "Only a negative card movement can be reviewed here as an expense. Payments, refunds, cash advances "
-            "and transfers need their own interpretation and should stay pending. Printed Post dates are preferred; "
+            "Choose expense, expense refund, income or income adjustment explicitly when supported. "
+            "A card credit does not establish a refund; owned card payments, transfers and cash advances require their own supported review. "
+            "Amount signs do not establish purpose. Printed Post dates are preferred; "
             "assumed dates need the global choice or an explicit different accounting date. "
             "A correction reverses the old entry and replaces it without changing source evidence."
             + (
@@ -266,27 +324,53 @@ class V2CardPurchaseReview(QDialog):
     def _act(self) -> None:
         row = self._current()
         category_id = self.category.currentData()
+        purpose = self.purpose.currentData()
         reason = self.reason.text().strip()
         try:
             accounting_date = date.fromisoformat(self.accounting_date.text().strip())
         except ValueError:
             QMessageBox.warning(self, "Review is incomplete", "Enter a valid accounting date (YYYY-MM-DD).")
             return
-        if row is None or category_id is None or not reason:
-            QMessageBox.warning(self, "Review is incomplete", "Select a row, expense category and review reason.")
+        if (
+            row is None
+            or category_id is None
+            or purpose not in PURPOSE_KINDS
+            or not reason
+            or not self.action_button.isEnabled()
+        ):
             return
         correction = row.entry_key is not None
+        label = PURPOSE_LABELS[purpose].lower()
+        effects = _purpose_effects(purpose, row.amount_minor, financial_kind="liability")
+        if correction:
+            if accounting_date.isoformat() != row.effective_date:
+                correction_effects = (
+                    f"The previous entry is reversed at its original accounting date ({row.effective_date}); "
+                    f"the replacement is dated {accounting_date.isoformat()}. "
+                    f"Across both dates, the inverse and replacement add $0.00 net account movement and leave total reviewed {PURPOSE_KINDS[purpose]} unchanged. "
+                    "Individual dates and periods are restated; no second money movement is recorded."
+                )
+            else:
+                correction_effects = (
+                    "The previous entry is reversed at its original accounting date. "
+                    f"This category-only correction adds $0.00 net account movement and leaves total reviewed {PURPOSE_KINDS[purpose]} unchanged. "
+                    "It reallocates the category amount; no second money movement is recorded."
+                )
+            effects = "Replacement entry effects only:\n" + effects + "\n" + correction_effects
+        else:
+            effects = "New entry effects:\n" + effects
         message = (
-            f"{'Correct' if correction else 'Post'} this reviewed card expense?\n\n"
+            f"{'Correct, retaining purpose,' if correction else 'Post'} this reviewed card {label}?\n\n"
             f"Source date: {row.source_date or 'Unknown'}\n"
             f"Posting candidate: {row.posting_candidate or 'Unavailable'}"
             f"{f' ({row.date_provenance})' if row.date_provenance else ''}\n"
             f"Accounting date: {accounting_date.isoformat()}\n"
             f"{row.description}  {_money(row.amount_minor)}  {row.financial_account}\n"
-            f"Category: {self.category.currentText()}\nReason: {reason}\n\n"
-            "I confirm this movement is an expense, not a transfer or cash advance."
+            f"Purpose: {PURPOSE_LABELS[purpose]}\nCategory: {self.category.currentText()}\nReason: {reason}\n"
+            f"{effects}\n\n"
+            f"{PURPOSE_ASSERTIONS[purpose]} This is not an owned card payment, transfer or cash advance."
         )
-        if QMessageBox.question(self, "Confirm card expense", message) != QMessageBox.StandardButton.Yes:
+        if QMessageBox.question(self, f"Confirm card {label}", message) != QMessageBox.StandardButton.Yes:
             return
         if self.workspace.preferences() != self.review_preferences:
             QMessageBox.warning(
@@ -310,6 +394,7 @@ class V2CardPurchaseReview(QDialog):
                     store.post_reviewed_card_purchase(
                         row.row_id,
                         category_id,
+                        purpose=purpose,
                         reason=reason,
                         preferences=self.workspace.preferences(),
                         accounting_date=accounting_date
@@ -318,12 +403,16 @@ class V2CardPurchaseReview(QDialog):
                         expected_basis_sha256=self.basis,
                     )
         except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            QMessageBox.warning(self, "Card expense was not saved", str(exc))
+            QMessageBox.warning(self, "Card interpretation was not saved", str(exc))
             self.refresh(selected_row_id=row.row_id)
             return
         self.reason.clear()
         self.refresh(selected_row_id=row.row_id)
-        self.status.setText("Correction saved with reversal and replacement." if correction else "Card expense posted.")
+        self.status.setText(
+            "Correction saved with reversal and replacement; purpose retained."
+            if correction
+            else f"Card {label} posted."
+        )
 
     def _withdraw(self) -> None:
         row, reason = self._current(), self.reason.text().strip()
@@ -334,7 +423,7 @@ class V2CardPurchaseReview(QDialog):
         if effects is None:
             return
         message = (
-            f"Withdraw this supported card expense interpretation?\n\nInverse effects:\n{effects}\n\nReason: {reason}\n\n"
+            f"Withdraw this supported card interpretation?\n\nInverse effects:\n{effects}\n\nReason: {reason}\n\n"
             "The active entry is reversed at its recorded accounting date, including any reviewed date correction. "
             "The immutable source row returns to pending; posting it again requires a fresh review. "
             "Original entries and allocations remain history. This withdraws an interpretation, not a card transaction."

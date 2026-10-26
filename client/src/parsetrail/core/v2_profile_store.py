@@ -36,6 +36,7 @@ from parsetrail.core.source_evidence import (
     StatementAccount,
     StatementPayload,
 )
+from parsetrail.core.v2_builtin_categories import builtin_category, is_builtin_id_reserved
 from parsetrail.core.v2_preferences import V2Preferences
 from parsetrail.core.v2_review_dates import permitted_posting_date, posting_date_candidate
 from parsetrail.core.v2_source_overlap import (
@@ -51,6 +52,25 @@ from parsetrail.core.v2_source_overlap import (
 APPLICATION_ID = 0x50543230  # PT20
 SCHEMA_VERSION = 17
 TRACKING_SCOPES = {"account_total", "principal_component", "cash_component"}
+CategoryPurpose = Literal["expense", "expense_refund", "income", "income_adjustment"]
+CATEGORY_PURPOSE_KINDS = {
+    "expense": "expense",
+    "expense_refund": "expense",
+    "income": "income",
+    "income_adjustment": "income",
+}
+
+
+def _category_purposes(amount: int | None) -> tuple[CategoryPurpose, ...]:
+    if type(amount) is not int or amount == 0:
+        return ()
+    return ("expense", "income_adjustment") if amount < 0 else ("expense_refund", "income")
+
+
+def _category_purpose(amount: int, kind: str) -> CategoryPurpose:
+    return next(purpose for purpose in _category_purposes(amount) if CATEGORY_PURPOSE_KINDS[purpose] == kind)
+
+
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_DEFINITION_BYTES = 64 * 1024
 MAX_EVIDENCE_BYTES = 32 * 1024 * 1024
@@ -722,6 +742,8 @@ class CashActivityReviewRow:
     status: str
     entry_key: str | None = None
     category_id: str | None = None
+    purpose: CategoryPurpose | None = None
+    allowed_purposes: tuple[CategoryPurpose, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -737,6 +759,8 @@ class CardPurchaseReviewRow:
     status: str
     entry_key: str | None = None
     category_id: str | None = None
+    purpose: CategoryPurpose | None = None
+    allowed_purposes: tuple[CategoryPurpose, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1632,6 +1656,7 @@ class V2ProfileStore:
     def add_financial_account(self, account: FinancialAccount) -> None:
         """Create one user-authored financial account before any source binding."""
         self._require_writable()
+        self._validate_builtin_categories()
         name, institution_key, full_number = self._financial_account_values(account)
         self.connection.execute(
             "INSERT INTO Accounts VALUES (?,?,?,'USD','financial','normal',?,?,?)",
@@ -1643,6 +1668,7 @@ class V2ProfileStore:
         if (
             not isinstance(account, FinancialAccount)
             or type(account.id) is not str
+            or is_builtin_id_reserved(account.id)
             or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9:_-]{0,79}", account.id) is None
             or type(account.name) is not str
             or not 0 < len(account.name.strip()) <= 200
@@ -1693,6 +1719,7 @@ class V2ProfileStore:
             raise
 
     def financial_accounts(self) -> tuple[FinancialAccount, ...]:
+        self._validate_builtin_categories()
         return tuple(
             FinancialAccount(*row)
             for row in self.connection.execute(
@@ -1744,8 +1771,10 @@ class V2ProfileStore:
     def add_category_account(self, account_id: str, name: str, kind: Literal["expense", "income"]) -> None:
         """Create a fresh authored ledger category without source interpretation."""
         self._require_writable()
+        self._validate_builtin_categories()
         if (
             type(account_id) is not str
+            or is_builtin_id_reserved(account_id)
             or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9:_-]{0,79}", account_id) is None
             or type(name) is not str
             or not 0 < len(name.strip()) <= 200
@@ -1758,6 +1787,7 @@ class V2ProfileStore:
         )
 
     def category_accounts(self) -> tuple[CategoryAccount, ...]:
+        self._validate_builtin_categories()
         return tuple(
             CategoryAccount(*row)
             for row in self.connection.execute(
@@ -1765,9 +1795,46 @@ class V2ProfileStore:
             )
         )
 
+    def ensure_builtin_category(self, account_id: str) -> CategoryAccount:
+        """Explicitly materialize a known fixed category; discovery never writes."""
+        self._require_writable()
+        category = builtin_category(account_id) if type(account_id) is str else None
+        if category is None:
+            raise ProfileFormatError("builtin_category_unknown")
+        self._validate_builtin_categories()
+        self.connection.execute(
+            "INSERT INTO Accounts VALUES (?,?,?,'USD','category','normal',NULL,NULL,'account_total') "
+            "ON CONFLICT(id) DO NOTHING",
+            (category.account_id, category.name, category.kind),
+        )
+        return CategoryAccount(category.account_id, category.name, category.kind)
+
+    def _validate_builtin_categories(self) -> None:
+        for row in self.connection.execute("SELECT * FROM Accounts"):
+            if type(row[0]) is not str:
+                raise ProfileFormatError("account_identity_integrity")
+            if not is_builtin_id_reserved(row[0]):
+                continue
+            category = builtin_category(row[0])
+            if category is None or row != (
+                category.account_id,
+                category.name,
+                category.kind,
+                "USD",
+                "category",
+                "normal",
+                None,
+                None,
+                "account_total",
+            ):
+                raise ProfileFormatError("builtin_category_integrity")
+
     def rename_category_account(self, account_id: str, name: str) -> None:
         """Change only a category's display name; journal references use its ID."""
         self._require_writable()
+        self._validate_builtin_categories()
+        if type(account_id) is str and is_builtin_id_reserved(account_id):
+            raise ProfileFormatError("builtin_category_immutable")
         if type(name) is not str or not 0 < len(name.strip()) <= 200:
             raise ProfileFormatError("invalid_category_name")
         cursor = self.connection.execute(
@@ -1785,6 +1852,7 @@ class V2ProfileStore:
     def set_category_budget_rate(self, category_id: str, effective_month: date, amount_minor: int | None) -> None:
         """Set a monthly target from one month until the next authored change."""
         self._require_writable()
+        self._validate_builtin_categories()
         month_key = self._budget_month(effective_month)
         if amount_minor is not None and (
             type(amount_minor) is not int or not 0 <= amount_minor < 9_000_000_000_000_000
@@ -1802,6 +1870,7 @@ class V2ProfileStore:
         )
 
     def category_budget_history(self, category_id: str) -> tuple[CategoryBudgetRate, ...]:
+        self._validate_builtin_categories()
         if (
             self.connection.execute("SELECT 1 FROM Accounts WHERE id=? AND role='category'", (category_id,)).fetchone()
             is None
@@ -1836,7 +1905,7 @@ class V2ProfileStore:
             for category in self.category_accounts()
         )
 
-    def _cash_category_source(self, row_id: str, kind: Literal["expense", "income"]):
+    def _cash_category_source(self, row_id: str):
         source_row = self.connection.execute(
             "SELECT source_sha256,row_role,date_role,observed_date,amount_minor FROM SourceObservations WHERE row_id=?",
             (row_id,),
@@ -1856,7 +1925,8 @@ class V2ProfileStore:
             or row.date.iso is None
             or row.amount.minor is None
             or row.amount.minor == 0
-            or (row.amount.minor < 0) != (kind == "expense")
+            or row.amount.provenance != "observed"
+            or row.components
             or not row.description.text
             or financial_id is None
         ):
@@ -1871,6 +1941,7 @@ class V2ProfileStore:
         return row, financial_id, self._ledger_accounts()
 
     def _ledger_accounts(self) -> dict[str, LedgerAccount]:
+        self._validate_builtin_categories()
         account_rows = self.connection.execute("SELECT id,name,kind,currency,role,purpose FROM Accounts").fetchall()
         return {
             account_id: LedgerAccount(
@@ -1901,7 +1972,8 @@ class V2ProfileStore:
             row is None
             or row.row_role != "activity"
             or row.amount.minor is None
-            or row.amount.minor >= 0
+            or row.amount.minor == 0
+            or row.components
             or row.amount.provenance != "observed"
             or not row.description.text
             or financial_id is None
@@ -2528,7 +2600,6 @@ class V2ProfileStore:
         accounts = cache["accounts"]
         financial = accounts.get(entry.postings[0].account_id)
         category = accounts.get(entry.postings[1].account_id)
-        kind = "expense" if amount < 0 else "income"
         cash = entry_key.startswith("review:cash:")
         if (
             row.row_role != "activity"
@@ -2543,7 +2614,7 @@ class V2ProfileStore:
             or financial.source_account_id is None
             or category is None
             or category.source_account_id is not None
-            or category.kind.value != kind
+            or category.kind.value not in {"expense", "income"}
             or cache["roles"].get(category.id) != "category"
             or (
                 cash
@@ -2558,13 +2629,19 @@ class V2ProfileStore:
                 not cash
                 and (
                     financial.kind != AccountKind.LIABILITY
-                    or amount >= 0
                     or not scopes[source[0]][1].get(row_id, False)
                     or posting_date_candidate(row) is None
                 )
             )
         ):
             raise ProfileFormatError("source_interpretation_unsupported")
+        # Initial identities retain the explicitly reviewed financial purpose.
+        # Corrections carry that purpose through their immutable original link.
+        if not entry_key.startswith(("review:cash:correction:", "review:card:correction:")):
+            purpose = _category_purpose(amount, category.kind.value)
+            base = f"review:{'cash' if cash else 'card'}:{purpose}:{row_id}"
+            if entry_key != base and re.fullmatch(re.escape(base) + r":repost:[1-9][0-9]*", entry_key) is None:
+                raise ProfileFormatError("source_interpretation_unsupported")
         try:
             validate_entry(entry, accounts, {row_id: Observation(row_id, financial.id, amount, entry.posting_date)}, {})
         except LedgerError:
@@ -2835,11 +2912,19 @@ class V2ProfileStore:
                     or original.event_id != replacement.event_id
                     or original.postings[0].account_id != replacement.postings[0].account_id
                     or original.postings[0].amount_minor != replacement.postings[0].amount_minor
+                    or accounts[original.postings[1].account_id].kind
+                    != accounts[replacement.postings[1].account_id].kind
                     or replacement.reason != reason
                     or original.key.split(":")[1] != replacement.key.split(":")[1]
                 ):
                     raise ValueError
                 links[original_key] = replacement_key
+            replacement_keys = set(links.values())
+            if any(
+                key.startswith(("review:cash:correction:", "review:card:correction:")) and key not in replacement_keys
+                for key in ordinary
+            ):
+                raise ValueError
             for key in links:
                 seen = set()
                 while key in links:
@@ -3075,6 +3160,8 @@ class V2ProfileStore:
             entries = active.get(row.row_id, [])
             entry_key = None
             category_id = None
+            purpose = None
+            allowed_purposes = ()
             if entries:
                 status = "Already posted to the ledger"
                 if len(entries) == 1:
@@ -3086,17 +3173,21 @@ class V2ProfileStore:
                         and entry.postings[0].account_id == account_id
                         and entry.postings[0].allocations == (Allocation(row.row_id, row.amount.minor),)
                         and accounts.get(entry.postings[1].account_id, (None, None, None))[1:]
-                        == ("expense" if row.amount.minor < 0 else "income", "category")
+                        in {("expense", "category"), ("income", "category")}
                     ):
                         entry_key = entry.key
                         category_id = entry.postings[1].account_id
+                        purpose = _category_purpose(row.amount.minor, accounts[category_id][1])
+                        allowed_purposes = (purpose,)
                         status = "Posted: " + accounts[category_id][0]
             elif row.row_id in overlap_blocks:
                 status = overlap_blocks[row.row_id]
             elif not scopes.get(row.row_id, False):
                 status = "Outside supported asset cash statement scope"
-            elif row.row_role != "activity" or row.amount.minor is None or row.amount.minor == 0:
+            elif row.row_role != "activity" or row.amount.minor is None or row.amount.minor == 0 or row.components:
                 status = "Outside cash activity scope"
+            elif row.amount.provenance != "observed":
+                status = "Source amount not observed"
             elif row.date_role != "posting_date" or row.date.iso is None:
                 status = "Posting date needs review"
             elif account_id is None:
@@ -3108,7 +3199,8 @@ class V2ProfileStore:
             elif not row.description.text:
                 status = "Description needs review"
             else:
-                status = "Ready for expense review" if row.amount.minor < 0 else "Ready for income review"
+                status = "Ready for purpose review"
+                allowed_purposes = _category_purposes(row.amount.minor)
             result.append(
                 CashActivityReviewRow(
                     row.row_id,
@@ -3119,6 +3211,8 @@ class V2ProfileStore:
                     status,
                     entry_key,
                     category_id,
+                    purpose,
+                    allowed_purposes,
                 )
             )
         return tuple(result)
@@ -3160,6 +3254,8 @@ class V2ProfileStore:
             entry_key = None
             category_id = None
             effective_date = None
+            purpose = None
+            allowed_purposes = ()
             if entries:
                 status = "Already posted to the ledger"
                 if len(entries) == 1:
@@ -3171,22 +3267,22 @@ class V2ProfileStore:
                         and entry.postings[0].account_id == account_id
                         and entry.postings[0].allocations == (Allocation(row.row_id, row.amount.minor),)
                         and accounts.get(entry.postings[1].account_id, (None, None, None))[1:]
-                        == ("expense", "category")
+                        in {("expense", "category"), ("income", "category")}
                     ):
                         entry_key = entry.key
                         category_id = entry.postings[1].account_id
+                        purpose = _category_purpose(row.amount.minor, accounts[category_id][1])
+                        allowed_purposes = (purpose,)
                         effective_date = entry.posting_date.isoformat()
                         status = "Posted: " + accounts[category_id][0]
             elif row.row_id in overlap_blocks:
                 status = overlap_blocks[row.row_id]
             elif not scopes.get(row.row_id, False):
                 status = "Outside supported card statement scope"
-            elif row.row_role != "activity":
+            elif row.row_role != "activity" or row.components:
                 status = "Header or summary charge needs separate review"
             elif row.amount.minor is None or row.amount.minor == 0:
                 status = "Amount unavailable or zero"
-            elif row.amount.minor > 0:
-                status = "Payment, refund or other positive movement pending"
             elif row.amount.provenance != "observed":
                 status = "Source amount not observed"
             elif candidate is None:
@@ -3201,8 +3297,10 @@ class V2ProfileStore:
                 status = "Description needs review"
             elif permitted_posting_date(row, preferences) is None:
                 status = "Enable assumed dates or enter a corrected date"
+                allowed_purposes = _category_purposes(row.amount.minor)
             else:
-                status = "Ready for expense review"
+                status = "Ready for purpose review"
+                allowed_purposes = _category_purposes(row.amount.minor)
             source_date = row.transaction_date or row.date
             result.append(
                 CardPurchaseReviewRow(
@@ -3217,6 +3315,8 @@ class V2ProfileStore:
                     status,
                     entry_key,
                     category_id,
+                    purpose,
+                    allowed_purposes,
                 )
             )
         return tuple(result)
@@ -4495,7 +4595,13 @@ class V2ProfileStore:
         return entry.key
 
     def post_reviewed_cash_category(
-        self, row_id: str, category_id: str, *, reason: str, expected_basis_sha256: str | None = None
+        self,
+        row_id: str,
+        category_id: str,
+        *,
+        reason: str,
+        expected_basis_sha256: str | None = None,
+        purpose: CategoryPurpose | None = None,
     ) -> str:
         """Post one explicitly classified asset cash movement with source evidence."""
         self._require_writable()
@@ -4503,14 +4609,21 @@ class V2ProfileStore:
             raise ProfileFormatError("cash_review_reason_required")
         self.connection.execute("BEGIN IMMEDIATE")
         try:
-            category = self.connection.execute("SELECT kind,role FROM Accounts WHERE id=?", (category_id,)).fetchone()
+            expected_basis_sha256 = self._basis_before_builtin_materialization(category_id, expected_basis_sha256)
+            category = self._category_for_posting(category_id)
             if category not in {("expense", "category"), ("income", "category")}:
                 raise ProfileFormatError("cash_category_invalid")
             kind = category[0]
-            row, financial_id, accounts = self._cash_category_source(row_id, kind)
+            row, financial_id, accounts = self._cash_category_source(row_id)
             amount = row.amount.minor
+            if purpose is None:
+                # Existing narrow callers explicitly review an ordinary category.
+                # New adapters supply the complete purpose instead of inferring it.
+                purpose = "expense" if kind == "expense" else "income"
+            if purpose not in _category_purposes(amount) or CATEGORY_PURPOSE_KINDS.get(purpose) != kind:
+                raise ProfileFormatError("cash_category_purpose_invalid")
             entry = JournalEntry(
-                key=f"review:cash:{kind}:{row_id}",
+                key=f"review:cash:{purpose}:{row_id}",
                 event_id=f"source:{row_id}",
                 posting_date=date.fromisoformat(row.date.iso),
                 description=row.description.text,
@@ -4547,8 +4660,9 @@ class V2ProfileStore:
         preferences: V2Preferences,
         accounting_date: date | None = None,
         expected_basis_sha256: str | None = None,
+        purpose: CategoryPurpose = "expense",
     ) -> str:
-        """Post one classified negative card movement; a date override is explicit."""
+        """Post one explicitly classified card movement; date overrides are explicit."""
         self._require_writable()
         if type(reason) is not str or not 0 < len(reason.strip()) <= 500:
             raise ProfileFormatError("card_purchase_reason_required")
@@ -4560,10 +4674,16 @@ class V2ProfileStore:
             raise ProfileFormatError("card_purchase_date_decision_invalid")
         self.connection.execute("BEGIN IMMEDIATE")
         try:
-            category = self.connection.execute("SELECT kind,role FROM Accounts WHERE id=?", (category_id,)).fetchone()
-            if category != ("expense", "category"):
-                raise ProfileFormatError("card_purchase_requires_expense_category")
+            expected_basis_sha256 = self._basis_before_builtin_materialization(category_id, expected_basis_sha256)
+            category = self._category_for_posting(category_id)
+            if category not in {("expense", "category"), ("income", "category")}:
+                raise ProfileFormatError("card_category_invalid")
             row, financial_id, accounts, candidate = self._card_purchase_source(row_id)
+            if (
+                purpose not in _category_purposes(row.amount.minor)
+                or CATEGORY_PURPOSE_KINDS.get(purpose) != category[0]
+            ):
+                raise ProfileFormatError("card_category_purpose_invalid")
             permitted = permitted_posting_date(row, preferences)
             if accounting_date is None:
                 if permitted is None:
@@ -4575,7 +4695,7 @@ class V2ProfileStore:
                 posting_date = accounting_date
             amount = row.amount.minor
             entry = JournalEntry(
-                key=f"review:card:expense:{row_id}",
+                key=f"review:card:{purpose}:{row_id}",
                 event_id=f"source:{row_id}",
                 posting_date=posting_date,
                 description=row.description.text,
@@ -4602,6 +4722,23 @@ class V2ProfileStore:
             if isinstance(exc, LedgerError):
                 raise ProfileFormatError("card_purchase_refused") from None
             raise
+
+    def _category_for_posting(self, category_id: str):
+        if type(category_id) is str and is_builtin_id_reserved(category_id):
+            self.ensure_builtin_category(category_id)
+        return self.connection.execute("SELECT kind,role FROM Accounts WHERE id=?", (category_id,)).fetchone()
+
+    def _basis_before_builtin_materialization(self, category_id: str, expected: str | None) -> str | None:
+        # A selected built-in is authored in this same transaction. Its account
+        # row changes the review version, so check the original selection first.
+        if (
+            type(category_id) is str
+            and builtin_category(category_id) is not None
+            and self.connection.execute("SELECT 1 FROM Accounts WHERE id=?", (category_id,)).fetchone() is None
+        ):
+            self._require_source_interpretation_basis(expected)
+            return None
+        return expected
 
     def _insert_reviewed_correction(
         self,
@@ -4702,11 +4839,9 @@ class V2ProfileStore:
             old_category = self.connection.execute(
                 "SELECT kind,role FROM Accounts WHERE id=?", (old_category_id,)
             ).fetchone()
-            new_category = self.connection.execute(
-                "SELECT kind,role FROM Accounts WHERE id=?", (category_id,)
-            ).fetchone()
-            kind = "expense" if amount < 0 else "income"
-            row, financial_id, accounts = self._cash_category_source(row_id, kind)
+            new_category = self._category_for_posting(category_id)
+            kind = old_category[0] if old_category is not None else None
+            row, financial_id, accounts = self._cash_category_source(row_id)
             if (
                 original.postings[0].account_id != financial_id
                 or original.event_id != f"source:{row_id}"
@@ -4760,7 +4895,7 @@ class V2ProfileStore:
         self._require_writable()
         if (
             type(original_key) is not str
-            or not original_key.startswith(("review:card:expense:", "review:card:correction:"))
+            or not original_key.startswith("review:card:")
             or type(category_id) is not str
             or not category_id
             or (accounting_date is not None and type(accounting_date) is not date)
@@ -4805,26 +4940,24 @@ class V2ProfileStore:
                 or len(original.postings) != 2
                 or len(allocations) != 1
                 or original.postings[0].amount_minor != allocations[0][1]
-                or original.postings[0].amount_minor >= 0
+                or original.postings[0].amount_minor == 0
                 or original.postings[0].allocations != (Allocation(*allocations[0]),)
                 or original.postings[1].amount_minor != -allocations[0][1]
             ):
                 raise ProfileFormatError("card_correction_original_invalid")
             row_id, amount = allocations[0]
-            row, financial_id, accounts, _candidate = self._card_purchase_source(row_id)
             old_category_id = original.postings[1].account_id
             old_category = self.connection.execute(
                 "SELECT kind,role FROM Accounts WHERE id=?", (old_category_id,)
             ).fetchone()
-            new_category = self.connection.execute(
-                "SELECT kind,role FROM Accounts WHERE id=?", (category_id,)
-            ).fetchone()
+            new_category = self._category_for_posting(category_id)
+            row, financial_id, accounts, _candidate = self._card_purchase_source(row_id)
             if (
                 original.postings[0].account_id != financial_id
                 or original.event_id != f"source:{row_id}"
                 or original.description != row.description.text
-                or old_category != ("expense", "category")
-                or new_category != ("expense", "category")
+                or old_category not in {("expense", "category"), ("income", "category")}
+                or new_category != old_category
                 or (category_id == old_category_id and chosen_date == original.posting_date)
             ):
                 raise ProfileFormatError("card_correction_requires_changed_category_or_date")
@@ -6847,6 +6980,7 @@ class V2ProfileStore:
         )
 
     def _validate_account_metadata(self) -> None:
+        self._validate_builtin_categories()
         if not self._account_anchors_mutating:
             if any(
                 type(scope) is not str or scope not in TRACKING_SCOPES

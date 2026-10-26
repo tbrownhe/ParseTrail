@@ -13,15 +13,18 @@ boundaries. Work, commands, review and acceptance evidence belong in
 [archived contract](work/archive/2026-10-25-client-ledger-contract.md) retains
 superseded migration/audit narrative and its historical evidence links.
 
-The current workspace supports narrow reviewed asset cash expense/income,
-negative card purchases, whole-movement owned transfers/card payments, printed
+The current workspace supports reviewed account-total asset cash/card category
+movements with explicit expense, expense refund, income or income-adjustment
+purpose, whole-movement owned transfers/card payments, printed
 and reviewed manual openings, separate manual dated values and closure metadata.
 Cash-category, card-category/date and source/manual opening corrections
 are available. Supported ordinary interpretations can be withdrawn, then freshly
 reviewed; posted-repeat repair retains one interpretation and retires its
-redundant counterpart atomically. Whole transfers can be withdrawn or atomically
-replaced while retaining every dated leg and allocation history. General refunds,
-splits, loan transactions, suspense and source valuations require their own
+redundant counterpart atomically. Category/date corrections retain the original
+category class and exact source effect, which preserve purpose; changing purpose
+requires explicit withdrawal and fresh review. Whole transfers can be withdrawn
+or atomically replaced while retaining every dated leg and allocation history.
+Splits, loan transactions, suspense and source valuations require their own
 admitted workflows; examples below specify financial meaning rather than
 availability. Arbitrary manual journals remain outside DEC-1 scope.
 
@@ -188,6 +191,14 @@ ledger-account creation performed during posting belongs to that atomic write;
 explicit source-account binding remains a separate, non-posting decision.
 Catalog reads remain read-only.
 
+The catalog currently contains Loan interest only. Explicit category authoring
+can materialize this known identity; ordinary posting can create a selected known
+built-in inside its own transaction. Failed or stale posting leaves no category
+behind. Unknown `builtin:` identities, attempts to rename/retype the built-in and
+malformed persisted built-in metadata are refused. Custom same-name categories
+retain separate IDs. This catalog is preparation for loan interpretation and
+does not admit loan postings on its own.
+
 Changing a category's name/type must not rewrite historical postings. Prevent
 reusing evidence between an original and its active replacement. Reconciliation
 must be invalidated or reopened explicitly when a correction changes its result.
@@ -203,7 +214,7 @@ and period-boundary effects. Unknown reviewed shapes remain unclassified;
 pending evidence, source overlap, capture and coverage prevent certification.
 Historical event context outside a report period adds no money. Account choices
 must distinguish permitted duplicate names; report refresh failures clear values.
-Later loan/split/refund workflows must extend classification before completeness
+Later loan/split workflows must extend classification before completeness
 is claimed. See the [cash-movement packet](work/2026-10-25-v2-cash-movement.md).
 
 Track independently: balanced/posted state, interpretation review, evidence

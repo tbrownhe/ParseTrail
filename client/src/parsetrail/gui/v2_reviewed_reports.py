@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from parsetrail.core.v2_builtin_categories import category_labels
 from parsetrail.core.v2_profile_store import (
     AccountPosition,
     AccountPositionHistoryRow,
@@ -48,6 +49,8 @@ from parsetrail.gui.v2_report_drilldown import V2ReviewedEntryDrilldown
 class _CategoryModel(QAbstractTableModel):
     def __init__(self, kind: str, parent=None):
         super().__init__(parent)
+        self.kind = kind
+        self.labels = {}
         self.headers = (
             ("Expense category", "Net reviewed spending")
             if kind == "expense"
@@ -58,6 +61,7 @@ class _CategoryModel(QAbstractTableModel):
     def replace(self, rows: tuple[ReviewedCategoryTotal, ...]) -> None:
         self.beginResetModel()
         self.rows = rows
+        self.labels = category_labels((row.category_id, row.name, self.kind) for row in rows)
         self.endResetModel()
 
     def rowCount(self, _parent: QModelIndex = QModelIndex()) -> int:
@@ -75,7 +79,7 @@ class _CategoryModel(QAbstractTableModel):
         if not index.isValid() or role not in {Qt.DisplayRole, Qt.ToolTipRole}:
             return None
         row = self.rows[index.row()]
-        return row.name if index.column() == 0 else _money(row.amount_minor)
+        return self.labels[row.category_id] if index.column() == 0 else _money(row.amount_minor)
 
 
 class _AccountMovementModel(QAbstractTableModel):
@@ -121,10 +125,12 @@ class _MonthlyBudgetModel(QAbstractTableModel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.rows: tuple[MonthlyBudgetRow, ...] = ()
+        self.labels = {}
 
     def replace(self, rows: tuple[MonthlyBudgetRow, ...]) -> None:
         self.beginResetModel()
         self.rows = rows
+        self.labels = category_labels((row.category_id, row.name, "expense") for row in rows)
         self.endResetModel()
 
     def rowCount(self, _parent: QModelIndex = QModelIndex()) -> int:
@@ -143,7 +149,7 @@ class _MonthlyBudgetModel(QAbstractTableModel):
             return None
         row = self.rows[index.row()]
         values = (
-            row.name,
+            self.labels[row.category_id],
             _money(row.target_minor) if row.target_minor is not None else "No target",
             _money(row.reviewed_spending_minor),
             _money(row.remaining_minor) if row.remaining_minor is not None else "—",

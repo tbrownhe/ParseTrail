@@ -68,6 +68,12 @@ saved. An empty target clears later months without changing earlier targets;
 zero is a valid target. These planning values do not post money or infer
 categories. Category display-name edits retain historical account references.
 
+Code-owned built-in categories have protected semantic IDs and fixed name/kind,
+starting with `builtin:loan-interest`. Discovery and reports never materialize
+them. Explicit authoring or an atomic reviewed posting may create a selected
+known built-in; custom same-name categories remain separate identities. Reserved
+namespace and persisted built-in metadata checks apply to common reads/backups.
+
 ## Journal and review history
 
 Supported reviewed cash/card/transfer workflows atomically validate and save
@@ -79,6 +85,13 @@ and exact retirement inverses, including zero decisions without replacements.
 Whole-transfer withdrawal/replacement preserves every original leg and creates
 fresh replacement identities. Unsupported interpretations and unknown posting dates remain
 pending.
+
+Account-total cash/card category movements admit explicit expense, expense refund,
+income and income adjustment purposes with compatible exact source signs and
+category classes. Initial review requires a purpose/category choice. Category/date
+corrections retain purpose/class; a change of purpose uses withdrawal/fresh review.
+Net spending, income and budgets may be negative; refunds/adjustments never change
+the imported amount or date and never imply an owned transfer or card payment.
 
 `StatementSourceReviews` is one append-only assertion history for bound statement
 sections. Opening/closing origin, inclusive-period timing, posting-date certainty,

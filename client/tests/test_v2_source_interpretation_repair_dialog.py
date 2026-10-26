@@ -131,7 +131,9 @@ def test_corrected_cash_withdrawal_uses_active_entry_then_reposts_fresh(tmp_path
         )
         assert dialog.model.rows[row_index].entry_key is None
         assert "withdraw" in dialog.history_details.text()
-        assert dialog.action_button.isEnabled()
+        assert not dialog.action_button.isEnabled()
+        dialog.purpose.setCurrentIndex(dialog.purpose.findData("expense" if row_index == 0 else "income"))
+        dialog.category.setCurrentIndex(dialog.category.findData("expense:food" if row_index == 0 else "income:pay"))
         dialog.reason.setText("Freshly reviewed after withdrawal")
         dialog.action_button.click()
         assert dialog.model.rows[row_index].entry_key not in {None, old_key}
@@ -172,6 +174,8 @@ def test_card_withdrawal_uses_recorded_corrected_date_and_category_then_reposts_
         assert "amount owed change -$10.00" in questions[0]
         assert dialog.model.rows[0].entry_key is None
         assert not dialog.action_button.isEnabled()
+        dialog.purpose.setCurrentIndex(dialog.purpose.findData("expense"))
+        dialog.category.setCurrentIndex(dialog.category.findData("expense:food"))
         dialog.accounting_date.setText("2026-04-02")
         dialog.reason.setText("Fresh explicit date review")
         dialog.action_button.click()
@@ -229,6 +233,7 @@ def test_stale_cash_context_cannot_post_correct_or_withdraw(tmp_path, app, monke
     dialog = V2CashActivityReview(profile, evidence.source_sha256)
     try:
         dialog.table.selectRow(0)
+        dialog.purpose.setCurrentIndex(dialog.purpose.findData("expense"))
         dialog.category.setCurrentIndex(dialog.category.findData("expense:travel"))
         dialog.reason.setText("From loaded review frame")
         old_basis = dialog.basis
@@ -373,6 +378,8 @@ def test_card_preference_change_during_confirmation_reloads_without_posting(tmp_
     dialog = V2CardPurchaseReview(workspace, evidence.source_sha256)
     try:
         dialog.table.selectRow(0)
+        dialog.purpose.setCurrentIndex(dialog.purpose.findData("expense"))
+        dialog.category.setCurrentIndex(dialog.category.findData("expense:food"))
         dialog.accounting_date.setText("2026-03-17")
         dialog.reason.setText("Review from initial date preference")
         assert dialog.action_button.isEnabled()

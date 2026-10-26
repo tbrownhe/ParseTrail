@@ -40,7 +40,7 @@ def test_reviewed_cash_expense_reopens_once_and_other_row_stays_pending(tmp_path
         )
         with pytest.raises(ProfileFormatError, match="cash_review_conflicts_with_prior_entry"):
             store.post_reviewed_cash_category(outflow.row_id, "expense:food", reason="Different review")
-        with pytest.raises(ProfileFormatError, match="cash_category_requires_bound_posted_movement"):
+        with pytest.raises(ProfileFormatError, match="cash_category_purpose_invalid"):
             store.post_reviewed_cash_category(inflow.row_id, "expense:food", reason="Not an expense")
         original_payload = store.connection.execute(
             "SELECT payload FROM JournalEntries WHERE key=?", (key,)
@@ -82,7 +82,7 @@ def test_cash_expense_requires_explicit_mapping_and_expense_category(tmp_path: P
         with pytest.raises(ProfileFormatError, match="cash_category_requires_bound_posted_movement"):
             store.post_reviewed_cash_category(row_id, "income:other", reason="Missing account decision")
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
-        with pytest.raises(ProfileFormatError, match="cash_category_requires_bound_posted_movement"):
+        with pytest.raises(ProfileFormatError, match="cash_category_purpose_invalid"):
             store.post_reviewed_cash_category(row_id, "income:other", reason="Wrong category")
         store.add_category_account("expense:food", "Food", "expense")
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "card")
@@ -163,9 +163,9 @@ def test_positive_cash_requires_explicit_income_category_and_corrects_with_histo
         store.add_category_account("income:pay", "Pay", "income")
         store.add_category_account("income:gift", "Gift", "income")
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
-        with pytest.raises(ProfileFormatError, match="cash_category_requires_bound_posted_movement"):
+        with pytest.raises(ProfileFormatError, match="cash_category_purpose_invalid"):
             store.post_reviewed_cash_category(deposit.row_id, "expense:food", reason="Wrong sign")
-        with pytest.raises(ProfileFormatError, match="cash_category_requires_bound_posted_movement"):
+        with pytest.raises(ProfileFormatError, match="cash_category_purpose_invalid"):
             store.post_reviewed_cash_category(expense_row.row_id, "income:pay", reason="Wrong sign")
         assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (0,)
         original = store.post_reviewed_cash_category(deposit.row_id, "income:pay", reason="Confirmed cash income")
@@ -243,8 +243,8 @@ def test_bound_bank_statement_cash_rows_post_but_component_scope_stays_pending(t
             evidence.source_sha256, source_account.source_identity, source_account.source_identity_form, "cash"
         )
         assert [row.status for row in store.cash_activity_review_rows(evidence.source_sha256)] == [
-            "Ready for income review",
-            "Ready for expense review",
+            "Ready for purpose review",
+            "Ready for purpose review",
         ]
         expense_key = store.post_reviewed_cash_category(
             withdrawal.row_id, "expense:other", reason="Reviewed withdrawal"

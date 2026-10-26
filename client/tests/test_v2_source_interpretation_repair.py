@@ -59,7 +59,7 @@ def test_withdraw_corrected_cash_chain_and_repost_never_revives_old_entries(tmp_
         )
         assert action.row_id == row_id and action.entry_key == latest and action.kind == "withdraw"
         assert store._active_consumed() == {}
-        assert _snapshot(store, evidence).rows[0].status == "Ready for expense review"
+        assert _snapshot(store, evidence).rows[0].status == "Ready for purpose review"
         assert (
             store.withdraw_reviewed_interpretation(
                 latest, expected_basis_sha256=selected.basis_sha256, reason="Interpretation is unsupported"

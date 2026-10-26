@@ -46,18 +46,22 @@ def test_cash_activity_dialog_keeps_unclassified_deposit_pending(tmp_path: Path,
             store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
         dialog.refresh()
         assert [row.status for row in dialog.model.rows] == [
-            "Ready for expense review",
-            "Ready for income review",
+            "Ready for purpose review",
+            "Ready for purpose review",
         ]
         dialog.table.selectRow(1)
+        assert dialog.purpose.currentData() is None and dialog.category.currentData() is None
+        dialog.purpose.setCurrentIndex(dialog.purpose.findData("income"))
         assert not dialog.action_button.isEnabled()
         assert "add an income category first" in dialog.status.text()
         dialog.table.selectRow(0)
-        assert dialog.action_button.isEnabled()
+        dialog.purpose.setCurrentIndex(dialog.purpose.findData("expense"))
+        dialog.category.setCurrentIndex(dialog.category.findData("expense:food"))
         dialog.reason.setText("Reviewed purchase")
+        assert dialog.action_button.isEnabled()
         dialog.action_button.click()
         assert dialog.model.rows[0].status == "Posted: Food"
-        assert dialog.model.rows[1].status == "Ready for income review"
+        assert dialog.model.rows[1].status == "Ready for purpose review"
         assert dialog.action_button.text() == "Correct expense category"
         renamed = "A Very Long Renamed Checking Account For Testing"
         with V2ProfileStore.open(profile) as store:
@@ -71,7 +75,7 @@ def test_cash_activity_dialog_keeps_unclassified_deposit_pending(tmp_path: Path,
         dialog.reason.setText("Correct category")
         dialog.action_button.click()
         assert dialog.model.rows[0].status == "Posted: Travel"
-        assert dialog.model.rows[1].status == "Ready for income review"
+        assert dialog.model.rows[1].status == "Ready for purpose review"
     finally:
         dialog.close()
         app.processEvents()
@@ -107,7 +111,9 @@ def test_cash_activity_dialog_explicitly_posts_and_corrects_income(tmp_path: Pat
     dialog = V2CashActivityReview(profile, evidence.source_sha256)
     try:
         dialog.table.selectRow(1)
-        assert dialog.category.count() == 2
+        assert dialog.purpose.currentData() is None and dialog.category.currentData() is None
+        dialog.purpose.setCurrentIndex(dialog.purpose.findData("income"))
+        assert dialog.category.count() == 3
         assert dialog.category.findData("expense:food") == -1
         assert dialog.action_button.text() == "Post reviewed income"
         dialog.category.setCurrentIndex(dialog.category.findData("income:pay"))
@@ -120,7 +126,7 @@ def test_cash_activity_dialog_explicitly_posts_and_corrects_income(tmp_path: Pat
         dialog.reason.setText("Correct classification")
         dialog.action_button.click()
         assert dialog.model.rows[1].status == "Posted: Gift"
-        assert dialog.model.rows[0].status == "Ready for expense review"
+        assert dialog.model.rows[0].status == "Ready for purpose review"
     finally:
         dialog.close()
         app.processEvents()
@@ -152,15 +158,17 @@ def test_bank_statement_rows_use_explicit_cash_review_dialog(tmp_path: Path, mon
     monkeypatch.setattr(QMessageBox, "question", confirm)
     dialog = V2CashActivityReview(profile, evidence.source_sha256)
     try:
-        assert [row.status for row in dialog.model.rows] == ["Ready for income review", "Ready for expense review"]
+        assert [row.status for row in dialog.model.rows] == ["Ready for purpose review", "Ready for purpose review"]
         assert "account-total scope" in dialog.note.text()
         dialog.table.selectRow(0)
+        dialog.purpose.setCurrentIndex(dialog.purpose.findData("income"))
         dialog.category.setCurrentIndex(dialog.category.findData("income:interest"))
         dialog.reason.setText("Confirmed interest")
         dialog.action_button.click()
         assert dialog.model.rows[0].status == "Posted: Interest"
         assert any("I confirm this receipt is income." in message for message in confirmations)
         dialog.table.selectRow(1)
+        dialog.purpose.setCurrentIndex(dialog.purpose.findData("expense"))
         dialog.category.setCurrentIndex(dialog.category.findData("expense:other"))
         dialog.reason.setText("Reviewed withdrawal")
         dialog.action_button.click()
