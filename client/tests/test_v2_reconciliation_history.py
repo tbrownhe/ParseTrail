@@ -348,7 +348,9 @@ def test_saved_entry_versions_detect_modified_historical_payload(tmp_path: Path)
         connection.execute("DROP TRIGGER immutable_JournalEntries_update")
         key = saved.journal_versions[0][0]
         payload = json.loads(connection.execute("SELECT payload FROM JournalEntries WHERE key=?", (key,)).fetchone()[0])
-        payload["description"] = "Tampered synthetic historical description"
+        # Keep the financial/source shape valid so this case specifically proves
+        # the saved manifest also binds nonfinancial historical review metadata.
+        payload["reason"] = "Tampered synthetic historical review reason"
         connection.execute("UPDATE JournalEntries SET payload=? WHERE key=?", (json.dumps(payload), key))
         connection.execute(trigger)
     with V2ProfileStore.open(path, read_only=True) as store:

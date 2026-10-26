@@ -42,10 +42,23 @@ Unresolved detected candidates block new cash, card and transfer allocations.
 Confirmed supporting repeats cannot be allocated independently; the retained
 row may be posted after its other candidate conflicts are resolved. Existing
 allocations are visible in review. A row with journal history cannot be silently
-excluded or reassigned. Two already-posted occurrences remain a visible conflict;
-this packet does not introduce journal cancellation or rewrite earlier books.
+excluded or reassigned. Two already-posted occurrences remain a visible conflict
+until explicit posted-repeat repair retains one supported cash/card category
+interpretation and retires the redundant one with an exact dated inverse.
+The repair, supporting-repeat decision and immutable proof are saved atomically.
+Subsequent pending/distinct/repeat review cannot revive retired money; a new
+independent interpretation requires fresh posting review. Historical rows may
+support a repeat only with validated complete repair and zero active allocation.
 Existing category/date corrections keep their audit trail and remain possible
 for already-posted retained rows.
+
+Supported ordinary interpretations can also be explicitly withdrawn with a
+reason and optimistic source-review version. Withdrawal retains all evidence and
+history, releases active consumption and returns the row to pending. A later
+post has a fresh identity. Whole-transfer withdrawal uses its separate event
+workflow. These actions do not unlock historical binding moves; explicit binding
+repair remains separate work. See the
+[interpretation-repair record](work/2026-10-25-v2-source-interpretation-repair.md).
 
 Conservative allocation and reconciliation reports continue to distinguish
 supporting evidence from actual source-row allocations. A duplicate review does

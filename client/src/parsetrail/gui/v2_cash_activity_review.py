@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
@@ -21,7 +22,6 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from parsetrail.core.source_evidence import StatementPayload
 from parsetrail.core.v2_profile_store import CashActivityReviewRow, ProfileFormatError, V2ProfileStore
 
 
@@ -31,6 +31,26 @@ def _money(minor: int | None) -> str:
     sign = "-" if minor < 0 else ""
     amount = abs(minor)
     return f"{sign}${amount // 100:,}.{amount % 100:02d}"
+
+
+def _interpretation_effects(entry, row, categories, *, financial_kind: str) -> str | None:
+    """Describe an exact supported entry's inverse, keeping natural account signs."""
+    category = next((category for category in categories if category.id == row.category_id), None)
+    if category is None:
+        return None
+    category_postings = [posting for posting in entry.postings if posting.account_id == category.id]
+    financial_postings = [posting for posting in entry.postings if posting.account_id != category.id]
+    if len(category_postings) != 1 or len(financial_postings) != 1:
+        return None
+    financial_sign = 1 if financial_kind == "asset" else -1
+    category_sign = 1 if category.kind == "expense" else -1
+    return (
+        f"Accounting date: {entry.posting_date.isoformat()}\n{entry.description}\n"
+        f"{row.financial_account}: {'asset value' if financial_kind == 'asset' else 'amount owed'} change "
+        f"{_money(-financial_sign * financial_postings[0].amount_minor)}.\n"
+        f"{category.name}: reviewed {category.kind} change {_money(-category_sign * category_postings[0].amount_minor)}.\n"
+        f"Active entry: {entry.key}; original reason: {entry.reason}."
+    )
 
 
 class _ReviewModel(QAbstractTableModel):
@@ -77,6 +97,7 @@ class V2CashActivityReview(QDialog):
         super().__init__(parent)
         self.profile = profile
         self.source_sha256 = source_sha256
+        self.basis, self.entries, self.history = None, {}, ()
         self.setWindowTitle("2.0 cash activity review")
         self.resize(1050, 620)
         layout = QVBoxLayout(self)
@@ -102,15 +123,29 @@ class V2CashActivityReview(QDialog):
         self.reason = QLineEdit()
         self.reason.setMaxLength(500)
         self.reason.setPlaceholderText("Required review or correction reason")
+        self.reason.textChanged.connect(self._update_withdraw)
         form.addRow("Reason", self.reason)
         layout.addLayout(form)
         self.action_button = QPushButton("Post reviewed cash activity")
         self.action_button.clicked.connect(self._act)
-        layout.addWidget(self.action_button)
+        self.withdraw_button = QPushButton("Withdraw active interpretation")
+        self.withdraw_button.clicked.connect(self._withdraw)
+        actions = QHBoxLayout()
+        actions.addWidget(self.action_button)
+        actions.addWidget(self.withdraw_button)
+        layout.addLayout(actions)
         self.status = QLabel()
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
+        self.history_details = QLabel()
+        self.history_details.setWordWrap(True)
+        self.history_details.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(self.history_details)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        reload_button = buttons.addButton("Reload saved review", QDialogButtonBox.ActionRole)
+        reload_button.clicked.connect(
+            lambda: self.refresh(selected_row_id=self._current().row_id if self._current() else None)
+        )
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
         self.categories = ()
@@ -142,13 +177,42 @@ class V2CashActivityReview(QDialog):
             if row is not None
             else f"{len(self.model.rows)} source row(s). Select one to review."
         )
+        self._update_withdraw()
+
+    def _update_withdraw(self, *_args) -> None:
+        row = self._current()
+        self.withdraw_button.setEnabled(
+            row is not None
+            and row.entry_key in self.entries
+            and self.basis is not None
+            and bool(self.reason.text().strip())
+        )
+        history = tuple(action for action in self.history if row and action.row_id == row.row_id)
+        self.history_details.setText(
+            "Retained interpretation history: "
+            + "; ".join(
+                f"{action.kind.replace('_', ' ')} — {action.reason} ({action.created_at} UTC)" for action in history[:3]
+            )
+            if history
+            else ""
+        )
 
     def refresh(self, selected_row_id: str | None = None) -> None:
-        with V2ProfileStore.open(self.profile, read_only=True) as store:
-            rows = store.cash_activity_review_rows(self.source_sha256)
-            self.categories = store.category_accounts()
-            statement = isinstance(store.load_import(self.source_sha256).evidence.payload, StatementPayload)
-            overlaps = store.overlapping_statement_sources(self.source_sha256) if statement else ()
+        try:
+            with V2ProfileStore.open(self.profile, read_only=True) as store:
+                snapshot = store.source_interpretation_snapshot(self.source_sha256, kind="cash")
+        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
+            self.basis, self.entries, self.history, self.categories = None, {}, (), ()
+            self.model.replace(())
+            self._selected()
+            self.status.setText(f"Source review unavailable. Reopen or refresh the review: {exc}")
+            return
+        self.basis, self.entries, self.history = (
+            snapshot.basis_sha256,
+            {entry.key: entry for entry in snapshot.entries},
+            snapshot.history,
+        )
+        rows, self.categories, overlaps = snapshot.rows, snapshot.categories, snapshot.overlapping_source_ids
         self.note.setText(
             "Select a row assigned to an asset account with a source posting date. "
             "Bank statement rows also need account-total scope; other statement rows stay pending. "
@@ -191,9 +255,13 @@ class V2CashActivityReview(QDialog):
         try:
             with V2ProfileStore.open(self.profile) as store:
                 if correcting:
-                    store.correct_reviewed_cash_category(row.entry_key, category_id, reason=reason)
+                    store.correct_reviewed_cash_category(
+                        row.entry_key, category_id, reason=reason, expected_basis_sha256=self.basis
+                    )
                 else:
-                    store.post_reviewed_cash_category(row.row_id, category_id, reason=reason)
+                    store.post_reviewed_cash_category(
+                        row.row_id, category_id, reason=reason, expected_basis_sha256=self.basis
+                    )
         except (ProfileFormatError, sqlite3.Error, OSError) as exc:
             QMessageBox.warning(self, "Cash activity was not saved", str(exc))
             self.refresh(selected_row_id=row.row_id)
@@ -202,4 +270,34 @@ class V2CashActivityReview(QDialog):
         self.refresh(selected_row_id=row.row_id)
         self.status.setText(
             "Correction saved with its reversal and replacement." if correcting else f"{kind.title()} posted."
+        )
+
+    def _withdraw(self) -> None:
+        row, reason = self._current(), self.reason.text().strip()
+        entry = self.entries.get(row.entry_key) if row else None
+        if row is None or entry is None or not reason or self.basis is None:
+            return
+        effects = _interpretation_effects(entry, row, self.categories, financial_kind="asset")
+        if effects is None:
+            return
+        message = (
+            f"Withdraw this supported cash interpretation?\n\nInverse effects:\n{effects}\n\nReason: {reason}\n\n"
+            "The active entry is reversed at its original accounting date. Original entries and allocations remain history. "
+            "The immutable source row returns to pending; posting it again requires a fresh review. "
+            "This withdraws an interpretation, not a bank movement."
+        )
+        if QMessageBox.question(self, "Confirm interpretation withdrawal", message) != QMessageBox.Yes:
+            return
+        try:
+            with V2ProfileStore.open(self.profile) as store:
+                store.withdraw_reviewed_interpretation(entry.key, expected_basis_sha256=self.basis, reason=reason)
+        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
+            QMessageBox.warning(self, "Interpretation was not withdrawn", str(exc))
+            self.refresh(selected_row_id=row.row_id)
+            return
+        self.reason.clear()
+        self.refresh(selected_row_id=row.row_id)
+        self.status.setText(
+            "The selected interpretation's withdrawal is recorded. The refreshed row shows its current posting state; "
+            "original and inverse entries remain history."
         )

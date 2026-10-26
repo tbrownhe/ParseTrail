@@ -123,6 +123,8 @@ def write_reviewed_journal_workbook(report: ReviewedJournalExport, destination_p
             ("Corrections to original entries posted in period", len(report.corrections)),
             ("Retirements of original entries posted in period", len(report.retirements)),
             ("Transfer corrections affecting original events in period", len(report.transfer_actions)),
+            ("Source interpretation withdrawals/repairs in period", len(report.source_actions)),
+            ("Posted repeat repairs in period", len(report.repeat_repairs)),
             ("Correction presentation", "Superseded entries and reversals are omitted from active rows."),
             (
                 "Retirement presentation",
@@ -202,6 +204,44 @@ def write_reviewed_journal_workbook(report: ReviewedJournalExport, destination_p
             for row in report.transfer_actions
         ],
     )
+    _sheet(
+        workbook,
+        "Source Reviews",
+        ("Action", "Source row", "Original entry", "Inverse entry", "Kind", "Reason", "Created at"),
+        [
+            (row.action_id, row.row_id, row.entry_key, row.reversal_key, row.kind, row.reason, row.created_at)
+            for row in report.source_actions
+        ],
+    )
+    _sheet(
+        workbook,
+        "Repeat Repairs",
+        (
+            "Repair",
+            "Retained row",
+            "Supporting row",
+            "Retained entry",
+            "Retired entry",
+            "Inverse",
+            "Occurrence review",
+            "Reason",
+            "Created at",
+        ),
+        [
+            (
+                row.repair_id,
+                row.retained_row_id,
+                row.redundant_row_id,
+                row.retained_entry_key,
+                row.redundant_entry_key,
+                row.reversal_key,
+                row.review_revision_id,
+                row.reason,
+                row.created_at,
+            )
+            for row in report.repeat_repairs
+        ],
+    )
     descriptor, partial_name = tempfile.mkstemp(
         prefix=f".{destination.name}.partial.", suffix=".xlsx", dir=destination.parent
     )
@@ -219,6 +259,8 @@ def write_reviewed_journal_workbook(report: ReviewedJournalExport, destination_p
                 "Corrections",
                 "Retirements",
                 "Transfer Reviews",
+                "Source Reviews",
+                "Repeat Repairs",
             ]:
                 raise ReportExportError("report_workbook_integrity")
         finally:

@@ -47,7 +47,7 @@ from parsetrail.core.v2_source_overlap import (
 )
 
 APPLICATION_ID = 0x50543230  # PT20
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_DEFINITION_BYTES = 64 * 1024
 MAX_EVIDENCE_BYTES = 32 * 1024 * 1024
@@ -217,6 +217,34 @@ TABLE_COLUMNS = {
         ("record_sha256", "TEXT", 1, 0),
         ("created_at", "TEXT", 1, 0),
     ),
+    "SourceInterpretationActions": (
+        ("action_id", "INTEGER", 0, 1),
+        ("row_id", "TEXT", 1, 0),
+        ("entry_key", "TEXT", 1, 0),
+        ("reversal_key", "TEXT", 1, 0),
+        ("kind", "TEXT", 1, 0),
+        ("request_basis", "TEXT", 1, 0),
+        ("original_sha256", "TEXT", 1, 0),
+        ("inverse_sha256", "TEXT", 1, 0),
+        ("reason", "TEXT", 1, 0),
+        ("record_sha256", "TEXT", 1, 0),
+        ("created_at", "TEXT", 1, 0),
+    ),
+    "PostedRepeatRepairs": (
+        ("repair_id", "INTEGER", 0, 1),
+        ("retained_row_id", "TEXT", 1, 0),
+        ("redundant_row_id", "TEXT", 1, 0),
+        ("retained_entry_key", "TEXT", 1, 0),
+        ("redundant_entry_key", "TEXT", 1, 0),
+        ("action_id", "INTEGER", 1, 0),
+        ("review_revision_id", "INTEGER", 1, 0),
+        ("request_basis", "TEXT", 1, 0),
+        ("retained_sha256", "TEXT", 1, 0),
+        ("review_sha256", "TEXT", 1, 0),
+        ("reason", "TEXT", 1, 0),
+        ("record_sha256", "TEXT", 1, 0),
+        ("created_at", "TEXT", 1, 0),
+    ),
 }
 FOREIGN_KEYS = {
     "Sources": (),
@@ -263,6 +291,19 @@ FOREIGN_KEYS = {
         ("incoming_row_id", "SourceObservations", "row_id"),
         ("outgoing_row_id", "SourceObservations", "row_id"),
     ),
+    "SourceInterpretationActions": (
+        ("reversal_key", "JournalEntries", "key"),
+        ("entry_key", "JournalEntries", "key"),
+        ("row_id", "SourceObservations", "row_id"),
+    ),
+    "PostedRepeatRepairs": (
+        ("review_revision_id", "SourceOverlapReviews", "revision_id"),
+        ("action_id", "SourceInterpretationActions", "action_id"),
+        ("redundant_entry_key", "JournalEntries", "key"),
+        ("retained_entry_key", "JournalEntries", "key"),
+        ("redundant_row_id", "SourceObservations", "row_id"),
+        ("retained_row_id", "SourceObservations", "row_id"),
+    ),
 }
 
 IMMUTABLE_TABLES = (
@@ -282,6 +323,8 @@ IMMUTABLE_TABLES = (
     "TransferEvents",
     "TransferEventActions",
     "TransferPairReviews",
+    "SourceInterpretationActions",
+    "PostedRepeatRepairs",
 )
 
 _INACTIVE_JOURNAL_SQL = (
@@ -577,6 +620,46 @@ class TransferReviewSnapshot:
 
 
 @dataclass(frozen=True)
+class SourceInterpretationAction:
+    action_id: int
+    row_id: str
+    entry_key: str
+    reversal_key: str
+    kind: Literal["withdraw", "repeat_repair"]
+    reason: str
+    created_at: str
+    version: str
+
+
+@dataclass(frozen=True)
+class PostedRepeatRepair:
+    repair_id: int
+    retained_row_id: str
+    redundant_row_id: str
+    retained_entry_key: str
+    redundant_entry_key: str
+    reversal_key: str
+    review_revision_id: int
+    reason: str
+    created_at: str
+    version: str
+
+
+@dataclass(frozen=True)
+class SourceInterpretationSnapshot:
+    source_sha256: str
+    kind: Literal["cash", "card"]
+    rows: tuple[CashActivityReviewRow | CardPurchaseReviewRow, ...]
+    categories: tuple[CategoryAccount, ...]
+    entries: tuple[JournalEntry, ...]
+    history: tuple[SourceInterpretationAction, ...]
+    basis_sha256: str
+    preferences: V2Preferences | None
+    statement: bool
+    overlapping_source_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ReviewedCategoryTotal:
     category_id: str
     name: str
@@ -731,6 +814,8 @@ class ReviewedJournalExport:
     excluded_opening_entries: int
     retirements: tuple[JournalExportRetirement, ...] = ()
     transfer_actions: tuple[JournalExportTransferAction, ...] = ()
+    source_actions: tuple[SourceInterpretationAction, ...] = ()
+    repeat_repairs: tuple[PostedRepeatRepair, ...] = ()
 
 
 BANK_CASH_STATEMENT_PARSERS = frozenset(
@@ -795,8 +880,10 @@ def _journal_payload(entry: JournalEntry) -> str:
 
 def _decode_journal(payload: str) -> JournalEntry:
     try:
+        if type(payload) is not str:
+            raise ValueError
         data = json.loads(payload)
-        return JournalEntry(
+        entry = JournalEntry(
             key=data["key"],
             event_id=data["event_id"],
             posting_date=date.fromisoformat(data["posting_date"]),
@@ -813,6 +900,37 @@ def _decode_journal(payload: str) -> JournalEntry:
             reviewed=data["reviewed"],
             reason=data["reason"],
         )
+        if (
+            any(
+                type(value) is not str or not value
+                for value in (entry.key, entry.event_id, entry.description, entry.origin)
+            )
+            or entry.origin not in {"imported", "manual", "opening", "reversal"}
+            or type(entry.reviewed) is not bool
+            or type(entry.reason) is not str
+            or len(entry.postings) < 2
+        ):
+            raise ValueError
+        for posting in entry.postings:
+            if (
+                type(posting.account_id) is not str
+                or not posting.account_id
+                or type(posting.amount_minor) is not int
+                or not -(2**63) < posting.amount_minor < 2**63
+                or posting.amount_minor == 0
+                or any(
+                    type(a.observation_id) is not str
+                    or not a.observation_id
+                    or type(a.amount_minor) is not int
+                    or not -(2**63) < a.amount_minor < 2**63
+                    or a.amount_minor == 0
+                    for a in posting.allocations
+                )
+            ):
+                raise ValueError
+        if sum(posting.amount_minor for posting in entry.postings) != 0:
+            raise ValueError
+        return entry
     except (KeyError, TypeError, ValueError):
         raise ProfileFormatError("journal_entry_invalid") from None
 
@@ -1008,6 +1126,7 @@ class V2ProfileStore:
         self.connection = connection
         self.read_only = read_only
         self._transfer_mutating = False
+        self._source_interpretation_mutating = False
 
     @classmethod
     def create(cls, path: Path) -> V2ProfileStore:
@@ -1182,6 +1301,28 @@ class V2ProfileStore:
                     request_basis TEXT NOT NULL, reason TEXT NOT NULL, record_sha256 TEXT NOT NULL,
                     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
                 );
+                CREATE TABLE SourceInterpretationActions (
+                    action_id INTEGER PRIMARY KEY,
+                    row_id TEXT NOT NULL REFERENCES SourceObservations(row_id),
+                    entry_key TEXT NOT NULL UNIQUE REFERENCES JournalEntries(key),
+                    reversal_key TEXT NOT NULL UNIQUE REFERENCES JournalEntries(key),
+                    kind TEXT NOT NULL CHECK(kind IN ('withdraw','repeat_repair')),
+                    request_basis TEXT NOT NULL, original_sha256 TEXT NOT NULL, inverse_sha256 TEXT NOT NULL,
+                    reason TEXT NOT NULL, record_sha256 TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+                );
+                CREATE TABLE PostedRepeatRepairs (
+                    repair_id INTEGER PRIMARY KEY,
+                    retained_row_id TEXT NOT NULL REFERENCES SourceObservations(row_id),
+                    redundant_row_id TEXT NOT NULL REFERENCES SourceObservations(row_id),
+                    retained_entry_key TEXT NOT NULL REFERENCES JournalEntries(key),
+                    redundant_entry_key TEXT NOT NULL REFERENCES JournalEntries(key),
+                    action_id INTEGER NOT NULL UNIQUE REFERENCES SourceInterpretationActions(action_id),
+                    review_revision_id INTEGER NOT NULL UNIQUE REFERENCES SourceOverlapReviews(revision_id),
+                    request_basis TEXT NOT NULL, retained_sha256 TEXT NOT NULL, review_sha256 TEXT NOT NULL,
+                    reason TEXT NOT NULL, record_sha256 TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+                );
                 COMMIT;
             """)
             for table in IMMUTABLE_TABLES:
@@ -1251,12 +1392,12 @@ class V2ProfileStore:
                         raise ProfileFormatError("profile_snapshot_integrity")
                     for source_id in verified.source_ids():
                         verified.load_import(source_id)
-                    for (payload,) in verified.connection.execute("SELECT payload FROM JournalEntries"):
-                        _decode_journal(payload)
                     verified._validate_journal_retirements()
-                    verified._validate_transfer_history()
                     for account in verified.financial_accounts():
                         verified.opening_decision_history(account.id)
+                    verified._validate_transfer_history()
+                    verified._validate_source_interpretation_history()
+                    verified._validate_common_journal_read()
                     verified._reconciliation_history(None)
                 try:
                     os.link(partial, destination)
@@ -1520,6 +1661,8 @@ class V2ProfileStore:
     def _active_consumed(self, *, excluding: str | None = None) -> dict[str, int]:
         self._validate_journal_retirements()
         self._validate_transfer_history()
+        self._validate_source_interpretation_history()
+        self._validate_common_journal_read()
         query = (
             f"SELECT row_id,SUM(amount_minor) FROM JournalAllocations WHERE entry_key NOT IN ({_INACTIVE_JOURNAL_SQL})"
         )
@@ -1532,6 +1675,7 @@ class V2ProfileStore:
     def _inactive_journal_keys(self) -> frozenset[str]:
         self._validate_journal_retirements()
         self._validate_transfer_history()
+        self._validate_source_interpretation_history()
         return frozenset(key for (key,) in self.connection.execute(_INACTIVE_JOURNAL_SQL))
 
     def _validate_journal_retirements(self) -> None:
@@ -1647,6 +1791,10 @@ class V2ProfileStore:
         """Build full finite row buckets. Inventory caps never weaken posting checks."""
         accounts = {account.id: account for account in self.financial_accounts()}
         consumed = self._active_consumed()
+        proven_support = set()
+        if not self._source_interpretation_mutating:
+            _actions, repairs = self._read_source_interpretation_history()
+            proven_support = {repair.redundant_row_id for repair in repairs}
         history = {row[0] for row in self.connection.execute("SELECT DISTINCT row_id FROM JournalAllocations")}
         rows = {}
         buckets = {}
@@ -1670,6 +1818,7 @@ class V2ProfileStore:
                     tuple(dict.fromkeys(fragment.location.model_dump_json() for fragment in row.fragments)),
                     consumed.get(row.row_id, 0),
                     row.row_id in history,
+                    row.row_id in proven_support and not consumed.get(row.row_id, 0),
                 )
                 rows[item.row_id] = item
                 buckets.setdefault(bucket_key(item), []).append(item.row_id)
@@ -1691,6 +1840,7 @@ class V2ProfileStore:
     def _source_overlap_basis(self) -> str:
         self._validate_journal_retirements()
         self._validate_transfer_history()
+        self._validate_source_interpretation_history()
         digest = hashlib.sha256(OVERLAP_RULE.encode())
         for table in (
             "EvidenceSnapshots",
@@ -1707,6 +1857,8 @@ class V2ProfileStore:
             "TransferEvents",
             "TransferEventActions",
             "TransferPairReviews",
+            "SourceInterpretationActions",
+            "PostedRepeatRepairs",
             "SourceOverlapReviews",
         ):
             digest.update(table.encode())
@@ -1853,6 +2005,27 @@ class V2ProfileStore:
         reason: str,
         expected_basis_sha256: str,
     ) -> SourceOverlapCandidate:
+        return self._record_source_overlap_review(
+            left_row_id,
+            right_row_id,
+            decision=decision,
+            retained_row_id=retained_row_id,
+            reason=reason,
+            expected_basis_sha256=expected_basis_sha256,
+        )
+
+    def _record_source_overlap_review(
+        self,
+        left_row_id: str,
+        right_row_id: str,
+        *,
+        decision: Literal["distinct", "repeat", "pending"],
+        retained_row_id: str | None = None,
+        reason: str,
+        expected_basis_sha256: str,
+        _owns_transaction: bool = True,
+        _repair_proof: bool = False,
+    ) -> SourceOverlapCandidate:
         """Append an explicit occurrence decision without changing evidence or money."""
         self._require_writable()
         if (
@@ -1868,7 +2041,8 @@ class V2ProfileStore:
         ):
             raise ProfileFormatError("source_overlap_review_invalid")
         left_id, right_id = sorted((left_row_id, right_row_id))
-        self.connection.execute("BEGIN IMMEDIATE")
+        if _owns_transaction:
+            self.connection.execute("BEGIN IMMEDIATE")
         try:
             if expected_basis_sha256 != self._source_overlap_basis():
                 raise ProfileFormatError("source_overlap_changed_since_selection")
@@ -1889,7 +2063,16 @@ class V2ProfileStore:
                 effective.pop(old_excluded, None)
             if decision == "repeat":
                 excluded = right_id if retained_row_id == left_id else left_id
-                if rows[excluded].has_journal_history:
+                proven = self._has_posted_repeat_proof(excluded) or (
+                    _repair_proof
+                    and self._source_interpretation_mutating
+                    and self.connection.execute(
+                        "SELECT 1 FROM SourceInterpretationActions WHERE row_id=? AND kind='repeat_repair'", (excluded,)
+                    ).fetchone()
+                    is not None
+                    and not self._active_consumed().get(excluded, 0)
+                )
+                if rows[excluded].has_journal_history and not proven:
                     raise ProfileFormatError("source_overlap_excluded_has_journal_history")
                 if (
                     retained_row_id in effective
@@ -1925,9 +2108,11 @@ class V2ProfileStore:
                 )
             _rows_index, _buckets, reviews, aliases = self._source_overlap_index()
             result = self._source_overlap_candidate(left, right, reviews, aliases, self._source_overlap_basis())
-            self.connection.execute("COMMIT")
+            if _owns_transaction:
+                self.connection.execute("COMMIT")
         except BaseException:
-            self.connection.execute("ROLLBACK")
+            if _owns_transaction:
+                self.connection.execute("ROLLBACK")
             raise
         return result
 
@@ -1943,6 +2128,573 @@ class V2ProfileStore:
                 )
             )
         return assigned
+
+    def _ordinary_category_entry(
+        self, entry_key: str, *, active: bool = True, _cache: dict | None = None
+    ) -> tuple[JournalEntry, str]:
+        cache = {} if _cache is None else _cache
+        if type(entry_key) is not str or not entry_key.startswith(("review:cash:", "review:card:")):
+            raise ProfileFormatError("source_interpretation_unsupported")
+        saved = (
+            (cache["journal_payloads"][entry_key],)
+            if "journal_payloads" in cache and entry_key in cache["journal_payloads"]
+            else self.connection.execute("SELECT payload FROM JournalEntries WHERE key=?", (entry_key,)).fetchone()
+        )
+        if saved is None:
+            raise ProfileFormatError("source_interpretation_unsupported")
+        entry = _decode_journal(saved[0])
+        indexed = (
+            cache["allocations"].get(entry_key, [])
+            if "allocations" in cache
+            else self.connection.execute(
+                "SELECT row_id,amount_minor FROM JournalAllocations WHERE entry_key=?", (entry_key,)
+            ).fetchall()
+        )
+        if (
+            entry.key != entry_key
+            or entry.origin != "imported"
+            or entry.reviewed is not True
+            or len(entry.postings) != 2
+            or len(indexed) != 1
+            or type(indexed[0][0]) is not str
+            or type(indexed[0][1]) is not int
+            or indexed[0][1] == 0
+            or entry.postings[0].allocations != (Allocation(*indexed[0]),)
+            or entry.postings[0].amount_minor != indexed[0][1]
+            or entry.postings[1].amount_minor != -indexed[0][1]
+            or entry.postings[1].allocations
+        ):
+            raise ProfileFormatError("source_interpretation_unsupported")
+        row_id, amount = indexed[0]
+        source = (
+            (cache["observation_sources"][row_id],)
+            if "observation_sources" in cache and row_id in cache["observation_sources"]
+            else self.connection.execute(
+                "SELECT source_sha256 FROM SourceObservations WHERE row_id=?", (row_id,)
+            ).fetchone()
+        )
+        if source is None:
+            raise ProfileFormatError("source_interpretation_unsupported")
+        evidence_by_source = cache.setdefault("evidence", {})
+        if source[0] not in evidence_by_source:
+            evidence_by_source[source[0]] = self.load_import(source[0]).evidence
+            cache.setdefault("source_rows", {})[source[0]] = {
+                row.row_id: row for row in _rows(evidence_by_source[source[0]])
+            }
+        evidence = evidence_by_source[source[0]]
+        row = cache["source_rows"][source[0]][row_id]
+        scopes = cache.setdefault("review_scopes", {})
+        if source[0] not in scopes:
+            scopes[source[0]] = (_cash_review_scopes(evidence), _card_review_scopes(evidence))
+        if "accounts" not in cache:
+            cache["accounts"] = self._ledger_accounts()
+            cache["roles"] = dict(self.connection.execute("SELECT id,role FROM Accounts"))
+        accounts = cache["accounts"]
+        financial = accounts.get(entry.postings[0].account_id)
+        category = accounts.get(entry.postings[1].account_id)
+        kind = "expense" if amount < 0 else "income"
+        cash = entry_key.startswith("review:cash:")
+        if (
+            row.row_role != "activity"
+            or row.components
+            or row.amount.minor != amount
+            or row.amount.provenance != "observed"
+            or not row.description.text
+            or entry.description != row.description.text
+            or entry.event_id != f"source:{row_id}"
+            or financial is None
+            or financial.source_account_id is None
+            or category is None
+            or category.source_account_id is not None
+            or category.kind.value != kind
+            or cache["roles"].get(category.id) != "category"
+            or (
+                cash
+                and (
+                    financial.kind != AccountKind.ASSET
+                    or not scopes[source[0]][0].get(row_id, False)
+                    or row.date_role != "posting_date"
+                    or entry.posting_date.isoformat() != row.date.iso
+                )
+            )
+            or (
+                not cash
+                and (
+                    financial.kind != AccountKind.LIABILITY
+                    or amount >= 0
+                    or not scopes[source[0]][1].get(row_id, False)
+                    or posting_date_candidate(row) is None
+                )
+            )
+        ):
+            raise ProfileFormatError("source_interpretation_unsupported")
+        try:
+            validate_entry(entry, accounts, {row_id: Observation(row_id, financial.id, amount, entry.posting_date)}, {})
+        except LedgerError:
+            raise ProfileFormatError("source_interpretation_unsupported") from None
+        if active:
+            if entry_key in self._inactive_journal_keys():
+                raise ProfileFormatError("source_interpretation_not_active")
+            bindings = {b.row_id: b.ledger_account_id for b in self.account_bindings(source[0])}
+            usage = self._active_consumed()
+            active_keys = self.connection.execute(
+                f"SELECT entry_key FROM JournalAllocations WHERE row_id=? AND entry_key NOT IN ({_INACTIVE_JOURNAL_SQL})",
+                (row_id,),
+            ).fetchall()
+            if bindings.get(row_id) != financial.id or usage.get(row_id) != amount or active_keys != [(entry_key,)]:
+                raise ProfileFormatError("source_interpretation_not_active")
+        return entry, row_id
+
+    def _read_source_interpretation_history(
+        self,
+    ) -> tuple[tuple[SourceInterpretationAction, ...], tuple[PostedRepeatRepair, ...]]:
+        self._validate_journal_retirements()
+        actions, action_details = [], {}
+        for row in self.connection.execute(
+            "SELECT action_id,row_id,entry_key,reversal_key,kind,request_basis,original_sha256,inverse_sha256,reason,record_sha256,created_at FROM SourceInterpretationActions ORDER BY action_id DESC"
+        ):
+            action_id, row_id, key, inverse, kind, basis, original_sha, inverse_sha, reason, checksum, created = row
+            if (
+                type(action_id) is not int
+                or action_id <= 0
+                or any(type(value) is not str or not value for value in row[1:])
+                or kind not in {"withdraw", "repeat_repair"}
+                or not 0 < len(reason.strip()) <= 500
+                or any(
+                    re.fullmatch(r"[0-9a-f]{64}", value) is None
+                    for value in (basis, original_sha, inverse_sha, checksum)
+                )
+                or checksum != _transfer_record_digest(*row[:9])
+            ):
+                raise ProfileFormatError("source_interpretation_history_integrity")
+            try:
+                entry, actual_row = self._ordinary_category_entry(key, active=False)
+                saved_inverse = self.connection.execute(
+                    "SELECT payload FROM JournalEntries WHERE key=?", (inverse,)
+                ).fetchone()
+                retired = self.connection.execute(
+                    "SELECT reversal_key,reason FROM JournalRetirements WHERE original_key=?", (key,)
+                ).fetchone()
+                if (
+                    actual_row != row_id
+                    or retired != (inverse, reason)
+                    or saved_inverse is None
+                    or original_sha != _digest(_journal_payload(entry).encode())
+                    or inverse_sha != _digest(saved_inverse[0].encode())
+                ):
+                    raise ValueError
+            except (ProfileFormatError, TypeError, ValueError):
+                raise ProfileFormatError("source_interpretation_history_integrity") from None
+            actions.append(SourceInterpretationAction(action_id, row_id, key, inverse, kind, reason, created, checksum))
+            action_details[action_id] = row
+        repairs, repair_actions = [], set()
+        for row in self.connection.execute(
+            "SELECT repair_id,retained_row_id,redundant_row_id,retained_entry_key,redundant_entry_key,action_id,review_revision_id,request_basis,retained_sha256,review_sha256,reason,record_sha256,created_at FROM PostedRepeatRepairs ORDER BY repair_id DESC"
+        ):
+            (
+                repair_id,
+                retained,
+                redundant,
+                retained_key,
+                redundant_key,
+                action_id,
+                review_id,
+                basis,
+                retained_sha,
+                review_sha,
+                reason,
+                checksum,
+                created,
+            ) = row
+            if (
+                any(type(row[index]) is not int or row[index] <= 0 for index in (0, 5, 6))
+                or any(type(row[index]) is not str or not row[index] for index in (1, 2, 3, 4, 7, 8, 9, 10, 11, 12))
+                or any(
+                    re.fullmatch(r"[0-9a-f]{64}", value) is None
+                    for value in (basis, retained_sha, review_sha, checksum)
+                )
+                or checksum != _transfer_record_digest(*row[:11])
+            ):
+                raise ProfileFormatError("source_interpretation_history_integrity")
+            action = action_details.get(action_id)
+            if (
+                action is None
+                or action[1] != redundant
+                or action[2] != redundant_key
+                or action[4] != "repeat_repair"
+                or action[5] != basis
+                or action[8] != reason
+                or action_id in repair_actions
+            ):
+                raise ProfileFormatError("source_interpretation_history_integrity")
+            try:
+                retained_entry, retained_actual = self._ordinary_category_entry(retained_key, active=False)
+                redundant_entry, redundant_actual = self._ordinary_category_entry(redundant_key, active=False)
+                review = self.connection.execute(
+                    "SELECT * FROM SourceOverlapReviews WHERE revision_id=?", (review_id,)
+                ).fetchone()
+                if (
+                    retained_actual != retained
+                    or redundant_actual != redundant
+                    or retained == redundant
+                    or retained_entry.postings[0].account_id != redundant_entry.postings[0].account_id
+                    or retained_entry.postings[0].amount_minor != redundant_entry.postings[0].amount_minor
+                    or retained_sha != _digest(_journal_payload(retained_entry).encode())
+                    or review is None
+                    or review[1:5] != (*sorted((retained, redundant)), "repeat", retained)
+                    or review[6] != reason
+                    or review_sha != _transfer_record_digest(*review)
+                ):
+                    raise ValueError
+                immutable_rows = self.connection.execute(
+                    "SELECT row_id,source_sha256,date_role,observed_date,amount_minor FROM SourceObservations WHERE row_id IN (?,?)",
+                    (retained, redundant),
+                ).fetchall()
+                if (
+                    len(immutable_rows) != 2
+                    or immutable_rows[0][1] == immutable_rows[1][1]
+                    or immutable_rows[0][2:] != immutable_rows[1][2:]
+                ):
+                    raise ValueError
+            except (ProfileFormatError, TypeError, ValueError):
+                raise ProfileFormatError("source_interpretation_history_integrity") from None
+            repairs.append(
+                PostedRepeatRepair(
+                    repair_id,
+                    retained,
+                    redundant,
+                    retained_key,
+                    redundant_key,
+                    action[3],
+                    review_id,
+                    reason,
+                    created,
+                    checksum,
+                )
+            )
+            repair_actions.add(action_id)
+        if {a.action_id for a in actions if a.kind == "repeat_repair"} != repair_actions:
+            raise ProfileFormatError("source_interpretation_history_integrity")
+        return tuple(actions), tuple(repairs)
+
+    def _validate_source_interpretation_history(self) -> None:
+        if not self._source_interpretation_mutating:
+            self._read_source_interpretation_history()
+
+    def _validate_common_journal_read(self) -> None:
+        """Validate recorded money without invoking report or active-read helpers.
+
+        Historical effective card dates remain reviewed facts. Source decoding and
+        row indexes are cached for this pass, never shared across profile versions.
+        Pending manual entries receive structural checks without being classified.
+        """
+        payloads = dict(self.connection.execute("SELECT key,payload FROM JournalEntries"))
+        if not payloads:
+            return
+        entries = {key: _decode_journal(payload) for key, payload in payloads.items()}
+        accounts = self._ledger_accounts()
+        if any(
+            type(key) is not str
+            or entry.key != key
+            or any(posting.account_id not in accounts for posting in entry.postings)
+            for key, entry in entries.items()
+        ):
+            raise ProfileFormatError("journal_entry_invalid")
+        allocations = {}
+        for key, row_id, amount in self.connection.execute(
+            "SELECT entry_key,row_id,amount_minor FROM JournalAllocations"
+        ):
+            allocations.setdefault(key, []).append((row_id, amount))
+        cache = {
+            "journal_payloads": payloads,
+            "accounts": accounts,
+            "roles": dict(self.connection.execute("SELECT id,role FROM Accounts")),
+            "allocations": allocations,
+            "observation_sources": dict(self.connection.execute("SELECT row_id,source_sha256 FROM SourceObservations")),
+        }
+        inactive = frozenset(key for (key,) in self.connection.execute(_INACTIVE_JOURNAL_SQL))
+        active_by_row = {}
+        for key, rows in allocations.items():
+            if key not in inactive:
+                for row_id, _amount in rows:
+                    active_by_row.setdefault(row_id, []).append(key)
+        ordinary = {}
+        bindings_by_source = {}
+        try:
+            for key, entry in entries.items():
+                if not key.startswith(("review:cash:", "review:card:")):
+                    continue
+                ordinary[key] = self._ordinary_category_entry(key, active=False, _cache=cache)
+                if key not in inactive:
+                    row_id = ordinary[key][1]
+                    source_id = cache["observation_sources"][row_id]
+                    if source_id not in bindings_by_source:
+                        bindings_by_source[source_id] = {
+                            b.row_id: b.ledger_account_id for b in self.account_bindings(source_id)
+                        }
+                    if (
+                        active_by_row.get(row_id) != [key]
+                        or bindings_by_source[source_id].get(row_id) != entry.postings[0].account_id
+                    ):
+                        raise ValueError
+            corrections = self.connection.execute(
+                "SELECT original_key,reversal_key,replacement_key,reason FROM JournalCorrections"
+            ).fetchall()
+            links = {}
+            inverse_keys = {row[1] for row in corrections}
+            other_keys = {key for row in corrections for key in (row[0], row[2])}
+            if inverse_keys & other_keys:
+                raise ValueError
+            for original_key, inverse_key, replacement_key, reason in corrections:
+                if (
+                    any(
+                        type(value) is not str or not value
+                        for value in (original_key, inverse_key, replacement_key, reason)
+                    )
+                    or not 0 < len(reason.strip()) <= 500
+                    or original_key == replacement_key
+                ):
+                    raise ValueError
+                original, original_row = ordinary[original_key]
+                replacement, replacement_row = ordinary[replacement_key]
+                inverse = entries[inverse_key]
+                expected = JournalEntry(
+                    key=inverse_key,
+                    event_id=original.event_id,
+                    posting_date=original.posting_date,
+                    description="Reversal: " + original.description,
+                    postings=tuple(Posting(p.account_id, -p.amount_minor) for p in original.postings),
+                    origin="reversal",
+                    reviewed=True,
+                    reason=reason,
+                )
+                if (
+                    inverse != expected
+                    or allocations.get(inverse_key)
+                    or original_row != replacement_row
+                    or original.event_id != replacement.event_id
+                    or original.postings[0].account_id != replacement.postings[0].account_id
+                    or original.postings[0].amount_minor != replacement.postings[0].amount_minor
+                    or replacement.reason != reason
+                    or original.key.split(":")[1] != replacement.key.split(":")[1]
+                ):
+                    raise ValueError
+                links[original_key] = replacement_key
+            for key in links:
+                seen = set()
+                while key in links:
+                    if key in seen:
+                        raise ValueError
+                    seen.add(key)
+                    key = links[key]
+        except (ProfileFormatError, KeyError, TypeError, ValueError):
+            raise ProfileFormatError("ordinary_journal_integrity") from None
+
+    def _has_posted_repeat_proof(self, row_id: str) -> bool:
+        if self._active_consumed().get(row_id, 0):
+            return False
+        return (
+            self.connection.execute(
+                "SELECT 1 FROM PostedRepeatRepairs r JOIN SourceInterpretationActions a ON a.action_id=r.action_id WHERE r.redundant_row_id=? AND a.kind='repeat_repair' LIMIT 1",
+                (row_id,),
+            ).fetchone()
+            is not None
+        )
+
+    def source_interpretation_snapshot(
+        self, source_sha256: str, *, kind: Literal["cash", "card"], preferences: V2Preferences | None = None
+    ) -> SourceInterpretationSnapshot:
+        if kind not in {"cash", "card"} or (kind == "card" and type(preferences) is not V2Preferences):
+            raise ProfileFormatError("source_interpretation_kind_invalid")
+        if self.connection.in_transaction:
+            raise ProfileFormatError("source_interpretation_requires_committed_snapshot")
+        self.connection.execute("BEGIN")
+        try:
+            actions, _repairs = self._read_source_interpretation_history()
+            saved = self.load_import(source_sha256)
+            rows = (
+                self.cash_activity_review_rows(source_sha256)
+                if kind == "cash"
+                else self.card_purchase_review_rows(source_sha256, preferences=preferences)
+            )
+            keys = tuple(dict.fromkeys(row.entry_key for row in rows if row.entry_key is not None))
+            entries = tuple(self._ordinary_category_entry(key)[0] for key in keys)
+            row_ids = {row.row_id for row in _rows(saved.evidence)}
+            statement = isinstance(saved.evidence.payload, StatementPayload)
+            return SourceInterpretationSnapshot(
+                source_sha256,
+                kind,
+                rows,
+                self.category_accounts(),
+                entries,
+                tuple(action for action in actions if action.row_id in row_ids),
+                self._source_overlap_basis(),
+                preferences,
+                statement,
+                self.overlapping_statement_sources(source_sha256) if statement else (),
+            )
+        finally:
+            self.connection.execute("ROLLBACK")
+
+    def _append_source_interpretation_action(
+        self, entry: JournalEntry, row_id: str, kind: str, basis: str, reason: str
+    ) -> int:
+        inverse = self._retire_journal_entry(entry, reason=reason)
+        inverse_payload = self.connection.execute(
+            "SELECT payload FROM JournalEntries WHERE key=?", (inverse,)
+        ).fetchone()[0]
+        action_id = self.connection.execute(
+            "SELECT COALESCE(MAX(action_id),0)+1 FROM SourceInterpretationActions"
+        ).fetchone()[0]
+        fields = (
+            action_id,
+            row_id,
+            entry.key,
+            inverse,
+            kind,
+            basis,
+            _digest(_journal_payload(entry).encode()),
+            _digest(inverse_payload.encode()),
+            reason,
+        )
+        self.connection.execute(
+            "INSERT INTO SourceInterpretationActions(action_id,row_id,entry_key,reversal_key,kind,request_basis,original_sha256,inverse_sha256,reason,record_sha256) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            (*fields, _transfer_record_digest(*fields)),
+        )
+        return action_id
+
+    def withdraw_reviewed_interpretation(
+        self, entry_key: str, *, expected_basis_sha256: str, reason: str
+    ) -> SourceInterpretationAction:
+        reason = self._transfer_write_start(reason)
+        try:
+            actions, _repairs = self._read_source_interpretation_history()
+            prior = next((a for a in actions if a.entry_key == entry_key and a.kind == "withdraw"), None)
+            if prior is not None:
+                request = self.connection.execute(
+                    "SELECT request_basis FROM SourceInterpretationActions WHERE action_id=?", (prior.action_id,)
+                ).fetchone()[0]
+                if request == expected_basis_sha256 and prior.reason == reason:
+                    self.connection.execute("COMMIT")
+                    return prior
+                raise ProfileFormatError("source_interpretation_not_active")
+            self._require_source_interpretation_basis(expected_basis_sha256, required=True)
+            entry, row_id = self._ordinary_category_entry(entry_key)
+            self._source_interpretation_mutating = True
+            action_id = self._append_source_interpretation_action(
+                entry, row_id, "withdraw", expected_basis_sha256, reason
+            )
+            self._source_interpretation_mutating = False
+            result = next(a for a in self._read_source_interpretation_history()[0] if a.action_id == action_id)
+            self.connection.execute("COMMIT")
+            return result
+        except BaseException:
+            self.connection.execute("ROLLBACK")
+            raise
+        finally:
+            self._source_interpretation_mutating = False
+
+    def _require_source_interpretation_basis(self, expected: str | None, *, required: bool = False) -> None:
+        if required and (type(expected) is not str or re.fullmatch(r"[0-9a-f]{64}", expected) is None):
+            raise ProfileFormatError("source_interpretation_version_required")
+        if expected is not None and expected != self._source_overlap_basis():
+            raise ProfileFormatError("source_interpretation_changed_since_selection")
+
+    def repair_posted_repeat(
+        self, retained_row_id: str, redundant_row_id: str, *, expected_basis_sha256: str, reason: str
+    ) -> PostedRepeatRepair:
+        reason = self._transfer_write_start(reason)
+        try:
+            _actions, repairs = self._read_source_interpretation_history()
+            previous = next(
+                (r for r in repairs if r.retained_row_id == retained_row_id and r.redundant_row_id == redundant_row_id),
+                None,
+            )
+            if previous is not None:
+                request = self.connection.execute(
+                    "SELECT request_basis FROM PostedRepeatRepairs WHERE repair_id=?", (previous.repair_id,)
+                ).fetchone()[0]
+                latest = self.connection.execute(
+                    "SELECT revision_id,decision,retained_row_id FROM SourceOverlapReviews WHERE left_row_id=? AND right_row_id=? ORDER BY revision_id DESC LIMIT 1",
+                    tuple(sorted((retained_row_id, redundant_row_id))),
+                ).fetchone()
+                if (
+                    request == expected_basis_sha256
+                    and previous.reason == reason
+                    and latest == (previous.review_revision_id, "repeat", retained_row_id)
+                    and not self._active_consumed().get(redundant_row_id, 0)
+                ):
+                    self.connection.execute("COMMIT")
+                    return previous
+            self._require_source_interpretation_basis(expected_basis_sha256, required=True)
+            rows, _buckets, _reviews, _aliases = self._source_overlap_index()
+            retained, redundant = rows.get(retained_row_id), rows.get(redundant_row_id)
+            if (
+                retained is None
+                or redundant is None
+                or retained.source_sha256 == redundant.source_sha256
+                or bucket_key(retained) != bucket_key(redundant)
+                or retained.active_allocated_minor != retained.amount_minor
+                or redundant.active_allocated_minor != redundant.amount_minor
+            ):
+                raise ProfileFormatError("posted_repeat_requires_two_posted_occurrences")
+
+            def active_entry(row_id):
+                keys = self.connection.execute(
+                    f"SELECT entry_key FROM JournalAllocations WHERE row_id=? AND entry_key NOT IN ({_INACTIVE_JOURNAL_SQL})",
+                    (row_id,),
+                ).fetchall()
+                if len(keys) != 1:
+                    raise ProfileFormatError("source_interpretation_unsupported")
+                return self._ordinary_category_entry(keys[0][0])[0]
+
+            retained_entry, redundant_entry = active_entry(retained_row_id), active_entry(redundant_row_id)
+            self._source_interpretation_mutating = True
+            action_id = self._append_source_interpretation_action(
+                redundant_entry, redundant_row_id, "repeat_repair", expected_basis_sha256, reason
+            )
+            result = self._record_source_overlap_review(
+                retained_row_id,
+                redundant_row_id,
+                decision="repeat",
+                retained_row_id=retained_row_id,
+                expected_basis_sha256=self._source_overlap_basis(),
+                reason=reason,
+                _owns_transaction=False,
+                _repair_proof=True,
+            )
+            review = self.connection.execute(
+                "SELECT * FROM SourceOverlapReviews WHERE revision_id=?", (result.revision_id,)
+            ).fetchone()
+            repair_id = self.connection.execute(
+                "SELECT COALESCE(MAX(repair_id),0)+1 FROM PostedRepeatRepairs"
+            ).fetchone()[0]
+            fields = (
+                repair_id,
+                retained_row_id,
+                redundant_row_id,
+                retained_entry.key,
+                redundant_entry.key,
+                action_id,
+                result.revision_id,
+                expected_basis_sha256,
+                _digest(_journal_payload(retained_entry).encode()),
+                _transfer_record_digest(*review),
+                reason,
+            )
+            self.connection.execute(
+                "INSERT INTO PostedRepeatRepairs(repair_id,retained_row_id,redundant_row_id,retained_entry_key,redundant_entry_key,action_id,review_revision_id,request_basis,retained_sha256,review_sha256,reason,record_sha256) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                (*fields, _transfer_record_digest(*fields)),
+            )
+            self._source_interpretation_mutating = False
+            saved = self._read_source_interpretation_history()[1][0]
+            self.connection.execute("COMMIT")
+            return saved
+        except BaseException:
+            self.connection.execute("ROLLBACK")
+            raise
+        finally:
+            self._source_interpretation_mutating = False
 
     def cash_activity_review_rows(self, source_sha256: str) -> tuple[CashActivityReviewRow, ...]:
         """Describe source rows for explicit asset cash expense or income review."""
@@ -2877,8 +3629,10 @@ class V2ProfileStore:
 
     def _journal_entries_in_period(self, start: date, end: date):
         self._validate_journal_retirements()
-        self._validate_transfer_history()
         self._validate_opening_decision_histories()
+        self._validate_transfer_history()
+        self._validate_source_interpretation_history()
+        self._validate_common_journal_read()
         if type(start) is not date or type(end) is not date or start >= end:
             raise ProfileFormatError("report_period_invalid")
         for (payload,) in self.connection.execute("SELECT payload FROM JournalEntries"):
@@ -2889,6 +3643,7 @@ class V2ProfileStore:
     def _unallocated_activity_counts(self) -> tuple[int, int]:
         self._validate_journal_retirements()
         self._validate_transfer_history()
+        self._validate_source_interpretation_history()
         return self.connection.execute(
             "SELECT COUNT(*),COUNT(DISTINCT o.source_sha256) FROM SourceObservations o "
             "LEFT JOIN ("
@@ -3022,6 +3777,9 @@ class V2ProfileStore:
             self.connection.execute("ROLLBACK")
 
     def _account_positions(self, as_of: date) -> AccountPositionsSummary:
+        self._validate_journal_retirements()
+        self._validate_opening_decision_histories()
+        self._validate_common_journal_read()
         accounts = self.financial_accounts()
         entries = tuple(
             sorted(
@@ -3210,6 +3968,10 @@ class V2ProfileStore:
     def reviewed_journal_export(self, *, start: date, end: date) -> ReviewedJournalExport:
         """Read active reviewed entries with posting and source provenance for export."""
         period_entries = tuple(self._journal_entries_in_period(start, end))
+        action_history, repair_history = self._read_source_interpretation_history()
+        period_keys = {entry.key for entry in period_entries}
+        source_actions = tuple(action for action in action_history if action.entry_key in period_keys)
+        repeat_repairs = tuple(repair for repair in repair_history if repair.redundant_entry_key in period_keys)
         period_events = {entry.event_id for entry in period_entries}
         transfer_actions = tuple(
             JournalExportTransferAction(*row)
@@ -3280,6 +4042,8 @@ class V2ProfileStore:
             sum(entry.reviewed and entry.key in opening_keys for entry in period_entries),
             retirements,
             transfer_actions,
+            source_actions,
+            repeat_repairs,
         )
 
     def _insert_reviewed_category(
@@ -3291,15 +4055,37 @@ class V2ProfileStore:
         accounts: dict[str, LedgerAccount],
         *,
         refusal_prefix: str,
+        expected_basis_sha256: str | None = None,
     ) -> str:
         payload = _journal_payload(entry)
         prior = self.connection.execute("SELECT payload FROM JournalEntries WHERE key=?", (entry.key,)).fetchone()
         if prior is not None:
             if entry.key in self._inactive_journal_keys():
-                raise ProfileFormatError(f"{refusal_prefix}_already_corrected")
-            if prior[0] != payload:
-                raise ProfileFormatError(f"{refusal_prefix}_conflicts_with_prior_entry")
-            return entry.key
+                active = self.connection.execute(
+                    f"SELECT e.payload FROM JournalAllocations a JOIN JournalEntries e ON e.key=a.entry_key WHERE a.row_id=? AND a.entry_key NOT IN ({_INACTIVE_JOURNAL_SQL})",
+                    (row_id,),
+                ).fetchall()
+                if active:
+                    current = _decode_journal(active[0][0])
+                    if (
+                        len(active) == 1
+                        and current.key.startswith(entry.key + ":repost:")
+                        and _journal_payload(replace(entry, key=current.key)) == active[0][0]
+                    ):
+                        return current.key
+                    raise ProfileFormatError(f"{refusal_prefix}_already_corrected")
+                generation = self.connection.execute(
+                    "SELECT MAX(action_id) FROM SourceInterpretationActions WHERE row_id=?", (row_id,)
+                ).fetchone()[0]
+                if generation is None:
+                    raise ProfileFormatError(f"{refusal_prefix}_already_corrected")
+                entry = replace(entry, key=entry.key + f":repost:{generation}")
+                payload = _journal_payload(entry)
+            else:
+                if prior[0] != payload:
+                    raise ProfileFormatError(f"{refusal_prefix}_conflicts_with_prior_entry")
+                return entry.key
+        self._require_source_interpretation_basis(expected_basis_sha256)
         self._require_source_overlap_postable((row_id,))
         validate_entry(
             entry,
@@ -3311,7 +4097,9 @@ class V2ProfileStore:
         self.connection.execute("INSERT INTO JournalAllocations VALUES (?,?,?)", (entry.key, row_id, amount))
         return entry.key
 
-    def post_reviewed_cash_category(self, row_id: str, category_id: str, *, reason: str) -> str:
+    def post_reviewed_cash_category(
+        self, row_id: str, category_id: str, *, reason: str, expected_basis_sha256: str | None = None
+    ) -> str:
         """Post one explicitly classified asset cash movement with source evidence."""
         self._require_writable()
         if type(reason) is not str or not 0 < len(reason.strip()) <= 500:
@@ -3337,7 +4125,13 @@ class V2ProfileStore:
                 reason=reason.strip(),
             )
             key = self._insert_reviewed_category(
-                entry, row_id, financial_id, amount, accounts, refusal_prefix="cash_review"
+                entry,
+                row_id,
+                financial_id,
+                amount,
+                accounts,
+                refusal_prefix="cash_review",
+                expected_basis_sha256=expected_basis_sha256,
             )
             self.connection.execute("COMMIT")
             return key
@@ -3355,6 +4149,7 @@ class V2ProfileStore:
         reason: str,
         preferences: V2Preferences,
         accounting_date: date | None = None,
+        expected_basis_sha256: str | None = None,
     ) -> str:
         """Post one classified negative card movement; a date override is explicit."""
         self._require_writable()
@@ -3395,7 +4190,13 @@ class V2ProfileStore:
                 reason=reason.strip(),
             )
             key = self._insert_reviewed_category(
-                entry, row_id, financial_id, amount, accounts, refusal_prefix="card_purchase"
+                entry,
+                row_id,
+                financial_id,
+                amount,
+                accounts,
+                refusal_prefix="card_purchase",
+                expected_basis_sha256=expected_basis_sha256,
             )
             self.connection.execute("COMMIT")
             return key
@@ -3452,7 +4253,9 @@ class V2ProfileStore:
         )
         return replacement.key
 
-    def correct_reviewed_cash_category(self, original_key: str, category_id: str, *, reason: str) -> str:
+    def correct_reviewed_cash_category(
+        self, original_key: str, category_id: str, *, reason: str, expected_basis_sha256: str | None = None
+    ) -> str:
         """Atomically reverse and recategorize an active reviewed cash movement."""
         self._require_writable()
         if type(original_key) is not str or not original_key or type(category_id) is not str or not category_id:
@@ -3473,6 +4276,7 @@ class V2ProfileStore:
                     self.connection.execute("COMMIT")
                     return replacement_key
                 raise ProfileFormatError("cash_correction_conflicts_with_prior_decision")
+            self._require_source_interpretation_basis(expected_basis_sha256)
             if original_key in self._inactive_journal_keys():
                 raise ProfileFormatError("cash_correction_original_inactive")
             original_row = self.connection.execute(
@@ -3547,7 +4351,13 @@ class V2ProfileStore:
             raise
 
     def correct_reviewed_card_purchase(
-        self, original_key: str, category_id: str, *, reason: str, accounting_date: date | None = None
+        self,
+        original_key: str,
+        category_id: str,
+        *,
+        reason: str,
+        accounting_date: date | None = None,
+        expected_basis_sha256: str | None = None,
     ) -> str:
         """Reverse and replace one card expense when its category or accounting date changes."""
         self._require_writable()
@@ -3585,6 +4395,7 @@ class V2ProfileStore:
                     self.connection.execute("COMMIT")
                     return replacement_key
                 raise ProfileFormatError("card_correction_conflicts_with_prior_decision")
+            self._require_source_interpretation_basis(expected_basis_sha256)
             if original_key in self._inactive_journal_keys():
                 raise ProfileFormatError("card_correction_original_inactive")
             allocations = self.connection.execute(
@@ -4176,6 +4987,8 @@ class V2ProfileStore:
         """Hash inputs without requiring any source to be ready for reconciliation."""
         self._validate_journal_retirements()
         self._validate_transfer_history()
+        self._validate_source_interpretation_history()
+        self._validate_common_journal_read()
         rule = "v2-statement-reconciliation-3"
         version_tables = (
             ("Sources", "sha256"),
@@ -4193,6 +5006,8 @@ class V2ProfileStore:
             ("TransferEvents", "*"),
             ("TransferEventActions", "*"),
             ("TransferPairReviews", "*"),
+            ("SourceInterpretationActions", "*"),
+            ("PostedRepeatRepairs", "*"),
             ("SourceOverlapReviews", "*"),
         )
         digest = hashlib.sha256(rule.encode())
@@ -4833,7 +5648,10 @@ class V2ProfileStore:
                 raise ProfileFormatError("opening_decision_history_invalid") from None
             if key is not None:
                 payload = self.connection.execute("SELECT payload FROM JournalEntries WHERE key=?", (key,)).fetchone()
-                entry = _decode_journal(payload[0]) if payload is not None else None
+                try:
+                    entry = _decode_journal(payload[0]) if payload is not None else None
+                except ProfileFormatError:
+                    raise ProfileFormatError("opening_decision_history_invalid") from None
                 if (
                     entry is None
                     or entry.key != key

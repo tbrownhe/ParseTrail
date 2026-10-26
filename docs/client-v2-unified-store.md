@@ -29,7 +29,7 @@ evidence belong in [packet records](work/README.md).
 
 ## Profile format and lifecycle
 
-The current pre-release profile schema is revision 14; check `SCHEMA_VERSION`
+The current pre-release profile schema is revision 15; check `SCHEMA_VERSION`
 in `v2_profile_store.py` when opening a packet. Format markers, exact table and
 foreign-key shapes, append-only triggers and SQLite integrity are checked before
 writable use. Older disposable pilots, 1.x, unknown, damaged and newer shapes
@@ -122,7 +122,21 @@ matching, multiplicity, binding locks, posted conflicts and display limits.
 Existing retained-row corrections remain available. Repeat review does not
 replace source-row allocation or certify reconciliation or coverage.
 
+`SourceInterpretationActions` and `PostedRepeatRepairs` retain supported ordinary
+withdrawals and atomic existing-repeat repairs. Exact dated inverses release
+active consumption while preserving original allocations; fresh reposts have
+new identities. Repaired repeats require validated history and zero active
+allocation before later repeat review. Workbook Source Reviews and Repeat
+Repairs preserve action history separately from active money.
+
 ## Common reads and recovery
+
+Every journal payload must contain exact integer, nonzero, balanced posting
+lines within supported integer bounds. Common reads additionally validate
+ordinary initial/historical source and SQL allocation shapes, active bindings,
+unique consumption and exact correction inverses. Current assumed-date settings
+do not invalidate previously reviewed card dates. Malformed stored journals are
+refused by reports, positions, reconciliation, consumption and backup.
 
 Reports use common ledger reads with explicit scope, correction handling and
 pending evidence. Reconciliation is a versioned read over one committed SQLite

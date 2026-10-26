@@ -366,3 +366,32 @@ def test_reopen_uses_latest_decision_in_current_financial_context_after_rebindin
     finally:
         dialog.close()
         app.processEvents()
+
+
+def test_corrupt_blob_transfer_basis_refresh_refuses_and_disables_all_actions(tmp_path, app):
+    profile = tmp_path / "corrupt-basis.db"
+    outgoing, incoming = _profile(profile, bank_date="01/03/2026")
+    _post(profile, outgoing, incoming)
+    dialog = _dialog(profile)
+    try:
+        dialog.event_table.selectRow(0)
+        dialog.correction_reason.setText("Previously selected event")
+        assert dialog.withdraw.isEnabled()
+        with sqlite3.connect(profile) as connection:
+            trigger = connection.execute(
+                "SELECT sql FROM sqlite_master WHERE name='immutable_TransferEvents_update'"
+            ).fetchone()[0]
+            connection.execute("DROP TRIGGER immutable_TransferEvents_update")
+            connection.execute("UPDATE TransferEvents SET request_basis=?", (b"malformed BLOB basis",))
+            connection.execute(trigger)
+        dialog.refresh()
+        assert dialog.event_table.rowCount() == dialog.table.rowCount() == dialog.review_table.rowCount() == 0
+        assert dialog.selected_event is None and dialog.basis is None
+        assert not any(
+            button.isEnabled()
+            for button in (dialog.confirm, dialog.dismiss, dialog.withdraw, dialog.replace, dialog.reopen)
+        )
+        assert "unavailable" in dialog.status.text()
+    finally:
+        dialog.close()
+        app.processEvents()

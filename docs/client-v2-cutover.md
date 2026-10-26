@@ -60,8 +60,9 @@ not change ordinary 1.x startup or authorize daily-profile activation/release.
   decisions across catalog updates. Exact-source retries reuse snapshots;
   reparse produces a comparison rather than overwriting reviewed history.
 - Preserve revised/overlapping sources for explicit evidence review. Follow the
-  [bounded occurrence-review contract](client-v2-source-overlap.md); it does not
-  claim complete deduplication or repair existing double postings.
+  [bounded occurrence-review contract](client-v2-source-overlap.md). Supported
+  existing double postings have an explicit atomic repair workflow; neither
+  candidate detection nor repair claims complete deduplication.
 - Reports/exports share ledger scope rules and show pending/uncovered work.
   Internal transfers and card repayments do not create a second expense.
 - Keep source capture, independent arithmetic, allocations, interpretations,

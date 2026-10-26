@@ -93,3 +93,10 @@ acceptance or release action was performed.
 
 Other V2-3/4 safeguards and admitted accounting/report breadth, then consolidated
 human UX and supported-platform/release gates.
+
+## October 25 test follow-up
+
+The ordinary-interpretation packet added a focused GUI regression for malformed
+BLOB transfer-history fields. It verifies refusal and clearing without changing
+transfer runtime behavior; the focused case passed in 2.35 seconds. The later
+shared journal guard and report failure-state changes retain this boundary.

@@ -16,8 +16,10 @@ superseded migration/audit narrative and its historical evidence links.
 The current workspace supports narrow reviewed asset cash expense/income,
 negative card purchases, whole-movement owned transfers/card payments and printed
 openings. Cash-category, card-category/date and source-backed opening corrections
-are available. Whole transfers can be withdrawn or atomically replaced while
-retaining every dated leg and allocation history. General refunds,
+are available. Supported ordinary interpretations can be withdrawn, then freshly
+reviewed; posted-repeat repair retains one interpretation and retires its
+redundant counterpart atomically. Whole transfers can be withdrawn or atomically
+replaced while retaining every dated leg and allocation history. General refunds,
 splits, loans, manual entries, suspense and valuations require their own admitted
 workflows; examples below specify financial meaning rather than availability.
 

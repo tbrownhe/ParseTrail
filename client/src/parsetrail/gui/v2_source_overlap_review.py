@@ -29,8 +29,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from parsetrail.core.v2_preferences import V2Preferences
 from parsetrail.core.v2_profile_store import ProfileFormatError, V2ProfileStore
-from parsetrail.gui.v2_cash_activity_review import _money
+from parsetrail.gui.v2_cash_activity_review import _interpretation_effects, _money
 from parsetrail.gui.v2_evidence_preview import _location, preview_saved_source
 
 if TYPE_CHECKING:
@@ -72,6 +73,7 @@ def _row_details(row: SourceOverlapRow) -> str:
             *(f"  {_source_location(location)}" for location in row.locations),
             f"Active source allocation: {_money(row.active_allocated_minor)}",
             f"Journal history: {'Yes' if row.has_journal_history else 'None'}",
+            f"Validated prior repeat repair with no active allocation: {'Yes' if row.repeat_support_history_validated else 'No'}",
         )
     )
 
@@ -103,8 +105,9 @@ class V2SourceOverlapReview(QDialog):
         super().__init__(parent)
         self.profile = profile
         self.candidates: tuple[SourceOverlapCandidate, ...] = ()
+        self.repair_preview = None
         self.setWindowTitle("2.0 repeated source rows")
-        self.resize(1180, 800)
+        self.resize(1180, 760)
         layout = QVBoxLayout(self)
         profile_row = QHBoxLayout()
         profile_row.addWidget(QLabel("Profile:"))
@@ -190,6 +193,9 @@ class V2SourceOverlapReview(QDialog):
         self.save_button = QPushButton("Save source-row review")
         self.save_button.clicked.connect(self._save)
         layout.addWidget(self.save_button)
+        self.repair_button = QPushButton("Repair posted repeat — retain selected occurrence")
+        self.repair_button.clicked.connect(self._repair)
+        layout.addWidget(self.repair_button)
         self.status = QLabel()
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
@@ -248,6 +254,7 @@ class V2SourceOverlapReview(QDialog):
 
     def _selected(self) -> None:
         pair = self._current()
+        self.repair_preview = None
         self.decision.setCurrentIndex(0)
         self.reason.clear()
         self.preview_left.setEnabled(pair is not None)
@@ -293,24 +300,73 @@ class V2SourceOverlapReview(QDialog):
                     "One or both rows already support a retained occurrence in another pair. "
                     "This pair cannot change that decision. Select the pair containing the retained row to review it."
                 )
+            elif (
+                pair.left.active_allocated_minor == pair.left.amount_minor
+                and pair.right.active_allocated_minor == pair.right.amount_minor
+            ):
+                self.repair_preview = self._load_repair_preview(pair)
+                if self.repair_preview is not None:
+                    self.status.setText(
+                        "Both occurrences have supported active interpretations. If the sources describe one movement, "
+                        "choose the occurrence to retain and use Repair posted repeat. Ordinary evidence review cannot retire money."
+                    )
         self._update_action()
+
+    def _load_repair_preview(self, pair):
+        try:
+            with V2ProfileStore.open(self.profile, read_only=True) as store:
+                account = next(account for account in store.financial_accounts() if account.id == pair.left.account_id)
+                kind = "cash" if account.kind == "asset" else "card"
+                previews = []
+                for source_row in (pair.left, pair.right):
+                    snapshot = store.source_interpretation_snapshot(
+                        source_row.source_sha256, kind=kind, preferences=V2Preferences() if kind == "card" else None
+                    )
+                    if snapshot.basis_sha256 != pair.basis_sha256:
+                        return None
+                    row = next(row for row in snapshot.rows if row.row_id == source_row.row_id)
+                    entry = next(entry for entry in snapshot.entries if entry.key == row.entry_key)
+                    effects = _interpretation_effects(entry, row, snapshot.categories, financial_kind=account.kind)
+                    if effects is None:
+                        return None
+                    previews.append((row, entry, snapshot.categories, effects))
+                return tuple(previews)
+        except (ProfileFormatError, sqlite3.Error, OSError, StopIteration):
+            return None
 
     def _update_action(self, *_args) -> None:
         pair = self._current()
         choice = self.decision.currentData()
         supported = pair is not None and choice is not None and self.decision.isEnabled()
         if supported and choice == "retain_left":
-            supported = not pair.right.has_journal_history
+            supported = not pair.right.has_journal_history or (
+                pair.right.repeat_support_history_validated and pair.right.active_allocated_minor == 0
+            )
         elif supported and choice == "retain_right":
-            supported = not pair.left.has_journal_history
+            supported = not pair.left.has_journal_history or (
+                pair.left.repeat_support_history_validated and pair.left.active_allocated_minor == 0
+            )
         self.save_button.setEnabled(bool(supported and self.reason.text().strip()))
+        self.repair_button.setEnabled(
+            self.repair_preview is not None
+            and self.decision.isEnabled()
+            and choice in {"retain_left", "retain_right"}
+            and bool(self.reason.text().strip())
+        )
         if (
             pair is not None
             and self.decision.isEnabled()
             and choice in {"retain_left", "retain_right"}
             and not supported
         ):
-            self.status.setText("The supporting row has journal history and cannot be excluded by this review.")
+            self.status.setText(
+                "The supporting row has journal history and cannot be excluded by ordinary evidence review. "
+                + (
+                    "Use Repair posted repeat to explicitly retire its supported active interpretation."
+                    if self.repair_preview is not None
+                    else "Its interpretation is outside the supported repeat repair workflow."
+                )
+            )
 
     def _preview(self, side: str) -> None:
         pair = self._current()
@@ -362,3 +418,40 @@ class V2SourceOverlapReview(QDialog):
             return
         self.refresh()
         self.status.setText("Source-row review saved. No journal entries were created or changed.")
+
+    def _repair(self) -> None:
+        pair, choice, reason = self._current(), self.decision.currentData(), self.reason.text().strip()
+        if pair is None or self.repair_preview is None or not self.repair_button.isEnabled():
+            return
+        keep_index = 0 if choice == "retain_left" else 1
+        retained, redundant = (pair.left, pair.right) if keep_index == 0 else (pair.right, pair.left)
+        kept_row, kept_entry, kept_categories, _effects = self.repair_preview[keep_index]
+        _row, _entry, _categories, inverse = self.repair_preview[1 - keep_index]
+        category = next(category for category in kept_categories if category.id == kept_row.category_id)
+        message = (
+            f"Repair two posted occurrences of one movement?\n\nRetain {'A' if keep_index == 0 else 'B'}: "
+            f"{kept_row.financial_account}, {category.name}, {kept_entry.posting_date.isoformat()}; "
+            f"entry {kept_entry.key}. Its postings remain unchanged.\n\n"
+            f"Retire the other active interpretation with these exact inverse effects:\n{inverse}\n\nReason: {reason}\n\n"
+            "The redundant entry is reversed at its own accounting date and its allocation is released. "
+            "The repeated source row becomes supporting evidence, not another allocation. "
+            "The retirement and repeat decision commit together. All original entries, corrections and source evidence remain history."
+        )
+        if QMessageBox.question(self, "Confirm posted-repeat repair", message) != QMessageBox.Yes:
+            return
+        try:
+            with V2ProfileStore.open(self.profile) as store:
+                store.repair_posted_repeat(
+                    retained.row_id, redundant.row_id, expected_basis_sha256=pair.basis_sha256, reason=reason
+                )
+        except (ProfileFormatError, sqlite3.Error, OSError):
+            self.refresh()
+            self.status.setText(
+                "Posted repeat was not repaired. Source bindings, active interpretations or another review changed or the repair is unsupported. Inspect the refreshed pair."
+            )
+            return
+        self.refresh()
+        self.status.setText(
+            "The selected pair's posted-repeat repair is recorded. Refreshed source allocations show the current state; "
+            "original and inverse entries remain history."
+        )

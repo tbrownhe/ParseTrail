@@ -22,6 +22,7 @@ class SourceOverlapRow:
     locations: tuple[str, ...]
     active_allocated_minor: int
     has_journal_history: bool
+    repeat_support_history_validated: bool = False
 
 
 @dataclass(frozen=True)

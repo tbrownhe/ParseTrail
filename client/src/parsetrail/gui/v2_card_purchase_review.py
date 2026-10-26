@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
@@ -24,7 +25,7 @@ from PySide6.QtWidgets import (
 
 from parsetrail.core.v2_profile_store import CardPurchaseReviewRow, ProfileFormatError, V2ProfileStore
 from parsetrail.core.v2_workspace import V2Workspace
-from parsetrail.gui.v2_cash_activity_review import _money
+from parsetrail.gui.v2_cash_activity_review import _interpretation_effects, _money
 
 
 class _CardRowsModel(QAbstractTableModel):
@@ -77,6 +78,8 @@ class V2CardPurchaseReview(QDialog):
         super().__init__(parent)
         self.workspace = workspace
         self.source_sha256 = source_sha256
+        self.basis, self.entries, self.history, self.categories = None, {}, (), ()
+        self.review_preferences = workspace.preferences()
         self.setWindowTitle("2.0 card purchase review")
         self.resize(1200, 650)
         layout = QVBoxLayout(self)
@@ -107,6 +110,7 @@ class V2CardPurchaseReview(QDialog):
         self.reason = QLineEdit()
         self.reason.setMaxLength(500)
         self.reason.setPlaceholderText("Required review or correction reason")
+        self.reason.textChanged.connect(self._update_action)
         form.addRow("Reason", self.reason)
         layout.addLayout(form)
         self.assumed_dates = QCheckBox("Allow best guess posting dates when a statement does not print one")
@@ -115,11 +119,24 @@ class V2CardPurchaseReview(QDialog):
         layout.addWidget(self.assumed_dates)
         self.action_button = QPushButton("Post reviewed card expense")
         self.action_button.clicked.connect(self._act)
-        layout.addWidget(self.action_button)
+        self.withdraw_button = QPushButton("Withdraw active interpretation")
+        self.withdraw_button.clicked.connect(self._withdraw)
+        actions = QHBoxLayout()
+        actions.addWidget(self.action_button)
+        actions.addWidget(self.withdraw_button)
+        layout.addLayout(actions)
         self.status = QLabel()
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
+        self.history_details = QLabel()
+        self.history_details.setWordWrap(True)
+        self.history_details.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(self.history_details)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        reload_button = buttons.addButton("Reload saved review", QDialogButtonBox.ActionRole)
+        reload_button.clicked.connect(
+            lambda: self.refresh(selected_row_id=self._current().row_id if self._current() else None)
+        )
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
         self.refresh()
@@ -166,7 +183,26 @@ class V2CardPurchaseReview(QDialog):
             )
         )
         self.action_button.setEnabled(
-            ready and valid_date and self.category.count() > 0 and (not correction or changed)
+            ready
+            and valid_date
+            and self.category.count() > 0
+            and (not correction or changed)
+            and self.basis is not None
+        )
+        self.withdraw_button.setEnabled(
+            row is not None
+            and row.entry_key in self.entries
+            and self.basis is not None
+            and bool(self.reason.text().strip())
+        )
+        history = tuple(action for action in self.history if row and action.row_id == row.row_id)
+        self.history_details.setText(
+            "Retained interpretation history: "
+            + "; ".join(
+                f"{action.kind.replace('_', ' ')} — {action.reason} ({action.created_at} UTC)" for action in history[:3]
+            )
+            if history
+            else ""
         )
         if row is None:
             self.status.setText(f"{len(self.model.rows)} source row(s). Select one to review.")
@@ -174,10 +210,24 @@ class V2CardPurchaseReview(QDialog):
             self.status.setText(row.status + ("; add an expense category first" if self.category.count() == 0 else ""))
 
     def refresh(self, selected_row_id: str | None = None) -> None:
-        with V2ProfileStore.open(self.workspace.profile_path, read_only=True) as store:
-            rows = store.card_purchase_review_rows(self.source_sha256, preferences=self.workspace.preferences())
-            self.categories = store.category_accounts()
-            overlaps = store.overlapping_statement_sources(self.source_sha256)
+        try:
+            with V2ProfileStore.open(self.workspace.profile_path, read_only=True) as store:
+                snapshot = store.source_interpretation_snapshot(
+                    self.source_sha256, kind="card", preferences=self.workspace.preferences()
+                )
+        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
+            self.basis, self.entries, self.history, self.categories = None, {}, (), ()
+            self.model.replace(())
+            self._selected()
+            self.status.setText(f"Source review unavailable. Reopen or refresh the review: {exc}")
+            return
+        self.basis, self.entries, self.history = (
+            snapshot.basis_sha256,
+            {entry.key: entry for entry in snapshot.entries},
+            snapshot.history,
+        )
+        self.review_preferences = snapshot.preferences
+        rows, self.categories, overlaps = snapshot.rows, snapshot.categories, snapshot.overlapping_source_ids
         self.note.setText(
             "Only a negative card movement can be reviewed here as an expense. Payments, refunds, cash advances "
             "and transfers need their own interpretation and should stay pending. Printed Post dates are preferred; "
@@ -191,7 +241,7 @@ class V2CardPurchaseReview(QDialog):
         )
         self.model.replace(rows)
         self.assumed_dates.blockSignals(True)
-        self.assumed_dates.setChecked(self.workspace.preferences().allow_assumed_posting_dates)
+        self.assumed_dates.setChecked(self.review_preferences.allow_assumed_posting_dates)
         self.assumed_dates.blockSignals(False)
         self.assumed_dates.setVisible(any(row.date_provenance == "assumed" for row in rows))
         if selected_row_id is not None:
@@ -238,11 +288,23 @@ class V2CardPurchaseReview(QDialog):
         )
         if QMessageBox.question(self, "Confirm card expense", message) != QMessageBox.StandardButton.Yes:
             return
+        if self.workspace.preferences() != self.review_preferences:
+            QMessageBox.warning(
+                self,
+                "Review preferences changed",
+                "Posting-date preferences changed after this review was loaded. Inspect the refreshed row before confirming again.",
+            )
+            self.refresh(selected_row_id=row.row_id)
+            return
         try:
             with V2ProfileStore.open(self.workspace.profile_path) as store:
                 if correction:
                     store.correct_reviewed_card_purchase(
-                        row.entry_key, category_id, reason=reason, accounting_date=accounting_date
+                        row.entry_key,
+                        category_id,
+                        reason=reason,
+                        accounting_date=accounting_date,
+                        expected_basis_sha256=self.basis,
                     )
                 else:
                     store.post_reviewed_card_purchase(
@@ -253,6 +315,7 @@ class V2CardPurchaseReview(QDialog):
                         accounting_date=accounting_date
                         if accounting_date.isoformat() != row.posting_candidate
                         else None,
+                        expected_basis_sha256=self.basis,
                     )
         except (ProfileFormatError, sqlite3.Error, OSError) as exc:
             QMessageBox.warning(self, "Card expense was not saved", str(exc))
@@ -261,3 +324,33 @@ class V2CardPurchaseReview(QDialog):
         self.reason.clear()
         self.refresh(selected_row_id=row.row_id)
         self.status.setText("Correction saved with reversal and replacement." if correction else "Card expense posted.")
+
+    def _withdraw(self) -> None:
+        row, reason = self._current(), self.reason.text().strip()
+        entry = self.entries.get(row.entry_key) if row else None
+        if row is None or entry is None or not reason or self.basis is None:
+            return
+        effects = _interpretation_effects(entry, row, self.categories, financial_kind="liability")
+        if effects is None:
+            return
+        message = (
+            f"Withdraw this supported card expense interpretation?\n\nInverse effects:\n{effects}\n\nReason: {reason}\n\n"
+            "The active entry is reversed at its recorded accounting date, including any reviewed date correction. "
+            "The immutable source row returns to pending; posting it again requires a fresh review. "
+            "Original entries and allocations remain history. This withdraws an interpretation, not a card transaction."
+        )
+        if QMessageBox.question(self, "Confirm interpretation withdrawal", message) != QMessageBox.Yes:
+            return
+        try:
+            with V2ProfileStore.open(self.workspace.profile_path) as store:
+                store.withdraw_reviewed_interpretation(entry.key, expected_basis_sha256=self.basis, reason=reason)
+        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
+            QMessageBox.warning(self, "Interpretation was not withdrawn", str(exc))
+            self.refresh(selected_row_id=row.row_id)
+            return
+        self.reason.clear()
+        self.refresh(selected_row_id=row.row_id)
+        self.status.setText(
+            "The selected card interpretation's withdrawal is recorded. The refreshed row shows its current posting state; "
+            "original and inverse entries remain history."
+        )
