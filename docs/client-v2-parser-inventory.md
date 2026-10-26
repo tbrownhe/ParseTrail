@@ -65,6 +65,12 @@ supported-dollar-token lines remain located, visible and unposted under the
 owner-approved bounded review policy. Do not turn admitted definitions or expected
 source-refusal tests into claims of successful packaged import for every family.
 
+The [synthetic admission packet](work/2026-10-25-v2-family-source-admission.md)
+successfully exercises all 23 current declarations (21 PDF and two CSV) through
+real bounded workers, a test-signed full catalog and disposable-profile import.
+This closes the synthetic success-path gap while exact-candidate frozen/installed
+admission, private-source parity and full-page capture remain separate claims.
+
 ## Shared engine and repeated behavior
 
 Current V2 extraction uses the client-owned finite operations selected through
