@@ -8,7 +8,15 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 None active. The owner completed the [integrated Windows walkthrough](docs/work/2026-10-26-v2-integrated-ui-review.md).
 The account-list discoverability follow-up is implemented and agent-verified;
-the accepted pinned demo and its profile remain unchanged.
+all stated features worked, but another UI/UX pass is requested for clarity.
+
+## Recommended next packets (unselected)
+
+1. A small local real-statement pilot in a separate disposable profile, using
+   specifically selected inputs and preserving originals/1.x state.
+2. [Further UI/UX refinement](docs/work/2026-10-26-v2-integrated-ui-review.md#further-owner-feedback-and-recommended-next-work),
+   preferably in a future context: reduce information density, clarify navigation
+   and guide the ordinary import/review/report workflow.
 
 ## Remaining review and action gates
 
@@ -24,8 +32,9 @@ they are not selected by this closeout.
 ## Most recent product packet
 
 [Cash-account list visibility and owner walkthrough](docs/work/2026-10-26-v2-integrated-ui-review.md)
-completed the small UI follow-up and recorded owner confirmation. Supported-platform
-and 2.0 release gates remain separate.
+completed the small UI follow-up and recorded functional owner confirmation.
+Further interface refinement is requested; supported-platform and release gates
+remain separate.
 
 ## Decisions and gates
 

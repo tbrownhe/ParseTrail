@@ -5,7 +5,7 @@ Authorization: continuing roadmap development; owner offered an early UI/UX pass
 Implementation: final walkthrough and Windows handoff complete; source account-list visibility improvement verified.
 Automated verification: signed imports, pinned reopening/startup and cross-principal ACL propagation passed.
 Independent review: acceptance specialist prepared and verified synthetic artifacts.
-Owner acceptance: consolidated Windows walkthrough completed; owner found the scrolled account and confirmed the expected split.
+Owner acceptance: functional Windows walkthrough completed; owner requests another UI/UX pass because the interface remains overwhelming/confusing.
 Release authorization: not authorized.
 
 ## Scope and controlling decisions
@@ -238,6 +238,29 @@ small source follow-up, distinct from the owner's accepted pinned walkthrough.
 
 ## Remaining work
 
+### Further owner feedback and recommended next work
+
+The owner subsequently confirmed that all stated features work and described the
+software as a strong foundation, while finding the interface overwhelming and
+confusing. They requested an additional UI/UX pass, perhaps in another context,
+and noted that their own statements would make the workflows easier to assess.
+The functional walkthrough is complete; this is not acceptance of interface
+clarity or readiness for daily use. The additional refinement remains open.
+
+Recommended next packet, not selected: a small local real-statement pilot in a
+separate disposable V2 profile, with a specifically selected representative set
+of bank/card/loan statements and an overlap/re-import case. Keep originals and
+1.x state read-only. Review extraction, bindings, openings, money/date scope,
+pending states, correction and recovery against those actual sources. Private
+paths/contents stay outside Git and routine logs. This feedback does not select
+private inputs or authorize daily-profile activation, installation or release.
+
+Use that pilot's observed friction to guide the requested later UI/UX pass:
+clear import → account assignment → review → reports progression, less competing
+information, plain wording and discoverable details. Preserve unknown values,
+pending work and provenance; presentation simplification cannot erase financial
+qualifications. No additional feature expansion is selected by this feedback.
+
 Targeted Intel/installed/offline/OS integration and separately authorized
 production signing/version/release actions remain open. This walkthrough is
-owner Windows UX acceptance for the prepared demo, not release acceptance.
+owner functional acceptance for the prepared Windows demo, not release acceptance.
