@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from pathlib import Path
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
@@ -20,7 +21,14 @@ from PySide6.QtWidgets import (
 )
 
 from parsetrail.core.source_evidence import ActivityExportPayload, ObservationEvidence
-from parsetrail.core.v2_profile_store import AccountBinding, FinancialAccount, ProfileFormatError, V2ProfileStore
+from parsetrail.core.v2_profile_store import (
+    AccountBinding,
+    BindingCorrectionTarget,
+    FinancialAccount,
+    ProfileFormatError,
+    V2ProfileStore,
+)
+from parsetrail.gui.v2_binding_correction import V2BindingCorrection, ordinary_binding_lock_notice
 from parsetrail.gui.v2_evidence_preview import _location, _money
 
 
@@ -135,12 +143,33 @@ class V2AccountBindingReview(QDialog):
         row_controls.addWidget(self.clear_rows_button)
         row_controls.addStretch()
         layout.addLayout(row_controls)
+        correction_controls = QHBoxLayout()
+        self.correct_file_button = QPushButton("Review whole-file correction…")
+        self.correct_file_button.clicked.connect(self._correct_file)
+        correction_controls.addWidget(self.correct_file_button)
+        self.correct_rows_button = QPushButton("Review selected-row correction…")
+        self.correct_rows_button.clicked.connect(self._correct_rows)
+        correction_controls.addWidget(self.correct_rows_button)
+        layout.addLayout(correction_controls)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
         self._reload()
 
     def _reload(self) -> None:
+        try:
+            self._reload_current()
+        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
+            self._file_eligible = False
+            self.posted_row_ids, self.overlap_row_ids = frozenset(), frozenset()
+            self.file_ordinary_blockers = ()
+            self.account_combo.clear()
+            self.model.replace((), (), ())
+            self._update_controls()
+            self.status.setText("Source assignments are unavailable. Reopen this review to retry.")
+            self.lock_notice.setText(str(exc))
+
+    def _reload_current(self) -> None:
         with V2ProfileStore.open(self.profile, read_only=True) as store:
             evidence = store.load_import(self.source_sha256).evidence
             payload = evidence.payload
@@ -158,6 +187,13 @@ class V2AccountBindingReview(QDialog):
             self._file_eligible = len(rows) == len(payload.rows)
             self.posted_row_ids = store.journal_history_row_ids(self.source_sha256)
             self.overlap_row_ids = store.source_overlap_history_row_ids(self.source_sha256)
+            self.file_ordinary_blockers = (
+                store.binding_correction_snapshot(
+                    BindingCorrectionTarget(self.source_sha256, "file"), destination_account_id=None
+                ).ordinary_blockers
+                if self._file_eligible
+                else ()
+            )
         selected_account = self.account_combo.currentData()
         self.account_combo.clear()
         for account in accounts:
@@ -189,9 +225,19 @@ class V2AccountBindingReview(QDialog):
         selected_bindings = (self.model.bindings[index.row()] for index in self.table.selectionModel().selectedRows())
         file_mode = any(binding.basis == "file" for binding in self.model.bindings)
         row_mode = any(binding.basis == "row" for binding in self.model.bindings)
-        locked_rows = self.posted_row_ids | self.overlap_row_ids
-        file_locked = file_mode and bool(locked_rows)
-        selected_locked = any(row_id in locked_rows for row_id in selected)
+        selected_blockers = ()
+        read_error = None
+        if selected and not file_mode:
+            try:
+                with V2ProfileStore.open(self.profile, read_only=True) as store:
+                    selected_blockers = store.binding_correction_snapshot(
+                        BindingCorrectionTarget(self.source_sha256, "rows", row_ids=selected),
+                        destination_account_id=None,
+                    ).ordinary_blockers
+            except (ProfileFormatError, sqlite3.Error, OSError) as exc:
+                read_error = str(exc)
+        file_locked = bool(self.file_ordinary_blockers) or read_error is not None
+        selected_locked = bool(selected_blockers) or read_error is not None
         account_available = self.account_combo.currentData() is not None
         self.file_button.setEnabled(
             account_available and self._file_eligible and bool(self.model.rows) and not row_mode and not file_locked
@@ -203,30 +249,26 @@ class V2AccountBindingReview(QDialog):
         self.clear_rows_button.setEnabled(
             not file_mode and not selected_locked and any(binding.basis == "row" for binding in selected_bindings)
         )
+        self.correct_file_button.setEnabled(file_mode and read_error is None)
+        self.correct_rows_button.setEnabled(bool(selected) and not file_mode and read_error is None)
         self.lock_notice.setText(
-            "Saved repeated-row review history locks this account assignment, including after returning a pair to pending."
-            if (file_locked and self.overlap_row_ids) or any(row_id in self.overlap_row_ids for row_id in selected)
-            else "Posted journal history locks the whole-file account assertion. Review or correct the entry first."
-            if file_locked
-            else "Selected posted rows have locked account assignments. Review or correct their entries first."
-            if selected_locked
-            else ""
+            f"Assignment review is unavailable. Reopen this review to retry: {read_error}"
+            if read_error
+            else ordinary_binding_lock_notice(selected_blockers or self.file_ordinary_blockers)
         )
+        if file_locked or selected_locked:
+            self.lock_notice.setText(
+                self.lock_notice.text()
+                + " Review an account correction to inspect withdrawal/opening prerequisites and retained history."
+            )
 
     def _write(self, action) -> None:
         try:
             with V2ProfileStore.open(self.profile) as store:
                 action(store)
             self._reload()
-        except (ProfileFormatError, OSError) as exc:
-            message = (
-                "This account assignment has saved repeated-row review history and cannot be reassigned."
-                if str(exc) == "account_binding_has_overlap_review_history"
-                else "This account assignment is locked because a row has posted journal history. "
-                "Review or correct the entry; its source account cannot be reassigned."
-                if str(exc) == "account_binding_has_journal_history"
-                else str(exc)
-            )
+        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
+            message = ordinary_binding_lock_notice((str(exc),)) if str(exc).startswith("account_binding_") else str(exc)
             QMessageBox.warning(self, "Account assignment was not saved", message)
             self._reload()
 
@@ -245,6 +287,21 @@ class V2AccountBindingReview(QDialog):
     def _clear_selected(self) -> None:
         row_ids = self._selected_row_ids()
         self._write(lambda store: store.clear_row_account_assignments(self.source_sha256, row_ids))
+
+    def _correct_file(self) -> None:
+        if not self.correct_file_button.isEnabled():
+            return
+        V2BindingCorrection(self.profile, BindingCorrectionTarget(self.source_sha256, "file"), self).exec()
+        self._reload()
+
+    def _correct_rows(self) -> None:
+        row_ids = self._selected_row_ids()
+        if not row_ids or not self.correct_rows_button.isEnabled():
+            return
+        V2BindingCorrection(
+            self.profile, BindingCorrectionTarget(self.source_sha256, "rows", row_ids=row_ids), self
+        ).exec()
+        self._reload()
 
 
 def review_accountless_export(profile: Path, source_sha256: str, *, parent=None) -> V2AccountBindingReview:

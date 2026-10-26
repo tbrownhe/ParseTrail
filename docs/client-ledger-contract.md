@@ -46,6 +46,12 @@ The current [occurrence-review contract](client-v2-source-overlap.md) preserves
 separate imported rows while explicitly relating supporting repeats; it does
 not merge immutable observations or allocate additional money.
 
+Reviewed account-assignment correction changes authored source context only,
+after active source consumption has been withdrawn. It retains old journals
+under their original accounts and returns affected occurrence/transfer suggestion
+decisions to pending or inapplicable state. It does not move postings, clear an
+opening anchor or assert settlement. Fresh interpretation review is required.
+
 ## Account and journal invariants
 
 - Ledger account classes are Asset, Liability, Equity, Income, and Expense.

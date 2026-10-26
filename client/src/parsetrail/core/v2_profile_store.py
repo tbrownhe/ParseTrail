@@ -47,11 +47,23 @@ from parsetrail.core.v2_source_overlap import (
 )
 
 APPLICATION_ID = 0x50543230  # PT20
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_DEFINITION_BYTES = 64 * 1024
 MAX_EVIDENCE_BYTES = 32 * 1024 * 1024
 TABLE_COLUMNS = {
+    "BindingCorrections": (
+        ("correction_id", "INTEGER", 0, 1),
+        ("source_sha256", "TEXT", 1, 0),
+        ("target_payload", "TEXT", 1, 0),
+        ("prior_payload", "TEXT", 1, 0),
+        ("new_payload", "TEXT", 1, 0),
+        ("invalidations_payload", "TEXT", 1, 0),
+        ("request_basis", "TEXT", 1, 0),
+        ("reason", "TEXT", 1, 0),
+        ("record_sha256", "TEXT", 1, 0),
+        ("created_at", "TEXT", 1, 0),
+    ),
     "Sources": (
         ("sha256", "TEXT", 0, 1),
         ("suffix", "TEXT", 1, 0),
@@ -247,6 +259,7 @@ TABLE_COLUMNS = {
     ),
 }
 FOREIGN_KEYS = {
+    "BindingCorrections": (("source_sha256", "Sources", "sha256"),),
     "Sources": (),
     "Definitions": (),
     "EvidenceSnapshots": (("definition_sha256", "Definitions", "sha256"), ("source_sha256", "Sources", "sha256")),
@@ -307,6 +320,7 @@ FOREIGN_KEYS = {
 }
 
 IMMUTABLE_TABLES = (
+    "BindingCorrections",
     "Sources",
     "Definitions",
     "EvidenceSnapshots",
@@ -390,6 +404,60 @@ class SourceAccountBinding:
     source_identity: str
     source_identity_form: Literal["full", "last_four", "opaque"]
     ledger_account_id: str | None
+
+
+@dataclass(frozen=True)
+class BindingCorrectionTarget:
+    source_sha256: str
+    mode: Literal["source", "file", "rows"]
+    source_identity: str | None = None
+    source_identity_form: str | None = None
+    row_ids: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class BindingCorrection:
+    correction_id: int
+    target: BindingCorrectionTarget
+    prior_account_ids: tuple[str | None, ...]
+    new_account_ids: tuple[str | None, ...]
+    prior_bindings: tuple[AccountBinding, ...]
+    new_bindings: tuple[AccountBinding, ...]
+    invalidated_review_ids: tuple[int, ...]
+    reason: str
+    created_at: str
+    version: str
+    invalidated_transfer_review_ids: tuple[int, ...] = ()
+
+
+@dataclass(frozen=True)
+class BindingAffectedReviewRow:
+    row_id: str
+    source_sha256: str
+    source_date: str | None
+    description: str | None
+    account_id: str | None
+    account_name: str | None
+
+
+@dataclass(frozen=True)
+class BindingCorrectionSnapshot:
+    target: BindingCorrectionTarget
+    destination_account_id: str | None
+    evidence: SourceEvidence
+    accounts: tuple[FinancialAccount, ...]
+    current_account_ids: tuple[str | None, ...]
+    current_bindings: tuple[AccountBinding, ...]
+    affected_row_ids: tuple[str, ...]
+    blockers: tuple[str, ...]
+    ordinary_blockers: tuple[str, ...]
+    opening_blocker_account_ids: tuple[str, ...]
+    affected_review_pairs: tuple[tuple[str, str], ...]
+    history: tuple[BindingCorrection, ...]
+    basis_sha256: str
+    affected_review_rows: tuple[BindingAffectedReviewRow, ...] = ()
+    affected_transfer_review_ids: tuple[int, ...] = ()
+    affected_transfer_reviews: tuple[TransferPairReview, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1323,6 +1391,14 @@ class V2ProfileStore:
                     reason TEXT NOT NULL, record_sha256 TEXT NOT NULL,
                     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
                 );
+                CREATE TABLE BindingCorrections (
+                    correction_id INTEGER PRIMARY KEY,
+                    source_sha256 TEXT NOT NULL REFERENCES Sources(sha256),
+                    target_payload TEXT NOT NULL, prior_payload TEXT NOT NULL, new_payload TEXT NOT NULL,
+                    invalidations_payload TEXT NOT NULL, request_basis TEXT NOT NULL,
+                    reason TEXT NOT NULL, record_sha256 TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+                );
                 COMMIT;
             """)
             for table in IMMUTABLE_TABLES:
@@ -1397,6 +1473,7 @@ class V2ProfileStore:
                         verified.opening_decision_history(account.id)
                     verified._validate_transfer_history()
                     verified._validate_source_interpretation_history()
+                    verified._read_binding_corrections()
                     verified._validate_common_journal_read()
                     verified._reconciliation_history(None)
                 try:
@@ -1774,6 +1851,34 @@ class V2ProfileStore:
                 (*batch, *batch),
             ).fetchone():
                 raise ProfileFormatError("account_binding_has_overlap_review_history")
+            if self.connection.execute(
+                f"SELECT 1 FROM TransferPairReviews WHERE outgoing_row_id IN ({placeholders}) "
+                f"OR incoming_row_id IN ({placeholders}) LIMIT 1",
+                (*batch, *batch),
+            ).fetchone():
+                raise ProfileFormatError("account_binding_has_transfer_review_history")
+
+    def _binding_opening_anchors(self, target: BindingCorrectionTarget, accounts) -> tuple[str, ...]:
+        associated = set(accounts) - {None}
+        associated.update(
+            row[0]
+            for row in self.connection.execute(
+                "SELECT DISTINCT account_id FROM StatementSourceReviews WHERE source_sha256=?", (target.source_sha256,)
+            )
+        )
+        return tuple(sorted(account for account in associated if self.opening_decision_history(account)))
+
+    def _require_ordinary_binding_change(self, target: BindingCorrectionTarget) -> None:
+        _evidence, rows = self._binding_target_rows(target)
+        self._require_unposted_rows(rows)
+        for record in self._read_binding_corrections():
+            if record.target.source_sha256 != target.source_sha256:
+                continue
+            _old_evidence, old_rows = self._binding_target_rows(record.target)
+            if set(rows).intersection(old_rows) or record.target == target:
+                raise ProfileFormatError("account_binding_has_correction_history")
+        if self._binding_opening_anchors(target, self._binding_scope_accounts(target)):
+            raise ProfileFormatError("account_binding_source_backed_opening_anchor")
 
     def source_overlap_history_row_ids(self, source_sha256: str) -> frozenset[str]:
         """Rows whose binding is fixed by durable occurrence-review history."""
@@ -1838,6 +1943,7 @@ class V2ProfileStore:
         return rows, buckets, reviews, aliases
 
     def _source_overlap_basis(self) -> str:
+        self._read_binding_corrections()
         self._validate_journal_retirements()
         self._validate_transfer_history()
         self._validate_source_interpretation_history()
@@ -1860,6 +1966,7 @@ class V2ProfileStore:
             "SourceInterpretationActions",
             "PostedRepeatRepairs",
             "SourceOverlapReviews",
+            "BindingCorrections",
         ):
             digest.update(table.encode())
             columns = "source_sha256,definition_sha256,size,sha256" if table == "EvidenceSnapshots" else "*"
@@ -2388,6 +2495,7 @@ class V2ProfileStore:
         row indexes are cached for this pass, never shared across profile versions.
         Pending manual entries receive structural checks without being classified.
         """
+        self._read_binding_corrections()
         payloads = dict(self.connection.execute("SELECT key,payload FROM JournalEntries"))
         if not payloads:
             return
@@ -2934,9 +3042,18 @@ class V2ProfileStore:
         if type(max_day_gap) is not int or not 0 <= max_day_gap <= 31:
             raise ProfileFormatError("transfer_window_invalid")
         movements = self._transfer_movements(preferences, releasing_entry_keys)
-        decisions = dict(
-            self.connection.execute("SELECT context_sha256,decision FROM TransferPairReviews ORDER BY revision_id")
-        )
+        invalidated = {
+            revision
+            for record in self._read_binding_corrections()
+            for revision in record.invalidated_transfer_review_ids
+        }
+        decisions = {
+            context: decision
+            for revision, context, decision in self.connection.execute(
+                "SELECT revision_id,context_sha256,decision FROM TransferPairReviews ORDER BY revision_id"
+            )
+            if revision not in invalidated
+        }
         receiving: dict[int, list[TransferMovement]] = {}
         for movement in movements:
             if movement.amount_minor > 0:
@@ -3169,6 +3286,11 @@ class V2ProfileStore:
 
     def _read_transfer_history(self) -> tuple[tuple[ReviewedTransferEvent, ...], tuple[TransferPairReview, ...]]:
         self._validate_journal_retirements()
+        invalidated_pair_reviews = {
+            revision
+            for record in self._read_binding_corrections()
+            for revision in record.invalidated_transfer_review_ids
+        }
         event_rows = self.connection.execute(
             "SELECT event_id,sequence,outgoing_row_id,incoming_row_id,pair_payload,entry_versions,reason,request_basis,record_sha256,created_at FROM TransferEvents ORDER BY sequence"
         ).fetchall()
@@ -3337,7 +3459,13 @@ class V2ProfileStore:
                 raise ProfileFormatError("transfer_history_integrity")
             reviews.append(
                 TransferPairReview(
-                    revision, pair, decision, reason, created, checksum, self._transfer_pair_context_current(pair)
+                    revision,
+                    pair,
+                    decision,
+                    reason,
+                    created,
+                    checksum,
+                    revision not in invalidated_pair_reviews and self._transfer_pair_context_current(pair),
                 )
             )
         return tuple(reversed(events)), tuple(reviews)
@@ -3499,7 +3627,7 @@ class V2ProfileStore:
             if pair is None:
                 raise ProfileFormatError("transfer_pair_unavailable_or_already_posted")
             context = _transfer_pair_context(pair)
-            latest = next((r for r in reviews if _transfer_pair_context(r.pair) == context), None)
+            latest = next((r for r in reviews if r.context_current and _transfer_pair_context(r.pair) == context), None)
             if latest is not None and latest.decision == decision and latest.reason == reason:
                 request = self.connection.execute(
                     "SELECT request_basis FROM TransferPairReviews WHERE revision_id=?", (latest.revision_id,)
@@ -4461,8 +4589,514 @@ class V2ProfileStore:
                 raise ProfileFormatError("card_correction_refused") from None
             raise
 
+    def _binding_target_rows(self, target: BindingCorrectionTarget) -> tuple[SourceEvidence, tuple[str, ...]]:
+        if (
+            not isinstance(target, BindingCorrectionTarget)
+            or type(target.source_sha256) is not str
+            or type(target.mode) is not str
+            or target.mode not in {"source", "file", "rows"}
+            or type(target.row_ids) is not tuple
+            or (target.source_identity is not None and type(target.source_identity) is not str)
+            or (target.source_identity_form is not None and type(target.source_identity_form) is not str)
+            or any(type(row) is not str for row in target.row_ids)
+            or tuple(sorted(set(target.row_ids))) != target.row_ids
+        ):
+            raise ProfileFormatError("binding_correction_target_invalid")
+        evidence = self.load_import(target.source_sha256).evidence
+        rows = _rows(evidence)
+        if target.mode == "source":
+            if isinstance(evidence.payload, StatementPayload):
+                identities = {(a.source_identity, a.source_identity_form) for a in evidence.payload.accounts}
+            else:
+                identities = {(r.source_account, r.source_account_form) for r in rows if r.source_account is not None}
+            if target.row_ids or (target.source_identity, target.source_identity_form) not in identities:
+                raise ProfileFormatError("binding_correction_target_invalid")
+            selected = tuple(
+                r.row_id
+                for r in rows
+                if (r.source_account, r.source_account_form) == (target.source_identity, target.source_identity_form)
+            )
+        else:
+            if target.source_identity is not None or target.source_identity_form is not None:
+                raise ProfileFormatError("binding_correction_target_invalid")
+            if not isinstance(evidence.payload, ActivityExportPayload):
+                raise ProfileFormatError("binding_correction_target_invalid")
+            if target.mode == "file":
+                if target.row_ids or not rows or any(r.source_account is not None for r in rows):
+                    raise ProfileFormatError("binding_correction_target_invalid")
+                selected = tuple(r.row_id for r in rows)
+            else:
+                if not target.row_ids or not set(target.row_ids) <= {
+                    r.row_id for r in rows if r.source_account is None
+                }:
+                    raise ProfileFormatError("binding_correction_target_invalid")
+                selected = target.row_ids
+        return evidence, tuple(sorted(selected))
+
+    def _binding_scope_accounts(self, target: BindingCorrectionTarget) -> tuple[str | None, ...]:
+        if target.mode == "rows":
+            assignments = self._row_assignments(target.row_ids)
+            return tuple(assignments.get(row) for row in target.row_ids)
+        if target.mode == "file":
+            row = self.connection.execute(
+                "SELECT ledger_account_id FROM FileAccountAssertions WHERE source_sha256=?", (target.source_sha256,)
+            ).fetchone()
+        else:
+            row = self.connection.execute(
+                "SELECT ledger_account_id FROM SourceAccountBindings WHERE source_sha256=? AND source_identity=? AND source_identity_form=?",
+                (target.source_sha256, target.source_identity, target.source_identity_form),
+            ).fetchone()
+        return (row[0] if row else None,)
+
+    def _binding_affected_reviews(self, row_ids: tuple[str, ...], ceiling: int):
+        latest = {}
+        for row in self.connection.execute(
+            "SELECT * FROM SourceOverlapReviews WHERE revision_id<=? ORDER BY revision_id", (ceiling,)
+        ):
+            latest[row[1], row[2]] = row
+        affected = set(row_ids)
+        while True:
+            expanded = affected | {item for pair in latest if affected.intersection(pair) for item in pair}
+            if expanded == affected:
+                break
+            affected = expanded
+        return tuple(latest[pair] for pair in sorted(latest) if affected.intersection(pair))
+
+    def _binding_affected_transfer_reviews(self, row_ids: tuple[str, ...], ceiling: int):
+        selected = set(row_ids)
+        return tuple(
+            row
+            for row in self.connection.execute(
+                "SELECT * FROM TransferPairReviews WHERE revision_id<=? ORDER BY revision_id", (ceiling,)
+            )
+            if selected.intersection(row[1:3])
+        )
+
+    @staticmethod
+    def _binding_context_json(accounts, bindings) -> str:
+        return json.dumps(
+            {"accounts": accounts, "bindings": [[b.row_id, b.ledger_account_id, b.basis] for b in bindings]},
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+
+    def _read_binding_corrections(self) -> tuple[BindingCorrection, ...]:
+        """Validate immutable recorded contexts without imposing today's mapping on history."""
+        result = []
+        for saved in self.connection.execute("SELECT * FROM BindingCorrections ORDER BY correction_id DESC"):
+            number, source, raw_target, raw_prior, raw_new, raw_invalidations, basis, reason, checksum, created = saved
+            try:
+                if (
+                    type(number) is not int
+                    or number <= 0
+                    or any(type(value) is not str or not value for value in saved[1:])
+                    or any(re.fullmatch(r"[0-9a-f]{64}", value) is None for value in (source, basis, checksum))
+                    or not 0 < len(reason.strip()) <= 500
+                    or checksum != _transfer_record_digest(*saved[:8], created)
+                ):
+                    raise ValueError
+                decoded = json.loads(raw_target)
+                if type(decoded) is not dict or set(decoded) != {
+                    "source_sha256",
+                    "mode",
+                    "source_identity",
+                    "source_identity_form",
+                    "row_ids",
+                }:
+                    raise ValueError
+                if type(decoded["row_ids"]) is not list:
+                    raise ValueError
+                decoded["row_ids"] = tuple(decoded["row_ids"])
+                target = BindingCorrectionTarget(**decoded)
+                _evidence, rows = self._binding_target_rows(target)
+                if source != target.source_sha256:
+                    raise ValueError
+                contexts = []
+                for raw in (raw_prior, raw_new):
+                    context = json.loads(raw)
+                    if type(context) is not dict or set(context) != {"accounts", "bindings"}:
+                        raise ValueError
+                    ids, bindings = context["accounts"], context["bindings"]
+                    if (
+                        type(ids) is not list
+                        or len(ids) != (len(target.row_ids) if target.mode == "rows" else 1)
+                        or any(value is not None and type(value) is not str for value in ids)
+                        or type(bindings) is not list
+                        or any(type(b) is not list or len(b) != 3 for b in bindings)
+                    ):
+                        raise ValueError
+                    for account_id in ids:
+                        if account_id is not None:
+                            self._require_financial_account(account_id)
+                    expected = [
+                        [
+                            row_id,
+                            ids[index if target.mode == "rows" else 0],
+                            {"source": "source", "file": "file", "rows": "row"}[target.mode]
+                            if ids[index if target.mode == "rows" else 0] is not None
+                            else None,
+                        ]
+                        for index, row_id in enumerate(rows)
+                    ]
+                    if bindings != expected:
+                        raise ValueError
+                    contexts.append((tuple(ids), tuple(AccountBinding(*b) for b in bindings)))
+                if contexts[0] == contexts[1] or len(set(contexts[1][0])) != 1:
+                    raise ValueError
+                invalidations = json.loads(raw_invalidations)
+                if type(invalidations) is not dict or set(invalidations) != {
+                    "review_ceiling",
+                    "edges",
+                    "transfer_review_ceiling",
+                    "transfer_reviews",
+                }:
+                    raise ValueError
+                ceiling, edges = invalidations["review_ceiling"], invalidations["edges"]
+                if type(ceiling) is not int or ceiling < 0 or type(edges) is not list:
+                    raise ValueError
+                transfer_ceiling = invalidations["transfer_review_ceiling"]
+                if type(transfer_ceiling) is not int or transfer_ceiling < 0:
+                    raise ValueError
+                transfer_reviews = self._binding_affected_transfer_reviews(rows, transfer_ceiling)
+                if invalidations["transfer_reviews"] != [list(row) for row in transfer_reviews]:
+                    raise ValueError
+                prior_reviews = self._binding_affected_reviews(rows, ceiling)
+                if len(edges) != len(prior_reviews):
+                    raise ValueError
+                ids = []
+                for offset, (edge, prior_review) in enumerate(zip(edges, prior_reviews, strict=True), 1):
+                    if type(edge) is not list or len(edge) != 2 or edge[0] != list(prior_review):
+                        raise ValueError
+                    pending = edge[1]
+                    if (
+                        type(pending) is not list
+                        or len(pending) != 8
+                        or type(pending[0]) is not int
+                        or pending[0] != ceiling + offset
+                        or pending[1:7] != [prior_review[1], prior_review[2], "pending", None, basis, reason]
+                        or self.connection.execute(
+                            "SELECT * FROM SourceOverlapReviews WHERE revision_id=?", (pending[0],)
+                        ).fetchone()
+                        != tuple(pending)
+                    ):
+                        raise ValueError
+                    ids.append(pending[0])
+                result.append(
+                    BindingCorrection(
+                        number,
+                        target,
+                        contexts[0][0],
+                        contexts[1][0],
+                        contexts[0][1],
+                        contexts[1][1],
+                        tuple(ids),
+                        reason,
+                        created,
+                        checksum,
+                        tuple(row[0] for row in transfer_reviews),
+                    )
+                )
+            except (ProfileFormatError, TypeError, ValueError, KeyError):
+                raise ProfileFormatError("binding_correction_history_integrity") from None
+        checked_scopes = set()
+        for record in result:
+            current = self._binding_scope_accounts(record.target)
+            scope_keys = record.target.row_ids if record.target.mode == "rows" else (None,)
+            for key, expected, actual in zip(scope_keys, record.new_account_ids, current, strict=True):
+                scope = (
+                    record.target.source_sha256,
+                    record.target.mode,
+                    record.target.source_identity,
+                    record.target.source_identity_form,
+                    key,
+                )
+                if scope not in checked_scopes:
+                    if expected != actual:
+                        raise ProfileFormatError("binding_correction_history_integrity")
+                    checked_scopes.add(scope)
+        return tuple(result)
+
+    def binding_correction_history(self, source_sha256: str | None = None) -> tuple[BindingCorrection, ...]:
+        if self.connection.in_transaction:
+            raise ProfileFormatError("binding_requires_committed_snapshot")
+        self.connection.execute("BEGIN")
+        try:
+            if source_sha256 is not None:
+                self.load_import(source_sha256)
+            return tuple(
+                r
+                for r in self._read_binding_corrections()
+                if source_sha256 is None or r.target.source_sha256 == source_sha256
+            )
+        finally:
+            self.connection.execute("ROLLBACK")
+
+    def _binding_correction_snapshot(
+        self, target: BindingCorrectionTarget, destination_account_id: str | None
+    ) -> BindingCorrectionSnapshot:
+        history = self._read_binding_corrections()
+        evidence, rows = self._binding_target_rows(target)
+        if destination_account_id is not None and type(destination_account_id) is not str:
+            raise ProfileFormatError("binding_correction_invalid")
+        if destination_account_id is not None:
+            self._require_financial_account(destination_account_id)
+        accounts = self._binding_scope_accounts(target)
+        bindings = tuple(b for b in self.account_bindings(target.source_sha256) if b.row_id in set(rows))
+        bindings = tuple(sorted(bindings, key=lambda b: b.row_id))
+        blockers = []
+        if all(account == destination_account_id for account in accounts):
+            blockers.append("binding_unchanged")
+        if (
+            target.mode == "file"
+            and self.connection.execute(
+                "SELECT 1 FROM RowAccountAssignments a JOIN SourceObservations o ON o.row_id=a.row_id WHERE o.source_sha256=? LIMIT 1",
+                (target.source_sha256,),
+            ).fetchone()
+        ):
+            blockers.append("row_mode_requires_clear")
+        if (
+            target.mode == "rows"
+            and self.connection.execute(
+                "SELECT 1 FROM FileAccountAssertions WHERE source_sha256=?", (target.source_sha256,)
+            ).fetchone()
+        ):
+            blockers.append("file_mode_requires_clear")
+        consumed = self._active_consumed()
+        active_rows = {
+            row
+            for (row,) in self.connection.execute(
+                f"SELECT DISTINCT row_id FROM JournalAllocations WHERE entry_key NOT IN ({_INACTIVE_JOURNAL_SQL})"
+            )
+        }
+        if set(rows).intersection(active_rows) or any(consumed.get(row, 0) for row in rows):
+            blockers.append("active_source_consumption")
+        anchors = self._binding_opening_anchors(target, accounts)
+        if anchors:
+            blockers.append("source_backed_opening_anchor")
+        ordinary_blockers = ()
+        try:
+            self._require_ordinary_binding_change(target)
+        except ProfileFormatError as exc:
+            if str(exc) not in {
+                "account_binding_has_journal_history",
+                "account_binding_has_overlap_review_history",
+                "account_binding_has_transfer_review_history",
+                "account_binding_has_correction_history",
+                "account_binding_source_backed_opening_anchor",
+            }:
+                raise
+            ordinary_blockers = (str(exc),)
+        ceiling = self.connection.execute("SELECT coalesce(max(revision_id),0) FROM SourceOverlapReviews").fetchone()[0]
+        reviews = self._binding_affected_reviews(rows, ceiling)
+        transfer_ceiling = self.connection.execute(
+            "SELECT coalesce(max(revision_id),0) FROM TransferPairReviews"
+        ).fetchone()[0]
+        transfer_reviews = self._binding_affected_transfer_reviews(rows, transfer_ceiling)
+        transfer_ids = tuple(row[0] for row in transfer_reviews)
+        affected_ids = {row_id for review in reviews for row_id in review[1:3]}
+        affected_ids.update(row_id for review in transfer_reviews for row_id in review[1:3])
+        affected_rows = []
+        account_names = {account.id: account.name for account in self.financial_accounts()}
+        for (source_id,) in self.connection.execute("SELECT DISTINCT source_sha256 FROM SourceObservations"):
+            source_rows = [row for row in _rows(self.load_import(source_id).evidence) if row.row_id in affected_ids]
+            if not source_rows:
+                continue
+            source_bindings = {b.row_id: b.ledger_account_id for b in self.account_bindings(source_id)}
+            affected_rows.extend(
+                BindingAffectedReviewRow(
+                    row.row_id,
+                    source_id,
+                    row.date.iso,
+                    row.description.text,
+                    source_bindings[row.row_id],
+                    account_names.get(source_bindings[row.row_id]),
+                )
+                for row in source_rows
+            )
+        basis = _transfer_record_digest(
+            "v2-binding-correction-1",
+            self._source_overlap_basis(),
+            self.connection.execute("SELECT * FROM OpeningDecisions ORDER BY account_id").fetchall(),
+            self.connection.execute("SELECT * FROM StatementSourceReviews ORDER BY revision_id").fetchall(),
+            asdict(target),
+            destination_account_id,
+        )
+        return BindingCorrectionSnapshot(
+            target,
+            destination_account_id,
+            evidence,
+            self.financial_accounts(),
+            accounts,
+            bindings,
+            rows,
+            tuple(blockers),
+            ordinary_blockers,
+            anchors,
+            tuple((row[1], row[2]) for row in reviews),
+            tuple(r for r in history if r.target.source_sha256 == target.source_sha256),
+            basis,
+            tuple(sorted(affected_rows, key=lambda row: row.row_id)),
+            transfer_ids,
+            tuple(review for review in self._read_transfer_history()[1] if review.revision_id in set(transfer_ids)),
+        )
+
+    def binding_correction_snapshot(
+        self, target: BindingCorrectionTarget, *, destination_account_id: str | None
+    ) -> BindingCorrectionSnapshot:
+        if self.connection.in_transaction:
+            raise ProfileFormatError("binding_requires_committed_snapshot")
+        if (
+            isinstance(target, BindingCorrectionTarget)
+            and type(target.row_ids) is tuple
+            and all(type(row) is str for row in target.row_ids)
+        ):
+            target = replace(target, row_ids=tuple(sorted(target.row_ids)))
+        self.connection.execute("BEGIN")
+        try:
+            return self._binding_correction_snapshot(target, destination_account_id)
+        finally:
+            self.connection.execute("ROLLBACK")
+
+    def correct_reviewed_binding(
+        self,
+        target: BindingCorrectionTarget,
+        *,
+        destination_account_id: str | None,
+        expected_basis_sha256: str,
+        reason: str,
+    ) -> BindingCorrection:
+        """Change only reviewed assignment state; journal/source identities remain immutable."""
+        self._require_writable()
+        if self.connection.in_transaction:
+            raise ProfileFormatError("binding_requires_committed_snapshot")
+        if type(reason) is not str or not 0 < len(reason.strip()) <= 500 or type(expected_basis_sha256) is not str:
+            raise ProfileFormatError("binding_correction_invalid")
+        reason = reason.strip()
+        if (
+            isinstance(target, BindingCorrectionTarget)
+            and type(target.row_ids) is tuple
+            and all(type(row) is str for row in target.row_ids)
+        ):
+            target = replace(target, row_ids=tuple(sorted(target.row_ids)))
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            history = self._read_binding_corrections()
+            for record in history:
+                saved_basis = self.connection.execute(
+                    "SELECT request_basis FROM BindingCorrections WHERE correction_id=?", (record.correction_id,)
+                ).fetchone()[0]
+                if (
+                    record.target == target
+                    and record.new_account_ids == (destination_account_id,) * len(record.prior_account_ids)
+                    and saved_basis == expected_basis_sha256
+                    and record.reason == reason
+                ):
+                    self.connection.execute("COMMIT")
+                    return record
+            selected = self._binding_correction_snapshot(target, destination_account_id)
+            if expected_basis_sha256 != selected.basis_sha256:
+                raise ProfileFormatError("binding_changed_since_selection")
+            if selected.blockers:
+                raise ProfileFormatError("binding_correction_" + selected.blockers[0])
+            ceiling = self.connection.execute(
+                "SELECT coalesce(max(revision_id),0) FROM SourceOverlapReviews"
+            ).fetchone()[0]
+            reviews = self._binding_affected_reviews(selected.affected_row_ids, ceiling)
+            transfer_ceiling = self.connection.execute(
+                "SELECT coalesce(max(revision_id),0) FROM TransferPairReviews"
+            ).fetchone()[0]
+            transfer_reviews = self._binding_affected_transfer_reviews(selected.affected_row_ids, transfer_ceiling)
+            if target.mode == "source":
+                self.connection.execute(
+                    "DELETE FROM SourceAccountBindings WHERE source_sha256=? AND source_identity=? AND source_identity_form=?",
+                    (target.source_sha256, target.source_identity, target.source_identity_form),
+                )
+                if destination_account_id is not None:
+                    self.connection.execute(
+                        "INSERT INTO SourceAccountBindings VALUES (?,?,?,?)",
+                        (
+                            target.source_sha256,
+                            target.source_identity,
+                            target.source_identity_form,
+                            destination_account_id,
+                        ),
+                    )
+            elif target.mode == "file":
+                self.connection.execute(
+                    "DELETE FROM FileAccountAssertions WHERE source_sha256=?", (target.source_sha256,)
+                )
+                if destination_account_id is not None:
+                    self.connection.execute(
+                        "INSERT INTO FileAccountAssertions VALUES (?,?)", (target.source_sha256, destination_account_id)
+                    )
+            else:
+                self.connection.executemany(
+                    "DELETE FROM RowAccountAssignments WHERE row_id=?", ((row,) for row in target.row_ids)
+                )
+                if destination_account_id is not None:
+                    self.connection.executemany(
+                        "INSERT INTO RowAccountAssignments VALUES (?,?)",
+                        ((row, destination_account_id) for row in target.row_ids),
+                    )
+            edges = []
+            for review in reviews:
+                cursor = self.connection.execute(
+                    "INSERT INTO SourceOverlapReviews (left_row_id,right_row_id,decision,retained_row_id,basis_sha256,reason) VALUES (?,?,'pending',NULL,?,?)",
+                    (review[1], review[2], expected_basis_sha256, reason),
+                )
+                pending = self.connection.execute(
+                    "SELECT * FROM SourceOverlapReviews WHERE revision_id=?", (cursor.lastrowid,)
+                ).fetchone()
+                edges.append((review, pending))
+            number = self.connection.execute(
+                "SELECT coalesce(max(correction_id),0)+1 FROM BindingCorrections"
+            ).fetchone()[0]
+            created = self.connection.execute("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now')").fetchone()[0]
+            new_accounts = (destination_account_id,) * len(selected.current_account_ids)
+            new_bindings = tuple(
+                AccountBinding(
+                    row,
+                    destination_account_id,
+                    {"source": "source", "file": "file", "rows": "row"}[target.mode]
+                    if destination_account_id is not None
+                    else None,
+                )
+                for row in selected.affected_row_ids
+            )
+            fields = (
+                number,
+                target.source_sha256,
+                json.dumps(asdict(target), sort_keys=True, separators=(",", ":")),
+                self._binding_context_json(selected.current_account_ids, selected.current_bindings),
+                self._binding_context_json(new_accounts, new_bindings),
+                json.dumps(
+                    {
+                        "review_ceiling": ceiling,
+                        "edges": edges,
+                        "transfer_review_ceiling": transfer_ceiling,
+                        "transfer_reviews": transfer_reviews,
+                    },
+                    sort_keys=True,
+                    separators=(",", ":"),
+                ),
+                expected_basis_sha256,
+                reason,
+            )
+            self.connection.execute(
+                "INSERT INTO BindingCorrections VALUES (?,?,?,?,?,?,?,?,?,?)",
+                (*fields, _transfer_record_digest(*fields, created), created),
+            )
+            result = next(row for row in self._read_binding_corrections() if row.correction_id == number)
+            self._validate_common_journal_read()
+            self.connection.execute("COMMIT")
+            return result
+        except BaseException:
+            self.connection.execute("ROLLBACK")
+            raise
+
     def source_account_bindings(self, source_sha256: str) -> tuple[SourceAccountBinding, ...]:
         """Show each identity printed by a source and its explicit ledger decision."""
+        self._read_binding_corrections()
         evidence = self.load_import(source_sha256).evidence
         payload = evidence.payload
         if isinstance(payload, StatementPayload):
@@ -4504,15 +5138,9 @@ class V2ProfileStore:
                 (source_sha256, source_identity, source_identity_form),
             ).fetchone()
             if prior != (account_id,):
-                row_ids = tuple(
-                    row[0]
-                    for row in self.connection.execute(
-                        "SELECT row_id FROM SourceObservations WHERE source_sha256=? "
-                        "AND source_account=? AND source_account_form=?",
-                        (source_sha256, source_identity, source_identity_form),
-                    )
+                self._require_ordinary_binding_change(
+                    BindingCorrectionTarget(source_sha256, "source", source_identity, source_identity_form)
                 )
-                self._require_unposted_rows(row_ids)
                 self.connection.execute(
                     "INSERT INTO SourceAccountBindings VALUES (?,?,?,?) "
                     "ON CONFLICT(source_sha256,source_identity,source_identity_form) "
@@ -4533,15 +5161,13 @@ class V2ProfileStore:
             raise ProfileFormatError("source_account_missing")
         self.connection.execute("BEGIN IMMEDIATE")
         try:
-            row_ids = tuple(
-                row[0]
-                for row in self.connection.execute(
-                    "SELECT row_id FROM SourceObservations WHERE source_sha256=? "
-                    "AND source_account=? AND source_account_form=?",
-                    (source_sha256, source_identity, source_identity_form),
+            if self.connection.execute(
+                "SELECT 1 FROM SourceAccountBindings WHERE source_sha256=? AND source_identity=? AND source_identity_form=?",
+                (source_sha256, source_identity, source_identity_form),
+            ).fetchone():
+                self._require_ordinary_binding_change(
+                    BindingCorrectionTarget(source_sha256, "source", source_identity, source_identity_form)
                 )
-            )
-            self._require_unposted_rows(row_ids)
             self.connection.execute(
                 "DELETE FROM SourceAccountBindings WHERE source_sha256=? AND source_identity=? AND source_identity_form=?",
                 (source_sha256, source_identity, source_identity_form),
@@ -4575,7 +5201,7 @@ class V2ProfileStore:
                 "SELECT ledger_account_id FROM FileAccountAssertions WHERE source_sha256=?", (source_sha256,)
             ).fetchone()
             if prior != (account_id,):
-                self._require_unposted_rows(tuple(row.row_id for row in payload.rows))
+                self._require_ordinary_binding_change(BindingCorrectionTarget(source_sha256, "file"))
             self.connection.execute(
                 "INSERT INTO FileAccountAssertions VALUES (?,?) "
                 "ON CONFLICT(source_sha256) DO UPDATE SET ledger_account_id=excluded.ledger_account_id",
@@ -4593,14 +5219,7 @@ class V2ProfileStore:
             if self.connection.execute(
                 "SELECT 1 FROM FileAccountAssertions WHERE source_sha256=?", (source_sha256,)
             ).fetchone():
-                self._require_unposted_rows(
-                    tuple(
-                        row[0]
-                        for row in self.connection.execute(
-                            "SELECT row_id FROM SourceObservations WHERE source_sha256=?", (source_sha256,)
-                        )
-                    )
-                )
+                self._require_ordinary_binding_change(BindingCorrectionTarget(source_sha256, "file"))
             self.connection.execute("DELETE FROM FileAccountAssertions WHERE source_sha256=?", (source_sha256,))
             self.connection.execute("COMMIT")
         except BaseException:
@@ -4637,7 +5256,9 @@ class V2ProfileStore:
             ).fetchone():
                 raise ProfileFormatError("row_account_assignment_conflicts_with_file_assertion")
             prior = self._row_assignments(row_ids)
-            self._require_unposted_rows(tuple(row_id for row_id in row_ids if prior.get(row_id) != account_id))
+            changed = tuple(sorted(row_id for row_id in row_ids if prior.get(row_id) != account_id))
+            if changed:
+                self._require_ordinary_binding_change(BindingCorrectionTarget(source_sha256, "rows", row_ids=changed))
             self.connection.executemany(
                 "INSERT INTO RowAccountAssignments VALUES (?,?) "
                 "ON CONFLICT(row_id) DO UPDATE SET ledger_account_id=excluded.ledger_account_id",
@@ -4666,7 +5287,10 @@ class V2ProfileStore:
         self.connection.execute("BEGIN IMMEDIATE")
         try:
             assigned = tuple(self._row_assignments(row_ids))
-            self._require_unposted_rows(assigned)
+            if assigned:
+                self._require_ordinary_binding_change(
+                    BindingCorrectionTarget(source_sha256, "rows", row_ids=tuple(sorted(assigned)))
+                )
             self.connection.executemany(
                 "DELETE FROM RowAccountAssignments WHERE row_id=?", ((row_id,) for row_id in row_ids)
             )
@@ -4996,6 +5620,9 @@ class V2ProfileStore:
             ("SourceObservations", "*"),
             ("Accounts", "*"),
             ("SourceAccountBindings", "*"),
+            ("FileAccountAssertions", "*"),
+            ("RowAccountAssignments", "*"),
+            ("BindingCorrections", "*"),
             ("JournalEntries", "*"),
             ("JournalAllocations", "*"),
             ("JournalCorrections", "*"),

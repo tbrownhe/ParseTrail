@@ -20,8 +20,14 @@ from PySide6.QtWidgets import (
 
 from parsetrail.core.source_evidence import StatementPayload
 from parsetrail.core.v2_account_matching import LedgerAccountCandidate, match_verified_source_account
-from parsetrail.core.v2_profile_store import ProfileFormatError, SourceAccountBinding, V2ProfileStore
+from parsetrail.core.v2_profile_store import (
+    BindingCorrectionTarget,
+    ProfileFormatError,
+    SourceAccountBinding,
+    V2ProfileStore,
+)
 from parsetrail.core.v2_workspace import V2Workspace
+from parsetrail.gui.v2_binding_correction import V2BindingCorrection, ordinary_binding_lock_notice
 
 
 class V2SourceAccountReview(QDialog):
@@ -64,6 +70,9 @@ class V2SourceAccountReview(QDialog):
         self.clear_button.clicked.connect(self._clear)
         controls.addWidget(self.clear_button)
         layout.addLayout(controls)
+        self.correction_button = QPushButton("Review account correction…")
+        self.correction_button.clicked.connect(self._correct)
+        layout.addWidget(self.correction_button)
         self.abbreviated_matching_button = QPushButton(
             "Allow abbreviated account numbers to automatically match to ledger"
         )
@@ -76,6 +85,22 @@ class V2SourceAccountReview(QDialog):
         self._reload()
 
     def _reload(self) -> None:
+        try:
+            self._reload_current()
+        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
+            self.bindings, self.matches = (), ()
+            self.locked_keys, self.overlap_locked_keys = set(), set()
+            self.ordinary_blockers = {}
+            self.identities.clear()
+            self.account_combo.clear()
+            self.assign_button.setEnabled(False)
+            self.clear_button.setEnabled(False)
+            self.correction_button.setEnabled(False)
+            self.abbreviated_matching_button.setVisible(False)
+            self.status.setText("Source assignments are unavailable. Reopen this review to retry.")
+            self.lock_notice.setText(str(exc))
+
+    def _reload_current(self) -> None:
         prior = self._selected_key()
         with V2ProfileStore.open(self.profile, read_only=True) as store:
             evidence = store.load_import(self.source_sha256).evidence
@@ -83,6 +108,15 @@ class V2SourceAccountReview(QDialog):
             accounts = store.financial_accounts()
             posted_rows = store.journal_history_row_ids(self.source_sha256)
             overlap_rows = store.source_overlap_history_row_ids(self.source_sha256)
+            self.ordinary_blockers = {
+                (binding.source_identity, binding.source_identity_form): store.binding_correction_snapshot(
+                    BindingCorrectionTarget(
+                        self.source_sha256, "source", binding.source_identity, binding.source_identity_form
+                    ),
+                    destination_account_id=None,
+                ).ordinary_blockers
+                for binding in self.bindings
+            }
         catalog = self.workspace.catalog_cache.load_current()
         preferences = self.workspace.preferences()
         self.abbreviated_matching_button.blockSignals(True)
@@ -118,9 +152,11 @@ class V2SourceAccountReview(QDialog):
         self.overlap_locked_keys = {
             (row.source_account, row.source_account_form) for row in rows if row.row_id in overlap_rows
         }
-        self.locked_keys = {
-            (row.source_account, row.source_account_form) for row in rows if row.row_id in posted_rows
-        } | self.overlap_locked_keys
+        self.locked_keys = (
+            {(row.source_account, row.source_account_form) for row in rows if row.row_id in posted_rows}
+            | self.overlap_locked_keys
+            | {key for key, blockers in self.ordinary_blockers.items() if blockers}
+        )
         names = {account.id: account.name for account in accounts}
         self.account_combo.clear()
         self.account_combo.addItem("Choose a ledger account…", None)
@@ -146,6 +182,9 @@ class V2SourceAccountReview(QDialog):
                     " · Locked by source-row review"
                     if (binding.source_identity, binding.source_identity_form) in self.overlap_locked_keys
                     else " · Locked by posted entries"
+                    if "account_binding_has_journal_history"
+                    in self.ordinary_blockers.get((binding.source_identity, binding.source_identity_form), ())
+                    else " · Ordinary reassignment locked"
                     if locked
                     else ""
                 )
@@ -176,15 +215,13 @@ class V2SourceAccountReview(QDialog):
         locked = selected and self._selected_key() in self.locked_keys
         self.assign_button.setEnabled(selected and not locked and self.account_combo.currentData() is not None)
         self.clear_button.setEnabled(selected and not locked and self.bindings[index].ledger_account_id is not None)
-        self.lock_notice.setText(
-            "This account assignment has saved repeated-row review history and cannot be reassigned. "
-            "Returning a pair to pending preserves that history and its account identity."
-            if locked and self._selected_key() in self.overlap_locked_keys
-            else "This account assignment is locked because a row has posted journal history. "
-            "Review or correct the entry; its source account cannot be reassigned."
-            if locked
-            else ""
-        )
+        self.correction_button.setEnabled(selected)
+        self.lock_notice.setText(ordinary_binding_lock_notice(self.ordinary_blockers.get(self._selected_key(), ())))
+        if locked:
+            self.lock_notice.setText(
+                self.lock_notice.text()
+                + " Review account correction shows whether withdrawal and opening prerequisites permit an explicit correction."
+            )
         self.abbreviated_matching_button.setVisible(
             selected
             and self.bindings[index].source_identity_form == "last_four"
@@ -212,14 +249,7 @@ class V2SourceAccountReview(QDialog):
                 action(store)
             self._reload()
         except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            message = (
-                "This account assignment has saved repeated-row review history and cannot be reassigned."
-                if str(exc) == "account_binding_has_overlap_review_history"
-                else "This account assignment is locked because a row has posted journal history. "
-                "Review or correct the entry; its source account cannot be reassigned."
-                if str(exc) == "account_binding_has_journal_history"
-                else str(exc)
-            )
+            message = ordinary_binding_lock_notice((str(exc),)) if str(exc).startswith("account_binding_") else str(exc)
             QMessageBox.warning(self, "Account assignment was not saved", message)
             self._reload()
 
@@ -233,3 +263,13 @@ class V2SourceAccountReview(QDialog):
         key = self._selected_key()
         if key is not None:
             self._write(lambda store: store.clear_source_account_binding(self.source_sha256, *key))
+
+    def _correct(self) -> None:
+        key = self._selected_key()
+        if key is None:
+            return
+        target = BindingCorrectionTarget(
+            self.source_sha256, "source", source_identity=key[0], source_identity_form=key[1]
+        )
+        V2BindingCorrection(self.profile, target, self).exec()
+        self._reload()

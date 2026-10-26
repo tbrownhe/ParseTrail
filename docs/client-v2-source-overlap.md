@@ -34,9 +34,14 @@ review decisions or allocations. Decisions do not infer categories, accounting
 dates, transfers, openings or reconciliation, and do not post any money.
 The optimistic form version is separate from durable decision validity: posting
 or correcting the retained row must not reactivate a supporting repeat.
-Saving any review fixes both rows' account bindings in this pilot, including
-after returning a pair to pending. Assignment dialogs explain and enforce that
-history lock. A fresh form and reason can append another occurrence decision.
+Saving any review locks both rows against ordinary reassignment, including after
+returning a pair to pending. Assignment dialogs enforce that history lock. An
+explicit [reviewed binding correction](work/2026-10-25-v2-binding-corrections.md)
+can change or clear assignments after zero active consumption and opening-anchor
+checks, retaining prior mappings and invalidating connected repeat decisions
+atomically. Transfer suggestion review history is also locked and invalidated
+through this workflow; an account change away and back cannot revive it. A fresh
+form and reason can append another occurrence decision.
 
 Unresolved detected candidates block new cash, card and transfer allocations.
 Confirmed supporting repeats cannot be allocated independently; the retained
@@ -56,8 +61,8 @@ Supported ordinary interpretations can also be explicitly withdrawn with a
 reason and optimistic source-review version. Withdrawal retains all evidence and
 history, releases active consumption and returns the row to pending. A later
 post has a fresh identity. Whole-transfer withdrawal uses its separate event
-workflow. These actions do not unlock historical binding moves; explicit binding
-repair remains separate work. See the
+workflow. Historical binding moves then require the explicit correction workflow
+above, with a separate reason, current preview and stale-form protection. See the
 [interpretation-repair record](work/2026-10-25-v2-source-interpretation-repair.md).
 
 Conservative allocation and reconciliation reports continue to distinguish

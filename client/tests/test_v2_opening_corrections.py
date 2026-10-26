@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
@@ -39,6 +39,10 @@ def _review(store, evidence, *, reference="Printed synthetic opening"):
 def _new_source(
     store, original, *, amount=0, start="2026-01-01", end="2026-01-31", replace_binding=True, label="changed"
 ):
+    # A live source-backed opening fixes its assignment. Correct from a newly
+    # reviewed earlier source, retaining the old bound statement and its books.
+    if replace_binding and start == "2026-01-01":
+        start = (date.fromisoformat(original.payload.start.iso) - timedelta(days=1)).isoformat()
     source = SOURCE + f"-{label}-{amount}-{start}".encode()
     old = original.payload.accounts[0]
     money = old.opening.model_copy(update={"raw": str(amount), "minor": amount})
@@ -53,8 +57,6 @@ def _new_source(
     )
     evidence = original.model_copy(update={"source_sha256": hashlib.sha256(source).hexdigest(), "payload": payload})
     store.import_source(source, DEFINITION, evidence, suffix=".pdf")
-    if replace_binding:
-        store.clear_source_account_binding(original.source_sha256, old.source_identity, old.source_identity_form)
     store.bind_source_account(evidence.source_sha256, account.source_identity, account.source_identity_form, "cash")
     _review(store, evidence)
     return evidence
@@ -234,10 +236,7 @@ def test_conflicting_tied_sources_and_preopening_activity_refuse_correction(tmp_
         assert "conflicting_earliest_openings" in store.opening_review_snapshot("cash").candidate.blockers
         with pytest.raises(ProfileFormatError, match="opening_review_blocked"):
             _correct(store)
-        account = evidence.payload.accounts[0]
-        store.clear_source_account_binding(
-            evidence.source_sha256, account.source_identity, account.source_identity_form
-        )
+        _new_source(store, evidence, amount=2_000, label="earlier-reviewed")
         store.connection.execute(
             "INSERT INTO JournalEntries(key,payload) VALUES (?,?)",
             (

@@ -200,7 +200,19 @@ def test_dismiss_reopen_is_durable_nonposting_and_bound_to_reviewed_account_cont
         source_id = store.connection.execute(
             "SELECT source_sha256 FROM SourceObservations WHERE row_id=?", (outgoing,)
         ).fetchone()[0]
-        store.bind_source_account(source_id, "Checking A", "opaque", "other")
+        with pytest.raises(ProfileFormatError, match="account_binding_has_transfer_review_history"):
+            store.bind_source_account(source_id, "Checking A", "opaque", "other")
+        from parsetrail.core.v2_profile_store import BindingCorrectionTarget
+
+        frame = store.binding_correction_snapshot(
+            BindingCorrectionTarget(source_id, "source", "Checking A", "opaque"), destination_account_id="other"
+        )
+        store.correct_reviewed_binding(
+            frame.target,
+            destination_account_id="other",
+            expected_basis_sha256=frame.basis_sha256,
+            reason="Reviewed corrected checking account",
+        )
         refreshed = _snapshot(store)
         assert len(refreshed.candidates) == 1 and refreshed.candidates[0].outgoing.account_id == "other"
         assert not refreshed.pair_reviews[0].context_current

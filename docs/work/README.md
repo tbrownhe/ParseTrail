@@ -9,6 +9,9 @@ contracts own lasting behavior. Start with those documents, not historical logs.
 
 | Record | Roadmap scope | Implementation / evidence |
 | --- | --- | --- |
+| [Wider source matching](2026-10-25-v2-wider-source-matching.md) | V2-3/4 | Active integration; finite index preparation completed and independently reviewed. |
+| [Frozen V2 Windows verification](2026-10-25-v2-frozen-verification.md) | P2-3/4/5, V2-6/7 | Diagnostic implemented and reviewed; frozen probe awaits final integrated runtime. |
+| [Reviewed account-assignment correction](2026-10-25-v2-binding-corrections.md) | V2-3/4/5 | Completed development and independent review; exact prior context, review invalidation and old-account history preserved. |
 | [Reviewed-entry drill-down](2026-10-25-v2-reviewed-drilldown.md) | V2-5 | Completed development and independent review; current scope, immutable provenance and shared failure clearing. |
 | [Synthetic family source admission](2026-10-25-v2-family-source-admission.md) | P2-3/4 | Completed test-only packet and independent review; all current declarations through real bounded workers and test-signed catalog. |
 | [Ordinary interpretation/repeat repair](2026-10-25-v2-source-interpretation-repair.md) | V2-3/4/5 | Completed development and independent review; withdrawal/repost, atomic posted-repeat repair and shared journal integrity. |

@@ -29,7 +29,7 @@ evidence belong in [packet records](work/README.md).
 
 ## Profile format and lifecycle
 
-The current pre-release profile schema is revision 15; check `SCHEMA_VERSION`
+The current pre-release profile schema is revision 16; check `SCHEMA_VERSION`
 in `v2_profile_store.py` when opening a packet. Format markers, exact table and
 foreign-key shapes, append-only triggers and SQLite integrity are checked before
 writable use. Older disposable pilots, 1.x, unknown, damaged and newer shapes
@@ -128,6 +128,17 @@ active consumption while preserving original allocations; fresh reposts have
 new identities. Repaired repeats require validated history and zero active
 allocation before later repeat review. Workbook Source Reviews and Repeat
 Repairs preserve action history separately from active money.
+
+`BindingCorrections` retains typed, digested prior/new section/file/row mappings
+and exact affected review context. Explicit correction requires zero active
+source consumption and no source-backed opening anchor. Historical journals stay
+under their original accounts. Connected repeat relationships receive pending
+revisions; affected transfer suggestion reviews become inapplicable even after
+an account changes away and back. Ordinary binding APIs retain journal, repeat,
+transfer-review, correction-history and opening locks. Switching file/row modes
+requires an explicit clear first. Common reads/backup validate history and latest
+mapping consistency; all file/row bindings and corrections version reconciliation.
+Opening dependencies are conservative until explicit withdrawal is available.
 
 ## Common reads and recovery
 

@@ -311,6 +311,7 @@ def test_withdrawal_remains_available_after_assumed_date_preference_is_off(tmp_p
 
 
 def test_reopen_uses_latest_decision_in_current_financial_context_after_rebinding(tmp_path, app, monkeypatch):
+    from parsetrail.core.v2_profile_store import BindingCorrectionTarget
     from PySide6.QtWidgets import QMessageBox
 
     profile = tmp_path / "rebound-context.db"
@@ -327,7 +328,18 @@ def test_reopen_uses_latest_decision_in_current_financial_context_after_rebindin
             preferences=V2Preferences(),
             reason="Dismissed in original checking context",
         )
-        store.bind_source_account(pair.outgoing.source_sha256, "Checking A", "opaque", "checking-b")
+        target = BindingCorrectionTarget(pair.outgoing.source_sha256, "source", "Checking A", "opaque")
+
+        def correct_binding(destination):
+            frame = store.binding_correction_snapshot(target, destination_account_id=destination)
+            store.correct_reviewed_binding(
+                frame.target,
+                destination_account_id=destination,
+                expected_basis_sha256=frame.basis_sha256,
+                reason="Reviewed source account correction",
+            )
+
+        correct_binding("checking-b")
         snapshot_b = store.transfer_review_snapshot(preferences=V2Preferences())
         review_b = store.record_transfer_pair_review(
             outgoing,
@@ -337,19 +349,35 @@ def test_reopen_uses_latest_decision_in_current_financial_context_after_rebindin
             preferences=V2Preferences(),
             reason="Dismissed in different checking context",
         )
-        store.bind_source_account(pair.outgoing.source_sha256, "Checking A", "opaque", "checking")
+        correct_binding("checking")
+        returned = store.transfer_review_snapshot(preferences=V2Preferences())
+        assert len(returned.candidates) == 1
+        assert not any(review.context_current for review in returned.pair_reviews)
+        current_review = store.record_transfer_pair_review(
+            outgoing,
+            incoming,
+            decision="dismiss",
+            expected_basis_sha256=returned.basis_sha256,
+            preferences=V2Preferences(),
+            reason="Fresh source inspection in returned checking context",
+        )
     monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.Yes)
     dialog = _dialog(profile)
     try:
         assert dialog.table.rowCount() == 0
         current_index = next(
-            index for index, review in enumerate(dialog.pair_reviews) if review.revision_id == review_a.revision_id
+            index
+            for index, review in enumerate(dialog.pair_reviews)
+            if review.revision_id == current_review.revision_id
         )
         stale_index = next(
             index for index, review in enumerate(dialog.pair_reviews) if review.revision_id == review_b.revision_id
         )
         assert dialog.pair_reviews[current_index].context_current
         assert not dialog.pair_reviews[stale_index].context_current
+        assert not next(
+            review for review in dialog.pair_reviews if review.revision_id == review_a.revision_id
+        ).context_current
         assert review_b.revision_id > review_a.revision_id
         dialog.reopen_reason.setText("Reopen the original checking context after source inspection")
         dialog.review_table.selectRow(stale_index)
@@ -359,7 +387,7 @@ def test_reopen_uses_latest_decision_in_current_financial_context_after_rebindin
         dialog.reopen.click()
         assert dialog.table.rowCount() == 1
         assert dialog.candidates[0].outgoing.account_id == "checking"
-        assert len(dialog.pair_reviews) == 3
+        assert len(dialog.pair_reviews) == 4
         with V2ProfileStore.open(profile, read_only=True) as store:
             assert store._active_consumed() == {}
             assert store.connection.execute("SELECT COUNT(*) FROM JournalEntries").fetchone()[0] == 0
