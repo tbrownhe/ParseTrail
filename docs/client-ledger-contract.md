@@ -13,7 +13,7 @@ boundaries. Work, commands, review and acceptance evidence belong in
 [archived contract](work/archive/2026-10-25-client-ledger-contract.md) retains
 superseded migration/audit narrative and its historical evidence links.
 
-The current workspace supports reviewed account-total asset cash/card category
+The current workspace supports reviewed account-total asset cash/card/register category
 movements with explicit expense, expense refund, income or income-adjustment
 purpose, whole-movement owned transfers/card payments and reviewed multi-receipt
 settlements with explicit sending/receiving fees, printed
@@ -30,6 +30,14 @@ redundant counterpart atomically. Category/date corrections retain the original
 category class and exact source effect, which preserve purpose; changing purpose
 requires explicit withdrawal and fresh review. Whole transfers can be withdrawn
 or atomically replaced while retaining every dated leg and allocation history.
+The finite Yamaha register supports component-free account-total liability
+category movements through a separate review API with explicit purpose. Source
+transaction and posting dates stay separate, including derivation from printed
+year context; register correction retains the posting date. Owned receipts to
+account-total liabilities use neutral liability-payment terminology, covering
+cards and loan registers. Their full liability effect is not principal, and no
+unprinted principal/interest breakdown or interest category is automatically
+created. An explicit category choice remains an authored interpretation.
 Bounded evidenced loan payments pair an observed owned asset outflow with printed
 Capital/MOHELA principal/interest or explicitly selected Wells components, retaining
 their separate dates and whole-event correction history. General category splits,

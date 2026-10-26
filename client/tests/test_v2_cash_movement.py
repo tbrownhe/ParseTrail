@@ -106,7 +106,7 @@ def test_card_payment_is_one_cash_outflow_and_keeps_counterpart_dates(tmp_path, 
     before = profile.read_bytes()
     report = _read(profile)
     assert len(report.rows) == 1 and report.total_minor == -2000
-    assert report.rows[0].classification == "card_payment"
+    assert report.rows[0].classification == "liability_payment"
     assert report.outside_scope_entries == records - 1
     assert "2026-01-05" in report.rows[0].event_note
     if records == 2:
@@ -216,7 +216,7 @@ def test_concurrent_withdrawal_after_rows_read_cannot_mix_old_money_and_new_even
 
     monkeypatch.setattr(V2ProfileStore, "reviewed_journal_export", change_after_read)
     report = _read(profile)
-    assert report.total_minor == -2000 and report.rows[0].classification == "card_payment"
+    assert report.total_minor == -2000 and report.rows[0].classification == "liability_payment"
     monkeypatch.setattr(V2ProfileStore, "reviewed_journal_export", original)
     assert _read(profile).rows == ()
 

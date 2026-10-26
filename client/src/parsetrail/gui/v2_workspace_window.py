@@ -31,6 +31,7 @@ from PySide6.QtWidgets import (
 
 from parsetrail.core.source_evidence import ActivityExportPayload, StatementPayload
 from parsetrail.core.v2_cash_movement import cash_account_labels
+from parsetrail.core.v2_liability_register import REGISTER_PARSER
 from parsetrail.core.v2_profile_store import (
     CARD_STATEMENT_PARSERS,
     FinancialAccount,
@@ -201,12 +202,14 @@ class V2WorkspaceWindow(QMainWindow):
         self.source_opening_action = accounts_menu.addAction("Review source-backed opening…")
         self.source_opening_action.triggered.connect(self._review_openings)
         review_menu = self.menuBar().addMenu("Review")
-        self.transfer_review_action = review_menu.addAction("Owned transfers and card payments…")
+        self.transfer_review_action = review_menu.addAction("Owned transfers and liability repayments…")
         self.transfer_review_action.triggered.connect(self._review_transfers)
         self.settlement_review_action = review_menu.addAction("Transfer fees and partial settlements…")
         self.settlement_review_action.triggered.connect(self._review_settlements)
         self.loan_payment_action = review_menu.addAction("Evidenced loan principal and interest…")
         self.loan_payment_action.triggered.connect(self._review_loan_payments)
+        self.register_review_action = review_menu.addAction("Review selected liability register…")
+        self.register_review_action.triggered.connect(self._review_register_activity)
         reports_menu = self.menuBar().addMenu("Reports")
         self.reviewed_reports_action = reports_menu.addAction("Reviewed reports…")
         self.reviewed_reports_action.triggered.connect(self._open_reviewed_reports)
@@ -318,6 +321,7 @@ class V2WorkspaceWindow(QMainWindow):
             self.transfer_review_action,
             self.settlement_review_action,
             self.loan_payment_action,
+            self.register_review_action,
             self.account_anchors_action,
             self.source_values_action,
         ):
@@ -347,11 +351,13 @@ class V2WorkspaceWindow(QMainWindow):
         self.preview_button.setEnabled(source_id is not None)
         self.cash_review_button.setEnabled(source_id is not None)
         self.card_review_button.setEnabled(False)
+        self.register_review_action.setEnabled(False)
         unidentified_rows = False
         identified_accounts = False
         if source_id is not None:
             evidence = self.workspace.saved_import(source_id).evidence
             self.card_review_button.setEnabled(evidence.parser_id in CARD_STATEMENT_PARSERS)
+            self.register_review_action.setEnabled(evidence.parser_id == REGISTER_PARSER and self.import_worker is None)
             payload = evidence.payload
             rows = (
                 sum(len(account.rows) for account in payload.accounts)
@@ -728,6 +734,17 @@ class V2WorkspaceWindow(QMainWindow):
         self.assumed_posting_action.setChecked(self.workspace.preferences().allow_assumed_posting_dates)
         self.assumed_posting_action.blockSignals(False)
         self.refresh()
+
+    def _review_register_activity(self) -> None:
+        if self.import_worker is not None:
+            return
+        source_id = self._selected_source()
+        if source_id is None or self.workspace.saved_import(source_id).evidence.parser_id != REGISTER_PARSER:
+            return
+        from parsetrail.gui.v2_liability_register_review import V2LiabilityRegisterReview
+
+        V2LiabilityRegisterReview(self.workspace, source_id, self).exec()
+        self.refresh(select_source=source_id)
 
     def _open_reviewed_reports(self) -> None:
         V2ReviewedReportsDialog(self.workspace.profile_path, self).exec()

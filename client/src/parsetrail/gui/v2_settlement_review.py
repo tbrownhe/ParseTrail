@@ -159,6 +159,7 @@ class V2SettlementReview(QDialog):
             "Explicitly select one asset outflow and its owned-account receipts. If receipt evidence is missing, explicitly review an expected owned destination. "
             "That expectation creates no destination receipt or posting. Dates retain their reviewed source roles, "
             "even when receipts precede the outflow. No fee is inferred from a difference. Unexplained clearing remains unresolved / in transit. "
+            "Liability payments include card and loan-register repayments; their whole liability effects do not establish a principal/interest split. "
             "Unlisted unsupported or already consumed rows remain outside this review."
         )
         note.setWordWrap(True)

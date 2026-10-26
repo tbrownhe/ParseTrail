@@ -43,7 +43,7 @@ evidence distinctions and observed limits without duplicating validation logs.
 | `pdf_wfbankbus_202110` | 0.2.0 | Business bank dynamic table PDF | Located table activity, optional printed row balances and after-stop dispositions remain separate; missing balances are not filled as source facts. |
 | `pdf_wfbankper_202105` | 0.2.0 | Personal bank table PDF | Anchored table rows retain printed debit/credit and running-balance provenance; retained activity is not a claim of complete page capture. |
 | `pdf_wfloanper_202306` | 0.2.1 | Personal-loan line PDF | Printed principal/interest allocations and closing principal are retained; period start stays unknown and legacy synthetic origination is omitted. |
-| `pdf_yamahafin_202306` | 0.2.0 | Auto-loan line PDF | The finite two-date operation preserves transaction/Post dates and declared sign syntax; source parity does not approve loan interpretation. |
+| `pdf_yamahafin_202306` | 0.2.0 | Auto-loan line PDF | The finite two-date operation preserves transaction/Post dates and declared sign syntax. Bounded reviewed account-total register activity/repayments are implemented separately; no principal/interest split is inferred. Source admission is not owner accounting acceptance. |
 
 Source-fact comparison, routing execution, full-page capture, accounting review,
 ledger allocation, reconciliation and period coverage are separate claims.

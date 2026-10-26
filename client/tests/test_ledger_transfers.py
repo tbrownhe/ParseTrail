@@ -41,7 +41,7 @@ def test_suggestions_are_deterministic_unposted_and_same_day_payment_has_no_expe
         assert snapshot == transfers.snapshot()
         assert list(review.store.connection.iterdump()) == before
         assert snapshot["summary"] == {"unique_candidate": 1}
-        assert snapshot["pairs"][0]["kind"] == "card_payment"
+        assert snapshot["pairs"][0]["kind"] == "liability_payment"
         assert any(m["status"] == "no_candidate" for m in snapshot["movements"])
         transfers.decide([PAIR], "confirmed")
         entries = [decode_entry(p) for (p,) in review.store.connection.execute("SELECT payload FROM LedgerEntries")]
@@ -210,7 +210,7 @@ def test_transfer_window_cancel_confirm_filter_and_reopen(app, tmp_path, rebuild
     with ProposalReview(folder) as review:
         window = TransferReviewWindow(review)
         window.show()
-        window.page.search.setText("Card payment")
+        window.page.search.setText("Liability payment")
         window.page.table.selectRow(0)
         app.processEvents()
         assert window.confirm_button.isEnabled()

@@ -92,7 +92,11 @@ class TransferSettlement:
             return "owned outflow awaiting receipt"
         kinds = {m.account_kind for m in self.incoming}
         return (
-            "card payment" if kinds == {"liability"} else "asset transfer" if kinds == {"asset"} else "mixed settlement"
+            "liability payment"
+            if kinds == {"liability"}
+            else "asset transfer"
+            if kinds == {"asset"}
+            else "mixed settlement"
         )
 
 

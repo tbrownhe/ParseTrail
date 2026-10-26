@@ -326,7 +326,7 @@ class LoanPayments:
             request["previous_hash"] = correcting["preview_hash"]
         revision = "loan-payment:" + key(request)
         event = correcting["entries"][0]["event_id"] if correcting is not None else revision
-        transfers, clearing = TransferReview.entries(outgoing, incoming, "card_payment", reason)
+        transfers, clearing = TransferReview.entries(outgoing, incoming, "liability_payment", reason)
         entries = [
             replace(e, key=f"{revision}:payment:{i}", event_id=event, description="Confirmed loan payment")
             for i, e in enumerate(transfers)

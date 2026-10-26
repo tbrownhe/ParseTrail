@@ -120,7 +120,7 @@ def test_explicit_purpose_and_category_cancel_post_correct_class_and_exact_effec
         assert posted.purpose == purpose and posted.entry_key is not None
         assert "Purpose:" in questions[0] and f"reviewed {category_kind} change:" in questions[0]
         assert "New entry effects:" in questions[0] and "Replacement entry effects" not in questions[0]
-        assert "separate review" in questions[0] or "owned card payment" in questions[0]
+        assert "separate review" in questions[0] or "owned liability payment" in questions[0]
         assert not dialog.purpose.isEnabled() and dialog.purpose.currentData() == purpose
         if kind == "card":
             dialog.workspace.set_allow_assumed_posting_dates(False)

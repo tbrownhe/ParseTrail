@@ -34,6 +34,7 @@ from parsetrail.gui.v2_cash_activity_review import (
     _money,
     _purpose_effects,
 )
+from parsetrail.gui.v2_evidence_preview import preview_saved_source
 
 
 class _CardRowsModel(QAbstractTableModel):
@@ -47,9 +48,12 @@ class _CardRowsModel(QAbstractTableModel):
         "Reviewed purpose",
     )
 
-    def __init__(self, rows: tuple[CardPurchaseReviewRow, ...], parent=None):
+    def __init__(self, rows: tuple[CardPurchaseReviewRow, ...], parent=None, *, register_mode=False):
         super().__init__(parent)
         self.rows = rows
+        self.register_mode = register_mode
+        if register_mode:
+            self.HEADERS = ("Transaction date", "Source posting date", *self.HEADERS[2:])
 
     def replace(self, rows: tuple[CardPurchaseReviewRow, ...]) -> None:
         self.beginResetModel()
@@ -71,39 +75,54 @@ class _CardRowsModel(QAbstractTableModel):
         if not index.isValid() or role not in {Qt.DisplayRole, Qt.ToolTipRole}:
             return None
         row = self.rows[index.row()]
-        candidate = row.posting_candidate or "Unavailable"
-        if row.date_provenance == "assumed":
+        candidate = (row.posting_date if self.register_mode else row.posting_candidate) or "Unavailable"
+        provenance = row.posting_date_provenance if self.register_mode else row.date_provenance
+        if provenance == "assumed":
             candidate += " (assumed)"
-        elif row.date_provenance == "derived":
+        elif provenance == "derived":
             candidate += " (derived from source)"
         values = (
-            row.source_date or "Unknown",
+            (row.transaction_date.isoformat() if row.transaction_date else "Unknown")
+            if self.register_mode
+            else row.source_date or "Unknown",
             candidate,
             row.description or "Description not printed",
             _money(row.amount_minor),
-            row.financial_account or "Not assigned",
+            _register_identity(row) if self.register_mode else row.financial_account or "Not assigned",
             row.status,
             PURPOSE_LABELS.get(row.purpose, "Pending explicit review"),
         )
         return values[index.column()]
 
 
+def _register_identity(row):
+    return (
+        f"{row.financial_account or 'Not assigned'} ({row.financial_account_kind or 'kind unavailable'}, "
+        f"{(row.tracking_scope or 'scope unavailable').replace('_', ' ')}, ID {row.financial_account_id or 'unassigned'})"
+    )
+
+
 class V2CardPurchaseReview(QDialog):
     """Keep card classification and date decisions explicit before journal writes."""
 
-    def __init__(self, workspace: V2Workspace, source_sha256: str, parent=None):
+    def __init__(self, workspace: V2Workspace, source_sha256: str, parent=None, *, register_mode=False):
         super().__init__(parent)
         self.workspace = workspace
         self.source_sha256 = source_sha256
+        self.register_mode = register_mode
+        self.review_label = "register" if register_mode else "card"
         self.basis, self.entries, self.history, self.categories = None, {}, (), ()
         self.review_preferences = workspace.preferences()
-        self.setWindowTitle("2.0 card category purpose review")
+        self.setWindowTitle(
+            "2.0 account-total liability register review" if register_mode else "2.0 card category purpose review"
+        )
         self.resize(1200, 650)
         layout = QVBoxLayout(self)
         self.note = QLabel()
         self.note.setWordWrap(True)
+        self.note.setTextFormat(Qt.PlainText)
         layout.addWidget(self.note)
-        self.model = _CardRowsModel((), self)
+        self.model = _CardRowsModel((), self, register_mode=register_mode)
         self.table = QTableView()
         self.table.setModel(self.model)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
@@ -115,6 +134,12 @@ class V2CardPurchaseReview(QDialog):
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.table.selectionModel().currentRowChanged.connect(self._selected)
         layout.addWidget(self.table)
+        self.source_context = QLabel()
+        self.source_context.setWordWrap(True)
+        self.source_context.setTextFormat(Qt.PlainText)
+        self.source_context.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.source_context.setVisible(register_mode)
+        layout.addWidget(self.source_context)
         form = QFormLayout()
         self.purpose = QComboBox()
         self.purpose.currentIndexChanged.connect(self._purpose_changed)
@@ -125,6 +150,7 @@ class V2CardPurchaseReview(QDialog):
         self.accounting_date = QLineEdit()
         self.accounting_date.setPlaceholderText("YYYY-MM-DD")
         self.accounting_date.setMaxLength(10)
+        self.accounting_date.setReadOnly(register_mode)
         self.accounting_date.textChanged.connect(self._update_action)
         form.addRow("Accounting date", self.accounting_date)
         self.reason = QLineEdit()
@@ -136,6 +162,7 @@ class V2CardPurchaseReview(QDialog):
         layout.addLayout(form)
         self.assumed_dates = QCheckBox("Allow best guess posting dates when a statement does not print one")
         self.assumed_dates.setChecked(workspace.preferences().allow_assumed_posting_dates)
+        self.assumed_dates.setEnabled(not register_mode)
         self.assumed_dates.toggled.connect(self._toggle_assumed_dates)
         layout.addWidget(self.assumed_dates)
         self.action_button = QPushButton("Post reviewed card expense")
@@ -148,11 +175,17 @@ class V2CardPurchaseReview(QDialog):
         layout.addLayout(actions)
         self.status = QLabel()
         self.status.setWordWrap(True)
+        self.status.setTextFormat(Qt.PlainText)
         layout.addWidget(self.status)
         self.history_details = QLabel()
         self.history_details.setWordWrap(True)
+        self.history_details.setTextFormat(Qt.PlainText)
         self.history_details.setTextInteractionFlags(Qt.TextSelectableByMouse)
         layout.addWidget(self.history_details)
+        self.preview_source_button = QPushButton("Open immutable register source")
+        self.preview_source_button.setVisible(register_mode)
+        self.preview_source_button.clicked.connect(self._preview_source)
+        layout.addWidget(self.preview_source_button)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         reload_button = buttons.addButton("Reload saved review", QDialogButtonBox.ActionRole)
         reload_button.clicked.connect(
@@ -182,7 +215,7 @@ class V2CardPurchaseReview(QDialog):
         self.purpose.blockSignals(False)
         self._purpose_changed()
         self.accounting_date.blockSignals(True)
-        self.accounting_date.setText((row.effective_date or row.posting_candidate or "") if row else "")
+        self.accounting_date.setText((row.effective_date or self._posting_candidate(row) or "") if row else "")
         self.accounting_date.blockSignals(False)
         self._update_action()
 
@@ -213,7 +246,17 @@ class V2CardPurchaseReview(QDialog):
         correction = row is not None and row.entry_key is not None
         purpose = self.purpose.currentData()
         label = PURPOSE_LABELS.get(purpose, "purpose").lower()
-        self.action_button.setText(f"Correct card {label}" if correction else f"Post card {label}")
+        self.action_button.setText(
+            f"Correct {self.review_label} {label}" if correction else f"Post {self.review_label} {label}"
+        )
+        if self.register_mode:
+            self.source_context.setText(
+                f"{_register_identity(row)}. Transaction date: {row.transaction_date.isoformat() if row.transaction_date else 'unavailable'} "
+                f"({row.transaction_date_provenance or 'unknown'}); source posting date: {row.posting_date or 'unavailable'} "
+                f"({row.posting_date_provenance or 'unknown'}). Whole liability effect only; principal/interest breakdown is unavailable and is not inferred."
+                if row
+                else "Select a register row. Account kind/scope and both source dates remain unavailable until selection."
+            )
         changed = row is not None and (
             selected_date != row.effective_date or self.category.currentData() != row.category_id
         )
@@ -222,12 +265,13 @@ class V2CardPurchaseReview(QDialog):
             or row.status == "Ready for purpose review"
             or (
                 row.status == "Enable assumed dates or enter a corrected date"
-                and selected_date != row.posting_candidate
+                and selected_date != self._posting_candidate(row)
             )
         )
         self.action_button.setEnabled(
             ready
             and valid_date
+            and (not self.register_mode or selected_date == self._posting_candidate(row))
             and purpose in PURPOSE_KINDS
             and self.category.currentData() is not None
             and (not correction or purpose == row.purpose)
@@ -258,7 +302,7 @@ class V2CardPurchaseReview(QDialog):
                 + (
                     "; purpose and category class are retained; withdraw and freshly review to change purpose"
                     if correction
-                    else "; choose purpose explicitly; owned card payments use transfer review"
+                    else "; choose purpose explicitly; owned card and loan-register repayments use transfer review"
                     if purpose is None
                     else f"; add an {PURPOSE_KINDS[purpose]} category first"
                     if self.category.count() == 1
@@ -267,16 +311,25 @@ class V2CardPurchaseReview(QDialog):
             )
 
     def refresh(self, selected_row_id: str | None = None) -> None:
+        if self.register_mode:
+            self.reason.clear()
         try:
             with V2ProfileStore.open(self.workspace.profile_path, read_only=True) as store:
                 snapshot = store.source_interpretation_snapshot(
-                    self.source_sha256, kind="card", preferences=self.workspace.preferences()
+                    self.source_sha256,
+                    kind="register" if self.register_mode else "card",
+                    preferences=None if self.register_mode else self.workspace.preferences(),
                 )
         except (ProfileFormatError, sqlite3.Error, OSError) as exc:
             self.basis, self.entries, self.history, self.categories = None, {}, (), ()
             self.model.replace(())
             self._selected()
-            self.status.setText(f"Source review unavailable. Reopen or refresh the review: {exc}")
+            self.preview_source_button.setEnabled(False)
+            self.status.setText(
+                "Register source or retained interpretation history could not be verified. Reopen or refresh before another action."
+                if self.register_mode
+                else f"Source review unavailable. Reopen or refresh the review: {exc}"
+            )
             return
         self.basis, self.entries, self.history = (
             snapshot.basis_sha256,
@@ -284,9 +337,15 @@ class V2CardPurchaseReview(QDialog):
             snapshot.history,
         )
         self.review_preferences = snapshot.preferences
+        self.preview_source_button.setEnabled(True)
         rows, self.categories, overlaps = snapshot.rows, snapshot.categories, snapshot.overlapping_source_ids
         self.note.setText(
-            "Choose expense, expense refund, income or income adjustment explicitly when supported. "
+            "Only the admitted Yamaha account-total liability register is supported here. Select purpose and category explicitly; a positive credit is not automatically a refund or repayment. "
+            "Owned card and loan-register repayments use transfer review and create no second expense. "
+            "Transaction and posting dates are retained independently; printed-derived posting dates are fixed here and need no assumed-date preference. "
+            "Whole liability effects do not establish principal/interest components. Category correction retains date, purpose and class; withdrawal permits fresh review."
+            if self.register_mode
+            else "Choose expense, expense refund, income or income adjustment explicitly when supported. "
             "A card credit does not establish a refund; owned card payments, transfers and cash advances require their own supported review. "
             "Amount signs do not establish purpose. Printed Post dates are preferred; "
             "assumed dates need the global choice or an explicit different accounting date. "
@@ -297,11 +356,18 @@ class V2CardPurchaseReview(QDialog):
                 else ""
             )
         )
+        if self.register_mode and overlaps:
+            self.note.setText(
+                self.note.text()
+                + f" This statement has {len(overlaps)} possible overlapping saved source(s); review occurrence guards before posting."
+            )
         self.model.replace(rows)
         self.assumed_dates.blockSignals(True)
-        self.assumed_dates.setChecked(self.review_preferences.allow_assumed_posting_dates)
+        self.assumed_dates.setChecked(
+            False if self.register_mode else self.review_preferences.allow_assumed_posting_dates
+        )
         self.assumed_dates.blockSignals(False)
-        self.assumed_dates.setVisible(any(row.date_provenance == "assumed" for row in rows))
+        self.assumed_dates.setVisible(not self.register_mode and any(row.date_provenance == "assumed" for row in rows))
         if selected_row_id is not None:
             for index, row in enumerate(rows):
                 if row.row_id == selected_row_id:
@@ -310,6 +376,8 @@ class V2CardPurchaseReview(QDialog):
         self._selected()
 
     def _toggle_assumed_dates(self, enabled: bool) -> None:
+        if self.register_mode:
+            return
         try:
             self.workspace.set_allow_assumed_posting_dates(enabled)
         except (OSError, ValueError) as exc:
@@ -360,19 +428,28 @@ class V2CardPurchaseReview(QDialog):
         else:
             effects = "New entry effects:\n" + effects
         message = (
-            f"{'Correct, retaining purpose,' if correction else 'Post'} this reviewed card {label}?\n\n"
-            f"Source date: {row.source_date or 'Unknown'}\n"
-            f"Posting candidate: {row.posting_candidate or 'Unavailable'}"
-            f"{f' ({row.date_provenance})' if row.date_provenance else ''}\n"
+            f"{'Correct, retaining purpose,' if correction else 'Post'} this reviewed {self.review_label} {label}?\n\n"
+            + (
+                f"Source transaction date: {row.transaction_date.isoformat() if row.transaction_date else 'Unknown'} ({row.transaction_date_provenance or 'unknown'})\n"
+                if self.register_mode
+                else f"Source date: {row.source_date or 'Unknown'}\n"
+            )
+            + f"Posting candidate: {self._posting_candidate(row) or 'Unavailable'}"
+            f"{f' ({self._date_provenance(row)})' if self._date_provenance(row) else ''}\n"
             f"Accounting date: {accounting_date.isoformat()}\n"
             f"{row.description}  {_money(row.amount_minor)}  {row.financial_account}\n"
             f"Purpose: {PURPOSE_LABELS[purpose]}\nCategory: {self.category.currentText()}\nReason: {reason}\n"
             f"{effects}\n\n"
-            f"{PURPOSE_ASSERTIONS[purpose]} This is not an owned card payment, transfer or cash advance."
+            f"{PURPOSE_ASSERTIONS[purpose]} This is not an owned liability payment, transfer or cash advance."
         )
-        if QMessageBox.question(self, f"Confirm card {label}", message) != QMessageBox.StandardButton.Yes:
+        if self.register_mode:
+            message += "\n\n" + self.source_context.text()
+        if (
+            QMessageBox.question(self, f"Confirm {self.review_label} {label}", message)
+            != QMessageBox.StandardButton.Yes
+        ):
             return
-        if self.workspace.preferences() != self.review_preferences:
+        if not self.register_mode and self.workspace.preferences() != self.review_preferences:
             QMessageBox.warning(
                 self,
                 "Review preferences changed",
@@ -382,7 +459,15 @@ class V2CardPurchaseReview(QDialog):
             return
         try:
             with V2ProfileStore.open(self.workspace.profile_path) as store:
-                if correction:
+                if self.register_mode and correction:
+                    store.correct_reviewed_register_category(
+                        row.entry_key, category_id, reason=reason, expected_basis_sha256=self.basis
+                    )
+                elif self.register_mode:
+                    store.post_reviewed_register_category(
+                        row.row_id, category_id, purpose=purpose, reason=reason, expected_basis_sha256=self.basis
+                    )
+                elif correction:
                     store.correct_reviewed_card_purchase(
                         row.entry_key,
                         category_id,
@@ -403,7 +488,13 @@ class V2CardPurchaseReview(QDialog):
                         expected_basis_sha256=self.basis,
                     )
         except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            QMessageBox.warning(self, "Card interpretation was not saved", str(exc))
+            QMessageBox.warning(
+                self,
+                f"{self.review_label.title()} interpretation was not saved",
+                "The register source, assignment or saved review changed. Inspect refreshed facts before another action."
+                if self.register_mode
+                else str(exc),
+            )
             self.refresh(selected_row_id=row.row_id)
             return
         self.reason.clear()
@@ -411,7 +502,7 @@ class V2CardPurchaseReview(QDialog):
         self.status.setText(
             "Correction saved with reversal and replacement; purpose retained."
             if correction
-            else f"Card {label} posted."
+            else f"{self.review_label.title()} {label} posted."
         )
 
     def _withdraw(self) -> None:
@@ -423,11 +514,13 @@ class V2CardPurchaseReview(QDialog):
         if effects is None:
             return
         message = (
-            f"Withdraw this supported card interpretation?\n\nInverse effects:\n{effects}\n\nReason: {reason}\n\n"
+            f"Withdraw this supported {self.review_label} interpretation?\n\nInverse effects:\n{effects}\n\nReason: {reason}\n\n"
             "The active entry is reversed at its recorded accounting date, including any reviewed date correction. "
             "The immutable source row returns to pending; posting it again requires a fresh review. "
-            "Original entries and allocations remain history. This withdraws an interpretation, not a card transaction."
+            "Original entries and allocations remain history. This withdraws an interpretation, not a financial transaction."
         )
+        if self.register_mode:
+            message += "\n\n" + self.source_context.text()
         if QMessageBox.question(self, "Confirm interpretation withdrawal", message) != QMessageBox.Yes:
             return
         try:
@@ -440,6 +533,23 @@ class V2CardPurchaseReview(QDialog):
         self.reason.clear()
         self.refresh(selected_row_id=row.row_id)
         self.status.setText(
-            "The selected card interpretation's withdrawal is recorded. The refreshed row shows its current posting state; "
+            f"The selected {self.review_label} interpretation's withdrawal is recorded. The refreshed row shows its current posting state; "
             "original and inverse entries remain history."
         )
+
+    def _posting_candidate(self, row):
+        return row.posting_date if self.register_mode else row.posting_candidate
+
+    def _date_provenance(self, row):
+        return row.posting_date_provenance if self.register_mode else row.date_provenance
+
+    def _preview_source(self):
+        if self.basis is None:
+            return
+        try:
+            preview_saved_source(self.workspace.profile_path, self.source_sha256, parent=self).exec()
+        except (ProfileFormatError, sqlite3.Error, OSError):
+            self.refresh()
+            self.status.setText(
+                "Source preview is unavailable. Inspect the refreshed register state before another action."
+            )

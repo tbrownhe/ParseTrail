@@ -1,4 +1,4 @@
-"""Explicit cross-source review of owned-account transfers and card payments."""
+"""Explicit cross-source review of owned transfers and liability payments."""
 
 from __future__ import annotations
 
@@ -97,7 +97,7 @@ class V2TransferReview(QDialog):
         self.candidates: tuple[TransferCandidate, ...] = ()
         self.events, self.pair_reviews, self.replacements = (), (), ()
         self.basis, self.event_basis, self.selected_event = None, None, None
-        self.setWindowTitle("2.0 transfer and card payment review")
+        self.setWindowTitle("2.0 owned transfers, card and loan-register repayments")
         self.resize(1250, 750)
         layout = QVBoxLayout(self)
         profile_row = QHBoxLayout()
@@ -109,7 +109,7 @@ class V2TransferReview(QDialog):
         layout.addLayout(profile_row)
         note = QLabel(
             "Equal and opposite movements are suggestions only. Confirm the pair from both sources. "
-            "A card repayment moves cash to the card liability and does not add spending. "
+            "A liability payment covers card and loan-register repayments; it moves cash to the whole liability and does not add spending or establish a principal/interest split. "
             "Different source dates use transfer clearing. Corrections withdraw or replace the whole confirmed event. "
             "Dismissal changes suggestions only; its evidence remains pending. Use the full settlement review for explicit fees, multiple or partial receipts, or an owned outflow awaiting receipt evidence."
         )

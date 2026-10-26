@@ -24,7 +24,7 @@ MOVEMENT_LABELS = {
     "expense_refund": "Reviewed cash expense refund",
     "within_scope_transfer": "Owned transfer within selected scope",
     "owned_transfer": "Owned transfer across scope boundary",
-    "card_payment": "Reviewed card payment",
+    "liability_payment": "Reviewed card or loan-register repayment",
     "loan_payment": "Reviewed loan payment",
     "loan_principal": "Reviewed loan principal payment",
     "unsettled_transfer": "Owned transfer with unresolved clearing",
@@ -170,7 +170,7 @@ def read_cash_movement(
                         if settlement.residual_minor:
                             purpose = "unsettled_transfer"
                         elif all(movement.account_kind == "liability" for movement in settlement.incoming):
-                            purpose = "card_payment"
+                            purpose = "liability_payment"
                         elif {movement.account_id for movement in settlement.movements} <= selected:
                             purpose = "within_scope_transfer"
                         else:
@@ -220,8 +220,8 @@ def read_cash_movement(
                                 f"Ownership review reference: {expected.reference}. This is an authored expectation; "
                                 "no destination receipt or positive financial posting has been created."
                             )
-                    elif pair.kind == "card payment":
-                        classification = "card_payment"
+                    elif pair.kind == "liability payment":
+                        classification = "liability_payment"
                     else:
                         classification = (
                             "within_scope_transfer"
@@ -238,6 +238,8 @@ def read_cash_movement(
                                 else "One reviewed event; this is no second expense."
                             )
                         )
+                if classification == "liability_payment":
+                    note += " This is a whole liability effect; no principal/interest split is inferred."
                 components = components or (CashMovementComponent(classification, amount),)
                 if sum(component.amount_minor for component in components) != amount:
                     raise ProfileFormatError("cash_movement_component_integrity")

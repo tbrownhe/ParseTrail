@@ -39,7 +39,7 @@ def pair_kind(outgoing, incoming, accounts):
     if receiver.kind == AccountKind.ASSET:
         return "cash_transfer"
     if receiver.kind == AccountKind.LIABILITY:
-        return "card_payment"
+        return "liability_payment"
     return None
 
 
@@ -253,7 +253,7 @@ class TransferReview:
     @staticmethod
     def entries(outgoing, incoming, kind, reason):
         pid = pair_id(outgoing.id, incoming.id)
-        description = "Confirmed card payment" if kind == "card_payment" else "Confirmed cash transfer"
+        description = "Confirmed liability payment" if kind == "liability_payment" else "Confirmed cash transfer"
 
         def posting(o):
             return Posting(o.account_id, o.amount_minor, (Allocation(o.id, o.amount_minor),))

@@ -52,7 +52,7 @@ def test_card_payment_pair_preserves_dates_and_has_no_expense(tmp_path: Path, ba
         candidates = store.transfer_candidates(preferences=V2Preferences())
         assert len(candidates) == 1
         pair = candidates[0]
-        assert (pair.outgoing.row_id, pair.incoming.row_id, pair.kind) == (cash_id, card_id, "card payment")
+        assert (pair.outgoing.row_id, pair.incoming.row_id, pair.kind) == (cash_id, card_id, "liability payment")
         assert pair.posting_allowed
         event = store.post_reviewed_transfer(
             cash_id, card_id, preferences=V2Preferences(), reason="Confirmed repayment"

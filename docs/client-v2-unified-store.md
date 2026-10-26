@@ -29,7 +29,7 @@ evidence belong in [packet records](work/README.md).
 
 ## Profile format and lifecycle
 
-The current pre-release profile schema is revision 21; check `SCHEMA_VERSION`
+The current pre-release profile schema is revision 22; check `SCHEMA_VERSION`
 in `v2_profile_store.py` when opening a packet. Format markers, exact table and
 foreign-key shapes, append-only triggers and SQLite integrity are checked before
 writable use. Older disposable pilots, 1.x, unknown, damaged and newer shapes
@@ -76,7 +76,7 @@ namespace and persisted built-in metadata checks apply to common reads/backups.
 
 ## Journal and review history
 
-Supported reviewed cash/card/transfer workflows atomically validate and save
+Supported reviewed cash/card/register/transfer workflows atomically validate and save
 balanced journal entries and signed source allocations. Cash-category and
 card-category/date corrections save inverse reversals, replacements and their
 links together; original entries and allocations remain history, and only active
@@ -109,7 +109,7 @@ history decoding has finite bounds and controlled malformed-depth refusal.
 The [settlement packet](work/2026-10-25-v2-settlements.md) and
 [HSA/missing-receipt packet](work/2026-10-25-v2-hsa-cash.md) record development checks.
 
-Account-total cash/card category movements admit explicit expense, expense refund,
+Account-total cash/card/register category movements admit explicit expense, expense refund,
 income and income adjustment purposes with compatible exact source signs and
 category classes. Initial review requires a purpose/category choice. Category/date
 corrections retain purpose/class; a change of purpose uses withdrawal/fresh review.
@@ -123,6 +123,24 @@ can identify a reviewed entry without claiming printed merchant/interest text.
 Printed openings and reconciliation admit that same exact component rule. Other
 HSA/retirement summary rows remain nonposting; existing account-total opening rules
 remain available. Scope metadata survives correction, withdrawal and history.
+
+The finite `pdf_yamahafin_202306` register has its own explicit review API and
+`review:register` namespace, restricted to component-free account-total liability
+rows. Shared ordinary category correction/withdrawal/repost/repeat-repair validates
+that source shape; card APIs retain their separate finite family gate. Register
+purpose is required. Corrections retain purpose/class and the source posting date;
+they cannot override that date. Original transaction dates and posting dates,
+including derivation from printed month/day/year context, remain separately
+visible. These printed/derived posting dates require no assumed-date opt-in.
+
+Schema 22 uses neutral `liability payment` event-kind semantics for owned
+account-total liability receipts, including card and loan-register repayments.
+The whole liability effect is allocated once and creates no second expense.
+Principal/interest is unknown when the register does not print components; no
+principal observation, component loan event or interest category is automatically
+created. Explicit authored category choice retains the ordinary category policy.
+Source opening/closing values remain account-total and separate from capture/
+completeness. See the [register packet](work/2026-10-26-v2-liability-register.md).
 
 Schema 21 retains bounded reviewed loan payments in `LoanEvents`,
 `LoanEventActions`, `LoanSourceUses`, `DerivedFinancialObservations` and

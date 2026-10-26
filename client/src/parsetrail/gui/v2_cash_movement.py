@@ -74,7 +74,7 @@ class V2CashMovementDialog(QDialog):
         intro = QLabel(
             "Choose the financial asset accounts you want to treat as cash in this report. "
             "No accounts are selected automatically. This reports active reviewed journal movement, "
-            "with transfers and card payments separate from income and expenses."
+            "with transfers, card and loan-register repayments separate from income and expenses."
         )
         intro.setWordWrap(True)
         layout.addWidget(intro)
@@ -205,7 +205,7 @@ class V2CashMovementDialog(QDialog):
             f"Across the whole profile and all dates, {journal.activity_rows_without_full_allocation} activity row(s) "
             f"from {journal.sources_with_incomplete_activity} source(s) lack full allocation. "
             f"{journal.excluded_unreviewed_entries} unreviewed and {journal.excluded_opening_entries} opening record(s) "
-            "were excluded in this period. Card purchases alone are not cash movement. "
+            "were excluded in this period. Card purchases and loan-register charges alone are not cash movement. "
             "A loan payment or settlement with interest or fees can appear in multiple purpose counts; "
             "those counts are not additive. "
             f"Across all dates, {report.expected_receipts_without_source} reviewed owned outflow(s) involving selected "

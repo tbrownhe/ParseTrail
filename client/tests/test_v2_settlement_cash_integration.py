@@ -147,7 +147,7 @@ def test_receiving_card_fee_does_not_manufacture_selected_cash_on_card_date(tmp_
     )
     full = _read(profile, ("cash",))
     assert full.total_minor == -3000 and len(full.rows) == 1
-    assert _parts(full) == {"card_payment": -3000}
+    assert _parts(full) == {"liability_payment": -3000}
     card_day = _read(profile, ("cash",), date(2026, 1, 5), date(2026, 1, 6))
     assert card_day.total_minor == 0 and card_day.rows == () and card_day.outside_scope_entries == 1
     with V2ProfileStore.open(profile, read_only=True) as store:

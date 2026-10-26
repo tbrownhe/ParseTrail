@@ -44,6 +44,12 @@ from parsetrail.core.v2_cash_source_policy import (
     cash_accounting_description,
     cash_tracking_scope,
 )
+from parsetrail.core.v2_liability_register import (
+    REGISTER_PARSER,
+    RegisterActivityReviewRow,
+    register_posting_date,
+    register_review_scopes,
+)
 from parsetrail.core.v2_loan_payments import (
     LOAN_PARSERS,
     LoanComponentReviewRow,
@@ -100,7 +106,7 @@ from parsetrail.core.v2_source_values import (
 )
 
 APPLICATION_ID = 0x50543230  # PT20
-SCHEMA_VERSION = 21
+SCHEMA_VERSION = 22
 TRACKING_SCOPES = {"account_total", "principal_component", "cash_component"}
 CategoryPurpose = Literal["expense", "expense_refund", "income", "income_adjustment"]
 CATEGORY_PURPOSE_KINDS = {
@@ -983,7 +989,7 @@ class CardPurchaseReviewRow:
 class TransferCandidate:
     outgoing: TransferMovement
     incoming: TransferMovement
-    kind: Literal["asset transfer", "card payment"]
+    kind: Literal["asset transfer", "liability payment"]
     day_gap: int
     posting_allowed: bool
 
@@ -1059,8 +1065,8 @@ class PostedRepeatRepair:
 @dataclass(frozen=True)
 class SourceInterpretationSnapshot:
     source_sha256: str
-    kind: Literal["cash", "card"]
-    rows: tuple[CashActivityReviewRow | CardPurchaseReviewRow, ...]
+    kind: Literal["cash", "card", "register"]
+    rows: tuple[CashActivityReviewRow | CardPurchaseReviewRow | RegisterActivityReviewRow, ...]
     categories: tuple[CategoryAccount, ...]
     entries: tuple[JournalEntry, ...]
     history: tuple[SourceInterpretationAction, ...]
@@ -1420,7 +1426,7 @@ def _decode_transfer_pair(payload: str) -> TransferCandidate:
             or pair.incoming.amount_minor != -pair.outgoing.amount_minor
             or pair.outgoing.account_id == pair.incoming.account_id
             or pair.outgoing.row_id == pair.incoming.row_id
-            or pair.kind != ("card payment" if pair.incoming.account_kind == "liability" else "asset transfer")
+            or pair.kind != ("liability payment" if pair.incoming.account_kind == "liability" else "asset transfer")
             or type(pair.day_gap) is not int
             or pair.day_gap != gap
             or gap > 31
@@ -2248,7 +2254,7 @@ class V2ProfileStore:
             for account_id, name, kind, currency, role, purpose in account_rows
         }
 
-    def _card_purchase_source(self, row_id: str):
+    def _card_purchase_source(self, row_id: str, *, _register: bool = False):
         source_row = self.connection.execute(
             "SELECT source_sha256,row_role,date_role,observed_date,amount_minor FROM SourceObservations WHERE row_id=?",
             (row_id,),
@@ -2256,7 +2262,9 @@ class V2ProfileStore:
         if source_row is None:
             raise ProfileFormatError("source_observation_missing")
         saved = self.load_import(source_row[0])
-        if not _card_review_scopes(saved.evidence).get(row_id, False):
+        if not (register_review_scopes(saved.evidence) if _register else _card_review_scopes(saved.evidence)).get(
+            row_id, False
+        ):
             raise ProfileFormatError("card_purchase_unsupported_source_scope")
         row = next((item for item in _rows(saved.evidence) if item.row_id == row_id), None)
         bindings = {binding.row_id: binding.ledger_account_id for binding in self.account_bindings(source_row[0])}
@@ -2279,7 +2287,7 @@ class V2ProfileStore:
         ).fetchone()
         if financial != ("liability", "financial", "account_total"):
             raise ProfileFormatError("card_purchase_requires_liability_account")
-        candidate = posting_date_candidate(row)
+        candidate = register_posting_date(row) if _register else posting_date_candidate(row)
         if candidate is None:
             raise ProfileFormatError("card_purchase_posting_date_unavailable")
         return row, financial_id, self._ledger_accounts(), candidate
@@ -2910,7 +2918,7 @@ class V2ProfileStore:
         self, entry_key: str, *, active: bool = True, _cache: dict | None = None
     ) -> tuple[JournalEntry, str]:
         cache = {} if _cache is None else _cache
-        if type(entry_key) is not str or not entry_key.startswith(("review:cash:", "review:card:")):
+        if type(entry_key) is not str or not entry_key.startswith(("review:cash:", "review:card:", "review:register:")):
             raise ProfileFormatError("source_interpretation_unsupported")
         saved = (
             (cache["journal_payloads"][entry_key],)
@@ -2964,7 +2972,11 @@ class V2ProfileStore:
             cache["tracking_scopes"] = dict(self.connection.execute("SELECT id,tracking_scope FROM Accounts"))
         scopes = cache.setdefault("review_scopes", {})
         if source[0] not in scopes:
-            scopes[source[0]] = (_cash_review_scopes(evidence), _card_review_scopes(evidence))
+            scopes[source[0]] = (
+                _cash_review_scopes(evidence),
+                _card_review_scopes(evidence),
+                register_review_scopes(evidence),
+            )
         if "accounts" not in cache:
             cache["accounts"] = self._ledger_accounts()
             cache["roles"] = dict(self.connection.execute("SELECT id,role FROM Accounts"))
@@ -2972,6 +2984,7 @@ class V2ProfileStore:
         financial = accounts.get(entry.postings[0].account_id)
         category = accounts.get(entry.postings[1].account_id)
         cash = entry_key.startswith("review:cash:")
+        register = entry_key.startswith("review:register:")
         if (
             row.row_role != "activity"
             or row.components
@@ -3007,17 +3020,20 @@ class V2ProfileStore:
                 not cash
                 and (
                     financial.kind != AccountKind.LIABILITY
-                    or not scopes[source[0]][1].get(row_id, False)
-                    or posting_date_candidate(row) is None
+                    or not scopes[source[0]][2 if register else 1].get(row_id, False)
+                    or (register_posting_date(row) if register else posting_date_candidate(row)) is None
+                    or (register and entry.posting_date.isoformat() != row.date.iso)
                 )
             )
         ):
             raise ProfileFormatError("source_interpretation_unsupported")
         # Initial identities retain the explicitly reviewed financial purpose.
         # Corrections carry that purpose through their immutable original link.
-        if not entry_key.startswith(("review:cash:correction:", "review:card:correction:")):
+        if not entry_key.startswith(
+            ("review:cash:correction:", "review:card:correction:", "review:register:correction:")
+        ):
             purpose = _category_purpose(amount, category.kind.value)
-            base = f"review:{'cash' if cash else 'card'}:{purpose}:{row_id}"
+            base = f"review:{'cash' if cash else 'register' if register else 'card'}:{purpose}:{row_id}"
             if entry_key != base and re.fullmatch(re.escape(base) + r":repost:[1-9][0-9]*", entry_key) is None:
                 raise ProfileFormatError("source_interpretation_unsupported")
         try:
@@ -3238,7 +3254,7 @@ class V2ProfileStore:
         bindings_by_source = {}
         try:
             for key, entry in entries.items():
-                if not key.startswith(("review:cash:", "review:card:")):
+                if not key.startswith(("review:cash:", "review:card:", "review:register:")):
                     continue
                 ordinary[key] = self._ordinary_category_entry(key, active=False, _cache=cache)
                 if key not in inactive:
@@ -3300,7 +3316,8 @@ class V2ProfileStore:
                 links[original_key] = replacement_key
             replacement_keys = set(links.values())
             if any(
-                key.startswith(("review:cash:correction:", "review:card:correction:")) and key not in replacement_keys
+                key.startswith(("review:cash:correction:", "review:card:correction:", "review:register:correction:"))
+                and key not in replacement_keys
                 for key in ordinary
             ):
                 raise ValueError
@@ -3326,9 +3343,9 @@ class V2ProfileStore:
         )
 
     def source_interpretation_snapshot(
-        self, source_sha256: str, *, kind: Literal["cash", "card"], preferences: V2Preferences | None = None
+        self, source_sha256: str, *, kind: Literal["cash", "card", "register"], preferences: V2Preferences | None = None
     ) -> SourceInterpretationSnapshot:
-        if kind not in {"cash", "card"} or (kind == "card" and type(preferences) is not V2Preferences):
+        if kind not in {"cash", "card", "register"} or (kind == "card" and type(preferences) is not V2Preferences):
             raise ProfileFormatError("source_interpretation_kind_invalid")
         if self.connection.in_transaction:
             raise ProfileFormatError("source_interpretation_requires_committed_snapshot")
@@ -3339,6 +3356,8 @@ class V2ProfileStore:
             rows = (
                 self.cash_activity_review_rows(source_sha256)
                 if kind == "cash"
+                else self.register_activity_review_rows(source_sha256)
+                if kind == "register"
                 else self.card_purchase_review_rows(source_sha256, preferences=preferences)
             )
             keys = tuple(dict.fromkeys(row.entry_key for row in rows if row.entry_key is not None))
@@ -3617,11 +3636,19 @@ class V2ProfileStore:
     def card_purchase_review_rows(
         self, source_sha256: str, *, preferences: V2Preferences
     ) -> tuple[CardPurchaseReviewRow, ...]:
+        return self._liability_category_review_rows(source_sha256, preferences=preferences)
+
+    def register_activity_review_rows(self, source_sha256: str) -> tuple[RegisterActivityReviewRow, ...]:
+        return self._liability_category_review_rows(source_sha256, preferences=V2Preferences(), _register=True)
+
+    def _liability_category_review_rows(
+        self, source_sha256: str, *, preferences: V2Preferences, _register: bool = False
+    ) -> tuple[CardPurchaseReviewRow | RegisterActivityReviewRow, ...]:
         """List card source rows without interpreting positive movements as income."""
         if type(preferences) is not V2Preferences or type(preferences.allow_assumed_posting_dates) is not bool:
             raise ProfileFormatError("card_purchase_preferences_invalid")
         saved = self.load_import(source_sha256)
-        scopes = _card_review_scopes(saved.evidence)
+        scopes = register_review_scopes(saved.evidence) if _register else _card_review_scopes(saved.evidence)
         bindings = {binding.row_id: binding.ledger_account_id for binding in self.account_bindings(source_sha256)}
         accounts = {
             account_id: (name, kind, role)
@@ -3634,7 +3661,7 @@ class V2ProfileStore:
         for row in _rows(saved.evidence):
             account_id = bindings.get(row.row_id)
             financial = accounts.get(account_id) if account_id is not None else None
-            candidate = posting_date_candidate(row)
+            candidate = register_posting_date(row) if _register else posting_date_candidate(row)
             entries = active.get(row.row_id, ())
             entry_key = None
             category_id = None
@@ -3646,7 +3673,9 @@ class V2ProfileStore:
                 if len(entries) == 1:
                     entry = entries[0]
                     if (
-                        entry.origin == "imported"
+                        scopes.get(row.row_id, False)
+                        and entry.key.startswith("review:register:" if _register else "review:card:")
+                        and entry.origin == "imported"
                         and entry.reviewed
                         and len(entry.postings) == 2
                         and entry.postings[0].account_id == account_id
@@ -3663,7 +3692,11 @@ class V2ProfileStore:
             elif row.row_id in overlap_blocks:
                 status = overlap_blocks[row.row_id]
             elif not scopes.get(row.row_id, False):
-                status = "Outside supported card statement scope"
+                status = (
+                    "Outside supported liability register scope"
+                    if _register
+                    else "Outside supported card statement scope"
+                )
             elif row.row_role != "activity" or row.components:
                 status = "Header or summary charge needs separate review"
             elif row.amount.minor is None or row.amount.minor == 0:
@@ -3677,10 +3710,14 @@ class V2ProfileStore:
             elif tracking_scopes.get(account_id) != "account_total":
                 status = "Tracking scope needs a supported source interpretation"
             elif financial is None or financial[1:] != ("liability", "financial"):
-                status = "Requires a bound card liability account"
+                status = (
+                    "Requires a bound account-total liability register"
+                    if _register
+                    else "Requires a bound card liability account"
+                )
             elif not row.description.text:
                 status = "Description needs review"
-            elif permitted_posting_date(row, preferences) is None:
+            elif not _register and permitted_posting_date(row, preferences) is None:
                 status = "Enable assumed dates or enter a corrected date"
                 allowed_purposes = _category_purposes(row.amount.minor)
             else:
@@ -3688,7 +3725,7 @@ class V2ProfileStore:
                 allowed_purposes = _category_purposes(row.amount.minor)
             source_date = row.transaction_date or row.date
             result.append(
-                CardPurchaseReviewRow(
+                (RegisterActivityReviewRow if _register else CardPurchaseReviewRow)(
                     row.row_id,
                     source_date.iso,
                     candidate.iso if candidate is not None else None,
@@ -3702,6 +3739,21 @@ class V2ProfileStore:
                     category_id,
                     purpose,
                     allowed_purposes,
+                    **(
+                        {
+                            "transaction_date": date.fromisoformat(row.transaction_date.iso)
+                            if row.transaction_date is not None and row.transaction_date.iso is not None
+                            else None,
+                            "transaction_date_provenance": row.transaction_date.provenance
+                            if row.transaction_date is not None
+                            else None,
+                            "financial_account_id": account_id,
+                            "financial_account_kind": financial[1] if financial else None,
+                            "tracking_scope": tracking_scopes.get(account_id),
+                        }
+                        if _register
+                        else {}
+                    ),
                 )
             )
         return tuple(result)
@@ -3724,7 +3776,7 @@ class V2ProfileStore:
         for source_sha256 in self.source_ids():
             evidence = self.load_import(source_sha256).evidence
             cash_scope = _cash_review_scopes(evidence)
-            card_scope = _card_review_scopes(evidence)
+            card_scope = {**_card_review_scopes(evidence), **register_review_scopes(evidence)}
             if not cash_scope and not card_scope:
                 continue
             bindings = {binding.row_id: binding.ledger_account_id for binding in self.account_bindings(source_sha256)}
@@ -3757,7 +3809,11 @@ class V2ProfileStore:
                     and amount > 0
                     and card_scope.get(row.row_id, False)
                 ):
-                    candidate = posting_date_candidate(row)
+                    candidate = (
+                        register_posting_date(row)
+                        if evidence.parser_id == REGISTER_PARSER
+                        else posting_date_candidate(row)
+                    )
                     if candidate is None:
                         continue
                 else:
@@ -3824,7 +3880,7 @@ class V2ProfileStore:
                     pair = TransferCandidate(
                         outgoing,
                         incoming,
-                        "card payment" if incoming.account_kind == "liability" else "asset transfer",
+                        "liability payment" if incoming.account_kind == "liability" else "asset transfer",
                         gap,
                         outgoing.date_allowed and incoming.date_allowed,
                     )
@@ -4012,12 +4068,16 @@ class V2ProfileStore:
             candidate = (
                 row.date
                 if movement.account_kind == "asset" and row.date_role == "posting_date"
-                else posting_date_candidate(row)
+                else (
+                    register_posting_date(row)
+                    if saved.evidence.parser_id == REGISTER_PARSER
+                    else posting_date_candidate(row)
+                )
             )
             scope = (
                 _cash_review_scopes(saved.evidence)
                 if movement.account_kind == "asset"
-                else _card_review_scopes(saved.evidence)
+                else {**_card_review_scopes(saved.evidence), **register_review_scopes(saved.evidence)}
             )
             if (
                 not scope.get(row.row_id, False)
@@ -6136,6 +6196,47 @@ class V2ProfileStore:
         expected_basis_sha256: str | None = None,
         purpose: CategoryPurpose = "expense",
     ) -> str:
+        return self._post_reviewed_liability_category(
+            row_id,
+            category_id,
+            reason=reason,
+            preferences=preferences,
+            accounting_date=accounting_date,
+            expected_basis_sha256=expected_basis_sha256,
+            purpose=purpose,
+        )
+
+    def post_reviewed_register_category(
+        self,
+        row_id: str,
+        category_id: str,
+        *,
+        purpose: CategoryPurpose,
+        reason: str,
+        expected_basis_sha256: str | None = None,
+    ) -> str:
+        return self._post_reviewed_liability_category(
+            row_id,
+            category_id,
+            reason=reason,
+            preferences=V2Preferences(),
+            expected_basis_sha256=expected_basis_sha256,
+            purpose=purpose,
+            _register=True,
+        )
+
+    def _post_reviewed_liability_category(
+        self,
+        row_id: str,
+        category_id: str,
+        *,
+        reason: str,
+        preferences: V2Preferences,
+        accounting_date: date | None = None,
+        expected_basis_sha256: str | None = None,
+        purpose: CategoryPurpose = "expense",
+        _register: bool = False,
+    ) -> str:
         """Post one explicitly classified card movement; date overrides are explicit."""
         self._require_writable()
         if type(reason) is not str or not 0 < len(reason.strip()) <= 500:
@@ -6152,13 +6253,13 @@ class V2ProfileStore:
             category = self._category_for_posting(category_id)
             if category not in {("expense", "category"), ("income", "category")}:
                 raise ProfileFormatError("card_category_invalid")
-            row, financial_id, accounts, candidate = self._card_purchase_source(row_id)
+            row, financial_id, accounts, candidate = self._card_purchase_source(row_id, _register=_register)
             if (
                 purpose not in _category_purposes(row.amount.minor)
                 or CATEGORY_PURPOSE_KINDS.get(purpose) != category[0]
             ):
                 raise ProfileFormatError("card_category_purpose_invalid")
-            permitted = permitted_posting_date(row, preferences)
+            permitted = register_posting_date(row) if _register else permitted_posting_date(row, preferences)
             if accounting_date is None:
                 if permitted is None:
                     raise ProfileFormatError("card_purchase_assumed_date_disabled")
@@ -6169,7 +6270,7 @@ class V2ProfileStore:
                 posting_date = accounting_date
             amount = row.amount.minor
             entry = JournalEntry(
-                key=f"review:card:{purpose}:{row_id}",
+                key=f"review:{'register' if _register else 'card'}:{purpose}:{row_id}",
                 event_id=f"source:{row_id}",
                 posting_date=posting_date,
                 description=row.description.text,
@@ -6365,11 +6466,36 @@ class V2ProfileStore:
         accounting_date: date | None = None,
         expected_basis_sha256: str | None = None,
     ) -> str:
+        return self._correct_reviewed_liability_category(
+            original_key,
+            category_id,
+            reason=reason,
+            accounting_date=accounting_date,
+            expected_basis_sha256=expected_basis_sha256,
+        )
+
+    def correct_reviewed_register_category(
+        self, original_key: str, category_id: str, *, reason: str, expected_basis_sha256: str | None = None
+    ) -> str:
+        return self._correct_reviewed_liability_category(
+            original_key, category_id, reason=reason, expected_basis_sha256=expected_basis_sha256, _register=True
+        )
+
+    def _correct_reviewed_liability_category(
+        self,
+        original_key: str,
+        category_id: str,
+        *,
+        reason: str,
+        accounting_date: date | None = None,
+        expected_basis_sha256: str | None = None,
+        _register: bool = False,
+    ) -> str:
         """Reverse and replace one card expense when its category or accounting date changes."""
         self._require_writable()
         if (
             type(original_key) is not str
-            or not original_key.startswith("review:card:")
+            or not original_key.startswith("review:register:" if _register else "review:card:")
             or type(category_id) is not str
             or not category_id
             or (accounting_date is not None and type(accounting_date) is not date)
@@ -6388,11 +6514,10 @@ class V2ProfileStore:
             original = _decode_journal(original_row[0])
             chosen_date = accounting_date or original.posting_date
             replacement_key = (
-                "review:card:correction:"
-                + hashlib.sha256(
-                    f"{original_key}\0{category_id}\0{chosen_date.isoformat()}\0{reason}".encode()
-                ).hexdigest()
-            )
+                "review:register:correction:" if _register else "review:card:correction:"
+            ) + hashlib.sha256(
+                f"{original_key}\0{category_id}\0{chosen_date.isoformat()}\0{reason}".encode()
+            ).hexdigest()
             prior = self.connection.execute(
                 "SELECT replacement_key,reason FROM JournalCorrections WHERE original_key=?", (original_key,)
             ).fetchone()
@@ -6425,7 +6550,7 @@ class V2ProfileStore:
                 "SELECT kind,role FROM Accounts WHERE id=?", (old_category_id,)
             ).fetchone()
             new_category = self._category_for_posting(category_id)
-            row, financial_id, accounts, _candidate = self._card_purchase_source(row_id)
+            row, financial_id, accounts, _candidate = self._card_purchase_source(row_id, _register=_register)
             if (
                 original.postings[0].account_id != financial_id
                 or original.event_id != f"source:{row_id}"

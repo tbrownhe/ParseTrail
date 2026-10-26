@@ -166,7 +166,7 @@ class TransferReviewWindow(QMainWindow):
                         self.accounts[incoming.account_id].name,
                         incoming.posting_date.isoformat(),
                         money(pair["amount_minor"]),
-                        "Card payment" if pair["kind"] == "card_payment" else "Cash transfer",
+                        "Liability payment" if pair["kind"] == "liability_payment" else "Cash transfer",
                         LABELS[pair["status"]],
                     ],
                     "details": "\n".join(details),

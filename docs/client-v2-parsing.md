@@ -148,6 +148,12 @@ Neither becomes an invented activity date. Preserve generic
 loan activity dates and unknown openings independently of printed closing
 principal; principal-component scope does not establish the total obligation.
 
+Yamaha's account-total register retains its transaction and posting columns
+separately, including year derivation from printed statement context. The register
+review workflow uses that posting fact without adding a guess or principal/interest
+breakdown. A whole liability repayment is distinct from the principal-component
+loan workflow. See the [register packet](work/2026-10-26-v2-liability-register.md).
+
 Bounded reviewed loan payments retain the complete raw row/component/location
 proof separately from canonical derived principal observations. Capital/MOHELA
 gross amounts are not principal allocations; Wells interest-only rows create no
