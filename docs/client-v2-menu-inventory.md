@@ -32,7 +32,7 @@ retains the earlier snapshot and proposal wording.
 | Statements → Correct Discrepancies | Evidence preview and append-only category/card-date corrections exist for supported rows. | Wider source/balance discrepancies and correction paths [V2-4](../ROADMAP.md#v2-4). |
 | Statements → Send for Plugin Development | No V2 action; ordinary imports remain local. | Submission is deferred under [DEC-3](../ROADMAP.md#dec-3); any service work stays separately scoped [P2-S](../ROADMAP.md#p2-s). |
 | Categories → Category Manager | Fresh category names/kinds and effective-month budgets are available. | Additional editing/hierarchy scope, if needed, [V2-4](../ROADMAP.md#v2-4)/[DEC-3](../ROADMAP.md#dec-3). |
-| Transactions → Review Transactions | Bound asset cash expense/income, negative card expense and whole-movement transfer/card-payment review are available. Category/card-date corrections are append-only; native card/transfer review was accepted. Repeated-row review now guards detected unresolved or supporting repeats. | Broader overlap, repair of double postings/review-locked bindings, fees, partial settlements, transfer corrections, HSA/loan/manual interpretations [V2-3](../ROADMAP.md#v2-3)/[V2-4](../ROADMAP.md#v2-4); consolidated [V2-UX](../ROADMAP.md#v2-ux). |
+| Transactions → Review Transactions | Bound asset cash expense/income, negative card expense and whole transfer/card-payment review are available. Whole events can be withdrawn/replaced; suggestions can be dismissed/reopened. Category/card-date corrections and history remain append-only. Repeated-row review guards detected unresolved or supporting repeats. | Broader overlap, ordinary withdrawal/double-posting and review-locked binding repair, fees, partial settlements, HSA/loan/manual interpretations [V2-3](../ROADMAP.md#v2-3)/[V2-4](../ROADMAP.md#v2-4); consolidated [V2-UX](../ROADMAP.md#v2-ux). |
 | Transactions → Identify Recurring | No V2 counterpart; forecasting remains outside the initial release gate. | Deferred initial-release capability; later CF4 scope under [DEC-3](../ROADMAP.md#dec-3). |
 | Transactions → Insert Manually | Reviewed source openings exist; arbitrary manual journals/values do not. | DEC-1 resolved: reviewed openings/dated values only, for missing new-loan opening information or final statements on closed loans. Implement under [V2-4](../ROADMAP.md#v2-4); arbitrary manual journals excluded. |
 | Train Model → Train Model for Testing | No V2 counterpart; category review remains explicit. | Deferred initial-release capability under [DEC-3](../ROADMAP.md#dec-3). |
@@ -50,6 +50,7 @@ retains the earlier snapshot and proposal wording.
 The V2 workbook contains active reviewed non-opening entries, exact posting and
 source-allocation lines, correction links and scope for its selected date range.
 The Retirements sheet records original/inverse links without a dummy replacement.
+Transfer Reviews retains whole-event withdrawal/replacement links.
 Active rows omit superseded entries and reversals while preserving correction
 links. It does not certify unique source coverage, reconciled balances or cash
 flow. Presets, category pivots and hiding internal keys remain separate

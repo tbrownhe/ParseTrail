@@ -6,7 +6,7 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-**None.** Source-backed opening corrections completed development and independent
+**None.** Whole-transfer review/correction completed development and independent
 verification. Continued roadmap development remains owner-authorized.
 
 ## Next candidates
@@ -21,7 +21,7 @@ verification. Continued roadmap development remains owner-authorized.
 
 ## Most recent product packet
 
-[Source-backed opening corrections](docs/work/2026-10-25-v2-opening-corrections.md) completed
+[Whole-transfer review/correction](docs/work/2026-10-25-v2-transfer-corrections.md) completed
 development and independent review. Consolidated human UI/UX review remains open;
 this is not 2.0 release acceptance.
 

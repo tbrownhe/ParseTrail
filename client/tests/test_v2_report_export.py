@@ -57,6 +57,7 @@ def test_workbook_has_active_reviewed_entries_postings_corrections_and_scope(tmp
             "Source Allocations",
             "Corrections",
             "Retirements",
+            "Transfer Reviews",
         ]
         entry_rows = list(workbook["Reviewed Entries"].values)
         assert len(entry_rows) == 3

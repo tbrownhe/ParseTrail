@@ -29,7 +29,7 @@ evidence belong in [packet records](work/README.md).
 
 ## Profile format and lifecycle
 
-The current pre-release profile schema is revision 13; check `SCHEMA_VERSION`
+The current pre-release profile schema is revision 14; check `SCHEMA_VERSION`
 in `v2_profile_store.py` when opening a packet. Format markers, exact table and
 foreign-key shapes, append-only triggers and SQLite integrity are checked before
 writable use. Older disposable pilots, 1.x, unknown, damaged and newer shapes
@@ -74,7 +74,8 @@ card-category/date corrections save inverse reversals, replacements and their
 links together; original entries and allocations remain history, and only active
 allocations consume evidence. Source-backed opening corrections append revisions
 and exact retirement inverses, including zero decisions without replacements.
-Transfer correction remains separate work. Unsupported interpretations and unknown posting dates remain
+Whole-transfer withdrawal/replacement preserves every original leg and creates
+fresh replacement identities. Unsupported interpretations and unknown posting dates remain
 pending.
 
 `StatementSourceReviews` is one append-only assertion history for bound statement
@@ -102,6 +103,16 @@ consumption; raw sums retain cancellation math. Inverse payload/index allocation
 must be empty. History enters overlap/reconciliation versions and workbook
 Retirements links. Pending/stale source facts remain recoverable. This foundation
 does not expose arbitrary manual-entry or journal-cancellation workflows.
+
+`TransferEvents`, `TransferEventActions` and `TransferPairReviews` retain exact
+confirmed pairs, entry manifests, whole-event withdrawal/replacement and scoped
+suggestion dismissal/reopen history. Account-context changes do not silently
+apply an old suggestion decision. Composite reads and optimistic write versions
+preserve review context. All-leg retirement is atomic; new assumed-date postings
+require opt-in even though existing events can be withdrawn after it is disabled.
+Persisted types/checksums, exact source/entry/index shapes and cancellation links
+are validated in common reads and backup. Workbook Transfer Reviews links retain
+whole-event actions separately from active rows.
 
 `SourceOverlapReviews` saves append-only distinct/repeat/pending decisions.
 Supporting repeats are references, never additional money. New cash/card/transfer
@@ -135,7 +146,7 @@ currently valid saved cutoff and a newly computed live cutoff. Snapshot backup
 validates this retained history independently of current reconciliation availability
 before publishing a new copy. A saved snapshot digest detects accidental changes;
 it does not authenticate a profile against hostile modification. Earlier disposable
-schema-11 pilots must be recreated, without a migration or 1.x alias.
+pilot schemas must be recreated, without a migration or 1.x alias.
 
 SQLite profile snapshots contain embedded sources, authored data, journals and
 all review history. They are verified before publication at a new path; restore

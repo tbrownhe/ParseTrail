@@ -122,6 +122,7 @@ def write_reviewed_journal_workbook(report: ReviewedJournalExport, destination_p
             ("Sources with incomplete activity, whole profile", report.sources_with_incomplete_activity),
             ("Corrections to original entries posted in period", len(report.corrections)),
             ("Retirements of original entries posted in period", len(report.retirements)),
+            ("Transfer corrections affecting original events in period", len(report.transfer_actions)),
             ("Correction presentation", "Superseded entries and reversals are omitted from active rows."),
             (
                 "Retirement presentation",
@@ -192,6 +193,15 @@ def write_reviewed_journal_workbook(report: ReviewedJournalExport, destination_p
         ("Original key", "Reversal key", "Reason", "Created at"),
         [(row.original_key, row.reversal_key, row.reason, row.created_at) for row in report.retirements],
     )
+    _sheet(
+        workbook,
+        "Transfer Reviews",
+        ("Original event", "Action", "Replacement event", "Reason", "Created at"),
+        [
+            (row.event_id, row.action, row.replacement_event_id, row.reason, row.created_at)
+            for row in report.transfer_actions
+        ],
+    )
     descriptor, partial_name = tempfile.mkstemp(
         prefix=f".{destination.name}.partial.", suffix=".xlsx", dir=destination.parent
     )
@@ -208,6 +218,7 @@ def write_reviewed_journal_workbook(report: ReviewedJournalExport, destination_p
                 "Source Allocations",
                 "Corrections",
                 "Retirements",
+                "Transfer Reviews",
             ]:
                 raise ReportExportError("report_workbook_integrity")
         finally:
