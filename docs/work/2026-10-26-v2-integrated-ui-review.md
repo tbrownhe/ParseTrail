@@ -2,10 +2,10 @@
 
 Date: 2026-10-26. Roadmap IDs: V2-UX, V2-6/7.
 Authorization: continuing roadmap development; owner offered an early UI/UX pass.
-Implementation: final six-source walkthrough and pinned launcher prepared; Windows catalog handoff corrected.
+Implementation: final walkthrough and Windows handoff complete; source account-list visibility improvement verified.
 Automated verification: signed imports, pinned reopening/startup and cross-principal ACL propagation passed.
 Independent review: acceptance specialist prepared and verified synthetic artifacts.
-Owner acceptance: walkthrough otherwise worked; step-12 cash-movement discrepancy reported, exact owner settings unconfirmed.
+Owner acceptance: consolidated Windows walkthrough completed; owner found the scrolled account and confirmed the expected split.
 Release authorization: not authorized.
 
 ## Scope and controlling decisions
@@ -204,8 +204,40 @@ service/GUI reproduction agrees on the owner-edited artifact. Primary's ignored
 `scratch/review-cash-step12.json` retains exact rows, totals, details and limits.
 Changed-file Ruff check/format, local document links and whitespace checks passed.
 
+## Owner confirmation and account-list visibility
+
+The owner then identified the cause: the account checkbox list appeared to contain
+only three items. After finding Demo payment checking further down the list, the
+owner confirmed the expected split. Together with the earlier report that the
+rest worked, this completes the consolidated Windows walkthrough on the pinned
+demo. The earlier differing result is resolved as account-list discoverability,
+not missing financial records.
+
+The current source UI now displays the number of available cash accounts, tells
+users to scroll, provides more list height and keeps its vertical scrollbar
+visible. Account scope remains explicitly checked and unchanged. Primary owns
+this small UI follow-up and verification; no new per-feature human gate applies.
+The accepted pinned runtime and earlier frozen binary retain their exact original
+identity; this follow-up is source UI only and will need inclusion in the future
+release candidate. No profile, catalog or financial interpretation changes.
+Windows AMD64/Python 3.13.15, `PYTHONPATH=.;client/src;client`, Qt offscreen:
+`client/.venv/Scripts/python.exe -m pytest -p no:cacheprovider
+client/tests/test_v2_cash_movement.py devtools/v2_review_demo -q --tb=short`:
+**21 passed in 52.70s**. Changed-file Ruff check/format passed.
+
+Primary also checked the actual source dialog using a disposable copy of the
+owner-reviewed synthetic profile: the five demo cash accounts are visible at
+normal size with the count and cue. An extended 17-account example scrolls to
+the last item and accepts a real checkbox click with the expected explicit scope.
+Both original profile and copied report-profile bytes remain unchanged by GUI
+reads. Primary inspected readable 1100-by-780 renderings with explicit Segoe UI;
+the initial fontless offscreen images were not used for readability acceptance.
+Images and JSON evidence are in ignored
+`scratch/cash-account-list-visibility-segoe`. This is agent verification of the
+small source follow-up, distinct from the owner's accepted pinned walkthrough.
+
 ## Remaining work
 
-The rest of the owner walkthrough worked as reported. Owner confirmation of the
-clarified step 12 remains open; initial authorized development is complete and
-platform/release gates remain separately tracked.
+Targeted Intel/installed/offline/OS integration and separately authorized
+production signing/version/release actions remain open. This walkthrough is
+owner Windows UX acceptance for the prepared demo, not release acceptance.

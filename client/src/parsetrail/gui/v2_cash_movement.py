@@ -79,9 +79,16 @@ class V2CashMovementDialog(QDialog):
         intro.setWordWrap(True)
         layout.addWidget(intro)
         scope_row = QHBoxLayout()
+        account_choices = QVBoxLayout()
+        self.account_choices_label = QLabel()
+        self.account_choices_label.setWordWrap(True)
+        account_choices.addWidget(self.account_choices_label)
         self.accounts = QListWidget()
-        self.accounts.setMaximumHeight(100)
-        scope_row.addWidget(self.accounts, 1)
+        self.accounts.setMaximumHeight(160)
+        self.accounts.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
+        self.accounts.setAccessibleName("Cash accounts to include")
+        account_choices.addWidget(self.accounts)
+        scope_row.addLayout(account_choices, 1)
         controls = QWidget()
         form = QFormLayout(controls)
         today = date.today()
@@ -165,8 +172,12 @@ class V2CashMovementDialog(QDialog):
                 accounts = tuple(account for account in financial if account.kind == "asset")
                 labels = cash_account_labels(financial)
         except (ProfileFormatError, sqlite3.Error, OSError) as exc:
+            self.account_choices_label.setText("Cash accounts unavailable")
             self._clear(f"Account choices are unavailable: {exc}")
             return
+        self.account_choices_label.setText(
+            f"Cash accounts ({len(accounts)} available). Check accounts to include; scroll to see all."
+        )
         self.accounts.blockSignals(True)
         self.accounts.clear()
         for account in accounts:

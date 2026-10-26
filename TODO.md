@@ -6,19 +6,15 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None active. The [walkthrough cash-movement check](docs/work/2026-10-26-v2-integrated-ui-review.md#owner-walkthrough-feedback-and-cash-movement-instructions)
-reproduced the expected records and clarified the instructions; the owner's exact
-discrepancy remains unconfirmed. Initial approved development is complete within
-scope; the tested application freeze is unchanged.
+None active. The owner completed the [integrated Windows walkthrough](docs/work/2026-10-26-v2-integrated-ui-review.md).
+The account-list discoverability follow-up is implemented and agent-verified;
+the accepted pinned demo and its profile remain unchanged.
 
 ## Remaining review and action gates
 
-1. [V2-UX](docs/work/2026-10-26-v2-integrated-ui-review.md): owner reports the
-   walkthrough otherwise worked; confirmation of clarified cash-movement step 12
-   remains open.
-2. [Platform/release checks](ROADMAP.md#release-checklist): targeted Intel,
+1. [Platform/release checks](ROADMAP.md#release-checklist): targeted Intel,
    installed/offline/OS integration and no-build-toolchain environment acceptance.
-3. [Starter signing](docs/work/2026-10-26-v2-catalog-signing-inputs.md), versioning
+2. [Starter signing](docs/work/2026-10-26-v2-catalog-signing-inputs.md), versioning
    and release actions: exact unsigned inputs ready; production signing,
    installation and publication require their specifically authorized scope.
 
@@ -27,9 +23,9 @@ they are not selected by this closeout.
 
 ## Most recent product packet
 
-[Default V2 startup and offline diagnostics](docs/work/2026-10-26-v2-runtime-cutover.md)
-completed development and independent review. Consolidated human UI/UX review
-remains open; this is not 2.0 release acceptance.
+[Cash-account list visibility and owner walkthrough](docs/work/2026-10-26-v2-integrated-ui-review.md)
+completed the small UI follow-up and recorded owner confirmation. Supported-platform
+and 2.0 release gates remain separate.
 
 ## Decisions and gates
 
