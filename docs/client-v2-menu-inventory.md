@@ -28,7 +28,7 @@ retains the earlier snapshot and proposal wording.
 | Accounts → Appreciation Calculator | No V2 counterpart; activity does not establish investment values. | Deferred initial-release capability under [DEC-3](../ROADMAP.md#dec-3). |
 | Statements → Import All | Multi-file and shallow-folder CSV/PDF batch import are available; native batch presentation was accepted. | Archive recovery [V2-3](../ROADMAP.md#v2-3), consolidated daily-workflow [V2-UX](../ROADMAP.md#v2-ux). |
 | Statements → Pick File for Import | Selected CSV/PDF import uses a verified catalog; narrow shell/import flows have recorded native acceptance. | Family/installed checks [P2-3](../ROADMAP.md#p2-3)/[P2-4](../ROADMAP.md#p2-4), final imports [V2-3](../ROADMAP.md#v2-3). |
-| Statements → Completeness Grid | Statement coverage shows bound periods, overlap/gap hints, printed endpoints, journal movement and a versioned reconciliation check. Bound source provenance and source-backed openings have explicit review; their native flows were accepted. | Coverage conclusions and balance/report integration [V2-5](../ROADMAP.md#v2-5); retain independent capture/reconciliation limits. |
+| Statements → Completeness Grid | Statement coverage shows bound periods, overlap/gap hints, printed endpoints, journal movement, live checks and saved reconciliation history/current-input status. Bound source provenance and source-backed openings have explicit review. | Integrated [V2-UX](../ROADMAP.md#v2-ux) and [V2-5](../ROADMAP.md#v2-5); retain independent capture/reconciliation limits and historical native evidence. |
 | Statements → Correct Discrepancies | Evidence preview and append-only category/card-date corrections exist for supported rows. | Wider source/balance discrepancies and correction paths [V2-4](../ROADMAP.md#v2-4). |
 | Statements → Send for Plugin Development | No V2 action; ordinary imports remain local. | Submission is deferred under [DEC-3](../ROADMAP.md#dec-3); any service work stays separately scoped [P2-S](../ROADMAP.md#p2-s). |
 | Categories → Category Manager | Fresh category names/kinds and effective-month budgets are available. | Additional editing/hierarchy scope, if needed, [V2-4](../ROADMAP.md#v2-4)/[DEC-3](../ROADMAP.md#dec-3). |
@@ -43,12 +43,13 @@ retains the earlier snapshot and proposal wording.
 | Help → About | No V2 counterpart in the pilot shell. | Final build metadata [V2-7](../ROADMAP.md#v2-7). |
 | Help → Getting Started | Disposable demos and technical documentation exist. | Final onboarding [V2-7](../ROADMAP.md#v2-7), integrated [V2-UX](../ROADMAP.md#v2-ux). |
 | Help → Check for Updates | No V2 counterpart in the pilot shell. | Client/catalog update scope [P2-5](../ROADMAP.md#p2-5)/[DEC-2](../ROADMAP.md#dec-2); service work stays separate. |
-| Balance History dashboard tab | Account movement shows reviewed changes and confirmed source-backed openings separately. | Account positions/balance history [V2-5](../ROADMAP.md#v2-5); no current bank-balance claim. |
+| Balance History dashboard tab | Account positions/history uses an explicit inclusive as-of date, opening validity, pending scope and separate live/historical/current saved reconciliation cutoffs. | Remaining [V2-5](../ROADMAP.md#v2-5) report integration; no current bank-balance claim. |
 | Category Spending dashboard tab | Reviewed Spending reports exact category totals with incomplete scope. | Charts deferred; truthful drill-down scope [V2-5](../ROADMAP.md#v2-5)/[DEC-3](../ROADMAP.md#dec-3), later CF3 comparisons. |
 | Budgets dashboard tab | Monthly targets are compared with reviewed spending in a table. | Charts deferred; further variance scope [V2-5](../ROADMAP.md#v2-5)/[DEC-3](../ROADMAP.md#dec-3). |
 
 The V2 workbook contains active reviewed non-opening entries, exact posting and
 source-allocation lines, correction links and scope for its selected date range.
+The Retirements sheet records original/inverse links without a dummy replacement.
 Active rows omit superseded entries and reversals while preserving correction
 links. It does not certify unique source coverage, reconciled balances or cash
 flow. Presets, category pivots and hiding internal keys remain separate

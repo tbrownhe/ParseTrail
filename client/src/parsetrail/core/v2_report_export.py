@@ -121,7 +121,12 @@ def write_reviewed_journal_workbook(report: ReviewedJournalExport, destination_p
             ),
             ("Sources with incomplete activity, whole profile", report.sources_with_incomplete_activity),
             ("Corrections to original entries posted in period", len(report.corrections)),
+            ("Retirements of original entries posted in period", len(report.retirements)),
             ("Correction presentation", "Superseded entries and reversals are omitted from active rows."),
+            (
+                "Retirement presentation",
+                "Retired originals and their inverses are omitted; links retain history without a replacement.",
+            ),
             ("Precision", "USD columns are for display; minor-unit text columns preserve exact values."),
             ("Coverage", "Source rows can overlap; these rows do not prove complete transaction coverage."),
             ("Balances", "This export does not establish reconciled balances or certified cash flow."),
@@ -181,6 +186,12 @@ def write_reviewed_journal_workbook(report: ReviewedJournalExport, destination_p
             for correction in report.corrections
         ],
     )
+    _sheet(
+        workbook,
+        "Retirements",
+        ("Original key", "Reversal key", "Reason", "Created at"),
+        [(row.original_key, row.reversal_key, row.reason, row.created_at) for row in report.retirements],
+    )
     descriptor, partial_name = tempfile.mkstemp(
         prefix=f".{destination.name}.partial.", suffix=".xlsx", dir=destination.parent
     )
@@ -196,6 +207,7 @@ def write_reviewed_journal_workbook(report: ReviewedJournalExport, destination_p
                 "Posting Lines",
                 "Source Allocations",
                 "Corrections",
+                "Retirements",
             ]:
                 raise ReportExportError("report_workbook_integrity")
         finally:

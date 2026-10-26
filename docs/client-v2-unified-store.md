@@ -29,7 +29,7 @@ evidence belong in [packet records](work/README.md).
 
 ## Profile format and lifecycle
 
-The current pre-release profile schema is revision 12; check `SCHEMA_VERSION`
+The current pre-release profile schema is revision 13; check `SCHEMA_VERSION`
 in `v2_profile_store.py` when opening a packet. Format markers, exact table and
 foreign-key shapes, append-only triggers and SQLite integrity are checked before
 writable use. Older disposable pilots, 1.x, unknown, damaged and newer shapes
@@ -72,8 +72,9 @@ Supported reviewed cash/card/transfer workflows atomically validate and save
 balanced journal entries and signed source allocations. Cash-category and
 card-category/date corrections save inverse reversals, replacements and their
 links together; original entries and allocations remain history, and only active
-allocations consume evidence. Transfer and opening-decision correction are
-separate work. Unsupported interpretations and unknown posting dates remain
+allocations consume evidence. Source-backed opening corrections append revisions
+and exact retirement inverses, including zero decisions without replacements.
+Transfer correction remains separate work. Unsupported interpretations and unknown posting dates remain
 pending.
 
 `StatementSourceReviews` is one append-only assertion history for bound statement
@@ -87,6 +88,20 @@ openings post through internal opening equity at the prior-day cutoff; zero
 saves a decision without a journal. A changed relevant earliest-source assertion
 makes the decision stale without rewriting its entry. Later unrelated reviews
 do not change that opening basis.
+
+`OpeningDecisionRevisions` retains corrected source-backed decisions and prior
+versions; reads select the latest. Corrections validate the selected decision
+version and current reviewed earliest-source basis atomically. Changed amount/date
+reverses the old opening at its own cutoff and posts the new evidenced amount at
+its cutoff; zero has no replacement entry. Basis-only changes can retain the
+journal. Persisted digests, exact balanced opening shapes and links are checked.
+
+`JournalRetirements` links an immutable original to its exact dated inverse
+without requiring a replacement. Shared inactive reads release retired evidence
+consumption; raw sums retain cancellation math. Inverse payload/index allocations
+must be empty. History enters overlap/reconciliation versions and workbook
+Retirements links. Pending/stale source facts remain recoverable. This foundation
+does not expose arbitrary manual-entry or journal-cancellation workflows.
 
 `SourceOverlapReviews` saves append-only distinct/repeat/pending decisions.
 Supporting repeats are references, never additional money. New cash/card/transfer

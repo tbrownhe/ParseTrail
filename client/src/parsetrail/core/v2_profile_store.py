@@ -12,7 +12,7 @@ import os
 import re
 import sqlite3
 import tempfile
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import date
 from pathlib import Path
 from typing import Literal
@@ -47,7 +47,7 @@ from parsetrail.core.v2_source_overlap import (
 )
 
 APPLICATION_ID = 0x50543230  # PT20
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_DEFINITION_BYTES = 64 * 1024
 MAX_EVIDENCE_BYTES = 32 * 1024 * 1024
@@ -122,6 +122,12 @@ TABLE_COLUMNS = {
         ("reason", "TEXT", 1, 0),
         ("created_at", "TEXT", 1, 0),
     ),
+    "JournalRetirements": (
+        ("original_key", "TEXT", 0, 1),
+        ("reversal_key", "TEXT", 1, 0),
+        ("reason", "TEXT", 1, 0),
+        ("created_at", "TEXT", 1, 0),
+    ),
     "StatementSourceReviews": (
         ("revision_id", "INTEGER", 0, 1),
         ("account_id", "TEXT", 1, 0),
@@ -140,6 +146,19 @@ TABLE_COLUMNS = {
         ("amount_minor", "INTEGER", 1, 0),
         ("cutoff_date", "TEXT", 1, 0),
         ("entry_key", "TEXT", 0, 0),
+        ("decision_sha256", "TEXT", 1, 0),
+        ("created_at", "TEXT", 1, 0),
+    ),
+    "OpeningDecisionRevisions": (
+        ("revision_id", "INTEGER", 0, 1),
+        ("account_id", "TEXT", 1, 0),
+        ("prior_version", "TEXT", 1, 0),
+        ("basis_sha256", "TEXT", 1, 0),
+        ("amount_minor", "INTEGER", 1, 0),
+        ("cutoff_date", "TEXT", 1, 0),
+        ("entry_key", "TEXT", 0, 0),
+        ("reason", "TEXT", 1, 0),
+        ("decision_sha256", "TEXT", 1, 0),
         ("created_at", "TEXT", 1, 0),
     ),
     "SourceOverlapReviews": (
@@ -189,8 +208,10 @@ FOREIGN_KEYS = {
         ("reversal_key", "JournalEntries", "key"),
         ("original_key", "JournalEntries", "key"),
     ),
+    "JournalRetirements": (("reversal_key", "JournalEntries", "key"), ("original_key", "JournalEntries", "key")),
     "StatementSourceReviews": (("source_sha256", "Sources", "sha256"), ("account_id", "Accounts", "id")),
     "OpeningDecisions": (("entry_key", "JournalEntries", "key"), ("account_id", "Accounts", "id")),
+    "OpeningDecisionRevisions": (("entry_key", "JournalEntries", "key"), ("account_id", "Accounts", "id")),
     "SourceOverlapReviews": (
         ("retained_row_id", "SourceObservations", "row_id"),
         ("right_row_id", "SourceObservations", "row_id"),
@@ -207,11 +228,19 @@ IMMUTABLE_TABLES = (
     "JournalEntries",
     "JournalAllocations",
     "JournalCorrections",
+    "JournalRetirements",
     "StatementSourceReviews",
     "OpeningDecisions",
+    "OpeningDecisionRevisions",
     "SourceOverlapReviews",
     "ReconciliationDecisions",
 )
+
+_INACTIVE_JOURNAL_SQL = (
+    "SELECT original_key FROM JournalCorrections UNION SELECT reversal_key FROM JournalCorrections "
+    "UNION SELECT original_key FROM JournalRetirements UNION SELECT reversal_key FROM JournalRetirements"
+)
+_UNSET_REVIEW_REVISION = object()
 
 
 class ProfileFormatError(ValueError):
@@ -305,6 +334,31 @@ class OpeningDecision:
     cutoff_date: date
     entry_key: str | None
     stale: bool
+    revision_id: int = 0
+    version: str = ""
+
+
+@dataclass(frozen=True)
+class OpeningDecisionHistoryRow:
+    revision_id: int
+    account_id: str
+    basis_sha256: str
+    amount_minor: int
+    cutoff_date: date
+    entry_key: str | None
+    version: str
+    prior_version: str | None
+    reason: str
+    created_at: str
+
+
+@dataclass(frozen=True)
+class OpeningReviewSnapshot:
+    candidate: EarliestSourceOpening
+    reviews: tuple[StatementSourceReview, ...]
+    decision: OpeningDecision | None
+    basis_sha256: str
+    history: tuple[OpeningDecisionHistoryRow, ...]
 
 
 @dataclass(frozen=True)
@@ -511,7 +565,10 @@ class AccountPositionHistoryRow:
     debit_change_minor: int
     recorded_debit_minor: int
     position_debit_minor: int | None
-    correction_role: Literal["original", "reversal", "replacement", "superseded_replacement"] | None
+    correction_role: (
+        Literal["original", "reversal", "replacement", "superseded_replacement", "retired", "retirement_reversal"]
+        | None
+    )
 
 
 @dataclass(frozen=True)
@@ -564,6 +621,14 @@ class JournalExportCorrection:
 
 
 @dataclass(frozen=True)
+class JournalExportRetirement:
+    original_key: str
+    reversal_key: str
+    reason: str
+    created_at: str
+
+
+@dataclass(frozen=True)
 class ReviewedJournalExport:
     start: date
     end: date
@@ -575,6 +640,7 @@ class ReviewedJournalExport:
     sources_with_incomplete_activity: int
     excluded_unreviewed_entries: int
     excluded_opening_entries: int
+    retirements: tuple[JournalExportRetirement, ...] = ()
 
 
 BANK_CASH_STATEMENT_PARSERS = frozenset(
@@ -870,6 +936,12 @@ class V2ProfileStore:
                     reason TEXT NOT NULL,
                     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
                 );
+                CREATE TABLE JournalRetirements (
+                    original_key TEXT PRIMARY KEY REFERENCES JournalEntries(key),
+                    reversal_key TEXT NOT NULL UNIQUE REFERENCES JournalEntries(key),
+                    reason TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+                );
                 CREATE TABLE StatementSourceReviews (
                     revision_id INTEGER PRIMARY KEY,
                     account_id TEXT NOT NULL REFERENCES Accounts(id),
@@ -888,7 +960,19 @@ class V2ProfileStore:
                     amount_minor INTEGER NOT NULL,
                     cutoff_date TEXT NOT NULL,
                     entry_key TEXT REFERENCES JournalEntries(key),
+                    decision_sha256 TEXT NOT NULL,
                     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+                );
+                CREATE TABLE OpeningDecisionRevisions (
+                    revision_id INTEGER PRIMARY KEY,
+                    account_id TEXT NOT NULL REFERENCES Accounts(id),
+                    prior_version TEXT NOT NULL,
+                    basis_sha256 TEXT NOT NULL, amount_minor INTEGER NOT NULL,
+                    cutoff_date TEXT NOT NULL, entry_key TEXT REFERENCES JournalEntries(key),
+                    reason TEXT NOT NULL,
+                    decision_sha256 TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+                    UNIQUE(account_id,prior_version)
                 );
                 CREATE TABLE SourceOverlapReviews (
                     revision_id INTEGER PRIMARY KEY,
@@ -984,6 +1068,9 @@ class V2ProfileStore:
                         verified.load_import(source_id)
                     for (payload,) in verified.connection.execute("SELECT payload FROM JournalEntries"):
                         _decode_journal(payload)
+                    verified._validate_journal_retirements()
+                    for account in verified.financial_accounts():
+                        verified.opening_decision_history(account.id)
                     verified._reconciliation_history(None)
                 try:
                     os.link(partial, destination)
@@ -1245,15 +1332,101 @@ class V2ProfileStore:
         return row, financial_id, self._ledger_accounts(), candidate
 
     def _active_consumed(self, *, excluding: str | None = None) -> dict[str, int]:
+        self._validate_journal_retirements()
         query = (
-            "SELECT row_id,SUM(amount_minor) FROM JournalAllocations "
-            "WHERE entry_key NOT IN (SELECT original_key FROM JournalCorrections)"
+            f"SELECT row_id,SUM(amount_minor) FROM JournalAllocations WHERE entry_key NOT IN ({_INACTIVE_JOURNAL_SQL})"
         )
         parameters: tuple[str, ...] = ()
         if excluding is not None:
             query += " AND entry_key<>?"
             parameters = (excluding,)
         return dict(self.connection.execute(query + " GROUP BY row_id", parameters))
+
+    def _inactive_journal_keys(self) -> frozenset[str]:
+        self._validate_journal_retirements()
+        return frozenset(key for (key,) in self.connection.execute(_INACTIVE_JOURNAL_SQL))
+
+    def _validate_journal_retirements(self) -> None:
+        """A persisted retirement is exactly its original's reviewed inverse."""
+        rows = self.connection.execute("SELECT original_key,reversal_key,reason FROM JournalRetirements").fetchall()
+        if not rows:
+            return
+        corrections = self.connection.execute(
+            "SELECT original_key,reversal_key,replacement_key FROM JournalCorrections"
+        ).fetchall()
+        correction_inactive = {key for row in corrections for key in row[:2]}
+        correction_keys = {key for row in corrections for key in row}
+        original_keys = {row[0] for row in rows}
+        inverse_keys = {row[1] for row in rows}
+        if original_keys & inverse_keys or original_keys & correction_inactive or inverse_keys & correction_keys:
+            raise ProfileFormatError("journal_retirement_integrity")
+        for original_key, inverse_key, reason in rows:
+            saved = dict(
+                self.connection.execute(
+                    "SELECT key,payload FROM JournalEntries WHERE key IN (?,?)", (original_key, inverse_key)
+                )
+            )
+            try:
+                original = _decode_journal(saved[original_key])
+                inverse = _decode_journal(saved[inverse_key])
+                if (
+                    original.key != original_key
+                    or inverse.key != inverse_key
+                    or original.reviewed is not True
+                    or inverse.reviewed is not True
+                    or inverse.origin != "reversal"
+                    or inverse.event_id != original.event_id
+                    or inverse.posting_date != original.posting_date
+                    or original.origin not in {"imported", "opening", "manual"}
+                    or type(reason) is not str
+                    or not 0 < len(reason.strip()) <= 500
+                    or inverse.reason != reason
+                    or self.connection.execute(
+                        "SELECT 1 FROM JournalAllocations WHERE entry_key=? LIMIT 1", (inverse_key,)
+                    ).fetchone()
+                    is not None
+                    or len(original.postings) < 2
+                    or len(original.postings) != len(inverse.postings)
+                    or sum(posting.amount_minor for posting in original.postings) != 0
+                    or any(
+                        type(posting.amount_minor) is not int
+                        or posting.amount_minor == 0
+                        or type(reversal.amount_minor) is not int
+                        or reversal.account_id != posting.account_id
+                        or reversal.amount_minor != -posting.amount_minor
+                        or reversal.allocations
+                        for posting, reversal in zip(original.postings, inverse.postings, strict=True)
+                    )
+                ):
+                    raise ValueError
+            except (KeyError, TypeError, ValueError):
+                raise ProfileFormatError("journal_retirement_integrity") from None
+
+    def _opening_journal_keys(self) -> frozenset[str]:
+        """Opening inverses retain opening scope in movement and export views."""
+        self._validate_journal_retirements()
+        self._validate_opening_decision_histories()
+        openings = {
+            key
+            for key, payload in self.connection.execute("SELECT key,payload FROM JournalEntries")
+            if _decode_journal(payload).origin == "opening"
+        }
+        openings.update(
+            reversal
+            for original, reversal in self.connection.execute(
+                "SELECT original_key,reversal_key FROM JournalRetirements"
+            )
+            if original in openings
+        )
+        return frozenset(openings)
+
+    def _active_journal_entries(self) -> tuple[JournalEntry, ...]:
+        inactive = self._inactive_journal_keys()
+        return tuple(
+            _decode_journal(payload)
+            for key, payload in self.connection.execute("SELECT key,payload FROM JournalEntries")
+            if key not in inactive
+        )
 
     def _require_unposted_rows(self, row_ids: tuple[str, ...]) -> None:
         for offset in range(0, len(row_ids), 500):
@@ -1328,6 +1501,7 @@ class V2ProfileStore:
         return rows, buckets, reviews, aliases
 
     def _source_overlap_basis(self) -> str:
+        self._validate_journal_retirements()
         digest = hashlib.sha256(OVERLAP_RULE.encode())
         for table in (
             "EvidenceSnapshots",
@@ -1339,6 +1513,8 @@ class V2ProfileStore:
             "JournalEntries",
             "JournalAllocations",
             "JournalCorrections",
+            "JournalRetirements",
+            "OpeningDecisionRevisions",
             "SourceOverlapReviews",
         ):
             digest.update(table.encode())
@@ -1642,11 +1818,12 @@ class V2ProfileStore:
         return tuple(result)
 
     def _active_reviewed_entries(self, source_sha256: str) -> dict[str, list[JournalEntry]]:
+        self._validate_journal_retirements()
         active: dict[str, list[JournalEntry]] = {}
         for row_id, payload in self.connection.execute(
             "SELECT a.row_id,e.payload FROM JournalAllocations a JOIN JournalEntries e ON e.key=a.entry_key "
             "JOIN SourceObservations o ON o.row_id=a.row_id "
-            "WHERE o.source_sha256=? AND a.entry_key NOT IN (SELECT original_key FROM JournalCorrections)",
+            f"WHERE o.source_sha256=? AND a.entry_key NOT IN ({_INACTIVE_JOURNAL_SQL})",
             (source_sha256,),
         ):
             active.setdefault(row_id, []).append(_decode_journal(payload))
@@ -1952,6 +2129,8 @@ class V2ProfileStore:
             raise
 
     def _journal_entries_in_period(self, start: date, end: date):
+        self._validate_journal_retirements()
+        self._validate_opening_decision_histories()
         if type(start) is not date or type(end) is not date or start >= end:
             raise ProfileFormatError("report_period_invalid")
         for (payload,) in self.connection.execute("SELECT payload FROM JournalEntries"):
@@ -1960,11 +2139,12 @@ class V2ProfileStore:
                 yield entry
 
     def _unallocated_activity_counts(self) -> tuple[int, int]:
+        self._validate_journal_retirements()
         return self.connection.execute(
             "SELECT COUNT(*),COUNT(DISTINCT o.source_sha256) FROM SourceObservations o "
             "LEFT JOIN ("
             "SELECT a.row_id,SUM(a.amount_minor) AS used FROM JournalAllocations a "
-            "WHERE a.entry_key NOT IN (SELECT original_key FROM JournalCorrections) GROUP BY a.row_id"
+            f"WHERE a.entry_key NOT IN ({_INACTIVE_JOURNAL_SQL}) GROUP BY a.row_id"
             ") active ON active.row_id=o.row_id "
             "WHERE o.row_role='activity' AND (active.used IS NULL OR active.used<>o.amount_minor)"
         ).fetchone()
@@ -2043,15 +2223,16 @@ class V2ProfileStore:
         opening = dict.fromkeys(accounts, 0)
         opening_seen: set[str] = set()
         excluded_unreviewed = 0
+        opening_keys = self._opening_journal_keys()
         for entry in self._journal_entries_in_period(start, end):
             financial_postings = tuple(posting for posting in entry.postings if posting.account_id in accounts)
             if not entry.reviewed:
                 excluded_unreviewed += bool(financial_postings)
                 continue
-            target = opening if entry.origin == "opening" else nonopening
+            target = opening if entry.key in opening_keys else nonopening
             for posting in financial_postings:
                 target[posting.account_id] += posting.amount_minor
-                if entry.origin == "opening":
+                if entry.key in opening_keys:
                     opening_seen.add(posting.account_id)
         unresolved_rows, unresolved_sources = self._unallocated_activity_counts()
         return FinancialJournalSummary(
@@ -2109,7 +2290,9 @@ class V2ProfileStore:
             originals.add(original)
             reversals.add(reversal)
             replacements.add(replacement)
-        inactive = originals | reversals
+        retired = dict(self.connection.execute("SELECT original_key,reversal_key FROM JournalRetirements"))
+        retirement_reversals = set(retired.values())
+        inactive = self._inactive_journal_keys()
         consumed = self._active_consumed()
         pending = dict.fromkeys((account.id for account in accounts), 0)
         latest_activity: dict[str, date] = {}
@@ -2171,6 +2354,10 @@ class V2ProfileStore:
                     role = "reversal"
                 elif entry.key in replacements:
                     role = "replacement"
+                if entry.key in retired:
+                    role = "retired"
+                elif entry.key in retirement_reversals:
+                    role = "retirement_reversal"
                 history.append(
                     AccountPositionHistoryRow(
                         entry.posting_date,
@@ -2283,14 +2470,23 @@ class V2ProfileStore:
             )
             if start <= _decode_journal(payload).posting_date < end
         )
-        inactive = {row[0] for row in self.connection.execute("SELECT original_key FROM JournalCorrections")}
-        inactive.update(row[0] for row in self.connection.execute("SELECT reversal_key FROM JournalCorrections"))
+        retirements = tuple(
+            JournalExportRetirement(original, reversal, reason, created)
+            for original, reversal, reason, created, payload in self.connection.execute(
+                "SELECT r.original_key,r.reversal_key,r.reason,r.created_at,e.payload "
+                "FROM JournalRetirements r JOIN JournalEntries e ON e.key=r.original_key "
+                "ORDER BY r.created_at,r.original_key"
+            )
+            if start <= _decode_journal(payload).posting_date < end
+        )
+        inactive = self._inactive_journal_keys()
+        opening_keys = self._opening_journal_keys()
         entries = tuple(
             sorted(
                 (
                     entry
                     for entry in period_entries
-                    if entry.reviewed and entry.origin != "opening" and entry.key not in inactive
+                    if entry.reviewed and entry.key not in opening_keys and entry.key not in inactive
                 ),
                 key=lambda entry: (entry.posting_date, entry.key),
             )
@@ -2324,7 +2520,8 @@ class V2ProfileStore:
             unresolved_rows,
             unresolved_sources,
             sum(not entry.reviewed for entry in period_entries),
-            sum(entry.reviewed and entry.origin == "opening" for entry in period_entries),
+            sum(entry.reviewed and entry.key in opening_keys for entry in period_entries),
+            retirements,
         )
 
     def _insert_reviewed_category(
@@ -2340,9 +2537,7 @@ class V2ProfileStore:
         payload = _journal_payload(entry)
         prior = self.connection.execute("SELECT payload FROM JournalEntries WHERE key=?", (entry.key,)).fetchone()
         if prior is not None:
-            if self.connection.execute(
-                "SELECT 1 FROM JournalCorrections WHERE original_key=?", (entry.key,)
-            ).fetchone():
+            if entry.key in self._inactive_journal_keys():
                 raise ProfileFormatError(f"{refusal_prefix}_already_corrected")
             if prior[0] != payload:
                 raise ProfileFormatError(f"{refusal_prefix}_conflicts_with_prior_entry")
@@ -2464,6 +2659,8 @@ class V2ProfileStore:
         reason: str,
         refusal_prefix: str,
     ) -> str:
+        if original.key in self._inactive_journal_keys():
+            raise ProfileFormatError(f"{refusal_prefix}_original_inactive")
         reversal = JournalEntry(
             key="reversal:" + hashlib.sha256(original.key.encode()).hexdigest(),
             event_id=original.event_id,
@@ -2514,10 +2711,12 @@ class V2ProfileStore:
                 "SELECT replacement_key,reason FROM JournalCorrections WHERE original_key=?", (original_key,)
             ).fetchone()
             if prior is not None:
-                if prior == (replacement_key, reason):
+                if prior == (replacement_key, reason) and replacement_key not in self._inactive_journal_keys():
                     self.connection.execute("COMMIT")
                     return replacement_key
                 raise ProfileFormatError("cash_correction_conflicts_with_prior_decision")
+            if original_key in self._inactive_journal_keys():
+                raise ProfileFormatError("cash_correction_original_inactive")
             original_row = self.connection.execute(
                 "SELECT payload FROM JournalEntries WHERE key=?", (original_key,)
             ).fetchone()
@@ -2624,10 +2823,12 @@ class V2ProfileStore:
                 "SELECT replacement_key,reason FROM JournalCorrections WHERE original_key=?", (original_key,)
             ).fetchone()
             if prior is not None:
-                if prior == (replacement_key, reason):
+                if prior == (replacement_key, reason) and replacement_key not in self._inactive_journal_keys():
                     self.connection.execute("COMMIT")
                     return replacement_key
                 raise ProfileFormatError("card_correction_conflicts_with_prior_decision")
+            if original_key in self._inactive_journal_keys():
+                raise ProfileFormatError("card_correction_original_inactive")
             allocations = self.connection.execute(
                 "SELECT row_id,amount_minor FROM JournalAllocations WHERE entry_key=?", (original_key,)
             ).fetchall()
@@ -3071,11 +3272,10 @@ class V2ProfileStore:
         journal = tuple(
             _decode_journal(payload) for (payload,) in self.connection.execute("SELECT payload FROM JournalEntries")
         )
-        reversal_keys = {key for (key,) in self.connection.execute("SELECT reversal_key FROM JournalCorrections")}
-        inactive_keys = {key for (key,) in self.connection.execute("SELECT original_key FROM JournalCorrections")}
+        inactive_keys = self._inactive_journal_keys()
         active_dates: dict[str, list[date]] = {}
         for entry in journal:
-            if entry.key in inactive_keys or entry.key in reversal_keys:
+            if entry.key in inactive_keys:
                 continue
             for posting in entry.postings:
                 for allocation in posting.allocations:
@@ -3146,7 +3346,7 @@ class V2ProfileStore:
                             if posting.account_id != section.account_id:
                                 continue
                             journal_change += posting.amount_minor
-                            if entry.key not in reversal_keys and (
+                            if entry.key not in inactive_keys and (
                                 not entry.reviewed
                                 or not posting.allocations
                                 or any(allocation.observation_id not in row_ids for allocation in posting.allocations)
@@ -3216,6 +3416,7 @@ class V2ProfileStore:
 
     def _reconciliation_rule_and_version(self) -> tuple[str, str]:
         """Hash inputs without requiring any source to be ready for reconciliation."""
+        self._validate_journal_retirements()
         rule = "v2-statement-reconciliation-3"
         version_tables = (
             ("Sources", "sha256"),
@@ -3226,8 +3427,10 @@ class V2ProfileStore:
             ("JournalEntries", "*"),
             ("JournalAllocations", "*"),
             ("JournalCorrections", "*"),
+            ("JournalRetirements", "*"),
             ("StatementSourceReviews", "*"),
             ("OpeningDecisions", "*"),
+            ("OpeningDecisionRevisions", "*"),
             ("SourceOverlapReviews", "*"),
         )
         digest = hashlib.sha256(rule.encode())
@@ -3248,8 +3451,7 @@ class V2ProfileStore:
         entries = tuple(
             _decode_journal(payload) for (payload,) in self.connection.execute("SELECT payload FROM JournalEntries")
         )
-        inactive = {key for (key,) in self.connection.execute("SELECT original_key FROM JournalCorrections")}
-        inactive.update(key for (key,) in self.connection.execute("SELECT reversal_key FROM JournalCorrections"))
+        inactive = self._inactive_journal_keys()
         reviews = {
             account.id: {review.source_sha256: review for review in self.statement_source_reviews(account.id)}
             for account in self.financial_accounts()
@@ -3758,6 +3960,7 @@ class V2ProfileStore:
         timing_confirmed: bool,
         source_reference: str,
         note: str = "",
+        expected_revision_id: int | None | object = _UNSET_REVIEW_REVISION,
     ) -> int:
         """Record a source inspection without altering its printed evidence."""
         candidate = next((item for item in self.earliest_source_openings() if item.account_id == account_id), None)
@@ -3770,7 +3973,9 @@ class V2ProfileStore:
         return self.record_statement_source_review(
             account_id,
             source_sha256,
-            expected_revision_id=latest.revision_id if latest else None,
+            expected_revision_id=(latest.revision_id if latest else None)
+            if expected_revision_id is _UNSET_REVIEW_REVISION
+            else expected_revision_id,
             opening_origin=opening_origin,
             closing_origin=latest.closing_origin if latest else "unestablished",
             timing_confirmed=timing_confirmed,
@@ -3796,16 +4001,153 @@ class V2ProfileStore:
 
     def opening_decision(self, account_id: str) -> OpeningDecision | None:
         self._require_financial_account(account_id)
+        history = self.opening_decision_history(account_id)
+        if not history:
+            return None
+        saved = history[0]
+        candidate = next(item for item in self.earliest_source_openings() if item.account_id == account_id)
+        reviews = self.statement_source_reviews(account_id)
+        stale = bool(candidate.blockers) or saved.basis_sha256 != self._opening_basis(candidate, reviews)
+        return OpeningDecision(
+            account_id,
+            saved.basis_sha256,
+            saved.amount_minor,
+            saved.cutoff_date,
+            saved.entry_key,
+            stale,
+            saved.revision_id,
+            saved.version,
+        )
+
+    @staticmethod
+    def _opening_decision_version(
+        account_id, revision_id, basis, amount, cutoff, entry_key, prior_version=None, reason="Initial reviewed opening"
+    ) -> str:
+        return _digest(
+            json.dumps(
+                (account_id, revision_id, prior_version, basis, amount, cutoff, entry_key, reason),
+                separators=(",", ":"),
+            ).encode()
+        )
+
+    def opening_decision_history(self, account_id: str) -> tuple[OpeningDecisionHistoryRow, ...]:
+        """Retain the initial decision and every correction, newest first."""
+        self._validate_journal_retirements()
+        self._require_financial_account(account_id)
         saved = self.connection.execute(
-            "SELECT basis_sha256,amount_minor,cutoff_date,entry_key FROM OpeningDecisions WHERE account_id=?",
+            "SELECT basis_sha256,amount_minor,cutoff_date,entry_key,decision_sha256,created_at FROM OpeningDecisions WHERE account_id=?",
             (account_id,),
         ).fetchone()
         if saved is None:
-            return None
-        candidate = next(item for item in self.earliest_source_openings() if item.account_id == account_id)
-        reviews = self.statement_source_reviews(account_id)
-        stale = bool(candidate.blockers) or saved[0] != self._opening_basis(candidate, reviews)
-        return OpeningDecision(account_id, saved[0], saved[1], date.fromisoformat(saved[2]), saved[3], stale)
+            if self.connection.execute(
+                "SELECT 1 FROM OpeningDecisionRevisions WHERE account_id=?", (account_id,)
+            ).fetchone():
+                raise ProfileFormatError("opening_decision_history_invalid")
+            return ()
+        rows = [(0, None, *saved[:4], "Initial reviewed opening", saved[4], saved[5])]
+        rows.extend(
+            self.connection.execute(
+                "SELECT revision_id,prior_version,basis_sha256,amount_minor,cutoff_date,entry_key,reason,decision_sha256,created_at "
+                "FROM OpeningDecisionRevisions WHERE account_id=? ORDER BY revision_id",
+                (account_id,),
+            )
+        )
+        result = []
+        prior = None
+        for revision, previous, basis, amount, cutoff, key, reason, stored_version, created in rows:
+            if (
+                previous != prior
+                or (amount == 0) != (key is None)
+                or type(amount) is not int
+                or type(reason) is not str
+                or not reason.strip()
+                or type(basis) is not str
+                or re.fullmatch(r"[0-9a-f]{64}", basis) is None
+            ):
+                raise ProfileFormatError("opening_decision_history_invalid")
+            try:
+                cutoff_date = date.fromisoformat(cutoff)
+            except (TypeError, ValueError):
+                raise ProfileFormatError("opening_decision_history_invalid") from None
+            if key is not None:
+                payload = self.connection.execute("SELECT payload FROM JournalEntries WHERE key=?", (key,)).fetchone()
+                entry = _decode_journal(payload[0]) if payload is not None else None
+                if (
+                    entry is None
+                    or entry.key != key
+                    or entry.origin != "opening"
+                    or entry.reviewed is not True
+                    or entry.posting_date != cutoff_date
+                    or len(entry.postings) != 2
+                    or entry.postings[0].account_id != account_id
+                    or entry.postings[0].amount_minor != amount
+                    or entry.postings[1].account_id != "internal:opening-equity:USD"
+                    or entry.postings[1].amount_minor != -amount
+                    or any(posting.allocations for posting in entry.postings)
+                    or self.connection.execute(
+                        "SELECT 1 FROM JournalAllocations WHERE entry_key=? LIMIT 1", (key,)
+                    ).fetchone()
+                    is not None
+                ):
+                    raise ProfileFormatError("opening_decision_history_invalid")
+                try:
+                    validate_entry(entry, self._ledger_accounts(), {}, {})
+                except LedgerError:
+                    raise ProfileFormatError("opening_decision_history_invalid") from None
+            version = self._opening_decision_version(account_id, revision, basis, amount, cutoff, key, previous, reason)
+            if stored_version != version:
+                raise ProfileFormatError("opening_decision_history_invalid")
+            result.append(
+                OpeningDecisionHistoryRow(
+                    revision,
+                    account_id,
+                    basis,
+                    amount,
+                    cutoff_date,
+                    key,
+                    version,
+                    previous,
+                    reason,
+                    created,
+                )
+            )
+            prior = version
+        retired_keys = {key for (key,) in self.connection.execute("SELECT original_key FROM JournalRetirements")}
+        for older, newer in zip(result, result[1:], strict=False):
+            if (
+                older.entry_key != newer.entry_key
+                and older.entry_key is not None
+                and older.entry_key not in retired_keys
+            ):
+                raise ProfileFormatError("opening_decision_history_invalid")
+        if result[-1].entry_key is not None and result[-1].entry_key in self._inactive_journal_keys():
+            raise ProfileFormatError("opening_decision_history_invalid")
+        return tuple(reversed(result))
+
+    def _validate_opening_decision_histories(self) -> None:
+        """Validate stored decisions without demanding current source review."""
+        for (account_id,) in self.connection.execute(
+            "SELECT account_id FROM OpeningDecisions UNION SELECT account_id FROM OpeningDecisionRevisions"
+        ).fetchall():
+            self.opening_decision_history(account_id)
+
+    def opening_review_snapshot(self, account_id: str) -> OpeningReviewSnapshot:
+        if self.connection.in_transaction:
+            raise ProfileFormatError("opening_requires_committed_snapshot")
+        self.connection.execute("BEGIN")
+        try:
+            self._require_financial_account(account_id)
+            candidate = next(item for item in self.earliest_source_openings() if item.account_id == account_id)
+            reviews = self.statement_source_reviews(account_id)
+            return OpeningReviewSnapshot(
+                candidate,
+                reviews,
+                self.opening_decision(account_id),
+                self._opening_basis(candidate, reviews),
+                self.opening_decision_history(account_id),
+            )
+        finally:
+            self.connection.execute("ROLLBACK")
 
     def opening_review_basis(self, account_id: str) -> str:
         candidate = next((item for item in self.earliest_source_openings() if item.account_id == account_id), None)
@@ -3914,6 +4256,8 @@ class V2ProfileStore:
     def post_reviewed_opening(self, account_id: str, *, expected_basis_sha256: str | None = None) -> OpeningDecision:
         """Post a printed opening through equity after every earliest source is reviewed."""
         self._require_writable()
+        if self.connection.in_transaction:
+            raise ProfileFormatError("opening_requires_committed_snapshot")
         self.connection.execute("BEGIN IMMEDIATE")
         try:
             candidate = next((item for item in self.earliest_source_openings() if item.account_id == account_id), None)
@@ -3928,18 +4272,18 @@ class V2ProfileStore:
             basis = self._opening_basis(candidate, reviews)
             if expected_basis_sha256 is not None and basis != expected_basis_sha256:
                 raise ProfileFormatError("opening_review_changed_since_selection")
-            prior = self.connection.execute(
-                "SELECT basis_sha256,amount_minor,cutoff_date,entry_key FROM OpeningDecisions WHERE account_id=?",
-                (account_id,),
-            ).fetchone()
+            prior = self.opening_decision(account_id)
             cutoff = date.fromordinal(candidate.earliest_period_start.toordinal() - 1)
             if prior is not None:
-                if prior[:3] == (basis, amount, cutoff.isoformat()):
+                if (prior.basis_sha256, prior.amount_minor, prior.cutoff_date) == (
+                    basis,
+                    amount,
+                    cutoff,
+                ) and not prior.stale:
                     self.connection.execute("COMMIT")
-                    return OpeningDecision(account_id, basis, amount, cutoff, prior[3], False)
+                    return prior
                 raise ProfileFormatError("opening_already_decided")
-            for (payload,) in self.connection.execute("SELECT payload FROM JournalEntries"):
-                entry = _decode_journal(payload)
+            for entry in self._active_journal_entries():
                 if entry.posting_date <= cutoff and any(posting.account_id == account_id for posting in entry.postings):
                     raise ProfileFormatError("opening_earlier_posting_conflict")
             key = None
@@ -3965,16 +4309,162 @@ class V2ProfileStore:
                     "INSERT INTO JournalEntries(key,payload) VALUES (?,?)", (key, _journal_payload(entry))
                 )
             self.connection.execute(
-                "INSERT INTO OpeningDecisions(account_id,basis_sha256,amount_minor,cutoff_date,entry_key) "
-                "VALUES (?,?,?,?,?)",
-                (account_id, basis, amount, cutoff.isoformat(), key),
+                "INSERT INTO OpeningDecisions(account_id,basis_sha256,amount_minor,cutoff_date,entry_key,decision_sha256) "
+                "VALUES (?,?,?,?,?,?)",
+                (
+                    account_id,
+                    basis,
+                    amount,
+                    cutoff.isoformat(),
+                    key,
+                    self._opening_decision_version(account_id, 0, basis, amount, cutoff.isoformat(), key),
+                ),
             )
+            decision = self.opening_decision(account_id)
             self.connection.execute("COMMIT")
-            return OpeningDecision(account_id, basis, amount, cutoff, key, False)
+            return decision
         except BaseException as exc:
             self.connection.execute("ROLLBACK")
             if isinstance(exc, LedgerError):
                 raise ProfileFormatError("opening_posting_refused") from None
+            raise
+
+    def _retire_journal_entry(self, original: JournalEntry, *, reason: str) -> str:
+        """Transaction-owned inverse plus link; callers admit the specific workflow."""
+        if not self.connection.in_transaction:
+            raise ProfileFormatError("journal_retirement_requires_transaction")
+        if original.key in self._inactive_journal_keys():
+            raise ProfileFormatError("journal_retirement_original_inactive")
+        saved = self.connection.execute("SELECT payload FROM JournalEntries WHERE key=?", (original.key,)).fetchone()
+        if saved is None or saved[0] != _journal_payload(original):
+            raise ProfileFormatError("journal_retirement_original_changed")
+        inverse = JournalEntry(
+            key="retirement:" + _digest(original.key.encode()),
+            event_id=original.event_id,
+            posting_date=original.posting_date,
+            description="Retirement: " + original.description,
+            postings=tuple(Posting(posting.account_id, -posting.amount_minor) for posting in original.postings),
+            origin="opening" if original.origin == "opening" else "manual",
+            reviewed=True,
+            reason=reason,
+        )
+        validate_entry(inverse, self._ledger_accounts(), {}, self._active_consumed())
+        inverse = replace(inverse, origin="reversal")
+        self.connection.execute(
+            "INSERT INTO JournalEntries(key,payload) VALUES (?,?)", (inverse.key, _journal_payload(inverse))
+        )
+        self.connection.execute(
+            "INSERT INTO JournalRetirements(original_key,reversal_key,reason) VALUES (?,?,?)",
+            (original.key, inverse.key, reason),
+        )
+        return inverse.key
+
+    def correct_reviewed_opening(
+        self,
+        account_id: str,
+        *,
+        expected_decision_version: str,
+        expected_basis_sha256: str,
+        reason: str,
+    ) -> OpeningDecision:
+        """Append a source-backed opening correction; never invent a balancing entry."""
+        self._require_writable()
+        if type(reason) is not str or not 0 < len(reason.strip()) <= 500:
+            raise ProfileFormatError("opening_correction_reason_required")
+        if any(
+            type(value) is not str or re.fullmatch(r"[0-9a-f]{64}", value) is None
+            for value in (expected_decision_version, expected_basis_sha256)
+        ):
+            raise ProfileFormatError("opening_correction_version_required")
+        if self.connection.in_transaction:
+            raise ProfileFormatError("opening_requires_committed_snapshot")
+        reason = reason.strip()
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            current = self.opening_decision(account_id)
+            if current is None:
+                raise ProfileFormatError("opening_correction_decision_missing")
+            candidate = next(item for item in self.earliest_source_openings() if item.account_id == account_id)
+            basis = self._opening_basis(candidate, self.statement_source_reviews(account_id))
+            if basis != expected_basis_sha256:
+                raise ProfileFormatError("opening_review_changed_since_selection")
+            if candidate.blockers or candidate.earliest_period_start is None or candidate.printed_opening_minor is None:
+                raise ProfileFormatError("opening_review_blocked")
+            if candidate.earliest_period_start == date.min:
+                raise ProfileFormatError("opening_cutoff_unavailable")
+            cutoff = date.fromordinal(candidate.earliest_period_start.toordinal() - 1)
+            amount = candidate.printed_opening_minor
+            if current.version != expected_decision_version:
+                prior = self.opening_decision_history(account_id)[0]
+                if (
+                    prior.prior_version == expected_decision_version
+                    and prior.basis_sha256 == basis
+                    and prior.amount_minor == amount
+                    and prior.cutoff_date == cutoff
+                    and prior.reason == reason
+                    and not current.stale
+                ):
+                    self.connection.execute("COMMIT")
+                    return current
+                raise ProfileFormatError("opening_decision_changed_since_selection")
+            if current.basis_sha256 == basis and current.amount_minor == amount and current.cutoff_date == cutoff:
+                raise ProfileFormatError("opening_correction_requires_changed_basis")
+            for entry in self._active_journal_entries():
+                if (
+                    entry.key != current.entry_key
+                    and entry.posting_date <= cutoff
+                    and any(posting.account_id == account_id for posting in entry.postings)
+                ):
+                    raise ProfileFormatError("opening_earlier_posting_conflict")
+            key = current.entry_key
+            if current.amount_minor != amount or current.cutoff_date != cutoff:
+                if current.entry_key is not None:
+                    payload = self.connection.execute(
+                        "SELECT payload FROM JournalEntries WHERE key=?", (current.entry_key,)
+                    ).fetchone()
+                    self._retire_journal_entry(_decode_journal(payload[0]), reason=reason)
+                key = None
+                if amount != 0:
+                    equity = "internal:opening-equity:USD"
+                    self.connection.execute(
+                        "INSERT OR IGNORE INTO Accounts VALUES (?,?,?,'USD','internal','opening_equity',NULL,NULL)",
+                        (equity, "Opening equity", "equity"),
+                    )
+                    key = "review:opening:correction:" + _digest(
+                        json.dumps((account_id, expected_decision_version, basis, reason)).encode()
+                    )
+                    entry = JournalEntry(
+                        key=key,
+                        event_id=key,
+                        posting_date=cutoff,
+                        description="Corrected reviewed printed opening",
+                        postings=(Posting(account_id, amount), Posting(equity, -amount)),
+                        origin="opening",
+                        reviewed=True,
+                        reason=reason,
+                    )
+                    validate_entry(entry, self._ledger_accounts(), {}, self._active_consumed())
+                    self.connection.execute(
+                        "INSERT INTO JournalEntries(key,payload) VALUES (?,?)", (key, _journal_payload(entry))
+                    )
+            revision_id = self.connection.execute(
+                "SELECT COALESCE(MAX(revision_id),0)+1 FROM OpeningDecisionRevisions"
+            ).fetchone()[0]
+            version = self._opening_decision_version(
+                account_id, revision_id, basis, amount, cutoff.isoformat(), key, current.version, reason
+            )
+            self.connection.execute(
+                "INSERT INTO OpeningDecisionRevisions "
+                "(revision_id,account_id,prior_version,basis_sha256,amount_minor,cutoff_date,entry_key,reason,decision_sha256) VALUES (?,?,?,?,?,?,?,?,?)",
+                (revision_id, account_id, current.version, basis, amount, cutoff.isoformat(), key, reason, version),
+            )
+            decision = self.opening_decision(account_id)
+            self.connection.execute("COMMIT")
+            return decision
+        except BaseException as exc:
+            self.connection.execute("ROLLBACK")
+            if isinstance(exc, LedgerError):
+                raise ProfileFormatError("opening_correction_refused") from None
             raise
 
     def overlapping_statement_sources(self, source_sha256: str) -> tuple[str, ...]:

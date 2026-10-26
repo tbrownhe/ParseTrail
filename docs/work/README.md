@@ -9,6 +9,7 @@ contracts own lasting behavior. Start with those documents, not historical logs.
 
 | Record | Roadmap scope | Implementation / evidence |
 | --- | --- | --- |
+| [Correct reviewed openings](2026-10-25-v2-opening-corrections.md) | V2-4/5 | Completed development and independent review; append-only retirement/revision and integrated report/export history. |
 | [Recover embedded source originals](2026-10-25-v2-source-recovery.md) | V2-3/6 | Completed development and independent review; originals recover without catalog/import path, preserving profile bytes. |
 | [Durable reconciliation history](2026-10-25-v2-reconciliation-history.md) | V2-4/5 | Completed development and independent review; saved/current/live cutoffs and recoverable pending states. |
 | [Account positions and history](2026-10-25-v2-account-positions.md) | V2-5, DEC-1/2/3 | Completed development and independent review; owner scope decisions recorded; integrated UX remains open. |

@@ -48,7 +48,7 @@ its dependencies allow; the table is not a requirement to restart completed slic
 | <a id="v2-1"></a>V2-1 | **Implemented:** fresh-profile boundary and independent 1.x fallback. | Preserve [cutover rules](docs/client-v2-cutover.md); release validation belongs to V2-7. |
 | <a id="v2-2"></a>V2-2 | **Implemented pre-release:** one marked, verified profile; incompatible formats refused before writes. | Freeze the released schema/lifecycle after remaining workflows; follow [single-store rules](docs/client-v2-unified-store.md). |
 | <a id="v2-3"></a>V2-3 | **Partial:** signed-catalog selected-file/batch CSV/PDF imports, immutable snapshots, binding, retry/cancellation, bounded repeat review and [embedded-original recovery](docs/work/2026-10-25-v2-source-recovery.md). | Wider revised/overlapping-export review and correcting bindings fixed by occurrence history. Final integrated daily lifecycle belongs to V2-UX/7; selected originals are never moved into a second archive. Coordinate with V2-4 and P2-4/5. |
-| <a id="v2-4"></a>V2-4 | **Partial:** accounts/categories/budgets, cash income/expense, card purchases, whole transfers/payments, openings, corrections, source review and [durable reconciliation decisions](docs/work/2026-10-25-v2-reconciliation-history.md). | Transfer dismissal/correction, opening-decision correction, fees/partial settlements, refunds/negative income adjustments, supported loan/HSA/investment interpretations, reviewed manual openings/values and closures. Unsupported cases stay pending. DEC-1/3 constrain breadth. |
+| <a id="v2-4"></a>V2-4 | **Partial:** accounts/categories/budgets, cash income/expense, card purchases, whole transfers/payments, [source-backed opening correction/retirement](docs/work/2026-10-25-v2-opening-corrections.md), source review and [durable reconciliation decisions](docs/work/2026-10-25-v2-reconciliation-history.md). | Transfer dismissal/correction, opening withdrawal after invalid binding, fees/partial settlements, refunds/negative income adjustments, supported loan/HSA/investment interpretations, reviewed manual openings/values and closures. Unsupported cases stay pending. DEC-1/3 constrain breadth. |
 | <a id="v2-5"></a>V2-5 | **Partial:** common reviewed spending/income, account movement, monthly budgets, journal workbook export and [inclusive as-of positions/history](docs/work/2026-10-25-v2-account-positions.md), with opening validity, pending scope and separate live/historical/current saved reconciliation cutoffs. | Cash-flow classification and truthful drill-down/report integration remain. Relevant V2-3/4 safeguards still apply; optional presentation deferred by DEC-3. |
 | <a id="v2-6"></a>V2-6 | **Core implemented:** verified profile backup, restore-as-new, switching and storage/privacy presentation. | Final daily lifecycle/onboarding and recovery failure paths through V2-UX/7; backups exclude separate catalog/preferences. No old-profile activation. |
 | <a id="v2-ux"></a>V2-UX | **Open:** consolidated owner daily-workflow UI/UX pass after functional agent-verified workflows. | Disposable end-to-end import, binding, review/correction, reports and backup/reopen; pending/error states, navigation, wording and layout. Record feedback and disposition. Does not block unrelated development. |
@@ -99,7 +99,9 @@ The owner's Wells Fargo personal-loan parser-change deferral remains in force;
 retained legacy synthetic origination/opening uncertainty is not new source fact
 or permission to reconstruct that history.
 
-## Unresolved owner decisions
+<a id="unresolved-owner-decisions"></a>
+
+## Owner decisions
 
 | ID | Decision needed | Dependent scope |
 | --- | --- | --- |

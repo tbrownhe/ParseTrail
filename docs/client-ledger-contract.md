@@ -15,8 +15,8 @@ superseded migration/audit narrative and its historical evidence links.
 
 The current workspace supports narrow reviewed asset cash expense/income,
 negative card purchases, whole-movement owned transfers/card payments and printed
-openings. Cash-category and card-category/date corrections are available;
-transfer and opening-decision correction remain separate work. General refunds,
+openings. Cash-category, card-category/date and source-backed opening corrections
+are available; transfer correction remains separate work. General refunds,
 splits, loans, manual entries, suspense and valuations require their own admitted
 workflows; examples below specify financial meaning rather than availability.
 
@@ -148,6 +148,11 @@ ACH or peer-to-peer transfers do not determine it.
 
 Drafts can change. Posted entries retain an audit trail through explicit reversal
 and replacement entries linked to the original, including reason and provenance.
+Opening corrections also support exact dated retirement inverses without a
+replacement when the newly reviewed opening is zero. Initial decisions and
+append-only revisions retain persisted content versions; stale forms cannot
+authorize a different source basis. Basis-only changes can retain a journal.
+This does not authorize a later unexplained balance plug.
 Built-in categories have stable semantic keys in a code-owned catalog, with fixed
 names and income/expense types. User-defined categories occupy a separate identity
 namespace and can extend the catalog without overriding a built-in. The first is
