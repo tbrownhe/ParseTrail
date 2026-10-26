@@ -25,6 +25,22 @@ class TransferMovement:
     date_allowed: bool
     amount_minor: int
     description: str
+    tracking_scope: str = "account_total"
+    source_description_known: bool = True
+
+
+@dataclass(frozen=True)
+class ExpectedOwnedDestination:
+    account_id: str
+    reference: str
+    ownership_confirmed: bool
+    account_name: str = ""
+    account_kind: Literal["asset", "liability"] | None = None
+    tracking_scope: str | None = None
+
+    @property
+    def request_key(self) -> tuple:
+        return self.account_id, self.reference, self.ownership_confirmed
 
 
 @dataclass(frozen=True)
@@ -41,6 +57,7 @@ class TransferSettlement:
     outgoing: TransferMovement
     incoming: tuple[TransferMovement, ...]
     fees: tuple[SettlementFee, ...] = ()
+    expected_destination: ExpectedOwnedDestination | None = None
 
     @property
     def movements(self) -> tuple[TransferMovement, ...]:
@@ -71,6 +88,8 @@ class TransferSettlement:
 
     @property
     def kind(self) -> str:
+        if not self.incoming:
+            return "owned outflow awaiting receipt"
         kinds = {m.account_kind for m in self.incoming}
         return (
             "card payment" if kinds == {"liability"} else "asset transfer" if kinds == {"asset"} else "mixed settlement"
@@ -108,6 +127,8 @@ def validate_movement(movement: TransferMovement) -> None:
         or movement.date_provenance not in {"observed", "derived", "assumed"}
         or type(movement.date_allowed) is not bool
         or (not movement.date_allowed and movement.date_provenance != "assumed")
+        or movement.tracking_scope not in {"account_total", "cash_component", "principal_component"}
+        or type(movement.source_description_known) is not bool
     ):
         raise ValueError("settlement_movement_invalid")
     if date.fromisoformat(movement.posting_date).isoformat() != movement.posting_date:
@@ -125,10 +146,30 @@ def validate_settlement(settlement: TransferSettlement) -> None:
         or type(settlement.fees) is not tuple
     ):
         raise ValueError("settlement_manifest_invalid")
-    if not 1 <= len(settlement.incoming) <= 32 or len(settlement.fees) > 64:
+    if not 0 <= len(settlement.incoming) <= 32 or len(settlement.fees) > 64:
         raise ValueError("settlement_manifest_limits")
     for movement in settlement.movements:
         validate_movement(movement)
+    destination = settlement.expected_destination
+    if not settlement.incoming:
+        if not isinstance(destination, ExpectedOwnedDestination) or (
+            type(destination.account_id) is not str
+            or not 0 < len(destination.account_id) <= 80
+            or destination.account_id == settlement.outgoing.account_id
+            or type(destination.reference) is not str
+            or not 0 < len(destination.reference.strip()) <= 500
+            or destination.reference != destination.reference.strip()
+            or destination.ownership_confirmed is not True
+            or type(destination.account_name) is not str
+            or not 0 < len(destination.account_name) <= 200
+            or destination.account_kind not in {"asset", "liability"}
+            or destination.tracking_scope not in {"account_total", "cash_component", "principal_component"}
+            or (destination.tracking_scope == "cash_component" and destination.account_kind != "asset")
+            or (destination.tracking_scope == "principal_component" and destination.account_kind != "liability")
+        ):
+            raise ValueError("settlement_expected_destination_required")
+    elif destination is not None:
+        raise ValueError("settlement_expected_destination_requires_missing_receipts")
     if (
         settlement.outgoing.account_kind != "asset"
         or settlement.outgoing.amount_minor >= 0
@@ -162,7 +203,7 @@ def validate_settlement(settlement: TransferSettlement) -> None:
 
 def settlement_payload(settlement: TransferSettlement) -> str:
     validate_settlement(settlement)
-    return json.dumps({"format": "settlement-1", **asdict(settlement)}, sort_keys=True, separators=(",", ":"))
+    return json.dumps({"format": "settlement-2", **asdict(settlement)}, sort_keys=True, separators=(",", ":"))
 
 
 def decode_settlement(payload: str) -> TransferSettlement:
@@ -174,14 +215,14 @@ def decode_settlement(payload: str) -> TransferSettlement:
         raise ValueError("settlement_manifest_invalid") from None
     if (
         type(data) is not dict
-        or set(data) != {"format", "outgoing", "incoming", "fees"}
-        or data["format"] != "settlement-1"
+        or set(data) != {"format", "outgoing", "incoming", "fees", "expected_destination"}
+        or data["format"] != "settlement-2"
     ):
         raise ValueError("settlement_manifest_invalid")
     if (
         type(data["incoming"]) is not list
         or type(data["fees"]) is not list
-        or not 1 <= len(data["incoming"]) <= 32
+        or not 0 <= len(data["incoming"]) <= 32
         or len(data["fees"]) > 64
     ):
         raise ValueError("settlement_manifest_invalid")
@@ -189,6 +230,7 @@ def decode_settlement(payload: str) -> TransferSettlement:
         TransferMovement(**data["outgoing"]),
         tuple(TransferMovement(**m) for m in data["incoming"]),
         tuple(SettlementFee(**f) for f in data["fees"]),
+        ExpectedOwnedDestination(**data["expected_destination"]) if data["expected_destination"] is not None else None,
     )
     validate_settlement(settlement)
     return settlement

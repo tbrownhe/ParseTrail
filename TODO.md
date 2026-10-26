@@ -6,16 +6,17 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-No development packet active at this closeout. The owner's continuing initial
-V2/P2 authorization remains in force; select and record the next bounded outcome.
+No development packet remains selected at this closeout. The owner's continuing
+initial V2/P2 authorization covers selection of the next bounded loan/source-
+component packet; keep source gross, principal effects and interest proof distinct.
 
 [Frozen Windows family/recovery tooling](docs/work/2026-10-25-v2-frozen-verification.md)
 is implemented and reviewed; the probe awaits the final integrated runtime freeze.
 
 ## Next candidates
 
-1. [V2-4 remaining review safeguards](ROADMAP.md#v2-4): supported HSA cash-component
-   and loan/source-component accounting interpretations;
+1. [V2-4 remaining review safeguards](ROADMAP.md#v2-4): supported
+   loan/source-component accounting interpretations;
    select a bounded outcome before implementation.
    [Starting points](.agents/skills/parsetrail-workflow/references/code-and-checks.md#remaining-review-safeguards).
 2. [P2-3/4/5 readiness](ROADMAP.md#p2-3): remaining family/platform/catalog work;
@@ -24,7 +25,7 @@ is implemented and reviewed; the probe awaits the final integrated runtime freez
 
 ## Most recent product packet
 
-[Source closing values and dated-value withdrawal](docs/work/2026-10-25-v2-source-values.md)
+[HSA cash components and owned outflows awaiting receipts](docs/work/2026-10-25-v2-hsa-cash.md)
 completed development and independent review. Consolidated human UI/UX review
 remains open; this is not 2.0 release acceptance.
 

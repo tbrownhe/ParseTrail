@@ -62,6 +62,11 @@ class V2StatementSourceReview(QDialog):
             f"closing: {account.closing.raw if account.closing and account.closing.raw else 'unavailable'} "
             f"({account.closing.provenance if account.closing else 'unknown'}); "
             f"scope: {account.balance_scope.replace('_', ' ')}"
+            + (
+                ". Cash-component assertions apply only to this cash section; they do not review the whole HSA or investment portfolio."
+                if account.balance_scope == "cash_component"
+                else ""
+            )
         )
         facts.setWordWrap(True)
         layout.addWidget(facts)

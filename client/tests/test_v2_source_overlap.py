@@ -504,5 +504,5 @@ def test_reconciliation_versions_review_and_keeps_support_distinct_from_allocati
         assert "unallocated_source_movements" in checked.exceptions
         assert not checked.reconciled
         assert checked.input_version != before[repeated.source_sha256].input_version
-        assert checked.rule == "v2-statement-reconciliation-4"
+        assert checked.rule == "v2-statement-reconciliation-5"
         assert not store._active_consumed()

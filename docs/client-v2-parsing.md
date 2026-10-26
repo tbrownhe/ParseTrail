@@ -148,6 +148,13 @@ Neither becomes an invented activity date. Preserve generic
 loan activity dates and unknown openings independently of printed closing
 principal; principal-component scope does not establish the total obligation.
 
+The reviewed HealthEquity cash workflow admits only its finite cash activity
+family bound to an asset with cash-component tracking. Printed posting dates and
+unknown descriptions remain unchanged. The accounting layer may supply a generic
+entry label, explicitly separate from source text; it cannot relabel blank text
+as interest. Summary-only HSA/retirement values remain separate nonposting facts.
+See the [HSA cash packet](work/2026-10-25-v2-hsa-cash.md).
+
 Catalog updates do not overwrite saved evidence or authored decisions. Exact-source
 retry reuses its saved snapshot without parsing; reparse produces a comparison.
 Changed output needs explicit review before replacing affected interpretations.

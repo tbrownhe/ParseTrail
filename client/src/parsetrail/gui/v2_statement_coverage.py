@@ -142,7 +142,7 @@ class _OpeningModel(QAbstractTableModel):
     BLOCKERS = {
         "no_bound_statement": "No bound statement",
         "unknown_source_period": "Unknown source period",
-        "non_account_total_scope": "Not an account-total balance",
+        "non_account_total_scope": "Source scope and tracked account do not support a printed opening",
         "printed_opening_unavailable": "Printed opening unavailable",
         "conflicting_earliest_openings": "Conflicting printed openings",
         "duplicate_earliest_source_sections": "Multiple earliest sections from one source",
@@ -267,7 +267,7 @@ class _ReconciliationModel(QAbstractTableModel):
         "Source",
     )
     REASONS = {
-        "account_total_scope_unavailable": "Source is not an account-total balance",
+        "account_total_scope_unavailable": "Source scope and tracked account do not support this check",
         "source_period_start_unavailable": "Source period start unavailable",
         "reported_balance_endpoints_unavailable": "Reported printed endpoints unavailable",
         "source_balance_equation_unverified": "Printed source equation unverified",
@@ -331,6 +331,8 @@ class _ReconciliationModel(QAbstractTableModel):
             (
                 "Unsupported check result"
                 if not self.supported_codes(row)
+                else "Reconciled (cash component)"
+                if row.reconciled and row.balance_scope == "cash_component"
                 else "Reconciled"
                 if row.reconciled
                 else f"Needs review ({len(row.exceptions)})"
@@ -346,6 +348,18 @@ class _ReconciliationModel(QAbstractTableModel):
         return values[index.column()]
 
     @classmethod
+    def scope_qualification(cls, row: StatementReconciliationCheck) -> str:
+        return (
+            f"Source balance scope: {(row.balance_scope or 'unavailable in this historical check').replace('_', ' ')}; "
+            f"tracked account scope: {(row.tracking_scope or 'unavailable in this historical check').replace('_', ' ')}. "
+            + (
+                "This check applies only to the cash component; it does not reconcile the whole HSA or investment portfolio."
+                if "cash_component" in (row.balance_scope, row.tracking_scope)
+                else "Source capture, complete activity and period coverage remain separate."
+            )
+        )
+
+    @classmethod
     def details(cls, row: StatementReconciliationCheck) -> str:
         natural = 1 if row.account_kind == "asset" else -1
 
@@ -353,7 +367,8 @@ class _ReconciliationModel(QAbstractTableModel):
             return _money(value * natural) if value is not None else "Unavailable"
 
         return (
-            f"Printed opening {amount(row.printed_opening_minor)}; journal opening {amount(row.journal_opening_minor)}. "
+            cls.scope_qualification(row)
+            + f"\nPrinted opening {amount(row.printed_opening_minor)}; journal opening {amount(row.journal_opening_minor)}. "
             f"Printed closing {amount(row.printed_closing_minor)}; journal closing {amount(row.journal_closing_minor)}.\n"
             f"Check blockers: {', '.join(cls.reason_label(reason) for reason in row.exceptions) or 'None'}.\n"
             f"Evidence / coverage limits: {', '.join(cls.reason_label(reason) for reason in row.coverage_warnings) or 'None identified'}. "
@@ -470,7 +485,8 @@ class V2StatementCoverageDialog(QDialog):
         scope = QLabel(
             "Calendar comparisons use saved, explicitly bound statements only. Source period dates may be derived; "
             "hover a row for provenance. A gap or adjacent dates do not establish missing or complete activity. "
-            "Printed endpoint comparisons use observed account-total amounts on adjacent dated periods only; "
+            "Printed endpoint comparisons use observed amounts under the admitted account-total or exact HSA cash-component rule on adjacent dated periods only; "
+            "a cash-component comparison applies only to that component. "
             "equal amounts do not certify reconciliation or complete coverage. "
             "Printed balances are source evidence, not posted account balances. "
             "In Saved periods, double-click a row to inspect its source."
@@ -498,7 +514,7 @@ class V2StatementCoverageDialog(QDialog):
         opening_panel = QWidget()
         opening_layout = QVBoxLayout(opening_panel)
         opening_scope = QLabel(
-            "A candidate needs matching observed account-total openings across all tied earliest sources. "
+            "A candidate needs matching observed openings across all tied earliest sources under an admitted account-total or exact HSA cash-component scope. "
             "Asset values and liability amounts owed are shown in their natural direction. "
             "Source timing needs explicit review in Review openings. This tab is a read-only source inventory; "
             "inspect details in Saved periods and use Review openings to record a decision."
@@ -547,6 +563,7 @@ class V2StatementCoverageDialog(QDialog):
         reconciliation_scope = QLabel(
             "The live check requires matching printed and journal opening/closing balances, complete source allocation, "
             "reviewed source provenance and a current opening decision. "
+            "An admitted HSA cash-component check applies only to that component, never the whole HSA or investment portfolio. "
             "Page capture, period coverage and posted interpretation review remain separate. "
             "Select a successful check to confirm and save its cutoff. Saved decisions retain the inputs checked; "
             "changed inputs leave that decision in history as stale."

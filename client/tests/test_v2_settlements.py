@@ -461,7 +461,10 @@ def test_finite_manifest_selection_limits_refuse_before_writes(tmp_path, case):
     }
     fees = tuple(fee(outgoing, i + 1) for i in range(65)) if case == "too_many_fees" else ()
     with V2ProfileStore.open(path) as store:
-        with pytest.raises(ProfileFormatError, match="settlement_manifest_invalid"):
+        with pytest.raises(
+            ProfileFormatError,
+            match="settlement_expected_destination_required" if case == "empty" else "settlement_manifest_invalid",
+        ):
             post(store, outgoing, selections[case], fees=fees)
         assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (0,)
 

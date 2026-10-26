@@ -38,10 +38,17 @@ from parsetrail.core.source_evidence import (
     StatementPayload,
 )
 from parsetrail.core.v2_builtin_categories import builtin_category, is_builtin_id_reserved
+from parsetrail.core.v2_cash_source_policy import (
+    HSA_CASH_PARSER,
+    admitted_statement_scope,
+    cash_accounting_description,
+    cash_tracking_scope,
+)
 from parsetrail.core.v2_preferences import V2Preferences
 from parsetrail.core.v2_review_dates import permitted_posting_date, posting_date_candidate
 from parsetrail.core.v2_settlements import (
     MAX_SETTLEMENT_PAYLOAD,
+    ExpectedOwnedDestination,
     SettlementFee,
     SettlementPreview,
     TransferMovement,
@@ -50,6 +57,7 @@ from parsetrail.core.v2_settlements import (
     fee_order,
     settlement_entries,
     settlement_payload,
+    validate_movement,
     validate_settlement,
 )
 from parsetrail.core.v2_source_overlap import (
@@ -73,7 +81,7 @@ from parsetrail.core.v2_source_values import (
 )
 
 APPLICATION_ID = 0x50543230  # PT20
-SCHEMA_VERSION = 19
+SCHEMA_VERSION = 20
 TRACKING_SCOPES = {"account_total", "principal_component", "cash_component"}
 CategoryPurpose = Literal["expense", "expense_refund", "income", "income_adjustment"]
 CATEGORY_PURPOSE_KINDS = {
@@ -296,7 +304,7 @@ TABLE_COLUMNS = {
         ("event_id", "TEXT", 0, 1),
         ("sequence", "INTEGER", 1, 0),
         ("outgoing_row_id", "TEXT", 1, 0),
-        ("incoming_row_id", "TEXT", 1, 0),
+        ("incoming_row_id", "TEXT", 0, 0),
         ("pair_payload", "TEXT", 1, 0),
         ("entry_versions", "TEXT", 1, 0),
         ("reason", "TEXT", 1, 0),
@@ -819,6 +827,8 @@ class StatementReconciliationCheck:
     reconciled: bool
     rule: str
     input_version: str
+    balance_scope: str = "account_total"
+    tracking_scope: str = "account_total"
 
 
 @dataclass(frozen=True)
@@ -855,6 +865,9 @@ class CashActivityReviewRow:
     category_id: str | None = None
     purpose: CategoryPurpose | None = None
     allowed_purposes: tuple[CategoryPurpose, ...] = ()
+    tracking_scope: str | None = None
+    accounting_description: str | None = None
+    source_description_known: bool = True
 
 
 @dataclass(frozen=True)
@@ -1163,9 +1176,11 @@ CARD_STATEMENT_PARSERS = frozenset(
 def _cash_review_scopes(evidence: SourceEvidence) -> dict[str, bool]:
     if isinstance(evidence.payload, ActivityExportPayload):
         return {row.row_id: True for row in evidence.payload.rows}
-    if isinstance(evidence.payload, StatementPayload) and evidence.parser_id in BANK_CASH_STATEMENT_PARSERS:
+    if isinstance(evidence.payload, StatementPayload) and evidence.parser_id in BANK_CASH_STATEMENT_PARSERS | {
+        HSA_CASH_PARSER
+    }:
         return {
-            row.row_id: account.balance_scope == "account_total"
+            row.row_id: account.balance_scope == cash_tracking_scope(evidence.parser_id)
             for account in evidence.payload.accounts
             for row in account.rows
         }
@@ -1278,6 +1293,7 @@ def _decode_transfer_pair(payload: str) -> TransferCandidate:
         data["incoming"] = TransferMovement(**data["incoming"])
         pair = TransferCandidate(**data)
         for movement in (pair.outgoing, pair.incoming):
+            validate_movement(movement)
             if (
                 any(
                     type(value) is not str or not value
@@ -1358,6 +1374,14 @@ def _decode_reconciliation_check(payload: str) -> StatementReconciliationCheck:
             if type(data[field]) is not str or not data[field]:
                 raise ValueError
         if data["account_kind"] not in {"asset", "liability"}:
+            raise ValueError
+        legacy_scope = data["rule"] in {"v2-statement-reconciliation-3", "v2-statement-reconciliation-4"}
+        for field in ("balance_scope", "tracking_scope"):
+            if field not in data and legacy_scope:
+                data[field] = "account_total"
+            if data.get(field) not in TRACKING_SCOPES:
+                raise ValueError
+        if data["rule"] == "v2-statement-reconciliation-5" and data["balance_scope"] != data["tracking_scope"]:
             raise ValueError
         for field in (
             "printed_opening_minor",
@@ -1627,7 +1651,7 @@ class V2ProfileStore:
                 CREATE TABLE TransferEvents (
                     event_id TEXT PRIMARY KEY, sequence INTEGER NOT NULL UNIQUE,
                     outgoing_row_id TEXT NOT NULL REFERENCES SourceObservations(row_id),
-                    incoming_row_id TEXT NOT NULL REFERENCES SourceObservations(row_id),
+                    incoming_row_id TEXT REFERENCES SourceObservations(row_id),
                     pair_payload TEXT NOT NULL, entry_versions TEXT NOT NULL,
                     reason TEXT NOT NULL, request_basis TEXT NOT NULL, record_sha256 TEXT NOT NULL,
                     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
@@ -1883,6 +1907,10 @@ class V2ProfileStore:
             pair = _decode_transfer_pair(payload)
             if account_id in (pair.outgoing.account_id, pair.incoming.account_id):
                 return True
+        for event in self._read_transfer_history()[0]:
+            destination = event.settlement.expected_destination
+            if destination is not None and destination.account_id == account_id:
+                return True
         return False
 
     def _require_financial_account(self, account_id: str) -> None:
@@ -2052,7 +2080,10 @@ class V2ProfileStore:
             or row.amount.minor == 0
             or row.amount.provenance != "observed"
             or row.components
-            or not row.description.text
+            or cash_accounting_description(
+                saved.evidence.parser_id, cash_tracking_scope(saved.evidence.parser_id), row.description.text
+            )
+            is None
             or financial_id is None
         ):
             raise ProfileFormatError("cash_category_requires_bound_posted_movement")
@@ -2061,9 +2092,16 @@ class V2ProfileStore:
         financial = self.connection.execute(
             "SELECT kind,role,tracking_scope FROM Accounts WHERE id=?", (financial_id,)
         ).fetchone()
-        if financial != ("asset", "financial", "account_total"):
+        if financial != ("asset", "financial", cash_tracking_scope(saved.evidence.parser_id)):
             raise ProfileFormatError("cash_category_requires_asset_account")
-        return row, financial_id, self._ledger_accounts()
+        return (
+            row,
+            financial_id,
+            self._ledger_accounts(),
+            cash_accounting_description(
+                saved.evidence.parser_id, cash_tracking_scope(saved.evidence.parser_id), row.description.text
+            ),
+        )
 
     def _ledger_accounts(self) -> dict[str, LedgerAccount]:
         self._validate_builtin_categories()
@@ -2747,11 +2785,18 @@ class V2ProfileStore:
             or row.components
             or row.amount.minor != amount
             or row.amount.provenance != "observed"
-            or not row.description.text
-            or entry.description != row.description.text
+            or entry.description
+            != (
+                cash_accounting_description(
+                    evidence.parser_id, cash_tracking_scope(evidence.parser_id), row.description.text
+                )
+                if cash
+                else row.description.text
+            )
             or entry.event_id != f"source:{row_id}"
             or financial is None
-            or cache["tracking_scopes"].get(financial.id) != "account_total"
+            or cache["tracking_scopes"].get(financial.id)
+            != (cash_tracking_scope(evidence.parser_id) if cash else "account_total")
             or financial.source_account_id is None
             or category is None
             or category.source_account_id is not None
@@ -3303,6 +3348,9 @@ class V2ProfileStore:
             category_id = None
             purpose = None
             allowed_purposes = ()
+            accounting_description = cash_accounting_description(
+                saved.evidence.parser_id, cash_tracking_scope(saved.evidence.parser_id), row.description.text
+            )
             if entries:
                 status = "Already posted to the ledger"
                 if len(entries) == 1:
@@ -3333,11 +3381,11 @@ class V2ProfileStore:
                 status = "Posting date needs review"
             elif account_id is None:
                 status = "Assign a financial account first"
-            elif tracking_scopes.get(account_id) != "account_total":
+            elif tracking_scopes.get(account_id) != cash_tracking_scope(saved.evidence.parser_id):
                 status = "Tracking scope needs a supported source interpretation"
             elif financial is None or financial[1:] != ("asset", "financial"):
                 status = "Requires a bound asset account"
-            elif not row.description.text:
+            elif accounting_description is None:
                 status = "Description needs review"
             else:
                 status = "Ready for purpose review"
@@ -3354,6 +3402,9 @@ class V2ProfileStore:
                     category_id,
                     purpose,
                     allowed_purposes,
+                    tracking_scopes.get(account_id),
+                    accounting_description,
+                    bool(row.description.text),
                 )
             )
         return tuple(result)
@@ -3490,7 +3541,6 @@ class V2ProfileStore:
                 amount = row.amount.minor
                 if (
                     account is None
-                    or account.tracking_scope != "account_total"
                     or row.row_role != "activity"
                     or row.components
                     or type(amount) is not int
@@ -3500,11 +3550,20 @@ class V2ProfileStore:
                     or row.row_id in overlap_blocks
                 ):
                     continue
-                if account.kind == "asset" and cash_scope.get(row.row_id, False):
+                if (
+                    account.kind == "asset"
+                    and account.tracking_scope == cash_tracking_scope(evidence.parser_id)
+                    and cash_scope.get(row.row_id, False)
+                ):
                     if row.date_role != "posting_date" or row.date.iso is None:
                         continue
                     candidate = row.date
-                elif account.kind == "liability" and amount > 0 and card_scope.get(row.row_id, False):
+                elif (
+                    account.kind == "liability"
+                    and account.tracking_scope == "account_total"
+                    and amount > 0
+                    and card_scope.get(row.row_id, False)
+                ):
                     candidate = posting_date_candidate(row)
                     if candidate is None:
                         continue
@@ -3522,6 +3581,8 @@ class V2ProfileStore:
                         candidate.provenance != "assumed" or preferences.allow_assumed_posting_dates,
                         amount,
                         row.description.text or "Description not printed",
+                        account.tracking_scope,
+                        bool(row.description.text),
                     )
                 )
         return tuple(movements)
@@ -3753,7 +3814,7 @@ class V2ProfileStore:
             account = self.connection.execute(
                 "SELECT kind,role,tracking_scope FROM Accounts WHERE id=?", (movement.account_id,)
             ).fetchone()
-            if row is None or account != (movement.account_kind, "financial", "account_total"):
+            if row is None or account != (movement.account_kind, "financial", movement.tracking_scope):
                 raise ProfileFormatError("transfer_history_integrity")
             candidate = (
                 row.date
@@ -3767,11 +3828,18 @@ class V2ProfileStore:
             )
             if (
                 not scope.get(row.row_id, False)
+                or movement.tracking_scope
+                != (
+                    cash_tracking_scope(saved.evidence.parser_id)
+                    if movement.account_kind == "asset"
+                    else "account_total"
+                )
                 or row.row_role != "activity"
                 or row.components
                 or row.amount.provenance != "observed"
                 or row.amount.minor != movement.amount_minor
                 or movement.description != (row.description.text or "Description not printed")
+                or movement.source_description_known != bool(row.description.text)
                 or candidate is None
                 or candidate.iso != movement.posting_date
                 or candidate.provenance != movement.date_provenance
@@ -3835,8 +3903,9 @@ class V2ProfileStore:
                 or sequence <= 0
                 or any(
                     type(value) is not str or not value
-                    for value in (event_id, out_id, in_id, payload, versions, reason, basis, checksum, created)
+                    for value in (event_id, out_id, payload, versions, reason, basis, checksum, created)
                 )
+                or (in_id is not None and (type(in_id) is not str or not in_id))
             ):
                 raise ProfileFormatError("transfer_history_integrity")
         action_rows = self.connection.execute(
@@ -3873,7 +3942,7 @@ class V2ProfileStore:
             ):
                 raise ProfileFormatError("transfer_history_integrity")
             try:
-                generic = json.loads(payload).get("format") == "settlement-1"
+                generic = json.loads(payload).get("format") == "settlement-2"
                 pair = None if generic else _decode_transfer_pair(payload)
                 settlement = (
                     decode_settlement(payload) if generic else TransferSettlement(pair.outgoing, (pair.incoming,))
@@ -3883,9 +3952,10 @@ class V2ProfileStore:
                 raise ProfileFormatError("transfer_history_integrity") from None
             self._validate_transfer_movements_source(settlement.movements)
             self._validate_settlement_categories(settlement)
+            self._validate_expected_destination(settlement.expected_destination)
             if (
                 out_id != settlement.outgoing.row_id
-                or in_id != settlement.incoming[0].row_id
+                or in_id != (settlement.incoming[0].row_id if settlement.incoming else None)
                 or not all(m.date_allowed for m in settlement.movements)
                 or type(reason) is not str
                 or not 0 < len(reason.strip()) <= 500
@@ -4107,12 +4177,17 @@ class V2ProfileStore:
         return selected.entry_keys
 
     @staticmethod
-    def _settlement_request(outgoing_row_id: str, incoming_row_ids: tuple[str, ...], fees: tuple[SettlementFee, ...]):
+    def _settlement_request(
+        outgoing_row_id: str,
+        incoming_row_ids: tuple[str, ...],
+        fees: tuple[SettlementFee, ...],
+        expected_destination: ExpectedOwnedDestination | None = None,
+    ):
         if (
             type(outgoing_row_id) is not str
             or not outgoing_row_id
             or type(incoming_row_ids) is not tuple
-            or not 1 <= len(incoming_row_ids) <= 32
+            or not 0 <= len(incoming_row_ids) <= 32
             or any(type(row_id) is not str or not row_id for row_id in incoming_row_ids)
             or len(set(incoming_row_ids)) != len(incoming_row_ids)
             or outgoing_row_id in incoming_row_ids
@@ -4121,15 +4196,63 @@ class V2ProfileStore:
             or any(not isinstance(fee, SettlementFee) for fee in fees)
         ):
             raise ProfileFormatError("settlement_manifest_invalid")
+        if expected_destination is not None and (
+            not isinstance(expected_destination, ExpectedOwnedDestination)
+            or type(expected_destination.account_id) is not str
+            or not 0 < len(expected_destination.account_id) <= 80
+            or type(expected_destination.reference) is not str
+            or not 0 < len(expected_destination.reference.strip()) <= 500
+            or expected_destination.reference != expected_destination.reference.strip()
+            or expected_destination.ownership_confirmed is not True
+            or type(expected_destination.account_name) is not str
+            or expected_destination.account_kind not in {None, "asset", "liability"}
+            or expected_destination.tracking_scope
+            not in {None, "account_total", "cash_component", "principal_component"}
+        ):
+            raise ProfileFormatError("settlement_expected_destination_required")
+        if not incoming_row_ids and expected_destination is None:
+            raise ProfileFormatError("settlement_expected_destination_required")
+        if incoming_row_ids and expected_destination is not None:
+            raise ProfileFormatError("settlement_expected_destination_requires_missing_receipts")
         try:
             normalized_fees = tuple(sorted(fees, key=fee_order))
         except (TypeError, ValueError):
             raise ProfileFormatError("settlement_fee_invalid") from None
-        return outgoing_row_id, tuple(sorted(incoming_row_ids)), normalized_fees
+        return outgoing_row_id, tuple(sorted(incoming_row_ids)), normalized_fees, expected_destination
 
     @staticmethod
     def _settlement_matches(settlement: TransferSettlement, request) -> bool:
-        return (settlement.outgoing.row_id, tuple(m.row_id for m in settlement.incoming), settlement.fees) == request
+        return (settlement.outgoing.row_id, tuple(m.row_id for m in settlement.incoming), settlement.fees) == request[
+            :3
+        ] and (settlement.expected_destination.request_key if settlement.expected_destination else None) == (
+            request[3].request_key if request[3] else None
+        )
+
+    def _capture_expected_destination(
+        self, destination: ExpectedOwnedDestination | None, outgoing_account_id: str
+    ) -> ExpectedOwnedDestination | None:
+        if destination is None:
+            return None
+        saved = self.connection.execute(
+            "SELECT name,kind,tracking_scope FROM Accounts WHERE id=? AND role='financial' AND currency='USD'",
+            (destination.account_id,),
+        ).fetchone()
+        if saved is None or destination.account_id == outgoing_account_id:
+            raise ProfileFormatError("settlement_expected_destination_invalid")
+        name, kind, scope = saved
+        if (
+            (destination.account_name and destination.account_name != name)
+            or (destination.account_kind is not None and destination.account_kind != kind)
+            or (destination.tracking_scope is not None and destination.tracking_scope != scope)
+        ):
+            raise ProfileFormatError("settlement_expected_destination_context_changed")
+        return ExpectedOwnedDestination(destination.account_id, destination.reference, True, name, kind, scope)
+
+    def _validate_expected_destination(self, destination: ExpectedOwnedDestination | None) -> None:
+        if destination is not None and self.connection.execute(
+            "SELECT kind,tracking_scope,role,currency FROM Accounts WHERE id=?", (destination.account_id,)
+        ).fetchone() != (destination.account_kind, destination.tracking_scope, "financial", "USD"):
+            raise ProfileFormatError("transfer_history_integrity")
 
     def _settlement_accounts(self, settlement: TransferSettlement, *, materialize: bool) -> dict[str, LedgerAccount]:
         for fee in settlement.fees:
@@ -4150,10 +4273,13 @@ class V2ProfileStore:
         return accounts
 
     def _build_settlement(self, request, preferences: V2Preferences, releasing: tuple[str, ...]) -> TransferSettlement:
-        out_id, in_ids, fees = request
+        out_id, in_ids, fees, expected_destination = request
         movements = {m.row_id: m for m in self._transfer_movements(preferences, releasing)}
         try:
-            settlement = TransferSettlement(movements[out_id], tuple(movements[row_id] for row_id in in_ids), fees)
+            destination = self._capture_expected_destination(expected_destination, movements[out_id].account_id)
+            settlement = TransferSettlement(
+                movements[out_id], tuple(movements[row_id] for row_id in in_ids), fees, destination
+            )
             validate_settlement(settlement)
         except KeyError:
             raise ProfileFormatError("settlement_movement_unavailable_or_already_posted") from None
@@ -4174,8 +4300,9 @@ class V2ProfileStore:
         expected_basis_sha256: str,
         replacing_event_id: str | None = None,
         reason: str = "Preview only",
+        expected_destination: ExpectedOwnedDestination | None = None,
     ) -> SettlementPreview:
-        request = self._settlement_request(outgoing_row_id, incoming_row_ids, fees)
+        request = self._settlement_request(outgoing_row_id, incoming_row_ids, fees, expected_destination)
         if type(reason) is not str or not 0 < len(reason.strip()) <= 500:
             raise ProfileFormatError("transfer_reason_required")
         if self.connection.in_transaction:
@@ -4237,7 +4364,7 @@ class V2ProfileStore:
                         (entry.key, allocation.observation_id, allocation.amount_minor),
                     )
         manifest = json.dumps([[e.key, _digest(_journal_payload(e).encode())] for e in entries], separators=(",", ":"))
-        out_id, in_id = settlement.outgoing.row_id, settlement.incoming[0].row_id
+        out_id, in_id = settlement.outgoing.row_id, settlement.incoming[0].row_id if settlement.incoming else None
         checksum = _transfer_record_digest(event_id, sequence, out_id, in_id, payload, manifest, reason, basis)
         self.connection.execute(
             "INSERT INTO TransferEvents(event_id,sequence,outgoing_row_id,incoming_row_id,pair_payload,entry_versions,reason,request_basis,record_sha256) VALUES (?,?,?,?,?,?,?,?,?)",
@@ -4254,8 +4381,9 @@ class V2ProfileStore:
         preferences: V2Preferences,
         expected_basis_sha256: str,
         reason: str,
+        expected_destination: ExpectedOwnedDestination | None = None,
     ) -> str:
-        request = self._settlement_request(outgoing_row_id, incoming_row_ids, fees)
+        request = self._settlement_request(outgoing_row_id, incoming_row_ids, fees, expected_destination)
         reason = self._transfer_write_start(reason)
         try:
             events, _reviews = self._read_transfer_history()
@@ -4296,8 +4424,9 @@ class V2ProfileStore:
         preferences: V2Preferences,
         expected_basis_sha256: str,
         reason: str,
+        expected_destination: ExpectedOwnedDestination | None = None,
     ) -> str:
-        request = self._settlement_request(outgoing_row_id, incoming_row_ids, fees)
+        request = self._settlement_request(outgoing_row_id, incoming_row_ids, fees, expected_destination)
         reason = self._transfer_write_start(reason)
         try:
             events, _reviews = self._read_transfer_history()
@@ -5110,7 +5239,7 @@ class V2ProfileStore:
             if category not in {("expense", "category"), ("income", "category")}:
                 raise ProfileFormatError("cash_category_invalid")
             kind = category[0]
-            row, financial_id, accounts = self._cash_category_source(row_id)
+            row, financial_id, accounts, accounting_description = self._cash_category_source(row_id)
             amount = row.amount.minor
             if purpose is None:
                 # Existing narrow callers explicitly review an ordinary category.
@@ -5122,7 +5251,7 @@ class V2ProfileStore:
                 key=f"review:cash:{purpose}:{row_id}",
                 event_id=f"source:{row_id}",
                 posting_date=date.fromisoformat(row.date.iso),
-                description=row.description.text,
+                description=accounting_description,
                 postings=(
                     Posting(financial_id, amount, (Allocation(row_id, amount),)),
                     Posting(category_id, -amount),
@@ -5337,12 +5466,12 @@ class V2ProfileStore:
             ).fetchone()
             new_category = self._category_for_posting(category_id)
             kind = old_category[0] if old_category is not None else None
-            row, financial_id, accounts = self._cash_category_source(row_id)
+            row, financial_id, accounts, accounting_description = self._cash_category_source(row_id)
             if (
                 original.postings[0].account_id != financial_id
                 or original.event_id != f"source:{row_id}"
                 or original.posting_date.isoformat() != row.date.iso
-                or original.description != row.description.text
+                or original.description != accounting_description
                 or old_category != (kind, "category")
                 or new_category != (kind, "category")
                 or category_id == old_category_id
@@ -6320,8 +6449,15 @@ class V2ProfileStore:
                         if (
                             payload.start.provenance != "observed"
                             or previous_payload.end.provenance != "observed"
-                            or account.balance_scope != "account_total"
-                            or previous_account.balance_scope != "account_total"
+                            or not admitted_statement_scope(
+                                evidence.parser_id, account.balance_scope, financial.kind, financial.tracking_scope
+                            )
+                            or not admitted_statement_scope(
+                                saved[previous_source].parser_id,
+                                previous_account.balance_scope,
+                                financial.kind,
+                                financial.tracking_scope,
+                            )
                             or account.opening is None
                             or previous_account.closing is None
                             or account.opening.provenance != "observed"
@@ -6378,7 +6514,8 @@ class V2ProfileStore:
             for posting in entry.postings:
                 for allocation in posting.allocations:
                     active_dates.setdefault(allocation.observation_id, []).append(entry.posting_date)
-        account_kinds = {account.id: account.kind for account in self.financial_accounts()}
+        financial_accounts = {account.id: account for account in self.financial_accounts()}
+        account_kinds = {account.id: account.kind for account in financial_accounts.values()}
         result = []
         for section in coverage:
             payload = self.load_import(section.source_sha256).evidence.payload
@@ -6425,7 +6562,7 @@ class V2ProfileStore:
             printed_change = (
                 account.closing.minor - account.opening.minor
                 if account is not None
-                and account.balance_scope == "account_total"
+                and self._admitted_statement_scope(section.account_id, section.source_sha256, account)
                 and account.opening is not None
                 and account.closing is not None
                 and account.opening.provenance == "observed"
@@ -6455,7 +6592,7 @@ class V2ProfileStore:
             )
             if account is None:
                 status = "Bound source section is ambiguous"
-            elif account.balance_scope != "account_total":
+            elif not self._admitted_statement_scope(section.account_id, section.source_sha256, account):
                 status = "Outside account-total balance scope"
             elif section.period_start is None:
                 status = "Source period start unavailable"
@@ -6518,7 +6655,7 @@ class V2ProfileStore:
         self._validate_transfer_history()
         self._validate_source_interpretation_history()
         self._validate_common_journal_read()
-        rule = "v2-statement-reconciliation-4"
+        rule = "v2-statement-reconciliation-5"
         version_tables = (
             ("Sources", "sha256"),
             ("EvidenceSnapshots", "source_sha256,definition_sha256,sha256"),
@@ -6581,14 +6718,14 @@ class V2ProfileStore:
             opening_decision = decisions[section.account_id]
             printed_opening = (
                 section.opening.minor
-                if section.balance_scope == "account_total"
+                if self._admitted_statement_scope(section.account_id, section.source_sha256, source_section)
                 and section.opening is not None
                 and section.opening.provenance == "observed"
                 else None
             )
             printed_closing = (
                 section.closing.minor
-                if section.balance_scope == "account_total"
+                if self._admitted_statement_scope(section.account_id, section.source_sha256, source_section)
                 and section.closing is not None
                 and section.closing.provenance == "observed"
                 else None
@@ -6621,11 +6758,7 @@ class V2ProfileStore:
                 else None
             )
             exceptions = []
-            if (
-                section.balance_scope != "account_total"
-                or next(a for a in self.financial_accounts() if a.id == section.account_id).tracking_scope
-                != "account_total"
-            ):
+            if not self._admitted_statement_scope(section.account_id, section.source_sha256, source_section):
                 exceptions.append("account_total_scope_unavailable")
             if section.period_start is None:
                 exceptions.append("source_period_start_unavailable")
@@ -6713,6 +6846,8 @@ class V2ProfileStore:
                     not exceptions,
                     rule,
                     version,
+                    section.balance_scope,
+                    next(a.tracking_scope for a in self.financial_accounts() if a.id == section.account_id),
                 )
             )
         return tuple(result)
@@ -6891,6 +7026,12 @@ class V2ProfileStore:
                     or check.exceptions
                     or not check.posted_interpretations_reviewed
                     or not reason.strip()
+                    or not admitted_statement_scope(
+                        self.load_import(source).evidence.parser_id,
+                        check.balance_scope,
+                        check.account_kind,
+                        check.tracking_scope,
+                    )
                 ):
                     raise ValueError
             except (TypeError, ValueError):
@@ -6982,7 +7123,7 @@ class V2ProfileStore:
                 if any(
                     origin == "reported"
                     and (
-                        section.balance_scope != "account_total"
+                        not self._admitted_statement_scope(account_id, source, section)
                         or money is None
                         or money.provenance != "observed"
                         or money.minor is None
@@ -7042,6 +7183,49 @@ class V2ProfileStore:
         if len(sections) != 1:
             raise ProfileFormatError("statement_review_requires_one_bound_section")
         return payload, sections[0]
+
+    def _admitted_statement_scope(self, account_id: str, source_id: str, section: StatementAccount) -> bool:
+        financial = self.connection.execute(
+            "SELECT kind,tracking_scope FROM Accounts WHERE id=? AND role='financial'", (account_id,)
+        ).fetchone()
+        return financial is not None and admitted_statement_scope(
+            self.load_import(source_id).evidence.parser_id, section.balance_scope, financial[0], financial[1]
+        )
+
+    def _admitted_source_opening_history(self, account: FinancialAccount, amount: int, cutoff: date) -> bool:
+        if account.tracking_scope == "account_total":
+            return True
+        if account.kind != "asset" or account.tracking_scope != "cash_component":
+            return False
+        for review in self.statement_source_review_history(account.id):
+            if review.opening_origin != "reported" or not review.timing_confirmed:
+                continue
+            evidence = self.load_import(review.source_sha256).evidence
+            if (
+                evidence.parser_id != HSA_CASH_PARSER
+                or not isinstance(evidence.payload, StatementPayload)
+                or evidence.payload.start.iso is None
+            ):
+                continue
+            for section in evidence.payload.accounts:
+                if (section.source_identity, section.source_identity_form) != (
+                    review.source_identity,
+                    review.source_identity_form,
+                ):
+                    continue
+                start = date.fromisoformat(evidence.payload.start.iso)
+                if (
+                    admitted_statement_scope(
+                        evidence.parser_id, section.balance_scope, account.kind, account.tracking_scope
+                    )
+                    and section.opening is not None
+                    and section.opening.provenance == "observed"
+                    and section.opening.minor == amount
+                    and start.toordinal() > 1
+                    and cutoff == date.fromordinal(start.toordinal() - 1)
+                ):
+                    return True
+        return False
 
     def statement_source_review_snapshot(self, account_id: str, source_sha256: str) -> StatementSourceReviewSnapshot:
         if self.connection.in_transaction:
@@ -7113,14 +7297,14 @@ class V2ProfileStore:
             raise ProfileFormatError("statement_source_review_invalid")
         payload, section = self._bound_statement_section(account_id, source_sha256)
         if opening_origin == "reported" and (
-            section.balance_scope != "account_total"
+            not self._admitted_statement_scope(account_id, source_sha256, section)
             or section.opening is None
             or section.opening.provenance != "observed"
             or section.opening.minor is None
         ):
             raise ProfileFormatError("opening_reported_balance_unavailable")
         if closing_origin == "reported" and (
-            section.balance_scope != "account_total"
+            not self._admitted_statement_scope(account_id, source_sha256, section)
             or section.closing is None
             or section.closing.provenance != "observed"
             or section.closing.minor is None
@@ -7394,7 +7578,9 @@ class V2ProfileStore:
                     ):
                         raise ValueError
                     cutoff_date = date.fromisoformat(cutoff)
-                    if cutoff_date.isoformat() != cutoff or (origin == "source" and scope != "account_total"):
+                    if cutoff_date.isoformat() != cutoff or (
+                        origin == "source" and not self._admitted_source_opening_history(account, amount, cutoff_date)
+                    ):
                         raise ValueError
                     if origin == "manual" and (
                         not reference.strip()
@@ -8346,8 +8532,11 @@ class V2ProfileStore:
             earliest = min(start for _source_id, start, _account in bound if start is not None)
             tied = [(source_id, account) for source_id, start, account in bound if start == earliest]
             blockers = []
-            if financial.tracking_scope != "account_total" or any(
-                account.balance_scope != "account_total" for _source_id, account in tied
+            if any(
+                not admitted_statement_scope(
+                    saved[source_id].parser_id, account.balance_scope, financial.kind, financial.tracking_scope
+                )
+                for source_id, account in tied
             ):
                 blockers.append("non_account_total_scope")
             if any(

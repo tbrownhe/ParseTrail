@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
 
 from parsetrail.core.v2_cash_movement import cash_account_labels
 from parsetrail.core.v2_profile_store import ProfileFormatError, V2ProfileStore
-from parsetrail.core.v2_settlements import SettlementFee
+from parsetrail.core.v2_settlements import ExpectedOwnedDestination, SettlementFee
 from parsetrail.gui.v2_cash_activity_review import _category_labels, _money
 from parsetrail.gui.v2_evidence_preview import preview_saved_source
 
@@ -56,7 +56,13 @@ def settlement_details(settlement, *, labels=None, categories=(), inverse=False)
         lines.append(
             f"{'Outflow' if index == 0 else f'Receipt {index}'}: {labels.get(movement.account_id, reviewed_identity(movement))}; "
             f"{'asset value' if natural == 1 else 'liability owed'} change {_money(sign * natural * movement.amount_minor)} "
-            f"on {movement.posting_date} ({movement.date_provenance}). {movement.description}\n"
+            f"on {movement.posting_date} ({movement.date_provenance}); scope {movement.tracking_scope.replace('_', ' ')}. "
+            + (
+                movement.description
+                if movement.source_description_known
+                else f"Source description unavailable. Accounting label only: {movement.description}"
+            )
+            + "\n"
             f"Source {movement.source_sha256}; row {movement.row_id}."
         )
         for fee in settlement.fees_for(movement.row_id):
@@ -65,6 +71,18 @@ def settlement_details(settlement, *, labels=None, categories=(), inverse=False)
                 f"{category_names.get(fee.category_id, fee.category_id)}, at this leg's date.\n"
                 f"  Reference: {fee.reference}; reason: {fee.reason}."
             )
+    expected = settlement.expected_destination
+    if expected is not None:
+        lines.append(
+            f"NO RECEIPT EVIDENCE: expected owned destination {expected_identity(expected)}.\n"
+            f"Authored ownership reference: {expected.reference}; ownership explicitly acknowledged. "
+            "This expectation is review metadata, not a printed source fact. It creates no destination receipt or positive destination posting. "
+            + (
+                "Withdrawal reverses only the evidenced source effects; the historical ownership expectation is retained."
+                if inverse
+                else "Later receipt evidence requires a whole-event replacement."
+            )
+        )
     lines.append(
         f"{'Inverse of original ' if inverse else ''}ending transfer clearing: {_money(sign * settlement.residual_minor)} "
         "(unresolved / in transit; this does not establish missing counterpart history or settlement)."
@@ -73,7 +91,11 @@ def settlement_details(settlement, *, labels=None, categories=(), inverse=False)
 
 
 def reviewed_identity(movement):
-    return f"{movement.account_name} (reviewed {movement.account_kind}, ID {movement.account_id})"
+    return f"{movement.account_name} (reviewed {movement.account_kind}, {movement.tracking_scope.replace('_', ' ')}, ID {movement.account_id})"
+
+
+def expected_identity(expected):
+    return f"{expected.account_name} (reviewed {expected.account_kind}, {expected.tracking_scope.replace('_', ' ')}, ID {expected.account_id})"
 
 
 def _table(headers):
@@ -110,6 +132,7 @@ class V2SettlementReview(QDialog):
         self.review_preferences = workspace.preferences()
         self.fees = ()
         self.labels, self.movements = {}, {}
+        self._expected_outgoing_id = None
         self.setWindowTitle("2.0 transfer fees and partial settlements")
         self.resize(1180, 790)
         layout = QVBoxLayout(self)
@@ -133,7 +156,8 @@ class V2SettlementReview(QDialog):
         self.assumed_dates.toggled.connect(self._toggle_dates)
         layout.addWidget(self.assumed_dates)
         note = QLabel(
-            "Explicitly select one asset outflow and one or more owned-account receipts. Dates retain their reviewed source roles, "
+            "Explicitly select one asset outflow and its owned-account receipts. If receipt evidence is missing, explicitly review an expected owned destination. "
+            "That expectation creates no destination receipt or posting. Dates retain their reviewed source roles, "
             "even when receipts precede the outflow. No fee is inferred from a difference. Unexplained clearing remains unresolved / in transit. "
             "Unlisted unsupported or already consumed rows remain outside this review."
         )
@@ -205,6 +229,32 @@ class V2SettlementReview(QDialog):
         self.open_receipt = QPushButton("Open selected receipt evidence")
         self.open_receipt.clicked.connect(lambda: self._open_source(self._selected_receipt_id()))
         layout.addWidget(self.open_receipt)
+        self.expected_panel = QWidget()
+        expected_form = QFormLayout(self.expected_panel)
+        expected_form.setContentsMargins(0, 0, 0, 0)
+        self.expected_note = QLabel(
+            "No receipt selected. Review an expected owned destination to keep the outflow unresolved in transfer clearing. "
+            "This authored expectation is separate from source facts; it does not post to the destination or establish settlement."
+        )
+        self.expected_note.setWordWrap(True)
+        expected_form.addRow(self.expected_note)
+        self.expected_destination = QComboBox()
+        self.expected_destination.currentIndexChanged.connect(self._draft_changed)
+        expected_form.addRow("Expected owned destination", self.expected_destination)
+        self.expected_reference = QLineEdit()
+        self.expected_reference.setMaxLength(500)
+        self.expected_reference.setPlaceholderText(
+            "Required independent reference supporting ownership and expected destination"
+        )
+        self.expected_reference.textChanged.connect(self._draft_changed)
+        expected_form.addRow("Ownership / destination reference", self.expected_reference)
+        self.expected_ack = QCheckBox(
+            "I reviewed that this other tracked financial account is owned and is the expected destination"
+        )
+        self.expected_ack.toggled.connect(self._draft_changed)
+        expected_form.addRow("Explicit ownership review", self.expected_ack)
+        self.expected_panel.hide()
+        layout.addWidget(self.expected_panel)
         self.tabs.addTab(panel, "Source legs")
 
     def _build_fees(self):
@@ -406,9 +456,21 @@ class V2SettlementReview(QDialog):
             if event
             else "Choose a saved event above to inspect every source leg, fee and correction reference."
         )
+        self._sync_expectation()
+        if event is not None and event.settlement.expected_destination is not None:
+            expected = event.settlement.expected_destination
+            for widget in (self.expected_destination, self.expected_reference, self.expected_ack):
+                widget.blockSignals(True)
+            self.expected_destination.setCurrentIndex(self.expected_destination.findData(expected.account_id))
+            self.expected_reference.setText(expected.reference)
+            self.expected_ack.setChecked(expected.ownership_confirmed)
+            for widget in (self.expected_destination, self.expected_reference, self.expected_ack):
+                widget.blockSignals(False)
         self._draft_changed()
 
     def _clear_draft(self):
+        self._expected_outgoing_id = None
+        self._clear_expectation()
         for widget in (self.outgoing, self.fee_leg, self.fee_category):
             widget.blockSignals(True)
             widget.clear()
@@ -420,7 +482,9 @@ class V2SettlementReview(QDialog):
         self.source_details.clear()
         self.preview_details.clear()
         self.history_details.clear()
-        self.summary.setText("Select a complete source outflow and at least one receipt. No fee is inferred.")
+        self.summary.setText(
+            "Select a complete source outflow and receipts, or explicitly review its expected owned destination when no receipt is available. No fee is inferred."
+        )
         self.open_outgoing.setEnabled(False)
         self.open_receipt.setEnabled(False)
         self._fee_actions()
@@ -428,6 +492,7 @@ class V2SettlementReview(QDialog):
 
     def _draft_changed(self, *_args):
         self.preview = None
+        self._sync_expectation()
         self.open_outgoing.setEnabled(self.outgoing.currentData() in self.movements)
         self._receipt_selected()
         prior_leg = self.fee_leg.currentData()
@@ -465,11 +530,67 @@ class V2SettlementReview(QDialog):
         self._refresh_preview()
         self._fee_actions()
 
+    def _clear_expectation(self):
+        for widget in (self.expected_destination, self.expected_reference, self.expected_ack):
+            widget.blockSignals(True)
+        self.expected_destination.clear()
+        self.expected_reference.clear()
+        self.expected_ack.setChecked(False)
+        for widget in (self.expected_destination, self.expected_reference, self.expected_ack):
+            widget.blockSignals(False)
+        self.expected_panel.hide()
+
+    def _sync_expectation(self):
+        outgoing_id = self.outgoing.currentData()
+        outgoing = self.movements.get(outgoing_id)
+        missing = outgoing is not None and not self._receipt_ids()
+        if outgoing_id != self._expected_outgoing_id or not missing:
+            self._clear_expectation()
+            self._expected_outgoing_id = outgoing_id
+            if missing and self.snapshot is not None:
+                self.expected_destination.blockSignals(True)
+                self.expected_destination.addItem("Choose another owned financial account explicitly", None)
+                for account in self.snapshot.accounts:
+                    if account.id != outgoing.account_id:
+                        self.expected_destination.addItem(
+                            f"{self.labels.get(account.id, account.id)}; tracking scope: {account.tracking_scope.replace('_', ' ')}",
+                            account.id,
+                        )
+                self.expected_destination.blockSignals(False)
+        # After a checked receipt is removed, rebuild choices without inferring a destination.
+        if missing and self.expected_destination.count() == 0:
+            self._expected_outgoing_id = None
+            self._sync_expectation()
+            return
+        self.expected_panel.setVisible(missing)
+        self.expected_panel.setEnabled(
+            self.snapshot is not None and (self.selected_event is None or self.selected_event.status == "active")
+        )
+
+    def _expected_destination(self):
+        if (
+            self._receipt_ids()
+            or not self.expected_destination.currentData()
+            or not self.expected_reference.text().strip()
+            or not self.expected_ack.isChecked()
+        ):
+            return None
+        return ExpectedOwnedDestination(
+            self.expected_destination.currentData(), self.expected_reference.text().strip(), True
+        )
+
     def _refresh_preview(self):
         _fill(self.entry_table, ())
         self.preview_details.clear()
-        if self.snapshot is None or self.outgoing.currentData() is None or not self._receipt_ids():
-            self.summary.setText("Select a complete source outflow and at least one receipt. No fee is inferred.")
+        expected = self._expected_destination()
+        if (
+            self.snapshot is None
+            or self.outgoing.currentData() is None
+            or (not self._receipt_ids() and expected is None)
+        ):
+            self.summary.setText(
+                "Select the complete source outflow. Check actual receipts, or choose another owned destination, reference and ownership acknowledgement for a missing receipt. No destination receipt will be invented."
+            )
             self._update_actions()
             return
         if self.selected_event is not None and self.selected_event.status != "active":
@@ -487,6 +608,7 @@ class V2SettlementReview(QDialog):
                     preferences=self.review_preferences,
                     expected_basis_sha256=self.snapshot.basis_sha256,
                     replacing_event_id=self.selected_event.event_id if self.selected_event else None,
+                    expected_destination=expected,
                 )
         except (ProfileFormatError, sqlite3.Error, OSError) as exc:
             self.preview = None
@@ -524,6 +646,11 @@ class V2SettlementReview(QDialog):
             f"transfer principal {_money(settlement.sent_principal_minor)}. Net receipt allocations {_money(sum(m.amount_minor for m in settlement.incoming))}; "
             f"explicit receiving fees {_money(incoming_fee)}; gross settlement received {_money(settlement.received_gross_minor)}. "
             f"Ending clearing {_money(settlement.residual_minor)} remains unresolved / in transit. A zero residual does not establish complete source coverage."
+            + (
+                " NO RECEIPT EVIDENCE: only the source outflow is posted; the expected owned destination has no receipt or positive posting."
+                if expected is not None
+                else ""
+            )
         )
         names = {
             **self.labels,
@@ -604,7 +731,11 @@ class V2SettlementReview(QDialog):
         active = event is not None and event.status == "active"
         changed = self.preview is not None and (event is None or self.preview.settlement != event.settlement)
         self.confirm.setText(
-            "Confirm and replace whole event" if event is not None else "Confirm and post full settlement"
+            "Confirm and replace whole event"
+            if event is not None
+            else "Confirm owned outflow awaiting receipt"
+            if self.preview is not None and self.preview.settlement.expected_destination is not None
+            else "Confirm and post full settlement"
         )
         self.confirm.setEnabled(
             bool(
@@ -622,7 +753,7 @@ class V2SettlementReview(QDialog):
             self.status.setText(
                 "Historical event: no money can be posted, withdrawn or replaced from this saved state."
             )
-        elif self.preview is None and self.outgoing.currentData() is not None and self._receipt_ids():
+        elif self.preview is None and self.outgoing.currentData() is not None:
             self.status.setText(self.summary.text())
         elif self.preview is not None:
             self.status.setText(
@@ -664,6 +795,8 @@ class V2SettlementReview(QDialog):
                 + settlement_details(event.settlement, labels=self.labels, categories=snapshot.categories, inverse=True)
                 + "\n\nReplacement entry effects only (all original journal entries are reversed at their own dates):\n"
                 if event
+                else "Record this owned outflow awaiting receipt evidence?\n\nNew source-outflow entry effects only:\n"
+                if preview.settlement.expected_destination is not None
                 else "Post this complete settlement?\n\nNew entry effects:\n"
             )
             + settlement_details(preview.settlement, labels=self.labels, categories=snapshot.categories)
@@ -673,7 +806,13 @@ class V2SettlementReview(QDialog):
         )
         if (
             QMessageBox.question(
-                self, "Confirm full settlement replacement" if event else "Confirm full settlement", message
+                self,
+                "Confirm full settlement replacement"
+                if event
+                else "Confirm owned outflow awaiting receipt"
+                if preview.settlement.expected_destination is not None
+                else "Confirm full settlement",
+                message,
             )
             != QMessageBox.Yes
         ):
@@ -691,6 +830,15 @@ class V2SettlementReview(QDialog):
                     "preferences": self.review_preferences,
                     "expected_basis_sha256": snapshot.basis_sha256,
                     "reason": reason,
+                    "expected_destination": (
+                        ExpectedOwnedDestination(
+                            preview.settlement.expected_destination.account_id,
+                            preview.settlement.expected_destination.reference,
+                            True,
+                        )
+                        if preview.settlement.expected_destination is not None
+                        else None
+                    ),
                 }
                 if event is not None:
                     saved_id = store.replace_reviewed_settlement(

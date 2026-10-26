@@ -207,6 +207,8 @@ class V2CashMovementDialog(QDialog):
             f"{journal.excluded_unreviewed_entries} unreviewed and {journal.excluded_opening_entries} opening record(s) "
             "were excluded in this period. Card purchases alone are not cash movement. "
             "A settlement with a fee can appear in two purpose counts; those counts are not additive. "
+            f"Across all dates, {report.expected_receipts_without_source} reviewed owned outflow(s) involving selected "
+            "accounts have no receipt evidence. Expected amounts add no destination movement. "
             "Unallocated counts may include supporting repeats. Pending evidence and source capture/coverage gaps "
             "prevent a complete or certified cash-flow claim."
         )

@@ -9,6 +9,7 @@ contracts own lasting behavior. Start with those documents, not historical logs.
 
 | Record | Roadmap scope | Implementation / evidence |
 | --- | --- | --- |
+| [HSA cash components and owned outflows awaiting receipts](2026-10-25-v2-hsa-cash.md) | V2-4/5, CF2 | Completed development and independent review; finite cash scope, explicit purposes, unresolved clearing and authored expected-destination metadata. |
 | [Source closing values and dated-value withdrawal](2026-10-25-v2-source-values.md) | V2-4/5, P2-4 | Completed development and independent review; finite proof/scope/sign, conflicts, nonposting history and exact scoped source-review guards. |
 | [Transfer fees and partial settlements](2026-10-25-v2-settlements.md) | V2-4/5, CF2 | Completed development and independent review; exact fee allocations, multiple receipts, dated clearing and whole-event correction. |
 | [Refunds, income adjustments and stable categories](2026-10-25-v2-category-purposes.md) | V2-4/5 | Completed development and independent review; explicit source purposes, protected built-ins and exact negative-net reporting. |

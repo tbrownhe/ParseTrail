@@ -29,7 +29,12 @@ from PySide6.QtWidgets import (
 from parsetrail.core.v2_profile_store import ProfileFormatError, TransferCandidate, V2ProfileStore
 from parsetrail.core.v2_workspace import V2Workspace
 from parsetrail.gui.v2_cash_activity_review import _money
-from parsetrail.gui.v2_settlement_review import V2SettlementReview, reviewed_identity, settlement_details
+from parsetrail.gui.v2_settlement_review import (
+    V2SettlementReview,
+    expected_identity,
+    reviewed_identity,
+    settlement_details,
+)
 
 
 def _pair_key(pair):
@@ -43,8 +48,14 @@ def _pair_details(pair, *, inverse=False):
         amount = movement.amount_minor * natural * (-1 if inverse else 1)
         direction = "asset value" if movement.account_kind == "asset" else "amount owed"
         result.append(
-            f"{title}: {movement.account_name}; {direction} change {_money(amount)} on {movement.posting_date} "
-            f"({movement.date_provenance}). {movement.description}\n"
+            f"{title}: {reviewed_identity(movement)}; {direction} change {_money(amount)} on {movement.posting_date} "
+            f"({movement.date_provenance}). "
+            + (
+                movement.description
+                if movement.source_description_known
+                else f"Source description unavailable; accounting label only: {movement.description}"
+            )
+            + "\n"
             f"Source {movement.source_sha256}; row {movement.row_id}."
         )
     return "\n".join(result)
@@ -100,7 +111,7 @@ class V2TransferReview(QDialog):
             "Equal and opposite movements are suggestions only. Confirm the pair from both sources. "
             "A card repayment moves cash to the card liability and does not add spending. "
             "Different source dates use transfer clearing. Corrections withdraw or replace the whole confirmed event. "
-            "Dismissal changes suggestions only; its evidence remains pending. Use the full settlement review for explicit fees and multiple or partial receipts."
+            "Dismissal changes suggestions only; its evidence remains pending. Use the full settlement review for explicit fees, multiple or partial receipts, or an owned outflow awaiting receipt evidence."
         )
         note.setWordWrap(True)
         layout.addWidget(note)
@@ -320,6 +331,12 @@ class V2TransferReview(QDialog):
                     else f"{len(event.settlement.incoming)} dated receipt(s)",
                     reviewed_identity(event.pair.incoming)
                     if event.pair is not None
+                    else (
+                        "Receipt missing; expected owned: "
+                        + expected_identity(event.settlement.expected_destination)
+                        + f"; {_money(event.settlement.residual_minor)} clearing"
+                    )
+                    if event.settlement.expected_destination is not None
                     else "; ".join(dict.fromkeys(reviewed_identity(m) for m in event.settlement.incoming))
                     + f"; {_money(event.settlement.residual_minor)} clearing",
                     _money(-event.settlement.outgoing.amount_minor),

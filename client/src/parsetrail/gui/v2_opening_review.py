@@ -113,7 +113,7 @@ class V2OpeningReview(QDialog):
     BLOCKERS = {
         "no_bound_statement": "No bound statement",
         "unknown_source_period": "Unknown source period",
-        "non_account_total_scope": "Source is not an account-total balance",
+        "non_account_total_scope": "Source scope and bound financial kind/tracking scope do not support a printed opening",
         "printed_opening_unavailable": "Printed opening unavailable",
         "conflicting_earliest_openings": "Earliest sources have conflicting printed openings",
         "duplicate_earliest_source_sections": "Multiple earliest sections in one source",
@@ -309,6 +309,11 @@ class V2OpeningReview(QDialog):
                     f"({opening.provenance if opening else 'unknown'}), {section.balance_scope.replace('_', ' ')}. "
                     f"Section: {section.source_identity} ({section.source_identity_form}). "
                     f"Source {source_id}"
+                    + (
+                        " Cash-component facts apply only to this cash section; the whole HSA and investment portfolio remain outside this review."
+                        if section.balance_scope == "cash_component"
+                        else ""
+                    )
                 )
         self._loaded_section = section if source_id is not None else None
         self._update_actions()
@@ -362,10 +367,11 @@ class V2OpeningReview(QDialog):
         candidate = self.candidate
         amount = candidate.printed_opening_minor
         natural = 1 if candidate.account_kind == "asset" else -1
+        scopes = ", ".join(sorted({section.balance_scope.replace("_", " ") for section in snapshot.sections}))
         self.candidate_label.setText(
             f"Start: {candidate.earliest_period_start.isoformat() if candidate.earliest_period_start else 'unknown'}; "
             f"printed candidate: {_money(amount * natural) if amount is not None else 'unavailable'}; "
-            f"{candidate.bound_statement_sections} bound section(s)."
+            f"{candidate.bound_statement_sections} bound section(s); source scope: {scopes or 'unavailable'}."
         )
         if self.decision is None:
             self.saved_label.setText("Not established; unknown is not zero.")
@@ -528,10 +534,17 @@ class V2OpeningReview(QDialog):
             return
         cutoff = date.fromordinal(candidate.earliest_period_start.toordinal() - 1)
         natural = 1 if candidate.account_kind == "asset" else -1
+        scopes = ", ".join(sorted({section.balance_scope.replace("_", " ") for section in self.sections}))
         message = (
             f"Confirm {self.account.currentText()}'s printed opening of "
             f"{_money(candidate.printed_opening_minor * natural)} as of {cutoff.isoformat()}?\n\n"
-            f"All {len(candidate.earliest_source_ids)} earliest source(s) have been reviewed. "
+            f"Source scope: {scopes or 'unavailable'}. "
+            + (
+                "This establishes only the cash-component opening; it does not establish the whole HSA or investment portfolio. "
+                if any(section.balance_scope == "cash_component" for section in self.sections)
+                else ""
+            )
+            + f"All {len(candidate.earliest_source_ids)} earliest source(s) have been reviewed. "
             "A nonzero amount posts through opening equity; zero records a decision without a journal. "
             "This does not create income or spending."
         )

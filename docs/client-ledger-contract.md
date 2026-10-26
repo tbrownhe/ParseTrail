@@ -18,6 +18,11 @@ movements with explicit expense, expense refund, income or income-adjustment
 purpose, whole-movement owned transfers/card payments and reviewed multi-receipt
 settlements with explicit sending/receiving fees, printed
 and reviewed manual openings, separate manual/source closing values and closure metadata.
+The finite HealthEquity cash family also supports explicitly reviewed cash purposes,
+owned movements, printed openings and reconciliation for asset cash-component
+tracking. Summary-only HSA/retirement rows remain nonposting. Blank descriptions
+stay unknown in evidence; a generic reviewed-entry label does not assert interest
+or merchant text. Component reconciliation never claims the whole portfolio.
 Cash-category, card-category/date and source/manual opening corrections
 are available. Supported ordinary interpretations can be withdrawn, then freshly
 reviewed; posted-repeat repair retains one interpretation and retires its
@@ -120,6 +125,14 @@ account 90, expense 10 and credits clearing 100. Raw source effects remain exact
 gross settlement is a reviewed allocation. Every advanced leg uses its own date,
 even when receipt precedes outflow; no forced common date or zero clearing.
 Adding a later receipt is an atomic whole-event replacement preserving inverses.
+An outflow with no receipt can be reviewed with explicit expected owned destination,
+ownership acknowledgement and reference. The full observed source effect posts
+against clearing (and any explicitly reviewed fees); the destination gets no
+posting, observation, allocation or receipt date. The expectation is retained as
+authored metadata. Missing evidence remains visible even in a destination-only
+report with zero observed movement. Later receipt evidence replaces the whole
+event; withdrawal/replacement retains original dated inverses and expectation
+history. This does not infer ownership from source labels or clear the residual.
 Multi-outflow/foreign-currency and unsupported source shapes remain pending.
 
 Matching equal and opposite amounts in the same currency on different accounts

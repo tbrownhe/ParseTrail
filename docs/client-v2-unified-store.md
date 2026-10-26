@@ -29,7 +29,7 @@ evidence belong in [packet records](work/README.md).
 
 ## Profile format and lifecycle
 
-The current pre-release profile schema is revision 19; check `SCHEMA_VERSION`
+The current pre-release profile schema is revision 20; check `SCHEMA_VERSION`
 in `v2_profile_store.py` when opening a packet. Format markers, exact table and
 foreign-key shapes, append-only triggers and SQLite integrity are checked before
 writable use. Older disposable pilots, 1.x, unknown, damaged and newer shapes
@@ -87,11 +87,17 @@ fresh replacement identities. Unsupported interpretations and unknown posting da
 pending.
 
 TransferEvents also retains finite reviewed settlement manifests: one complete
-asset outflow, 1..32 distinct owned receipts, and at most 64 explicit fee parts
+asset outflow, up to 32 distinct owned receipts, and at most 64 explicit fee parts
 assigned to their source legs. Every raw financial amount is allocated once;
 each advanced leg posts at its own reviewed source date, with fee expenses and
 transfer clearing. Sending fees reduce sent principal; receiving fees add to a
 net receipt's reviewed gross settlement. Residual clearing stays unresolved.
+Zero receipts require an explicitly confirmed, distinct existing owned destination
+and reference. The service captures its identity/kind/scope under the write lock;
+the expectation is authored metadata only. No destination observation, allocation,
+receipt date or positive financial posting is created. Expected ownership cannot
+coexist with actual receipts in one manifest. Later receipt evidence uses whole
+replacement. Retained history protects destination kind/scope even after retirement.
 Legacy whole-pair APIs retain their shape; generic history exposes the full
 manifest without pretending it is one pair. Whole replacement/withdrawal retains
 every dated inverse and source-use history. Earlier pilot formats are recreated.
@@ -100,7 +106,8 @@ Code-owned clearing identity/class/role/purpose/scope and sole active allocation
 for each transfer source leg are checked in common reads/backups. Reserved
 `internal:` IDs cannot be authored as custom financial/category accounts. JSON
 history decoding has finite bounds and controlled malformed-depth refusal.
-The [settlement packet](work/2026-10-25-v2-settlements.md) records development checks.
+The [settlement packet](work/2026-10-25-v2-settlements.md) and
+[HSA/missing-receipt packet](work/2026-10-25-v2-hsa-cash.md) record development checks.
 
 Account-total cash/card category movements admit explicit expense, expense refund,
 income and income adjustment purposes with compatible exact source signs and
@@ -108,6 +115,14 @@ category classes. Initial review requires a purpose/category choice. Category/da
 corrections retain purpose/class; a change of purpose uses withdrawal/fresh review.
 Net spending, income and budgets may be negative; refunds/adjustments never change
 the imported amount or date and never imply an owned transfer or card payment.
+
+The finite `hsa_cash_line_pilot` activity family additionally admits these explicit
+purposes and owned movements only for an asset with cash-component tracking.
+Unknown source descriptions remain unknown; a separate code-owned accounting label
+can identify a reviewed entry without claiming printed merchant/interest text.
+Printed openings and reconciliation admit that same exact component rule. Other
+HSA/retirement summary rows remain nonposting; existing account-total opening rules
+remain available. Scope metadata survives correction, withdrawal and history.
 
 `StatementSourceReviews` is one append-only assertion history for bound statement
 sections. Opening/closing origin, inclusive-period timing, posting-date certainty,
@@ -119,7 +134,8 @@ available independently. Forms load a coherent section/review/basis snapshot and
 the write lock rechecks that original context, including an unreviewed initial form.
 A stale form cannot overwrite another revision or qualify a newly assigned section.
 
-An opening decision requires matching observed account-total openings across all
+An opening decision requires matching observed account-total openings (or the
+finite HSA cash-component case above) across all
 tied earliest sources and their latest reported-origin/timing reviews. Nonzero
 openings post through internal opening equity at the prior-day cutoff; zero
 saves a decision without a journal. A changed relevant earliest-source assertion
@@ -258,6 +274,15 @@ validates this retained history independently of current reconciliation availabi
 before publishing a new copy. A saved snapshot digest detects accidental changes;
 it does not authenticate a profile against hostile modification. Earlier disposable
 pilot schemas must be recreated, without a migration or 1.x alias.
+
+Reconciliation rule 5 retains balance/tracking scope explicitly and qualifies HSA
+success as cash-component only. Older saved rules 3/4 remain historical/stale with
+their original account-total defaults; current-rule missing/mismatched scope is
+refused. Capture, unclassified source text and portfolio completeness stay separate.
+Cash reports disclose active expected receipts even when only the expected
+destination is selected: no observed destination activity means zero movement,
+alongside a missing-receipt warning. Workbook event metadata retains expectations
+separately from actual source legs and journal money.
 
 SQLite profile snapshots contain embedded sources, authored data, journals and
 all review history. They are verified before publication at a new path; restore

@@ -87,6 +87,7 @@ class CashMovementReport:
     total_minor: int
     outside_scope_entries: int
     account_labels: tuple[tuple[str, str], ...]
+    expected_receipts_without_source: int = 0
 
 
 def read_cash_movement(
@@ -165,10 +166,15 @@ def read_cash_movement(
                         classification = "mixed_settlement" if fee_effect else purpose
                         note = (
                             f"Reviewed settlement sent from {labels[settlement.outgoing.account_id]} "
-                            f"on {settlement.outgoing.posting_date}; receipts: "
-                            + "; ".join(
-                                f"{labels[movement.account_id]} on {movement.posting_date}"
-                                for movement in settlement.incoming
+                            f"on {settlement.outgoing.posting_date}; "
+                            + (
+                                "receipts: "
+                                + "; ".join(
+                                    f"{labels[movement.account_id]} on {movement.posting_date}"
+                                    for movement in settlement.incoming
+                                )
+                                if settlement.incoming
+                                else "no receipt evidence is recorded"
                             )
                             + f". Remaining clearing after all reviewed receipts (any date): {settlement.residual_minor} USD minor units. "
                             "Event context can lie outside this period and adds no money here."
@@ -178,6 +184,13 @@ def read_cash_movement(
                                 f"{fee.amount_minor} USD minor units to {category_names[fee.category_id]} "
                                 f"on source row {fee.source_row_id}; {fee.reference}; {fee.reason}"
                                 for fee in settlement.fees
+                            )
+                        if settlement.expected_destination is not None:
+                            expected = settlement.expected_destination
+                            note += (
+                                f" Expected owned destination: {labels[expected.account_id]} (ID {expected.account_id}). "
+                                f"Ownership review reference: {expected.reference}. This is an authored expectation; "
+                                "no destination receipt or positive financial posting has been created."
                             )
                     elif pair.kind == "card payment":
                         classification = "card_payment"
@@ -225,6 +238,14 @@ def read_cash_movement(
                 sum(row.amount_minor for row in rows),
                 len(journal.entries) - len(rows),
                 tuple(sorted(labels.items())),
+                sum(
+                    event.settlement.expected_destination is not None
+                    and (
+                        event.settlement.outgoing.account_id in selected
+                        or event.settlement.expected_destination.account_id in selected
+                    )
+                    for event in events.values()
+                ),
             )
         finally:
             store.connection.execute("ROLLBACK")

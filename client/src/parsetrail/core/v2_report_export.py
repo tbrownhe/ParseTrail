@@ -427,6 +427,13 @@ def write_reviewed_journal_workbook(report: ReviewedJournalExport, destination_p
                 "Replacement event",
                 "Action reason",
                 "Original entry references",
+                "Expected owned destination ID",
+                "Expected reviewed name",
+                "Expected kind",
+                "Expected tracking scope",
+                "Ownership acknowledged",
+                "Ownership review reference",
+                "Expectation qualification",
             ),
             [
                 (
@@ -443,6 +450,23 @@ def write_reviewed_journal_workbook(report: ReviewedJournalExport, destination_p
                     event.replacement_event_id,
                     event.action_reason,
                     "\n".join(event.entry_keys),
+                    event.settlement.expected_destination.account_id if event.settlement.expected_destination else None,
+                    event.settlement.expected_destination.account_name
+                    if event.settlement.expected_destination
+                    else None,
+                    event.settlement.expected_destination.account_kind
+                    if event.settlement.expected_destination
+                    else None,
+                    event.settlement.expected_destination.tracking_scope
+                    if event.settlement.expected_destination
+                    else None,
+                    event.settlement.expected_destination.ownership_confirmed
+                    if event.settlement.expected_destination
+                    else None,
+                    event.settlement.expected_destination.reference if event.settlement.expected_destination else None,
+                    "Authored ownership expectation; no receipt evidence or destination posting"
+                    if event.settlement.expected_destination
+                    else None,
                 )
                 for event in report.settlements
             ],
@@ -463,6 +487,8 @@ def write_reviewed_journal_workbook(report: ReviewedJournalExport, destination_p
                 "Date provenance",
                 "Raw signed source minor units",
                 "Reviewed transfer portion minor units",
+                "Tracking scope",
+                "Source description known",
             ),
             [
                 (
@@ -483,6 +509,8 @@ def write_reviewed_journal_workbook(report: ReviewedJournalExport, destination_p
                         else movement.amount_minor
                         + sum(fee.amount_minor for fee in event.settlement.fees_for(movement.row_id))
                     ),
+                    movement.tracking_scope,
+                    movement.source_description_known,
                 )
                 for event in report.settlements
                 for index, movement in enumerate(event.settlement.movements)

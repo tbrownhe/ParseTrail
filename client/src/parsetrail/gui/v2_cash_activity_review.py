@@ -112,7 +112,9 @@ class _ReviewModel(QAbstractTableModel):
             row.date or "Unknown",
             row.description or "Description not printed",
             _money(row.amount_minor),
-            row.financial_account or "Not assigned",
+            f"{row.financial_account} ({row.tracking_scope.replace('_', ' ')})"
+            if row.financial_account
+            else "Not assigned",
             row.status,
             PURPOSE_LABELS.get(row.purpose, "Pending explicit review"),
         )
@@ -146,6 +148,10 @@ class V2CashActivityReview(QDialog):
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.table.selectionModel().currentRowChanged.connect(self._selected)
         layout.addWidget(self.table)
+        self.source_context = QLabel()
+        self.source_context.setWordWrap(True)
+        self.source_context.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(self.source_context)
         form = QFormLayout()
         self.purpose = QComboBox()
         self.purpose.currentIndexChanged.connect(self._purpose_changed)
@@ -224,6 +230,16 @@ class V2CashActivityReview(QDialog):
 
     def _update_withdraw(self, *_args) -> None:
         row = self._current()
+        self.source_context.setText(
+            f"Reviewed account scope: {(row.tracking_scope or 'unavailable until account assignment').replace('_', ' ')}. "
+            + (
+                f"Source description: {row.description}."
+                if row.source_description_known
+                else f"Source description unavailable / unknown; evidence remains unchanged. Code-owned accounting label only: {row.accounting_description}. No interest, contribution or investment purpose is inferred."
+            )
+            if row is not None
+            else "Select a source row to inspect its description provenance and account scope."
+        )
         purpose = self.purpose.currentData()
         correcting = row is not None and row.entry_key is not None
         label = PURPOSE_LABELS.get(purpose, "purpose")
@@ -289,8 +305,9 @@ class V2CashActivityReview(QDialog):
         rows, self.categories, overlaps = snapshot.rows, snapshot.categories, snapshot.overlapping_source_ids
         self.note.setText(
             "Select a row assigned to an asset account with a source posting date. "
-            "Bank statement rows also need account-total scope; other statement rows stay pending. "
+            "Supported bank statements use account-total scope; the admitted HealthEquity cash section uses asset cash-component scope only. "
             "Choose expense, expense refund, income or income adjustment explicitly when supported. Amount signs do not establish purpose. "
+            "HSA contributions, medical spending and investment movements are never inferred. Cash-component review does not review the whole HSA or portfolio. "
             "Owned transfers, card repayments and loan proceeds require their own supported review; leave unsupported movements pending."
             + (
                 f" This statement has {len(overlaps)} possible overlapping saved source(s). Review before posting."
@@ -336,9 +353,20 @@ class V2CashActivityReview(QDialog):
             else "New entry effects:\n" + effects
         )
         message = (
-            f"{action}?\n\n{row.date or 'Unknown'}  {row.description}\n"
+            f"{action}?\n\n{row.date or 'Unknown'}  {row.description if row.source_description_known else 'Source description unavailable / unknown'}\n"
             f"{_money(row.amount_minor)}  {row.financial_account}\n"
-            f"Purpose: {PURPOSE_LABELS[purpose]}\nCategory: {self.category.currentText()}\nReason: {reason}\n"
+            f"Account scope: {row.tracking_scope.replace('_', ' ')}. "
+            + (
+                "Only this cash component is reviewed; the whole HSA and investment portfolio remain outside this review. "
+                if row.tracking_scope == "cash_component"
+                else ""
+            )
+            + (
+                f"\nCode-owned accounting label only: {row.accounting_description}; this does not supply missing printed source text.\n"
+                if not row.source_description_known
+                else "\n"
+            )
+            + f"Purpose: {PURPOSE_LABELS[purpose]}\nCategory: {self.category.currentText()}\nReason: {reason}\n"
             f"{effects}\n"
             f"{PURPOSE_ASSERTIONS[purpose]} Owned transfers and card repayments use a separate review."
         )
