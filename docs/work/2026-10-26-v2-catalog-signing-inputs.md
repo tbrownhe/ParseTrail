@@ -2,7 +2,7 @@
 
 Date: 2026-10-26. Roadmap IDs: P2-4/5, V2-7.
 Authorization: continuing approved initial V2/P2 development; DEC-2 local catalog first.
-Implementation: tooling complete and frozen; final-revision candidate generation pending.
+Implementation: tooling and exact final-code unsigned starter inputs complete.
 Automated verification: focused client/pilot and whole-client integration passed.
 Independent review: complete; two findings fixed, no outstanding trust-boundary findings.
 Owner acceptance: pending starter-catalog/release review.
@@ -80,10 +80,21 @@ Windows 11 AMD64/Python 3.13.15; `PYTHONPATH=.;client/src;client`,
   unavailable native leaf-symlink creation. No hostile-authenticity claim is made.
 - Ruff, formatting and owned whitespace checks passed. Integrated whole-client
   run **2121 passed, 4 skipped in 977.04s**; parser pilot **262 passed in 84.59s**.
-  Concrete final-revision candidate results will be recorded at the freeze.
+  Concrete final-revision candidate results are recorded below.
+
+Final input was generated from clean code freeze
+`1e61bec33af214930d42396c6ff5f3b9a146e6d4` using the actual prepare CLI and shipped
+public ID `data-ed25519-85bb107180ef75ab92b9debcbc16472e`, sequence 1. The curated
+23 required declaration files and only their account contexts are copied under
+`scratch/v2-release-review-1e61bec/catalog-definitions`. Review artifacts are in
+`scratch/v2-release-review-1e61bec/unsigned-catalog-1`: exact `catalog.json`,
+`catalog.sha256` and readable `review.json`. Payload SHA-256:
+`3d6574d5646003ff995c8c6663fd3b8b526b0221a08312abcfbb591f5cc3e2bc`.
+The offline validator confirms source revision, public ID and 23 definitions;
+`catalog.sig` is absent. This is explicitly not activatable until the reviewed
+bytes receive a valid detached signature. No private key or passphrase was used.
 
 ## Remaining work
 
-Generate the exact unsigned starter inputs at
-the integrated freeze. Production detached signing and installed/offline signed
+Production detached signing and installed/offline signed
 catalog acceptance retain their explicit owner/release gates.

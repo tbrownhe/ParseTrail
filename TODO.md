@@ -6,17 +6,22 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-[Frozen Windows family/recovery tooling](docs/work/2026-10-25-v2-frozen-verification.md)
-is active for the final clean source freeze and available Windows probe checks.
-Generate exact unsigned starter-catalog inputs and the disposable walkthrough at
-that revision. Production signing/publication and workstation installation remain
-outside the authorized development scope.
+None active. Initial V2/P2 development and available Windows verification are
+complete within the approved scope. The final [frozen Windows record](docs/work/2026-10-25-v2-frozen-verification.md)
+identifies the tested code freeze; documentation closeout does not change it.
 
-## Next candidates
+## Remaining review and action gates
 
-1. [P2-3/4/5 readiness](ROADMAP.md#p2-3): remaining family/platform/catalog work;
-   choose checks or implementation appropriate to available platforms and scope.
-   [Starting points](.agents/skills/parsetrail-workflow/references/code-and-checks.md#parser-and-catalog-readiness).
+1. [V2-UX](docs/work/2026-10-26-v2-integrated-ui-review.md): final pinned disposable
+   walkthrough ready for the consolidated owner pass requested at the end.
+2. [Platform/release checks](ROADMAP.md#release-checklist): targeted Intel,
+   installed/offline/OS integration and no-build-toolchain environment acceptance.
+3. [Starter signing](docs/work/2026-10-26-v2-catalog-signing-inputs.md), versioning
+   and release actions: exact unsigned inputs ready; production signing,
+   installation and publication require their specifically authorized scope.
+
+Later planning capabilities, proposals and DEC-3 deferrals remain future work;
+they are not selected by this closeout.
 
 ## Most recent product packet
 

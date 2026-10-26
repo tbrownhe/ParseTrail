@@ -2,9 +2,9 @@
 
 Date: 2026-10-25. Roadmap IDs: P2-3/4/5, V2-6/7.
 Authorization: approved roadmap and continued development; test-only probe.
-Implementation: diagnostic complete; October 26 integrated freeze/probe execution selected.
-Automated verification: source checks passed; frozen probe not yet performed.
-Independent review: diagnostic implementation complete, no actionable findings.
+Implementation: complete; October 26 frozen Windows probe and development setup compile passed.
+Automated verification: source integration and all available frozen Windows checks passed.
+Independent review: diagnostic review and separate acceptance-agent execution complete; primary verified hashes/results.
 Owner acceptance: not performed; UX/native/installed gates remain separate.
 Release authorization: not authorized.
 
@@ -136,8 +136,56 @@ Focused release-bootstrap and native installation-identity checks after this
 one-option change: **35 passed in 2.85s**. Application/ledger/parser code is
 unchanged from the fully tested integration; native build verification follows.
 
+### Successful exact Windows probe — October 26
+
+Code freeze: clean `1e61bec33af214930d42396c6ff5f3b9a146e6d4`, application version
+unchanged at development `1.4.2`, profile schema 22. Windows 11 AMD64 build 26300,
+Python 3.13.15, PyInstaller 6.21.0, PySide6 6.11.2. The acceptance specialist built
+the actual production entry as onedir/windowed with the corrected production
+option set, all three hidden imports and required assets/notices/licenses/
+migrations/alembic data. Every cache/work/spec/home/temp/output path stayed under
+ignored `scratch/v2-frozen-1e61bec`; no release metadata was fabricated.
+
+| Stage | Result / elapsed seconds |
+| --- | --- |
+| Actual frozen build | Passed, 75.10 |
+| Isolated PE32+ AMD64 architecture check | Passed, 0.07 |
+| All six bounded worker pipes in the windowed executable | Passed, 3.44 |
+| External public source-runtime fixture baseline | Passed, 10.91 |
+| Frozen all-declaration admission/recovery | Passed, 17.60 |
+| Frozen V2 offline fresh/cached/network-failure | Passed, 2.70 / 2.51 / 2.61 |
+| Full unsigned development setup compilation | Passed, 38.14; never executed |
+
+All 23 declarations (21 PDF, 2 CSV, across the required families) admitted their
+45 synthetic observations with source-baseline equality and exact retries. All
+11 trust/reopen/cancellation/refusal/rollback/backup/restore/recovery/zero-automatic-
+journal checks passed. These profiles are unbound evidence-only fixtures; this
+does not establish private-source parity, complete capture or accounting acceptance.
+All three offline modes used actual Windows Qt with display suppressed, painted
+chooser/workspace/cash-review/reports, denied all networking with zero attempts,
+and retained exact expense 5743 minor units plus backup/recovery. Observed timing
+and heartbeat fields are not cold-start benchmarks. Total orchestration: 154.24s.
+
+The 2,481 bundle files were hashed/rechecked. Primary independently read the
+structured reports and recomputed these SHA-256 values:
+
+| Artifact under `scratch/v2-frozen-1e61bec` | SHA-256 |
+| --- | --- |
+| `dist/ParseTrail/ParseTrail.exe` (28,043,635 bytes) | `084b6133d9f540fec14b9ca764a4e7d020cd745f0276cb1b5c07c19b5097a897` |
+| `ParseTrail2-development-probe-setup.exe` (150,672,537 bytes) | `3cc543399c7cc9d150506c1475f0adaf27ad8c80194b1c90dc05cc6d07aa0e4e` |
+| `bundle-manifest.json` | `a8ca230340920a9055296357ad90d6e8ae080dc2fe9055eb466e26de9cabfa41` |
+| `probe-report.json` | `4d7d659981b1bd938d616f952a9d87f5f230f92d35ac48e2050dffa5f2490c45` |
+
+Commands, public inputs, per-stage logs/reports, source-tree identity and limits
+are retained beside those files. Git remained clean at the same source commit
+through post-checks. Later documentation closeout does not change this tested
+binary's source identity. The frozen native dependency smoke was intentionally
+not run without genuine tagged release provenance; its gate was not bypassed.
+Source native dependency operations passed separately. No installer was executed;
+no daily/1.x profile, registry, production key, deployment or publication was touched.
+
 ## Remaining work
 
-Intel native limits/pipes, installer and installed/offline/OS integration,
-no-build-toolchain Intel environment, owner V2-UX and separately authorized
+Owner V2-UX, Intel native limits/pipes, installed/offline/OS integration,
+no-build-toolchain Intel environment and separately authorized
 production starter signing/version/publication remain their own gates.

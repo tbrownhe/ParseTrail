@@ -2,7 +2,7 @@
 
 Date: 2026-10-26. Roadmap IDs: V2-1/6/7, P2-3/4/5.
 Authorization: continuing approved initial V2/P2 development.
-Implementation: default V2 entry and isolated diagnostics complete and frozen.
+Implementation: complete; source and corrected production-option frozen Windows verification passed.
 Automated verification: focused/native source, whole-client, parser and demo checks passed.
 Independent review: complete; report publication finding fixed and independently rechecked.
 Owner acceptance: pending final integrated V2-UX.
@@ -122,13 +122,21 @@ except explicit Windows-native display-suppressed checks. Commands use
   No global policy/tool installation changed. No additional implementation edits
   occurred during these runs; documentation closeout followed.
 - Focused Ruff/format/whitespace checks passed. Final frozen candidate results
-  remain separate and will be recorded at the integrated freeze.
+  are recorded separately in the linked Windows packet below.
 
 These are synthetic source/offscreen/native-Qt checks. They do not establish owner
 UX, actual installation, native Intel, production starter signing or release.
 
+The final [frozen Windows packet](2026-10-25-v2-frozen-verification.md) verifies
+code freeze `1e61bec33af214930d42396c6ff5f3b9a146e6d4`: AMD64 build, all six worker
+pipes, all 23 declaration fixtures/recovery and all three Windows Qt offline modes
+passed. A build-only correction removed the optional unusable Tcl splash; the
+application/ledger/parser source is unchanged from the full integration checks.
+Tagged production provenance and owner/native-platform acceptance remain separate.
+
 ## Remaining work
 
-Freeze the final integrated candidate, prepare the updated disposable owner walkthrough and unsigned
-starter-catalog signing inputs, run available Windows checks, and identify only the
-actual remaining owner/native/external/signing/release gates.
+The integrated candidate, disposable walkthrough and exact unsigned starter inputs
+are prepared and available Windows checks passed. Remaining work is owner UI/UX,
+targeted Intel/installed/no-build-toolchain acceptance and specifically authorized
+production signing/version/release actions.

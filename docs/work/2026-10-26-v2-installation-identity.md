@@ -72,8 +72,15 @@ Git Bash `-n` verifies Mac shell syntax. Integrated whole-client checks:
 **2121 passed, 4 skipped in 977.04s**, including the native compiler fixture cases.
 The frozen candidate remains a separate check.
 
-No installer, registry, shortcut, live/1.x profile or installed application was
-mutated. Native Intel/actual installation acceptance remains unperformed; these
+The final [frozen Windows packet](2026-10-25-v2-frozen-verification.md) built code
+freeze `1e61bec33af214930d42396c6ff5f3b9a146e6d4` and compiled the full unsigned
+development setup with actual NSIS 3.13 in 38.14s. Setup size 150,672,537 bytes,
+SHA-256 `3cc543399c7cc9d150506c1475f0adaf27ad8c80194b1c90dc05cc6d07aa0e4e`.
+It was not executed. The compiled identity remains separate from 1.x; actual
+installation/uninstallation/OS integration is still an owner/platform gate.
+
+No installer was executed; no registry, shortcut, live/1.x profile or installed
+application was mutated. Native Intel/actual installation acceptance remains unperformed; these
 portable/native-compiler checks do not establish it.
 
 ## Remaining work

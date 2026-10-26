@@ -2,7 +2,7 @@
 
 Date: 2026-10-26. Roadmap IDs: V2-UX, V2-6/7.
 Authorization: continuing roadmap development; owner offered an early UI/UX pass.
-Implementation: repeatable preparation/startup diagnostics implemented; final pass remains open.
+Implementation: final six-source walkthrough and pinned launcher prepared; owner pass remains open.
 Automated verification: signed imports, pinned runtime reopening and suppressed-display startup passed.
 Independent review: acceptance specialist prepared and verified synthetic artifacts.
 Owner acceptance: not performed; launcher failed and owner deferred the pass to the end.
@@ -85,7 +85,8 @@ reopens through the copied helper, and checks suppressed-display Qt startup with
 unchanged profile bytes. The earlier artifact's exact command path separately
 passed offscreen and native Windows Qt startup with display suppressed; intentional
 argument failure retained exit code 2 and a successful run returned 0. The owner's
-earlier error remains unconfirmed. Final-schema example and owner pass are pending.
+earlier error remains unconfirmed. The final-schema example is recorded below;
+the owner pass remains pending.
 
 Primary also prepared a fresh schema-21 pinned example and ran its copied helper
 with `QT_QPA_PLATFORM=windows --smoke-ui DEMO_DIRECTORY`: **exit 0**, JSON reports
@@ -98,13 +99,29 @@ After retaining the six-source helper and its focused tests, full
 reopening/hash verification, no-overwrite preparation, exact backup/restore and all
 six original recoveries, retained loan/transfer histories, native Windows helper
 startup and hidden loan/register/report dialog construction. Final source-revision
-artifact generation remains at the integrated freeze, and owner acceptance remains
-unperformed as requested.
+artifacts are recorded below; owner acceptance remains unperformed as requested.
+
+Final review artifacts bind to clean code freeze
+`1e61bec33af214930d42396c6ff5f3b9a146e6d4` under
+`scratch/v2-release-review-1e61bec/demo`. Launch `Open-review-demo.cmd`; read
+`WALKTHROUGH.txt`. `runtime-manifest.json` SHA-256 is
+`5a6ec116e7ee9f255e0193efa93ff13e88fe6236578ca112eee717df4c152c53`.
+The companion `review-index.json` in the parent records source revision, exact
+initial values and the unsigned starter payload identity. The earlier 25294e2
+artifacts remain historical; the final walkthrough uses the corrected build freeze.
+
+Primary exercised the **exact CMD launcher**, its quoted arguments/cwd and copied
+helper under native Windows Qt using an external test-only display-suppression
+shim. Exit 0, all 96 loaded first-party modules resolved under the copied runtime,
+and profile bytes remained unchanged. The launcher writes `last-launch.log` for
+startup diagnosis. Test evidence is in ignored
+`scratch/final-launcher-probe-1e61bec/result.json`; the shim is not part of normal
+launching or the pinned runtime. This rechecks invocation after the owner's earlier
+failed attempt while leaving actual visible owner acceptance unperformed.
 
 ## Remaining work
 
-Rebuild the disposable example at the final integrated runtime and confirm native
-owner startup using the captured diagnostics if needed. Owner
-then reviews import/binding, explicit review and correction, reports/budgets/
-positions, unknown/pending/error states, backup/reopen and layout/wording. Record
-feedback and disposition here. Continue unrelated roadmap development meanwhile.
+Owner confirms visible startup and reviews import/binding, explicit review and
+correction, reports/budgets/positions, unknown/pending/error states, backup/reopen
+and layout/wording. Record feedback and disposition here. Initial authorized
+development is complete; platform and release gates remain separately tracked.
