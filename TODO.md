@@ -7,8 +7,10 @@ queue position does not authorize a candidate. Keep it short and link details.
 ## Selected packet
 
 None active. Initial V2/P2 development and available Windows verification are
-complete within the approved scope. The final [frozen Windows record](docs/work/2026-10-25-v2-frozen-verification.md)
-identifies the tested code freeze; documentation closeout does not change it.
+complete within the approved scope. The [owner-demo catalog handoff correction](docs/work/2026-10-26-v2-integrated-ui-review.md#owner-startup-traceback-and-windows-handoff-correction)
+is implemented and verified; the existing demo is repaired at the same path.
+The [frozen Windows record](docs/work/2026-10-25-v2-frozen-verification.md)
+identifies the tested application freeze; the devtool correction does not change it.
 
 ## Remaining review and action gates
 

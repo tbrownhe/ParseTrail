@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import subprocess
 import sys
 from datetime import date
 from pathlib import Path
@@ -40,6 +41,41 @@ def workspace_at(root):
         root / "catalog",
         trusted_keys={key: bytes.fromhex(value) for key, value in raw.items()},
         preferences_path=root / "preferences.json",
+    )
+
+
+def inherit_public_catalog_access(root):
+    """Hand off only this generated public fixture catalog using its parent ACL.
+
+    Windows temporary directories restrict access to their creating principal.
+    Catalog activation retains that ACL when renaming its staging directory.
+    Ordinary runtime caches retain their normal protection; only a prepared
+    synthetic demo needs to be readable by the owner of its containing folder.
+    """
+    if sys.platform != "win32":
+        return
+    catalog = root / "catalog"
+    releases = catalog / "releases"
+    if any(path.is_symlink() or path.is_junction() for path in (catalog, releases)):
+        raise ValueError("demo_catalog_path")
+    directories = list(releases.iterdir())
+    if len(directories) != 1:
+        raise ValueError("demo_catalog_release_count")
+    release = directories[0]
+    if release.is_symlink() or release.is_junction() or not release.is_dir():
+        raise ValueError("demo_catalog_path")
+    files = list(release.iterdir())
+    if {path.name for path in files} != {"catalog.json", "catalog.sig"} or any(
+        path.is_symlink() or path.is_junction() or not path.is_file() for path in files
+    ):
+        raise ValueError("demo_catalog_shape")
+    subprocess.run(
+        [str(Path(os.environ["SystemRoot"]) / "System32/icacls.exe"), str(release), "/inheritance:e", "/Q"],
+        check=True,
+        capture_output=True,
+        text=True,
+        creationflags=subprocess.CREATE_NO_WINDOW,
+        timeout=30,
     )
 
 
@@ -83,6 +119,8 @@ def prepare(destination: Path | None = None):
     )
     save_preferences(root / "preferences.json", V2Preferences())
     workspace.install_catalog_release(release)
+    inherit_public_catalog_access(root)
+    workspace.catalog_cache.load_current()
     sources = root / "sources"
     sources.mkdir()
     cash = b"Date,Account,Description,Amount,ReportedBalance\n10/01/2026,Checking A,Coffee,-$4.00,$996.00\n10/02/2026,Checking A,Deposit,$10.00,$1006.00\n10/03/2026,Checking A,Tea,-$3.00,$1003.00\n"

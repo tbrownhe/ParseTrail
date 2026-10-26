@@ -2,10 +2,10 @@
 
 Date: 2026-10-26. Roadmap IDs: V2-UX, V2-6/7.
 Authorization: continuing roadmap development; owner offered an early UI/UX pass.
-Implementation: final six-source walkthrough and pinned launcher prepared; owner pass remains open.
-Automated verification: signed imports, pinned runtime reopening and suppressed-display startup passed.
+Implementation: final six-source walkthrough and pinned launcher prepared; Windows catalog handoff corrected.
+Automated verification: signed imports, pinned reopening/startup and cross-principal ACL propagation passed.
 Independent review: acceptance specialist prepared and verified synthetic artifacts.
-Owner acceptance: not performed; launcher failed and owner deferred the pass to the end.
+Owner acceptance: not performed; owner supplied final launcher traceback, repaired artifact awaits visible retry.
 Release authorization: not authorized.
 
 ## Scope and controlling decisions
@@ -118,6 +118,50 @@ startup diagnosis. Test evidence is in ignored
 `scratch/final-launcher-probe-1e61bec/result.json`; the shim is not part of normal
 launching or the pinned runtime. This rechecks invocation after the owner's earlier
 failed attempt while leaving actual visible owner acceptance unperformed.
+
+## Owner startup traceback and Windows handoff correction
+
+The owner subsequently supplied `CatalogError: catalog_cache_shape` from
+`load_current()` reading the prepared release's `catalog.json`. Inspection found
+the renamed temporary catalog directory had a protected Windows DACL for its
+sandbox creator, SYSTEM and Administrators; the containing demo allowed the owner
+access, but that permission did not reach the two release files. Same-principal
+startup checks missed this handoff defect. This is a failed startup, not UX
+acceptance.
+
+The devtool now enables inheritance on only the newly generated public synthetic
+catalog release directory using the existing parent ACL. Existing explicit rules
+are preserved. It refuses unexpected files, symlinks/junctions or multiple releases
+and fails preparation on ACL-operation failure. Ordinary runtime catalog protection
+and application/financial code are unchanged. No Everyone/Users grant is added.
+
+The existing `scratch/v2-release-review-1e61bec/demo` was repaired at its same path,
+without replacing the pinned runtime, catalog bytes or profile. Independent
+acceptance review inspected the directory and both files: all now unprotected,
+with the owner's inherited read permission. Catalog SHA-256 remains
+`61f1a70154cec4bdd9e0904f259d6afadad543226bb27acc34258b0865e96dbf`, runtime-manifest
+SHA-256 remains `5a6ec116e7ee9f255e0193efa93ff13e88fe6236578ca112eee717df4c152c53`,
+and profile SHA-256 remains `7bebf77ccea3c27d8b8879e6ccbb7cc8ffe19f5f20d95ce3170929a0d28b43c1`.
+The ignored `catalog-permission-repair.json` retains the before/after identity.
+
+Windows AMD64/Python 3.13.15, `PYTHONPATH=.;client/src;client`, Qt offscreen:
+`client/.venv/Scripts/python.exe -m pytest -p no:cacheprovider
+devtools/v2_review_demo -q --tb=short`: **7 passed in 42.92s**. The new native test
+adds a distinctive inheritable read ACE to a disposable parent, reproduces
+protected mode-0700 staging, and checks that the directory and both files acquire
+the ACE after repair, with all content/profile hashes unchanged. Additional tests
+verify refusal before an ACL operation for unexpected contents and propagation
+of ACL-command failure. Independent regression rerun: **3 passed in 3.51s**;
+read-only code review found no actionable findings.
+
+The exact existing CMD launcher passed again under Windows Qt with external
+test-only display suppression: exit 0, all 96 first-party modules pinned, profile
+unchanged. Evidence is in `scratch/final-launcher-permission-fix/result.json`.
+Ruff, formatting, changed-document links and whitespace checks passed. These
+checks repair and verify access; they do not establish visible owner acceptance.
+
+Python documents the [Windows mode-0700 restriction](https://docs.python.org/3.13/library/os.html#os.mkdir);
+Microsoft documents [enabling inherited ACLs](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/icacls).
 
 ## Remaining work
 

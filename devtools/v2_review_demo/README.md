@@ -18,6 +18,10 @@ application home and profile are separate from daily state. A copied public
 runtime and hash manifest pin the launcher and its parser workers to that schema;
 the existing virtual environment supplies only the interpreter/dependencies.
 Startup output goes to `last-launch.log`, and failures preserve their exit status.
+On Windows, preparation enables parent-permission inheritance on the generated
+public fixture catalog release so its files remain readable when handed from a
+sandbox account to the folder's owner. It preserves existing access rules and
+fails if the permission operation fails; ordinary application caches are unchanged.
 The initial profile contains reviewed cash/category history, unknown and zero openings, HSA cash-only
 reconciliation, nonposting dated values and an owned outflow awaiting its receipt.
 It also includes an evidenced Capital principal/interest payment and a Yamaha
