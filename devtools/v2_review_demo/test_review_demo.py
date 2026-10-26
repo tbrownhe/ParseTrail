@@ -21,7 +21,7 @@ def test_prepare_reopen_and_refuse_existing_destination(tmp_path):
         check=True,
     )
     result = json.loads(prepared.stdout)
-    assert result["verification"]["source_count"] == 3
+    assert result["verification"]["source_count"] == 6
     assert result["verification"]["october_spending_minor"] == 400
     assert result["verification"]["transfer_clearing_minor"] == 10000
     profile = destination / "review.db"

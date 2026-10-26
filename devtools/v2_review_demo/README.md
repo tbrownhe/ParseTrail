@@ -20,6 +20,11 @@ the existing virtual environment supplies only the interpreter/dependencies.
 Startup output goes to `last-launch.log`, and failures preserve their exit status.
 The initial profile contains reviewed cash/category history, unknown and zero openings, HSA cash-only
 reconciliation, nonposting dated values and an owned outflow awaiting its receipt.
+It also includes an evidenced Capital principal/interest payment and a Yamaha
+whole-register charge/repayment. January interest is $20; February Vehicle charge
+is $10. Six public synthetic originals remain embedded. Date preferences stay off;
+the seeded Capital accounting-date assumption is retained as an explicit historical
+fixture-author review, separate from its unchanged source activity date.
 The walkthrough gives expected exact totals and pending review actions.
 
 `--verify DEMO_DIRECTORY` checks the initial seeded state after reopening; after

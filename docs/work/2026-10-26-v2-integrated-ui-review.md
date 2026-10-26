@@ -52,6 +52,19 @@ It checks profile/runtime schema before copying and refuses existing runtimes or
 destinations. No private key is retained. `--smoke-ui` exercises the same helper
 window construction with display suppressed and checks unchanged profile bytes.
 
+The integrated seed now includes six actual public signed imports and both loan
+workflows. Payment checking starts at 100000 and ends at 76000 minor units. A
+reviewed independent Capital opening -970000 becomes principal -950000 after its
+printed 20000 principal/2000 interest payment; the original PDF opening remains
+unknown and its activity date has no added source guess. Yamaha's source-backed
+opening -100000 becomes whole liability -99000 after a 1000 Vehicle charge and
+2000 repayment. January expense is 2000 and February expense 1000; original
+October/HSA values remain unchanged. Saved date preferences remain off, with the
+Capital assumption retained as an explicit historical fixture-author decision.
+Separate source closing points add no money. The walkthrough provides actual
+hash-prefix navigation for the workspace's source labels and covers exact dated
+clearing, category correction, values, backup/reopen and all six source recoveries.
+
 ## Verification
 
 Windows AMD64/Python 3.13.15/schema 20: acceptance specialist verified exact
@@ -79,6 +92,14 @@ with `QT_QPA_PLATFORM=windows --smoke-ui DEMO_DIRECTORY`: **exit 0**, JSON repor
 `platform: windows`, `startup: passed`, `profile_unchanged: true`. Window display
 was suppressed. This verifies native Windows Qt initialization and helper startup,
 not the owner's earlier error or product/release/UX acceptance.
+
+After retaining the six-source helper and its focused tests, full
+`devtools/v2_review_demo` checks: **4 passed in 41.35s**. These include copied-runtime
+reopening/hash verification, no-overwrite preparation, exact backup/restore and all
+six original recoveries, retained loan/transfer histories, native Windows helper
+startup and hidden loan/register/report dialog construction. Final source-revision
+artifact generation remains at the integrated freeze, and owner acceptance remains
+unperformed as requested.
 
 ## Remaining work
 
