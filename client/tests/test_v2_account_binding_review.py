@@ -51,7 +51,7 @@ def test_review_switches_explicit_file_and_mixed_row_modes(tmp_path: Path) -> No
         dialog.account_combo.setCurrentIndex(dialog.account_combo.findData("loan-b"))
         dialog.assign_rows_button.click()
         assert "Row assignments: 1 of 2" in dialog.status.text()
-        assert dialog.model.data(dialog.model.index(1, 3)) == "Loan B"
+        assert dialog.model.data(dialog.model.index(1, 3)) == "Loan B (mohela, liability)"
         assert not dialog.file_button.isEnabled()
     finally:
         dialog.close()

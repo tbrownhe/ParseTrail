@@ -30,6 +30,7 @@ from PySide6.QtWidgets import (
 )
 
 from parsetrail.core.source_evidence import ActivityExportPayload, StatementPayload
+from parsetrail.core.v2_cash_movement import cash_account_labels
 from parsetrail.core.v2_profile_store import (
     CARD_STATEMENT_PARSERS,
     FinancialAccount,
@@ -80,7 +81,7 @@ class V2ImportWorker(QThread):
 class V2FinancialAccountDialog(QDialog):
     """Record an account exactly as the owner describes it."""
 
-    def __init__(self, parent=None, *, existing: FinancialAccount | None = None):
+    def __init__(self, parent=None, *, existing: FinancialAccount | None = None, scope_locked: bool = False):
         super().__init__(parent)
         self.existing = existing
         self.setWindowTitle("Edit financial account" if existing is not None else "Add financial account")
@@ -97,6 +98,18 @@ class V2FinancialAccountDialog(QDialog):
             self.kind.setCurrentIndex(self.kind.findData(existing.kind))
             self.kind.setEnabled(False)
         form.addRow("Account kind", self.kind)
+        self.scope = QComboBox()
+        self._populate_scopes(existing.tracking_scope if existing is not None else "account_total")
+        self.kind.currentIndexChanged.connect(lambda: self._populate_scopes(self.scope.currentData()))
+        self.scope.setEnabled(not scope_locked)
+        form.addRow("Tracking scope", self.scope)
+        scope_note = QLabel(
+            "Scope specifies the amount represented by this account. Account totals, loan principal and cash "
+            "components are different values. Scope becomes fixed when reviewed history is saved."
+            + (" This account's scope is fixed by its history." if scope_locked else "")
+        )
+        scope_note.setWordWrap(True)
+        form.addRow(scope_note)
         self.institution = QLineEdit()
         self.institution.setPlaceholderText("e.g. mohela")
         self.institution.setMaxLength(80)
@@ -114,6 +127,15 @@ class V2FinancialAccountDialog(QDialog):
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
 
+    def _populate_scopes(self, selected: str) -> None:
+        self.scope.clear()
+        self.scope.addItem("Whole account", "account_total")
+        if self.kind.currentData() == "asset":
+            self.scope.addItem("Cash component only", "cash_component")
+        else:
+            self.scope.addItem("Loan principal only", "principal_component")
+        self.scope.setCurrentIndex(max(0, self.scope.findData(selected)))
+
     def account(self) -> FinancialAccount:
         return FinancialAccount(
             id=self.existing.id if self.existing is not None else uuid4().hex,
@@ -121,6 +143,7 @@ class V2FinancialAccountDialog(QDialog):
             kind=self.kind.currentData(),
             institution_key=self.institution.text().strip(),
             full_account_number=self.number.text().strip() or None,
+            tracking_scope=self.scope.currentData(),
         )
 
 
@@ -166,6 +189,15 @@ class V2WorkspaceWindow(QMainWindow):
         )
         self.assumed_posting_action.toggled.connect(self._set_assumed_posting_dates)
         settings_menu.addAction(self.assumed_posting_action)
+        accounts_menu = self.menuBar().addMenu("Accounts")
+        self.add_financial_account_action = accounts_menu.addAction("Add financial account…")
+        self.add_financial_account_action.triggered.connect(self._add_account)
+        self.edit_financial_account_action = accounts_menu.addAction("Edit financial account…")
+        self.edit_financial_account_action.triggered.connect(self._edit_account)
+        self.account_anchors_action = accounts_menu.addAction("Reviewed openings, dated values and closure…")
+        self.account_anchors_action.triggered.connect(self._review_account_anchors)
+        self.source_opening_action = accounts_menu.addAction("Review source-backed opening…")
+        self.source_opening_action.triggered.connect(self._review_openings)
         reports_menu = self.menuBar().addMenu("Reports")
         self.reviewed_reports_action = reports_menu.addAction("Reviewed reports…")
         self.reviewed_reports_action.triggered.connect(self._open_reviewed_reports)
@@ -707,21 +739,34 @@ class V2WorkspaceWindow(QMainWindow):
             except (ProfileFormatError, sqlite3.Error, OSError) as exc:
                 QMessageBox.warning(self, "Account was not saved", str(exc))
                 continue
-            self.status.setText("Financial account saved. Select an accountless export to assign it.")
+            self.status.setText(
+                "Financial account and tracking scope saved. Bind sources or review its opening and values."
+            )
             break
 
     def _edit_account(self) -> None:
-        with V2ProfileStore.open(self.workspace.profile_path, read_only=True) as store:
-            accounts = store.financial_accounts()
+        try:
+            with V2ProfileStore.open(self.workspace.profile_path, read_only=True) as store:
+                accounts = store.financial_accounts()
+            identities = cash_account_labels(accounts)
+        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
+            QMessageBox.warning(self, "Account details are unavailable", str(exc))
+            return
         if not accounts:
             QMessageBox.information(self, "No financial accounts", "Add a financial account before editing one.")
             return
-        labels = [f"{account.name} ({account.kind}, {account.id})" for account in accounts]
+        labels = [f"{identities[account.id]} · ID {account.id}" for account in accounts]
         selected, accepted = QInputDialog.getItem(self, "Edit financial account", "Account", labels, 0, False)
         if not accepted:
             return
         account = accounts[labels.index(selected)]
-        dialog = V2FinancialAccountDialog(self, existing=account)
+        try:
+            with V2ProfileStore.open(self.workspace.profile_path, read_only=True) as store:
+                scope_locked = store.financial_account_scope_locked(account.id)
+        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
+            QMessageBox.warning(self, "Account details are unavailable", str(exc))
+            return
+        dialog = V2FinancialAccountDialog(self, existing=account, scope_locked=scope_locked)
         while dialog.exec() == QDialog.Accepted:
             try:
                 with V2ProfileStore.open(self.workspace.profile_path) as store:
@@ -738,6 +783,14 @@ class V2WorkspaceWindow(QMainWindow):
 
     def _review_openings(self) -> None:
         V2OpeningReview(self.workspace, self).exec()
+
+    def _review_account_anchors(self) -> None:
+        if self.import_worker is not None:
+            return
+        from parsetrail.gui.v2_account_anchors import V2AccountAnchors
+
+        V2AccountAnchors(self.workspace.profile_path, parent=self).exec()
+        self.refresh()
 
     def closeEvent(self, event) -> None:
         if self.import_worker is not None:

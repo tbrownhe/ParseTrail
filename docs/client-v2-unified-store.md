@@ -29,7 +29,7 @@ evidence belong in [packet records](work/README.md).
 
 ## Profile format and lifecycle
 
-The current pre-release profile schema is revision 16; check `SCHEMA_VERSION`
+The current pre-release profile schema is revision 17; check `SCHEMA_VERSION`
 in `v2_profile_store.py` when opening a packet. Format markers, exact table and
 foreign-key shapes, append-only triggers and SQLite integrity are checked before
 writable use. Older disposable pilots, 1.x, unknown, damaged and newer shapes
@@ -55,10 +55,12 @@ candidate as a suggestion and offer the inline enable control. Ambiguous matches
 always require explicit review. An observed full number may match exactly without
 enabling abbreviated matching; an opaque identity is not a suffix number.
 
-Financial display/identity edits retain the account ID and ledger class.
-Account assignments with journal history cannot be changed. Any saved occurrence
-review also fixes the affected rows' account bindings, even after returning its
-pair to pending; history must not silently reactivate under a changed account.
+Financial display/identity edits retain the account ID and ledger class. Tracking
+scope explicitly distinguishes account total, principal component and cash
+component, with compatible asset/liability kinds. Reviewed history locks scope
+against ordinary edits; source operations retain their own admitted scope gates.
+Ordinary account assignments with journal or review history cannot be changed;
+the explicit correction workflow below retains/invalidate history safely.
 
 `CategoryBudgetRates` stores at most one target per category and effective month.
 The latest rate at or before the report month applies until another rate is
@@ -141,6 +143,25 @@ mapping consistency; all file/row bindings and corrections version reconciliatio
 Opening dependencies are conservative until explicit withdrawal is available.
 
 ## Common reads and recovery
+
+Schema-17 opening decisions/revisions retain source/manual origin, active or
+withdrawn state, reference, scope and full-context versions including creation
+time. Withdrawal has no replacement amount/date and makes the opening unknown;
+a reviewed zero is an active zero decision. Exact old-date inverses retire money;
+fresh establishment never revives old entries. Historical exact retries return
+their saved receipt without changing a newer opening. Only current active
+source-backed openings lock dependent source assignments. Manual openings use
+typed owner reference/date/amount and opening equity, with no manufactured source
+facts or arbitrary journal entry. Known account-history bounds prevent later
+manual balancing plugs; newly arrived earlier facts make the manual anchor stale.
+
+`AccountDatedValues` is immutable nonposting manual observation/correction history;
+`AccountLifecycleDecisions` is closure/reopen phase and correction history. Both
+enter common validation, reconciliation input versions and backup. Dated values
+never fill an opening or overwrite journal positions. Positions show their scope,
+origin and date separately. Applicable as-of closure metadata retains every
+account and its recorded residual; missing/stale/withdrawn openings remain unknown
+even if a manual final value is zero. Closing tracking posts no settlement.
 
 Every journal payload must contain exact integer, nonzero, balanced posting
 lines within supported integer bounds. Common reads additionally validate

@@ -30,9 +30,17 @@ MOVEMENT_LABELS = {
 
 def cash_account_labels(accounts: tuple[FinancialAccount, ...]) -> dict[str, str]:
     """Distinguish permitted duplicate names without showing full account numbers."""
+    scopes = {
+        "account_total": "whole account",
+        "principal_component": "loan principal",
+        "cash_component": "cash component",
+    }
+    if any(type(account.tracking_scope) is not str or account.tracking_scope not in scopes for account in accounts):
+        raise ProfileFormatError("financial_account_scope_invalid")
     bases = {
         account.id: (
             f"{account.name} ({account.institution_key}, {account.kind}"
+            + (f", {scopes[account.tracking_scope]}" if account.tracking_scope != "account_total" else "")
             + (f", ending {account.full_account_number[-4:]}" if account.full_account_number else "")
             + ")"
         )

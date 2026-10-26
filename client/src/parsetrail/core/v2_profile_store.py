@@ -49,7 +49,8 @@ from parsetrail.core.v2_source_overlap import (
 )
 
 APPLICATION_ID = 0x50543230  # PT20
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
+TRACKING_SCOPES = {"account_total", "principal_component", "cash_component"}
 MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_DEFINITION_BYTES = 64 * 1024
 MAX_EVIDENCE_BYTES = 32 * 1024 * 1024
@@ -99,6 +100,7 @@ TABLE_COLUMNS = {
         ("purpose", "TEXT", 1, 0),
         ("institution_key", "TEXT", 0, 0),
         ("full_account_number", "TEXT", 0, 0),
+        ("tracking_scope", "TEXT", 1, 0),
     ),
     "CategoryBudgetRates": (
         ("category_id", "TEXT", 1, 1),
@@ -157,22 +159,57 @@ TABLE_COLUMNS = {
     "OpeningDecisions": (
         ("account_id", "TEXT", 0, 1),
         ("basis_sha256", "TEXT", 1, 0),
-        ("amount_minor", "INTEGER", 1, 0),
-        ("cutoff_date", "TEXT", 1, 0),
+        ("amount_minor", "INTEGER", 0, 0),
+        ("cutoff_date", "TEXT", 0, 0),
         ("entry_key", "TEXT", 0, 0),
         ("decision_sha256", "TEXT", 1, 0),
         ("created_at", "TEXT", 1, 0),
+        ("origin", "TEXT", 1, 0),
+        ("state", "TEXT", 1, 0),
+        ("tracking_scope", "TEXT", 1, 0),
+        ("reference", "TEXT", 1, 0),
+        ("reason", "TEXT", 1, 0),
+        ("request_basis", "TEXT", 1, 0),
     ),
     "OpeningDecisionRevisions": (
         ("revision_id", "INTEGER", 0, 1),
         ("account_id", "TEXT", 1, 0),
         ("prior_version", "TEXT", 1, 0),
         ("basis_sha256", "TEXT", 1, 0),
-        ("amount_minor", "INTEGER", 1, 0),
-        ("cutoff_date", "TEXT", 1, 0),
+        ("amount_minor", "INTEGER", 0, 0),
+        ("cutoff_date", "TEXT", 0, 0),
         ("entry_key", "TEXT", 0, 0),
         ("reason", "TEXT", 1, 0),
         ("decision_sha256", "TEXT", 1, 0),
+        ("created_at", "TEXT", 1, 0),
+        ("origin", "TEXT", 1, 0),
+        ("state", "TEXT", 1, 0),
+        ("tracking_scope", "TEXT", 1, 0),
+        ("reference", "TEXT", 1, 0),
+        ("request_basis", "TEXT", 1, 0),
+    ),
+    "AccountDatedValues": (
+        ("value_id", "INTEGER", 0, 1),
+        ("account_id", "TEXT", 1, 0),
+        ("value_date", "TEXT", 1, 0),
+        ("amount_minor", "INTEGER", 1, 0),
+        ("tracking_scope", "TEXT", 1, 0),
+        ("reference", "TEXT", 1, 0),
+        ("reason", "TEXT", 1, 0),
+        ("corrects_value_id", "INTEGER", 0, 0),
+        ("request_basis", "TEXT", 1, 0),
+        ("record_sha256", "TEXT", 1, 0),
+        ("created_at", "TEXT", 1, 0),
+    ),
+    "AccountLifecycleDecisions": (
+        ("revision_id", "INTEGER", 0, 1),
+        ("account_id", "TEXT", 1, 0),
+        ("state", "TEXT", 1, 0),
+        ("effective_date", "TEXT", 1, 0),
+        ("reason", "TEXT", 1, 0),
+        ("prior_version", "TEXT", 0, 0),
+        ("request_basis", "TEXT", 1, 0),
+        ("record_sha256", "TEXT", 1, 0),
         ("created_at", "TEXT", 1, 0),
     ),
     "SourceOverlapReviews": (
@@ -261,6 +298,8 @@ TABLE_COLUMNS = {
     ),
 }
 FOREIGN_KEYS = {
+    "AccountDatedValues": (("corrects_value_id", "AccountDatedValues", "value_id"), ("account_id", "Accounts", "id")),
+    "AccountLifecycleDecisions": (("account_id", "Accounts", "id"),),
     "BindingCorrections": (("source_sha256", "Sources", "sha256"),),
     "Sources": (),
     "Definitions": (),
@@ -322,6 +361,8 @@ FOREIGN_KEYS = {
 }
 
 IMMUTABLE_TABLES = (
+    "AccountDatedValues",
+    "AccountLifecycleDecisions",
     "BindingCorrections",
     "Sources",
     "Definitions",
@@ -369,6 +410,7 @@ class FinancialAccount:
     kind: Literal["asset", "liability"]
     institution_key: str
     full_account_number: str | None = None
+    tracking_scope: Literal["account_total", "principal_component", "cash_component"] = "account_total"
 
 
 @dataclass(frozen=True)
@@ -491,12 +533,16 @@ class StatementSourceReview:
 class OpeningDecision:
     account_id: str
     basis_sha256: str
-    amount_minor: int
-    cutoff_date: date
+    amount_minor: int | None
+    cutoff_date: date | None
     entry_key: str | None
     stale: bool
     revision_id: int = 0
     version: str = ""
+    origin: Literal["source", "manual"] = "source"
+    state: Literal["active", "withdrawn"] = "active"
+    tracking_scope: str = "account_total"
+    reference: str = ""
 
 
 @dataclass(frozen=True)
@@ -504,13 +550,72 @@ class OpeningDecisionHistoryRow:
     revision_id: int
     account_id: str
     basis_sha256: str
-    amount_minor: int
-    cutoff_date: date
+    amount_minor: int | None
+    cutoff_date: date | None
     entry_key: str | None
     version: str
     prior_version: str | None
     reason: str
     created_at: str
+    origin: Literal["source", "manual"] = "source"
+    state: Literal["active", "withdrawn"] = "active"
+    tracking_scope: str = "account_total"
+    reference: str = ""
+    request_basis_sha256: str = ""
+
+
+@dataclass(frozen=True)
+class ReviewedDatedValue:
+    value_id: int
+    account_id: str
+    value_date: date
+    amount_minor: int
+    tracking_scope: str
+    reference: str
+    reason: str
+    corrects_value_id: int | None
+    created_at: str
+    version: str
+    origin: Literal["manual"] = "manual"
+    superseded_by_value_id: int | None = None
+
+
+@dataclass(frozen=True)
+class AccountLifecycleDecision:
+    revision_id: int
+    account_id: str
+    state: Literal["open", "closed"]
+    effective_date: date
+    reason: str
+    prior_version: str | None
+    created_at: str
+    version: str
+
+
+@dataclass(frozen=True)
+class AccountOpeningBoundary:
+    boundary_date: date
+    kind: Literal["activity", "journal", "statement_start", "statement_end", "dated_value", "lifecycle"]
+    allows_equal: bool
+    source_sha256: str | None = None
+    reference: str = ""
+
+
+@dataclass(frozen=True)
+class AccountAnchorSnapshot:
+    account: FinancialAccount
+    opening: OpeningDecision | None
+    opening_history: tuple[OpeningDecisionHistoryRow, ...]
+    dated_values: tuple[ReviewedDatedValue, ...]
+    latest_dated_value: ReviewedDatedValue | None
+    lifecycle: AccountLifecycleDecision | None
+    lifecycle_history: tuple[AccountLifecycleDecision, ...]
+    earliest_known_activity_date: date | None
+    basis_sha256: str
+    recorded_debit_minor: int
+    position_debit_minor: int | None
+    earliest_known_history_date: date | None = None
+    opening_boundaries: tuple[AccountOpeningBoundary, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -812,7 +917,7 @@ class AccountPosition:
     currency: str
     recorded_debit_minor: int
     position_debit_minor: int | None
-    opening_status: Literal["missing", "stale", "future", "conflict", "valid"]
+    opening_status: Literal["missing", "withdrawn", "stale", "future", "conflict", "valid"]
     opening_cutoff: date | None
     opening_minor: int | None
     latest_source_cutoff: date | None
@@ -824,6 +929,13 @@ class AccountPosition:
     history: tuple[AccountPositionHistoryRow, ...]
     latest_saved_reconciled_cutoff: date | None = None
     current_saved_reconciled_cutoff: date | None = None
+    tracking_scope: str = "account_total"
+    opening_origin: str | None = None
+    latest_dated_value: ReviewedDatedValue | None = None
+    lifecycle: AccountLifecycleDecision | None = None
+    closure_residual_debit_minor: int | None = None
+    closure_residual_unknown: bool = False
+    closure_residual_date: date | None = None
 
 
 @dataclass(frozen=True)
@@ -1197,6 +1309,7 @@ class V2ProfileStore:
         self.read_only = read_only
         self._transfer_mutating = False
         self._source_interpretation_mutating = False
+        self._account_anchors_mutating = False
 
     @classmethod
     def create(cls, path: Path) -> V2ProfileStore:
@@ -1238,6 +1351,7 @@ class V2ProfileStore:
                     role TEXT NOT NULL CHECK(role IN ('financial','category','internal')),
                     purpose TEXT NOT NULL CHECK(purpose IN ('normal','clearing','opening_equity','suspense')),
                     institution_key TEXT, full_account_number TEXT,
+                    tracking_scope TEXT NOT NULL DEFAULT 'account_total' CHECK(tracking_scope IN ('account_total','principal_component','cash_component')),
                     CHECK(
                         (role='financial' AND kind IN ('asset','liability') AND purpose='normal'
                             AND institution_key IS NOT NULL)
@@ -1305,22 +1419,40 @@ class V2ProfileStore:
                 CREATE TABLE OpeningDecisions (
                     account_id TEXT PRIMARY KEY REFERENCES Accounts(id),
                     basis_sha256 TEXT NOT NULL,
-                    amount_minor INTEGER NOT NULL,
-                    cutoff_date TEXT NOT NULL,
+                    amount_minor INTEGER,
+                    cutoff_date TEXT,
                     entry_key TEXT REFERENCES JournalEntries(key),
                     decision_sha256 TEXT NOT NULL,
-                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+                    origin TEXT NOT NULL, state TEXT NOT NULL, tracking_scope TEXT NOT NULL,
+                    reference TEXT NOT NULL, reason TEXT NOT NULL, request_basis TEXT NOT NULL
                 );
                 CREATE TABLE OpeningDecisionRevisions (
                     revision_id INTEGER PRIMARY KEY,
                     account_id TEXT NOT NULL REFERENCES Accounts(id),
                     prior_version TEXT NOT NULL,
-                    basis_sha256 TEXT NOT NULL, amount_minor INTEGER NOT NULL,
-                    cutoff_date TEXT NOT NULL, entry_key TEXT REFERENCES JournalEntries(key),
+                    basis_sha256 TEXT NOT NULL, amount_minor INTEGER,
+                    cutoff_date TEXT, entry_key TEXT REFERENCES JournalEntries(key),
                     reason TEXT NOT NULL,
                     decision_sha256 TEXT NOT NULL,
                     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+                    origin TEXT NOT NULL, state TEXT NOT NULL, tracking_scope TEXT NOT NULL,
+                    reference TEXT NOT NULL, request_basis TEXT NOT NULL,
                     UNIQUE(account_id,prior_version)
+                );
+                CREATE TABLE AccountDatedValues (
+                    value_id INTEGER PRIMARY KEY, account_id TEXT NOT NULL REFERENCES Accounts(id),
+                    value_date TEXT NOT NULL, amount_minor INTEGER NOT NULL, tracking_scope TEXT NOT NULL,
+                    reference TEXT NOT NULL, reason TEXT NOT NULL,
+                    corrects_value_id INTEGER UNIQUE REFERENCES AccountDatedValues(value_id),
+                    request_basis TEXT NOT NULL, record_sha256 TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+                );
+                CREATE TABLE AccountLifecycleDecisions (
+                    revision_id INTEGER PRIMARY KEY, account_id TEXT NOT NULL REFERENCES Accounts(id),
+                    state TEXT NOT NULL, effective_date TEXT NOT NULL, reason TEXT NOT NULL, prior_version TEXT,
+                    request_basis TEXT NOT NULL, record_sha256 TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
                 );
                 CREATE TABLE SourceOverlapReviews (
                     revision_id INTEGER PRIMARY KEY,
@@ -1502,8 +1634,8 @@ class V2ProfileStore:
         self._require_writable()
         name, institution_key, full_number = self._financial_account_values(account)
         self.connection.execute(
-            "INSERT INTO Accounts VALUES (?,?,?,'USD','financial','normal',?,?)",
-            (account.id, name, account.kind, institution_key, full_number),
+            "INSERT INTO Accounts VALUES (?,?,?,'USD','financial','normal',?,?,?)",
+            (account.id, name, account.kind, institution_key, full_number, account.tracking_scope),
         )
 
     @staticmethod
@@ -1515,6 +1647,8 @@ class V2ProfileStore:
             or type(account.name) is not str
             or not 0 < len(account.name.strip()) <= 200
             or account.kind not in {"asset", "liability"}
+            or type(account.tracking_scope) is not str
+            or account.tracking_scope not in TRACKING_SCOPES
             or type(account.institution_key) is not str
             or re.fullmatch(r"[a-z][a-z0-9_-]{2,79}", account.institution_key) is None
             or (
@@ -1536,26 +1670,69 @@ class V2ProfileStore:
         """Edit account identity labels while preserving its ledger class and ID."""
         self._require_writable()
         name, institution_key, full_number = self._financial_account_values(account)
-        current = self.connection.execute(
-            "SELECT kind FROM Accounts WHERE id=? AND role='financial'", (account.id,)
-        ).fetchone()
-        if current is None:
-            raise ProfileFormatError("financial_account_missing")
-        if current[0] != account.kind:
-            raise ProfileFormatError("financial_account_kind_immutable")
-        self.connection.execute(
-            "UPDATE Accounts SET name=?,institution_key=?,full_account_number=? WHERE id=? AND role='financial'",
-            (name, institution_key, full_number, account.id),
-        )
+        if self.connection.in_transaction:
+            raise ProfileFormatError("account_anchor_requires_committed_snapshot")
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            current = self.connection.execute(
+                "SELECT kind,tracking_scope FROM Accounts WHERE id=? AND role='financial'", (account.id,)
+            ).fetchone()
+            if current is None:
+                raise ProfileFormatError("financial_account_missing")
+            if current[0] != account.kind:
+                raise ProfileFormatError("financial_account_kind_immutable")
+            if current[1] != account.tracking_scope and self.financial_account_scope_locked(account.id):
+                raise ProfileFormatError("financial_account_scope_locked")
+            self.connection.execute(
+                "UPDATE Accounts SET name=?,institution_key=?,full_account_number=?,tracking_scope=? WHERE id=? AND role='financial'",
+                (name, institution_key, full_number, account.tracking_scope, account.id),
+            )
+            self.connection.execute("COMMIT")
+        except BaseException:
+            self.connection.execute("ROLLBACK")
+            raise
 
     def financial_accounts(self) -> tuple[FinancialAccount, ...]:
         return tuple(
             FinancialAccount(*row)
             for row in self.connection.execute(
-                "SELECT id,name,kind,institution_key,full_account_number FROM Accounts "
+                "SELECT id,name,kind,institution_key,full_account_number,tracking_scope FROM Accounts "
                 "WHERE role='financial' ORDER BY name,id"
             )
         )
+
+    def financial_account_scope_locked(self, account_id: str) -> bool:
+        """One policy for metadata editing and interpretation-history scope locks."""
+        self._require_financial_account(account_id)
+        if any(
+            any(p.account_id == account_id for p in _decode_journal(payload).postings)
+            for (payload,) in self.connection.execute("SELECT payload FROM JournalEntries")
+        ):
+            return True
+        for table in ("OpeningDecisions", "StatementSourceReviews", "AccountDatedValues", "AccountLifecycleDecisions"):
+            if self.connection.execute(f"SELECT 1 FROM {table} WHERE account_id=? LIMIT 1", (account_id,)).fetchone():
+                return True
+        if any(
+            account_id in record.prior_account_ids or account_id in record.new_account_ids
+            for record in self._read_binding_corrections()
+        ):
+            return True
+        reviewed_rows = {
+            r
+            for left, right in self.connection.execute("SELECT left_row_id,right_row_id FROM SourceOverlapReviews")
+            for r in (left, right)
+        }
+        for source_id in self.source_ids():
+            if any(
+                b.row_id in reviewed_rows and b.ledger_account_id == account_id
+                for b in self.account_bindings(source_id)
+            ):
+                return True
+        for (payload,) in self.connection.execute("SELECT pair_payload FROM TransferPairReviews"):
+            pair = _decode_transfer_pair(payload)
+            if account_id in (pair.outgoing.account_id, pair.incoming.account_id):
+                return True
+        return False
 
     def _require_financial_account(self, account_id: str) -> None:
         if (
@@ -1576,7 +1753,7 @@ class V2ProfileStore:
         ):
             raise ProfileFormatError("invalid_category_account")
         self.connection.execute(
-            "INSERT INTO Accounts VALUES (?,?,?,'USD','category','normal',NULL,NULL)",
+            "INSERT INTO Accounts VALUES (?,?,?,'USD','category','normal',NULL,NULL,'account_total')",
             (account_id, name, kind),
         )
 
@@ -1686,8 +1863,10 @@ class V2ProfileStore:
             raise ProfileFormatError("cash_category_requires_bound_posted_movement")
         if source_row[1:] != (row.row_role, row.date_role, row.date.iso, row.amount.minor):
             raise ProfileFormatError("source_observation_index_mismatch")
-        financial = self.connection.execute("SELECT kind,role FROM Accounts WHERE id=?", (financial_id,)).fetchone()
-        if financial != ("asset", "financial"):
+        financial = self.connection.execute(
+            "SELECT kind,role,tracking_scope FROM Accounts WHERE id=?", (financial_id,)
+        ).fetchone()
+        if financial != ("asset", "financial", "account_total"):
             raise ProfileFormatError("cash_category_requires_asset_account")
         return row, financial_id, self._ledger_accounts()
 
@@ -1730,8 +1909,10 @@ class V2ProfileStore:
             raise ProfileFormatError("card_purchase_requires_bound_negative_movement")
         if source_row[1:] != (row.row_role, row.date_role, row.date.iso, row.amount.minor):
             raise ProfileFormatError("source_observation_index_mismatch")
-        financial = self.connection.execute("SELECT kind,role FROM Accounts WHERE id=?", (financial_id,)).fetchone()
-        if financial != ("liability", "financial"):
+        financial = self.connection.execute(
+            "SELECT kind,role,tracking_scope FROM Accounts WHERE id=?", (financial_id,)
+        ).fetchone()
+        if financial != ("liability", "financial", "account_total"):
             raise ProfileFormatError("card_purchase_requires_liability_account")
         candidate = posting_date_candidate(row)
         if candidate is None:
@@ -1869,7 +2050,15 @@ class V2ProfileStore:
                 "SELECT DISTINCT account_id FROM StatementSourceReviews WHERE source_sha256=?", (target.source_sha256,)
             )
         )
-        return tuple(sorted(account for account in associated if self.opening_decision_history(account)))
+        return tuple(
+            sorted(
+                account
+                for account in associated
+                if (history := self.opening_decision_history(account))
+                and history[0].origin == "source"
+                and history[0].state == "active"
+            )
+        )
 
     def _require_ordinary_binding_change(self, target: BindingCorrectionTarget) -> None:
         _evidence, rows = self._binding_target_rows(target)
@@ -1970,6 +2159,7 @@ class V2ProfileStore:
         return groups
 
     def _source_overlap_basis(self) -> str:
+        self._validate_account_metadata()
         self._read_binding_corrections()
         self._validate_journal_retirements()
         self._validate_transfer_history()
@@ -1987,6 +2177,9 @@ class V2ProfileStore:
             "JournalCorrections",
             "JournalRetirements",
             "OpeningDecisionRevisions",
+            "OpeningDecisions",
+            "AccountDatedValues",
+            "AccountLifecycleDecisions",
             "TransferEvents",
             "TransferEventActions",
             "TransferPairReviews",
@@ -2324,6 +2517,8 @@ class V2ProfileStore:
             }
         evidence = evidence_by_source[source[0]]
         row = cache["source_rows"][source[0]][row_id]
+        if "tracking_scopes" not in cache:
+            cache["tracking_scopes"] = dict(self.connection.execute("SELECT id,tracking_scope FROM Accounts"))
         scopes = cache.setdefault("review_scopes", {})
         if source[0] not in scopes:
             scopes[source[0]] = (_cash_review_scopes(evidence), _card_review_scopes(evidence))
@@ -2344,6 +2539,7 @@ class V2ProfileStore:
             or entry.description != row.description.text
             or entry.event_id != f"source:{row_id}"
             or financial is None
+            or cache["tracking_scopes"].get(financial.id) != "account_total"
             or financial.source_account_id is None
             or category is None
             or category.source_account_id is not None
@@ -2550,6 +2746,7 @@ class V2ProfileStore:
         row indexes are cached for this pass, never shared across profile versions.
         Pending manual entries receive structural checks without being classified.
         """
+        self._validate_account_metadata()
         self._read_binding_corrections()
         payloads = dict(self.connection.execute("SELECT key,payload FROM JournalEntries"))
         if not payloads:
@@ -2867,6 +3064,7 @@ class V2ProfileStore:
             account_id: (name, kind, role)
             for account_id, name, kind, role in self.connection.execute("SELECT id,name,kind,role FROM Accounts")
         }
+        tracking_scopes = dict(self.connection.execute("SELECT id,tracking_scope FROM Accounts"))
         active = self._active_reviewed_entries(source_sha256)
         overlap_blocks = self.source_overlap_posting_blocks(tuple(row.row_id for row in _rows(saved.evidence)))
         result = []
@@ -2903,6 +3101,8 @@ class V2ProfileStore:
                 status = "Posting date needs review"
             elif account_id is None:
                 status = "Assign a financial account first"
+            elif tracking_scopes.get(account_id) != "account_total":
+                status = "Tracking scope needs a supported source interpretation"
             elif financial is None or financial[1:] != ("asset", "financial"):
                 status = "Requires a bound asset account"
             elif not row.description.text:
@@ -2948,6 +3148,7 @@ class V2ProfileStore:
             account_id: (name, kind, role)
             for account_id, name, kind, role in self.connection.execute("SELECT id,name,kind,role FROM Accounts")
         }
+        tracking_scopes = dict(self.connection.execute("SELECT id,tracking_scope FROM Accounts"))
         active = self._active_reviewed_entries(source_sha256)
         overlap_blocks = self.source_overlap_posting_blocks(tuple(row.row_id for row in _rows(saved.evidence)))
         result = []
@@ -2992,6 +3193,8 @@ class V2ProfileStore:
                 status = "Posting date unavailable"
             elif account_id is None:
                 status = "Assign a financial account first"
+            elif tracking_scopes.get(account_id) != "account_total":
+                status = "Tracking scope needs a supported source interpretation"
             elif financial is None or financial[1:] != ("liability", "financial"):
                 status = "Requires a bound card liability account"
             elif not row.description.text:
@@ -3046,6 +3249,7 @@ class V2ProfileStore:
                 amount = row.amount.minor
                 if (
                     account is None
+                    or account.tracking_scope != "account_total"
                     or row.row_role != "activity"
                     or type(amount) is not int
                     or amount == 0
@@ -3188,7 +3392,7 @@ class V2ProfileStore:
             clearing_id = "internal:transfer-clearing:USD"
             if out_date != in_date:
                 self.connection.execute(
-                    "INSERT OR IGNORE INTO Accounts VALUES (?,?,?,'USD','internal','clearing',NULL,NULL)",
+                    "INSERT OR IGNORE INTO Accounts VALUES (?,?,?,'USD','internal','clearing',NULL,NULL,'account_total')",
                     (clearing_id, "Transfer clearing", "asset"),
                 )
             accounts = self._ledger_accounts()
@@ -3305,9 +3509,9 @@ class V2ProfileStore:
             saved = self.load_import(movement.source_sha256)
             row = next((row for row in _rows(saved.evidence) if row.row_id == movement.row_id), None)
             account = self.connection.execute(
-                "SELECT kind,role FROM Accounts WHERE id=?", (movement.account_id,)
+                "SELECT kind,role,tracking_scope FROM Accounts WHERE id=?", (movement.account_id,)
             ).fetchone()
-            if row is None or account != (movement.account_kind, "financial"):
+            if row is None or account != (movement.account_kind, "financial", "account_total"):
                 raise ProfileFormatError("transfer_history_integrity")
             candidate = (
                 row.date
@@ -4008,6 +4212,8 @@ class V2ProfileStore:
             decision = self.opening_decision(account.id)
             if decision is None:
                 status = "missing"
+            elif decision.state == "withdrawn":
+                status = "withdrawn"
             elif decision.stale:
                 status = "stale"
             elif decision.cutoff_date > as_of:
@@ -4099,6 +4305,8 @@ class V2ProfileStore:
                 ),
                 default=None,
             )
+            lifecycle = self._account_lifecycle_at(account.id, as_of)
+            closed = lifecycle is not None and lifecycle.state == "closed"
             result.append(
                 AccountPosition(
                     account.id,
@@ -4133,6 +4341,13 @@ class V2ProfileStore:
                         ),
                         default=None,
                     ),
+                    account.tracking_scope,
+                    decision.origin if decision is not None else None,
+                    self._latest_dated_value(account.id, as_of),
+                    lifecycle,
+                    recorded if closed else None,
+                    closed and status != "valid",
+                    as_of if closed else None,
                 )
             )
         unresolved_rows, unresolved_sources = self._unallocated_activity_counts()
@@ -5684,6 +5899,8 @@ class V2ProfileStore:
             ("StatementSourceReviews", "*"),
             ("OpeningDecisions", "*"),
             ("OpeningDecisionRevisions", "*"),
+            ("AccountDatedValues", "*"),
+            ("AccountLifecycleDecisions", "*"),
             ("TransferEvents", "*"),
             ("TransferEventActions", "*"),
             ("TransferPairReviews", "*"),
@@ -5767,7 +5984,11 @@ class V2ProfileStore:
                 else None
             )
             exceptions = []
-            if section.balance_scope != "account_total":
+            if (
+                section.balance_scope != "account_total"
+                or next(a for a in self.financial_accounts() if a.id == section.account_id).tracking_scope
+                != "account_total"
+            ):
                 exceptions.append("account_total_scope_unavailable")
             if section.period_start is None:
                 exceptions.append("source_period_start_unavailable")
@@ -5803,7 +6024,7 @@ class V2ProfileStore:
                 exceptions.append("source_period_timing_unreviewed")
             if review is None or review.posting_dates != "reported":
                 exceptions.append("posting_dates_not_reported")
-            if opening_decision is None or opening_decision.stale:
+            if opening_decision is None or opening_decision.state != "active" or opening_decision.stale:
                 exceptions.append("opening_position_unverified_or_stale")
             overlapping = any(
                 other.account_id == section.account_id
@@ -6263,9 +6484,15 @@ class V2ProfileStore:
         if not history:
             return None
         saved = history[0]
-        candidate = next(item for item in self.earliest_source_openings() if item.account_id == account_id)
-        reviews = self.statement_source_reviews(account_id)
-        stale = bool(candidate.blockers) or saved.basis_sha256 != self._opening_basis(candidate, reviews)
+        stale = False
+        if saved.state == "active":
+            if saved.origin == "source":
+                candidate = next(item for item in self.earliest_source_openings() if item.account_id == account_id)
+                stale = bool(candidate.blockers) or saved.basis_sha256 != self._opening_basis(
+                    candidate, self.statement_source_reviews(account_id)
+                )
+            else:
+                stale = self._manual_opening_history_conflict(account_id, saved.cutoff_date)
         return OpeningDecision(
             account_id,
             saved.basis_sha256,
@@ -6275,110 +6502,207 @@ class V2ProfileStore:
             stale,
             saved.revision_id,
             saved.version,
+            saved.origin,
+            saved.state,
+            saved.tracking_scope,
+            saved.reference,
         )
 
     @staticmethod
     def _opening_decision_version(
-        account_id, revision_id, basis, amount, cutoff, entry_key, prior_version=None, reason="Initial reviewed opening"
+        account_id,
+        revision_id,
+        basis,
+        amount,
+        cutoff,
+        entry_key,
+        prior_version=None,
+        reason="Initial reviewed opening",
+        origin="source",
+        state="active",
+        tracking_scope="account_total",
+        reference="",
+        request_basis=None,
+        created_at=None,
     ) -> str:
-        return _digest(
-            json.dumps(
-                (account_id, revision_id, prior_version, basis, amount, cutoff, entry_key, reason),
-                separators=(",", ":"),
-            ).encode()
+        return _transfer_record_digest(
+            account_id,
+            revision_id,
+            prior_version,
+            basis,
+            amount,
+            cutoff,
+            entry_key,
+            reason,
+            origin,
+            state,
+            tracking_scope,
+            reference,
+            basis if request_basis is None else request_basis,
+            created_at,
         )
 
+    @staticmethod
+    def _manual_opening_basis(account_id, amount, cutoff, scope, reference):
+        return _transfer_record_digest("manual-opening-1", account_id, amount, cutoff, scope, reference)
+
     def opening_decision_history(self, account_id: str) -> tuple[OpeningDecisionHistoryRow, ...]:
-        """Retain the initial decision and every correction, newest first."""
+        """One immutable source/manual/withdrawal chain; zero and unknown remain distinct."""
         self._validate_journal_retirements()
         self._require_financial_account(account_id)
+        account = next(a for a in self.financial_accounts() if a.id == account_id)
         saved = self.connection.execute(
-            "SELECT basis_sha256,amount_minor,cutoff_date,entry_key,decision_sha256,created_at FROM OpeningDecisions WHERE account_id=?",
+            "SELECT basis_sha256,amount_minor,cutoff_date,entry_key,reason,decision_sha256,created_at,origin,state,tracking_scope,reference,request_basis FROM OpeningDecisions WHERE account_id=?",
             (account_id,),
         ).fetchone()
+        revisions = self.connection.execute(
+            "SELECT revision_id,prior_version,basis_sha256,amount_minor,cutoff_date,entry_key,reason,decision_sha256,created_at,origin,state,tracking_scope,reference,request_basis FROM OpeningDecisionRevisions WHERE account_id=? ORDER BY revision_id",
+            (account_id,),
+        ).fetchall()
         if saved is None:
-            if self.connection.execute(
-                "SELECT 1 FROM OpeningDecisionRevisions WHERE account_id=?", (account_id,)
-            ).fetchone():
+            if revisions:
                 raise ProfileFormatError("opening_decision_history_invalid")
             return ()
-        rows = [(0, None, *saved[:4], "Initial reviewed opening", saved[4], saved[5])]
-        rows.extend(
-            self.connection.execute(
-                "SELECT revision_id,prior_version,basis_sha256,amount_minor,cutoff_date,entry_key,reason,decision_sha256,created_at "
-                "FROM OpeningDecisionRevisions WHERE account_id=? ORDER BY revision_id",
-                (account_id,),
-            )
-        )
-        result = []
+        rows = [(0, None, *saved), *revisions]
         prior = None
-        for revision, previous, basis, amount, cutoff, key, reason, stored_version, created in rows:
-            if (
-                previous != prior
-                or (amount == 0) != (key is None)
-                or type(amount) is not int
-                or type(reason) is not str
-                or not reason.strip()
-                or type(basis) is not str
-                or re.fullmatch(r"[0-9a-f]{64}", basis) is None
-            ):
-                raise ProfileFormatError("opening_decision_history_invalid")
+        result = []
+        entry_reasons = {}
+        for (
+            revision,
+            previous,
+            basis,
+            amount,
+            cutoff,
+            key,
+            reason,
+            stored,
+            created,
+            origin,
+            state,
+            scope,
+            reference,
+            request,
+        ) in rows:
             try:
-                cutoff_date = date.fromisoformat(cutoff)
-            except (TypeError, ValueError):
-                raise ProfileFormatError("opening_decision_history_invalid") from None
-            if key is not None:
-                payload = self.connection.execute("SELECT payload FROM JournalEntries WHERE key=?", (key,)).fetchone()
-                try:
-                    entry = _decode_journal(payload[0]) if payload is not None else None
-                except ProfileFormatError:
-                    raise ProfileFormatError("opening_decision_history_invalid") from None
                 if (
-                    entry is None
-                    or entry.key != key
-                    or entry.origin != "opening"
-                    or entry.reviewed is not True
-                    or entry.posting_date != cutoff_date
-                    or len(entry.postings) != 2
-                    or entry.postings[0].account_id != account_id
-                    or entry.postings[0].amount_minor != amount
-                    or entry.postings[1].account_id != "internal:opening-equity:USD"
-                    or entry.postings[1].amount_minor != -amount
-                    or any(posting.allocations for posting in entry.postings)
-                    or self.connection.execute(
-                        "SELECT 1 FROM JournalAllocations WHERE entry_key=? LIMIT 1", (key,)
-                    ).fetchone()
-                    is not None
+                    type(revision) is not int
+                    or revision < 0
+                    or previous != prior
+                    or any(
+                        type(v) is not str
+                        for v in (basis, reason, stored, created, origin, state, scope, reference, request)
+                    )
+                    or any(re.fullmatch(r"[0-9a-f]{64}", v) is None for v in (basis, stored, request))
+                    or not 0 < len(reason.strip()) <= 500
+                    or len(reference) > 500
+                    or not created
+                    or origin not in {"source", "manual"}
+                    or state not in {"active", "withdrawn"}
+                    or scope not in TRACKING_SCOPES
+                    or scope != account.tracking_scope
                 ):
-                    raise ProfileFormatError("opening_decision_history_invalid")
-                try:
+                    raise ValueError
+                cutoff_date = None
+                if state == "withdrawn":
+                    if (
+                        revision == 0
+                        or amount is not None
+                        or cutoff is not None
+                        or key is not None
+                        or basis != _transfer_record_digest("withdraw-opening-1", previous)
+                    ):
+                        raise ValueError
+                else:
+                    if (
+                        type(amount) is not int
+                        or not -(2**63) < amount < 2**63
+                        or type(cutoff) is not str
+                        or (amount == 0) != (key is None)
+                    ):
+                        raise ValueError
+                    cutoff_date = date.fromisoformat(cutoff)
+                    if cutoff_date.isoformat() != cutoff or (origin == "source" and scope != "account_total"):
+                        raise ValueError
+                    if origin == "manual" and (
+                        not reference.strip()
+                        or basis != self._manual_opening_basis(account_id, amount, cutoff, scope, reference)
+                    ):
+                        raise ValueError
+                if key is not None:
+                    payload = self.connection.execute(
+                        "SELECT payload FROM JournalEntries WHERE key=?", (key,)
+                    ).fetchone()
+                    entry = _decode_journal(payload[0]) if payload else None
+                    entry_reasons.setdefault(key, reason)
+                    if (
+                        type(key) is not str
+                        or entry is None
+                        or entry.key != key
+                        or entry.origin != "opening"
+                        or entry.event_id != key
+                        or entry.description != "Reviewed opening position"
+                        or entry.reason != entry_reasons[key]
+                        or not entry.reviewed
+                        or entry.posting_date != cutoff_date
+                        or len(entry.postings) != 2
+                        or entry.postings[0] != Posting(account_id, amount)
+                        or entry.postings[1] != Posting("internal:opening-equity:USD", -amount)
+                        or self.connection.execute(
+                            "SELECT 1 FROM JournalAllocations WHERE entry_key=? LIMIT 1", (key,)
+                        ).fetchone()
+                    ):
+                        raise ValueError
+                    if self.connection.execute(
+                        "SELECT kind,role,purpose,currency FROM Accounts WHERE id='internal:opening-equity:USD'"
+                    ).fetchone() != ("equity", "internal", "opening_equity", "USD"):
+                        raise ValueError
                     validate_entry(entry, self._ledger_accounts(), {}, {})
-                except LedgerError:
-                    raise ProfileFormatError("opening_decision_history_invalid") from None
-            version = self._opening_decision_version(account_id, revision, basis, amount, cutoff, key, previous, reason)
-            if stored_version != version:
-                raise ProfileFormatError("opening_decision_history_invalid")
-            result.append(
-                OpeningDecisionHistoryRow(
-                    revision,
+                version = self._opening_decision_version(
                     account_id,
+                    revision,
                     basis,
                     amount,
-                    cutoff_date,
+                    cutoff,
                     key,
-                    version,
                     previous,
                     reason,
+                    origin,
+                    state,
+                    scope,
+                    reference,
+                    request,
                     created,
                 )
-            )
-            prior = version
-        retired_keys = {key for (key,) in self.connection.execute("SELECT original_key FROM JournalRetirements")}
+                if stored != version:
+                    raise ValueError
+                result.append(
+                    OpeningDecisionHistoryRow(
+                        revision,
+                        account_id,
+                        basis,
+                        amount,
+                        cutoff_date,
+                        key,
+                        version,
+                        previous,
+                        reason,
+                        created,
+                        origin,
+                        state,
+                        scope,
+                        reference,
+                        request,
+                    )
+                )
+                prior = version
+            except (ProfileFormatError, LedgerError, TypeError, ValueError):
+                raise ProfileFormatError("opening_decision_history_invalid") from None
+        retirements = dict(self.connection.execute("SELECT original_key,reason FROM JournalRetirements"))
         for older, newer in zip(result, result[1:], strict=False):
             if (
                 older.entry_key != newer.entry_key
                 and older.entry_key is not None
-                and older.entry_key not in retired_keys
+                and retirements.get(older.entry_key) != newer.reason
             ):
                 raise ProfileFormatError("opening_decision_history_invalid")
         if result[-1].entry_key is not None and result[-1].entry_key in self._inactive_journal_keys():
@@ -6391,6 +6715,347 @@ class V2ProfileStore:
             "SELECT account_id FROM OpeningDecisions UNION SELECT account_id FROM OpeningDecisionRevisions"
         ).fetchall():
             self.opening_decision_history(account_id)
+
+    def _anchor_write_start(self, reason: str) -> None:
+        self._require_writable()
+        if type(reason) is not str or not 0 < len(reason.strip()) <= 500:
+            raise ProfileFormatError("account_anchor_reason_required")
+        if self.connection.in_transaction:
+            raise ProfileFormatError("account_anchor_requires_committed_snapshot")
+        self.connection.execute("BEGIN IMMEDIATE")
+
+    def _anchor_account(self, account_id: str, scope: str) -> FinancialAccount:
+        self._require_financial_account(account_id)
+        account = next(a for a in self.financial_accounts() if a.id == account_id)
+        if type(scope) is not str or scope not in TRACKING_SCOPES or scope != account.tracking_scope:
+            raise ProfileFormatError("account_anchor_scope_mismatch")
+        return account
+
+    @staticmethod
+    def _validate_anchor_value(amount, value_date, reference):
+        if (
+            type(amount) is not int
+            or not -(2**63) < amount < 2**63
+            or type(value_date) is not date
+            or type(reference) is not str
+            or not 0 < len(reference.strip()) <= 500
+        ):
+            raise ProfileFormatError("account_anchor_value_invalid")
+
+    def _read_dated_values(self, account_id: str | None = None) -> tuple[ReviewedDatedValue, ...]:
+        values = []
+        by_id = {}
+        corrected = {}
+        for row in self.connection.execute("SELECT * FROM AccountDatedValues ORDER BY value_id"):
+            number, account, day, amount, scope, reference, reason, previous, request, checksum, created = row
+            try:
+                if (
+                    type(number) is not int
+                    or number <= 0
+                    or any(type(row[i]) is not str for i in (1, 2, 4, 5, 6, 8, 9, 10))
+                    or any(re.fullmatch(r"[0-9a-f]{64}", v) is None for v in (request, checksum))
+                    or not 0 < len(reason.strip()) <= 500
+                    or not created
+                    or checksum != _transfer_record_digest(*row[:9], created)
+                ):
+                    raise ValueError
+                self._anchor_account(account, scope)
+                value_date = date.fromisoformat(day)
+                self._validate_anchor_value(amount, value_date, reference)
+                if value_date.isoformat() != day:
+                    raise ValueError
+                if previous is not None and (
+                    type(previous) is not int
+                    or previous not in by_id
+                    or previous in corrected
+                    or by_id[previous].account_id != account
+                ):
+                    raise ValueError
+                item = ReviewedDatedValue(
+                    number, account, value_date, amount, scope, reference, reason, previous, created, checksum
+                )
+                values.append(item)
+                by_id[number] = item
+                if previous is not None:
+                    corrected[previous] = number
+            except (ProfileFormatError, TypeError, ValueError):
+                raise ProfileFormatError("account_dated_value_history_integrity") from None
+        return tuple(
+            replace(item, superseded_by_value_id=corrected.get(item.value_id))
+            for item in reversed(values)
+            if account_id is None or item.account_id == account_id
+        )
+
+    def _read_account_lifecycle(self, account_id: str | None = None) -> tuple[AccountLifecycleDecision, ...]:
+        values = []
+        latest = {}
+        phases = {}
+        for row in self.connection.execute("SELECT * FROM AccountLifecycleDecisions ORDER BY revision_id"):
+            number, account, state, day, reason, previous, request, checksum, created = row
+            try:
+                if (
+                    type(number) is not int
+                    or number <= 0
+                    or any(type(row[i]) is not str for i in (1, 2, 3, 4, 6, 7, 8))
+                    or state not in {"open", "closed"}
+                    or not 0 < len(reason.strip()) <= 500
+                    or not created
+                    or any(re.fullmatch(r"[0-9a-f]{64}", v) is None for v in (request, checksum))
+                    or checksum != _transfer_record_digest(*row[:7], created)
+                ):
+                    raise ValueError
+                self._require_financial_account(account)
+                effective = date.fromisoformat(day)
+                if effective.isoformat() != day or previous != (latest[account].version if account in latest else None):
+                    raise ValueError
+                events = phases.setdefault(account, [])
+                if events and events[-1].state == state:
+                    events.pop()
+                if events and effective < events[-1].effective_date:
+                    raise ValueError
+                item = AccountLifecycleDecision(number, account, state, effective, reason, previous, created, checksum)
+                events.append(item)
+                latest[account] = item
+                values.append(item)
+            except (ProfileFormatError, TypeError, ValueError):
+                raise ProfileFormatError("account_lifecycle_history_integrity") from None
+        return tuple(item for item in reversed(values) if account_id is None or item.account_id == account_id)
+
+    def _account_lifecycle_at(self, account_id: str, as_of: date) -> AccountLifecycleDecision | None:
+        return next(
+            (item for item in reversed(self._account_lifecycle_phases(account_id)) if item.effective_date <= as_of),
+            None,
+        )
+
+    def _account_lifecycle_phases(self, account_id: str) -> tuple[AccountLifecycleDecision, ...]:
+        phases = []
+        for item in reversed(self._read_account_lifecycle(account_id)):
+            if phases and phases[-1].state == item.state:
+                phases.pop()
+            phases.append(item)
+        return tuple(phases)
+
+    def _latest_dated_value(self, account_id: str, as_of: date) -> ReviewedDatedValue | None:
+        return max(
+            (
+                item
+                for item in self._read_dated_values(account_id)
+                if item.superseded_by_value_id is None and item.value_date <= as_of
+            ),
+            key=lambda item: (item.value_date, item.value_id),
+            default=None,
+        )
+
+    def _validate_account_metadata(self) -> None:
+        if not self._account_anchors_mutating:
+            if any(
+                type(scope) is not str or scope not in TRACKING_SCOPES
+                for (scope,) in self.connection.execute("SELECT tracking_scope FROM Accounts")
+            ):
+                raise ProfileFormatError("account_tracking_scope_integrity")
+            self._read_dated_values()
+            self._read_account_lifecycle()
+            self._validate_opening_decision_histories()
+
+    def _account_anchor_basis(self) -> str:
+        rule, version = self._reconciliation_rule_and_version()
+        return _transfer_record_digest("account-anchor-1", rule, version)
+
+    def account_anchor_snapshot(self, account_id: str, *, as_of: date | None = None) -> AccountAnchorSnapshot:
+        if self.connection.in_transaction:
+            raise ProfileFormatError("account_anchor_requires_committed_snapshot")
+        if as_of is None:
+            as_of = date.today()
+        if type(as_of) is not date:
+            raise ProfileFormatError("account_anchor_date_invalid")
+        self.connection.execute("BEGIN")
+        try:
+            self._require_financial_account(account_id)
+            account = next(a for a in self.financial_accounts() if a.id == account_id)
+            history = self.opening_decision_history(account_id)
+            opening = self.opening_decision(account_id)
+            lifecycle = self._read_account_lifecycle(account_id)
+            recorded = sum(
+                p.amount_minor
+                for (payload,) in self.connection.execute("SELECT payload FROM JournalEntries")
+                for entry in (_decode_journal(payload),)
+                if entry.reviewed and entry.posting_date <= as_of
+                for p in entry.postings
+                if p.account_id == account_id
+            )
+            earliest = self._earliest_known_account_activity(account_id)
+            boundaries = self._account_opening_boundaries(account_id)
+            valid = (
+                opening is not None and opening.state == "active" and not opening.stale and opening.cutoff_date <= as_of
+            )
+            if valid and any(
+                entry.key != opening.entry_key
+                and entry.posting_date <= opening.cutoff_date
+                and any(p.account_id == account_id for p in entry.postings)
+                for entry in self._active_journal_entries()
+            ):
+                valid = False
+            return AccountAnchorSnapshot(
+                account,
+                opening,
+                history,
+                self._read_dated_values(account_id),
+                self._latest_dated_value(account_id, as_of),
+                lifecycle[0] if lifecycle else None,
+                lifecycle,
+                earliest,
+                self._account_anchor_basis(),
+                recorded,
+                recorded if valid else None,
+                min((item.boundary_date for item in boundaries), default=None),
+                boundaries,
+            )
+        finally:
+            self.connection.execute("ROLLBACK")
+
+    def record_reviewed_dated_value(
+        self,
+        account_id: str,
+        *,
+        amount_minor: int,
+        value_date: date,
+        tracking_scope: str,
+        reference: str,
+        reason: str,
+        expected_basis_sha256: str,
+        corrects_value_id: int | None = None,
+    ) -> ReviewedDatedValue:
+        self._anchor_write_start(reason)
+        try:
+            if (
+                type(expected_basis_sha256) is not str
+                or re.fullmatch(r"[0-9a-f]{64}", expected_basis_sha256) is None
+                or (corrects_value_id is not None and type(corrects_value_id) is not int)
+            ):
+                raise ProfileFormatError("account_anchor_version_required")
+            self._anchor_account(account_id, tracking_scope)
+            self._validate_anchor_value(amount_minor, value_date, reference)
+            history = self._read_dated_values(account_id)
+            prior = self.connection.execute(
+                "SELECT value_id FROM AccountDatedValues WHERE account_id=? AND value_date=? AND amount_minor=? AND tracking_scope=? AND reference=? AND reason=? AND corrects_value_id IS ? AND request_basis=?",
+                (
+                    account_id,
+                    value_date.isoformat(),
+                    amount_minor,
+                    tracking_scope,
+                    reference.strip(),
+                    reason.strip(),
+                    corrects_value_id,
+                    expected_basis_sha256,
+                ),
+            ).fetchone()
+            if prior:
+                result = next(v for v in history if v.value_id == prior[0])
+                self.connection.execute("COMMIT")
+                return result
+            if self._account_anchor_basis() != expected_basis_sha256:
+                raise ProfileFormatError("account_anchor_changed_since_selection")
+            if corrects_value_id is not None and (
+                type(corrects_value_id) is not int
+                or not any(v.value_id == corrects_value_id and v.superseded_by_value_id is None for v in history)
+            ):
+                raise ProfileFormatError("account_dated_value_correction_unavailable")
+            number = self.connection.execute("SELECT coalesce(max(value_id),0)+1 FROM AccountDatedValues").fetchone()[0]
+            created = self.connection.execute("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now')").fetchone()[0]
+            fields = (
+                number,
+                account_id,
+                value_date.isoformat(),
+                amount_minor,
+                tracking_scope,
+                reference.strip(),
+                reason.strip(),
+                corrects_value_id,
+                expected_basis_sha256,
+            )
+            self.connection.execute(
+                "INSERT INTO AccountDatedValues VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                (*fields, _transfer_record_digest(*fields, created), created),
+            )
+            result = next(v for v in self._read_dated_values(account_id) if v.value_id == number)
+            self.connection.execute("COMMIT")
+            return result
+        except BaseException:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def record_account_lifecycle(
+        self,
+        account_id: str,
+        *,
+        state: str,
+        effective_date: date,
+        reason: str,
+        expected_version: str | None,
+        expected_basis_sha256: str,
+    ) -> AccountLifecycleDecision:
+        self._anchor_write_start(reason)
+        try:
+            if (
+                type(expected_basis_sha256) is not str
+                or re.fullmatch(r"[0-9a-f]{64}", expected_basis_sha256) is None
+                or (
+                    expected_version is not None
+                    and (type(expected_version) is not str or re.fullmatch(r"[0-9a-f]{64}", expected_version) is None)
+                )
+            ):
+                raise ProfileFormatError("account_anchor_version_required")
+            self._require_financial_account(account_id)
+            if type(state) is not str or state not in {"open", "closed"} or type(effective_date) is not date:
+                raise ProfileFormatError("account_lifecycle_invalid")
+            history = self._read_account_lifecycle(account_id)
+            current = history[0] if history else None
+            for receipt in history:
+                if (
+                    receipt.prior_version == expected_version
+                    and receipt.state == state
+                    and receipt.effective_date == effective_date
+                    and receipt.reason == reason.strip()
+                ):
+                    request = self.connection.execute(
+                        "SELECT request_basis FROM AccountLifecycleDecisions WHERE revision_id=?",
+                        (receipt.revision_id,),
+                    ).fetchone()[0]
+                    if request == expected_basis_sha256:
+                        self.connection.execute("COMMIT")
+                        return receipt
+            if expected_version != (current.version if current else None):
+                raise ProfileFormatError("account_lifecycle_changed_since_selection")
+            if self._account_anchor_basis() != expected_basis_sha256:
+                raise ProfileFormatError("account_anchor_changed_since_selection")
+            phases = list(self._account_lifecycle_phases(account_id))
+            if phases and phases[-1].state == state:
+                phases.pop()
+            if phases and effective_date < phases[-1].effective_date:
+                raise ProfileFormatError("account_lifecycle_date_order")
+            number = self.connection.execute(
+                "SELECT coalesce(max(revision_id),0)+1 FROM AccountLifecycleDecisions"
+            ).fetchone()[0]
+            created = self.connection.execute("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now')").fetchone()[0]
+            fields = (
+                number,
+                account_id,
+                state,
+                effective_date.isoformat(),
+                reason.strip(),
+                expected_version,
+                expected_basis_sha256,
+            )
+            self.connection.execute(
+                "INSERT INTO AccountLifecycleDecisions VALUES (?,?,?,?,?,?,?,?,?)",
+                (*fields, _transfer_record_digest(*fields, created), created),
+            )
+            result = self._read_account_lifecycle(account_id)[0]
+            self.connection.execute("COMMIT")
+            return result
+        except BaseException:
+            self.connection.execute("ROLLBACK")
+            raise
 
     def opening_review_snapshot(self, account_id: str) -> OpeningReviewSnapshot:
         if self.connection.in_transaction:
@@ -6475,7 +7140,9 @@ class V2ProfileStore:
             earliest = min(start for _source_id, start, _account in bound if start is not None)
             tied = [(source_id, account) for source_id, start, account in bound if start == earliest]
             blockers = []
-            if any(account.balance_scope != "account_total" for _source_id, account in tied):
+            if financial.tracking_scope != "account_total" or any(
+                account.balance_scope != "account_total" for _source_id, account in tied
+            ):
                 blockers.append("non_account_total_scope")
             if any(
                 account.opening is None or account.opening.provenance != "observed" or account.opening.minor is None
@@ -6514,76 +7181,276 @@ class V2ProfileStore:
             )
         return tuple(result)
 
+    def _account_activity_boundaries(self, account_id: str) -> tuple[AccountOpeningBoundary, ...]:
+        bounds = []
+        for source_id in self.source_ids():
+            bound = {b.row_id for b in self.account_bindings(source_id) if b.ledger_account_id == account_id}
+            for row in _rows(self.load_import(source_id).evidence):
+                if row.row_id not in bound or row.row_role != "activity":
+                    continue
+                for actual in (row.transaction_date, row.date):
+                    if actual is not None and actual.iso is not None and actual.provenance in {"observed", "derived"}:
+                        bounds.append(
+                            AccountOpeningBoundary(
+                                date.fromisoformat(actual.iso), "activity", False, source_id, row.row_id
+                            )
+                        )
+        entries = {
+            key: _decode_journal(payload)
+            for key, payload in self.connection.execute("SELECT key,payload FROM JournalEntries")
+        }
+        openings = {key for key, entry in entries.items() if entry.origin == "opening"}
+        openings.update(
+            inverse
+            for original, inverse in self.connection.execute("SELECT original_key,reversal_key FROM JournalRetirements")
+            if original in openings
+        )
+        inactive = frozenset(key for (key,) in self.connection.execute(_INACTIVE_JOURNAL_SQL))
+        bounds.extend(
+            AccountOpeningBoundary(entry.posting_date, "journal", False, reference=key)
+            for key, entry in entries.items()
+            if key not in inactive and key not in openings and any(p.account_id == account_id for p in entry.postings)
+        )
+        return tuple(set(bounds))
+
+    def _earliest_known_account_activity(self, account_id: str) -> date | None:
+        return min((bound.boundary_date for bound in self._account_activity_boundaries(account_id)), default=None)
+
+    def _account_opening_boundaries(self, account_id: str) -> tuple[AccountOpeningBoundary, ...]:
+        bounds = list(self._account_activity_boundaries(account_id))
+        associated = {
+            source
+            for (source,) in self.connection.execute(
+                "SELECT DISTINCT source_sha256 FROM SourceAccountBindings WHERE ledger_account_id=?", (account_id,)
+            )
+        }
+        for source_id in associated:
+            payload = self.load_import(source_id).evidence.payload
+            if not isinstance(payload, StatementPayload):
+                continue
+            if payload.start.iso is not None and payload.start.provenance in {"observed", "derived"}:
+                bounds.append(
+                    AccountOpeningBoundary(
+                        date.fromisoformat(payload.start.iso),
+                        "statement_start",
+                        False,
+                        source_id,
+                        "Known statement interval",
+                    )
+                )
+            elif payload.end.iso is not None and payload.end.provenance in {"observed", "derived"}:
+                bounds.append(
+                    AccountOpeningBoundary(
+                        date.fromisoformat(payload.end.iso),
+                        "statement_end",
+                        True,
+                        source_id,
+                        "First known statement endpoint",
+                    )
+                )
+        bounds.extend(
+            AccountOpeningBoundary(item.value_date, "dated_value", True, reference=str(item.value_id))
+            for item in self._read_dated_values(account_id)
+            if item.superseded_by_value_id is None
+        )
+        bounds.extend(
+            AccountOpeningBoundary(item.effective_date, "lifecycle", True, reference=str(item.revision_id))
+            for item in self._account_lifecycle_phases(account_id)
+        )
+        return tuple(
+            sorted(
+                set(bounds),
+                key=lambda item: (
+                    item.boundary_date,
+                    item.allows_equal,
+                    item.kind,
+                    item.source_sha256 or "",
+                    item.reference,
+                ),
+            )
+        )
+
+    def _manual_opening_history_conflict(self, account_id: str, cutoff: date) -> bool:
+        return any(
+            cutoff > bound.boundary_date or (cutoff == bound.boundary_date and not bound.allows_equal)
+            for bound in self._account_opening_boundaries(account_id)
+        )
+
+    def _append_opening_decision(
+        self, account_id, *, current, origin, state, amount, cutoff, basis, reference, reason, request_basis
+    ):
+        account = next(a for a in self.financial_accounts() if a.id == account_id)
+        if state == "active":
+            if origin == "manual":
+                if self._manual_opening_history_conflict(account_id, cutoff):
+                    raise ProfileFormatError("opening_earlier_activity_conflict")
+            for entry in self._active_journal_entries():
+                if (
+                    entry.key != (current.entry_key if current else None)
+                    and entry.posting_date <= cutoff
+                    and any(p.account_id == account_id for p in entry.postings)
+                ):
+                    raise ProfileFormatError("opening_earlier_posting_conflict")
+        self._account_anchors_mutating = True
+        try:
+            key = current.entry_key if current else None
+            keep = (
+                current is not None
+                and current.state == "active"
+                and state == "active"
+                and current.origin == origin
+                and current.amount_minor == amount
+                and current.cutoff_date == cutoff
+            )
+            if not keep:
+                if key is not None:
+                    payload = self.connection.execute(
+                        "SELECT payload FROM JournalEntries WHERE key=?", (key,)
+                    ).fetchone()[0]
+                    self._retire_journal_entry(_decode_journal(payload), reason=reason)
+                key = None
+                if state == "active" and amount != 0:
+                    equity = "internal:opening-equity:USD"
+                    self.connection.execute(
+                        "INSERT OR IGNORE INTO Accounts VALUES (?,?,?,'USD','internal','opening_equity',NULL,NULL,'account_total')",
+                        (equity, "Opening equity", "equity"),
+                    )
+                    if current is None:
+                        key = ("review:opening:" if origin == "source" else "review:opening:manual:") + account_id
+                    else:
+                        key = "review:opening:correction:" + _transfer_record_digest(
+                            account_id, current.version, basis, reason, origin
+                        )
+                    entry = JournalEntry(
+                        key=key,
+                        event_id=key,
+                        posting_date=cutoff,
+                        description="Reviewed opening position",
+                        postings=(Posting(account_id, amount), Posting(equity, -amount)),
+                        origin="opening",
+                        reviewed=True,
+                        reason=reason,
+                    )
+                    validate_entry(entry, self._ledger_accounts(), {}, {})
+                    self.connection.execute(
+                        "INSERT INTO JournalEntries(key,payload) VALUES (?,?)", (key, _journal_payload(entry))
+                    )
+            revision = (
+                0
+                if current is None
+                else self.connection.execute(
+                    "SELECT coalesce(max(revision_id),0)+1 FROM OpeningDecisionRevisions"
+                ).fetchone()[0]
+            )
+            previous = current.version if current else None
+            cutoff_text = cutoff.isoformat() if cutoff is not None else None
+            created = self.connection.execute("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now')").fetchone()[0]
+            version = self._opening_decision_version(
+                account_id,
+                revision,
+                basis,
+                amount,
+                cutoff_text,
+                key,
+                previous,
+                reason,
+                origin,
+                state,
+                account.tracking_scope,
+                reference,
+                request_basis,
+                created,
+            )
+            if current is None:
+                self.connection.execute(
+                    "INSERT INTO OpeningDecisions (account_id,basis_sha256,amount_minor,cutoff_date,entry_key,decision_sha256,origin,state,tracking_scope,reference,reason,request_basis,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        account_id,
+                        basis,
+                        amount,
+                        cutoff_text,
+                        key,
+                        version,
+                        origin,
+                        state,
+                        account.tracking_scope,
+                        reference,
+                        reason,
+                        request_basis,
+                        created,
+                    ),
+                )
+            else:
+                self.connection.execute(
+                    "INSERT INTO OpeningDecisionRevisions (revision_id,account_id,prior_version,basis_sha256,amount_minor,cutoff_date,entry_key,reason,decision_sha256,origin,state,tracking_scope,reference,request_basis,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (
+                        revision,
+                        account_id,
+                        previous,
+                        basis,
+                        amount,
+                        cutoff_text,
+                        key,
+                        reason,
+                        version,
+                        origin,
+                        state,
+                        account.tracking_scope,
+                        reference,
+                        request_basis,
+                        created,
+                    ),
+                )
+        finally:
+            self._account_anchors_mutating = False
+        return self.opening_decision(account_id)
+
     def post_reviewed_opening(self, account_id: str, *, expected_basis_sha256: str | None = None) -> OpeningDecision:
-        """Post a printed opening through equity after every earliest source is reviewed."""
         self._require_writable()
         if self.connection.in_transaction:
             raise ProfileFormatError("opening_requires_committed_snapshot")
         self.connection.execute("BEGIN IMMEDIATE")
         try:
-            candidate = next((item for item in self.earliest_source_openings() if item.account_id == account_id), None)
-            if candidate is None or candidate.blockers or candidate.earliest_period_start is None:
+            candidate = next((c for c in self.earliest_source_openings() if c.account_id == account_id), None)
+            if (
+                candidate is None
+                or candidate.blockers
+                or candidate.earliest_period_start is None
+                or candidate.printed_opening_minor is None
+            ):
                 raise ProfileFormatError("opening_review_blocked")
             if candidate.earliest_period_start == date.min:
                 raise ProfileFormatError("opening_cutoff_unavailable")
-            amount = candidate.printed_opening_minor
-            if amount is None:
-                raise ProfileFormatError("opening_review_blocked")
-            reviews = self.statement_source_reviews(account_id)
-            basis = self._opening_basis(candidate, reviews)
-            if expected_basis_sha256 is not None and basis != expected_basis_sha256:
+            basis = self._opening_basis(candidate, self.statement_source_reviews(account_id))
+            if expected_basis_sha256 is not None and expected_basis_sha256 != basis:
                 raise ProfileFormatError("opening_review_changed_since_selection")
-            prior = self.opening_decision(account_id)
+            current = self.opening_decision(account_id)
             cutoff = date.fromordinal(candidate.earliest_period_start.toordinal() - 1)
-            if prior is not None:
-                if (prior.basis_sha256, prior.amount_minor, prior.cutoff_date) == (
-                    basis,
-                    amount,
-                    cutoff,
-                ) and not prior.stale:
+            if current is not None:
+                if (
+                    current.origin == "source"
+                    and current.state == "active"
+                    and not current.stale
+                    and (current.basis_sha256, current.amount_minor, current.cutoff_date)
+                    == (basis, candidate.printed_opening_minor, cutoff)
+                ):
                     self.connection.execute("COMMIT")
-                    return prior
+                    return current
                 raise ProfileFormatError("opening_already_decided")
-            for entry in self._active_journal_entries():
-                if entry.posting_date <= cutoff and any(posting.account_id == account_id for posting in entry.postings):
-                    raise ProfileFormatError("opening_earlier_posting_conflict")
-            key = None
-            if amount != 0:
-                equity_id = "internal:opening-equity:USD"
-                self.connection.execute(
-                    "INSERT OR IGNORE INTO Accounts VALUES (?,?,?,'USD','internal','opening_equity',NULL,NULL)",
-                    (equity_id, "Opening equity", "equity"),
-                )
-                key = f"review:opening:{account_id}"
-                entry = JournalEntry(
-                    key=key,
-                    event_id=key,
-                    posting_date=cutoff,
-                    description="Reviewed printed opening position",
-                    postings=(Posting(account_id, amount), Posting(equity_id, -amount)),
-                    origin="opening",
-                    reviewed=True,
-                    reason="Confirmed printed balance and inclusive source timing",
-                )
-                validate_entry(entry, self._ledger_accounts(), {}, self._active_consumed())
-                self.connection.execute(
-                    "INSERT INTO JournalEntries(key,payload) VALUES (?,?)", (key, _journal_payload(entry))
-                )
-            self.connection.execute(
-                "INSERT INTO OpeningDecisions(account_id,basis_sha256,amount_minor,cutoff_date,entry_key,decision_sha256) "
-                "VALUES (?,?,?,?,?,?)",
-                (
-                    account_id,
-                    basis,
-                    amount,
-                    cutoff.isoformat(),
-                    key,
-                    self._opening_decision_version(account_id, 0, basis, amount, cutoff.isoformat(), key),
-                ),
+            result = self._append_opening_decision(
+                account_id,
+                current=None,
+                origin="source",
+                state="active",
+                amount=candidate.printed_opening_minor,
+                cutoff=cutoff,
+                basis=basis,
+                reference="",
+                reason="Initial reviewed opening",
+                request_basis=basis,
             )
-            decision = self.opening_decision(account_id)
             self.connection.execute("COMMIT")
-            return decision
+            return result
         except BaseException as exc:
             self.connection.execute("ROLLBACK")
             if isinstance(exc, LedgerError):
@@ -6621,31 +7488,23 @@ class V2ProfileStore:
         return inverse.key
 
     def correct_reviewed_opening(
-        self,
-        account_id: str,
-        *,
-        expected_decision_version: str,
-        expected_basis_sha256: str,
-        reason: str,
+        self, account_id: str, *, expected_decision_version: str, expected_basis_sha256: str, reason: str
     ) -> OpeningDecision:
-        """Append a source-backed opening correction; never invent a balancing entry."""
-        self._require_writable()
+        if self.connection.in_transaction:
+            raise ProfileFormatError("opening_requires_committed_snapshot")
         if type(reason) is not str or not 0 < len(reason.strip()) <= 500:
             raise ProfileFormatError("opening_correction_reason_required")
         if any(
-            type(value) is not str or re.fullmatch(r"[0-9a-f]{64}", value) is None
-            for value in (expected_decision_version, expected_basis_sha256)
+            type(v) is not str or re.fullmatch(r"[0-9a-f]{64}", v) is None
+            for v in (expected_decision_version, expected_basis_sha256)
         ):
             raise ProfileFormatError("opening_correction_version_required")
-        if self.connection.in_transaction:
-            raise ProfileFormatError("opening_requires_committed_snapshot")
-        reason = reason.strip()
-        self.connection.execute("BEGIN IMMEDIATE")
+        self._anchor_write_start(reason)
         try:
             current = self.opening_decision(account_id)
             if current is None:
                 raise ProfileFormatError("opening_correction_decision_missing")
-            candidate = next(item for item in self.earliest_source_openings() if item.account_id == account_id)
+            candidate = next(c for c in self.earliest_source_openings() if c.account_id == account_id)
             basis = self._opening_basis(candidate, self.statement_source_reviews(account_id))
             if basis != expected_basis_sha256:
                 raise ProfileFormatError("opening_review_changed_since_selection")
@@ -6654,78 +7513,182 @@ class V2ProfileStore:
             if candidate.earliest_period_start == date.min:
                 raise ProfileFormatError("opening_cutoff_unavailable")
             cutoff = date.fromordinal(candidate.earliest_period_start.toordinal() - 1)
-            amount = candidate.printed_opening_minor
+            latest = self.opening_decision_history(account_id)[0]
             if current.version != expected_decision_version:
-                prior = self.opening_decision_history(account_id)[0]
                 if (
-                    prior.prior_version == expected_decision_version
-                    and prior.basis_sha256 == basis
-                    and prior.amount_minor == amount
-                    and prior.cutoff_date == cutoff
-                    and prior.reason == reason
+                    latest.prior_version == expected_decision_version
+                    and latest.request_basis_sha256 == basis
+                    and latest.origin == "source"
+                    and latest.state == "active"
+                    and latest.reason == reason.strip()
                     and not current.stale
                 ):
                     self.connection.execute("COMMIT")
                     return current
                 raise ProfileFormatError("opening_decision_changed_since_selection")
-            if current.basis_sha256 == basis and current.amount_minor == amount and current.cutoff_date == cutoff:
+            if (
+                current.origin == "source"
+                and current.state == "active"
+                and (current.basis_sha256, current.amount_minor, current.cutoff_date)
+                == (basis, candidate.printed_opening_minor, cutoff)
+            ):
                 raise ProfileFormatError("opening_correction_requires_changed_basis")
-            for entry in self._active_journal_entries():
-                if (
-                    entry.key != current.entry_key
-                    and entry.posting_date <= cutoff
-                    and any(posting.account_id == account_id for posting in entry.postings)
-                ):
-                    raise ProfileFormatError("opening_earlier_posting_conflict")
-            key = current.entry_key
-            if current.amount_minor != amount or current.cutoff_date != cutoff:
-                if current.entry_key is not None:
-                    payload = self.connection.execute(
-                        "SELECT payload FROM JournalEntries WHERE key=?", (current.entry_key,)
-                    ).fetchone()
-                    self._retire_journal_entry(_decode_journal(payload[0]), reason=reason)
-                key = None
-                if amount != 0:
-                    equity = "internal:opening-equity:USD"
-                    self.connection.execute(
-                        "INSERT OR IGNORE INTO Accounts VALUES (?,?,?,'USD','internal','opening_equity',NULL,NULL)",
-                        (equity, "Opening equity", "equity"),
-                    )
-                    key = "review:opening:correction:" + _digest(
-                        json.dumps((account_id, expected_decision_version, basis, reason)).encode()
-                    )
-                    entry = JournalEntry(
-                        key=key,
-                        event_id=key,
-                        posting_date=cutoff,
-                        description="Corrected reviewed printed opening",
-                        postings=(Posting(account_id, amount), Posting(equity, -amount)),
-                        origin="opening",
-                        reviewed=True,
-                        reason=reason,
-                    )
-                    validate_entry(entry, self._ledger_accounts(), {}, self._active_consumed())
-                    self.connection.execute(
-                        "INSERT INTO JournalEntries(key,payload) VALUES (?,?)", (key, _journal_payload(entry))
-                    )
-            revision_id = self.connection.execute(
-                "SELECT COALESCE(MAX(revision_id),0)+1 FROM OpeningDecisionRevisions"
-            ).fetchone()[0]
-            version = self._opening_decision_version(
-                account_id, revision_id, basis, amount, cutoff.isoformat(), key, current.version, reason
+            result = self._append_opening_decision(
+                account_id,
+                current=current,
+                origin="source",
+                state="active",
+                amount=candidate.printed_opening_minor,
+                cutoff=cutoff,
+                basis=basis,
+                reference="",
+                reason=reason.strip(),
+                request_basis=basis,
             )
-            self.connection.execute(
-                "INSERT INTO OpeningDecisionRevisions "
-                "(revision_id,account_id,prior_version,basis_sha256,amount_minor,cutoff_date,entry_key,reason,decision_sha256) VALUES (?,?,?,?,?,?,?,?,?)",
-                (revision_id, account_id, current.version, basis, amount, cutoff.isoformat(), key, reason, version),
-            )
-            decision = self.opening_decision(account_id)
             self.connection.execute("COMMIT")
-            return decision
-        except BaseException as exc:
+            return result
+        except BaseException:
             self.connection.execute("ROLLBACK")
-            if isinstance(exc, LedgerError):
-                raise ProfileFormatError("opening_correction_refused") from None
+            raise
+
+    def withdraw_reviewed_opening(
+        self, account_id: str, *, expected_decision_version: str, reason: str
+    ) -> OpeningDecision:
+        if (
+            type(expected_decision_version) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", expected_decision_version) is None
+        ):
+            raise ProfileFormatError("opening_correction_version_required")
+        self._anchor_write_start(reason)
+        try:
+            current = self.opening_decision(account_id)
+            if current is None:
+                raise ProfileFormatError("opening_correction_decision_missing")
+            history = self.opening_decision_history(account_id)
+            for old in history:
+                if (
+                    old.state == "withdrawn"
+                    and old.prior_version == expected_decision_version
+                    and old.reason == reason.strip()
+                ):
+                    receipt = OpeningDecision(
+                        old.account_id,
+                        old.basis_sha256,
+                        None,
+                        None,
+                        None,
+                        False,
+                        old.revision_id,
+                        old.version,
+                        old.origin,
+                        old.state,
+                        old.tracking_scope,
+                        old.reference,
+                    )
+                    self.connection.execute("COMMIT")
+                    return receipt
+            latest = history[0]
+            if (
+                current.state == "withdrawn"
+                and latest.prior_version == expected_decision_version
+                and latest.reason == reason.strip()
+            ):
+                self.connection.execute("COMMIT")
+                return current
+            if current.version != expected_decision_version:
+                raise ProfileFormatError("opening_decision_changed_since_selection")
+            if current.state == "withdrawn":
+                raise ProfileFormatError("opening_already_withdrawn")
+            result = self._append_opening_decision(
+                account_id,
+                current=current,
+                origin=current.origin,
+                state="withdrawn",
+                amount=None,
+                cutoff=None,
+                basis=_transfer_record_digest("withdraw-opening-1", current.version),
+                reference=current.reference,
+                reason=reason.strip(),
+                request_basis=current.version,
+            )
+            self.connection.execute("COMMIT")
+            return result
+        except BaseException:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def post_reviewed_manual_opening(
+        self,
+        account_id: str,
+        *,
+        amount_minor: int,
+        cutoff_date: date,
+        tracking_scope: str,
+        reference: str,
+        reason: str,
+        expected_decision_version: str | None,
+        expected_basis_sha256: str,
+    ) -> OpeningDecision:
+        self._anchor_write_start(reason)
+        try:
+            if (
+                type(expected_basis_sha256) is not str
+                or re.fullmatch(r"[0-9a-f]{64}", expected_basis_sha256) is None
+                or (
+                    expected_decision_version is not None
+                    and (
+                        type(expected_decision_version) is not str
+                        or re.fullmatch(r"[0-9a-f]{64}", expected_decision_version) is None
+                    )
+                )
+            ):
+                raise ProfileFormatError("account_anchor_version_required")
+            account = self._anchor_account(account_id, tracking_scope)
+            self._validate_anchor_value(amount_minor, cutoff_date, reference)
+            current = self.opening_decision(account_id)
+            basis = self._manual_opening_basis(
+                account_id, amount_minor, cutoff_date.isoformat(), account.tracking_scope, reference.strip()
+            )
+            if current is not None and current.version != expected_decision_version:
+                latest = self.opening_decision_history(account_id)[0]
+                if (
+                    latest.prior_version == expected_decision_version
+                    and latest.request_basis_sha256 == expected_basis_sha256
+                    and latest.origin == "manual"
+                    and latest.state == "active"
+                    and latest.basis_sha256 == basis
+                    and latest.reason == reason.strip()
+                ):
+                    self.connection.execute("COMMIT")
+                    return current
+                raise ProfileFormatError("opening_decision_changed_since_selection")
+            if current is None and expected_decision_version is not None:
+                raise ProfileFormatError("opening_decision_changed_since_selection")
+            if self._account_anchor_basis() != expected_basis_sha256:
+                raise ProfileFormatError("account_anchor_changed_since_selection")
+            if (
+                current is not None
+                and current.state == "active"
+                and current.origin == "manual"
+                and current.basis_sha256 == basis
+            ):
+                raise ProfileFormatError("opening_correction_requires_changed_basis")
+            result = self._append_opening_decision(
+                account_id,
+                current=current,
+                origin="manual",
+                state="active",
+                amount=amount_minor,
+                cutoff=cutoff_date,
+                basis=basis,
+                reference=reference.strip(),
+                reason=reason.strip(),
+                request_basis=expected_basis_sha256,
+            )
+            self.connection.execute("COMMIT")
+            return result
+        except BaseException:
+            self.connection.execute("ROLLBACK")
             raise
 
     def overlapping_statement_sources(self, source_sha256: str) -> tuple[str, ...]:

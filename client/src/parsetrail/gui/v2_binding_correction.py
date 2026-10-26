@@ -27,6 +27,7 @@ from PySide6.QtWidgets import (
 )
 
 from parsetrail.core.source_evidence import StatementPayload
+from parsetrail.core.v2_cash_movement import cash_account_labels
 from parsetrail.core.v2_profile_store import BindingCorrectionTarget, ProfileFormatError, V2ProfileStore
 from parsetrail.gui.v2_cash_activity_review import _money
 
@@ -38,7 +39,7 @@ def _scope(target: BindingCorrectionTarget) -> str:
 
 
 def _assignments(account_ids, accounts) -> str:
-    names = {account.id: account.name for account in accounts}
+    names = cash_account_labels(accounts)
     counts = Counter(
         "Unassigned" if account_id is None else names.get(account_id, account_id) for account_id in account_ids
     )
@@ -239,8 +240,9 @@ class V2BindingCorrection(QDialog):
         self.destination.clear()
         self.destination.addItem("Choose a corrected assignment", None)
         self.destination.addItem("Unassign this scope", None)
+        names = cash_account_labels(snapshot.accounts)
         for account in snapshot.accounts:
-            self.destination.addItem(f"{account.name} ({account.institution_key}, {account.kind})", account.id)
+            self.destination.addItem(names[account.id], account.id)
         self.destination.setCurrentIndex(
             1 if prior_index == 1 else max(0, self.destination.findData(account_id)) if account_id else 0
         )
@@ -252,7 +254,6 @@ class V2BindingCorrection(QDialog):
             f"{len(snapshot.affected_transfer_review_ids)} transfer-suggestion review(s) become inapplicable. "
             "Historical journals retain their original financial accounts."
         )
-        names = {account.id: account.name for account in snapshot.accounts}
         bindings = {binding.row_id: binding for binding in snapshot.current_bindings}
         payload = snapshot.evidence.payload
         rows = (
@@ -308,10 +309,10 @@ class V2BindingCorrection(QDialog):
             relationship_rows.append(
                 (
                     label,
-                    f"{left.account_name or 'Unassigned'}\n{left.source_date or 'Unknown date'}",
+                    f"{names.get(left.account_id, left.account_name or 'Unassigned')}\n{left.source_date or 'Unknown date'}",
                     left.description or "Not printed",
                     left.source_sha256[:16],
-                    f"{right.account_name or 'Unassigned'}\n{right.source_date or 'Unknown date'}",
+                    f"{names.get(right.account_id, right.account_name or 'Unassigned')}\n{right.source_date or 'Unknown date'}",
                     right.description or "Not printed",
                     right.source_sha256[:16],
                 )
@@ -319,6 +320,7 @@ class V2BindingCorrection(QDialog):
         _fill(self.affected_table, relationship_rows)
         for column, width in enumerate((145, 155, 175, 110, 155, 175, 110)):
             self.affected_table.setColumnWidth(column, width)
+        self.affected_table.resizeRowsToContents()
         self.affected_details.setPlainText(
             "No recorded repeat or transfer-suggestion reviews are affected."
             if not relationship_rows
@@ -365,6 +367,8 @@ class V2BindingCorrection(QDialog):
             item = self.snapshot.history[index]
             self.history_details.setPlainText(
                 f"Correction {item.correction_id}: {_scope(item.target)}\nReason: {item.reason}\n"
+                f"Prior assignment: {_assignments(item.prior_account_ids, self.snapshot.accounts)}\n"
+                f"New assignment: {_assignments(item.new_account_ids, self.snapshot.accounts)}\n"
                 f"Prior account IDs: {item.prior_account_ids}\nNew account IDs: {item.new_account_ids}\n"
                 f"Invalidated repeated-row review references: {item.invalidated_review_ids}\n"
                 f"Invalidated transfer-suggestion review references: {item.invalidated_transfer_review_ids}\nVersion: {item.version}"
@@ -373,6 +377,7 @@ class V2BindingCorrection(QDialog):
     def _show_affected(self):
         index = self.affected_table.currentRow()
         if self.snapshot is not None and 0 <= index < len(self.affected_items):
+            names = cash_account_labels(self.snapshot.accounts)
             contexts = {row.row_id: row for row in self.snapshot.affected_review_rows}
             _label, left_id, right_id, detail = self.affected_items[index]
             lines = [detail]
@@ -380,7 +385,7 @@ class V2BindingCorrection(QDialog):
                 row = contexts[row_id]
                 lines.append(
                     f"Source {side}: {row.source_sha256}\nRow: {row.row_id}\n"
-                    f"Account: {row.account_name or 'Unassigned'} ({row.account_id or 'none'}); "
+                    f"Account: {names.get(row.account_id, row.account_name or 'Unassigned')} ({row.account_id or 'none'}); "
                     f"source date: {row.source_date or 'Unknown'}; description: {row.description or 'Not printed'}"
                 )
             self.affected_details.setPlainText("\n\n".join(lines))
@@ -392,7 +397,7 @@ class V2BindingCorrection(QDialog):
         new_name = (
             "Unassigned"
             if snapshot.destination_account_id is None
-            else next(account.name for account in snapshot.accounts if account.id == snapshot.destination_account_id)
+            else cash_account_labels(snapshot.accounts)[snapshot.destination_account_id]
         )
         message = (
             f"Correct this account assignment?\n\n{_scope(snapshot.target)}\n"

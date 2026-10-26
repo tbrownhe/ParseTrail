@@ -14,14 +14,16 @@ boundaries. Work, commands, review and acceptance evidence belong in
 superseded migration/audit narrative and its historical evidence links.
 
 The current workspace supports narrow reviewed asset cash expense/income,
-negative card purchases, whole-movement owned transfers/card payments and printed
-openings. Cash-category, card-category/date and source-backed opening corrections
+negative card purchases, whole-movement owned transfers/card payments, printed
+and reviewed manual openings, separate manual dated values and closure metadata.
+Cash-category, card-category/date and source/manual opening corrections
 are available. Supported ordinary interpretations can be withdrawn, then freshly
 reviewed; posted-repeat repair retains one interpretation and retires its
 redundant counterpart atomically. Whole transfers can be withdrawn or atomically
 replaced while retaining every dated leg and allocation history. General refunds,
-splits, loans, manual entries, suspense and valuations require their own admitted
-workflows; examples below specify financial meaning rather than availability.
+splits, loan transactions, suspense and source valuations require their own
+admitted workflows; examples below specify financial meaning rather than
+availability. Arbitrary manual journals remain outside DEC-1 scope.
 
 ## Evidence and books
 
@@ -162,6 +164,18 @@ replacement when the newly reviewed opening is zero. Initial decisions and
 append-only revisions retain persisted content versions; stale forms cannot
 authorize a different source basis. Basis-only changes can retain a journal.
 This does not authorize a later unexplained balance plug.
+
+Opening withdrawal retires the exact active opening at its original date and
+records unknown, rather than zero. A fresh source/manual review is a new decision
+and identity. Manual openings require exact date/amount, kind-compatible tracking
+scope, reference and reason. Their cutoff is before known activity/journal dates
+and observed/derived statement starts; it may equal but cannot follow a first
+known endpoint/value/lifecycle point. Corrected/superseded wrong dates do not
+establish current history, and assumed posting guesses are not observed activity.
+Earlier history arriving later makes a manual opening stale. Missing statement
+starts remain unknown. Dated values and closure/reopen records post no money and
+never zero residual books; display them separately from opening-based positions.
+See the [account-anchor record](work/2026-10-25-v2-account-anchors.md).
 Built-in categories have stable semantic keys in a code-owned catalog, with fixed
 names and income/expense types. User-defined categories occupy a separate identity
 namespace and can extend the catalog without overriding a built-in. The first is

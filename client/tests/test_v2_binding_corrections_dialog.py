@@ -460,7 +460,7 @@ def test_empty_printed_section_retains_explicit_prior_and_new_account_context(tm
         _destination(dialog, "b")
         dialog.reason.setText("Correct the account represented by an empty printed period")
         assert dialog.rows_table.rowCount() == 0
-        assert "Savings (1 assignment)" in dialog.summary.text()
+        assert "Savings (lendingclub, asset) (1 assignment)" in dialog.summary.text()
         assert dialog.snapshot.current_account_ids == ("cash",)
         assert dialog.save_button.isEnabled()
         dialog.save_button.click()

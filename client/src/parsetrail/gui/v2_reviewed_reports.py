@@ -165,9 +165,14 @@ class _AccountPositionModel(QAbstractTableModel):
         "Latest source\nperiod end",
         "Latest saved\ncutoff",
         "Saved cutoff\n(current inputs)",
+        "Tracking scope",
+        "Opening origin",
+        "Latest reviewed\ndated value",
+        "Tracking state\nat as-of",
     )
     OPENING_STATES = {
         "missing": "Not established",
+        "withdrawn": "Withdrawn — unknown",
         "stale": "Stale — review opening",
         "future": "After as-of date",
         "conflict": "Earlier postings need review",
@@ -206,11 +211,13 @@ class _AccountPositionModel(QAbstractTableModel):
                 "Positive means asset value or liability owed. Recorded totals include reviewed postings only. "
                 "A live successful check is computed now; it is not a saved reconciliation decision. "
                 "Latest saved cutoff includes historical decisions; the current-input cutoff excludes stale decisions. "
-                "Pending rows cover all dates and may include supporting repeats."
+                "Pending rows cover all dates and may include supporting repeats. "
+                "Dated values are nonposting reviews; closure metadata never zeros residual books."
             )
         if role != Qt.DisplayRole:
             return None
         sign = 1 if row.kind == "asset" else -1
+        value, lifecycle = row.latest_dated_value, row.lifecycle
         values = (
             row.name,
             row.kind.title(),
@@ -228,6 +235,18 @@ class _AccountPositionModel(QAbstractTableModel):
             row.latest_source_cutoff.isoformat() if row.latest_source_cutoff else "Unavailable",
             row.latest_saved_reconciled_cutoff.isoformat() if row.latest_saved_reconciled_cutoff else "None saved",
             row.current_saved_reconciled_cutoff.isoformat() if row.current_saved_reconciled_cutoff else "None current",
+            {
+                "account_total": "Whole account",
+                "principal_component": "Loan principal",
+                "cash_component": "Cash component",
+            }[row.tracking_scope],
+            {"source": "Source-backed", "manual": "Reviewed manual", None: "None current"}[row.opening_origin],
+            f"{_money(sign * value.amount_minor)}\n{value.value_date.isoformat()} ({value.origin})"
+            if value
+            else "None through as-of",
+            f"Tracking {lifecycle.state}\n{lifecycle.effective_date.isoformat()}"
+            if lifecycle
+            else "No effective closure",
         )
         return values[index.column()]
 
@@ -444,6 +463,10 @@ class V2ReviewedReportsDialog(QDialog):
         refresh = QPushButton("Refresh positions")
         refresh.clicked.connect(self._refresh_positions)
         controls.addWidget(refresh)
+        self.account_anchor_button = QPushButton("Review selected account…")
+        self.account_anchor_button.setEnabled(False)
+        self.account_anchor_button.clicked.connect(self._review_selected_account)
+        controls.addWidget(self.account_anchor_button)
         controls.addStretch()
         layout.addLayout(controls)
         note = QLabel(
@@ -461,12 +484,14 @@ class V2ReviewedReportsDialog(QDialog):
         self.positions_table.setSelectionMode(QAbstractItemView.SingleSelection)
         header = self.positions_table.horizontalHeader()
         header.setMinimumHeight(header.fontMetrics().lineSpacing() * 2 + 16)
-        for column, width in enumerate((180, 80, 130, 150, 185, 115, 125, 125, 130, 150)):
+        for column, width in enumerate((180, 80, 130, 150, 185, 115, 125, 125, 130, 150, 150, 150, 190, 180)):
             header.setSectionResizeMode(column, QHeaderView.Interactive)
             self.positions_table.setColumnWidth(column, width)
         self.positions_table.setMinimumHeight(120)
+        self.positions_table.verticalHeader().setDefaultSectionSize(44)
         self.position_details = QLabel("No financial accounts in this profile.")
         self.position_details.setWordWrap(True)
+        self.position_details.setTextFormat(Qt.PlainText)
         self.position_details.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.history_model = _AccountPositionHistoryModel(self)
         self.history_table = QTableView()
@@ -519,6 +544,8 @@ class V2ReviewedReportsDialog(QDialog):
                 self._show_position_history()
             else:
                 self.history_model.replace(())
+                self.account_anchor_button.setEnabled(False)
+                self.position_details.setToolTip("")
                 self.position_details.setText("No financial accounts in this profile. Add an account to begin.")
                 self.history_title.setText("Reviewed accounting history")
         self._show_selected_tab()
@@ -527,8 +554,12 @@ class V2ReviewedReportsDialog(QDialog):
         index = self.positions_table.currentIndex()
         if not index.isValid():
             self.history_model.replace(())
+            self.account_anchor_button.setEnabled(False)
+            self.position_details.setText("Select an account to inspect its reviewed history and limits.")
+            self.position_details.setToolTip("")
             return
         row = self.positions_model.rows[index.row()]
+        self.account_anchor_button.setEnabled(True)
         self.history_model.replace(row.history, row.kind)
         self.history_title.setText(
             f"{row.name}: reviewed accounting history through {self.as_of.date().toString('yyyy-MM-dd')} "
@@ -555,7 +586,40 @@ class V2ReviewedReportsDialog(QDialog):
         current_saved = (
             row.current_saved_reconciled_cutoff.isoformat() if row.current_saved_reconciled_cutoff else "none"
         )
-        self.position_details.setText(
+        scope_label = {
+            "account_total": "whole account",
+            "principal_component": "loan principal only",
+            "cash_component": "cash component only",
+        }[row.tracking_scope]
+        origin_label = {"source": "source-backed review", "manual": "reviewed manual fact", None: "not established"}[
+            row.opening_origin
+        ]
+        value_note = "No reviewed dated value applies through this as-of date."
+        value = row.latest_dated_value
+        if value is not None:
+            reference = value.reference if len(value.reference) <= 100 else value.reference[:100] + "…"
+            value_note = (
+                f"Latest {value.origin} dated value: {_money(direction * value.amount_minor)} as of {value.value_date.isoformat()}; "
+                f"reference: {reference}. This nonposting value does not replace the books or establish settlement."
+            )
+        lifecycle_note = "No closure is effective in tracking metadata at this as-of date."
+        if row.lifecycle is not None:
+            lifecycle_note = (
+                f"Tracking metadata: {row.lifecycle.state} effective {row.lifecycle.effective_date.isoformat()}."
+            )
+            if row.lifecycle.state == "closed":
+                residual = (
+                    _money(direction * row.closure_residual_debit_minor)
+                    if row.closure_residual_debit_minor is not None
+                    else "unavailable"
+                )
+                lifecycle_note += (
+                    f" Recorded journal residual at {row.closure_residual_date}: {residual}. "
+                    + ("The opening-based residual is unknown. " if row.closure_residual_unknown else "")
+                    + "Closing tracking does not zero journals or prove settlement."
+                )
+        details = (
+            f"Tracking scope: {scope_label}; opening origin: {origin_label}. "
             f"Opening: {opening}; {_AccountPositionModel.OPENING_STATES[row.opening_status].lower()}. "
             f"Latest source activity date: {latest_activity}. "
             f"{row.pending_activity_rows} pending source row(s) across all dates; "
@@ -563,8 +627,24 @@ class V2ReviewedReportsDialog(QDialog):
             f"Evidence / coverage limits: {limits or 'none identified'}. "
             f"Latest saved cutoff: {latest_saved}; saved cutoff matching current inputs: {current_saved}. "
             "The live check is computed now and is not a saved reconciliation cutoff. "
-            "History includes original, reversal and replacement entries as the reviewed books stand now."
+            "History includes original, reversal and replacement entries as the reviewed books stand now. "
+            + value_note
+            + " "
+            + lifecycle_note
         )
+        self.position_details.setText(details)
+        self.position_details.setToolTip(
+            details + (f"\nFull dated-value reference: {value.reference}" if value is not None else "")
+        )
+
+    def _review_selected_account(self) -> None:
+        index = self.positions_table.currentIndex()
+        if not index.isValid() or self.positions_report is None:
+            return
+        from parsetrail.gui.v2_account_anchors import V2AccountAnchors
+
+        V2AccountAnchors(self.profile, self.positions_model.rows[index.row()].account_id, self).exec()
+        self._refresh_all_reports()
 
     def _clear_unavailable_reports(self, exc: Exception) -> None:
         """A shared profile failure invalidates every previously displayed total."""
@@ -583,6 +663,8 @@ class V2ReviewedReportsDialog(QDialog):
         ):
             model.replace(())
         self.position_details.setText("Account positions are unavailable. Refresh to retry.")
+        self.position_details.setToolTip("")
+        self.account_anchor_button.setEnabled(False)
         self.history_title.setText("Reviewed accounting history")
         self.export_button.setEnabled(False)
 

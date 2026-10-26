@@ -14,8 +14,8 @@ is implemented and reviewed; the probe awaits the final integrated runtime freez
 
 ## Next candidates
 
-1. [V2-4 remaining review safeguards](ROADMAP.md#v2-4): opening withdrawal,
-   reviewed manual openings/dated values, closure metadata and accounting interpretations;
+1. [V2-4 remaining review safeguards](ROADMAP.md#v2-4): refunds, income adjustments,
+   stable category identities and remaining source-backed accounting interpretations;
    select a bounded outcome before implementation.
    [Starting points](.agents/skills/parsetrail-workflow/references/code-and-checks.md#remaining-review-safeguards).
 2. [P2-3/4/5 readiness](ROADMAP.md#p2-3): remaining family/platform/catalog work;
@@ -24,10 +24,9 @@ is implemented and reviewed; the probe awaits the final integrated runtime freez
 
 ## Most recent product packet
 
-[Wider source review](docs/work/2026-10-25-v2-wider-source-matching.md) and
-[explicit-scope cash movement](docs/work/2026-10-25-v2-cash-movement.md) completed
-development and independent review. Consolidated human UI/UX review remains open;
-this is not 2.0 release acceptance.
+[Reviewed account anchors and lifecycle](docs/work/2026-10-25-v2-account-anchors.md)
+completed development and independent review. Consolidated human UI/UX review
+remains open; this is not 2.0 release acceptance.
 
 ## Decisions and gates
 

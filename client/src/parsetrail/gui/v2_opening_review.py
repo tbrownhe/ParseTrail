@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from parsetrail.core.v2_cash_movement import cash_account_labels
 from parsetrail.core.v2_profile_store import (
     EarliestSourceOpening,
     OpeningDecisionHistoryRow,
@@ -37,7 +38,17 @@ from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
 
 
 class _OpeningHistoryModel(QAbstractTableModel):
-    HEADERS = ("Revision", "Opening amount", "Cutoff", "Reason", "Saved at (UTC)", "Journal")
+    HEADERS = (
+        "Revision",
+        "Opening amount",
+        "Cutoff",
+        "Reason",
+        "Saved at (UTC)",
+        "Journal",
+        "Origin",
+        "Scope",
+        "State",
+    )
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -71,20 +82,28 @@ class _OpeningHistoryModel(QAbstractTableModel):
             return None
         return (
             str(row.revision_id),
-            _money(self.natural * row.amount_minor),
-            row.cutoff_date.isoformat(),
+            _money(self.natural * row.amount_minor) if row.amount_minor is not None else "Unknown (withdrawn)",
+            row.cutoff_date.isoformat() if row.cutoff_date is not None else "Not established",
             row.reason,
             row.created_at,
-            "No posting (zero)" if row.entry_key is None else "Retained reference",
+            "No current posting"
+            if row.state == "withdrawn"
+            else "No posting (zero)"
+            if row.entry_key is None
+            else "Retained reference",
+            row.origin.title(),
+            row.tracking_scope.replace("_", " "),
+            row.state.title(),
         )[index.column()]
 
     @staticmethod
     def details(row: OpeningDecisionHistoryRow) -> str:
         return (
             f"Revision {row.revision_id}; reason: {row.reason}. "
-            f"Journal entry: {row.entry_key or 'none (zero decision)'}.\n"
+            f"Journal entry: {row.entry_key or 'none'}. Origin: {row.origin}; state: {row.state}; "
+            f"tracking scope: {row.tracking_scope.replace('_', ' ')}; reference: {row.reference or 'source basis below'}.\n"
             f"Decision version: {row.version}; prior version: {row.prior_version or 'none (initial decision)'}.\n"
-            f"Source basis: {row.basis_sha256}. Prior decisions and journals remain history."
+            f"Reviewed basis: {row.basis_sha256}. Prior decisions and journals remain history."
         )
 
 
@@ -172,9 +191,9 @@ class V2OpeningReview(QDialog):
         form.addRow("Note", self.note)
         self.correction_reason = QLineEdit()
         self.correction_reason.setMaxLength(500)
-        self.correction_reason.setPlaceholderText("Required when correcting the saved opening decision")
+        self.correction_reason.setPlaceholderText("Required for correction, fresh establishment or withdrawal")
         self.correction_reason.textChanged.connect(self._update_actions)
-        form.addRow("Correction reason", self.correction_reason)
+        form.addRow("Action reason", self.correction_reason)
         review_layout.addLayout(form)
         actions = QHBoxLayout()
         self.preview = QPushButton("Preview source")
@@ -194,6 +213,16 @@ class V2OpeningReview(QDialog):
         actions.addWidget(self.reload)
         actions.addStretch()
         review_layout.addLayout(actions)
+        withdrawal_row = QHBoxLayout()
+        self.withdraw = QPushButton("Withdraw saved opening")
+        self.withdraw.clicked.connect(self._withdraw)
+        withdrawal_row.addWidget(self.withdraw)
+        withdrawal_note = QLabel(
+            "Withdrawal is available even when the source basis is stale or unavailable; the opening becomes unknown."
+        )
+        withdrawal_note.setWordWrap(True)
+        withdrawal_row.addWidget(withdrawal_note, 1)
+        review_layout.addLayout(withdrawal_row)
         self.status = QLabel()
         self.status.setWordWrap(True)
         self.status.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -203,7 +232,7 @@ class V2OpeningReview(QDialog):
         history_panel = QWidget()
         history_layout = QVBoxLayout(history_panel)
         history_scope = QLabel(
-            "Newest decisions appear first, including zero decisions without postings. "
+            "Newest decisions appear first, including zero decisions and explicit withdrawals. Withdrawn is unknown, not zero. "
             "Amounts use asset value or liability owed signs. A basis-only correction may retain its journal reference. "
             "This history does not establish later coverage or reconciliation."
         )
@@ -232,8 +261,10 @@ class V2OpeningReview(QDialog):
         layout.addWidget(buttons)
         self.account.blockSignals(True)
         with V2ProfileStore.open(workspace.profile_path, read_only=True) as store:
-            for account in store.financial_accounts():
-                self.account.addItem(f"{account.name} ({account.kind})", account.id)
+            accounts = store.financial_accounts()
+        labels = cash_account_labels(accounts)
+        for account in accounts:
+            self.account.addItem(labels[account.id], account.id)
         self.account.blockSignals(False)
         self.refresh()
 
@@ -260,15 +291,18 @@ class V2OpeningReview(QDialog):
         if source_id is None:
             self.source_details.setText("No earliest source is available for this account.")
         else:
-            with V2ProfileStore.open(self.workspace.profile_path, read_only=True) as store:
-                section = next(
-                    (
-                        row
-                        for row in store.statement_coverage()
-                        if row.account_id == self.account.currentData() and row.source_sha256 == source_id
-                    ),
-                    None,
-                )
+            try:
+                with V2ProfileStore.open(self.workspace.profile_path, read_only=True) as store:
+                    section = next(
+                        (
+                            row
+                            for row in store.statement_coverage()
+                            if row.account_id == self.account.currentData() and row.source_sha256 == source_id
+                        ),
+                        None,
+                    )
+            except (ProfileFormatError, sqlite3.Error, OSError):
+                section = None
             if section is None:
                 self.source_details.setText("Source section unavailable; inspect binding and evidence.")
             else:
@@ -283,6 +317,24 @@ class V2OpeningReview(QDialog):
         self._update_actions()
 
     def refresh(self, *_args, selected_source: str | None = None) -> None:
+        try:
+            self._reload(selected_source=selected_source)
+        except (ProfileFormatError, sqlite3.Error, OSError):
+            self.candidate = None
+            self.reviews = {}
+            self.decision = None
+            self.basis = None
+            self.source.blockSignals(True)
+            self.source.clear()
+            self.source.blockSignals(False)
+            self.history_model.replace(())
+            self.history_details.setText("Opening history unavailable; reload after checking the profile.")
+            self.saved_label.setText("Saved state unavailable; unknown is not zero.")
+            self.candidate_label.setText("Source candidate unavailable.")
+            self._source_changed()
+            self.status.setText("Opening review could not be read. Reload saved state before reviewing an opening.")
+
+    def _reload(self, *, selected_source: str | None = None) -> None:
         account_id = self.account.currentData()
         if account_id != self._loaded_account_id:
             self.correction_reason.blockSignals(True)
@@ -317,11 +369,16 @@ class V2OpeningReview(QDialog):
         )
         if self.decision is None:
             self.saved_label.setText("Not established; unknown is not zero.")
+        elif self.decision.state == "withdrawn":
+            self.saved_label.setText(
+                f"Withdrawn; opening unknown, not zero. Revision {self.decision.revision_id}. Prior amounts and dates remain in history."
+            )
         else:
             self.saved_label.setText(
                 f"{_money(self.decision.amount_minor * natural)} as of {self.decision.cutoff_date.isoformat()}; "
                 f"revision {self.decision.revision_id}; "
-                f"{'stale against the current source basis' if self.decision.stale else 'current source basis'}."
+                f"{self.decision.origin} origin; {self.decision.tracking_scope.replace('_', ' ')}; "
+                f"{'independent manual review' if self.decision.origin == 'manual' else 'stale against the current source basis' if self.decision.stale else 'current source basis'}."
             )
         self.history_model.replace(snapshot.history, candidate.account_kind)
         if snapshot.history:
@@ -360,15 +417,36 @@ class V2OpeningReview(QDialog):
         )
         self.confirm.setEnabled(candidate_ready and self.decision is None)
         self.correction_reason.setEnabled(self.decision is not None)
+        self.withdraw.setEnabled(
+            self.decision is not None
+            and self.decision.state == "active"
+            and bool(self.correction_reason.text().strip())
+        )
+        self.correct.setText(
+            "Establish fresh source opening"
+            if self.decision is not None and self.decision.state == "withdrawn"
+            else "Replace manual with source opening"
+            if self.decision is not None and self.decision.origin == "manual"
+            else "Correct saved opening"
+        )
         self.correct.setEnabled(
             candidate_ready
             and self.decision is not None
-            and (self.decision.stale or self.decision.basis_sha256 != self.basis)
+            and (
+                self.decision.state == "withdrawn"
+                or self.decision.origin == "manual"
+                or self.decision.stale
+                or self.decision.basis_sha256 != self.basis
+            )
             and bool(self.correction_reason.text().strip())
         )
         if self.decision is not None:
             self.status.setText(
-                "Saved opening is stale against the current source basis. Review the earliest sources, "
+                "Opening withdrawn; unknown is not zero. A fresh source or manual review is required to establish another opening."
+                if self.decision.state == "withdrawn"
+                else "Manual opening remains independent of printed source evidence. Replacing it with a source opening requires explicit review."
+                if self.decision.origin == "manual"
+                else "Saved opening is stale against the current source basis. Review the earliest sources, "
                 "save any source assessments and enter a reason before correcting it."
                 if self.decision.stale
                 else "Zero opening confirmed."
@@ -440,7 +518,7 @@ class V2OpeningReview(QDialog):
         cutoff = date.fromordinal(candidate.earliest_period_start.toordinal() - 1)
         natural = 1 if candidate.account_kind == "asset" else -1
         message = (
-            f"Confirm {candidate.account_name}'s printed opening of "
+            f"Confirm {self.account.currentText()}'s printed opening of "
             f"{_money(candidate.printed_opening_minor * natural)} as of {cutoff.isoformat()}?\n\n"
             f"All {len(candidate.earliest_source_ids)} earliest source(s) have been reviewed. "
             "A nonzero amount posts through opening equity; zero records a decision without a journal. "
@@ -475,14 +553,20 @@ class V2OpeningReview(QDialog):
             or decision is None
             or not reason
             or self._form() != self._loaded_form
-            or (not decision.stale and decision.basis_sha256 == self.basis)
+            or (
+                decision.state == "active"
+                and decision.origin == "source"
+                and not decision.stale
+                and decision.basis_sha256 == self.basis
+            )
         ):
             return
         cutoff = date.fromordinal(candidate.earliest_period_start.toordinal() - 1)
         natural = 1 if candidate.account_kind == "asset" else -1
         message = (
-            f"Correct {candidate.account_name}'s source-backed opening?\n\n"
-            f"Saved: {_money(decision.amount_minor * natural)} as of {decision.cutoff_date.isoformat()} "
+            f"Correct {self.account.currentText()}'s source-backed opening?\n\n"
+            f"Saved: {_money(decision.amount_minor * natural) if decision.amount_minor is not None else 'unknown (withdrawn)'} "
+            f"as of {decision.cutoff_date.isoformat() if decision.cutoff_date is not None else 'not established'} "
             f"(revision {decision.revision_id}).\n"
             f"Current reviewed candidate: {_money(candidate.printed_opening_minor * natural)} as of {cutoff.isoformat()}.\n"
             f"Reason: {reason}\n\n"
@@ -516,3 +600,35 @@ class V2OpeningReview(QDialog):
         self.correction_reason.clear()
         self.refresh()
         self.status.setText("Opening corrected. Prior decisions and journals remain in Opening history.")
+
+    def _withdraw(self) -> None:
+        decision = self.decision
+        reason = self.correction_reason.text().strip()
+        if decision is None or decision.state != "active" or not reason or not self.withdraw.isEnabled():
+            return
+        natural = 1 if self.candidate is None or self.candidate.account_kind == "asset" else -1
+        message = (
+            f"Withdraw {self.account.currentText()}'s saved {decision.origin} opening of {_money(decision.amount_minor * natural)} "
+            f"as of {decision.cutoff_date.isoformat()}?\n\nScope: {decision.tracking_scope.replace('_', ' ')}. "
+            f"Reason: {reason}\n\n"
+            "A nonzero opening is reversed through opening equity at its original date. A reviewed zero is withdrawn without money postings. "
+            "The opening becomes unknown, not zero. Existing activity and prior decisions remain history. "
+            "This does not establish settlement or change source assertions."
+        )
+        if QMessageBox.question(self, "Confirm opening withdrawal", message) != QMessageBox.Yes:
+            return
+        try:
+            with V2ProfileStore.open(self.workspace.profile_path) as store:
+                store.withdraw_reviewed_opening(
+                    decision.account_id, expected_decision_version=decision.version, reason=reason
+                )
+        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
+            self.refresh()
+            self.status.setText("Opening withdrawal was not recorded. Review refreshed state before trying again.")
+            QMessageBox.warning(self, "Opening was not withdrawn", str(exc))
+            return
+        self.correction_reason.clear()
+        self.refresh()
+        self.status.setText(
+            "The selected opening withdrawal is recorded. Refreshed state and history show the current opening; unknown is not zero."
+        )

@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from parsetrail.core.source_evidence import ActivityExportPayload, ObservationEvidence
+from parsetrail.core.v2_cash_movement import cash_account_labels
 from parsetrail.core.v2_profile_store import (
     AccountBinding,
     BindingCorrectionTarget,
@@ -50,7 +51,7 @@ class _BindingsModel(QAbstractTableModel):
         self.beginResetModel()
         self.rows = rows
         self.bindings = bindings
-        self.account_names = {account.id: account.name for account in accounts}
+        self.account_names = cash_account_labels(accounts)
         self.endResetModel()
 
     def rowCount(self, _parent: QModelIndex = QModelIndex()) -> int:
@@ -195,9 +196,10 @@ class V2AccountBindingReview(QDialog):
                 else ()
             )
         selected_account = self.account_combo.currentData()
+        names = cash_account_labels(accounts)
         self.account_combo.clear()
         for account in accounts:
-            self.account_combo.addItem(f"{account.name} ({account.institution_key}, {account.kind})", account.id)
+            self.account_combo.addItem(names[account.id], account.id)
         if selected_account is not None:
             selected_index = self.account_combo.findData(selected_account)
             if selected_index >= 0:
@@ -207,7 +209,7 @@ class V2AccountBindingReview(QDialog):
         row_count = sum(binding.basis == "row" for binding in bindings)
         if file_count:
             account_id = bindings[0].ledger_account_id
-            account_name = next(account.name for account in accounts if account.id == account_id)
+            account_name = names[account_id]
             self.status.setText(f"Whole-file assertion: {account_name} · {file_count} rows")
         elif row_count:
             self.status.setText(f"Row assignments: {row_count} of {len(bindings)} rows")

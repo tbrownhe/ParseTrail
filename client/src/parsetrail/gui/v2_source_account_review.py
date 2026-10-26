@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 
 from parsetrail.core.source_evidence import StatementPayload
 from parsetrail.core.v2_account_matching import LedgerAccountCandidate, match_verified_source_account
+from parsetrail.core.v2_cash_movement import cash_account_labels
 from parsetrail.core.v2_profile_store import (
     BindingCorrectionTarget,
     ProfileFormatError,
@@ -157,11 +158,11 @@ class V2SourceAccountReview(QDialog):
             | self.overlap_locked_keys
             | {key for key, blockers in self.ordinary_blockers.items() if blockers}
         )
-        names = {account.id: account.name for account in accounts}
+        names = cash_account_labels(accounts)
         self.account_combo.clear()
         self.account_combo.addItem("Choose a ledger account…", None)
         for account in accounts:
-            self.account_combo.addItem(f"{account.name} ({account.institution_key}, {account.kind})", account.id)
+            self.account_combo.addItem(names[account.id], account.id)
         self.identities.clear()
         for binding, match in zip(self.bindings, self.matches, strict=True):
             count = counts[(binding.source_identity, binding.source_identity_form)]
