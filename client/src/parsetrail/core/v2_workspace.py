@@ -164,6 +164,11 @@ class V2Workspace:
     def preferences(self) -> V2Preferences:
         return load_preferences(self.preferences_path)
 
+    def verify_local_configuration(self) -> None:
+        """Validate separate preferences/catalog reads before activating a workspace."""
+        self.preferences()
+        self.catalog_cache.load_current()
+
     def set_allow_abbreviated_account_matching(self, enabled: bool) -> None:
         if type(enabled) is not bool:
             raise ValueError("invalid_abbreviated_matching_preference")

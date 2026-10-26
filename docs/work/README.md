@@ -9,6 +9,7 @@ contracts own lasting behavior. Start with those documents, not historical logs.
 
 | Record | Roadmap scope | Implementation / evidence |
 | --- | --- | --- |
+| [Explicit profile startup](2026-10-25-v2-profile-startup.md) | V2-6/7 | Completed development and independent review; New/Open/Restore, safe configuration and switch-failure recovery. |
 | [Transfer review/correction](2026-10-25-v2-transfer-corrections.md) | V2-3/4/5 | Completed development and independent review; context-scoped suggestions, whole withdrawal/replacement and validated history. |
 | [Workspace guidance/build identity](2026-10-25-v2-workspace-guidance.md) | V2-6/7 | Completed small primary-verified change: local workflow help and unchanged pilot version disclosure. |
 | [Correct reviewed openings](2026-10-25-v2-opening-corrections.md) | V2-4/5 | Completed development and independent review; append-only retirement/revision and integrated report/export history. |

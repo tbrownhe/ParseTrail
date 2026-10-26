@@ -177,9 +177,11 @@ exclude statement archives; back up the managed folders separately.
 ## Application service boundaries
 
 Ordinary startup still runs the published 1.x application and its independent
-transaction/category database. The explicit `--v2 --profile <new.db>
---catalog-cache <directory>` path opens the fresh V2 workspace before legacy
-bootstrap; `--create-profile` deliberately creates a new profile. Development
+transaction/category database. Explicit `--v2` opens a New/Open/Restore chooser
+before legacy bootstrap; cancellation writes nothing and no last profile opens
+automatically. `--profile <new.db> --catalog-cache <directory>` remains available
+for automation; `--create-profile` deliberately creates that new profile.
+Optional `--preferences <file>` provides a separate preferences path. Development
 writes use disposable profiles, never the owner's daily profile.
 
 V2 uses the [single authoritative store](../docs/client-v2-unified-store.md) and

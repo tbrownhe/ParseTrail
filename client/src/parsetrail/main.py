@@ -57,23 +57,44 @@ def run_v2_workspace(argv: list[str]) -> int:
     import argparse
     from pathlib import Path
 
+    from parsetrail.core.v2_preferences import default_preferences_path
     from parsetrail.core.v2_workspace import V2Workspace
 
     parser = argparse.ArgumentParser(description="Open an explicit ParseTrail 2.0 workspace")
     parser.add_argument("--v2", action="store_true", required=True)
-    parser.add_argument("--profile", type=Path, required=True)
-    parser.add_argument("--catalog-cache", type=Path, required=True)
+    parser.add_argument("--profile", type=Path)
+    parser.add_argument("--catalog-cache", type=Path)
+    parser.add_argument("--preferences", type=Path)
     parser.add_argument("--create-profile", action="store_true")
     args = parser.parse_args(argv)
+    catalog = args.catalog_cache or default_preferences_path().parent / "v2-catalog"
+    if args.create_profile and args.profile is None:
+        parser.error("--create-profile requires --profile; use --v2 alone for the profile chooser")
     try:
-        workspace = (
-            V2Workspace.create(args.profile, args.catalog_cache)
-            if args.create_profile
-            else V2Workspace.open(args.profile, args.catalog_cache)
-        )
+        app = None
+        if args.profile is None:
+            from PySide6.QtWidgets import QApplication, QDialog
+
+            from parsetrail.gui.v2_profile_startup import V2ProfileStartupDialog
+
+            app = QApplication.instance() or create_application(sys.argv[:1])
+            startup = V2ProfileStartupDialog(catalog, preferences_path=args.preferences)
+            if startup.exec() != QDialog.Accepted or startup.workspace is None:
+                return 0
+            workspace = startup.workspace
+        else:
+            V2Workspace(args.profile, catalog, preferences_path=args.preferences).verify_local_configuration()
+            workspace = (
+                V2Workspace.create(args.profile, catalog, preferences_path=args.preferences)
+                if args.create_profile
+                else V2Workspace.open(args.profile, catalog, preferences_path=args.preferences)
+            )
         from parsetrail.gui.v2_workspace_window import V2WorkspaceWindow
 
-        app = create_application(sys.argv[:1])
+        if app is None:
+            from PySide6.QtWidgets import QApplication
+
+            app = QApplication.instance() or create_application(sys.argv[:1])
         with suppress(ModuleNotFoundError):
             import pyi_splash  # type: ignore
 

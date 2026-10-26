@@ -37,6 +37,14 @@ Keep the application version unchanged during pilots. A version bump, production
 signing, live-profile activation, installation/release, deployment or publication
 requires its specifically selected release scope and acceptance.
 
+Explicit `--v2` source launch can offer New/Open/Restore without mandatory profile
+or cache CLI paths. Existing explicit paths and deliberate `--create-profile`
+automation remain available. A chooser never activates the last profile by
+default; cancellation writes nothing. Separate preferences/catalog configuration
+is checked before creating/restoring, invalid selections preserve the current
+workspace, and a failed staged refresh restores its prior selection. This does
+not change ordinary 1.x startup or authorize daily-profile activation/release.
+
 ## Evidence and accounting rules
 
 - Retain original source bytes/digest, exact parser definition/revision, engine

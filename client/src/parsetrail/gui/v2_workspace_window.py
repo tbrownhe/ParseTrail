@@ -46,6 +46,7 @@ from parsetrail.gui.v2_categories import V2CategoryDialog
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
 from parsetrail.gui.v2_opening_review import V2OpeningReview
 from parsetrail.gui.v2_path_notice import show_data_locations, show_path_notice
+from parsetrail.gui.v2_profile_startup import choose_new_workspace
 from parsetrail.gui.v2_reviewed_reports import V2ReviewedReportsDialog
 from parsetrail.gui.v2_source_account_review import V2SourceAccountReview
 from parsetrail.gui.v2_source_overlap_review import V2SourceOverlapReview
@@ -134,6 +135,8 @@ class V2WorkspaceWindow(QMainWindow):
         self.setWindowTitle("ParseTrail 2.0 workspace")
         self.resize(1050, 560)
         profile_menu = self.menuBar().addMenu("Profile")
+        self.new_profile_action = profile_menu.addAction("New 2.0 profile…")
+        self.new_profile_action.triggered.connect(self._new_profile)
         self.open_profile_action = profile_menu.addAction("Open 2.0 profile…")
         self.open_profile_action.triggered.connect(self._choose_profile)
         self.data_locations_action = profile_menu.addAction("Data locations and privacy…")
@@ -258,7 +261,12 @@ class V2WorkspaceWindow(QMainWindow):
         )
         self.import_button.setEnabled(catalog is not None and self.import_worker is None)
         self.import_folder_button.setEnabled(catalog is not None and self.import_worker is None)
-        for action in (self.open_profile_action, self.backup_profile_action, self.restore_profile_action):
+        for action in (
+            self.new_profile_action,
+            self.open_profile_action,
+            self.backup_profile_action,
+            self.restore_profile_action,
+        ):
             action.setEnabled(self.import_worker is None)
         prior = select_source or self._selected_source()
         self.sources.clear()
@@ -352,6 +360,49 @@ class V2WorkspaceWindow(QMainWindow):
         self.refresh()
         self.status.setText(f"Verified catalog release {release.release_sequence} installed.")
 
+    def _new_profile(self) -> None:
+        if self.import_worker is not None:
+            return
+        selected = choose_new_workspace(
+            self,
+            self.workspace.profile_path.parent,
+            self.workspace.catalog_cache.root,
+            trusted_keys=self.workspace.catalog_cache.trusted_keys,
+            preferences_path=self.workspace.preferences_path,
+        )
+        if selected is not None:
+            self._select_workspace(selected)
+
+    def _select_workspace(self, selected: V2Workspace) -> None:
+        previous = self.workspace
+        previous_source = self._selected_source()
+        try:
+            selected.verify_local_configuration()
+            source_ids = selected.source_ids()
+            candidate_source = previous_source if previous_source in source_ids else next(iter(source_ids), None)
+            if candidate_source is not None:
+                selected.saved_import(candidate_source)
+                selected.overlapping_statement_sources(candidate_source)
+            self.workspace = selected
+            self.refresh()
+        except (ProfileFormatError, sqlite3.Error, OSError, ValueError) as exc:
+            self.workspace = previous
+            try:
+                self.refresh(select_source=previous_source)
+            except (ProfileFormatError, sqlite3.Error, OSError, ValueError):
+                self.sources.clear()
+                self.import_button.setEnabled(False)
+                self.import_folder_button.setEnabled(False)
+                self._update_controls()
+                self.status.setText(
+                    "The current profile is retained, but its view could not refresh. Reopen it to retry."
+                )
+            QMessageBox.warning(self, "Profile was not opened", str(exc))
+            return
+        self.profile_label.setText(str(selected.profile_path))
+        self.profile_label.setCursorPosition(0)
+        self.status.setText("Opened 2.0 profile. Its path is shown above.")
+
     def _switch_profile(self, path: Path) -> None:
         if self.import_worker is not None:
             return
@@ -365,11 +416,7 @@ class V2WorkspaceWindow(QMainWindow):
         except (ProfileFormatError, sqlite3.Error, OSError) as exc:
             QMessageBox.warning(self, "Profile was not opened", str(exc))
             return
-        self.workspace = selected
-        self.profile_label.setText(str(selected.profile_path))
-        self.profile_label.setCursorPosition(0)
-        self.refresh()
-        self.status.setText("Opened 2.0 profile. Its path is shown above.")
+        self._select_workspace(selected)
 
     def _choose_profile(self) -> None:
         selected, _filter = QFileDialog.getOpenFileName(
@@ -484,7 +531,12 @@ class V2WorkspaceWindow(QMainWindow):
         self.import_button.setEnabled(False)
         self.import_folder_button.setEnabled(False)
         self.recover_source_action.setEnabled(False)
-        for action in (self.open_profile_action, self.backup_profile_action, self.restore_profile_action):
+        for action in (
+            self.new_profile_action,
+            self.open_profile_action,
+            self.backup_profile_action,
+            self.restore_profile_action,
+        ):
             action.setEnabled(False)
         self.progress.show()
         self.import_worker.start()
@@ -503,7 +555,12 @@ class V2WorkspaceWindow(QMainWindow):
         self.import_button.setEnabled(False)
         self.import_folder_button.setEnabled(False)
         self.recover_source_action.setEnabled(False)
-        for action in (self.open_profile_action, self.backup_profile_action, self.restore_profile_action):
+        for action in (
+            self.new_profile_action,
+            self.open_profile_action,
+            self.backup_profile_action,
+            self.restore_profile_action,
+        ):
             action.setEnabled(False)
         self.progress.show()
         self.import_worker.start()
@@ -525,7 +582,12 @@ class V2WorkspaceWindow(QMainWindow):
         self.import_worker = None
         worker.deleteLater()
         self.recover_source_action.setEnabled(self._selected_source() is not None)
-        for action in (self.open_profile_action, self.backup_profile_action, self.restore_profile_action):
+        for action in (
+            self.new_profile_action,
+            self.open_profile_action,
+            self.backup_profile_action,
+            self.restore_profile_action,
+        ):
             action.setEnabled(True)
         if self._close_after_import:
             QTimer.singleShot(0, self.close)
