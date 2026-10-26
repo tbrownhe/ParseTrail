@@ -38,6 +38,154 @@ def _sheet(workbook: Workbook, name: str, headers: tuple[str, ...], rows: list[t
         sheet.column_dimensions[letter].width = min(max(width + 2, 12), 64)
 
 
+def _value_metadata(workbook: Workbook, report: ReviewedJournalExport, accounts: dict) -> list[str]:
+    """Nonposting points and their full source/audit context add no entry totals."""
+    if not report.dated_values:
+        return []
+    workbook["Scope"].append(
+        (
+            "Dated value metadata",
+            "Nonposting points filtered by value date, including superseded/withdrawn history. Creation/withdrawal "
+            "dates do not add money. Current points can conflict; values and total/component scopes are never summed "
+            "into entries, balances or certified net worth.",
+        )
+    )
+    _sheet(
+        workbook,
+        "Dated Values",
+        (
+            "Value ID",
+            "Account ID",
+            "Account name",
+            "Value date",
+            "Origin",
+            "Tracking scope",
+            "Reviewed debit minor units",
+            "State",
+            "Reference",
+            "Reason",
+            "Corrects value",
+            "Superseded by",
+            "Withdrawal ID",
+            "Created at",
+            "Version",
+            "Conflicting value acknowledged",
+            "Source review changed since recording",
+        ),
+        [
+            (
+                value.value_id,
+                value.account_id,
+                accounts[value.account_id].name,
+                value.value_date.isoformat(),
+                value.origin,
+                value.tracking_scope,
+                str(value.amount_minor),
+                value.state,
+                value.reference,
+                value.reason,
+                value.corrects_value_id,
+                value.superseded_by_value_id,
+                value.withdrawal.withdrawal_id if value.withdrawal else None,
+                value.created_at,
+                value.version,
+                value.allow_conflict,
+                value.source_review_changed,
+            )
+            for value in report.dated_values
+        ],
+    )
+    _sheet(
+        workbook,
+        "Dated Value Withdrawals",
+        ("Withdrawal ID", "Value ID", "Account ID", "Prior value version", "Reason", "Created at", "Version"),
+        [
+            (
+                row.withdrawal_id,
+                row.value_id,
+                row.account_id,
+                row.prior_version,
+                row.reason,
+                row.created_at,
+                row.version,
+            )
+            for row in report.dated_value_withdrawals
+        ],
+    )
+    names = ["Dated Values", "Dated Value Withdrawals"]
+    source_values = tuple(value for value in report.dated_values if value.source_proof is not None)
+    if source_values:
+        _sheet(
+            workbook,
+            "Source Value Proofs",
+            (
+                "Value ID",
+                "Source SHA-256",
+                "Evidence SHA-256",
+                "Definition SHA-256",
+                "Parser ID",
+                "Definition revision",
+                "Source section identity",
+                "Identity form",
+                "Financial kind",
+                "Tracking scope",
+                "Sign rule",
+                "Extracted closing minor units",
+                "Extracted closing raw text",
+                "Closing provenance",
+                "Source endpoint",
+                "Endpoint raw text",
+                "Endpoint provenance",
+                "Captured authored review JSON",
+            ),
+            [
+                (
+                    value.value_id,
+                    proof.source_sha256,
+                    proof.evidence_sha256,
+                    proof.definition_sha256,
+                    proof.parser_id,
+                    proof.definition_revision,
+                    proof.source_identity,
+                    proof.source_identity_form,
+                    proof.financial_kind,
+                    proof.tracking_scope,
+                    proof.sign_rule,
+                    str(proof.closing.minor),
+                    proof.closing.raw,
+                    proof.closing.provenance,
+                    proof.value_date.iso,
+                    proof.value_date.raw,
+                    proof.value_date.provenance,
+                    proof.review_annotation.model_dump_json() if proof.review_annotation else None,
+                )
+                for value in source_values
+                for proof in (value.source_proof,)
+            ],
+        )
+        _sheet(
+            workbook,
+            "Value Source Locations",
+            ("Value ID", "Source field", "Location ordinal", "Exact location JSON"),
+            [
+                (
+                    value.value_id,
+                    field,
+                    ordinal,
+                    location.model_dump_json(),
+                )
+                for value in source_values
+                for field, locations in (
+                    ("closing", value.source_proof.closing.locations),
+                    ("endpoint", value.source_proof.value_date.locations),
+                )
+                for ordinal, location in enumerate(locations, start=1)
+            ],
+        )
+        names.extend(("Source Value Proofs", "Value Source Locations"))
+    return names
+
+
 def write_reviewed_journal_workbook(report: ReviewedJournalExport, destination_path: Path) -> Path:
     """Write active reviewed entry rows, exact posting lines, provenance and scope."""
     destination = destination_path.expanduser()
@@ -375,6 +523,7 @@ def write_reviewed_journal_workbook(report: ReviewedJournalExport, destination_p
             ],
         )
         expected_sheets.extend(("Settlement Events", "Settlement Legs", "Settlement Fees"))
+    expected_sheets.extend(_value_metadata(workbook, report, accounts))
     descriptor, partial_name = tempfile.mkstemp(
         prefix=f".{destination.name}.partial.", suffix=".xlsx", dir=destination.parent
     )

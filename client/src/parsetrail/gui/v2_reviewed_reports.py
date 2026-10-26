@@ -46,6 +46,47 @@ from parsetrail.gui.v2_path_notice import show_path_notice
 from parsetrail.gui.v2_report_drilldown import V2ReviewedEntryDrilldown
 
 
+def _dated_value_note(row: AccountPosition, *, full_reference: bool = False) -> str:
+    direction = 1 if row.kind == "asset" else -1
+    if row.value_status == "conflict":
+        facts = "; ".join(
+            f"{_money(direction * value.amount_minor)} ({value.origin}, value {value.value_id})"
+            for value in row.conflicting_dated_values
+        )
+        return (
+            f"Conflicting reviewed dated values at {row.conflicting_dated_values[0].value_date.isoformat()}: "
+            f"{facts}. No single value is selected. "
+            "These nonposting facts do not replace the books or establish settlement."
+        )
+    value = row.latest_dated_value
+    if value is None:
+        return "No reviewed dated value applies through this as-of date."
+    reference = value.reference
+    if not full_reference and len(reference) > 100:
+        reference = reference[:100] + "…"
+    note = (
+        f"Latest {value.origin} dated value: {_money(direction * value.amount_minor)} as of {value.value_date.isoformat()}; "
+        f"reference: {reference}. This nonposting value does not replace the books or establish settlement."
+    )
+    agreeing = tuple(point for point in row.current_dated_values if point.value_date == value.value_date)
+    if len(agreeing) > 1:
+        note += f" {len(agreeing)} current points agree at this date; their amounts are not added."
+    if value.source_proof is not None:
+        proof = value.source_proof
+        rule = {
+            "debit-signed-1": "already debit signed",
+            "positive-owed-negate-1": "positive amount owed converted to negative debit",
+        }[proof.sign_rule]
+        note += (
+            f" Extracted closing {_money(proof.closing.minor)} ({proof.closing.provenance}); "
+            f"reviewed debit {_money(value.amount_minor)} ({rule}). "
+            f"Source endpoint {proof.value_date.iso} ({proof.value_date.provenance})."
+        )
+    if any(point.source_review_changed for point in agreeing) or value.source_review_changed:
+        note += " Source review annotations changed since a point was recorded; inspect its retained review context."
+    return note
+
+
 class _CategoryModel(QAbstractTableModel):
     def __init__(self, kind: str, parent=None):
         super().__init__(parent)
@@ -212,6 +253,8 @@ class _AccountPositionModel(QAbstractTableModel):
         if role == Qt.TextAlignmentRole and index.column() in (2, 3, 5):
             return Qt.AlignRight | Qt.AlignVCenter
         if role == Qt.ToolTipRole:
+            if index.column() == 12:
+                return _dated_value_note(row, full_reference=True)
             return (
                 f"{row.name} ({row.account_id}); {row.currency}. "
                 "Positive means asset value or liability owed. Recorded totals include reviewed postings only. "
@@ -249,6 +292,8 @@ class _AccountPositionModel(QAbstractTableModel):
             {"source": "Source-backed", "manual": "Reviewed manual", None: "None current"}[row.opening_origin],
             f"{_money(sign * value.amount_minor)}\n{value.value_date.isoformat()} ({value.origin})"
             if value
+            else f"Conflicting reviewed values\n{row.conflicting_dated_values[0].value_date.isoformat()}"
+            if row.value_status == "conflict"
             else "None through as-of",
             f"Tracking {lifecycle.state}\n{lifecycle.effective_date.isoformat()}"
             if lifecycle
@@ -473,6 +518,10 @@ class V2ReviewedReportsDialog(QDialog):
         self.account_anchor_button.setEnabled(False)
         self.account_anchor_button.clicked.connect(self._review_selected_account)
         controls.addWidget(self.account_anchor_button)
+        self.source_value_button = QPushButton("Review source values…")
+        self.source_value_button.setEnabled(False)
+        self.source_value_button.clicked.connect(self._review_selected_source_values)
+        controls.addWidget(self.source_value_button)
         controls.addStretch()
         layout.addLayout(controls)
         note = QLabel(
@@ -551,6 +600,7 @@ class V2ReviewedReportsDialog(QDialog):
             else:
                 self.history_model.replace(())
                 self.account_anchor_button.setEnabled(False)
+                self.source_value_button.setEnabled(False)
                 self.position_details.setToolTip("")
                 self.position_details.setText("No financial accounts in this profile. Add an account to begin.")
                 self.history_title.setText("Reviewed accounting history")
@@ -561,11 +611,13 @@ class V2ReviewedReportsDialog(QDialog):
         if not index.isValid():
             self.history_model.replace(())
             self.account_anchor_button.setEnabled(False)
+            self.source_value_button.setEnabled(False)
             self.position_details.setText("Select an account to inspect its reviewed history and limits.")
             self.position_details.setToolTip("")
             return
         row = self.positions_model.rows[index.row()]
         self.account_anchor_button.setEnabled(True)
+        self.source_value_button.setEnabled(True)
         self.history_model.replace(row.history, row.kind)
         self.history_title.setText(
             f"{row.name}: reviewed accounting history through {self.as_of.date().toString('yyyy-MM-dd')} "
@@ -600,14 +652,7 @@ class V2ReviewedReportsDialog(QDialog):
         origin_label = {"source": "source-backed review", "manual": "reviewed manual fact", None: "not established"}[
             row.opening_origin
         ]
-        value_note = "No reviewed dated value applies through this as-of date."
-        value = row.latest_dated_value
-        if value is not None:
-            reference = value.reference if len(value.reference) <= 100 else value.reference[:100] + "…"
-            value_note = (
-                f"Latest {value.origin} dated value: {_money(direction * value.amount_minor)} as of {value.value_date.isoformat()}; "
-                f"reference: {reference}. This nonposting value does not replace the books or establish settlement."
-            )
+        value_note = _dated_value_note(row)
         lifecycle_note = "No closure is effective in tracking metadata at this as-of date."
         if row.lifecycle is not None:
             lifecycle_note = (
@@ -639,17 +684,22 @@ class V2ReviewedReportsDialog(QDialog):
             + lifecycle_note
         )
         self.position_details.setText(details)
-        self.position_details.setToolTip(
-            details + (f"\nFull dated-value reference: {value.reference}" if value is not None else "")
-        )
+        self.position_details.setToolTip(details + "\n" + _dated_value_note(row, full_reference=True))
 
     def _review_selected_account(self) -> None:
+        self._open_selected_account_review()
+
+    def _review_selected_source_values(self) -> None:
+        self._open_selected_account_review("source_values")
+
+    def _open_selected_account_review(self, initial_tab: str | None = None) -> None:
         index = self.positions_table.currentIndex()
-        if not index.isValid() or self.positions_report is None:
+        if not index.isValid() or self.positions_report is None or index.row() >= len(self.positions_model.rows):
             return
         from parsetrail.gui.v2_account_anchors import V2AccountAnchors
 
-        V2AccountAnchors(self.profile, self.positions_model.rows[index.row()].account_id, self).exec()
+        options = {"initial_tab": initial_tab} if initial_tab is not None else {}
+        V2AccountAnchors(self.profile, self.positions_model.rows[index.row()].account_id, self, **options).exec()
         self._refresh_all_reports()
 
     def _clear_unavailable_reports(self, exc: Exception) -> None:
@@ -671,6 +721,7 @@ class V2ReviewedReportsDialog(QDialog):
         self.position_details.setText("Account positions are unavailable. Refresh to retry.")
         self.position_details.setToolTip("")
         self.account_anchor_button.setEnabled(False)
+        self.source_value_button.setEnabled(False)
         self.history_title.setText("Reviewed accounting history")
         self.export_button.setEnabled(False)
 

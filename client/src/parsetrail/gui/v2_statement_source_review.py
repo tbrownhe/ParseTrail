@@ -29,18 +29,15 @@ class V2StatementSourceReview(QDialog):
     def __init__(self, profile: Path, section: StatementCoverageRow, parent=None):
         super().__init__(parent)
         self.profile = profile
-        self.section = section
         with V2ProfileStore.open(profile, read_only=True) as store:
-            payload, account = store._bound_statement_section(section.account_id, section.source_sha256)
-            self.saved = store.load_import(section.source_sha256)
-            self.review = next(
-                (
-                    item
-                    for item in store.statement_source_reviews(section.account_id)
-                    if item.source_sha256 == section.source_sha256
-                ),
-                None,
-            )
+            snapshot = store.statement_source_review_snapshot(section.account_id, section.source_sha256)
+        self.section = section = snapshot.section
+        payload, account = snapshot.payload, snapshot.source_account
+        self.saved, self.review = snapshot.saved, snapshot.review
+        self.expected_section = account.source_identity, account.source_identity_form
+        self.basis = snapshot.basis_sha256
+        self._context_valid = True
+        self._loaded = None
         self.reported_dates_available = all(
             (candidate := posting_date_candidate(row)) is not None and candidate.provenance in {"observed", "derived"}
             for row in account.rows
@@ -57,6 +54,7 @@ class V2StatementSourceReview(QDialog):
         layout.addWidget(scope)
         facts = QLabel(
             f"{section.account_name} · Source {section.source_sha256[:16]}…\n"
+            f"Section: {account.source_identity} ({account.source_identity_form}); financial account ID: {section.account_id}\n"
             f"Period: {payload.start.iso or 'unknown'} to {payload.end.iso} "
             f"({payload.start.provenance} start, {payload.end.provenance} end)\n"
             f"Opening: {account.opening.raw if account.opening and account.opening.raw else 'unavailable'} "
@@ -148,6 +146,8 @@ class V2StatementSourceReview(QDialog):
             and closing is not None
             and dates is not None
             and bool(reference)
+            and self._context_valid
+            and self._loaded is not None
             and (self.review is None or self._form() != self._loaded)
         )
 
@@ -162,6 +162,8 @@ class V2StatementSourceReview(QDialog):
                     self.section.account_id,
                     self.section.source_sha256,
                     expected_revision_id=self.review.revision_id if self.review else None,
+                    expected_section=self.expected_section,
+                    expected_basis_sha256=self.basis,
                     opening_origin=opening,
                     closing_origin=closing,
                     timing_confirmed=timing,
@@ -170,6 +172,19 @@ class V2StatementSourceReview(QDialog):
                     note=note,
                 )
         except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            QMessageBox.warning(self, "Source review was not saved", str(exc))
+            changed = str(exc) in {
+                "statement_source_review_context_changed_since_selection",
+                "statement_source_review_changed_since_selection",
+            }
+            if changed or isinstance(exc, (sqlite3.Error, OSError)):
+                self._context_valid = False
+                self._update_action()
+            message = (
+                "The loaded source section, assignment or saved review changed. Close and reopen this source review; no assessment was recorded from this stale form."
+                if changed
+                else "The source assessment could not be recorded. Check its printed facts, date assessment and required reference before trying again."
+            )
+            self.status.setText(message)
+            QMessageBox.warning(self, "Source review was not saved", message)
             return
         self.accept()

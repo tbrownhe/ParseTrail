@@ -14,8 +14,8 @@ is implemented and reviewed; the probe awaits the final integrated runtime freez
 
 ## Next candidates
 
-1. [V2-4 remaining review safeguards](ROADMAP.md#v2-4): source-observed dated values
-   and remaining supported loan/HSA accounting interpretations;
+1. [V2-4 remaining review safeguards](ROADMAP.md#v2-4): supported HSA cash-component
+   and loan/source-component accounting interpretations;
    select a bounded outcome before implementation.
    [Starting points](.agents/skills/parsetrail-workflow/references/code-and-checks.md#remaining-review-safeguards).
 2. [P2-3/4/5 readiness](ROADMAP.md#p2-3): remaining family/platform/catalog work;
@@ -24,7 +24,7 @@ is implemented and reviewed; the probe awaits the final integrated runtime freez
 
 ## Most recent product packet
 
-[Transfer fees and partial settlements](docs/work/2026-10-25-v2-settlements.md)
+[Source closing values and dated-value withdrawal](docs/work/2026-10-25-v2-source-values.md)
 completed development and independent review. Consolidated human UI/UX review
 remains open; this is not 2.0 release acceptance.
 

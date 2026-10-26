@@ -128,6 +128,7 @@ class V2OpeningReview(QDialog):
         self.decision = None
         self.basis = None
         self._loaded_account_id = None
+        self.sections, self.source_review_basis, self._loaded_section = (), None, None
         self._loaded_form = (None, False, "", "")
         self.setWindowTitle("2.0 opening position review")
         self.resize(1080, 720)
@@ -291,18 +292,12 @@ class V2OpeningReview(QDialog):
         if source_id is None:
             self.source_details.setText("No earliest source is available for this account.")
         else:
-            try:
-                with V2ProfileStore.open(self.workspace.profile_path, read_only=True) as store:
-                    section = next(
-                        (
-                            row
-                            for row in store.statement_coverage()
-                            if row.account_id == self.account.currentData() and row.source_sha256 == source_id
-                        ),
-                        None,
-                    )
-            except (ProfileFormatError, sqlite3.Error, OSError):
-                section = None
+            sections = tuple(
+                row
+                for row in self.sections
+                if row.account_id == self.account.currentData() and row.source_sha256 == source_id
+            )
+            section = sections[0] if len(sections) == 1 else None
             if section is None:
                 self.source_details.setText("Source section unavailable; inspect binding and evidence.")
             else:
@@ -312,8 +307,10 @@ class V2OpeningReview(QDialog):
                     f"to {section.period_end.isoformat()} ({section.period_start_provenance} start); "
                     f"opening {opening.raw if opening and opening.raw else 'unknown'} "
                     f"({opening.provenance if opening else 'unknown'}), {section.balance_scope.replace('_', ' ')}. "
+                    f"Section: {section.source_identity} ({section.source_identity_form}). "
                     f"Source {source_id}"
                 )
+        self._loaded_section = section if source_id is not None else None
         self._update_actions()
 
     def refresh(self, *_args, selected_source: str | None = None) -> None:
@@ -324,6 +321,7 @@ class V2OpeningReview(QDialog):
             self.reviews = {}
             self.decision = None
             self.basis = None
+            self.sections, self.source_review_basis, self._loaded_section = (), None, None
             self.source.blockSignals(True)
             self.source.clear()
             self.source.blockSignals(False)
@@ -346,6 +344,7 @@ class V2OpeningReview(QDialog):
             self.reviews = {}
             self.decision = None
             self.basis = None
+            self.sections, self.source_review_basis, self._loaded_section = (), None, None
             self.source.clear()
             self.candidate_label.setText("Add and bind a financial account first.")
             self.saved_label.setText("Not established; unknown is not zero.")
@@ -359,6 +358,7 @@ class V2OpeningReview(QDialog):
         self.reviews = {review.source_sha256: review for review in snapshot.reviews}
         self.decision = snapshot.decision
         self.basis = snapshot.basis_sha256
+        self.sections, self.source_review_basis = snapshot.sections, snapshot.source_review_basis_sha256
         candidate = self.candidate
         amount = candidate.printed_opening_minor
         natural = 1 if candidate.account_kind == "asset" else -1
@@ -404,6 +404,8 @@ class V2OpeningReview(QDialog):
         self.preview.setEnabled(source_selected)
         self.save.setEnabled(
             source_selected
+            and self._loaded_section is not None
+            and self.source_review_basis is not None
             and changed
             and self.origin.currentData() is not None
             and bool(self.reference.text().strip())
@@ -485,12 +487,17 @@ class V2OpeningReview(QDialog):
         if account_id is None or source_id is None:
             return
         loaded_review = self.reviews.get(source_id)
+        loaded_section = self._loaded_section
+        if loaded_section is None or self.source_review_basis is None:
+            return
         try:
             with V2ProfileStore.open(self.workspace.profile_path) as store:
                 store.record_statement_source_review(
                     account_id,
                     source_id,
                     expected_revision_id=loaded_review.revision_id if loaded_review else None,
+                    expected_section=(loaded_section.source_identity, loaded_section.source_identity_form),
+                    expected_basis_sha256=self.source_review_basis,
                     opening_origin=self.origin.currentData(),
                     closing_origin=loaded_review.closing_origin if loaded_review else "unestablished",
                     timing_confirmed=self.timing.isChecked(),
@@ -501,7 +508,11 @@ class V2OpeningReview(QDialog):
         except (ProfileFormatError, sqlite3.Error, OSError) as exc:
             message = (
                 "This source review changed after the form was loaded. The latest saved assessment has been reloaded."
-                if str(exc) == "statement_source_review_changed_since_selection"
+                if str(exc)
+                in {
+                    "statement_source_review_changed_since_selection",
+                    "statement_source_review_context_changed_since_selection",
+                }
                 else str(exc)
             )
             QMessageBox.warning(self, "Source review was not saved", message)

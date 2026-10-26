@@ -196,6 +196,8 @@ class V2WorkspaceWindow(QMainWindow):
         self.edit_financial_account_action.triggered.connect(self._edit_account)
         self.account_anchors_action = accounts_menu.addAction("Reviewed openings, dated values and closure…")
         self.account_anchors_action.triggered.connect(self._review_account_anchors)
+        self.source_values_action = accounts_menu.addAction("Review statement closing values…")
+        self.source_values_action.triggered.connect(self._review_source_values)
         self.source_opening_action = accounts_menu.addAction("Review source-backed opening…")
         self.source_opening_action.triggered.connect(self._review_openings)
         review_menu = self.menuBar().addMenu("Review")
@@ -313,6 +315,8 @@ class V2WorkspaceWindow(QMainWindow):
             self.restore_profile_action,
             self.transfer_review_action,
             self.settlement_review_action,
+            self.account_anchors_action,
+            self.source_values_action,
         ):
             action.setEnabled(self.import_worker is None)
         self.transfer_review_button.setEnabled(self.import_worker is None)
@@ -811,6 +815,14 @@ class V2WorkspaceWindow(QMainWindow):
         from parsetrail.gui.v2_account_anchors import V2AccountAnchors
 
         V2AccountAnchors(self.workspace.profile_path, parent=self).exec()
+        self.refresh()
+
+    def _review_source_values(self) -> None:
+        if self.import_worker is not None:
+            return
+        from parsetrail.gui.v2_account_anchors import V2AccountAnchors
+
+        V2AccountAnchors(self.workspace.profile_path, parent=self, initial_tab="source_values").exec()
         self.refresh()
 
     def closeEvent(self, event) -> None:

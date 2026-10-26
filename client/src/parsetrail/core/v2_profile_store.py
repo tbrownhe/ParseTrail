@@ -31,6 +31,7 @@ from parsetrail.core.ledger import (
 )
 from parsetrail.core.source_evidence import (
     ActivityExportPayload,
+    DateValue,
     MoneyValue,
     SourceEvidence,
     StatementAccount,
@@ -60,9 +61,19 @@ from parsetrail.core.v2_source_overlap import (
     nearby_source_pair,
     pairwise_source_group,
 )
+from parsetrail.core.v2_source_values import (
+    SOURCE_VALUE_RULES,
+    SourceValueProof,
+    SourceValueReviewAnnotation,
+    dated_value_conflicts,
+    decode_source_value_proof,
+    make_source_value_proof,
+    proof_payload,
+    source_value_candidate_id,
+)
 
 APPLICATION_ID = 0x50543230  # PT20
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 TRACKING_SCOPES = {"account_total", "principal_component", "cash_component"}
 CategoryPurpose = Literal["expense", "expense_refund", "income", "income_adjustment"]
 CATEGORY_PURPOSE_KINDS = {
@@ -187,6 +198,8 @@ TABLE_COLUMNS = {
         ("source_reference", "TEXT", 1, 0),
         ("note", "TEXT", 1, 0),
         ("created_at", "TEXT", 1, 0),
+        ("source_identity", "TEXT", 1, 0),
+        ("source_identity_form", "TEXT", 1, 0),
     ),
     "OpeningDecisions": (
         ("account_id", "TEXT", 0, 1),
@@ -230,6 +243,18 @@ TABLE_COLUMNS = {
         ("reason", "TEXT", 1, 0),
         ("corrects_value_id", "INTEGER", 0, 0),
         ("request_basis", "TEXT", 1, 0),
+        ("record_sha256", "TEXT", 1, 0),
+        ("created_at", "TEXT", 1, 0),
+        ("origin", "TEXT", 1, 0),
+        ("source_proof", "TEXT", 0, 0),
+        ("allow_conflict", "INTEGER", 1, 0),
+    ),
+    "DatedValueWithdrawals": (
+        ("withdrawal_id", "INTEGER", 0, 1),
+        ("value_id", "INTEGER", 1, 0),
+        ("prior_version", "TEXT", 1, 0),
+        ("request_basis", "TEXT", 1, 0),
+        ("reason", "TEXT", 1, 0),
         ("record_sha256", "TEXT", 1, 0),
         ("created_at", "TEXT", 1, 0),
     ),
@@ -330,6 +355,7 @@ TABLE_COLUMNS = {
     ),
 }
 FOREIGN_KEYS = {
+    "DatedValueWithdrawals": (("value_id", "AccountDatedValues", "value_id"),),
     "AccountDatedValues": (("corrects_value_id", "AccountDatedValues", "value_id"), ("account_id", "Accounts", "id")),
     "AccountLifecycleDecisions": (("account_id", "Accounts", "id"),),
     "BindingCorrections": (("source_sha256", "Sources", "sha256"),),
@@ -393,6 +419,7 @@ FOREIGN_KEYS = {
 }
 
 IMMUTABLE_TABLES = (
+    "DatedValueWithdrawals",
     "AccountDatedValues",
     "AccountLifecycleDecisions",
     "BindingCorrections",
@@ -534,6 +561,7 @@ class BindingCorrectionSnapshot:
     affected_review_rows: tuple[BindingAffectedReviewRow, ...] = ()
     affected_transfer_review_ids: tuple[int, ...] = ()
     affected_transfer_reviews: tuple[TransferPairReview, ...] = ()
+    source_value_anchors: tuple[ReviewedDatedValue, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -559,6 +587,9 @@ class StatementSourceReview:
     posting_dates: Literal["reported", "estimated", "unverified"]
     source_reference: str
     note: str
+    source_identity: str = ""
+    source_identity_form: str = ""
+    created_at: str = ""
 
 
 @dataclass(frozen=True)
@@ -608,8 +639,56 @@ class ReviewedDatedValue:
     corrects_value_id: int | None
     created_at: str
     version: str
-    origin: Literal["manual"] = "manual"
+    origin: Literal["manual", "source"] = "manual"
     superseded_by_value_id: int | None = None
+    source_proof: SourceValueProof | None = None
+    withdrawal: DatedValueWithdrawal | None = None
+    allow_conflict: bool = False
+    source_review_changed: bool = False
+
+    @property
+    def state(self) -> Literal["active", "superseded", "withdrawn"]:
+        return (
+            "withdrawn"
+            if self.withdrawal is not None
+            else "superseded"
+            if self.superseded_by_value_id is not None
+            else "active"
+        )
+
+
+@dataclass(frozen=True)
+class DatedValueWithdrawal:
+    withdrawal_id: int
+    value_id: int
+    account_id: str
+    prior_version: str
+    reason: str
+    created_at: str
+    version: str
+
+
+@dataclass(frozen=True)
+class SourceClosingCandidate:
+    candidate_id: str
+    version: str
+    account_id: str
+    source_sha256: str
+    source_identity: str
+    source_identity_form: str
+    value_date: date | None
+    amount_minor: int | None
+    tracking_scope: str
+    proof: SourceValueProof | None
+    blockers: tuple[str, ...]
+    source_review: StatementSourceReview | None
+    capture_verified: bool
+    closing: MoneyValue | None = None
+    endpoint: DateValue | None = None
+    parser_id: str = ""
+    definition_revision: str = ""
+    sign_rule: str | None = None
+    source_review_ambiguous: bool = False
 
 
 @dataclass(frozen=True)
@@ -648,6 +727,11 @@ class AccountAnchorSnapshot:
     position_debit_minor: int | None
     earliest_known_history_date: date | None = None
     opening_boundaries: tuple[AccountOpeningBoundary, ...] = ()
+    source_value_candidates: tuple[SourceClosingCandidate, ...] = ()
+    dated_value_withdrawals: tuple[DatedValueWithdrawal, ...] = ()
+    value_status: Literal["missing", "known", "conflict"] = "missing"
+    conflicting_dated_values: tuple[ReviewedDatedValue, ...] = ()
+    current_dated_values: tuple[ReviewedDatedValue, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -657,6 +741,8 @@ class OpeningReviewSnapshot:
     decision: OpeningDecision | None
     basis_sha256: str
     history: tuple[OpeningDecisionHistoryRow, ...]
+    sections: tuple[StatementCoverageRow, ...] = ()
+    source_review_basis_sha256: str = ""
 
 
 @dataclass(frozen=True)
@@ -677,6 +763,19 @@ class StatementCoverageRow:
     capture_verified: bool
     endpoint_comparison: Literal["not_adjacent", "unavailable", "ambiguous_prior", "same", "different"]
     compared_source_sha256: str | None
+    source_identity: str = ""
+    source_identity_form: str = ""
+
+
+@dataclass(frozen=True)
+class StatementSourceReviewSnapshot:
+    account: FinancialAccount
+    section: StatementCoverageRow
+    saved: SavedImport
+    payload: StatementPayload
+    source_account: StatementAccount
+    review: StatementSourceReview | None
+    basis_sha256: str
 
 
 @dataclass(frozen=True)
@@ -968,6 +1067,9 @@ class AccountPosition:
     closure_residual_debit_minor: int | None = None
     closure_residual_unknown: bool = False
     closure_residual_date: date | None = None
+    value_status: Literal["missing", "known", "conflict"] = "missing"
+    conflicting_dated_values: tuple[ReviewedDatedValue, ...] = ()
+    current_dated_values: tuple[ReviewedDatedValue, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -1031,6 +1133,8 @@ class ReviewedJournalExport:
     source_actions: tuple[SourceInterpretationAction, ...] = ()
     repeat_repairs: tuple[PostedRepeatRepair, ...] = ()
     settlements: tuple[ReviewedTransferEvent, ...] = ()
+    dated_values: tuple[ReviewedDatedValue, ...] = ()
+    dated_value_withdrawals: tuple[DatedValueWithdrawal, ...] = ()
 
 
 BANK_CASH_STATEMENT_PARSERS = frozenset(
@@ -1447,7 +1551,9 @@ class V2ProfileStore:
                     posting_dates TEXT NOT NULL CHECK(posting_dates IN ('reported','estimated','unverified')),
                     source_reference TEXT NOT NULL,
                     note TEXT NOT NULL,
-                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
+                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+                    source_identity TEXT NOT NULL,
+                    source_identity_form TEXT NOT NULL CHECK(source_identity_form IN ('full','last_four','opaque'))
                 );
                 CREATE TABLE OpeningDecisions (
                     account_id TEXT PRIMARY KEY REFERENCES Accounts(id),
@@ -1479,6 +1585,14 @@ class V2ProfileStore:
                     reference TEXT NOT NULL, reason TEXT NOT NULL,
                     corrects_value_id INTEGER UNIQUE REFERENCES AccountDatedValues(value_id),
                     request_basis TEXT NOT NULL, record_sha256 TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now')),
+                    origin TEXT NOT NULL, source_proof TEXT,
+                    allow_conflict INTEGER NOT NULL CHECK(allow_conflict IN (0,1))
+                );
+                CREATE TABLE DatedValueWithdrawals (
+                    withdrawal_id INTEGER PRIMARY KEY, value_id INTEGER NOT NULL UNIQUE REFERENCES AccountDatedValues(value_id),
+                    prior_version TEXT NOT NULL, request_basis TEXT NOT NULL, reason TEXT NOT NULL,
+                    record_sha256 TEXT NOT NULL,
                     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
                 );
                 CREATE TABLE AccountLifecycleDecisions (
@@ -2155,6 +2269,20 @@ class V2ProfileStore:
                 raise ProfileFormatError("account_binding_has_correction_history")
         if self._binding_opening_anchors(target, self._binding_scope_accounts(target)):
             raise ProfileFormatError("account_binding_source_backed_opening_anchor")
+        if self._binding_dated_value_anchors(target):
+            raise ProfileFormatError("account_binding_source_backed_dated_value_anchor")
+
+    def _binding_dated_value_anchors(self, target: BindingCorrectionTarget) -> tuple[ReviewedDatedValue, ...]:
+        return tuple(
+            value
+            for value in self._read_dated_values()
+            if value.state == "active"
+            and value.source_proof is not None
+            and value.source_proof.source_sha256 == target.source_sha256
+            and target.mode == "source"
+            and (value.source_proof.source_identity, value.source_proof.source_identity_form)
+            == (target.source_identity, target.source_identity_form)
+        )
 
     def source_overlap_history_row_ids(self, source_sha256: str) -> frozenset[str]:
         """Rows whose binding is fixed by durable occurrence-review history."""
@@ -2263,6 +2391,7 @@ class V2ProfileStore:
             "OpeningDecisionRevisions",
             "OpeningDecisions",
             "AccountDatedValues",
+            "DatedValueWithdrawals",
             "AccountLifecycleDecisions",
             "TransferEvents",
             "TransferEventActions",
@@ -4760,6 +4889,7 @@ class V2ProfileStore:
             )
             lifecycle = self._account_lifecycle_at(account.id, as_of)
             closed = lifecycle is not None and lifecycle.state == "closed"
+            value_status, latest_value, current_values = self._dated_value_point(account.id, as_of)
             result.append(
                 AccountPosition(
                     account.id,
@@ -4796,11 +4926,14 @@ class V2ProfileStore:
                     ),
                     account.tracking_scope,
                     decision.origin if decision is not None else None,
-                    self._latest_dated_value(account.id, as_of),
+                    latest_value,
                     lifecycle,
                     recorded if closed else None,
                     closed and status != "valid",
                     as_of if closed else None,
+                    value_status,
+                    current_values if value_status == "conflict" else (),
+                    current_values,
                 )
             )
         unresolved_rows, unresolved_sources = self._unallocated_activity_counts()
@@ -4827,6 +4960,8 @@ class V2ProfileStore:
             for event in self._read_transfer_history()[0]
             if event.pair is None and any(key in period_keys for key in event.entry_keys)
         )
+        dated_values = tuple(v for v in self._read_dated_values() if start <= v.value_date < end)
+        dated_withdrawals = tuple(v.withdrawal for v in dated_values if v.withdrawal is not None)
         period_events = {entry.event_id for entry in period_entries}
         transfer_actions = tuple(
             JournalExportTransferAction(*row)
@@ -4900,6 +5035,8 @@ class V2ProfileStore:
             source_actions,
             repeat_repairs,
             settlements,
+            dated_values,
+            dated_withdrawals,
         )
 
     def _insert_reviewed_category(
@@ -5634,6 +5771,9 @@ class V2ProfileStore:
         anchors = self._binding_opening_anchors(target, accounts)
         if anchors:
             blockers.append("source_backed_opening_anchor")
+        value_anchors = self._binding_dated_value_anchors(target)
+        if value_anchors:
+            blockers.append("source_backed_dated_value_anchor")
         ordinary_blockers = ()
         try:
             self._require_ordinary_binding_change(target)
@@ -5644,6 +5784,7 @@ class V2ProfileStore:
                 "account_binding_has_transfer_review_history",
                 "account_binding_has_correction_history",
                 "account_binding_source_backed_opening_anchor",
+                "account_binding_source_backed_dated_value_anchor",
             }:
                 raise
             ordinary_blockers = (str(exc),)
@@ -5699,6 +5840,7 @@ class V2ProfileStore:
             tuple(sorted(affected_rows, key=lambda row: row.row_id)),
             transfer_ids,
             tuple(review for review in self._read_transfer_history()[1] if review.revision_id in set(transfer_ids)),
+            value_anchors,
         )
 
     def binding_correction_snapshot(
@@ -6210,6 +6352,8 @@ class V2ProfileStore:
                         payload.capture_verified,
                         comparison,
                         compared_source,
+                        account.source_identity,
+                        account.source_identity_form,
                     )
                 )
                 if start is not None and (latest_end is None or end > latest_end):
@@ -6392,6 +6536,7 @@ class V2ProfileStore:
             ("OpeningDecisions", "*"),
             ("OpeningDecisionRevisions", "*"),
             ("AccountDatedValues", "*"),
+            ("DatedValueWithdrawals", "*"),
             ("AccountLifecycleDecisions", "*"),
             ("TransferEvents", "*"),
             ("TransferEventActions", "*"),
@@ -6780,19 +6925,99 @@ class V2ProfileStore:
         return tuple(result)
 
     def statement_source_reviews(self, account_id: str) -> tuple[StatementSourceReview, ...]:
-        """Return the latest append-only assertion for each source on an account."""
+        """Latest assertions whose exact section is currently unambiguously bound."""
         self._require_financial_account(account_id)
-        return tuple(
-            StatementSourceReview(revision, account, source, opening, closing, bool(timing), dates, reference, note)
-            for revision, account, source, opening, closing, timing, dates, reference, note in self.connection.execute(
-                "SELECT r.revision_id,r.account_id,r.source_sha256,r.opening_origin,r.closing_origin,"
-                "r.timing_confirmed,r.posting_dates,r.source_reference,r.note FROM StatementSourceReviews r "
-                "WHERE r.account_id=? AND r.revision_id=(SELECT MAX(later.revision_id) "
-                "FROM StatementSourceReviews later WHERE later.account_id=r.account_id "
-                "AND later.source_sha256=r.source_sha256) ORDER BY r.source_sha256",
-                (account_id,),
-            )
-        )
+        latest = {}
+        for review in self.statement_source_review_history(account_id):
+            if review.source_sha256 in latest:
+                continue
+            bindings = self.connection.execute(
+                "SELECT source_identity,source_identity_form FROM SourceAccountBindings WHERE source_sha256=? AND ledger_account_id=?",
+                (review.source_sha256, account_id),
+            ).fetchall()
+            if bindings == [(review.source_identity, review.source_identity_form)]:
+                latest[review.source_sha256] = review
+        return tuple(latest[source] for source in sorted(latest))
+
+    def statement_source_review_history(self, account_id: str) -> tuple[StatementSourceReview, ...]:
+        self._require_financial_account(account_id)
+        result = []
+        for row in self.connection.execute(
+            "SELECT revision_id,account_id,source_sha256,opening_origin,closing_origin,timing_confirmed,posting_dates,source_reference,note,source_identity,source_identity_form,created_at FROM StatementSourceReviews WHERE account_id=? ORDER BY revision_id DESC",
+            (account_id,),
+        ):
+            revision, account, source, opening, closing, timing, dates, reference, note, identity, form, created = row
+            try:
+                if (
+                    type(timing) is not int
+                    or timing not in {0, 1}
+                    or type(source) is not str
+                    or re.fullmatch(r"[0-9a-f]{64}", source) is None
+                    or type(created) is not str
+                    or not created
+                ):
+                    raise ValueError
+                SourceValueReviewAnnotation(
+                    revision_id=revision,
+                    opening_origin=opening,
+                    closing_origin=closing,
+                    timing_confirmed=bool(timing),
+                    posting_dates=dates,
+                    source_reference=reference,
+                    note=note,
+                    source_identity=identity,
+                    source_identity_form=form,
+                )
+                if not reference.strip() or reference != reference.strip() or note != note.strip():
+                    raise ValueError
+                payload = self.load_import(source).evidence.payload
+                if not isinstance(payload, StatementPayload):
+                    raise ValueError
+                sections = [
+                    s for s in payload.accounts if (s.source_identity, s.source_identity_form) == (identity, form)
+                ]
+                if len(sections) != 1:
+                    raise ValueError
+                section = sections[0]
+                if any(
+                    origin == "reported"
+                    and (
+                        section.balance_scope != "account_total"
+                        or money is None
+                        or money.provenance != "observed"
+                        or money.minor is None
+                    )
+                    for origin, money in ((opening, section.opening), (closing, section.closing))
+                ):
+                    raise ValueError
+                if timing and (payload.start.iso is None or payload.end.iso is None):
+                    raise ValueError
+                if dates == "reported" and any(
+                    (candidate := posting_date_candidate(r)) is None
+                    or candidate.provenance not in {"observed", "derived"}
+                    for r in section.rows
+                    if r.row_role == "activity"
+                ):
+                    raise ValueError
+                result.append(
+                    StatementSourceReview(
+                        revision,
+                        account,
+                        source,
+                        opening,
+                        closing,
+                        bool(timing),
+                        dates,
+                        reference,
+                        note,
+                        identity,
+                        form,
+                        created,
+                    )
+                )
+            except (ValueError, TypeError, RecursionError):
+                raise ProfileFormatError("statement_source_review_history_integrity") from None
+        return tuple(result)
 
     def _bound_statement_section(
         self, account_id: str, source_sha256: str
@@ -6818,6 +7043,31 @@ class V2ProfileStore:
             raise ProfileFormatError("statement_review_requires_one_bound_section")
         return payload, sections[0]
 
+    def statement_source_review_snapshot(self, account_id: str, source_sha256: str) -> StatementSourceReviewSnapshot:
+        if self.connection.in_transaction:
+            raise ProfileFormatError("statement_source_review_requires_committed_snapshot")
+        self.connection.execute("BEGIN")
+        try:
+            payload, source_account = self._bound_statement_section(account_id, source_sha256)
+            account = next(a for a in self.financial_accounts() if a.id == account_id)
+            saved = self.load_import(source_sha256)
+            section = next(
+                s
+                for s in self.statement_coverage()
+                if s.account_id == account_id
+                and s.source_sha256 == source_sha256
+                and (s.source_identity, s.source_identity_form)
+                == (source_account.source_identity, source_account.source_identity_form)
+            )
+            review = next(
+                (r for r in self.statement_source_reviews(account_id) if r.source_sha256 == source_sha256), None
+            )
+            return StatementSourceReviewSnapshot(
+                account, section, saved, payload, source_account, review, self._account_anchor_basis()
+            )
+        finally:
+            self.connection.execute("ROLLBACK")
+
     def record_statement_source_review(
         self,
         account_id: str,
@@ -6830,6 +7080,8 @@ class V2ProfileStore:
         posting_dates: Literal["reported", "estimated", "unverified"],
         source_reference: str,
         note: str = "",
+        expected_section: tuple[str, str] | None = None,
+        expected_basis_sha256: str | None = None,
     ) -> int:
         """Append a reviewed source assertion; printed evidence stays immutable."""
         self._require_writable()
@@ -6842,6 +7094,21 @@ class V2ProfileStore:
             or not 0 < len(source_reference.strip()) <= 500
             or type(note) is not str
             or len(note.strip()) > 500
+            or (
+                expected_basis_sha256 is not None
+                and (
+                    type(expected_basis_sha256) is not str
+                    or re.fullmatch(r"[0-9a-f]{64}", expected_basis_sha256) is None
+                )
+            )
+            or (
+                expected_section is not None
+                and (
+                    type(expected_section) is not tuple
+                    or len(expected_section) != 2
+                    or any(type(v) is not str or not v for v in expected_section)
+                )
+            )
         ):
             raise ProfileFormatError("statement_source_review_invalid")
         payload, section = self._bound_statement_section(account_id, source_sha256)
@@ -6877,6 +7144,14 @@ class V2ProfileStore:
         )
         self.connection.execute("BEGIN IMMEDIATE")
         try:
+            _locked_payload, locked_section = self._bound_statement_section(account_id, source_sha256)
+            if expected_basis_sha256 is not None and expected_basis_sha256 != self._account_anchor_basis():
+                raise ProfileFormatError("statement_source_review_changed_since_selection")
+            context = (section.source_identity, section.source_identity_form)
+            if (locked_section.source_identity, locked_section.source_identity_form) != context or (
+                expected_section is not None and expected_section != context
+            ):
+                raise ProfileFormatError("statement_source_review_context_changed_since_selection")
             latest = next(
                 (
                     review
@@ -6903,8 +7178,8 @@ class V2ProfileStore:
                 return latest.revision_id
             cursor = self.connection.execute(
                 "INSERT INTO StatementSourceReviews "
-                "(account_id,source_sha256,opening_origin,closing_origin,timing_confirmed,posting_dates,source_reference,note) "
-                "VALUES (?,?,?,?,?,?,?,?)",
+                "(account_id,source_sha256,opening_origin,closing_origin,timing_confirmed,posting_dates,source_reference,note,source_identity,source_identity_form) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (
                     account_id,
                     source_sha256,
@@ -6914,6 +7189,8 @@ class V2ProfileStore:
                     posting_dates,
                     source_reference.strip(),
                     note.strip(),
+                    section.source_identity,
+                    section.source_identity_form,
                 ),
             )
             self.connection.execute("COMMIT")
@@ -6932,6 +7209,8 @@ class V2ProfileStore:
         source_reference: str,
         note: str = "",
         expected_revision_id: int | None | object = _UNSET_REVIEW_REVISION,
+        expected_section: tuple[str, str] | None = None,
+        expected_basis_sha256: str | None = None,
     ) -> int:
         """Record a source inspection without altering its printed evidence."""
         candidate = next((item for item in self.earliest_source_openings() if item.account_id == account_id), None)
@@ -6953,6 +7232,8 @@ class V2ProfileStore:
             posting_dates=latest.posting_dates if latest else "unverified",
             source_reference=source_reference,
             note=note,
+            expected_section=expected_section,
+            expected_basis_sha256=expected_basis_sha256,
         )
 
     @staticmethod
@@ -7234,12 +7515,124 @@ class V2ProfileStore:
         ):
             raise ProfileFormatError("account_anchor_value_invalid")
 
+    def _source_value_annotation(
+        self,
+        account_id: str,
+        source_sha256: str,
+        revision_id: int | None = None,
+        *,
+        source_identity: str | None = None,
+        source_identity_form: str | None = None,
+    ) -> SourceValueReviewAnnotation | None:
+        if revision_id is None:
+            if source_identity is None:
+                bindings = self.connection.execute(
+                    "SELECT source_identity,source_identity_form FROM SourceAccountBindings WHERE source_sha256=? AND ledger_account_id=?",
+                    (source_sha256, account_id),
+                ).fetchall()
+                if len(bindings) != 1:
+                    return None
+                source_identity, source_identity_form = bindings[0]
+            row = self.connection.execute(
+                "SELECT revision_id,opening_origin,closing_origin,timing_confirmed,posting_dates,source_reference,note,source_identity,source_identity_form FROM StatementSourceReviews WHERE account_id=? AND source_sha256=? AND source_identity=? AND source_identity_form=? ORDER BY revision_id DESC LIMIT 1",
+                (account_id, source_sha256, source_identity, source_identity_form),
+            ).fetchone()
+        else:
+            row = self.connection.execute(
+                "SELECT revision_id,opening_origin,closing_origin,timing_confirmed,posting_dates,source_reference,note,source_identity,source_identity_form FROM StatementSourceReviews WHERE account_id=? AND source_sha256=? AND revision_id=?",
+                (account_id, source_sha256, revision_id),
+            ).fetchone()
+            if row is None:
+                raise ProfileFormatError("account_dated_value_source_proof_invalid")
+        if row is None:
+            return None
+        if type(row[3]) is not int or row[3] not in {0, 1}:
+            raise ProfileFormatError("account_dated_value_source_proof_invalid")
+        return SourceValueReviewAnnotation(
+            revision_id=row[0],
+            opening_origin=row[1],
+            closing_origin=row[2],
+            timing_confirmed=bool(row[3]),
+            posting_dates=row[4],
+            source_reference=row[5],
+            note=row[6],
+            source_identity=row[7],
+            source_identity_form=row[8],
+        )
+
+    def _validate_dated_source_proof(self, account: FinancialAccount, proof: SourceValueProof) -> None:
+        saved = self.load_import(proof.source_sha256)
+        payload = saved.evidence.payload
+        if not isinstance(payload, StatementPayload):
+            raise ProfileFormatError("account_dated_value_source_proof_invalid")
+        sections = [
+            s
+            for s in payload.accounts
+            if (s.source_identity, s.source_identity_form) == (proof.source_identity, proof.source_identity_form)
+        ]
+        if len(sections) != 1:
+            raise ProfileFormatError("account_dated_value_source_proof_invalid")
+        annotation = None
+        if proof.review_annotation is not None:
+            annotation = self._source_value_annotation(
+                account.id, proof.source_sha256, proof.review_annotation.revision_id
+            )
+        digest = self.connection.execute(
+            "SELECT sha256 FROM EvidenceSnapshots WHERE source_sha256=?", (proof.source_sha256,)
+        ).fetchone()[0]
+        expected = make_source_value_proof(
+            saved.evidence,
+            sections[0],
+            financial_kind=account.kind,
+            tracking_scope=account.tracking_scope,
+            evidence_sha256=digest,
+            review_annotation=annotation,
+        )
+        if proof != expected:
+            raise ProfileFormatError("account_dated_value_source_proof_invalid")
+
+    def _read_dated_value_withdrawals(self, values: dict[int, ReviewedDatedValue]) -> tuple[DatedValueWithdrawal, ...]:
+        result = []
+        for row in self.connection.execute("SELECT * FROM DatedValueWithdrawals ORDER BY withdrawal_id DESC"):
+            number, value_id, prior, request, reason, checksum, created = row
+            if (
+                type(number) is not int
+                or number <= 0
+                or type(value_id) is not int
+                or value_id not in values
+                or any(type(v) is not str or not v for v in row[2:])
+                or not 0 < len(reason.strip()) <= 500
+                or any(re.fullmatch(r"[0-9a-f]{64}", v) is None for v in (prior, request, checksum))
+                or prior != values[value_id].version
+                or checksum != _transfer_record_digest(*row[:5], created)
+            ):
+                raise ProfileFormatError("account_dated_value_history_integrity")
+            result.append(
+                DatedValueWithdrawal(number, value_id, values[value_id].account_id, prior, reason, created, checksum)
+            )
+        return tuple(result)
+
     def _read_dated_values(self, account_id: str | None = None) -> tuple[ReviewedDatedValue, ...]:
         values = []
         by_id = {}
         corrected = {}
         for row in self.connection.execute("SELECT * FROM AccountDatedValues ORDER BY value_id"):
-            number, account, day, amount, scope, reference, reason, previous, request, checksum, created = row
+            (
+                number,
+                account,
+                day,
+                amount,
+                scope,
+                reference,
+                reason,
+                previous,
+                request,
+                checksum,
+                created,
+                origin,
+                raw_proof,
+                allow_conflict,
+            ) = row
             try:
                 if (
                     type(number) is not int
@@ -7248,14 +7641,27 @@ class V2ProfileStore:
                     or any(re.fullmatch(r"[0-9a-f]{64}", v) is None for v in (request, checksum))
                     or not 0 < len(reason.strip()) <= 500
                     or not created
-                    or checksum != _transfer_record_digest(*row[:9], created)
+                    or origin not in {"manual", "source"}
+                    or type(allow_conflict) is not int
+                    or allow_conflict not in {0, 1}
+                    or (origin == "manual") != (raw_proof is None)
+                    or checksum != _transfer_record_digest(*row[:9], created, origin, raw_proof, allow_conflict)
                 ):
                     raise ValueError
-                self._anchor_account(account, scope)
+                financial = self._anchor_account(account, scope)
                 value_date = date.fromisoformat(day)
                 self._validate_anchor_value(amount, value_date, reference)
                 if value_date.isoformat() != day:
                     raise ValueError
+                proof = decode_source_value_proof(raw_proof) if origin == "source" else None
+                if proof is not None:
+                    self._validate_dated_source_proof(financial, proof)
+                    if (
+                        amount != proof.amount_minor
+                        or value_date.isoformat() != proof.value_date.iso
+                        or scope != proof.tracking_scope
+                    ):
+                        raise ValueError
                 if previous is not None and (
                     type(previous) is not int
                     or previous not in by_id
@@ -7264,16 +7670,49 @@ class V2ProfileStore:
                 ):
                     raise ValueError
                 item = ReviewedDatedValue(
-                    number, account, value_date, amount, scope, reference, reason, previous, created, checksum
+                    number,
+                    account,
+                    value_date,
+                    amount,
+                    scope,
+                    reference,
+                    reason,
+                    previous,
+                    created,
+                    checksum,
+                    origin=origin,
+                    source_proof=proof,
+                    allow_conflict=bool(allow_conflict),
+                    source_review_changed=proof is not None
+                    and proof.review_annotation
+                    != self._source_value_annotation(
+                        account,
+                        proof.source_sha256,
+                        source_identity=proof.source_identity,
+                        source_identity_form=proof.source_identity_form,
+                    ),
                 )
                 values.append(item)
                 by_id[number] = item
                 if previous is not None:
                     corrected[previous] = number
-            except (ProfileFormatError, TypeError, ValueError):
+            except (ProfileFormatError, TypeError, ValueError, RecursionError):
                 raise ProfileFormatError("account_dated_value_history_integrity") from None
+        withdrawals = {w.value_id: w for w in self._read_dated_value_withdrawals(by_id)}
+        if set(withdrawals).intersection(corrected):
+            raise ProfileFormatError("account_dated_value_history_integrity")
+        for item in values:
+            if item.value_id not in corrected and item.value_id not in withdrawals and item.source_proof is not None:
+                proof = item.source_proof
+                if self.connection.execute(
+                    "SELECT ledger_account_id FROM SourceAccountBindings WHERE source_sha256=? AND source_identity=? AND source_identity_form=?",
+                    (proof.source_sha256, proof.source_identity, proof.source_identity_form),
+                ).fetchone() != (item.account_id,):
+                    raise ProfileFormatError("account_dated_value_history_integrity")
         return tuple(
-            replace(item, superseded_by_value_id=corrected.get(item.value_id))
+            replace(
+                item, superseded_by_value_id=corrected.get(item.value_id), withdrawal=withdrawals.get(item.value_id)
+            )
             for item in reversed(values)
             if account_id is None or item.account_id == account_id
         )
@@ -7328,19 +7767,25 @@ class V2ProfileStore:
         return tuple(phases)
 
     def _latest_dated_value(self, account_id: str, as_of: date) -> ReviewedDatedValue | None:
-        return max(
-            (
-                item
-                for item in self._read_dated_values(account_id)
-                if item.superseded_by_value_id is None and item.value_date <= as_of
-            ),
-            key=lambda item: (item.value_date, item.value_id),
-            default=None,
+        return self._dated_value_point(account_id, as_of)[1]
+
+    def _dated_value_point(self, account_id: str, as_of: date):
+        values = tuple(
+            item for item in self._read_dated_values(account_id) if item.state == "active" and item.value_date <= as_of
         )
+        if not values:
+            return "missing", None, ()
+        latest_date = max(item.value_date for item in values)
+        current = tuple(item for item in values if item.value_date == latest_date)
+        if len({item.amount_minor for item in current}) > 1:
+            return "conflict", None, current
+        return "known", max(current, key=lambda item: item.value_id), current
 
     def _validate_account_metadata(self) -> None:
         self._validate_builtin_categories()
         self._validate_transfer_clearing()
+        for (account_id,) in self.connection.execute("SELECT DISTINCT account_id FROM StatementSourceReviews"):
+            self.statement_source_review_history(account_id)
         if not self._account_anchors_mutating:
             if any(
                 type(scope) is not str or scope not in TRACKING_SCOPES
@@ -7350,6 +7795,84 @@ class V2ProfileStore:
             self._read_dated_values()
             self._read_account_lifecycle()
             self._validate_opening_decision_histories()
+
+    def _source_value_candidates(self, account_id: str) -> tuple[SourceClosingCandidate, ...]:
+        self._require_financial_account(account_id)
+        review_history = {r.revision_id: r for r in self.statement_source_review_history(account_id)}
+        account = next(a for a in self.financial_accounts() if a.id == account_id)
+        candidates = []
+        bindings = self.connection.execute(
+            "SELECT source_sha256,source_identity,source_identity_form FROM SourceAccountBindings WHERE ledger_account_id=? ORDER BY source_sha256,source_identity,source_identity_form",
+            (account_id,),
+        ).fetchall()
+        for source_id, identity, form in bindings:
+            evidence = self.load_import(source_id).evidence
+            if not isinstance(evidence.payload, StatementPayload):
+                continue
+            sections = [
+                s for s in evidence.payload.accounts if (s.source_identity, s.source_identity_form) == (identity, form)
+            ]
+            if len(sections) != 1:
+                raise ProfileFormatError("source_value_bound_section_unavailable")
+            section = sections[0]
+            annotation = self._source_value_annotation(
+                account_id, source_id, source_identity=identity, source_identity_form=form
+            )
+            review = review_history.get(annotation.revision_id) if annotation is not None else None
+            digest = self.connection.execute(
+                "SELECT sha256 FROM EvidenceSnapshots WHERE source_sha256=?", (source_id,)
+            ).fetchone()[0]
+            proof, blockers = None, ()
+            try:
+                proof = make_source_value_proof(
+                    evidence,
+                    section,
+                    financial_kind=account.kind,
+                    tracking_scope=account.tracking_scope,
+                    evidence_sha256=digest,
+                    review_annotation=annotation,
+                )
+            except ValueError as exc:
+                blockers = (str(exc),)
+            candidate_id = source_value_candidate_id(source_id, section)
+            version = _transfer_record_digest(
+                candidate_id,
+                account_id,
+                account.kind,
+                account.tracking_scope,
+                digest,
+                proof_payload(proof) if proof else None,
+                blockers,
+                annotation.model_dump(mode="json") if annotation else None,
+            )
+            rule = SOURCE_VALUE_RULES.get(evidence.parser_id)
+            candidates.append(
+                SourceClosingCandidate(
+                    candidate_id,
+                    version,
+                    account_id,
+                    source_id,
+                    identity,
+                    form,
+                    date.fromisoformat(proof.value_date.iso) if proof else None,
+                    proof.amount_minor if proof else None,
+                    section.balance_scope,
+                    proof,
+                    blockers,
+                    review,
+                    evidence.payload.capture_verified,
+                    section.closing,
+                    evidence.payload.end,
+                    evidence.parser_id,
+                    evidence.definition_revision,
+                    rule.sign_rule if rule else None,
+                    False,
+                )
+            )
+        return tuple(candidates)
+
+    def source_dated_value_snapshot(self, account_id: str, *, as_of: date | None = None) -> AccountAnchorSnapshot:
+        return self.account_anchor_snapshot(account_id, as_of=as_of)
 
     def _account_anchor_basis(self) -> str:
         rule, version = self._reconciliation_rule_and_version()
@@ -7379,6 +7902,8 @@ class V2ProfileStore:
             )
             earliest = self._earliest_known_account_activity(account_id)
             boundaries = self._account_opening_boundaries(account_id)
+            value_status, latest_value, current_values = self._dated_value_point(account_id, as_of)
+            value_history = self._read_dated_values(account_id)
             valid = (
                 opening is not None and opening.state == "active" and not opening.stale and opening.cutoff_date <= as_of
             )
@@ -7393,8 +7918,8 @@ class V2ProfileStore:
                 account,
                 opening,
                 history,
-                self._read_dated_values(account_id),
-                self._latest_dated_value(account_id, as_of),
+                value_history,
+                latest_value,
                 lifecycle[0] if lifecycle else None,
                 lifecycle,
                 earliest,
@@ -7403,6 +7928,11 @@ class V2ProfileStore:
                 recorded if valid else None,
                 min((item.boundary_date for item in boundaries), default=None),
                 boundaries,
+                self._source_value_candidates(account_id),
+                tuple(v.withdrawal for v in value_history if v.withdrawal is not None),
+                value_status,
+                current_values if value_status == "conflict" else (),
+                current_values,
             )
         finally:
             self.connection.execute("ROLLBACK")
@@ -7418,46 +7948,56 @@ class V2ProfileStore:
         reason: str,
         expected_basis_sha256: str,
         corrects_value_id: int | None = None,
+        allow_conflict: bool = False,
     ) -> ReviewedDatedValue:
         self._anchor_write_start(reason)
         try:
-            if (
-                type(expected_basis_sha256) is not str
-                or re.fullmatch(r"[0-9a-f]{64}", expected_basis_sha256) is None
-                or (corrects_value_id is not None and type(corrects_value_id) is not int)
-            ):
-                raise ProfileFormatError("account_anchor_version_required")
-            self._anchor_account(account_id, tracking_scope)
-            self._validate_anchor_value(amount_minor, value_date, reference)
-            history = self._read_dated_values(account_id)
-            prior = self.connection.execute(
-                "SELECT value_id FROM AccountDatedValues WHERE account_id=? AND value_date=? AND amount_minor=? AND tracking_scope=? AND reference=? AND reason=? AND corrects_value_id IS ? AND request_basis=?",
-                (
-                    account_id,
-                    value_date.isoformat(),
-                    amount_minor,
-                    tracking_scope,
-                    reference.strip(),
-                    reason.strip(),
-                    corrects_value_id,
-                    expected_basis_sha256,
-                ),
-            ).fetchone()
-            if prior:
-                result = next(v for v in history if v.value_id == prior[0])
-                self.connection.execute("COMMIT")
-                return result
-            if self._account_anchor_basis() != expected_basis_sha256:
-                raise ProfileFormatError("account_anchor_changed_since_selection")
-            if corrects_value_id is not None and (
-                type(corrects_value_id) is not int
-                or not any(v.value_id == corrects_value_id and v.superseded_by_value_id is None for v in history)
-            ):
-                raise ProfileFormatError("account_dated_value_correction_unavailable")
-            number = self.connection.execute("SELECT coalesce(max(value_id),0)+1 FROM AccountDatedValues").fetchone()[0]
-            created = self.connection.execute("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now')").fetchone()[0]
-            fields = (
-                number,
+            result = self._append_dated_value(
+                account_id,
+                amount_minor=amount_minor,
+                value_date=value_date,
+                tracking_scope=tracking_scope,
+                reference=reference,
+                reason=reason,
+                expected_basis_sha256=expected_basis_sha256,
+                corrects_value_id=corrects_value_id,
+                allow_conflict=allow_conflict,
+            )
+            self.connection.execute("COMMIT")
+            return result
+        except BaseException:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def _append_dated_value(
+        self,
+        account_id,
+        *,
+        amount_minor,
+        value_date,
+        tracking_scope,
+        reference,
+        reason,
+        expected_basis_sha256,
+        corrects_value_id=None,
+        allow_conflict=False,
+        source_proof=None,
+    ) -> ReviewedDatedValue:
+        if (
+            type(expected_basis_sha256) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", expected_basis_sha256) is None
+            or (corrects_value_id is not None and type(corrects_value_id) is not int)
+            or type(allow_conflict) is not bool
+        ):
+            raise ProfileFormatError("account_anchor_version_required")
+        self._anchor_account(account_id, tracking_scope)
+        self._validate_anchor_value(amount_minor, value_date, reference)
+        origin = "source" if source_proof is not None else "manual"
+        raw_proof = proof_payload(source_proof) if source_proof is not None else None
+        history = self._read_dated_values(account_id)
+        prior = self.connection.execute(
+            "SELECT value_id FROM AccountDatedValues WHERE account_id=? AND value_date=? AND amount_minor=? AND tracking_scope=? AND reference=? AND reason=? AND corrects_value_id IS ? AND request_basis=? AND origin=? AND source_proof IS ? AND allow_conflict=?",
+            (
                 account_id,
                 value_date.isoformat(),
                 amount_minor,
@@ -7466,12 +8006,178 @@ class V2ProfileStore:
                 reason.strip(),
                 corrects_value_id,
                 expected_basis_sha256,
+                origin,
+                raw_proof,
+                int(allow_conflict),
+            ),
+        ).fetchone()
+        if prior:
+            return next(v for v in history if v.value_id == prior[0])
+        if self._account_anchor_basis() != expected_basis_sha256:
+            raise ProfileFormatError("account_anchor_changed_since_selection")
+        if corrects_value_id is not None and not any(
+            v.value_id == corrects_value_id and v.state == "active" for v in history
+        ):
+            raise ProfileFormatError("account_dated_value_correction_unavailable")
+        if (
+            dated_value_conflicts(
+                history, value_date=value_date, amount_minor=amount_minor, corrects_value_id=corrects_value_id
             )
+            and not allow_conflict
+        ):
+            raise ProfileFormatError("account_dated_value_conflict_requires_review")
+        number = self.connection.execute("SELECT coalesce(max(value_id),0)+1 FROM AccountDatedValues").fetchone()[0]
+        created = self.connection.execute("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now')").fetchone()[0]
+        fields = (
+            number,
+            account_id,
+            value_date.isoformat(),
+            amount_minor,
+            tracking_scope,
+            reference.strip(),
+            reason.strip(),
+            corrects_value_id,
+            expected_basis_sha256,
+        )
+        checksum = _transfer_record_digest(*fields, created, origin, raw_proof, int(allow_conflict))
+        self.connection.execute(
+            "INSERT INTO AccountDatedValues VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (*fields, checksum, created, origin, raw_proof, int(allow_conflict)),
+        )
+        return next(v for v in self._read_dated_values(account_id) if v.value_id == number)
+
+    def record_reviewed_source_value(
+        self,
+        account_id: str,
+        candidate_id: str,
+        *,
+        expected_candidate_sha256: str,
+        expected_basis_sha256: str,
+        reference: str,
+        reason: str,
+        corrects_value_id: int | None = None,
+        allow_conflict: bool = False,
+    ) -> ReviewedDatedValue:
+        self._anchor_write_start(reason)
+        try:
+            if (
+                type(candidate_id) is not str
+                or type(expected_candidate_sha256) is not str
+                or re.fullmatch(r"[0-9a-f]{64}", expected_candidate_sha256) is None
+                or type(expected_basis_sha256) is not str
+                or re.fullmatch(r"[0-9a-f]{64}", expected_basis_sha256) is None
+                or type(allow_conflict) is not bool
+                or (corrects_value_id is not None and type(corrects_value_id) is not int)
+            ):
+                raise ProfileFormatError("account_anchor_version_required")
+            if type(reference) is not str or not 0 < len(reference.strip()) <= 500:
+                raise ProfileFormatError("account_anchor_value_invalid")
+            # Exact historical retry may return its old receipt after retirement,
+            # never act on a newly established value of the same source point.
+            for value in self._read_dated_values(account_id):
+                proof = value.source_proof
+                if (
+                    proof is None
+                    or value.corrects_value_id != corrects_value_id
+                    or value.reference != reference.strip()
+                    or value.reason != reason.strip()
+                    or value.allow_conflict != allow_conflict
+                ):
+                    continue
+                # Candidate IDs use the same finite source/section tuple.
+                source_id = _digest(
+                    json.dumps(
+                        (proof.source_sha256, proof.source_identity, proof.source_identity_form), separators=(",", ":")
+                    ).encode()
+                )
+                old_version = _transfer_record_digest(
+                    source_id,
+                    account_id,
+                    proof.financial_kind,
+                    proof.tracking_scope,
+                    proof.evidence_sha256,
+                    proof_payload(proof),
+                    (),
+                    proof.review_annotation.model_dump(mode="json") if proof.review_annotation else None,
+                )
+                prior_basis = self.connection.execute(
+                    "SELECT request_basis FROM AccountDatedValues WHERE value_id=?", (value.value_id,)
+                ).fetchone()[0]
+                if (
+                    source_id == candidate_id
+                    and old_version == expected_candidate_sha256
+                    and prior_basis == expected_basis_sha256
+                ):
+                    self.connection.execute("COMMIT")
+                    return value
+            candidate = next(
+                (c for c in self._source_value_candidates(account_id) if c.candidate_id == candidate_id), None
+            )
+            if candidate is None or candidate.proof is None or candidate.blockers:
+                raise ProfileFormatError("source_value_candidate_unavailable")
+            if candidate.version != expected_candidate_sha256:
+                raise ProfileFormatError("source_value_candidate_changed_since_selection")
+            result = self._append_dated_value(
+                account_id,
+                amount_minor=candidate.amount_minor,
+                value_date=candidate.value_date,
+                tracking_scope=candidate.tracking_scope,
+                reference=reference,
+                reason=reason,
+                expected_basis_sha256=expected_basis_sha256,
+                corrects_value_id=corrects_value_id,
+                allow_conflict=allow_conflict,
+                source_proof=candidate.proof,
+            )
+            self.connection.execute("COMMIT")
+            return result
+        except BaseException:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def withdraw_reviewed_dated_value(
+        self,
+        account_id: str,
+        value_id: int,
+        *,
+        expected_value_version: str,
+        expected_basis_sha256: str,
+        reason: str,
+    ) -> DatedValueWithdrawal:
+        self._anchor_write_start(reason)
+        try:
+            if type(value_id) is not int or any(
+                type(v) is not str or re.fullmatch(r"[0-9a-f]{64}", v) is None
+                for v in (expected_value_version, expected_basis_sha256)
+            ):
+                raise ProfileFormatError("account_anchor_version_required")
+            history = self._read_dated_values(account_id)
+            selected = next((v for v in history if v.value_id == value_id), None)
+            if selected is None or selected.version != expected_value_version:
+                raise ProfileFormatError("account_dated_value_changed_since_selection")
+            if selected.withdrawal is not None:
+                basis = self.connection.execute(
+                    "SELECT request_basis FROM DatedValueWithdrawals WHERE withdrawal_id=?",
+                    (selected.withdrawal.withdrawal_id,),
+                ).fetchone()[0]
+                if selected.withdrawal.reason == reason.strip() and basis == expected_basis_sha256:
+                    self.connection.execute("COMMIT")
+                    return selected.withdrawal
+                raise ProfileFormatError("account_dated_value_withdrawal_unavailable")
+            if selected.state != "active":
+                raise ProfileFormatError("account_dated_value_withdrawal_unavailable")
+            if self._account_anchor_basis() != expected_basis_sha256:
+                raise ProfileFormatError("account_anchor_changed_since_selection")
+            number = self.connection.execute(
+                "SELECT coalesce(max(withdrawal_id),0)+1 FROM DatedValueWithdrawals"
+            ).fetchone()[0]
+            created = self.connection.execute("SELECT strftime('%Y-%m-%dT%H:%M:%fZ','now')").fetchone()[0]
+            fields = (number, value_id, selected.version, expected_basis_sha256, reason.strip())
             self.connection.execute(
-                "INSERT INTO AccountDatedValues VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO DatedValueWithdrawals VALUES (?,?,?,?,?,?,?)",
                 (*fields, _transfer_record_digest(*fields, created), created),
             )
-            result = next(v for v in self._read_dated_values(account_id) if v.value_id == number)
+            result = next(v.withdrawal for v in self._read_dated_values(account_id) if v.value_id == value_id)
             self.connection.execute("COMMIT")
             return result
         except BaseException:
@@ -7565,6 +8271,12 @@ class V2ProfileStore:
                 self.opening_decision(account_id),
                 self._opening_basis(candidate, reviews),
                 self.opening_decision_history(account_id),
+                tuple(
+                    section
+                    for section in self.statement_coverage()
+                    if section.account_id == account_id and section.source_sha256 in candidate.earliest_source_ids
+                ),
+                self._account_anchor_basis(),
             )
         finally:
             self.connection.execute("ROLLBACK")
@@ -7745,7 +8457,7 @@ class V2ProfileStore:
         bounds.extend(
             AccountOpeningBoundary(item.value_date, "dated_value", True, reference=str(item.value_id))
             for item in self._read_dated_values(account_id)
-            if item.superseded_by_value_id is None
+            if item.state == "active"
         )
         bounds.extend(
             AccountOpeningBoundary(item.effective_date, "lifecycle", True, reference=str(item.revision_id))

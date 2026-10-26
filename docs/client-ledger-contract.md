@@ -17,7 +17,7 @@ The current workspace supports reviewed account-total asset cash/card category
 movements with explicit expense, expense refund, income or income-adjustment
 purpose, whole-movement owned transfers/card payments and reviewed multi-receipt
 settlements with explicit sending/receiving fees, printed
-and reviewed manual openings, separate manual dated values and closure metadata.
+and reviewed manual openings, separate manual/source closing values and closure metadata.
 Cash-category, card-category/date and source/manual opening corrections
 are available. Supported ordinary interpretations can be withdrawn, then freshly
 reviewed; posted-repeat repair retains one interpretation and retires its
@@ -25,7 +25,7 @@ redundant counterpart atomically. Category/date corrections retain the original
 category class and exact source effect, which preserve purpose; changing purpose
 requires explicit withdrawal and fresh review. Whole transfers can be withdrawn
 or atomically replaced while retaining every dated leg and allocation history.
-General category splits, loan transactions, suspense and source valuations require their own
+General category splits, loan transactions, suspense and securities accounting require their own
 admitted workflows; examples below specify financial meaning rather than
 availability. Arbitrary manual journals remain outside DEC-1 scope.
 
@@ -191,6 +191,20 @@ Earlier history arriving later makes a manual opening stale. Missing statement
 starts remain unknown. Dated values and closure/reopen records post no money and
 never zero residual books; display them separately from opening-based positions.
 See the [account-anchor record](work/2026-10-25-v2-account-anchors.md).
+
+Reviewed source closing values are nonposting points under finite family/kind/scope
+and sign rules. Capital One printed positive principal owed becomes negative debit;
+Wells Fargo loan values are already debit signed. HSA cash components and whole
+account/retirement values remain distinct. Raw values, source dates/locations,
+normalization and authored source-review context stay separate. Unknown/assumed
+endpoints are unavailable; activity exports do not invent statement endpoints.
+No full-capture or journal-reconciliation gate is imposed on a nonposting point.
+Current values that disagree at one latest date remain a conflict, with no amount
+chosen by record ID. Correction/withdrawal preserves history, and withdrawal means
+unknown rather than zero. Source/manual zero never proves settlement or fills an
+opening. Active source points protect their exact source/section assignment until
+retired, including empty sections. See the [source-value record](work/2026-10-25-v2-source-values.md).
+
 Built-in categories have stable semantic keys in a code-owned catalog, with fixed
 names and income/expense types. User-defined categories occupy a separate identity
 namespace and can extend the catalog without overriding a built-in. The first is

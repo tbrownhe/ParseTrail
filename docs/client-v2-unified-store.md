@@ -29,7 +29,7 @@ evidence belong in [packet records](work/README.md).
 
 ## Profile format and lifecycle
 
-The current pre-release profile schema is revision 18; check `SCHEMA_VERSION`
+The current pre-release profile schema is revision 19; check `SCHEMA_VERSION`
 in `v2_profile_store.py` when opening a packet. Format markers, exact table and
 foreign-key shapes, append-only triggers and SQLite integrity are checked before
 writable use. Older disposable pilots, 1.x, unknown, damaged and newer shapes
@@ -112,7 +112,12 @@ the imported amount or date and never imply an owned transfer or card payment.
 `StatementSourceReviews` is one append-only assertion history for bound statement
 sections. Opening/closing origin, inclusive-period timing, posting-date certainty,
 source reference and note are separate assertions. Known assumed card dates
-cannot be asserted reported. A stale form cannot overwrite another revision.
+cannot be asserted reported. Every assertion retains its original section identity
+and form. Current applicability requires the exact account/source/section; an A
+assertion cannot qualify B after reassignment. Historical scoped assertions remain
+available independently. Forms load a coherent section/review/basis snapshot and
+the write lock rechecks that original context, including an unreviewed initial form.
+A stale form cannot overwrite another revision or qualify a newly assigned section.
 
 An opening decision requires matching observed account-total openings across all
 tied earliest sources and their latest reported-origin/timing reviews. Nonzero
@@ -162,14 +167,15 @@ Repairs preserve action history separately from active money.
 
 `BindingCorrections` retains typed, digested prior/new section/file/row mappings
 and exact affected review context. Explicit correction requires zero active
-source consumption and no source-backed opening anchor. Historical journals stay
+source consumption and no active source-backed opening or dated-value anchor. Historical journals stay
 under their original accounts. Connected repeat relationships receive pending
 revisions; affected transfer suggestion reviews become inapplicable even after
 an account changes away and back. Ordinary binding APIs retain journal, repeat,
-transfer-review, correction-history and opening locks. Switching file/row modes
+transfer-review, correction-history, opening and exact source-value section locks. Switching file/row modes
 requires an explicit clear first. Common reads/backup validate history and latest
 mapping consistency; all file/row bindings and corrections version reconciliation.
-Opening dependencies are conservative until explicit withdrawal is available.
+Active source-backed openings/values must be explicitly withdrawn before their
+anchored assignment changes, including empty sections without transaction rows.
 
 ## Common reads and recovery
 
@@ -184,13 +190,28 @@ typed owner reference/date/amount and opening equity, with no manufactured sourc
 facts or arbitrary journal entry. Known account-history bounds prevent later
 manual balancing plugs; newly arrived earlier facts make the manual anchor stale.
 
-`AccountDatedValues` is immutable nonposting manual observation/correction history;
-`AccountLifecycleDecisions` is closure/reopen phase and correction history. Both
-enter common validation, reconciliation input versions and backup. Dated values
+`AccountDatedValues` is immutable nonposting manual/source observation and correction
+history; `DatedValueWithdrawals` appends retirement receipts without inventing zero.
+Source proofs retain immutable parser facts, locations, definition/evidence hashes,
+finite scope/sign rules and captured authored source-review context. Source review
+accepts no arbitrary amount/date override. Manual correction remains manual.
+Current differing points at the latest date are an explicit conflict with no chosen
+value. Retaining a new conflicting point requires an explicit acknowledgement;
+agreeing amounts are never summed. Superseded/withdrawn points leave current value
+and opening-point bounds, while exact old retries cannot retire a fresh point.
+Source proofs preserve their original account/review after retirement/reassignment.
+
+`AccountLifecycleDecisions` is closure/reopen phase and correction history. These
+histories enter common validation, reconciliation input versions and backup. Dated values
 never fill an opening or overwrite journal positions. Positions show their scope,
 origin and date separately. Applicable as-of closure metadata retains every
 account and its recorded residual; missing/stale/withdrawn openings remain unknown
 even if a manual final value is zero. Closing tracking posts no settlement.
+Parser-observed/derived values and authored source-review qualifications remain
+separate; later review changes are flagged without rewriting captured facts.
+Capture, arithmetic and complete activity are independent qualifications for a
+nonposting point. Values, proofs, exact locations and withdrawals export as metadata
+separate from active journal money. See the [source-value packet](work/2026-10-25-v2-source-values.md).
 
 Every journal payload must contain exact integer, nonzero, balanced posting
 lines within supported integer bounds. Common reads additionally validate

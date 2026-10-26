@@ -56,6 +56,7 @@ def ordinary_binding_lock_notice(blockers) -> str:
         "account_binding_has_correction_history": "Recorded account-correction history locks ordinary reassignment. Use the reviewed correction workflow for another change.",
         "account_binding_has_transfer_review_history": "Saved transfer-suggestion review history locks ordinary reassignment. Use a reviewed correction to invalidate the old suggestion context explicitly.",
         "account_binding_source_backed_opening_anchor": "Source-backed opening history locks this assignment. Opening withdrawal is a separate required workflow.",
+        "account_binding_source_backed_dated_value_anchor": "An active source closing value protects this exact source section and account assignment. Withdraw that dated value before correcting the binding; its history stays under the original account.",
     }
     return " ".join(messages.get(code, f"Ordinary reassignment unavailable ({code}).") for code in blockers)
 
@@ -81,6 +82,7 @@ class V2BindingCorrection(QDialog):
     BLOCKERS = {
         "active_source_consumption": "Active source allocations remain. Withdraw the relevant cash/card interpretations or the whole transfer event first.",
         "source_backed_opening_anchor": "A source-backed opening decision still anchors this source/account context. Opening withdrawal is a separate workflow; this correction cannot proceed.",
+        "source_backed_dated_value_anchor": "An active source closing value protects this source section, including a section without activity. Withdraw that value before correcting its assignment; prior source proof remains under its original account.",
         "file_mode_requires_clear": "Clear the whole-file assertion explicitly before assigning individual rows.",
         "row_mode_requires_clear": "Clear individual row assignments explicitly before asserting the whole file.",
         "binding_unchanged": "The selected assignment is unchanged. Choose a different account or Unassign.",
