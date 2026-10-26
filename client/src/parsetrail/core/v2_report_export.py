@@ -242,6 +242,139 @@ def write_reviewed_journal_workbook(report: ReviewedJournalExport, destination_p
             for row in report.repeat_repairs
         ],
     )
+    expected_sheets = [
+        "Scope",
+        "Reviewed Entries",
+        "Posting Lines",
+        "Source Allocations",
+        "Corrections",
+        "Retirements",
+        "Transfer Reviews",
+        "Source Reviews",
+        "Repeat Repairs",
+    ]
+    if report.settlements:
+        workbook["Scope"].append(
+            (
+                "Settlement metadata",
+                "Full reviewed manifests whose original entry dates intersect this period; may include retired events "
+                "and out-of-period legs. Metadata adds no money to active reviewed rows. Remaining clearing is after "
+                "all reviewed receipts, not a period-end clearing position.",
+            )
+        )
+        _sheet(
+            workbook,
+            "Settlement Events",
+            (
+                "Event ID",
+                "Status",
+                "Kind",
+                "Outgoing row",
+                "Sent principal minor units",
+                "Received gross minor units",
+                "Remaining clearing minor units",
+                "Review reason",
+                "Created at",
+                "Version",
+                "Replacement event",
+                "Action reason",
+                "Original entry references",
+            ),
+            [
+                (
+                    event.event_id,
+                    event.status,
+                    event.settlement.kind,
+                    event.settlement.outgoing.row_id,
+                    str(event.settlement.sent_principal_minor),
+                    str(event.settlement.received_gross_minor),
+                    str(event.settlement.residual_minor),
+                    event.reason,
+                    event.created_at,
+                    event.version,
+                    event.replacement_event_id,
+                    event.action_reason,
+                    "\n".join(event.entry_keys),
+                )
+                for event in report.settlements
+            ],
+        )
+        _sheet(
+            workbook,
+            "Settlement Legs",
+            (
+                "Event ID",
+                "Status",
+                "Leg",
+                "Source row",
+                "Source SHA-256",
+                "Account ID",
+                "Account name",
+                "Account kind",
+                "Accounting date",
+                "Date provenance",
+                "Raw signed source minor units",
+                "Reviewed transfer portion minor units",
+            ),
+            [
+                (
+                    event.event_id,
+                    event.status,
+                    "outgoing" if index == 0 else "receipt",
+                    movement.row_id,
+                    movement.source_sha256,
+                    movement.account_id,
+                    movement.account_name,
+                    movement.account_kind,
+                    movement.posting_date,
+                    movement.date_provenance,
+                    str(movement.amount_minor),
+                    str(
+                        event.settlement.sent_principal_minor
+                        if index == 0
+                        else movement.amount_minor
+                        + sum(fee.amount_minor for fee in event.settlement.fees_for(movement.row_id))
+                    ),
+                )
+                for event in report.settlements
+                for index, movement in enumerate(event.settlement.movements)
+            ],
+        )
+        _sheet(
+            workbook,
+            "Settlement Fees",
+            (
+                "Event ID",
+                "Status",
+                "Source row",
+                "Accounting date",
+                "Expense category ID",
+                "Category name",
+                "Exact fee minor units",
+                "Source/review reference",
+                "Allocation reason",
+            ),
+            [
+                (
+                    event.event_id,
+                    event.status,
+                    fee.source_row_id,
+                    next(
+                        movement.posting_date
+                        for movement in event.settlement.movements
+                        if movement.row_id == fee.source_row_id
+                    ),
+                    fee.category_id,
+                    accounts[fee.category_id].name,
+                    str(fee.amount_minor),
+                    fee.reference,
+                    fee.reason,
+                )
+                for event in report.settlements
+                for fee in event.settlement.fees
+            ],
+        )
+        expected_sheets.extend(("Settlement Events", "Settlement Legs", "Settlement Fees"))
     descriptor, partial_name = tempfile.mkstemp(
         prefix=f".{destination.name}.partial.", suffix=".xlsx", dir=destination.parent
     )
@@ -251,17 +384,7 @@ def write_reviewed_journal_workbook(report: ReviewedJournalExport, destination_p
         workbook.save(partial)
         verified = load_workbook(partial, read_only=True, data_only=False)
         try:
-            if verified.sheetnames != [
-                "Scope",
-                "Reviewed Entries",
-                "Posting Lines",
-                "Source Allocations",
-                "Corrections",
-                "Retirements",
-                "Transfer Reviews",
-                "Source Reviews",
-                "Repeat Repairs",
-            ]:
+            if verified.sheetnames != expected_sheets:
                 raise ReportExportError("report_workbook_integrity")
         finally:
             verified.close()

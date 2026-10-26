@@ -25,6 +25,8 @@ MOVEMENT_LABELS = {
     "within_scope_transfer": "Owned transfer within selected scope",
     "owned_transfer": "Owned transfer across scope boundary",
     "card_payment": "Reviewed card payment",
+    "unsettled_transfer": "Owned transfer with unresolved clearing",
+    "mixed_settlement": "Owned settlement with reviewed fee",
     "unclassified": "Unclassified reviewed movement",
 }
 
@@ -54,12 +56,19 @@ def cash_account_labels(accounts: tuple[FinancialAccount, ...]) -> dict[str, str
 
 
 @dataclass(frozen=True)
+class CashMovementComponent:
+    classification: str
+    amount_minor: int
+
+
+@dataclass(frozen=True)
 class CashMovementRow:
     entry: JournalEntry
     classification: str
     amount_minor: int
     account_effects: tuple[tuple[str, int], ...]
     event_note: str
+    components: tuple[CashMovementComponent, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -113,6 +122,7 @@ def read_cash_movement(
                     continue
                 amount = sum(value for _account, value in effects)
                 classification, note = "unclassified", "No admitted movement classification for this reviewed entry."
+                components = ()
                 if entry.key.startswith("review:cash:") and len(entry.postings) == 2:
                     categories = [p for p in entry.postings if accounts[p.account_id].kind in {"expense", "income"}]
                     if len(categories) == 1 and amount == -categories[0].amount_minor:
@@ -124,8 +134,52 @@ def read_cash_movement(
                         )
                         note = f"Reviewed category: {category_names[categories[0].account_id]}."
                 elif entry.event_id in events:
-                    pair = events[entry.event_id].pair
-                    if pair.kind == "card payment":
+                    event = events[entry.event_id]
+                    pair = event.pair
+                    if pair is None:
+                        settlement = event.settlement
+                        if settlement.residual_minor:
+                            purpose = "unsettled_transfer"
+                        elif all(movement.account_kind == "liability" for movement in settlement.incoming):
+                            purpose = "card_payment"
+                        elif {movement.account_id for movement in settlement.movements} <= selected:
+                            purpose = "within_scope_transfer"
+                        else:
+                            purpose = "owned_transfer"
+                        selected_rows = {
+                            allocation.observation_id
+                            for posting in entry.postings
+                            if posting.account_id in selected
+                            for allocation in posting.allocations
+                        }
+                        fee_effect = -sum(
+                            fee.amount_minor for fee in settlement.fees if fee.source_row_id in selected_rows
+                        )
+                        # A net receipt can represent gross transfer less an
+                        # explicitly reviewed fee. Its two components still sum
+                        # to the exact selected financial posting. A fee on a
+                        # non-selected/card leg creates no synthetic cash row.
+                        components = (CashMovementComponent(purpose, amount - fee_effect),) + (
+                            (CashMovementComponent("expense", fee_effect),) if fee_effect else ()
+                        )
+                        classification = "mixed_settlement" if fee_effect else purpose
+                        note = (
+                            f"Reviewed settlement sent from {labels[settlement.outgoing.account_id]} "
+                            f"on {settlement.outgoing.posting_date}; receipts: "
+                            + "; ".join(
+                                f"{labels[movement.account_id]} on {movement.posting_date}"
+                                for movement in settlement.incoming
+                            )
+                            + f". Remaining clearing after all reviewed receipts (any date): {settlement.residual_minor} USD minor units. "
+                            "Event context can lie outside this period and adds no money here."
+                        )
+                        if settlement.fees:
+                            note += " Reviewed fee allocations: " + "; ".join(
+                                f"{fee.amount_minor} USD minor units to {category_names[fee.category_id]} "
+                                f"on source row {fee.source_row_id}; {fee.reference}; {fee.reason}"
+                                for fee in settlement.fees
+                            )
+                    elif pair.kind == "card payment":
                         classification = "card_payment"
                     else:
                         classification = (
@@ -133,24 +187,35 @@ def read_cash_movement(
                             if {pair.outgoing.account_id, pair.incoming.account_id} <= selected
                             else "owned_transfer"
                         )
-                    note = (
-                        f"{labels[pair.outgoing.account_id]} ({pair.outgoing.posting_date}) to "
-                        f"{labels[pair.incoming.account_id]} ({pair.incoming.posting_date}). "
-                        + (
-                            "Different posting dates retain transfer clearing; this is no second expense."
-                            if pair.outgoing.posting_date != pair.incoming.posting_date
-                            else "One reviewed event; this is no second expense."
+                    if pair is not None:
+                        note = (
+                            f"{labels[pair.outgoing.account_id]} ({pair.outgoing.posting_date}) to "
+                            f"{labels[pair.incoming.account_id]} ({pair.incoming.posting_date}). "
+                            + (
+                                "Different posting dates retain transfer clearing; this is no second expense."
+                                if pair.outgoing.posting_date != pair.incoming.posting_date
+                                else "One reviewed event; this is no second expense."
+                            )
                         )
-                    )
-                rows.append(CashMovementRow(entry, classification, amount, effects, note))
+                components = components or (CashMovementComponent(classification, amount),)
+                if sum(component.amount_minor for component in components) != amount:
+                    raise ProfileFormatError("cash_movement_component_integrity")
+                rows.append(CashMovementRow(entry, classification, amount, effects, note, components))
             buckets = tuple(
                 CashMovementBucket(
                     classification,
-                    sum(row.amount_minor for row in rows if row.classification == classification),
-                    sum(row.classification == classification for row in rows),
+                    sum(
+                        component.amount_minor
+                        for row in rows
+                        for component in row.components
+                        if component.classification == classification
+                    ),
+                    sum(
+                        any(component.classification == classification for component in row.components) for row in rows
+                    ),
                 )
                 for classification in MOVEMENT_LABELS
-                if any(row.classification == classification for row in rows)
+                if any(component.classification == classification for row in rows for component in row.components)
             )
             return CashMovementReport(
                 journal,

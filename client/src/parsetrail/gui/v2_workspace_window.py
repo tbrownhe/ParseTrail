@@ -198,6 +198,11 @@ class V2WorkspaceWindow(QMainWindow):
         self.account_anchors_action.triggered.connect(self._review_account_anchors)
         self.source_opening_action = accounts_menu.addAction("Review source-backed opening…")
         self.source_opening_action.triggered.connect(self._review_openings)
+        review_menu = self.menuBar().addMenu("Review")
+        self.transfer_review_action = review_menu.addAction("Owned transfers and card payments…")
+        self.transfer_review_action.triggered.connect(self._review_transfers)
+        self.settlement_review_action = review_menu.addAction("Transfer fees and partial settlements…")
+        self.settlement_review_action.triggered.connect(self._review_settlements)
         reports_menu = self.menuBar().addMenu("Reports")
         self.reviewed_reports_action = reports_menu.addAction("Reviewed reports…")
         self.reviewed_reports_action.triggered.connect(self._open_reviewed_reports)
@@ -306,8 +311,11 @@ class V2WorkspaceWindow(QMainWindow):
             self.open_profile_action,
             self.backup_profile_action,
             self.restore_profile_action,
+            self.transfer_review_action,
+            self.settlement_review_action,
         ):
             action.setEnabled(self.import_worker is None)
+        self.transfer_review_button.setEnabled(self.import_worker is None)
         prior = select_source or self._selected_source()
         self.sources.clear()
         for source_id in self.workspace.source_ids():
@@ -684,7 +692,20 @@ class V2WorkspaceWindow(QMainWindow):
             self.refresh(select_source=source_id)
 
     def _review_transfers(self) -> None:
+        if self.import_worker is not None:
+            return
         V2TransferReview(self.workspace, self).exec()
+        self.assumed_posting_action.blockSignals(True)
+        self.assumed_posting_action.setChecked(self.workspace.preferences().allow_assumed_posting_dates)
+        self.assumed_posting_action.blockSignals(False)
+        self.refresh()
+
+    def _review_settlements(self) -> None:
+        if self.import_worker is not None:
+            return
+        from parsetrail.gui.v2_settlement_review import V2SettlementReview
+
+        V2SettlementReview(self.workspace, parent=self).exec()
         self.assumed_posting_action.blockSignals(True)
         self.assumed_posting_action.setChecked(self.workspace.preferences().allow_assumed_posting_dates)
         self.assumed_posting_action.blockSignals(False)

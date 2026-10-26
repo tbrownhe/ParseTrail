@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
     QSpinBox,
     QTableWidget,
@@ -28,6 +29,7 @@ from PySide6.QtWidgets import (
 from parsetrail.core.v2_profile_store import ProfileFormatError, TransferCandidate, V2ProfileStore
 from parsetrail.core.v2_workspace import V2Workspace
 from parsetrail.gui.v2_cash_activity_review import _money
+from parsetrail.gui.v2_settlement_review import V2SettlementReview, reviewed_identity, settlement_details
 
 
 def _pair_key(pair):
@@ -98,7 +100,7 @@ class V2TransferReview(QDialog):
             "Equal and opposite movements are suggestions only. Confirm the pair from both sources. "
             "A card repayment moves cash to the card liability and does not add spending. "
             "Different source dates use transfer clearing. Corrections withdraw or replace the whole confirmed event. "
-            "Dismissal changes suggestions only; its evidence remains pending. Fees and partial payments stay pending."
+            "Dismissal changes suggestions only; its evidence remains pending. Use the full settlement review for explicit fees and multiple or partial receipts."
         )
         note.setWordWrap(True)
         layout.addWidget(note)
@@ -149,6 +151,9 @@ class V2TransferReview(QDialog):
         suggestion_actions.addWidget(self.dismiss)
         suggestions_layout.addLayout(suggestion_actions)
         self.tabs.addTab(suggestions, "Suggestions")
+        self.full_settlement = QPushButton("Review transfer fees / partial settlements…")
+        self.full_settlement.clicked.connect(self._new_settlement)
+        layout.addWidget(self.full_settlement)
         self._build_history_tabs()
         layout.addWidget(self.tabs)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
@@ -164,10 +169,15 @@ class V2TransferReview(QDialog):
         )
         self.event_table.itemSelectionChanged.connect(self._event_selected)
         layout.addWidget(self.event_table)
-        self.event_details = QLabel("Select a confirmed event to inspect its complete effect and retained history.")
-        self.event_details.setWordWrap(True)
-        self.event_details.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.event_details = QPlainTextEdit(
+            "Select a confirmed event to inspect its complete effect and retained history."
+        )
+        self.event_details.setReadOnly(True)
+        self.event_details.setMaximumHeight(180)
         layout.addWidget(self.event_details)
+        self.review_settlement = QPushButton("Inspect / replace complete settlement manifest…")
+        self.review_settlement.clicked.connect(self._open_settlement)
+        layout.addWidget(self.review_settlement)
         replacement_row = QHBoxLayout()
         replacement_row.addWidget(QLabel("Replacement pair"))
         self.replacement = QComboBox()
@@ -247,14 +257,16 @@ class V2TransferReview(QDialog):
             )
 
     def refresh(self, *_args) -> None:
+        preferences = self.workspace.preferences()
+        self.assumed_dates.blockSignals(True)
+        self.assumed_dates.setChecked(preferences.allow_assumed_posting_dates)
+        self.assumed_dates.blockSignals(False)
         selected = self._current()
         selected_ids = (selected.outgoing.row_id, selected.incoming.row_id) if selected is not None else None
         event_id = self.selected_event.event_id if self.selected_event else None
         try:
             with V2ProfileStore.open(self.workspace.profile_path, read_only=True) as store:
-                snapshot = store.transfer_review_snapshot(
-                    preferences=self.workspace.preferences(), max_day_gap=self.gap.value()
-                )
+                snapshot = store.transfer_review_snapshot(preferences=preferences, max_day_gap=self.gap.value())
         except (ProfileFormatError, sqlite3.Error, OSError) as exc:
             self.basis = None
             self.candidates, self.events, self.pair_reviews = (), (), ()
@@ -300,12 +312,17 @@ class V2TransferReview(QDialog):
             tuple(
                 (
                     event.status.title(),
-                    event.pair.kind.capitalize(),
-                    event.pair.outgoing.posting_date,
-                    event.pair.outgoing.account_name,
-                    event.pair.incoming.posting_date,
-                    event.pair.incoming.account_name,
-                    _money(-event.pair.outgoing.amount_minor),
+                    event.pair.kind.capitalize() if event.pair is not None else f"Full {event.settlement.kind}",
+                    event.settlement.outgoing.posting_date,
+                    reviewed_identity(event.settlement.outgoing),
+                    event.pair.incoming.posting_date
+                    if event.pair is not None
+                    else f"{len(event.settlement.incoming)} dated receipt(s)",
+                    reviewed_identity(event.pair.incoming)
+                    if event.pair is not None
+                    else "; ".join(dict.fromkeys(reviewed_identity(m) for m in event.settlement.incoming))
+                    + f"; {_money(event.settlement.residual_minor)} clearing",
+                    _money(-event.settlement.outgoing.amount_minor),
                     len(event.entry_keys),
                     event.reason,
                 )
@@ -346,7 +363,8 @@ class V2TransferReview(QDialog):
         self.replacement.clear()
         self.withdraw.setEnabled(False)
         self.replace.setEnabled(False)
-        self.event_details.setText("Select a confirmed event to inspect its complete effect and retained history.")
+        self.review_settlement.setEnabled(False)
+        self.event_details.setPlainText("Select a confirmed event to inspect its complete effect and retained history.")
         self.replacement_details.setText("Select an active event to load eligible replacement pairs.")
         self.event_status.clear()
 
@@ -368,12 +386,14 @@ class V2TransferReview(QDialog):
             self.event_status.setText(f"Selected event unavailable or changed. Reload saved state: {exc}")
             return
         self.selected_event, self.event_basis = event, snapshot.basis_sha256
-        self.event_details.setText(
-            f"{event.status.title()} {event.pair.kind}; {len(event.entry_keys)} journal leg(s). Original reason: {event.reason}. "
+        self.review_settlement.setEnabled(True)
+        self.event_details.setPlainText(
+            f"{event.status.title()} {event.settlement.kind}; {len(event.entry_keys)} journal leg(s); "
+            f"{len(event.settlement.incoming)} receipt(s), {len(event.settlement.fees)} explicit fee(s). Original reason: {event.reason}. "
             f"Action reason: {event.action_reason or 'none'}. Replacement event: {event.replacement_event_id or 'none'}.\n"
-            f"{_pair_details(event.pair)}\nEvent: {event.event_id}; version: {event.version}."
+            f"{settlement_details(event.settlement)}\nEvent: {event.event_id}; version: {event.version}."
         )
-        self.replacements = snapshot.candidates if event.status == "active" else ()
+        self.replacements = snapshot.candidates if event.status == "active" and event.pair is not None else ()
         self.replacement.blockSignals(True)
         self.replacement.addItem("Choose a replacement pair", None)
         for index, pair in enumerate(self.replacements):
@@ -386,6 +406,16 @@ class V2TransferReview(QDialog):
         self.event_status.clear()
         self._event_actions()
 
+    def _new_settlement(self):
+        V2SettlementReview(self.workspace, parent=self).exec()
+        self.refresh()
+
+    def _open_settlement(self):
+        event = self.selected_event
+        if event is not None:
+            V2SettlementReview(self.workspace, event_id=event.event_id, parent=self).exec()
+            self.refresh()
+
     def _event_actions(self, *_args):
         event = self.selected_event
         ready = (
@@ -397,7 +427,12 @@ class V2TransferReview(QDialog):
         self.withdraw.setEnabled(ready)
         index = self.replacement.currentData()
         pair = self.replacements[index] if isinstance(index, int) and 0 <= index < len(self.replacements) else None
-        different_pair = event is not None and pair is not None and _pair_key(pair) != _pair_key(event.pair)
+        different_pair = (
+            event is not None
+            and event.pair is not None
+            and pair is not None
+            and _pair_key(pair) != _pair_key(event.pair)
+        )
         self.replace.setEnabled(ready and different_pair and pair.posting_allowed)
         if pair:
             natural = 1 if pair.incoming.account_kind == "asset" else -1
@@ -417,7 +452,9 @@ class V2TransferReview(QDialog):
                 )
         else:
             self.replacement_details.setText(
-                "Choose an eligible replacement pair; its exact account effects will appear here."
+                "This event uses a complete settlement manifest. Inspect / replace it above; a pair cannot represent all of its receipts and fees."
+                if event is not None and event.pair is None
+                else "Choose an eligible replacement pair; its exact account effects will appear here."
             )
 
     def _review_selected(self):
@@ -563,7 +600,12 @@ class V2TransferReview(QDialog):
         if event is None or event.status != "active" or not reason or self.event_basis is None:
             return
         message = (
-            f"Withdraw this whole {event.pair.kind} interpretation?\n\nInverse account effects:\n"
+            f"Withdraw this whole {event.settlement.kind} settlement?\n\nInverse source and fee effects:\n"
+            f"{settlement_details(event.settlement, inverse=True)}\n\nAll {len(event.entry_keys)} journal leg(s) are reversed at "
+            f"their original accounting dates. Reason: {reason}\n\nAll event fee expense and clearing effects are also reversed. "
+            "Original entries remain history; the whole source manifest is released together. This withdraws an interpretation, not a bank payment."
+            if event.pair is None
+            else f"Withdraw this whole {event.pair.kind} interpretation?\n\nInverse account effects:\n"
             f"{_pair_details(event.pair, inverse=True)}\n\nAll {len(event.entry_keys)} journal leg(s) are reversed at "
             f"their original accounting dates. Reason: {reason}\n\nOriginal entries remain history; source rows return to pending. "
             "No income or expense is created. This withdraws an interpretation, not a bank payment."
@@ -579,7 +621,7 @@ class V2TransferReview(QDialog):
         self.correction_reason.clear()
         self.refresh()
         self.event_status.setText(
-            "Whole transfer interpretation withdrawn. Source rows remain pending; original and inverse entries remain history."
+            "The selected whole-event withdrawal is recorded. Refreshed history shows current source usage; original and inverse entries remain history."
         )
 
     def _replace(self):
@@ -591,6 +633,7 @@ class V2TransferReview(QDialog):
         pair = self.replacements[index] if isinstance(index, int) and 0 <= index < len(self.replacements) else None
         if (
             event is None
+            or event.pair is None
             or event.status != "active"
             or pair is None
             or not pair.posting_allowed

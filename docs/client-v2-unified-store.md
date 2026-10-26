@@ -29,7 +29,7 @@ evidence belong in [packet records](work/README.md).
 
 ## Profile format and lifecycle
 
-The current pre-release profile schema is revision 17; check `SCHEMA_VERSION`
+The current pre-release profile schema is revision 18; check `SCHEMA_VERSION`
 in `v2_profile_store.py` when opening a packet. Format markers, exact table and
 foreign-key shapes, append-only triggers and SQLite integrity are checked before
 writable use. Older disposable pilots, 1.x, unknown, damaged and newer shapes
@@ -85,6 +85,22 @@ and exact retirement inverses, including zero decisions without replacements.
 Whole-transfer withdrawal/replacement preserves every original leg and creates
 fresh replacement identities. Unsupported interpretations and unknown posting dates remain
 pending.
+
+TransferEvents also retains finite reviewed settlement manifests: one complete
+asset outflow, 1..32 distinct owned receipts, and at most 64 explicit fee parts
+assigned to their source legs. Every raw financial amount is allocated once;
+each advanced leg posts at its own reviewed source date, with fee expenses and
+transfer clearing. Sending fees reduce sent principal; receiving fees add to a
+net receipt's reviewed gross settlement. Residual clearing stays unresolved.
+Legacy whole-pair APIs retain their shape; generic history exposes the full
+manifest without pretending it is one pair. Whole replacement/withdrawal retains
+every dated inverse and source-use history. Earlier pilot formats are recreated.
+
+Code-owned clearing identity/class/role/purpose/scope and sole active allocation
+for each transfer source leg are checked in common reads/backups. Reserved
+`internal:` IDs cannot be authored as custom financial/category accounts. JSON
+history decoding has finite bounds and controlled malformed-depth refusal.
+The [settlement packet](work/2026-10-25-v2-settlements.md) records development checks.
 
 Account-total cash/card category movements admit explicit expense, expense refund,
 income and income adjustment purposes with compatible exact source signs and

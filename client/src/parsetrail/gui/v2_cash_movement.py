@@ -29,6 +29,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from parsetrail.core.v2_builtin_categories import category_labels
 from parsetrail.core.v2_cash_movement import MOVEMENT_LABELS, cash_account_labels, read_cash_movement
 from parsetrail.core.v2_profile_store import ProfileFormatError, V2ProfileStore
 from parsetrail.gui.v2_cash_activity_review import _money
@@ -102,7 +103,7 @@ class V2CashMovementDialog(QDialog):
         self.scope = QLabel()
         self.scope.setWordWrap(True)
         layout.addWidget(self.scope)
-        self.summary = _table(("Reviewed purpose", "Journal records", "Net selected-scope movement"))
+        self.summary = _table(("Reviewed purpose", "Records with purpose", "Net selected-scope movement"))
         self.entries = _table(
             ("Accounting date", "Reviewed purpose", "Net selected scope", "Description", "Selected accounts")
         )
@@ -205,6 +206,7 @@ class V2CashMovementDialog(QDialog):
             f"from {journal.sources_with_incomplete_activity} source(s) lack full allocation. "
             f"{journal.excluded_unreviewed_entries} unreviewed and {journal.excluded_opening_entries} opening record(s) "
             "were excluded in this period. Card purchases alone are not cash movement. "
+            "A settlement with a fee can appear in two purpose counts; those counts are not additive. "
             "Unallocated counts may include supporting repeats. Pending evidence and source capture/coverage gaps "
             "prevent a complete or certified cash-flow claim."
         )
@@ -252,18 +254,22 @@ class V2CashMovementDialog(QDialog):
             return
         row = self.report.rows[index]
         accounts = {account.id: account for account in self.report.journal.accounts}
-        labels = dict(self.report.account_labels)
+        labels = category_labels((account.id, account.name, account.kind) for account in accounts.values())
+        labels.update(self.report.account_labels)
         lines = [
             row.entry.description,
             row.event_note,
             f"Review reason: {row.entry.reason}",
+            "",
+            "Selected-scope components (together equal this record's selected financial movement):",
+            *(f"{MOVEMENT_LABELS[part.classification]}: {_money(part.amount_minor)}" for part in row.components),
             "",
             "Stored posting lines:",
         ]
         for posting in row.entry.postings:
             side = "Debit" if posting.amount_minor > 0 else "Credit"
             label = labels.get(posting.account_id, accounts[posting.account_id].name)
-            lines.append(f"{label}: {side} {_money(abs(posting.amount_minor))}")
+            lines.append(f"{label} (ID {posting.account_id}): {side} {_money(abs(posting.amount_minor))}")
         lines.extend(("", f"Entry: {row.entry.key}", f"Event: {row.entry.event_id}"))
         self.details.setPlainText("\n".join(lines))
         source_rows = dict(self.report.journal.source_rows)

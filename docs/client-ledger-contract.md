@@ -15,7 +15,8 @@ superseded migration/audit narrative and its historical evidence links.
 
 The current workspace supports reviewed account-total asset cash/card category
 movements with explicit expense, expense refund, income or income-adjustment
-purpose, whole-movement owned transfers/card payments, printed
+purpose, whole-movement owned transfers/card payments and reviewed multi-receipt
+settlements with explicit sending/receiving fees, printed
 and reviewed manual openings, separate manual dated values and closure metadata.
 Cash-category, card-category/date and source/manual opening corrections
 are available. Supported ordinary interpretations can be withdrawn, then freshly
@@ -24,7 +25,7 @@ redundant counterpart atomically. Category/date corrections retain the original
 category class and exact source effect, which preserve purpose; changing purpose
 requires explicit withdrawal and fresh review. Whole transfers can be withdrawn
 or atomically replaced while retaining every dated leg and allocation history.
-Splits, loan transactions, suspense and source valuations require their own
+General category splits, loan transactions, suspense and source valuations require their own
 admitted workflows; examples below specify financial meaning rather than
 availability. Arbitrary manual journals remain outside DEC-1 scope.
 
@@ -109,6 +110,17 @@ For different posting dates, use two dated balanced entries in a shared economic
 event: checking to transfer clearing, then clearing to the card. Clearing retains
 the amount in transit at intermediate cutoffs. No forced common posting date.
 Transfers within owned assets and card repayments create no second expense.
+
+Reviewed settlements can retain one complete asset outflow and multiple owned
+receipts, including explicit fee allocations with an exact amount, expense
+category, source leg, reference and reason. No difference is automatically a fee.
+For outflow 100, sending fee 10 and receipt 60, clearing retains 30. For outflow
+100 and receiving net 90 with fee 10, the receipt's entry debits its financial
+account 90, expense 10 and credits clearing 100. Raw source effects remain exact;
+gross settlement is a reviewed allocation. Every advanced leg uses its own date,
+even when receipt precedes outflow; no forced common date or zero clearing.
+Adding a later receipt is an atomic whole-event replacement preserving inverses.
+Multi-outflow/foreign-currency and unsupported source shapes remain pending.
 
 Matching equal and opposite amounts in the same currency on different accounts
 within a date window produces candidates only. Category labels are supporting
@@ -212,6 +224,11 @@ and card payments separately classified. Card purchases alone are spending,
 without selected-asset cash movement. Different transfer dates retain clearing
 and period-boundary effects. Unknown reviewed shapes remain unclassified;
 pending evidence, source overlap, capture and coverage prevent certification.
+For reviewed settlements, selected financial effects can contain a transfer and
+a fee component whose sum is the exact raw movement. One entry remains one
+report row; purpose counts can overlap and are explicitly non-additive. A fee on
+an unselected/card leg creates no selected cash movement. Residual clearing is
+qualified separately from the statement/account's own reconciliation result.
 Historical event context outside a report period adds no money. Account choices
 must distinguish permitted duplicate names; report refresh failures clear values.
 Later loan/split workflows must extend classification before completeness

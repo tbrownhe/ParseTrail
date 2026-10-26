@@ -9,6 +9,7 @@ contracts own lasting behavior. Start with those documents, not historical logs.
 
 | Record | Roadmap scope | Implementation / evidence |
 | --- | --- | --- |
+| [Transfer fees and partial settlements](2026-10-25-v2-settlements.md) | V2-4/5, CF2 | Completed development and independent review; exact fee allocations, multiple receipts, dated clearing and whole-event correction. |
 | [Refunds, income adjustments and stable categories](2026-10-25-v2-category-purposes.md) | V2-4/5 | Completed development and independent review; explicit source purposes, protected built-ins and exact negative-net reporting. |
 | [Reviewed openings, values and account lifecycle](2026-10-25-v2-account-anchors.md) | V2-4/5, DEC-1 | Completed development and independent review; unknown/zero, scopes, nonposting values and residual books preserved. |
 | [Explicit-scope cash movement](2026-10-25-v2-cash-movement.md) | V2-5, CF2 | Completed development/review for admitted shapes; exact scope, transfer timing and unknown classifications. |

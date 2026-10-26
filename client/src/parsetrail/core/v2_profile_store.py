@@ -39,6 +39,18 @@ from parsetrail.core.source_evidence import (
 from parsetrail.core.v2_builtin_categories import builtin_category, is_builtin_id_reserved
 from parsetrail.core.v2_preferences import V2Preferences
 from parsetrail.core.v2_review_dates import permitted_posting_date, posting_date_candidate
+from parsetrail.core.v2_settlements import (
+    MAX_SETTLEMENT_PAYLOAD,
+    SettlementFee,
+    SettlementPreview,
+    TransferMovement,
+    TransferSettlement,
+    decode_settlement,
+    fee_order,
+    settlement_entries,
+    settlement_payload,
+    validate_settlement,
+)
 from parsetrail.core.v2_source_overlap import (
     OVERLAP_RULE,
     NearbySourceIndex,
@@ -50,7 +62,7 @@ from parsetrail.core.v2_source_overlap import (
 )
 
 APPLICATION_ID = 0x50543230  # PT20
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 TRACKING_SCOPES = {"account_total", "principal_component", "cash_component"}
 CategoryPurpose = Literal["expense", "expense_refund", "income", "income_adjustment"]
 CATEGORY_PURPOSE_KINDS = {
@@ -764,20 +776,6 @@ class CardPurchaseReviewRow:
 
 
 @dataclass(frozen=True)
-class TransferMovement:
-    row_id: str
-    source_sha256: str
-    account_id: str
-    account_name: str
-    account_kind: Literal["asset", "liability"]
-    posting_date: str
-    date_provenance: str
-    date_allowed: bool
-    amount_minor: int
-    description: str
-
-
-@dataclass(frozen=True)
 class TransferCandidate:
     outgoing: TransferMovement
     incoming: TransferMovement
@@ -789,7 +787,7 @@ class TransferCandidate:
 @dataclass(frozen=True)
 class ReviewedTransferEvent:
     event_id: str
-    pair: TransferCandidate
+    pair: TransferCandidate | None
     entry_keys: tuple[str, ...]
     reason: str
     created_at: str
@@ -797,6 +795,7 @@ class ReviewedTransferEvent:
     status: Literal["active", "cancelled", "replaced"]
     replacement_event_id: str | None
     action_reason: str | None
+    settlement: TransferSettlement
 
 
 @dataclass(frozen=True)
@@ -816,6 +815,15 @@ class TransferReviewSnapshot:
     events: tuple[ReviewedTransferEvent, ...]
     pair_reviews: tuple[TransferPairReview, ...]
     basis_sha256: str
+
+
+@dataclass(frozen=True)
+class SettlementReviewSnapshot:
+    movements: tuple[TransferMovement, ...]
+    events: tuple[ReviewedTransferEvent, ...]
+    categories: tuple[CategoryAccount, ...]
+    basis_sha256: str
+    accounts: tuple[FinancialAccount, ...]
 
 
 @dataclass(frozen=True)
@@ -1022,6 +1030,7 @@ class ReviewedJournalExport:
     transfer_actions: tuple[JournalExportTransferAction, ...] = ()
     source_actions: tuple[SourceInterpretationAction, ...] = ()
     repeat_repairs: tuple[PostedRepeatRepair, ...] = ()
+    settlements: tuple[ReviewedTransferEvent, ...] = ()
 
 
 BANK_CASH_STATEMENT_PARSERS = frozenset(
@@ -1137,7 +1146,7 @@ def _decode_journal(payload: str) -> JournalEntry:
         if sum(posting.amount_minor for posting in entry.postings) != 0:
             raise ValueError
         return entry
-    except (KeyError, TypeError, ValueError):
+    except (KeyError, TypeError, ValueError, RecursionError):
         raise ProfileFormatError("journal_entry_invalid") from None
 
 
@@ -1205,7 +1214,7 @@ def _decode_transfer_pair(payload: str) -> TransferCandidate:
         ):
             raise ValueError
         return pair
-    except (TypeError, ValueError, KeyError):
+    except (TypeError, ValueError, KeyError, RecursionError):
         raise ProfileFormatError("transfer_history_integrity") from None
 
 
@@ -1669,6 +1678,7 @@ class V2ProfileStore:
             not isinstance(account, FinancialAccount)
             or type(account.id) is not str
             or is_builtin_id_reserved(account.id)
+            or account.id.startswith("internal:")
             or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9:_-]{0,79}", account.id) is None
             or type(account.name) is not str
             or not 0 < len(account.name.strip()) <= 200
@@ -1775,6 +1785,7 @@ class V2ProfileStore:
         if (
             type(account_id) is not str
             or is_builtin_id_reserved(account_id)
+            or account_id.startswith("internal:")
             or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9:_-]{0,79}", account_id) is None
             or type(name) is not str
             or not 0 < len(name.strip()) <= 200
@@ -1942,6 +1953,7 @@ class V2ProfileStore:
 
     def _ledger_accounts(self) -> dict[str, LedgerAccount]:
         self._validate_builtin_categories()
+        self._validate_transfer_clearing()
         account_rows = self.connection.execute("SELECT id,name,kind,currency,role,purpose FROM Accounts").fetchall()
         return {
             account_id: LedgerAccount(
@@ -3351,6 +3363,7 @@ class V2ProfileStore:
                     account is None
                     or account.tracking_scope != "account_total"
                     or row.row_role != "activity"
+                    or row.components
                     or type(amount) is not int
                     or amount == 0
                     or row.amount.provenance != "observed"
@@ -3491,10 +3504,7 @@ class V2ProfileStore:
             in_date = date.fromisoformat(incoming.posting_date)
             clearing_id = "internal:transfer-clearing:USD"
             if out_date != in_date:
-                self.connection.execute(
-                    "INSERT OR IGNORE INTO Accounts VALUES (?,?,?,'USD','internal','clearing',NULL,NULL,'account_total')",
-                    (clearing_id, "Transfer clearing", "asset"),
-                )
+                self._ensure_transfer_clearing()
             accounts = self._ledger_accounts()
             observations = {
                 outgoing.row_id: Observation(outgoing.row_id, outgoing.account_id, -amount, out_date),
@@ -3605,7 +3615,10 @@ class V2ProfileStore:
         )
 
     def _validate_transfer_pair_source(self, pair: TransferCandidate) -> None:
-        for movement in (pair.outgoing, pair.incoming):
+        self._validate_transfer_movements_source((pair.outgoing, pair.incoming))
+
+    def _validate_transfer_movements_source(self, movements: tuple[TransferMovement, ...]) -> None:
+        for movement in movements:
             saved = self.load_import(movement.source_sha256)
             row = next((row for row in _rows(saved.evidence) if row.row_id == movement.row_id), None)
             account = self.connection.execute(
@@ -3626,14 +3639,49 @@ class V2ProfileStore:
             if (
                 not scope.get(row.row_id, False)
                 or row.row_role != "activity"
+                or row.components
                 or row.amount.provenance != "observed"
                 or row.amount.minor != movement.amount_minor
+                or movement.description != (row.description.text or "Description not printed")
                 or candidate is None
                 or candidate.iso != movement.posting_date
                 or candidate.provenance != movement.date_provenance
+                or self.connection.execute(
+                    "SELECT source_sha256,row_role,date_role,observed_date,amount_minor FROM SourceObservations WHERE row_id=?",
+                    (row.row_id,),
+                ).fetchone()
+                != (movement.source_sha256, row.row_role, row.date_role, row.date.iso, row.amount.minor)
                 or (movement.account_kind == "liability" and movement.amount_minor <= 0)
             ):
                 raise ProfileFormatError("transfer_history_integrity")
+
+    def _validate_settlement_categories(self, settlement: TransferSettlement) -> None:
+        for fee in settlement.fees:
+            if self.connection.execute(
+                "SELECT kind,role,currency FROM Accounts WHERE id=?", (fee.category_id,)
+            ).fetchone() != ("expense", "category", "USD"):
+                raise ProfileFormatError("settlement_fee_requires_expense_category")
+
+    def _validate_transfer_clearing(self) -> None:
+        saved = self.connection.execute("SELECT * FROM Accounts WHERE id='internal:transfer-clearing:USD'").fetchone()
+        if saved is not None and saved != (
+            "internal:transfer-clearing:USD",
+            "Transfer clearing",
+            "asset",
+            "USD",
+            "internal",
+            "clearing",
+            None,
+            None,
+            "account_total",
+        ):
+            raise ProfileFormatError("transfer_clearing_integrity")
+
+    def _ensure_transfer_clearing(self) -> None:
+        self._validate_transfer_clearing()
+        self.connection.execute(
+            "INSERT OR IGNORE INTO Accounts VALUES ('internal:transfer-clearing:USD','Transfer clearing','asset','USD','internal','clearing',NULL,NULL,'account_total')"
+        )
 
     def _transfer_pair_context_current(self, pair: TransferCandidate) -> bool:
         for movement in (pair.outgoing, pair.incoming):
@@ -3688,12 +3736,28 @@ class V2ProfileStore:
         retired = dict(self.connection.execute("SELECT original_key,reason FROM JournalRetirements"))
         accounts = self._ledger_accounts()
         for event_id, sequence, out_id, in_id, payload, versions, reason, basis, checksum, created in event_rows:
-            pair = _decode_transfer_pair(payload)
-            self._validate_transfer_pair_source(pair)
             if (
-                out_id != pair.outgoing.row_id
-                or in_id != pair.incoming.row_id
-                or not pair.posting_allowed
+                len(payload) > MAX_SETTLEMENT_PAYLOAD
+                or len(versions) > 64 * 1024
+                or checksum
+                != _transfer_record_digest(event_id, sequence, out_id, in_id, payload, versions, reason, basis)
+            ):
+                raise ProfileFormatError("transfer_history_integrity")
+            try:
+                generic = json.loads(payload).get("format") == "settlement-1"
+                pair = None if generic else _decode_transfer_pair(payload)
+                settlement = (
+                    decode_settlement(payload) if generic else TransferSettlement(pair.outgoing, (pair.incoming,))
+                )
+                validate_settlement(settlement)
+            except (TypeError, ValueError, KeyError, AttributeError, RecursionError):
+                raise ProfileFormatError("transfer_history_integrity") from None
+            self._validate_transfer_movements_source(settlement.movements)
+            self._validate_settlement_categories(settlement)
+            if (
+                out_id != settlement.outgoing.row_id
+                or in_id != settlement.incoming[0].row_id
+                or not all(m.date_allowed for m in settlement.movements)
                 or type(reason) is not str
                 or not 0 < len(reason.strip()) <= 500
                 or re.fullmatch(r"[0-9a-f]{64}", basis) is None
@@ -3701,7 +3765,11 @@ class V2ProfileStore:
                 != _transfer_record_digest(event_id, sequence, out_id, in_id, payload, versions, reason, basis)
             ):
                 raise ProfileFormatError("transfer_history_integrity")
-            expected = self._expected_transfer_entries(pair, event_id, reason)
+            expected = (
+                settlement_entries(settlement, event_id, reason)
+                if generic
+                else self._expected_transfer_entries(pair, event_id, reason)
+            )
             try:
                 manifest = json.loads(versions)
                 expected_manifest = [[entry.key, _digest(_journal_payload(entry).encode())] for entry in expected]
@@ -3716,7 +3784,7 @@ class V2ProfileStore:
                     raise ValueError
                 observations = {
                     m.row_id: Observation(m.row_id, m.account_id, m.amount_minor, date.fromisoformat(m.posting_date))
-                    for m in (pair.outgoing, pair.incoming)
+                    for m in settlement.movements
                 }
                 for entry in expected:
                     if event_entries[entry.key] != _journal_payload(entry):
@@ -3730,13 +3798,30 @@ class V2ProfileStore:
                     allocated = {a.observation_id: a.amount_minor for p in entry.postings for a in p.allocations}
                     if indexed != allocated:
                         raise ValueError
-            except (ValueError, TypeError, KeyError, sqlite3.DatabaseError):
+            except (ValueError, TypeError, KeyError, sqlite3.DatabaseError, RecursionError):
                 raise ProfileFormatError("transfer_history_integrity") from None
             action = actions.get(event_id)
             status, replacement, action_reason = "active", None, None
             if action is None:
                 if any(entry.key in inactive for entry in expected):
                     raise ProfileFormatError("transfer_history_integrity")
+                for movement in settlement.movements:
+                    bindings = {b.row_id: b.ledger_account_id for b in self.account_bindings(movement.source_sha256)}
+                    if bindings.get(movement.row_id) != movement.account_id:
+                        raise ProfileFormatError("transfer_history_integrity")
+                    expected_usage = [
+                        (entry.key, allocation.amount_minor)
+                        for entry in expected
+                        for posting in entry.postings
+                        for allocation in posting.allocations
+                        if allocation.observation_id == movement.row_id
+                    ]
+                    actual_usage = self.connection.execute(
+                        f"SELECT entry_key,amount_minor FROM JournalAllocations WHERE row_id=? AND entry_key NOT IN ({_INACTIVE_JOURNAL_SQL})",
+                        (movement.row_id,),
+                    ).fetchall()
+                    if actual_usage != expected_usage:
+                        raise ProfileFormatError("transfer_history_integrity")
             else:
                 _, kind, replacement, request, action_reason, action_checksum, _created = action
                 if (
@@ -3762,6 +3847,7 @@ class V2ProfileStore:
                     status,
                     replacement,
                     action_reason,
+                    settlement,
                 )
             )
             event_sequences[event_id] = sequence
@@ -3863,6 +3949,268 @@ class V2ProfileStore:
     def transfer_history(self) -> tuple[ReviewedTransferEvent, ...]:
         return self.transfer_review_snapshot(preferences=V2Preferences(), max_day_gap=31).events
 
+    def settlement_review_snapshot(
+        self, *, preferences: V2Preferences, replacing_event_id: str | None = None
+    ) -> SettlementReviewSnapshot:
+        if self.connection.in_transaction:
+            raise ProfileFormatError("transfer_requires_committed_snapshot")
+        self.connection.execute("BEGIN")
+        try:
+            events, _reviews = self._read_transfer_history()
+            releasing = self._settlement_releasing_keys(events, replacing_event_id)
+            return SettlementReviewSnapshot(
+                self._transfer_movements(preferences, releasing),
+                events,
+                tuple(c for c in self.category_accounts() if c.kind == "expense"),
+                self._transfer_review_basis(),
+                self.financial_accounts(),
+            )
+        finally:
+            self.connection.execute("ROLLBACK")
+
+    @staticmethod
+    def _settlement_releasing_keys(events, event_id: str | None) -> tuple[str, ...]:
+        if event_id is None:
+            return ()
+        selected = next((e for e in events if e.event_id == event_id and e.status == "active"), None)
+        if selected is None:
+            raise ProfileFormatError("transfer_event_not_active")
+        return selected.entry_keys
+
+    @staticmethod
+    def _settlement_request(outgoing_row_id: str, incoming_row_ids: tuple[str, ...], fees: tuple[SettlementFee, ...]):
+        if (
+            type(outgoing_row_id) is not str
+            or not outgoing_row_id
+            or type(incoming_row_ids) is not tuple
+            or not 1 <= len(incoming_row_ids) <= 32
+            or any(type(row_id) is not str or not row_id for row_id in incoming_row_ids)
+            or len(set(incoming_row_ids)) != len(incoming_row_ids)
+            or outgoing_row_id in incoming_row_ids
+            or type(fees) is not tuple
+            or len(fees) > 64
+            or any(not isinstance(fee, SettlementFee) for fee in fees)
+        ):
+            raise ProfileFormatError("settlement_manifest_invalid")
+        try:
+            normalized_fees = tuple(sorted(fees, key=fee_order))
+        except (TypeError, ValueError):
+            raise ProfileFormatError("settlement_fee_invalid") from None
+        return outgoing_row_id, tuple(sorted(incoming_row_ids)), normalized_fees
+
+    @staticmethod
+    def _settlement_matches(settlement: TransferSettlement, request) -> bool:
+        return (settlement.outgoing.row_id, tuple(m.row_id for m in settlement.incoming), settlement.fees) == request
+
+    def _settlement_accounts(self, settlement: TransferSettlement, *, materialize: bool) -> dict[str, LedgerAccount]:
+        for fee in settlement.fees:
+            if materialize and builtin_category(fee.category_id) is not None:
+                self.ensure_builtin_category(fee.category_id)
+        accounts = self._ledger_accounts()
+        for fee in settlement.fees:
+            saved = self.connection.execute(
+                "SELECT kind,role,currency FROM Accounts WHERE id=?", (fee.category_id,)
+            ).fetchone()
+            category = builtin_category(fee.category_id)
+            if saved is None and category is not None and not materialize:
+                accounts[category.account_id] = LedgerAccount(
+                    category.account_id, category.name, AccountKind.EXPENSE, "USD"
+                )
+            elif saved != ("expense", "category", "USD"):
+                raise ProfileFormatError("settlement_fee_requires_expense_category")
+        return accounts
+
+    def _build_settlement(self, request, preferences: V2Preferences, releasing: tuple[str, ...]) -> TransferSettlement:
+        out_id, in_ids, fees = request
+        movements = {m.row_id: m for m in self._transfer_movements(preferences, releasing)}
+        try:
+            settlement = TransferSettlement(movements[out_id], tuple(movements[row_id] for row_id in in_ids), fees)
+            validate_settlement(settlement)
+        except KeyError:
+            raise ProfileFormatError("settlement_movement_unavailable_or_already_posted") from None
+        except (TypeError, ValueError) as exc:
+            raise ProfileFormatError(str(exc)) from None
+        if not all(m.date_allowed for m in settlement.movements):
+            raise ProfileFormatError("transfer_assumed_date_disabled")
+        self._require_source_overlap_postable(settlement.row_ids)
+        return settlement
+
+    def preview_reviewed_settlement(
+        self,
+        outgoing_row_id: str,
+        incoming_row_ids: tuple[str, ...],
+        *,
+        fees: tuple[SettlementFee, ...] = (),
+        preferences: V2Preferences,
+        expected_basis_sha256: str,
+        replacing_event_id: str | None = None,
+        reason: str = "Preview only",
+    ) -> SettlementPreview:
+        request = self._settlement_request(outgoing_row_id, incoming_row_ids, fees)
+        if type(reason) is not str or not 0 < len(reason.strip()) <= 500:
+            raise ProfileFormatError("transfer_reason_required")
+        if self.connection.in_transaction:
+            raise ProfileFormatError("transfer_requires_committed_snapshot")
+        self.connection.execute("BEGIN")
+        try:
+            events, _reviews = self._read_transfer_history()
+            self._require_transfer_basis(expected_basis_sha256, required=True)
+            releasing = self._settlement_releasing_keys(events, replacing_event_id)
+            settlement = self._build_settlement(request, preferences, releasing)
+            accounts = self._settlement_accounts(settlement, materialize=False)
+            accounts.setdefault(
+                "internal:transfer-clearing:USD",
+                LedgerAccount(
+                    "internal:transfer-clearing:USD", "Transfer clearing", AccountKind.ASSET, "USD", purpose="clearing"
+                ),
+            )
+            entries = settlement_entries(settlement, "preview:settlement", reason.strip())
+            self._validate_settlement_entries_for_posting(settlement, entries, accounts, releasing)
+            return SettlementPreview(settlement, entries)
+        finally:
+            self.connection.execute("ROLLBACK")
+
+    def _validate_settlement_entries_for_posting(self, settlement, entries, accounts, releasing=()) -> None:
+        consumed = self._active_consumed()
+        for key in releasing:
+            for row_id, amount in self.connection.execute(
+                "SELECT row_id,amount_minor FROM JournalAllocations WHERE entry_key=?", (key,)
+            ):
+                consumed[row_id] = consumed.get(row_id, 0) - amount
+        observations = {
+            m.row_id: Observation(m.row_id, m.account_id, m.amount_minor, date.fromisoformat(m.posting_date))
+            for m in settlement.movements
+        }
+        try:
+            for entry in entries:
+                usage = validate_entry(entry, accounts, observations, consumed)
+                for row_id, amount in usage.items():
+                    consumed[row_id] = consumed.get(row_id, 0) + amount
+        except LedgerError:
+            raise ProfileFormatError("settlement_posting_refused") from None
+
+    def _record_settlement_event(self, settlement: TransferSettlement, reason: str, basis: str) -> str:
+        self._ensure_transfer_clearing()
+        accounts = self._settlement_accounts(settlement, materialize=True)
+        sequence = self.connection.execute("SELECT COALESCE(MAX(sequence),0)+1 FROM TransferEvents").fetchone()[0]
+        payload = settlement_payload(settlement)
+        event_id = "review:transfer:" + _digest(payload.encode()) + f":v{sequence}"
+        entries = settlement_entries(settlement, event_id, reason)
+        self._validate_settlement_entries_for_posting(settlement, entries, accounts)
+        for entry in entries:
+            self.connection.execute(
+                "INSERT INTO JournalEntries(key,payload) VALUES (?,?)", (entry.key, _journal_payload(entry))
+            )
+            for posting in entry.postings:
+                for allocation in posting.allocations:
+                    self.connection.execute(
+                        "INSERT INTO JournalAllocations VALUES (?,?,?)",
+                        (entry.key, allocation.observation_id, allocation.amount_minor),
+                    )
+        manifest = json.dumps([[e.key, _digest(_journal_payload(e).encode())] for e in entries], separators=(",", ":"))
+        out_id, in_id = settlement.outgoing.row_id, settlement.incoming[0].row_id
+        checksum = _transfer_record_digest(event_id, sequence, out_id, in_id, payload, manifest, reason, basis)
+        self.connection.execute(
+            "INSERT INTO TransferEvents(event_id,sequence,outgoing_row_id,incoming_row_id,pair_payload,entry_versions,reason,request_basis,record_sha256) VALUES (?,?,?,?,?,?,?,?,?)",
+            (event_id, sequence, out_id, in_id, payload, manifest, reason, basis, checksum),
+        )
+        return event_id
+
+    def post_reviewed_settlement(
+        self,
+        outgoing_row_id: str,
+        incoming_row_ids: tuple[str, ...],
+        *,
+        fees: tuple[SettlementFee, ...] = (),
+        preferences: V2Preferences,
+        expected_basis_sha256: str,
+        reason: str,
+    ) -> str:
+        request = self._settlement_request(outgoing_row_id, incoming_row_ids, fees)
+        reason = self._transfer_write_start(reason)
+        try:
+            events, _reviews = self._read_transfer_history()
+            active = next(
+                (e for e in events if e.status == "active" and self._settlement_matches(e.settlement, request)), None
+            )
+            if active is not None:
+                original_basis = self.connection.execute(
+                    "SELECT request_basis FROM TransferEvents WHERE event_id=?", (active.event_id,)
+                ).fetchone()[0]
+                if active.reason != reason:
+                    raise ProfileFormatError("transfer_conflicts_with_prior_decision")
+                if expected_basis_sha256 != original_basis:
+                    self._require_transfer_basis(expected_basis_sha256, required=True)
+                self.connection.execute("COMMIT")
+                return active.event_id
+            basis = self._require_transfer_basis(expected_basis_sha256, required=True)
+            settlement = self._build_settlement(request, preferences, ())
+            self._transfer_mutating = True
+            event_id = self._record_settlement_event(settlement, reason, basis)
+            self._transfer_mutating = False
+            self._read_transfer_history()
+            self.connection.execute("COMMIT")
+            return event_id
+        except BaseException:
+            self.connection.execute("ROLLBACK")
+            raise
+        finally:
+            self._transfer_mutating = False
+
+    def replace_reviewed_settlement(
+        self,
+        event_id: str,
+        outgoing_row_id: str,
+        incoming_row_ids: tuple[str, ...],
+        *,
+        fees: tuple[SettlementFee, ...] = (),
+        preferences: V2Preferences,
+        expected_basis_sha256: str,
+        reason: str,
+    ) -> str:
+        request = self._settlement_request(outgoing_row_id, incoming_row_ids, fees)
+        reason = self._transfer_write_start(reason)
+        try:
+            events, _reviews = self._read_transfer_history()
+            event = next((e for e in events if e.event_id == event_id), None)
+            if event is None:
+                raise ProfileFormatError("transfer_event_missing")
+            if event.status == "replaced":
+                replacement = next(e for e in events if e.event_id == event.replacement_event_id)
+                action = self.connection.execute(
+                    "SELECT request_basis,reason FROM TransferEventActions WHERE event_id=?", (event_id,)
+                ).fetchone()
+                if (
+                    action == (expected_basis_sha256, reason)
+                    and replacement.status == "active"
+                    and self._settlement_matches(replacement.settlement, request)
+                ):
+                    self.connection.execute("COMMIT")
+                    return replacement.event_id
+            if event.status != "active":
+                raise ProfileFormatError("transfer_event_not_active")
+            basis = self._require_transfer_basis(expected_basis_sha256, required=True)
+            if self._settlement_matches(event.settlement, request):
+                raise ProfileFormatError("settlement_replacement_requires_changed_manifest")
+            settlement = self._build_settlement(request, preferences, event.entry_keys)
+            self._transfer_mutating = True
+            for key in event.entry_keys:
+                payload = self.connection.execute("SELECT payload FROM JournalEntries WHERE key=?", (key,)).fetchone()[
+                    0
+                ]
+                self._retire_journal_entry(_decode_journal(payload), reason=reason)
+            replacement_id = self._record_settlement_event(settlement, reason, basis)
+            self._record_transfer_action(event, "replace", replacement_id, basis, reason)
+            self._transfer_mutating = False
+            self._read_transfer_history()
+            self.connection.execute("COMMIT")
+            return replacement_id
+        except BaseException:
+            self.connection.execute("ROLLBACK")
+            raise
+        finally:
+            self._transfer_mutating = False
+
     def _transfer_write_start(self, reason: str) -> str:
         self._require_writable()
         if type(reason) is not str or not 0 < len(reason.strip()) <= 500:
@@ -3931,6 +4279,7 @@ class V2ProfileStore:
                     e
                     for e in events
                     if e.status == "active"
+                    and e.pair is not None
                     and e.pair.outgoing.row_id == outgoing_row_id
                     and e.pair.incoming.row_id == incoming_row_id
                 ),
@@ -4085,6 +4434,7 @@ class V2ProfileStore:
                 if (
                     action == (expected_basis_sha256, reason)
                     and replacement.status == "active"
+                    and replacement.pair is not None
                     and replacement.pair.outgoing.row_id == outgoing_row_id
                     and replacement.pair.incoming.row_id == incoming_row_id
                 ):
@@ -4093,7 +4443,10 @@ class V2ProfileStore:
             if event.status != "active":
                 raise ProfileFormatError("transfer_event_not_active")
             basis = self._require_transfer_basis(expected_basis_sha256, required=True)
-            if (event.pair.outgoing.row_id, event.pair.incoming.row_id) == (outgoing_row_id, incoming_row_id):
+            if event.pair is not None and (event.pair.outgoing.row_id, event.pair.incoming.row_id) == (
+                outgoing_row_id,
+                incoming_row_id,
+            ):
                 raise ProfileFormatError("transfer_replacement_requires_different_pair")
             self._transfer_mutating = True
             for key in event.entry_keys:
@@ -4469,6 +4822,11 @@ class V2ProfileStore:
         period_keys = {entry.key for entry in period_entries}
         source_actions = tuple(action for action in action_history if action.entry_key in period_keys)
         repeat_repairs = tuple(repair for repair in repair_history if repair.redundant_entry_key in period_keys)
+        settlements = tuple(
+            event
+            for event in self._read_transfer_history()[0]
+            if event.pair is None and any(key in period_keys for key in event.entry_keys)
+        )
         period_events = {entry.event_id for entry in period_entries}
         transfer_actions = tuple(
             JournalExportTransferAction(*row)
@@ -4541,6 +4899,7 @@ class V2ProfileStore:
             transfer_actions,
             source_actions,
             repeat_repairs,
+            settlements,
         )
 
     def _insert_reviewed_category(
@@ -6981,6 +7340,7 @@ class V2ProfileStore:
 
     def _validate_account_metadata(self) -> None:
         self._validate_builtin_categories()
+        self._validate_transfer_clearing()
         if not self._account_anchors_mutating:
             if any(
                 type(scope) is not str or scope not in TRACKING_SCOPES
