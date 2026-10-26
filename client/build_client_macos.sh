@@ -50,7 +50,7 @@ VERSION=$(sed -nE "s/^__version__[[:space:]]*=[[:space:]]*['\"]([^'\"]+)['\"]/\1
     src/parsetrail/version.py)
 [[ -n "$VERSION" ]] || error_exit "Failed to determine client version"
 
-APP_NAME="ParseTrail"
+APP_NAME="ParseTrail 2"
 SRC_DIR="./src"
 MODULE_PATH="./src/parsetrail/main.py"
 BUILD_DIR="./build"
@@ -104,6 +104,7 @@ uv run --no-env-file --no-sync --python "$RELEASE_PYTHON" --no-python-downloads 
     --noconfirm \
     --noconsole \
     --target-arch x86_64 \
+    --osx-bundle-identifier "com.parsetrail.client.v2" \
     --workpath "prebuild" \
     --distpath "$BUILD_DIR" \
     --paths "$SRC_DIR" \

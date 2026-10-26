@@ -13,6 +13,7 @@ import hashlib
 import json
 import os
 import platform
+import plistlib
 import posixpath
 import re
 import shutil
@@ -20,6 +21,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+from xml.parsers.expat import ExpatError
 
 CLIENT_ROOT = Path(__file__).resolve().parents[1]
 MACHO_MAGIC = {
@@ -208,14 +210,50 @@ def _expand(path: str, *, loader: Path, executable: Path, root: Path) -> Path:
     raise MacReleaseError(f"Non-relocatable library path: {path}")
 
 
+def _bundle_executable(app: Path) -> Path:
+    """Read the bundle's declared basename without following metadata outside it."""
+    root = app.resolve(strict=True)
+    metadata = root / "Contents/Info.plist"
+    if metadata.is_symlink() or not metadata.resolve().is_relative_to(root):
+        raise MacReleaseError("Bundle executable metadata must be inside the app.")
+    try:
+        with metadata.open("rb") as stream:
+            payload = stream.read(1024 * 1024 + 1)
+        if not 0 < len(payload) <= 1024 * 1024:
+            raise ValueError("metadata size")
+        document = plistlib.loads(payload)
+    except (
+        OSError,
+        ValueError,
+        TypeError,
+        OverflowError,
+        plistlib.InvalidFileException,
+        ExpatError,
+        RecursionError,
+    ) as exc:
+        raise MacReleaseError("Bundle executable metadata is unavailable or invalid.") from exc
+    name = document.get("CFBundleExecutable") if type(document) is dict else None
+    if (
+        type(name) is not str
+        or not 0 < len(name) <= 255
+        or name in {".", ".."}
+        or any(character in name for character in ("/", "\\", ":", "\x00"))
+    ):
+        raise MacReleaseError("CFBundleExecutable must be a filename inside Contents/MacOS.")
+    executable = root / "Contents/MacOS" / name
+    if executable.is_symlink() or not executable.resolve().is_relative_to(root) or not executable.is_file():
+        raise MacReleaseError("Frozen bundle executable not found inside the app.")
+    return executable
+
+
 def audit_bundle(app: Path) -> dict[str, object]:
     """Fail closed on workstation paths, missing bundled libraries, or dynamic crypto."""
     _require_intel_mac()
     otool = _require_tool("otool")
     root = app.resolve(strict=True)
-    executable = root / "Contents/MacOS/ParseTrail"
+    executable = _bundle_executable(root)
     if not executable.is_file() or not _is_macho(executable):
-        raise MacReleaseError("The app is missing its Mach-O ParseTrail executable.")
+        raise MacReleaseError("The app is missing its declared Mach-O executable.")
     binaries = []
     for path in sorted(root.rglob("*")):
         if path.is_symlink() and (not path.exists() or not path.resolve().is_relative_to(root)):
@@ -264,9 +302,7 @@ def audit_bundle(app: Path) -> dict[str, object]:
 
 
 def smoke_test(app: Path, *, timeout: int = 30) -> dict[str, object]:
-    executable = app.resolve(strict=True) / "Contents/MacOS/ParseTrail"
-    if not executable.is_file():
-        raise MacReleaseError("Frozen executable not found.")
+    executable = _bundle_executable(app)
     env = {
         key: value
         for key, value in os.environ.items()

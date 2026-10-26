@@ -17,10 +17,14 @@
 # Definitions
 # Paths relative to THIS File
 
-!define APP_NAME "ParseTrail"
+!define APP_NAME "ParseTrail 2"
+!ifndef SOURCE_DIR
 !define SOURCE_DIR "..\build\ParseTrail\*.*"
+!endif
 !define EXE_IN_SOURCE "ParseTrail.exe"
+!ifndef OUTPUT_PATH
 !define OUTPUT_PATH "${DIST}\windows-x86_64\parsetrail_${VERSION}_windows-x86_64_setup.exe"
+!endif
 !define INSTALLER_ICON "..\assets\parsetrail_128px.ico"
 !define COMPANY_NAME "ParseTrail"
 !define APP_REGKEY "Software\${APP_NAME}"
@@ -86,7 +90,7 @@ Section "${APP_NAME}"
     SetOutPath $INSTDIR
 
     # Copy application files
-    File /r ${SOURCE_DIR}
+    File /r "${SOURCE_DIR}"
 
     # Create the uninstaller
     WriteUninstaller "$INSTDIR\uninstall.exe"

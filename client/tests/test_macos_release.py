@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import plistlib
 import shutil
 import subprocess
 import sys
@@ -154,15 +155,16 @@ def load_commands(*dependencies, rpaths=()):
     )
 
 
-@pytest.fixture
-def bundle(tmp_path, monkeypatch):
-    root = tmp_path / "ParseTrail.app"
-    executable = root / "Contents/MacOS/ParseTrail"
+@pytest.fixture(params=["ParseTrail", "ParseTrail 2"])
+def bundle(tmp_path, monkeypatch, request):
+    root = tmp_path / f"{request.param}.app"
+    executable = root / "Contents/MacOS" / request.param
     library = root / "Contents/Frameworks/library.dylib"
     crypto = root / "Contents/Frameworks/cryptography/hazmat/bindings/_rust.abi3.so"
     for path in (executable, library, crypto):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(bytes.fromhex("cffaedfe") + b"synthetic Mach-O")
+    (root / "Contents/Info.plist").write_bytes(plistlib.dumps({"CFBundleExecutable": request.param}))
     commands = {
         executable: load_commands("@rpath/library.dylib", rpaths=["@executable_path/../Frameworks"]),
         library: load_commands("/usr/lib/libSystem.B.dylib"),
@@ -179,6 +181,40 @@ def test_audit_accepts_resolved_bundle_and_system_libraries_ignores_install_iden
     assert report["macho_files"] == 3
     assert report["cryptography_extensions"] == 1
     assert str(bundle.root) not in json.dumps(report)
+
+
+@pytest.mark.parametrize("name", ["", ".", "..", "../outside", "/outside", "nested\\file", "a:b", "a\x00b", 42, True])
+def test_bundle_executable_metadata_refuses_nonlocal_names_before_execution(bundle, monkeypatch, name):
+    metadata = bundle.root / "Contents/Info.plist"
+    if isinstance(name, str) and "\x00" in name:
+        payload = plistlib.dumps({"CFBundleExecutable": "a_PLACEHOLDER_b"}).replace(b"a_PLACEHOLDER_b", b"a\x00b")
+    else:
+        payload = plistlib.dumps({"CFBundleExecutable": name})
+    metadata.write_bytes(payload)
+    monkeypatch.setattr(native, "_run", lambda *_args, **_kwargs: pytest.fail("Invalid bundle must not execute"))
+    with pytest.raises(native.MacReleaseError):
+        native.smoke_test(bundle.root)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [b"", b"not a plist", b"<?xml version='1.0'?><plist><dict>", b" " * (1024 * 1024 + 1)],
+    ids=["empty", "invalid", "malformed_xml", "oversized"],
+)
+def test_invalid_or_oversized_bundle_metadata_fails_closed(bundle, payload):
+    (bundle.root / "Contents/Info.plist").write_bytes(payload)
+    with pytest.raises(native.MacReleaseError, match="metadata"):
+        native._bundle_executable(bundle.root)
+
+
+def test_missing_bundle_metadata_or_declared_executable_is_refused(bundle):
+    metadata = bundle.root / "Contents/Info.plist"
+    metadata.unlink()
+    with pytest.raises(native.MacReleaseError, match="metadata"):
+        native._bundle_executable(bundle.root)
+    metadata.write_bytes(plistlib.dumps({"CFBundleExecutable": "Missing V2 executable"}))
+    with pytest.raises(native.MacReleaseError, match="executable not found"):
+        native._bundle_executable(bundle.root)
 
 
 @pytest.mark.parametrize(
