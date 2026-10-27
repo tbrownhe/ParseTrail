@@ -4,7 +4,7 @@ Date: 2026-10-27. Roadmap IDs: V2-3/4/6/UX.
 Branch/components: feature/client-financial-insights; local evidence/account review.
 Authorization: owner requested parser-known institution read-only in normal use, batched account assignment by institution/document identity with account creation for unmatched groups, and default-app access to original DB blobs with managed temporary files when memory handoff is unavailable.
 Implementation: complete in development; verified public runtime handoff prepared.
-Automated verification: integrated 100-test run passed; final lifecycle regressions verified separately.
+Automated verification: integrated 100-test run and final 63-test regression run passed; independent lifecycle probes passed.
 Design verification: ui_ux reviewed grouped batch/confirmation, cancellation, source access and lifecycle states before implementation.
 Independent review: integrity reviewed financial association, temporary-file/privacy boundaries and integrated cancellation; reproduced lifecycle findings corrected and independently rechecked.
 Owner acceptance: existing Yamaha account creation/assignment reported successful; this batch/original-open work not yet reviewed.
@@ -163,6 +163,13 @@ imported two sources through the pinned modules, staged and applied one account
 with two assignments, verified zero journals, dispatched exact retained bytes
 through a mocked OS opener and confirmed exit cleanup. Evidence:
 `scratch/batch-pinned-check-530970f1/result.json`.
+
+Implementation committed as `bd7a08c` with every pre-commit check passing. Final
+batch GUI/original lifecycle/inline account/workspace regression suite:
+**63 passed in 39.19s**. All **281** pinned runtime files match their source bytes
+and Git-cleaned blob IDs in that commit; verification is recorded beside the
+launcher in `runtime-source-verification.json`. The working tree was clean after
+the implementation commit; this closeout adds only the final verification record.
 
 This is agent native/synthetic verification, not owner acceptance, real viewer
 association testing, screen-reader/high-DPI acceptance, Intel or installed-release
