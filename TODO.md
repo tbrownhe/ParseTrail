@@ -6,11 +6,9 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-[Real-statement archive pilot](docs/work/2026-10-26-v2-real-statement-pilot.md)
-is selected. Prepare an isolated V2 profile, import the explicitly supplied entire
-V1 statement archive as unposted evidence, verify reuse/recovery and report actual
-limits. The owner supplied the archive path; intake of 946 selected CSV/PDF files
-is running. Keep originals and all V1 profiles unchanged.
+None active. The [real-statement archive pilot](docs/work/2026-10-26-v2-real-statement-pilot.md)
+completed intake and integrity/recovery checks. The isolated populated profile,
+launcher and private source index are ready for owner accounting review.
 
 ## Recommended next packets (unselected)
 
@@ -20,9 +18,12 @@ is running. Keep originals and all V1 profiles unchanged.
 
 ## Remaining review and action gates
 
-1. [Platform/release checks](ROADMAP.md#release-checklist): targeted Intel,
+1. [Real-statement pilot review](docs/work/2026-10-26-v2-real-statement-pilot.md):
+   review evidence, account assignments, openings and activity before interpreting
+   posted reports; further interface refinement remains a later selected packet.
+2. [Platform/release checks](ROADMAP.md#release-checklist): targeted Intel,
    installed/offline/OS integration and no-build-toolchain environment acceptance.
-2. [Starter signing](docs/work/2026-10-26-v2-catalog-signing-inputs.md), versioning
+3. [Starter signing](docs/work/2026-10-26-v2-catalog-signing-inputs.md), versioning
    and release actions: exact unsigned inputs ready; production signing,
    installation and publication require their specifically authorized scope.
 
@@ -31,10 +32,9 @@ they are not selected by this closeout.
 
 ## Most recent product packet
 
-[Cash-account list visibility and owner walkthrough](docs/work/2026-10-26-v2-integrated-ui-review.md)
-completed the small UI follow-up and recorded functional owner confirmation.
-Further interface refinement is requested; supported-platform and release gates
-remain separate.
+[Real-statement archive pilot](docs/work/2026-10-26-v2-real-statement-pilot.md)
+completed unposted evidence intake and verification. Owner accounting review,
+further interface refinement, supported-platform and release gates remain.
 
 ## Decisions and gates
 

@@ -264,3 +264,7 @@ qualifications. No additional feature expansion is selected by this feedback.
 Targeted Intel/installed/offline/OS integration and separately authorized
 production signing/version/release actions remain open. This walkthrough is
 owner functional acceptance for the prepared Windows demo, not release acceptance.
+
+The owner subsequently selected the [whole-archive real-statement pilot](2026-10-26-v2-real-statement-pilot.md)
+before further redesign. Intake and evidence/recovery verification are complete;
+the populated pilot is ready for owner accounting review and later UX feedback.
