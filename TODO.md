@@ -6,10 +6,9 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-[Archive-sized review performance](docs/work/2026-10-26-v2-review-performance.md)
-is selected after owner-reported slow Cash activity and Statement coverage actions.
-Profile a disposable pilot copy and optimize repeated read work while preserving
-the evidence format, integrity checks and current owner-reviewed profile.
+None active. [Archive-sized review performance](docs/work/2026-10-26-v2-review-performance.md)
+is implemented and verified; a versioned launcher opens the same existing pilot
+with the optimized runtime. Owner data, evidence format and agent roles are unchanged.
 
 ## Recommended next packets (unselected)
 
@@ -34,9 +33,10 @@ they are not selected by this closeout.
 
 ## Most recent product packet
 
-[Real-statement archive pilot](docs/work/2026-10-26-v2-real-statement-pilot.md)
-completed unposted evidence intake and verification. Owner accounting review,
-further interface refinement, supported-platform and release gates remain.
+[Archive-sized review performance](docs/work/2026-10-26-v2-review-performance.md)
+completed the measured read optimization and existing-profile runtime handoff.
+Owner accounting review, agent-workflow review, later interface refinement and
+supported-platform/release gates remain separate.
 
 ## Decisions and gates
 

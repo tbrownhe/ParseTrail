@@ -3,9 +3,9 @@
 Date: 2026-10-26. Roadmap IDs: V2-3/4/5/UX/7.
 Branch/runtime: feature/client-financial-insights, source and pinned pilot.
 Authorization: owner reported approximately ten-second Cash activity/Statement coverage actions on the real-statement pilot.
-Implementation: measured optimization complete; integration and updated-runtime handoff active.
+Implementation: complete; versioned optimized runtime is ready for the existing pilot.
 Automated verification: focused checks, 2,141-test client integration and final 17-test devtool integration passed.
-Independent review: final store equivalence, corruption, concurrency and failure paths passed; runtime-bundle adapter under review.
+Independent review: store equivalence/corruption/concurrency and runtime-bundle adapter passed.
 Owner acceptance: performance/usability issue reported; follow-up pending.
 Release authorization: not authorized.
 
@@ -75,7 +75,7 @@ Primary actual dialog construction on the same copy, without profiler:
 | Cash activity review | 12.4419s | 1.2598s |
 | Statement coverage | 24.4460s | 1.2951s |
 
-Dialog show/paint processing added approximately 0.01s. These are observed warm
+Dialog show/event processing added approximately 0.01s. These are observed warm
 Windows/offscreen timings, not cold-start or installed-platform benchmarks.
 Old-code wall measurements explicitly used the retained pinned runtime to avoid
 a working-tree edit race. The ambiguous first unprofiled probe was excluded from
@@ -106,6 +106,27 @@ redirection, so a locked log cannot yield false startup success. A native Window
 sharing-mode regression proves both launching beside a held-open workspace log
 and nonzero refusal when the bundle's own log is locked. No owner window was
 closed or altered by the agent.
+
+Final public bundle source: clean
+`35ea5e61758ee8d1da2f0a37a32def0f3747d043`, under the existing pilot at
+`runtime-updates/35ea5e6`. Use its `Open-optimized-pilot.cmd` after closing the
+old pilot window. It opens the **same** existing profile, catalog and preferences.
+No migration, reset or copied financial profile is involved; the original pinned
+runtime and launcher remain intact. All 274 public runtime files are manifest-
+bound; manifest SHA-256:
+`7b49aba7d2f3693a901959003db7a7b04676e8f7e46adfb4a6183cac3cb5290e`.
+
+The exact final CMD passed on Windows Qt with external display suppression:
+exit 0, all 96 loaded first-party modules resolved under the new bundle and the
+active pilot's streaming file hash remained unchanged. Neither old window nor
+owner-reviewed state was changed. Evidence is local in
+`scratch/review-performance-updated-launcher-probe-v3/result.json`.
+
+Independent final artifact review rehashed all 274 public files, matched the
+bundled store to the reviewed source, confirmed schema 22 and absence of copied
+private data/settings/catalog, and checked the workspace/runtime/log separation.
+Its separate native locked-log regression passed in 0.62s. No active private
+profile was read by that artifact review.
 
 ## Verification
 
@@ -140,7 +161,9 @@ are printed or committed.
 
 ## Remaining work
 
-Complete profiling, implement/review the measured optimization, prepare a concrete
-updated-runtime handoff that preserves the owner's pilot state, and record actual
-tests/performance. Owner account review, further UI/UX simplification and the
-supported-platform/release gates remain separate.
+Owner can reopen the existing pilot with the new bundle and assess actual
+responsiveness while reviewing accounts/activity. Broad UI/UX changes stay
+deferred; the owner will independently review the development-agent architecture.
+Exact-candidate packaging, Intel/installed acceptance and authorized release
+actions remain separate; the prior frozen development binary is not silently
+promoted to contain this source change.
