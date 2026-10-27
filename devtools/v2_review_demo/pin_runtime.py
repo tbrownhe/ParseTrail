@@ -5,22 +5,34 @@ from __future__ import annotations
 import ast
 import hashlib
 import json
+import re
 import sqlite3
 import stat
 from pathlib import Path
 
 
-def launcher_text(python_executable: Path) -> str:
+def _helper_path(path: Path) -> Path:
+    if (
+        path.is_absolute()
+        or not path.parts
+        or any(part in {".", ".."} or re.fullmatch(r"[A-Za-z0-9_.-]+", part) is None for part in path.parts)
+    ):
+        raise ValueError("runtime_helper_path")
+    return path
+
+
+def launcher_text(
+    python_executable: Path, helper_relative: Path = Path("devtools/v2_review_demo/prepare_demo.py")
+) -> str:
     executable = str(python_executable.resolve()).replace("%", "%%")
+    helper = str(_helper_path(helper_relative)).replace("/", "\\")
     return (
         "@echo off\r\nsetlocal DisableDelayedExpansion\r\nchcp 65001 >nul\r\n"
         'set "DEMO_ROOT=%~dp0."\r\n'
         'set "DEMO_LOG=%DEMO_ROOT%\\last-launch.log"\r\n'
         'cd /d "%DEMO_ROOT%\\runtime"\r\n'
         "if errorlevel 1 exit /b 3\r\n"
-        '"'
-        + executable
-        + '" -B -X utf8 "%DEMO_ROOT%\\runtime\\devtools\\v2_review_demo\\prepare_demo.py" --open "%DEMO_ROOT%" >"%DEMO_LOG%" 2>&1\r\n'
+        '"' + executable + f'" -B -X utf8 "%DEMO_ROOT%\\runtime\\{helper}" --open "%DEMO_ROOT%" >"%DEMO_LOG%" 2>&1\r\n'
         'set "DEMO_EXIT=%ERRORLEVEL%"\r\n'
         'if not "%DEMO_EXIT%"=="0" (\r\n'
         '  type "%DEMO_LOG%"\r\n'
@@ -32,14 +44,27 @@ def launcher_text(python_executable: Path) -> str:
     )
 
 
-def pin_runtime(source_repository: Path, demo_directory: Path, python_executable: Path, helper_source: Path) -> dict:
+def pin_runtime(
+    source_repository: Path,
+    demo_directory: Path,
+    python_executable: Path,
+    helper_source: Path,
+    *,
+    helper_relative: Path = Path("devtools/v2_review_demo/prepare_demo.py"),
+    launcher_name: str = "Open-review-demo.cmd",
+    purpose: str = "Pinned public synthetic review runtime, not release acceptance",
+) -> dict:
     """Create once; refuse schema mismatch before copying; retain only public code/resources.
 
-    The caller supplies an already-created disposable synthetic profile, catalog,
-    public demo trust and preferences. No production trust or private key is copied.
+    The caller supplies an already-created disposable profile, catalog,
+    public pilot trust and preferences. Only public runtime code/resources are copied.
+    No financial profile, production trust or private key is copied into the runtime.
     This function never builds, releases, migrates or overwrites a runtime.
     """
     repository, demo = source_repository.resolve(), demo_directory.resolve()
+    helper_relative = _helper_path(helper_relative)
+    if re.fullmatch(r"[A-Za-z0-9_-]+\.cmd", launcher_name) is None:
+        raise ValueError("runtime_launcher_name")
     if not demo.is_dir() or not (demo / "review.db").is_file():
         raise ValueError("demo_profile_missing")
     runtime = demo / "runtime"
@@ -83,7 +108,7 @@ def pin_runtime(source_repository: Path, demo_directory: Path, python_executable
             if hashlib.sha256(source.read_bytes()).hexdigest() != digest:
                 raise ValueError("runtime_source_changed")
             records.append({"path": path.as_posix(), "sha256": digest, "size": len(content)})
-    helper = runtime / "devtools/v2_review_demo/prepare_demo.py"
+    helper = runtime / helper_relative
     helper.parent.mkdir(parents=True)
     code = helper_source.read_text(encoding="utf-8-sig")
     if "SNAPSHOT_PATHS =" not in code or 'os.environ["PYTHONPATH"]' not in code:
@@ -100,7 +125,7 @@ def pin_runtime(source_repository: Path, demo_directory: Path, python_executable
     records.sort(key=lambda row: row["path"])
     manifest = {
         "schema_version": profile_schema,
-        "purpose": "Pinned public synthetic review runtime, not release acceptance",
+        "purpose": purpose,
         "files": records,
     }
     for record in records:
@@ -112,5 +137,5 @@ def pin_runtime(source_repository: Path, demo_directory: Path, python_executable
             raise ValueError("runtime_source_changed")
         path.chmod(stat.S_IREAD)
     (demo / "runtime-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
-    (demo / "Open-review-demo.cmd").write_text(launcher_text(python_executable), encoding="utf-8", newline="")
+    (demo / launcher_name).write_text(launcher_text(python_executable, helper_relative), encoding="utf-8", newline="")
     return manifest

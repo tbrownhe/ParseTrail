@@ -6,15 +6,14 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None active. The owner completed the [integrated Windows walkthrough](docs/work/2026-10-26-v2-integrated-ui-review.md).
-The account-list discoverability follow-up is implemented and agent-verified;
-all stated features worked, but another UI/UX pass is requested for clarity.
+[Real-statement archive pilot](docs/work/2026-10-26-v2-real-statement-pilot.md)
+is selected. Prepare an isolated V2 profile, import the explicitly supplied entire
+V1 statement archive as unposted evidence, verify reuse/recovery and report actual
+limits. Keep originals and all V1 profiles unchanged. Local archive path pending.
 
 ## Recommended next packets (unselected)
 
-1. A small local real-statement pilot in a separate disposable profile, using
-   specifically selected inputs and preserving originals/1.x state.
-2. [Further UI/UX refinement](docs/work/2026-10-26-v2-integrated-ui-review.md#further-owner-feedback-and-recommended-next-work),
+1. [Further UI/UX refinement](docs/work/2026-10-26-v2-integrated-ui-review.md#further-owner-feedback-and-recommended-next-work),
    preferably in a future context: reduce information density, clarify navigation
    and guide the ordinary import/review/report workflow.
 
