@@ -6,6 +6,7 @@ import sqlite3
 from pathlib import Path
 from uuid import uuid4
 
+from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import QComboBox, QDialog, QDialogButtonBox, QFormLayout, QLabel, QLineEdit, QMessageBox
 
 from parsetrail.core.v2_account_creation import AccountCreationDraft
@@ -39,9 +40,16 @@ class V2FinancialAccountDialog(QDialog):
             self.setMinimumWidth(480)
             self.source_identity = QLineEdit(draft.source_identity or "No account identifier in these rows")
             self.source_identity.setReadOnly(True)
+            self.source_identity.setFrame(False)
+            source_palette = self.source_identity.palette()
+            source_palette.setColor(QPalette.Base, source_palette.color(QPalette.Window))
+            self.source_identity.setPalette(source_palette)
+            self.source_identity.setAccessibleDescription(
+                "Read-only identifier from the document. Text can be selected and copied."
+            )
             self.source_identity.setCursorPosition(0)
             self.source_identity.setToolTip(draft.source_identity or "This document does not identify an account.")
-            form.addRow("Document account", self.source_identity)
+            form.addRow("Document account (read-only)", self.source_identity)
             context_note = QLabel(
                 "Review these editable suggestions before creating the account. "
                 "Creating an account does not change this document’s assignment or add transactions. "
@@ -102,7 +110,13 @@ class V2FinancialAccountDialog(QDialog):
             self.institution.setText(existing.institution_key)
         elif draft is not None:
             self.institution.setText(draft.institution_key)
-        form.addRow("Institution key", self.institution)
+        form.addRow("Institution matching code", self.institution)
+        institution_help = QLabel(
+            "Used locally to match documents to accounts from the same bank or servicer. "
+            "Keep the suggested code unless you are correcting the institution."
+        )
+        institution_help.setWordWrap(True)
+        form.addRow(institution_help)
         self.number = QLineEdit()
         self.number.setPlaceholderText("Optional; full number only")
         self.number.setMaxLength(80)

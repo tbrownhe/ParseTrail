@@ -165,3 +165,32 @@ the feature does not reconstruct hidden digits. Creating account metadata is not
 account assignment, reviewed posting or reconciliation. Batch review, parser or
 schema/matching-policy changes, daily-profile activation and release are outside
 this packet. No new per-feature owner approval gate is introduced.
+
+## Read-only appearance and institution wording follow-up
+
+The owner confirmed that Document account could not be edited but looked like
+an ordinary input, and asked how the institution key works. The field now has an
+explicit read-only label, no editable-style frame and a theme-aware window-color
+background. It stays enabled for selection/copying. The editable institution
+field is labeled Institution matching code, with inline help explaining its
+local matching purpose and advising that the suggested code normally stays.
+
+This is presentation only: matching still filters by exact institution code and
+asset/liability kind before testing complete/eligible abbreviated numbers;
+opaque masked identities still require explicit selection. Multiple accounts at
+one institution share its code. No matching, account storage or trust behavior
+changes. Focused form checks and actual Qt inspection are recorded at closeout.
+
+Follow-up checks: inline creation suite **20 passed in 12.93s**; actual Windows
+Qt modal Cancel/Create/Use journey passed again with zero journals and unchanged
+profile on cancellation. Primary inspected the default 500x437 form: document
+identity now reads as static, selectable source text while authored fields retain
+their input appearance. Evidence: ignored `scratch/inline-account-qa-45d855e3`.
+Ruff/format and whitespace passed. No additional implementation-mirroring style
+test or broad repeated suite was added for this small presentation change.
+
+The versioned public handoff is
+`scratch/archive-demo-f92c025/runtime-updates/20261027-account-field-clarity/Open-updated-demo.cmd`.
+It retains the same existing profile/catalog/preferences and earlier runtime
+versions; only a read-only schema marker was accessed while preparing the bundle.
+Public runtime hashes are checked against final committed source at closeout.
