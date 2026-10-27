@@ -330,6 +330,11 @@ def _safe_code(value: str) -> str:
     return value if re.fullmatch(r"[a-zA-Z_][a-zA-Z0-9_]{0,100}", value) else "unclassified_import_failure"
 
 
+def _profile_digest(path: Path) -> str:
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
 def open_pilot(root: Path, *, smoke: bool = False) -> int:
     isolate(root)
     if not smoke:
@@ -339,7 +344,7 @@ def open_pilot(root: Path, *, smoke: bool = False) -> int:
     from PySide6.QtWidgets import QApplication
 
     workspace = workspace_at(root)
-    before = hashlib.sha256(workspace.profile_path.read_bytes()).hexdigest() if smoke else None
+    before = _profile_digest(workspace.profile_path) if smoke else None
     app = QApplication.instance() or QApplication([])
     window = V2WorkspaceWindow(workspace)
     window.setWindowTitle("ParseTrail - local V2 statement pilot")
@@ -350,7 +355,7 @@ def open_pilot(root: Path, *, smoke: bool = False) -> int:
     result = app.exec()
     window.close()
     if smoke:
-        if hashlib.sha256(workspace.profile_path.read_bytes()).hexdigest() != before:
+        if _profile_digest(workspace.profile_path) != before:
             raise PilotError("pilot_startup_changed_profile")
         print(json.dumps({"startup": "passed", "platform": app.platformName(), "profile_unchanged": True}))
     return result

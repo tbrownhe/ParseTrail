@@ -3,8 +3,8 @@
 Date: 2026-10-26. Roadmap IDs: V2-3/4/5/6/UX/7, P2-4/5.
 Branch/runtime: feature/client-financial-insights, isolated development pilot.
 Authorization: owner selected the real-statement pilot after checking roadmap dependencies, then requested the entire V1 archive.
-Implementation: pilot tooling and concrete isolated preparation complete; local archive path pending.
-Automated verification: synthetic integration and actual pinned Windows launcher passed; no private archive run yet.
+Implementation: pilot tooling/preparation complete; owner-supplied archive intake active.
+Automated verification: synthetic integration and pinned Windows launcher passed; confidential intake/verification in progress.
 Independent review: isolation, evidence provenance, failure bounds and pinner compatibility reviewed; findings fixed.
 Owner acceptance: functional synthetic walkthrough completed separately; real-statement review pending.
 Release authorization: not authorized.
@@ -123,10 +123,21 @@ and confirmed that the selected catalog directory plus both files inherit the
 owner's read permission. The earlier Windows handoff defect does not recur.
 No profile copies or private-key files were found in the public runtime tree.
 
+During populated-pilot review, integrity noted that the optional smoke helper's
+before/after fingerprint used `read_bytes()`, allocating the entire growing
+profile. Current tooling now streams that fingerprint with `hashlib.file_digest`;
+ordinary workspace behavior and the running pinned intake are unchanged. Focused
+pilot checks after this change: **6 passed in 7.09s**; Ruff/format passed.
+Populated-profile validation uses streaming hashes and ordinary pinned `--open`
+under external display suppression, avoiding the older pinned smoke allocation.
+
 ## Remaining work
 
-Obtain the owner-supplied archive path, run the archive import and review failures
-without guessing accounting. Prepare a concrete owner review of
+The owner supplied the SUCCESS archive path directly in chat. The pinned helper
+selected 946 CSV/PDF files recursively and began intake; private path and names
+remain outside Git. Results and subsequent checks will be recorded here.
+
+Finish archive import and review failures without guessing accounting. Prepare a concrete owner review of
 their imported evidence and record any required fixes. Further UI/UX refinement,
 supported-platform/installed acceptance and explicitly authorized signing/release
 actions retain their separate scope.

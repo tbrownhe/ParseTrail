@@ -9,8 +9,8 @@ queue position does not authorize a candidate. Keep it short and link details.
 [Real-statement archive pilot](docs/work/2026-10-26-v2-real-statement-pilot.md)
 is selected. Prepare an isolated V2 profile, import the explicitly supplied entire
 V1 statement archive as unposted evidence, verify reuse/recovery and report actual
-limits. The isolated pilot and launcher are prepared and verified; the local V1
-archive folder path is pending. Keep originals and all V1 profiles unchanged.
+limits. The owner supplied the archive path; intake of 946 selected CSV/PDF files
+is running. Keep originals and all V1 profiles unchanged.
 
 ## Recommended next packets (unselected)
 
