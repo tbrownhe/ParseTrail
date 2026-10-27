@@ -1,84 +1,91 @@
 # ParseTrail repository guidance
 
-ParseTrail is a local-first personal-finance desktop application with a separate
-account, artifact and explicit statement-contribution service. Keep ordinary
-financial data and analysis local.
+ParseTrail includes a local-first personal-finance desktop client, a FastAPI
+account/artifact/explicit-contribution service, a React dashboard and a static
+public website. Ordinary financial data and analysis stay local.
 
-## Workflow and context
+## Scope and context
 
-Read `README.md` and `development.md` for orientation/setup, then
-[ROADMAP.md](ROADMAP.md) for authoritative milestones, scope and release gates,
-and [TODO.md](TODO.md) for selected work. Read its linked packet record and the
-relevant component contracts before substantive work. Use
-[parsetrail-workflow](.agents/skills/parsetrail-workflow/SKILL.md) for substantive
-implementation, integration and repository review; handle simple edits directly.
-The skill owns role routing, packet execution and verification.
+Use the current user request and existing session decisions to establish scope.
+Read `README.md` for unfamiliar project context and `development.md` for setup
+and isolation, then the relevant component guides/contracts and actual code.
+Consult [ROADMAP.md](ROADMAP.md) and [TODO.md](TODO.md) when work affects planned
+product scope, dependencies or release gates. They do not restrict ordinary
+maintenance, investigation or explicitly requested work to the current milestone.
+Historical plans and queue recommendations do not select additional work.
 
-For V2, the cutover, unified-store, ledger and parsing documents are component
-contracts, not parallel roadmaps. Check current code and dated owner decisions.
-A recommended candidate, historical checkbox or handover does not select work.
+Use [parsetrail-workflow](.agents/skills/parsetrail-workflow/SKILL.md) for substantive
+implementation, integration or repository review. It owns role routing, design
+review and verification; handle simple edits directly. Read references selectively.
+Keep current runtime and component contracts separate from dated work evidence.
 
-Substantial packets use one `docs/work/YYYY-MM-DD-<packet>.md` record for scope,
-implementation, decisions and verification; see [the template](docs/work/README.md).
-At closeout update that record, affected contracts and roadmap status, then clear
-the selected TODO entry. Small edits can use a concise entry in an existing record.
-Keep validation logs out of ROADMAP/TODO. Historical acceptance/handover archives
-remain evidence; do not append new work there or create a competing CURRENT file.
+For substantial work, use one [work record](docs/work/README.md) for scope,
+decisions and verification. Update affected contracts and planning status when
+applicable; clear only the TODO entry belonging to that task. Do not create
+parallel plan/acceptance/handover logs or append new work to historical archives.
 
-## V2 development and human review
+## Team and ownership
 
-Within the selected scope, agents may design the system and implement and verify
-a first functional UI without a human checkpoint for each feature or UI change.
-Use automated checks and agent review to finish development packets and continue
-implementation. Consolidate human review into a later integrated UI/UX pass,
-with a disposable end-to-end walkthrough prepared at that milestone.
+Subagent use is authorized within the user's task when it adds value and the
+session permits it. Use the smallest useful team from [.codex/agents](.codex/agents/):
+`ui_ux`, `desktop`, `evidence`, `ledger`, `backend`, `web`, `integrity`, `acceptance`.
 
-Ask the owner for unresolved product/accounting decisions that existing contracts
-cannot settle, an explicitly requested human review, or a specific native/platform,
-release or live-profile gate that requires owner action. Run available native
-checks autonomously. A new feature or substantial UI change alone does not
-create a human gate. Record unperformed human acceptance honestly and keep
-unrelated authorized development moving. This prospective policy supersedes
-older per-feature GUI acceptance wording; historical acceptance records remain
-valid, and release/platform gates remain separate.
+- One primary integrator owns the user conversation, scope, cross-component
+  contracts and integrated result. Specialists do not recursively delegate.
+- Give specialists a compact brief: outcome, relevant decisions/contracts,
+  explicit write set, allowed data, verification and expected return. They need
+  not repeat broad repository orientation for a narrow assignment.
+- Assign one writer per shared file/schema/generated output. Parallelize disjoint
+  implementation and read-only investigation; serialize dependencies. Never
+  revert others' edits or switch a shared checkout's branch under ongoing work.
+- Use independent review for material financial, evidence, persistence, security
+  or privacy changes. If delegation is unavailable, make a separate review pass
+  and disclose that limitation. Routine small work does not need a full team.
+- Delegation inherits existing permissions; it does not authorize private-data
+  access, production mutations, publication or release.
 
-## Subagents
+## Design and human review
 
-Subagent use is authorized for work within the user's task. The primary agent
-may delegate without asking for additional permission when a specialist or
-independent review adds value and the session supports it. Use the custom
-agents in [.codex/agents](.codex/agents/): `evidence`, `ledger`, `desktop`,
-`integrity`, `acceptance` and `service_web`.
+Desktop, dashboard and website work includes usability and visual quality.
+Substantial interaction changes receive agent design review before implementation
+and inspection of the actual integrated UI afterward. Small fixes need only
+proportionate checks. Follow the workflow's [design criteria](.agents/skills/parsetrail-workflow/SKILL.md#design-and-ui-verification).
 
-- Keep one primary integrator responsible for the user conversation, scope,
-  shared contracts, integration and acceptance records. Specialists return
-  findings and decisions to the primary; they do not recursively delegate.
-- Give each assignment an outcome, relevant contracts, explicit write set,
-  permitted data, verification and return expectations. Assign one writer per
-  shared file or schema, especially `v2_profile_store.py`. Parallelize disjoint
-  work or read-only investigation; serialize conflicting edits.
-- Use independent integrity review for material accounting, evidence,
-  persistence or financial-report claims as described in the workflow. Small
-  tasks do not require a full team. If delegation is unavailable, perform the
-  relevant checks in the primary and disclose any review limitation.
-- Delegation carries the task's existing authorization and session permissions;
-  it does not grant access to additional private data or authorize release,
-  deployment, publication or live-profile actions.
+Agents make ordinary implementation and design decisions within scope. No new
+feature or substantial UI change creates a per-feature owner approval gate.
+Consolidate human review at the applicable integrated milestone or an explicitly
+requested review. Ask only for unresolved product/accounting choices or specific
+human, platform, live-profile or release actions that need owner input. Continue
+independent authorized work. Record agent verification, actual owner acceptance
+and release authorization separately.
+
+<a id="v2-development-and-human-review"></a>
+This policy supersedes earlier first-functional-UI and per-feature human-review
+wording for ongoing development; historical acceptance remains evidence.
 
 ## Project boundaries
 
 - Preserve exact money, typed dates, source locations and provenance. Keep
   imported evidence, reviewed interpretations and derived reports distinct.
-  Unknown values stay unknown; do not invent balancing entries or count card
-  repayments/internal transfers as a second expense.
-- V2 uses one fresh authoritative SQLite profile. Keep 1.x databases, archives
-  and statements read-only during development; write synthetic/disposable
-  profiles. Do not add 1.x migrations or aliases to the V2 runtime. Keep private
-  paths, contents, credentials and signing material out of Git and routine logs.
-- Keep client work on the active client branch. Follow the documented separate
-  service-branch handoff when a client feature needs a server interface. Existing
-  roadmap approval does not authorize unselected features or release actions.
-- Run meaningful focused checks and the relevant integration suite. Parser work
-  may require `devtools/parser_engine_pilot` tests beyond `client/tests`. Follow
-  the workflow's isolation and command guidance. Record tested platforms;
-  offscreen success does not establish owner native acceptance or Intel support.
+  Unknown stays unknown; never invent balancing entries or count internal
+  transfers/card repayments as another expense. Keep material qualifications
+  beside affected values and full supporting detail discoverable.
+- Use synthetic/disposable profiles and isolated test services for development.
+  Live profiles, statements and archives remain read-only unless the task
+  explicitly authorizes otherwise. Keep private content, credentials and signing
+  material out of Git and routine logs; do not load root `.env` to discover data.
+- The current client uses one authoritative fresh profile with an independent
+  1.x fallback. Follow its lifecycle contract; do not introduce legacy migrations
+  or aliases by interpreting historical experiments as current requirements.
+- The service receives ordinary finance data only through the explicit statement
+  contribution flow. Preserve its confirmation and encryption boundaries;
+  decrypted contributed statements stay in process memory. Artifact signing
+  authority remains separate from public hosting.
+- Follow applicable branch/API/release contracts. A client-only assignment does
+  not authorize service changes; an explicitly scoped full-stack task may cover
+  multiple components with coordinated ownership. Deployment, production signing,
+  publication and daily-profile activation require their authorized scope.
+- Run meaningful focused checks and relevant integration checks. Verify isolation
+  before running tools; record actual platforms and untested limits. Offscreen
+  or browser automation does not establish owner acceptance or another platform's
+  native behavior.

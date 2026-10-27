@@ -105,6 +105,7 @@ from routing diagnostics.
 - [Roadmap and release gates](ROADMAP.md), [current work](TODO.md), and
   [packet plans and verification](docs/work/README.md)
 - [Contributor setup and local development](development.md)
+- [Agent scope and coordination](AGENTS.md) for client, backend, dashboard and public-site work
 - [Desktop architecture, tests, and releases](client/README.md)
 - [Backend operations and tests](backend/README.md)
 - [Server deployment runbook](deployment.md)

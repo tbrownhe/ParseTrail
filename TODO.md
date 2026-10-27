@@ -6,16 +6,16 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None active. [Archive-sized review performance](docs/work/2026-10-26-v2-review-performance.md)
-is implemented and verified; a versioned launcher opens the same existing pilot
-with the optimized runtime. Owner data, evidence format and agent roles are unchanged.
+None active. The approved [project-wide agent/workflow configuration](docs/work/2026-10-26-project-agent-workflow.md)
+is implemented and verified. This documentation/configuration task does not
+select the broad application redesign or change owner data and evidence formats.
 
 ## Recommended next packets (unselected)
 
 1. [Further UI/UX refinement](docs/work/2026-10-26-v2-integrated-ui-review.md#further-owner-feedback-and-recommended-next-work),
-   preferably in a future context: reduce information density, clarify navigation
-   and guide the ordinary import/review/report workflow. The owner is independently
-   reviewing the development-agent team/workflow before further broad UI/UX work.
+   reduce information density, clarify navigation and guide the ordinary
+   import/review/report workflow. The owner approved the project-wide team/workflow
+   update; broad application refinement remains a separate unselected packet.
 
 ## Remaining review and action gates
 
@@ -35,7 +35,7 @@ they are not selected by this closeout.
 
 [Archive-sized review performance](docs/work/2026-10-26-v2-review-performance.md)
 completed the measured read optimization and existing-profile runtime handoff.
-Owner accounting review, agent-workflow review, later interface refinement and
+Owner accounting review, later interface refinement and
 supported-platform/release gates remain separate.
 
 ## Decisions and gates

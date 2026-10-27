@@ -5,12 +5,14 @@ packet and confirm that symbols and commands still exist before use.
 
 ## Runtime and contracts
 
-- `ROADMAP.md`: sole ordered milestones, scope decisions and release gates.
-  `TODO.md`: selected packet and a short candidate queue. `docs/work/README.md`:
-  standard packet plans, decisions and verification; read the linked record.
+- `AGENTS.md` and the workflow skill: project-wide scope, routing and review.
+  `ROADMAP.md` and `TODO.md`: affected planned scope, dependencies and release
+  gates, not prerequisites for every explicit request. `docs/work/README.md`:
+  substantial work plans, decisions and verification.
 
-- `client/src/parsetrail/main.py`: fixed parser worker dispatch, explicit
-  `--v2` workspace path, then legacy runtime bootstrap.
+- `client/src/parsetrail/main.py`: isolated worker/diagnostic dispatch, then
+  ordinary fresh-profile startup; `--v2` is optional. The published 1.x fallback
+  is independent, not an ordinary legacy bootstrap in this entry point.
 - `docs/client-v2-cutover.md`: current fresh-profile launch boundary. `docs/client-v2-unified-store.md`: single store.
 - `docs/client-ledger-contract.md`: signs, review, dates, corrections and claims.
 - `docs/client-v2-menu-inventory.md`: implemented actions and undecided deferrals.
@@ -45,6 +47,10 @@ assertions, reconciliation snapshots and report queries. `core/v2_workspace.py`
 coordinates selected files, catalog and profile operations.
 `core/v2_preferences.py` holds separate global V2 preferences, both matching and
 assumed-posting-date opt-ins defaulting off.
+Positions/history use `account_positions`; reconciliation separates live
+`statement_reconciliation_checks` from persisted `save_reconciliation_decision`,
+`reconciliation_history` and `reconciliation_snapshot`. Read current contracts
+and implementations rather than treating completed slices as future dependencies.
 
 Check stale or absent openings, zero openings, current review bases, repeated
 imports/decisions, failed transactions, original/reversal/replacement arithmetic,
@@ -62,76 +68,46 @@ and `v2_reviewed_reports.py`. Workbook serialization is in
 
 Check empty, pending, refused, corrected, stale and cancelled states; restart
 persistence; exact numeric ordering; long labels/path copyability and scope
-wording. Agents verify the first functional UI and continue development without
-per-feature human acceptance. Accumulate useful scenarios for the later integrated
-UI/UX pass; prepare its disposable end-to-end launch at that milestone. Preserve
-specifically identified native/platform and release gates.
+wording. Substantial interaction work includes an agreed journey/design and
+inspection of the actual Qt result with working fonts, relevant window sizes,
+long lists and keyboard focus. Apply the workflow's design criteria without
+per-feature owner approval. Prepare disposable human walkthroughs when assigned;
+preserve concrete native/platform and release gates.
 
-## Candidate starting points
+## Backend, dashboard and public website
 
-These are technical entry points, not another queue or authorization. Use TODO
-to establish selected scope and create its packet record before substantial work.
-Code remains authoritative; recheck schema/runtime and existing checks at pickup.
-Here `core/` and `gui/` are under `client/src/parsetrail/`.
+- Backend entry: `backend/app/main.py`, `backend/app/api`, `backend/app/core`
+  and `backend/app/models.py`; schema revisions under `backend/app/alembic`.
+  Read `backend/README.md`, `docs/web-authentication.md`,
+  `docs/privacy-and-data-flow.md` and the affected API/artifact contract.
+- Dashboard: `frontend/src/routes`, `frontend/src/components`, `frontend/src/hooks`
+  and `frontend/src/theme.tsx`. Read `frontend/README.md`; handwritten API
+  compatibility code lives above `frontend/src/client/generated`.
+- Public site: `website/*.html`, `website/assets`, `website/tests` and
+  `website/nginx.conf`. The dashboard is an account/admin surface; the public
+  site explains the product and distributes artifacts. Neither synchronizes
+  ordinary desktop finance data. Match public claims to supported behavior.
+- Backend and web agree API changes and designate one generated-output writer.
+  Use `scripts/generate-client.sh` or `npm run generate-client` from `frontend`;
+  never hand-edit generated transport/schema files. Inspect affected consumers.
+- For substantial web interactions use ui_ux plus web, inspect actual browser
+  rendering, responsive states, keyboard/focus and failure behavior. Test static
+  metadata/configuration rendering without introducing untrusted HTML. Use the
+  component's relevant tests rather than making every site edit start a backend.
 
-### Account positions and history
+## Tooling, documentation and instruction work
 
-- Read the ledger report contract, single-store contract and occurrence-review
-  contract, plus `docs/work/2026-10-25-v2-source-overlap.md` for the completed
-  safeguard and its limits. Current `financial_journal_summary` is period
-  movement with openings separate, not an as-of balance.
-- Start in `core/v2_profile_store.py`: `financial_journal_summary`,
-  `opening_decision`, `statement_reconciliation_checks`, correction reads and
-  conservative unallocated-source counts; UI in `gui/v2_reviewed_reports.py`.
-- Define the selected report contract before UI: explicit as-of/currency,
-  recorded journal versus source-supported position, natural asset/liability
-  direction, absent/stale openings as unknown, correction arithmetic, overlap,
-  pending/unreviewed scope and freshness. Include exact synthetic sign/date cases.
-- Current reconciliation is computed live with a rule/input version. A previously
-  saved cutoff requires V2-4 durable reconciliation history. A positions view can
-  proceed with truthful live-check wording; it cannot claim that history exists.
-- Focused starting tests under `client/tests/`: `test_v2_category_reports.py`,
-  `test_v2_reviewed_openings.py`, `test_v2_source_openings.py`,
-  `test_v2_statement_reconciliation.py`, `test_v2_reviewed_reports_dialog.py` and
-  `test_v2_source_overlap.py`. Add meaningful as-of/unknown/correction cases.
+Choose checks for the changed artifact: TOML parsing and role discovery/schema
+for agent files; skill validation and realistic task scenarios for workflow
+changes; local links/anchors and current-code checks for documentation. Do not
+run unrelated application suites for prose/config-only work. Keep dated task
+results in the work record, not in this map.
 
-### Remaining review safeguards
-
-- Read the occurrence-review, ledger and single-store contracts and the completed
-  overlap record first. The current matcher uses exact bound account/signed
-  amount and source dates within three calendar days across sources, permitting
-  activity/posting role differences. Supporting repeats are not allocations.
-  Ordinary bindings retain history locks; explicit reviewed correction requires
-  zero active consumption and no opening anchor, retaining/invalidation history.
-- Select one outcome: wider matching, history-locked binding repair, existing
-  double-posting correction, or transfer correction. These are distinct packets;
-  do not turn them into a general import rewrite or erase prior review/journals.
-- Start at store `source_overlap_inventory`, `record_source_overlap_review`,
-  `source_overlap_posting_blocks`, account-binding mutation guards,
-  `transfer_candidates` and `post_reviewed_transfer`; GUI adapters are the
-  overlap, source/account-binding and transfer review dialogs.
-- Starting tests: `test_v2_source_overlap.py`, `test_v2_source_overlap_dialog.py`,
-  `test_v2_source_overlap_binding_dialog.py`, `test_v2_transfers.py`,
-  `test_v2_reviewed_journal.py` and `test_v2_profile_snapshot.py`. Preserve
-  one occurrence per source, stale-form refusal, atomic failure, unique active
-  allocation and original/reversal/replacement history.
-
-### Parser and catalog readiness
-
-- Read the current parsing contract and family map. The pilot README is a test/
-  tool entry point with historical chronology, not another current work queue.
-- Start at `core/v2_source_pipeline.py`, `core/v2_catalog_admission.py`,
-  `core/v2_data_catalog.py`, `core/v2_worker_limits.py` and `client/scripts/v2_catalog_release.py`.
-  Choose a family/operation/platform or catalog outcome before running broad checks.
-- Starting client tests: `test_v2_catalog_import.py`, `test_v2_data_catalog.py`,
-  `test_v2_catalog_release.py` and `test_v2_worker_entry.py`; include the affected
-  synthetic `devtools/parser_engine_pilot/` modules. Client `-k v2` alone does
-  not exercise that directory; inspect isolation before running its tools.
-- CSV/PDF workspace admission exists; XLSX remains isolated. Keep execution,
-  source parity, capture, accounting, Windows/Intel limits and installed/offline
-  trust distinct. Existing fixture authorization does not require broad private
-  replay. Production signing/service publication needs its own scope; DEC-2
-  settles the first-release service dependency and blocks only dependent work.
+Deployment/configuration tooling follows `deployment.md` and affected scripts
+under `scripts/deployment`; client packaging follows its release contracts.
+Inspection or local disposable rehearsal does not itself authorize production
+mutation, signing or publication. Component-specific branch/handoff contracts
+apply to their scope; do not hardcode the current branch into reusable roles.
 
 ## Windows source verification
 
@@ -162,19 +138,12 @@ tooling. Pre-commit uses Ruff and Biome; some hooks fix files, so inspect its di
 Hosted lint currently lists `backend/app`, `client/src`, `client/tests` and
 `scripts/deployment`; explicitly check modified devtools or client scripts too.
 
-For the integrated UI/UX milestone or an explicitly requested earlier review,
-use this owner-launched synthetic walkthrough in a fresh PowerShell session without
-`QT_QPA_PLATFORM=offscreen`:
-
-```powershell
-$env:PYTHONPATH='.;client/src;client'
-& .\client\.venv\Scripts\python.exe -m devtools.parser_engine_pilot.open_v2_workspace --demo --comparison
-```
-
-The demo owns a temporary profile and test-signed catalog. Extend or choose a
-different existing disposable launcher to cover the milestone's integrated flows.
-This command is a review aid, not a required human checkpoint after every feature.
-Do not treat a sandbox-launched window as the owner's Windows walkthrough.
+For assigned integrated human review, `devtools/v2_review_demo/README.md`
+describes preparation of a disposable synthetic profile, fixture-signed catalog
+and pinned runtime with a Windows launcher. Choose/extend a disposable aid for
+the affected journey; do not use a historical demo as the current runtime by
+default. Human review runs without `QT_QPA_PLATFORM=offscreen`. Sandbox or
+suppressed-display checks do not establish the owner's visible walkthrough.
 
 ## Service/web and release checks
 

@@ -35,40 +35,37 @@ These constraints apply when changing any component:
   migration, restore path, or compatibility error instead of silently admitting
   incompatible data.
 
-Existing financial fixtures referenced by the local `.env` are authorized for
-confidential local testing. Read only the explicit fixture inputs needed for that
-task; this authorization does not let automated suites load production database
-settings. Use copied client databases for mutating acceptance, and commit only
-synthetic fixtures or redacted evidence.
+Existing confidential local-test fixture authorizations remain valid for
+task-relevant inputs explicitly identified by the request or prior owner decision.
+Do not load or enumerate root `.env` to discover inputs or widen that scope.
+Fixture authorization does not let automated suites load production database
+settings. Use disposable copies for authorized mutating fixture checks, keep live
+sources/profiles read-only, and commit only synthetic fixtures or redacted evidence.
 
-Read [ROADMAP](ROADMAP.md) for the authoritative milestones, scope decisions and
-release gates, then [TODO](TODO.md) for the selected packet. Read its linked
-[work record](docs/work/README.md) and relevant component contracts; old proposals
-and handovers are historical evidence. Candidate priority does not select work.
-Use focused, reviewable chunks on `feature/client-financial-insights` for current
-client development. If a client feature requires a server interface change,
-stop at that boundary, merge accepted client work first, and use the documented
-separate service-branch handoff. Server P0 remains closed.
-For ongoing V2 development, agents design and implement a first functional UI
-and complete development packets using appropriate automated checks and agent
-review. Human UI/UX review is consolidated at a later integrated milestone;
-new features and UI changes do not require per-feature owner walkthroughs.
-Follow the [current review policy](AGENTS.md#v2-development-and-human-review),
-which supersedes older per-slice GUI gates. Preserve specifically identified
-native decoder, packaging, installed/offline and release checks, requesting
-targeted Intel/native testing where needed. Record platforms actually tested.
-Use one [packet record](docs/work/README.md#packet-template) for substantial scope,
-work, commands/results, review findings and actual owner decisions/acceptance.
-At closeout update that record, affected contracts and roadmap status, then clear
-the selected TODO entry. Keep validation narratives out of TODO and the roadmap;
-do not append new work to the historical acceptance monolith or create another
-current-work handover. Small edits can use a concise entry in an existing record.
+For agent scope, coordination and review, follow [AGENTS.md](AGENTS.md) and
+[parsetrail-workflow](.agents/skills/parsetrail-workflow/SKILL.md). The same team
+supports client, API, dashboard, website, tooling and documentation work. Start
+from the current request and relevant component contracts; consult [ROADMAP](ROADMAP.md)
+and [TODO](TODO.md) for affected planned work and release gates. An empty board
+does not block explicitly requested maintenance or investigation.
 
-The roadmap distinguishes approved program outcomes, selected packets, unselected
-proposals and deferred work. Historical C1/C2a, migration experiments and 1.4.2
-acceptance do not select new features. Stop only work dependent on an unresolved
-owner decision or specifically identified gate; pending consolidated UI/UX review
-does not block unrelated authorized implementation.
+Check the actual branch and applicable component handoff/release contracts.
+Keep concurrent writers coordinated; do not switch branches under other work.
+A client-only task does not select service changes, while an explicitly scoped
+full-stack task can coordinate multiple components. Historical branch names,
+completed programs and old handovers do not select or forbid new requested work.
+
+Substantial UI work includes agent design review and inspection of the actual
+Qt/browser result, with proportionate usability and accessibility criteria.
+Follow the [design and human-review policy](AGENTS.md#design-and-human-review);
+new features and UI changes do not require per-feature owner approval. Preserve
+specific native, installed/offline and release gates; record actual tested
+platforms and actual owner feedback separately from agent checks.
+
+Use one [work record](docs/work/README.md#packet-template) for substantial scope,
+decisions and verification. Update affected contracts and roadmap/TODO entries
+when applicable; keep validation details in the record and historical archives
+unchanged. Small edits can use a concise existing entry.
 
 ## Prerequisites
 

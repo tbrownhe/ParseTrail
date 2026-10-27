@@ -3,19 +3,21 @@
 This is the standard home for substantial packet plans, completed work,
 verification and dated decisions. [ROADMAP](../../ROADMAP.md) owns priorities,
 scope and release gates; [TODO](../../TODO.md) points to selected work. Current
-contracts own lasting behavior. Start with those documents, not historical logs.
+contracts own lasting behavior. Explicit user requests can also select work
+outside the current board; use the relevant context, not historical logs.
 
 ## Current records
 
 | Record | Roadmap scope | Implementation / evidence |
 | --- | --- | --- |
+| [Project-wide agent team and workflow](2026-10-26-project-agent-workflow.md) | Project-wide engineering guidance | Approved generic client/API/dashboard/website roles and design-review policy; configuration and scenario verification recorded here. |
 | [Archive-sized review performance](2026-10-26-v2-review-performance.md) | V2-3/4/5/UX/7 | Verified one-pass source reads cut measured cash/coverage latency; full integration passed and a versioned runtime opens the same owner pilot. Broad UI/UX and agent-role changes deferred. |
 | [Real-statement V1 archive pilot](2026-10-26-v2-real-statement-pilot.md) | V2-3/4/5/6/UX/7, P2-4/5 | All selected archive files imported and independently verified as unposted evidence; actual retry, backup/restore/recovery and populated launcher passed. Owner accounting review pending. |
 | [Independent V2 installation identity](2026-10-26-v2-installation-identity.md) | V2-1/7 | Completed code/portable/native-compiler checks, independent review and full unsigned Windows setup compilation; actual installation acceptance remains open. |
 | [Starter-catalog signing inputs](2026-10-26-v2-catalog-signing-inputs.md) | P2-4/5, V2-7 | Preparation implemented/verified/reviewed; exact final-source unsigned candidate ready, production signing/installed acceptance remain open. |
 | [Default V2 runtime and offline diagnostics](2026-10-26-v2-runtime-cutover.md) | V2-1/6/7, P2-3/4/5 | Completed development, independent review and final frozen Windows verification; owner/Intel/installed/release gates remain. |
 | [Account-total loan-register activity](2026-10-26-v2-liability-register.md) | V2-4/5, CF2 | Completed development and independent review; finite Yamaha category review, exact source dates and neutral whole-liability repayment semantics. |
-| [Integrated disposable UI/UX review](2026-10-26-v2-integrated-ui-review.md) | V2-UX, V2-6/7 | Functional Windows walkthrough completed, all stated features worked; owner requests another pass to reduce interface confusion, preferably future context. Local real-statement pilot recommended, unselected; platform/release gates separate. |
+| [Integrated disposable UI/UX review](2026-10-26-v2-integrated-ui-review.md) | V2-UX, V2-6/7 | Functional Windows walkthrough completed; interface clarity needs further work. The subsequently selected real-statement pilot is prepared and verified; owner accounting review and platform/release gates remain separate. |
 | [Evidenced loan principal and interest payments](2026-10-26-v2-loan-payments.md) | V2-4/5, CF2 | Completed development and independent review; exact bank counterpart, printed component proof, canonical principal provenance and whole-event history. |
 | [HSA cash components and owned outflows awaiting receipts](2026-10-25-v2-hsa-cash.md) | V2-4/5, CF2 | Completed development and independent review; finite cash scope, explicit purposes, unresolved clearing and authored expected-destination metadata. |
 | [Source closing values and dated-value withdrawal](2026-10-25-v2-source-values.md) | V2-4/5, P2-4 | Completed development and independent review; finite proof/scope/sign, conflicts, nonposting history and exact scoped source-review guards. |
@@ -42,32 +44,36 @@ contracts own lasting behavior. Start with those documents, not historical logs.
 
 Use `YYYY-MM-DD-<packet>.md`. One record can begin with the packet plan and
 become its closeout; update it when correcting its evidence. Put implementation,
-automated verification, independent review, actual owner acceptance and release
-authorization in separate fields. Use `not performed`, `pending` or `not applicable`
+automated verification, design verification, independent review, actual owner
+acceptance and release authorization in separate fields. Use `not performed`, `pending` or `not applicable`
 with the reason rather than treating an omitted check as passed.
 
 For small changes, a concise dated entry in an appropriate existing work record
 can be sufficient. Do not create a separate plan, handover, acceptance report and
-decision log for the same packet. Record useful UX scenarios here for the later
-integrated milestone; a new feature alone does not create a human gate.
+decision log for the same packet. Record proportionate agent design/UI verification
+and useful scenarios for any required integrated human review; a new feature alone
+does not create a human gate.
 
 ## Packet template
 
 ```markdown
 # <Outcome>
 
-Date: YYYY-MM-DD. Roadmap IDs: <IDs>. Branch/runtime: <scope>.
+Date: YYYY-MM-DD. Roadmap IDs: <IDs or not applicable>. Branch/components: <scope>.
 Authorization: <owner request/decision and limits>.
 Implementation: planned | active | complete | incomplete.
 Automated verification: <result or not performed>.
+Design verification: <criteria, actual UI inspection/result, or not applicable>.
 Independent review: <result or not performed and why>.
 Owner acceptance: <actual result, pending milestone, or not applicable>.
 Release authorization: <explicit result or not authorized/not applicable>.
 
 ## Scope and controlling decisions
 Outcome, non-goals, contracts, owned files/roles, permitted data/write boundary,
-financial claims and meaningful verification. Capture unresolved decisions and
-their dependent work; retain any actual owner decision with its date/basis.
+material claims and meaningful verification. Include user journeys and observable
+interaction/visual/accessibility criteria for substantial UI work. Capture
+unresolved decisions and their dependent work; retain actual owner decisions
+with their date/basis.
 
 ## Result and review
 Behavior/files changed, reviewed code reference or baseline/diff, failure paths,
@@ -77,6 +83,8 @@ review findings/resolution, and preserved unknowns. Update lasting contracts.
 Exact commands, platform/runtime, results and untested limits. Link committed
 synthetic checks; keep private paths, data, secrets and raw reports out of Git.
 Distinguish source replay/parity, offscreen tests, native checks and human review.
+For substantial UI work record inspected implementation/screenshots, task-based
+criteria results and untested usability/accessibility limits.
 
 ## Remaining work
 Roadmap IDs, actual blockers, pending UX/platform/release gates and reproducible

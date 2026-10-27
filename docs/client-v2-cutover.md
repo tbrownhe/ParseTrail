@@ -6,14 +6,13 @@ This document owns the fresh-profile, runtime and release-boundary contract.
 verification belong in [work records](work/README.md). Earlier planning and
 native acceptance narratives remain in the [archived cutover plan](work/archive/2026-10-25-client-v2-cutover.md).
 
-## Development review update — October 25, 2026
+## Development review policy
 
-The owner approved autonomous design and first functional V2 UI implementation
-within selected scope, completed with meaningful automated checks and agent
-review. Follow [the current review policy](../AGENTS.md#v2-development-and-human-review).
-Human UI/UX review is consolidated at V2-UX; new features and substantial UI
-changes do not require individual owner acceptance. Keep historical owner
-acceptance intact and identify specifically missing platform/release checks.
+Follow the project-wide [design and human-review policy](../AGENTS.md#design-and-human-review)
+and [workflow](../.agents/skills/parsetrail-workflow/SKILL.md). Desktop development
+includes agent design and implemented-UI verification; integrated human review
+remains at V2-UX without per-feature owner approval. Keep historical acceptance
+intact and identify specifically missing platform/release checks separately.
 
 ## Release boundary
 
