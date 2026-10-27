@@ -31,18 +31,21 @@ def launcher_text(
     helper = str(_helper_path(helper_relative)).replace("/", "\\")
     workspace = "%~dp0."
     runtime = "%DEMO_ROOT%\\runtime"
+    log = "%DEMO_ROOT%\\last-launch.log"
     if workspace_root is not None:
         workspace = str(workspace_root.resolve())
         if any(character in workspace for character in ('"', "\r", "\n")):
             raise ValueError("runtime_workspace_path")
         workspace = workspace.replace("%", "%%")
         runtime = "%~dp0runtime"
+        log = "%~dp0last-launch.log"
     return (
         "@echo off\r\nsetlocal DisableDelayedExpansion\r\nchcp 65001 >nul\r\n"
         f'set "DEMO_ROOT={workspace}"\r\n'
-        'set "DEMO_LOG=%DEMO_ROOT%\\last-launch.log"\r\n'
+        f'set "DEMO_LOG={log}"\r\n'
         f'cd /d "{runtime}"\r\n'
         "if errorlevel 1 exit /b 3\r\n"
+        '"%COMSPEC%" /d /c exit 1\r\n'
         '"' + executable + f'" -B -X utf8 "{runtime}\\{helper}" --open "%DEMO_ROOT%" >"%DEMO_LOG%" 2>&1\r\n'
         'set "DEMO_EXIT=%ERRORLEVEL%"\r\n'
         'if not "%DEMO_EXIT%"=="0" (\r\n'

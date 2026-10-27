@@ -239,3 +239,64 @@ def test_runtime_bundle_refuses_incompatible_existing_workspace(tmp_path):
         pin_runtime(TOOL.parents[2], bundle, Path(sys.executable), TOOL, workspace_root=workspace)
     assert not (bundle / "runtime").exists()
     assert (workspace / "review.db").read_bytes() == before
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="Windows batch redirection sharing semantics")
+def test_launcher_uses_own_log_and_reports_redirection_failure(tmp_path):
+    import ctypes
+    from ctypes import wintypes
+
+    from devtools.v2_review_demo.pin_runtime import launcher_text
+
+    workspace, bundle = tmp_path / "workspace", tmp_path / "bundle"
+    workspace.mkdir()
+    runtime = bundle / "runtime"
+    runtime.mkdir(parents=True)
+    marker = tmp_path / "started.txt"
+    (runtime / "helper.py").write_text(
+        "import pathlib\n" + f"pathlib.Path({str(marker)!r}).write_text('started')\n" + "print('started')\n"
+    )
+    launcher = bundle / "Open.cmd"
+    launcher.write_text(launcher_text(Path(sys.executable), Path("helper.py"), workspace_root=workspace))
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.CreateFileW.argtypes = [
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    ]
+    kernel.CreateFileW.restype = wintypes.HANDLE
+    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+
+    def lock_log(path):
+        handle = kernel.CreateFileW(str(path), 0x40000000, 1, None, 4, 0x80, None)
+        assert handle != ctypes.c_void_p(-1).value
+        return handle
+
+    def launch():
+        return subprocess.run(
+            [os.environ["COMSPEC"], "/d", "/c", str(launcher)],
+            capture_output=True,
+            text=True,
+            stdin=subprocess.DEVNULL,
+            timeout=15,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+
+    old_log = lock_log(workspace / "last-launch.log")
+    try:
+        result = launch()
+        assert result.returncode == 0 and marker.read_text() == "started"
+        assert "started" in (bundle / "last-launch.log").read_text()
+    finally:
+        kernel.CloseHandle(old_log)
+    marker.unlink()
+    blocked_log = lock_log(bundle / "last-launch.log")
+    try:
+        result = launch()
+        assert result.returncode != 0 and not marker.exists()
+    finally:
+        kernel.CloseHandle(blocked_log)

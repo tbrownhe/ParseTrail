@@ -15,7 +15,8 @@ the evidence format, integrity checks and current owner-reviewed profile.
 
 1. [Further UI/UX refinement](docs/work/2026-10-26-v2-integrated-ui-review.md#further-owner-feedback-and-recommended-next-work),
    preferably in a future context: reduce information density, clarify navigation
-   and guide the ordinary import/review/report workflow.
+   and guide the ordinary import/review/report workflow. The owner is independently
+   reviewing the development-agent team/workflow before further broad UI/UX work.
 
 ## Remaining review and action gates
 

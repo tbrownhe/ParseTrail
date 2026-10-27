@@ -4,7 +4,7 @@ Date: 2026-10-26. Roadmap IDs: V2-3/4/5/UX/7.
 Branch/runtime: feature/client-financial-insights, source and pinned pilot.
 Authorization: owner reported approximately ten-second Cash activity/Statement coverage actions on the real-statement pilot.
 Implementation: measured optimization complete; integration and updated-runtime handoff active.
-Automated verification: focused store/tooling checks passed; full client integration running.
+Automated verification: focused checks, 2,141-test client integration and final 17-test devtool integration passed.
 Independent review: final store equivalence, corruption, concurrency and failure paths passed; runtime-bundle adapter under review.
 Owner acceptance: performance/usability issue reported; follow-up pending.
 Release authorization: not authorized.
@@ -40,6 +40,12 @@ The owner's further comment that they are not an accountant and feel lost is
 recorded as product feedback. Explain the purpose of source snapshots and the
 ordinary import/assign/review/report progression plainly; larger interface
 simplification remains its separate later pass rather than this performance fix.
+
+During this packet the owner reiterated not to fix broad UI/UX now, clarified
+that the proposed architecture change concerns the development-agent team and
+workflow, and chose to complete an independent review of that. Agent definitions,
+AGENTS.md and workflow skill instructions remain unchanged. This packet closes
+only the measured performance fix and its verified runtime handoff.
 
 ## Result and review
 
@@ -93,6 +99,14 @@ and catalog without replacing the old pinned runtime. Default preparation stays
 compatible. This prepares a concrete optimized handoff while preserving current
 owner review state; versioned-bundle generation follows the clean code commit.
 
+The first exact updated-launcher probe found a locked existing workspace startup
+log, preventing Python invocation while the batch returned zero. Updated bundles
+now keep their own startup logs and initialize a failing command status before
+redirection, so a locked log cannot yield false startup success. A native Windows
+sharing-mode regression proves both launching beside a held-open workspace log
+and nonzero refusal when the bundle's own log is locked. No owner window was
+closed or altered by the agent.
+
 ## Verification
 
 Windows AMD64/Python 3.13.15/PySide6 6.11.2; `PYTHONPATH=.;client/src;client`,
@@ -106,14 +120,19 @@ Qt offscreen. Tests use `client/.venv/Scripts/python.exe -m pytest
   workspace/schema-refusal cases **2 passed, 6 deselected in 5.20s**.
 - Independent separated-workspace/schema cases: **2 passed in 5.08s**;
   read-only tooling review found no issue for the required fresh bundle directory.
+- Actual Windows launcher sharing/redirection regression: **1 passed in 1.22s**;
+  final full devtool integration after that fix: **17 passed in 50.59s**.
+- Full `client/tests`: **2141 passed, 4 skipped in 994.67s**, including the new
+  regressions. Process-only PowerShell execution policy and the existing scratch
+  NSIS compiler enabled native packaging fixture checks; no installer was run.
 
 Coverage includes bulk/single equality, unbound and zero-observation sources,
 verification of unrelated sources exactly once, 15 source/evidence/definition/
 inventory/missing-snapshot corruption cases across cash/coverage/overlap, WAL
 concurrent commits, next-read freshness, same-connection later writes, transaction
 cleanup, preserved review basis, runtime schema refusal and no profile copy/write.
-Changed-file Ruff/format passed. Full client integration remains in progress;
-parser declarations/engine/worker behavior are unchanged by this packet.
+Changed-file Ruff/format passed. Parser declarations/engine/worker behavior are
+unchanged by this packet, so no additional parser-pilot rerun was required.
 
 Confidential function profiles and before/after/equality reports remain under
 ignored `scratch/v2-review-performance-85820e2`; no source contents/identifiers
