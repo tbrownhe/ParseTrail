@@ -72,6 +72,10 @@ review, with verified original preservation and no authored accounting decisions
 [Inline account creation](docs/work/2026-10-27-inline-account-creation.md) now lets
 reviewers create an editable document-backed account without leaving assignment
 review; source assignment and posting remain separately confirmed.
+The subsequent [batch assignment and original preview](docs/work/2026-10-27-batch-account-assignment.md)
+reuse exact institution/printed-account associations across saved documents,
+stage new accounts for one confirmed atomic batch and expose retained originals
+through managed default-app handoff. Parser-known institution is read-only.
 
 ### Parser and catalog track
 

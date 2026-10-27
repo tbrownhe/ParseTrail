@@ -38,6 +38,7 @@ from parsetrail.core.v2_profile_store import (
 from parsetrail.core.v2_source_import import ImportCancelled, SourceImportResult
 from parsetrail.core.v2_workspace import V2Workspace, WorkspaceError, folder_source_files
 from parsetrail.gui.v2_account_binding_review import V2AccountBindingReview
+from parsetrail.gui.v2_batch_account_assignment import V2BatchAccountAssignment
 from parsetrail.gui.v2_batch_import import V2BatchImportReport, V2BatchImportWorker
 from parsetrail.gui.v2_card_purchase_review import V2CardPurchaseReview
 from parsetrail.gui.v2_cash_activity_review import V2CashActivityReview
@@ -52,6 +53,7 @@ from parsetrail.gui.v2_document_browser import (
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
 from parsetrail.gui.v2_financial_account import V2FinancialAccountDialog
 from parsetrail.gui.v2_opening_review import V2OpeningReview
+from parsetrail.gui.v2_original_document import open_original_document
 from parsetrail.gui.v2_path_notice import show_data_locations, show_path_notice
 from parsetrail.gui.v2_profile_startup import choose_new_workspace
 from parsetrail.gui.v2_reviewed_reports import V2ReviewedReportsDialog
@@ -144,6 +146,8 @@ class V2WorkspaceWindow(QMainWindow):
         self.source_opening_action = accounts_menu.addAction("Review source-backed opening…")
         self.source_opening_action.triggered.connect(self._review_openings)
         review_menu = self.menuBar().addMenu("Review")
+        self.batch_accounts_action = review_menu.addAction("Assign document accounts…")
+        self.batch_accounts_action.triggered.connect(self._assign_document_accounts)
         self.transfer_review_action = review_menu.addAction("Owned transfers and liability repayments…")
         self.transfer_review_action.triggered.connect(self._review_transfers)
         self.settlement_review_action = review_menu.addAction("Transfer fees and partial settlements…")
@@ -203,6 +207,9 @@ class V2WorkspaceWindow(QMainWindow):
         self.import_folder_button.clicked.connect(self._choose_import_folder)
         imports.addWidget(self.import_folder_button)
         imports.addStretch()
+        self.batch_accounts_button = QPushButton("Assign document accounts…")
+        self.batch_accounts_button.clicked.connect(self._assign_document_accounts)
+        imports.addWidget(self.batch_accounts_button)
         document_layout.addLayout(imports)
         self.document_search = QLineEdit()
         self.document_search.setPlaceholderText("Find an account, statement period or document type")
@@ -236,6 +243,9 @@ class V2WorkspaceWindow(QMainWindow):
         self.preview_button = QPushButton("Preview evidence")
         self.preview_button.clicked.connect(self._preview)
         document_actions.addWidget(self.preview_button)
+        self.open_original_button = QPushButton("Open original…")
+        self.open_original_button.clicked.connect(self._open_original)
+        document_actions.addWidget(self.open_original_button)
         self.document_details_button = QPushButton("Show details")
         self.document_details_button.setCheckable(True)
         document_actions.addWidget(self.document_details_button)
@@ -552,6 +562,10 @@ class V2WorkspaceWindow(QMainWindow):
         available = summary is not None and self.import_worker is None and not self._closing
         self.recover_source_action.setEnabled(available)
         self.preview_button.setEnabled(available)
+        self.open_original_button.setEnabled(available)
+        batch_available = self.import_worker is None and not self._closing
+        self.batch_accounts_button.setEnabled(batch_available)
+        self.batch_accounts_action.setEnabled(batch_available)
         self.review_document_button.setEnabled(available)
         self.document_details_button.setEnabled(available)
         is_card = summary is not None and summary.parser_id in CARD_STATEMENT_PARSERS
@@ -615,6 +629,23 @@ class V2WorkspaceWindow(QMainWindow):
             self.review_guidance.setText(
                 "Document details are loading." if self.inventory_pending else "Choose a document first."
             )
+
+    def _assign_document_accounts(self) -> None:
+        if self.import_worker is not None or self._closing:
+            return
+        source_id = self._selected_source()
+        dialog = V2BatchAccountAssignment(self.workspace, self)
+        dialog.exec()
+        if dialog.changed:
+            self.refresh(select_source=source_id)
+
+    def _open_original(self) -> None:
+        source_id = self._selected_source()
+        if source_id is None or self.import_worker is not None:
+            return
+        operation = open_original_document(self.workspace.profile_path, source_id, self)
+        self.statusBar().showMessage(operation.status)
+        operation.status_changed.connect(self.statusBar().showMessage)
 
     def _review_document(self, *_args) -> None:
         summary = self._document_summaries.get(self._selected_source())

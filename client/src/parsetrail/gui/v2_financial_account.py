@@ -23,6 +23,7 @@ class V2FinancialAccountDialog(QDialog):
         existing: FinancialAccount | None = None,
         scope_locked: bool = False,
         draft: AccountCreationDraft | None = None,
+        staged: bool = False,
     ):
         super().__init__(parent)
         self.existing = existing
@@ -51,7 +52,9 @@ class V2FinancialAccountDialog(QDialog):
             self.source_identity.setToolTip(draft.source_identity or "This document does not identify an account.")
             form.addRow("Document account (read-only)", self.source_identity)
             context_note = QLabel(
-                "Review these editable suggestions before creating the account. "
+                "These account details will be saved together with the selected document assignments when you apply the batch."
+                if staged
+                else "Review these editable suggestions before creating the account. "
                 "Creating an account does not change this document’s assignment or add transactions. "
                 "Confirm the assignment separately in Review."
                 + (
@@ -110,9 +113,23 @@ class V2FinancialAccountDialog(QDialog):
             self.institution.setText(existing.institution_key)
         elif draft is not None:
             self.institution.setText(draft.institution_key)
-        form.addRow("Institution matching code", self.institution)
+        known_institution = draft is not None and draft.verified_context
+        if known_institution:
+            self.institution.setReadOnly(True)
+            self.institution.setFrame(False)
+            institution_palette = self.institution.palette()
+            institution_palette.setColor(QPalette.Base, institution_palette.color(QPalette.Window))
+            self.institution.setPalette(institution_palette)
+            self.institution.setAccessibleDescription(
+                "Read-only institution identified by the document's verified parser."
+            )
+        form.addRow(
+            "Institution (from document)" if known_institution else "Institution matching code", self.institution
+        )
         institution_help = QLabel(
-            "Used locally to match documents to accounts from the same bank or servicer. "
+            "Identified automatically from this document's parser."
+            if known_institution
+            else "Used locally to match documents to accounts from the same bank or servicer. "
             "Keep the suggested code unless you are correcting the institution."
         )
         institution_help.setWordWrap(True)
@@ -130,7 +147,7 @@ class V2FinancialAccountDialog(QDialog):
         form.addRow(self.save_error)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         if draft is not None:
-            buttons.button(QDialogButtonBox.Ok).setText("Create account")
+            buttons.button(QDialogButtonBox.Ok).setText("Add to batch" if staged else "Create account")
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)

@@ -31,6 +31,7 @@ from parsetrail.core.v2_profile_store import (
 from parsetrail.core.v2_workspace import V2Workspace
 from parsetrail.gui.v2_binding_correction import V2BindingCorrection, ordinary_binding_lock_notice
 from parsetrail.gui.v2_financial_account import create_financial_account
+from parsetrail.gui.v2_original_document import open_original_document
 
 
 class V2SourceAccountReview(QDialog):
@@ -83,9 +84,19 @@ class V2SourceAccountReview(QDialog):
         self.abbreviated_matching_button.clicked.connect(self._toggle_abbreviated_matching)
         layout.addWidget(self.abbreviated_matching_button)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        self.open_original_button = buttons.addButton("Open original…", QDialogButtonBox.ActionRole)
+        self.open_original_button.clicked.connect(self._open_original)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+        self.original_status = QLabel()
+        self.original_status.setWordWrap(True)
+        layout.addWidget(self.original_status)
         self._reload()
+
+    def _open_original(self) -> None:
+        operation = open_original_document(self.profile, self.source_sha256, self)
+        self.original_status.setText(operation.status)
+        operation.status_changed.connect(self.original_status.setText)
 
     def _reload(self) -> None:
         try:

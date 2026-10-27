@@ -387,3 +387,49 @@ def test_v2_entry_refuses_missing_profile_without_creating_it(tmp_path: Path) ->
     profile = tmp_path / "missing.db"
     assert run_v2_workspace(["--v2", "--profile", str(profile), "--catalog-cache", str(tmp_path / "catalog")]) == 2
     assert not profile.exists()
+
+
+def test_document_actions_capture_original_and_route_batch_without_writes(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from parsetrail.gui import v2_workspace_window as gui
+    from PySide6.QtCore import QObject, Signal
+
+    app = _app()
+    workspace = _workspace(tmp_path)
+    evidence = build_source_evidence(SOURCE, DEFINITION, suffix=".csv")
+    with V2ProfileStore.open(workspace.profile_path) as store:
+        store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
+    window = gui.V2WorkspaceWindow(workspace)
+    wait_for_inventory(window)
+    before = workspace.profile_path.read_bytes()
+    opened, batches = [], []
+
+    class Operation(QObject):
+        status_changed = Signal(str)
+        status = "Opening retained original…"
+
+    operation = Operation()
+
+    def open_original(profile, source, parent):
+        opened.append((profile, source, parent))
+        return operation
+
+    def batch(workspace_arg, parent):
+        batches.append((workspace_arg, parent))
+        return SimpleNamespace(exec=lambda: None, changed=False)
+
+    monkeypatch.setattr(gui, "open_original_document", open_original)
+    monkeypatch.setattr(gui, "V2BatchAccountAssignment", batch)
+    try:
+        assert window.open_original_button.isEnabled()
+        window.open_original_button.click()
+        assert opened == [(workspace.profile_path, evidence.source_sha256, window)]
+        operation.status_changed.emit("Sent to default application.")
+        assert window.statusBar().currentMessage() == "Sent to default application."
+        window.batch_accounts_button.click()
+        assert batches == [(workspace, window)]
+        assert workspace.profile_path.read_bytes() == before
+    finally:
+        window.close()
+        app.processEvents()

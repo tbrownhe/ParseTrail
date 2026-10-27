@@ -213,10 +213,25 @@ No presentation mode changes matching preferences or accounting decisions.
 
 Review account selectors include New account. The shared account form suggests
 the selected document section's identity and scope, with institution/kind from
-its exact verified catalog context when available. Suggestions are editable;
-masked identifiers remain visible while unknown full numbers stay blank. Saving
+its exact verified catalog context when available. Account details are editable;
+parser-known institution and printed document identity appear read-only.
+Masked identifiers remain visible while unknown full numbers stay blank. Saving
 selects the new account without assigning the document or posting transactions;
 confirm the existing Use this account or Assign action separately.
+
+Documents also offers **Assign document accounts** across all saved unassigned
+sections. It reuses exact prior document-account associations and groups repeated
+statements, raises a prefilled account form for unmatched groups, and stages new
+accounts until the final summary's Apply action. Ambiguous or unsupported groups
+remain explicit choices or individual review. Cancel before Apply saves nothing;
+assignments never post transactions.
+
+**Open original** in Documents, account review, batch assignment or evidence
+preview sends verified database-retained PDF/CSV bytes to the default OS viewer
+through a managed private temporary file. Successful copies stay for the app
+session; locked files may need cleanup on a later run. **Save selected source
+original** remains available for a deliberate permanent copy. See the
+[local preview lifecycle](../docs/privacy-and-data-flow.md#v2-retained-original-preview).
 
 Document inventories and selected report tabs load through background read-only
 connections. Loading/error states replace outdated results, and superseded

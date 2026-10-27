@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 from parsetrail.core.source_evidence import ObservationEvidence, SourceDisposition, StatementPayload
 from parsetrail.core.v2_profile_store import SavedImport, V2ProfileStore
 from parsetrail.core.v2_review_dates import posting_date_candidate
+from parsetrail.gui.v2_original_document import open_saved_original
 
 
 def _money(minor: int | None) -> str:
@@ -139,6 +140,7 @@ class V2EvidencePreview(QDialog):
 
     def __init__(self, saved: SavedImport, parent=None):
         super().__init__(parent)
+        self.saved = saved
         evidence = saved.evidence
         payload = evidence.payload
         rows = (
@@ -202,8 +204,42 @@ class V2EvidencePreview(QDialog):
             tabs.addTab(view, title)
         layout.addWidget(tabs)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        self.original_button = buttons.addButton("Open original…", QDialogButtonBox.ActionRole)
+        self.original_button.setToolTip(
+            "Open a temporary local copy of the saved original in your default application."
+        )
+        self.original_button.clicked.connect(self._open_original)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
+        self.original_status = QLabel()
+        self.original_status.setWordWrap(True)
+        layout.addWidget(self.original_status)
+
+    def _open_original(self) -> None:
+        self.original_button.setEnabled(False)
+        self.original_status.setText("Preparing original document…")
+        self.original_open = open_saved_original(self.saved, self)
+        self.original_open.status_changed.connect(self.original_status.setText)
+        self.original_open.finished.connect(self._original_finished)
+
+    def _original_finished(self, _success: bool) -> None:
+        self.original_button.setEnabled(True)
+
+    def _cancel_original(self) -> None:
+        if hasattr(self, "original_open"):
+            self.original_open.cancel()
+
+    def close(self) -> bool:
+        self._cancel_original()
+        return super().close()
+
+    def closeEvent(self, event) -> None:
+        self._cancel_original()
+        super().closeEvent(event)
+
+    def done(self, result: int) -> None:
+        self._cancel_original()
+        super().done(result)
 
 
 def preview_saved_source(profile: Path, source_sha256: str, *, parent=None) -> V2EvidencePreview:

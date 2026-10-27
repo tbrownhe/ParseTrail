@@ -103,6 +103,8 @@ def test_statement_draft_uses_exact_section_scope_and_truthful_number(tmp_path, 
         assert form.kind.currentData() == expected[0]
         assert form.scope.currentData() == expected[1]
         assert form.name.isEnabled() and form.institution.isEnabled()
+        assert form.institution.isReadOnly() and not form.institution.hasFrame()
+        assert form.source_identity.isReadOnly() and not form.source_identity.hasFrame()
     finally:
         form.close()
 
@@ -139,6 +141,7 @@ def test_unavailable_exact_context_requires_explicit_kind_and_institution(tmp_pa
         form.kind.setCurrentIndex(form.kind.findData("liability"))
         assert form.scope.currentData() == "account_total"
         assert form.institution.text() == ""
+        assert not form.institution.isReadOnly()
     finally:
         form.close()
 

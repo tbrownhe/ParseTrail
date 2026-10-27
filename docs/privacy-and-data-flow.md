@@ -30,6 +30,22 @@ the token is kept only for the process lifetime. Device encryption, operating
 system login controls, filesystem permissions, swap/crash-dump policy, and the
 user's backup encryption protect the local boundary.
 
+### V2 retained-original preview
+
+The V2 workspace retains admitted PDF/CSV originals inside its local SQLite
+profile. **Open original** verifies those retained bytes and gives a private,
+randomized temporary copy to the operating system's default application. It
+does not depend on the original import path. Default applications require a
+filename, so this action creates a local plaintext file outside the database.
+The receiving application's own recent-file, cache and cloud settings apply.
+
+Successful copies stay available for the ParseTrail session. Exit attempts
+cleanup; files locked by a viewer may remain. A later session retries narrowly
+scoped cleanup of owned sessions older than 24 hours after confirming their
+lease is inactive. Temporary roots/session permissions, file counts and total
+bytes are checked. This local preview does not use the statement-contribution
+service or alter its in-memory decryption boundary.
+
 ## 2. Encrypted statement-contribution boundary
 
 Contribution is separate from normal import. It starts only after a user selects

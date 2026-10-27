@@ -6,9 +6,9 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None active. [Create accounts within document review](docs/work/2026-10-27-inline-account-creation.md)
-implemented and verified inline document-backed account creation, with separate
-assignment confirmation and a versioned demo runtime preserving review state.
+None. [Batch account assignment and original access](docs/work/2026-10-27-batch-account-assignment.md)
+completed development and agent verification; the updated public runtime preserves
+the owner's existing demo review state. Owner/platform/release gates remain below.
 
 ## Recommended next packets (unselected)
 
