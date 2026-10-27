@@ -569,6 +569,34 @@ class SavedImport:
 
 
 @dataclass(frozen=True)
+class DocumentSummary:
+    """Recognizable saved evidence and explicit review state, never a bank balance.
+
+    Dates describe the printed/derived statement period or export activity span.
+    Pending counts are conservative: supporting repeats remain pending until fully
+    allocated, and a suggested account is not an explicit saved assignment.
+    """
+
+    source_sha256: str
+    parser_id: str
+    document_kind: Literal["statement", "activity_export"]
+    institution_key: str | None
+    source_accounts: tuple[str, ...]
+    bound_account_names: tuple[str, ...]
+    start: date | None
+    end: date | None
+    start_provenance: str
+    end_provenance: str
+    row_count: int
+    pending_activity_rows: int
+    unassigned_activity_rows: int
+    has_unidentified_rows: bool
+    has_identified_accounts: bool
+    overlapping_source_ids: tuple[str, ...] = ()
+    unassigned_source_accounts: int = 0
+
+
+@dataclass(frozen=True)
 class FinancialAccount:
     id: str
     name: str
@@ -2489,7 +2517,7 @@ class V2ProfileStore:
             )
         )
 
-    def _source_overlap_index(self):
+    def _source_overlap_index(self, *, _source_consumer=None):
         """Build the full finite date-window index, retaining supporting rows."""
         accounts = {account.id: account for account in self.financial_accounts()}
         consumed = self._active_consumed()
@@ -2507,35 +2535,11 @@ class V2ProfileStore:
             )
         }
         rows = {}
-        self._read_binding_corrections()
-        file_assignments = dict(
-            self.connection.execute("SELECT source_sha256,ledger_account_id FROM FileAccountAssertions")
-        )
-        source_assignments = {}
-        for source_id, identity, form, account_id in self.connection.execute(
-            "SELECT source_sha256,source_identity,source_identity_form,ledger_account_id FROM SourceAccountBindings"
-        ):
-            source_assignments.setdefault(source_id, {})[identity, form] = account_id
-        row_assignments = {}
-        for source_id, row_id, account_id in self.connection.execute(
-            "SELECT o.source_sha256,a.row_id,a.ledger_account_id FROM RowAccountAssignments a "
-            "JOIN SourceObservations o ON o.row_id=a.row_id"
-        ):
-            row_assignments.setdefault(source_id, {})[row_id] = account_id
-        for source_id, saved in self._iter_verified_imports():
+        for source_id, saved, effective_bindings in self._iter_verified_bound_imports():
             evidence = saved.evidence
-            bindings = {
-                binding.row_id: binding.ledger_account_id
-                for binding in self._account_bindings_for_evidence(
-                    source_id,
-                    evidence,
-                    _decisions=(
-                        file_assignments.get(source_id),
-                        row_assignments.get(source_id, {}),
-                        source_assignments.get(source_id, {}),
-                    ),
-                )
-            }
+            bindings = {binding.row_id: binding.ledger_account_id for binding in effective_bindings}
+            if _source_consumer is not None:
+                _source_consumer(source_id, evidence, effective_bindings)
             for row in _rows(evidence):
                 account = accounts.get(bindings.get(row.row_id))
                 if account is None or row.row_role != "activity" or not row.amount.minor:
@@ -2603,6 +2607,35 @@ class V2ProfileStore:
         except ValueError:
             raise ProfileFormatError("source_overlap_history_integrity") from None
         return rows, index, reviews, aliases
+
+    def _iter_verified_bound_imports(self):
+        """Stream validated imports with prefetched explicit binding decisions."""
+        self._read_binding_corrections()
+        file_assignments = dict(
+            self.connection.execute("SELECT source_sha256,ledger_account_id FROM FileAccountAssertions")
+        )
+        source_assignments = {}
+        for source_id, identity, form, account_id in self.connection.execute(
+            "SELECT source_sha256,source_identity,source_identity_form,ledger_account_id FROM SourceAccountBindings"
+        ):
+            source_assignments.setdefault(source_id, {})[identity, form] = account_id
+        row_assignments = {}
+        for source_id, row_id, account_id in self.connection.execute(
+            "SELECT o.source_sha256,a.row_id,a.ledger_account_id FROM RowAccountAssignments a "
+            "JOIN SourceObservations o ON o.row_id=a.row_id"
+        ):
+            row_assignments.setdefault(source_id, {})[row_id] = account_id
+        for source_id, saved in self._iter_verified_imports():
+            bindings = self._account_bindings_for_evidence(
+                source_id,
+                saved.evidence,
+                _decisions=(
+                    file_assignments.get(source_id),
+                    row_assignments.get(source_id, {}),
+                    source_assignments.get(source_id, {}),
+                ),
+            )
+            yield source_id, saved, bindings
 
     @staticmethod
     def _source_overlap_groups(rows, aliases):
@@ -5830,9 +5863,13 @@ class V2ProfileStore:
         pending = dict.fromkeys((account.id for account in accounts), 0)
         latest_activity: dict[str, date] = {}
         unbound = 0
-        for source_id in self.source_ids():
-            bindings = {binding.row_id: binding.ledger_account_id for binding in self.account_bindings(source_id)}
-            for row in _rows(self.load_import(source_id).evidence):
+        counted_sources = set()
+
+        def collect_pending(source_id, evidence, effective_bindings):
+            nonlocal unbound
+            counted_sources.add(source_id)
+            bindings = {binding.row_id: binding.ledger_account_id for binding in effective_bindings}
+            for row in _rows(evidence):
                 if row.row_role != "activity":
                     continue
                 account_id = bindings.get(row.row_id)
@@ -5844,8 +5881,15 @@ class V2ProfileStore:
                     latest_activity[account_id] = max(latest_activity.get(account_id, observed), observed)
                 if row.row_id not in consumed or consumed[row.row_id] != row.amount.minor:
                     pending[account_id] += 1
+
         coverage = self.statement_coverage()
-        checks, reconciliation_unavailable = self._available_reconciliation_checks()
+        checks, reconciliation_unavailable = self._available_reconciliation_checks(_source_consumer=collect_pending)
+        # An unavailable multi-section reconciliation can return before building
+        # its overlap inventory. Pending evidence must still cover every source.
+        if len(counted_sources) != len(self.source_ids()):
+            for source_id, saved, bindings in self._iter_verified_bound_imports():
+                if source_id not in counted_sources:
+                    collect_pending(source_id, saved.evidence, bindings)
         saved_checks = self._reconciliation_history(checks)
         result = []
         for account in accounts:
@@ -7414,6 +7458,107 @@ class V2ProfileStore:
         """List saved imports in their original insertion order, newest first."""
         return tuple(row[0] for row in self.connection.execute("SELECT sha256 FROM Sources ORDER BY rowid DESC"))
 
+    def document_summaries(self) -> tuple[DocumentSummary, ...]:
+        """Read document labels and conservative review counts in one snapshot.
+
+        Every saved source is verified, including empty and unassigned imports.
+        Labels use saved account decisions or source identities, never inferred
+        ownership, missing filenames or an assertion of completed source review.
+        """
+        if self.connection.in_transaction:
+            raise ProfileFormatError("document_summaries_requires_committed_snapshot")
+        self.connection.execute("BEGIN")
+        try:
+            accounts = {account.id: account for account in self.financial_accounts()}
+            consumed = self._active_consumed()
+            source_accounts = {}
+            for source_id, identity, form, account_id in self.connection.execute(
+                "SELECT source_sha256,source_identity,source_identity_form,ledger_account_id FROM SourceAccountBindings"
+            ):
+                source_accounts.setdefault(source_id, {})[identity, form] = account_id
+            summaries = {}
+            periods = {}
+            for source_id, saved, bindings in self._iter_verified_bound_imports():
+                evidence = saved.evidence
+                payload = evidence.payload
+                rows = _rows(evidence)
+                assigned = {binding.row_id: binding.ledger_account_id for binding in bindings}
+                identities = (
+                    tuple((section.source_identity, section.source_identity_form) for section in payload.accounts)
+                    if isinstance(payload, StatementPayload)
+                    else tuple(dict.fromkeys((row.source_account, row.source_account_form) for row in rows))
+                )
+                source_account_ids = tuple(
+                    source_accounts[source_id][identity]
+                    for identity in identities
+                    if identity in source_accounts.get(source_id, {})
+                )
+                bound_accounts = tuple(
+                    accounts[account_id]
+                    for account_id in dict.fromkeys(
+                        [binding.ledger_account_id for binding in bindings] + list(source_account_ids)
+                    )
+                    if account_id in accounts
+                )
+                identity_labels = tuple(
+                    f"Ending {identity[-4:]}" if form in {"full", "last_four"} else identity
+                    for identity, form in identities
+                    if identity is not None
+                )
+                start = payload.start if isinstance(payload, StatementPayload) else payload.activity_start
+                end = payload.end if isinstance(payload, StatementPayload) else payload.activity_end
+                if isinstance(payload, StatementPayload) and start.iso is not None:
+                    for account_id in set(source_account_ids):
+                        periods.setdefault(account_id, []).append((start.iso, end.iso, source_id))
+                activity = tuple(row for row in rows if row.row_role == "activity")
+                identity_rows = {}
+                for row in rows:
+                    if row.source_account is not None:
+                        identity_rows.setdefault((row.source_account, row.source_account_form), []).append(row)
+                unassigned_identities = sum(
+                    source_accounts.get(source_id, {}).get(identity) is None
+                    and (
+                        not identity_rows.get(identity)
+                        or any(assigned.get(row.row_id) is None for row in identity_rows[identity])
+                    )
+                    for identity in identities
+                    if identity[0] is not None
+                )
+                institutions = {account.institution_key for account in bound_accounts}
+                summaries[source_id] = DocumentSummary(
+                    source_id,
+                    evidence.parser_id,
+                    payload.kind,
+                    next(iter(institutions)) if len(institutions) == 1 else None,
+                    identity_labels,
+                    tuple(account.name for account in bound_accounts),
+                    date.fromisoformat(start.iso) if start.iso else None,
+                    date.fromisoformat(end.iso) if end.iso else None,
+                    start.provenance,
+                    end.provenance,
+                    len(rows),
+                    sum(row.row_id not in consumed or consumed[row.row_id] != row.amount.minor for row in activity),
+                    sum(assigned.get(row.row_id) is None for row in activity),
+                    any(row.source_account is None for row in activity),
+                    isinstance(payload, StatementPayload) or any(row.source_account is not None for row in rows),
+                    unassigned_source_accounts=unassigned_identities,
+                )
+            overlaps = {}
+            for account_periods in periods.values():
+                active = []
+                for start, end, source_id in sorted(account_periods):
+                    active = [(other_end, other_id) for other_end, other_id in active if other_end >= start]
+                    for _other_end, other_id in active:
+                        if other_id != source_id:
+                            overlaps.setdefault(source_id, set()).add(other_id)
+                            overlaps.setdefault(other_id, set()).add(source_id)
+                    active.append((end, source_id))
+            for source_id, others in overlaps.items():
+                summaries[source_id] = replace(summaries[source_id], overlapping_source_ids=tuple(sorted(others)))
+            return tuple(summaries[source_id] for source_id in self.source_ids())
+        finally:
+            self.connection.execute("ROLLBACK")
+
     def statement_coverage(self) -> tuple[StatementCoverageRow, ...]:
         """Compare printed periods on explicitly bound statements, without certifying coverage."""
         sections: dict[str, list[tuple[str, SourceEvidence, StatementPayload, StatementAccount]]] = {}
@@ -7744,7 +7889,7 @@ class V2ProfileStore:
                 digest.update(json.dumps(row, separators=(",", ":")).encode())
         return rule, digest.hexdigest()
 
-    def _statement_reconciliation_checks(self) -> tuple[StatementReconciliationCheck, ...]:
+    def _statement_reconciliation_checks(self, *, _source_consumer=None) -> tuple[StatementReconciliationCheck, ...]:
         rule, version = self._reconciliation_rule_and_version()
         coverage = self.statement_coverage()
         comparisons = {(row.account_id, row.source_sha256): row for row in self.statement_journal_comparisons()}
@@ -7761,7 +7906,7 @@ class V2ProfileStore:
         derived_parents = dict(
             self.connection.execute("SELECT observation_id,row_id FROM DerivedFinancialObservations")
         )
-        verified_overlap_index = self._source_overlap_index()
+        verified_overlap_index = self._source_overlap_index(_source_consumer=_source_consumer)
         overlap_rows, _buckets, _reviews, overlap_aliases = verified_overlap_index
         overlap_blocks = self._source_overlap_posting_blocks(
             tuple(overlap_rows), _verified_index=verified_overlap_index
@@ -8003,9 +8148,16 @@ class V2ProfileStore:
         finally:
             self.connection.execute("ROLLBACK")
 
-    def _available_reconciliation_checks(self) -> tuple[tuple[StatementReconciliationCheck, ...], str | None]:
+    def _available_reconciliation_checks(
+        self, *, _source_consumer=None
+    ) -> tuple[tuple[StatementReconciliationCheck, ...], str | None]:
         try:
-            return self._statement_reconciliation_checks(), None
+            checks = (
+                self._statement_reconciliation_checks()
+                if _source_consumer is None
+                else self._statement_reconciliation_checks(_source_consumer=_source_consumer)
+            )
+            return checks, None
         except ProfileFormatError as exc:
             if str(exc) != "statement_review_requires_one_bound_section":
                 raise

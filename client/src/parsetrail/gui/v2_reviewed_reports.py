@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import atexit
 import sqlite3
+import time
 from datetime import date
 from pathlib import Path
 
-from PySide6.QtCore import QAbstractTableModel, QDate, QModelIndex, Qt
+from PySide6.QtCore import QAbstractTableModel, QDate, QModelIndex, Qt, QThread, QTimer
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
+    QCheckBox,
     QDateEdit,
     QDialog,
     QDialogButtonBox,
@@ -44,6 +48,69 @@ from parsetrail.core.v2_report_export import ReportExportError, write_reviewed_j
 from parsetrail.gui.v2_evidence_preview import _money
 from parsetrail.gui.v2_path_notice import show_path_notice
 from parsetrail.gui.v2_report_drilldown import V2ReviewedEntryDrilldown
+
+# A closed dialog must not destroy a still-running QThread. Workers own no widgets
+# and remain alive until their read connection has closed, even after rejection.
+_REPORT_READERS: set[QThread] = set()
+
+
+def _finish_report_readers() -> None:
+    """Drain connections before application/interpreter teardown, never terminate threads."""
+    readers = tuple(_REPORT_READERS)
+    for reader in readers:
+        reader.requestInterruption()
+    for reader in readers:
+        while reader.isRunning():
+            reader.wait(10)
+            # Validation includes Python work outside SQLite's progress handler.
+            # Yield the GIL even on Qt builds whose timed wait retains it.
+            time.sleep(0.001)
+        reader.wait()
+        _REPORT_READERS.discard(reader)
+
+
+# Source/diagnostic callers can process events without ever entering app.exec(),
+# in which case aboutToQuit is not emitted. Join before Qt's interpreter cleanup.
+atexit.register(_finish_report_readers)
+
+
+class _ReportReader(QThread):
+    def __init__(self, profile: Path, tab: int, dates: tuple[date, ...], generation: int, key: tuple):
+        super().__init__()
+        self.profile, self.tab, self.dates = profile, tab, dates
+        self.generation, self.key = generation, key
+        self.result = None
+        self.error: Exception | None = None
+
+    def run(self) -> None:
+        try:
+            if self.isInterruptionRequested():
+                return
+            with V2ProfileStore.open(self.profile, read_only=True) as store:
+                store.connection.set_progress_handler(lambda: int(self.isInterruptionRequested()), 1000)
+                # Positions owns its consistent read transaction. The other
+                # services share one worker-owned snapshot for their full read.
+                if self.tab == 4:
+                    self.result = store.account_positions(as_of=self.dates[0])
+                else:
+                    store.connection.execute("BEGIN")
+                    try:
+                        if self.tab == 0:
+                            self.result = store.reviewed_category_summary(
+                                kind="expense", start=self.dates[0], end=self.dates[1]
+                            )
+                        elif self.tab == 1:
+                            self.result = store.financial_journal_summary(start=self.dates[0], end=self.dates[1])
+                        elif self.tab == 2:
+                            self.result = store.monthly_budget_summary(self.dates[0])
+                        else:
+                            self.result = store.reviewed_category_summary(
+                                kind="income", start=self.dates[0], end=self.dates[1]
+                            )
+                    finally:
+                        store.connection.execute("ROLLBACK")
+        except Exception as exc:
+            self.error = exc
 
 
 def _dated_value_note(row: AccountPosition, *, full_reference: bool = False) -> str:
@@ -357,10 +424,27 @@ class V2ReviewedReportsDialog(QDialog):
 
     def __init__(self, profile: Path, parent=None):
         super().__init__(parent)
+        app = QApplication.instance()
+        if app is not None and not app.property("parsetrailReportShutdownHook"):
+            app.aboutToQuit.connect(_finish_report_readers)
+            app.setProperty("parsetrailReportShutdownHook", True)
         self.profile = profile
+        self._closed = False
+        self._generation = 0
+        self._reader: _ReportReader | None = None
+        self._read_requested = False
+        self._loaded: dict[int, tuple] = {}
+        self._errors: dict[int, str] = {}
+        self._selected_account_id: str | None = None
+        self._read_timer = QTimer(self)
+        self._read_timer.setSingleShot(True)
+        self._read_timer.timeout.connect(self._start_selected_read)
         self.setWindowTitle("2.0 reviewed reports")
         self.resize(1180, 780)
         layout = QVBoxLayout(self)
+        self.period_controls = QWidget()
+        period_layout = QVBoxLayout(self.period_controls)
+        period_layout.setContentsMargins(0, 0, 0, 0)
         form = QFormLayout()
         today = date.today()
         first = date(today.year, today.month, 1)
@@ -372,14 +456,15 @@ class V2ReviewedReportsDialog(QDialog):
             control.setDisplayFormat("yyyy-MM-dd")
         form.addRow("From (inclusive)", self.start)
         form.addRow("To (exclusive)", self.end)
-        layout.addLayout(form)
+        period_layout.addLayout(form)
         period_scope = QLabel(
             "Date range applies to Spending, Income and Account movement. "
             "Monthly budgets and Account positions use their own dates."
             " Select a category or movement account, then Inspect entries to see its current reviewed rows."
         )
         period_scope.setWordWrap(True)
-        layout.addWidget(period_scope)
+        period_layout.addWidget(period_scope)
+        layout.addWidget(self.period_controls)
         self.model = _CategoryModel("expense", self)
         self.table = QTableView()
         self.table.setModel(self.model)
@@ -426,8 +511,16 @@ class V2ReviewedReportsDialog(QDialog):
         self.total = QLabel()
         self.total.setWordWrap(True)
         layout.addWidget(self.total)
+        self.qualification = QLabel()
+        self.qualification.setWordWrap(True)
+        layout.addWidget(self.qualification)
+        self.show_details = QCheckBox("Show report and evidence details")
+        self.show_details.toggled.connect(self._toggle_details)
+        layout.addWidget(self.show_details)
         self.scope = QLabel()
         self.scope.setWordWrap(True)
+        self.scope.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.scope.hide()
         layout.addWidget(self.scope)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         self.inspect_button = buttons.addButton("Inspect entries…", QDialogButtonBox.ActionRole)
@@ -446,7 +539,7 @@ class V2ReviewedReportsDialog(QDialog):
         layout.addWidget(buttons)
         self.start.dateChanged.connect(self.refresh)
         self.end.dateChanged.connect(self.refresh)
-        self.tabs.currentChanged.connect(self._show_selected_tab)
+        self.tabs.currentChanged.connect(self._tab_changed)
         self.budget_month.dateChanged.connect(self._refresh_budget)
         self.spending_report: ReviewedCategorySummary | None = None
         self.income_report: ReviewedCategorySummary | None = None
@@ -456,14 +549,167 @@ class V2ReviewedReportsDialog(QDialog):
         self.budget_error: str | None = None
         self.positions_report: AccountPositionsSummary | None = None
         self.positions_error: str | None = None
-        self.refresh()
-        self._refresh_budget()
-        self._refresh_positions()
+        self._toggle_details(False)
+        self._queue_selected_read(0)
+
+    @property
+    def reports_pending(self) -> bool:
+        """Whether the event loop still has a requested report read to finish."""
+        return self._read_requested or self._read_timer.isActive() or self._reader is not None
+
+    def _dates(self, tab: int) -> tuple[date, ...]:
+        if tab == 4:
+            return (self.as_of.date().toPython(),)
+        if tab == 2:
+            selected = self.budget_month.date()
+            return (date(selected.year(), selected.month(), 1),)
+        return self.start.date().toPython(), self.end.date().toPython()
+
+    def _key(self, tab: int) -> tuple:
+        return str(self.profile), *self._dates(tab)
+
+    def _models(self):
+        return self.model, self.account_model, self.budget_model, self.income_model, self.positions_model
+
+    def _invalidate(self, tabs) -> None:
+        tabs = tuple(tabs)
+        if 4 in tabs:
+            selected = self.positions_table.currentIndex()
+            if selected.isValid():
+                self._selected_account_id = self.positions_model.rows[selected.row()].account_id
+        attributes = ("spending_report", "account_report", "budget_report", "income_report", "positions_report")
+        for tab in tabs:
+            self._loaded.pop(tab, None)
+            self._errors.pop(tab, None)
+            setattr(self, attributes[tab], None)
+            self._models()[tab].replace(())
+        if 4 in tabs:
+            self.history_model.replace(())
+            self.account_anchor_button.setEnabled(False)
+            self.source_value_button.setEnabled(False)
+            self.position_details.clear()
+        self.export_button.setEnabled(False)
+
+    def _queue_selected_read(self, delay: int = 120) -> None:
+        if self._closed:
+            return
+        tab = self.tabs.currentIndex()
+        if self._loaded.get(tab) != self._key(tab):
+            self._invalidate((tab,))
+        self._generation += 1
+        if self._reader is not None:
+            self._reader.requestInterruption()
+        self._read_requested = True
+        self._read_timer.start(delay)
+        self._show_selected_tab()
+
+    def _start_selected_read(self) -> None:
+        if self._closed or not self._read_requested or self._reader is not None:
+            return
+        self._read_requested = False
+        tab = self.tabs.currentIndex()
+        key = self._key(tab)
+        if self._loaded.get(tab) == key or tab in self._errors:
+            self._show_selected_tab()
+            return
+        dates = self._dates(tab)
+        if len(dates) == 2 and dates[0] >= dates[1]:
+            self.report_error = self._errors[tab] = "Choose an end date after the start date."
+            self._show_selected_tab()
+            return
+        reader = _ReportReader(Path(self.profile), tab, dates, self._generation, key)
+        self._reader = reader
+        _REPORT_READERS.add(reader)
+        reader.finished.connect(self._read_finished)
+        reader.finished.connect(lambda: _REPORT_READERS.discard(reader))
+        reader.finished.connect(reader.deleteLater)
+        reader.start()
+        self._show_selected_tab()
+
+    def _read_finished(self) -> None:
+        reader = self._reader
+        self._reader = None
+        if reader is None or self._closed:
+            return
+        if (
+            reader.generation == self._generation
+            and reader.tab == self.tabs.currentIndex()
+            and reader.key == self._key(reader.tab)
+        ):
+            if reader.error is not None:
+                self._clear_unavailable_reports(reader.error)
+            elif reader.result is not None:
+                self._apply_report(reader.tab, reader.result)
+                self._loaded[reader.tab] = reader.key
+                self._errors.pop(reader.tab, None)
+            self._show_selected_tab()
+        elif reader.tab == self.tabs.currentIndex() and reader.key != self._key(reader.tab):
+            self._read_requested = True
+        if self._read_requested:
+            self._read_timer.start(0)
+
+    def _apply_report(self, tab: int, report) -> None:
+        attributes = ("spending_report", "account_report", "budget_report", "income_report", "positions_report")
+        setattr(self, attributes[tab], report)
+        rows = report.accounts if tab in (1, 4) else report.categories
+        self._models()[tab].replace(rows)
+        self.report_error = self.budget_error = self.positions_error = None
+        if tab == 4:
+            if rows:
+                selected = next((i for i, row in enumerate(rows) if row.account_id == self._selected_account_id), 0)
+                self.positions_table.selectRow(selected)
+                self._show_position_history()
+            else:
+                self.history_model.replace(())
+                self.position_details.setText("No financial accounts in this profile. Add an account to begin.")
+                self.history_title.setText("Reviewed accounting history")
+
+    def _tab_changed(self, *_args) -> None:
+        tab = self.tabs.currentIndex()
+        if self._loaded.get(tab) != self._key(tab) and tab not in self._errors:
+            self._queue_selected_read(0)
+        else:
+            # Cancel a read for a tab that is no longer being viewed.
+            self._generation += 1
+            self._read_requested = False
+            self._read_timer.stop()
+            if self._reader is not None:
+                self._reader.requestInterruption()
+            self._show_selected_tab()
+
+    def _toggle_details(self, checked: bool) -> None:
+        self.scope.setVisible(checked)
+        self.position_details.setVisible(checked)
+        for column in range(self.positions_model.columnCount()):
+            self.positions_table.setColumnHidden(column, not checked and column not in (0, 1, 3, 4, 5, 10))
+        self.positions_table.horizontalHeader().setSectionResizeMode(
+            0, QHeaderView.Interactive if checked else QHeaderView.Stretch
+        )
+
+    def _stop_reads(self) -> None:
+        self._closed = True
+        self._read_requested = False
+        self._read_timer.stop()
+        if self._reader is not None:
+            self._reader.requestInterruption()
+
+    def close(self) -> bool:
+        # Qt can skip closeEvent/done for a dialog that has never been shown.
+        # Explicit close must still stop its queued initial read.
+        self._stop_reads()
+        return super().close()
+
+    def closeEvent(self, event) -> None:
+        self._stop_reads()
+        super().closeEvent(event)
+
+    def done(self, result: int) -> None:
+        self._stop_reads()
+        super().done(result)
 
     def _refresh_all_reports(self) -> None:
-        self.refresh()
-        self._refresh_budget()
-        self._refresh_positions()
+        self._invalidate(range(5))
+        self._queue_selected_read(0)
 
     def _update_inspect_button(self, *_args) -> None:
         tables = (self.table, self.account_table, self.budget_table, self.income_table)
@@ -539,7 +785,7 @@ class V2ReviewedReportsDialog(QDialog):
         self.positions_table.setSelectionMode(QAbstractItemView.SingleSelection)
         header = self.positions_table.horizontalHeader()
         header.setMinimumHeight(header.fontMetrics().lineSpacing() * 2 + 16)
-        for column, width in enumerate((180, 80, 130, 150, 185, 115, 125, 125, 130, 150, 150, 150, 190, 180)):
+        for column, width in enumerate((180, 75, 130, 150, 185, 115, 125, 125, 130, 150, 150, 150, 190, 180)):
             header.setSectionResizeMode(column, QHeaderView.Interactive)
             self.positions_table.setColumnWidth(column, width)
         self.positions_table.setMinimumHeight(120)
@@ -570,41 +816,26 @@ class V2ReviewedReportsDialog(QDialog):
         self.history_title = QLabel("Reviewed accounting history")
         lower_layout.addWidget(self.history_title)
         lower_layout.addWidget(self.history_table)
+        self.history_panel = lower
+        self.show_history = QCheckBox("Show selected account history")
+        self.show_history.toggled.connect(lower.setVisible)
+        layout.addWidget(self.show_history)
+        lower.hide()
         splitter = QSplitter(Qt.Vertical)
         splitter.addWidget(upper)
         splitter.addWidget(lower)
-        splitter.setSizes([260, 180])
+        splitter.setStretchFactor(0, 3)
+        splitter.setStretchFactor(1, 1)
+        splitter.setSizes([420, 180])
         layout.addWidget(splitter)
         self.tabs.addTab(panel, "Account positions")
         self.positions_table.selectionModel().currentRowChanged.connect(self._show_position_history)
         self.as_of.dateChanged.connect(self._refresh_positions)
 
     def _refresh_positions(self, *_args) -> None:
-        selected = self.positions_table.currentIndex()
-        selected_id = self.positions_model.rows[selected.row()].account_id if selected.isValid() else None
-        try:
-            with V2ProfileStore.open(self.profile, read_only=True) as store:
-                report = store.account_positions(as_of=self.as_of.date().toPython())
-        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            self._clear_unavailable_reports(exc)
-        else:
-            self.positions_report = report
-            self.positions_error = None
-            self.positions_model.replace(report.accounts)
-            if report.accounts:
-                selected_row = next(
-                    (index for index, row in enumerate(report.accounts) if row.account_id == selected_id), 0
-                )
-                self.positions_table.selectRow(selected_row)
-                self._show_position_history()
-            else:
-                self.history_model.replace(())
-                self.account_anchor_button.setEnabled(False)
-                self.source_value_button.setEnabled(False)
-                self.position_details.setToolTip("")
-                self.position_details.setText("No financial accounts in this profile. Add an account to begin.")
-                self.history_title.setText("Reviewed accounting history")
-        self._show_selected_tab()
+        self._invalidate((4,))
+        if self.tabs.currentIndex() == 4:
+            self._queue_selected_read()
 
     def _show_position_history(self, *_args) -> None:
         index = self.positions_table.currentIndex()
@@ -616,6 +847,7 @@ class V2ReviewedReportsDialog(QDialog):
             self.position_details.setToolTip("")
             return
         row = self.positions_model.rows[index.row()]
+        self._selected_account_id = row.account_id
         self.account_anchor_button.setEnabled(True)
         self.source_value_button.setEnabled(True)
         self.history_model.replace(row.history, row.kind)
@@ -704,6 +936,8 @@ class V2ReviewedReportsDialog(QDialog):
 
     def _clear_unavailable_reports(self, exc: Exception) -> None:
         """A shared profile failure invalidates every previously displayed total."""
+        self._loaded.clear()
+        self._errors = dict.fromkeys(range(5), f"Reports are unavailable: {exc}. Refresh to retry.")
         self.report_error = f"Reviewed reports are unavailable: {exc}"
         self.budget_error = f"Monthly budgets are unavailable: {exc}"
         self.positions_error = str(exc)
@@ -726,39 +960,15 @@ class V2ReviewedReportsDialog(QDialog):
         self.export_button.setEnabled(False)
 
     def refresh(self, *_args) -> None:
-        try:
-            with V2ProfileStore.open(self.profile, read_only=True) as store:
-                start, end = self.start.date().toPython(), self.end.date().toPython()
-                self.spending_report = store.reviewed_category_summary(kind="expense", start=start, end=end)
-                self.income_report = store.reviewed_category_summary(kind="income", start=start, end=end)
-                self.account_report = store.financial_journal_summary(start=start, end=end)
-        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            invalid_period = str(exc) == "report_period_invalid"
-            self.report_error = (
-                "Choose an end date after the start date."
-                if invalid_period
-                else f"Reviewed reports are unavailable: {exc}"
-            )
-            self.model.replace(())
-            self.income_model.replace(())
-            self.account_model.replace(())
-            self.spending_report = None
-            self.income_report = None
-            self.account_report = None
-            if not invalid_period:
-                self._clear_unavailable_reports(exc)
-            self.export_button.setEnabled(False)
+        self._invalidate((0, 1, 3))
+        if self.tabs.currentIndex() in (0, 1, 3):
+            self._queue_selected_read()
+        else:
             self._show_selected_tab()
-            return
-        self.report_error = None
-        self.model.replace(self.spending_report.categories)
-        self.income_model.replace(self.income_report.categories)
-        self.account_model.replace(self.account_report.accounts)
-        self.export_button.setEnabled(True)
-        self._show_selected_tab()
 
     def _export_reviewed_rows(self) -> None:
-        if self.spending_report is None:
+        tab = self.tabs.currentIndex()
+        if tab not in (0, 1, 3) or self._loaded.get(tab) != self._key(tab):
             return
         start, end = self.start.date().toPython(), self.end.date().toPython()
         default = self.profile.with_name(f"reviewed-{start:%Y%m%d}-{end:%Y%m%d}.xlsx")
@@ -787,20 +997,46 @@ class V2ReviewedReportsDialog(QDialog):
         )
 
     def _refresh_budget(self, *_args) -> None:
-        selected = self.budget_month.date()
-        month = date(selected.year(), selected.month(), 1)
-        try:
-            with V2ProfileStore.open(self.profile, read_only=True) as store:
-                self.budget_report = store.monthly_budget_summary(month)
-        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            self._clear_unavailable_reports(exc)
+        self._invalidate((2,))
+        if self.tabs.currentIndex() == 2:
+            self._queue_selected_read()
+        else:
             self._show_selected_tab()
-            return
-        self.budget_error = None
-        self.budget_model.replace(self.budget_report.categories)
-        self._show_selected_tab()
 
     def _show_selected_tab(self, *_args) -> None:
+        tab = self.tabs.currentIndex()
+        self.period_controls.setVisible(tab in (0, 1, 3))
+        self.export_button.setVisible(tab in (0, 1, 3))
+        ready = self._loaded.get(tab) == self._key(tab)
+        self.export_button.setEnabled(ready and tab in (0, 1, 3))
+        if not ready:
+            self.inspect_button.setEnabled(False)
+            if tab in self._errors:
+                self.total.setText(self._errors[tab])
+            else:
+                self.total.setText("Loading reviewed report…")
+            dates = self._dates(tab)
+            self.qualification.setText(
+                f"{dates[0].isoformat()} inclusive to {dates[1].isoformat()} exclusive."
+                if len(dates) == 2
+                else f"Budget month {dates[0]:%Y-%m}."
+                if tab == 2
+                else f"As of {dates[0].isoformat()} (inclusive)."
+            )
+            self.scope.setText(self._errors.get(tab, ""))
+            return
+        report = (
+            self.spending_report,
+            self.account_report,
+            self.budget_report,
+            self.income_report,
+            self.positions_report,
+        )[tab]
+        self.qualification.setText(
+            f"Reviewed entries only. {report.activity_rows_without_full_allocation} source row(s) pending "
+            "across the whole profile and all dates; source coverage may be incomplete. "
+            "Show details for scope and evidence limits."
+        )
         self._update_inspect_button()
         if self.tabs.currentIndex() == 4:
             positions = self.positions_report
@@ -863,7 +1099,7 @@ class V2ReviewedReportsDialog(QDialog):
                 "Source rows may overlap; this view does not establish complete income or statement coverage."
             )
             return
-        report = self.spending_report
+        report = self.account_report if self.tabs.currentIndex() == 1 else self.spending_report
         if report is None:
             self.total.setText(self.report_error or "Choose an end date after the start date.")
             self.scope.clear()

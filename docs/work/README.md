@@ -10,6 +10,7 @@ outside the current board; use the relevant context, not historical logs.
 
 | Record | Roadmap scope | Implementation / evidence |
 | --- | --- | --- |
+| [Guided client usability and responsive reads](2026-10-26-client-ux-performance-evaluation.md) | V2-UX, V2-3/4/5/6/7 | Evaluation followed by authorized implementation: recognizable documents, contextual navigation, confirmed assignment status, async scoped reports and one-pass positions; synthetic/native-agent and independent checks passed, disposable preview prepared. |
 | [Project-wide agent team and workflow](2026-10-26-project-agent-workflow.md) | Project-wide engineering guidance | Approved generic client/API/dashboard/website roles and design-review policy; configuration and scenario verification recorded here. |
 | [Archive-sized review performance](2026-10-26-v2-review-performance.md) | V2-3/4/5/UX/7 | Verified one-pass source reads cut measured cash/coverage latency; full integration passed and a versioned runtime opens the same owner pilot. Broad UI/UX and agent-role changes deferred. |
 | [Real-statement V1 archive pilot](2026-10-26-v2-real-statement-pilot.md) | V2-3/4/5/6/UX/7, P2-4/5 | All selected archive files imported and independently verified as unposted evidence; actual retry, backup/restore/recovery and populated launcher passed. Owner accounting review pending. |

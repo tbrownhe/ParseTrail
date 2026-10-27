@@ -10,6 +10,8 @@ from pathlib import Path
 from parsetrail.core.v2_profile_store import FinancialAccount, V2ProfileStore
 from parsetrail.core.v2_source_pipeline import build_source_evidence
 
+from .test_v2_reports_responsiveness import wait_for_reports
+
 DEFINITION = (
     Path(__file__).parents[2] / "devtools" / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
 ).read_bytes()
@@ -38,9 +40,12 @@ def test_spending_dialog_reads_posted_totals_without_changing_profile(tmp_path: 
         store.post_reviewed_cash_category(evidence.payload.rows[0].row_id, "expense:food", reason="Reviewed coffee")
     before = hashlib.sha256(profile.read_bytes()).hexdigest()
     dialog = V2ReviewedReportsDialog(profile)
+    wait_for_reports(dialog)
     try:
         dialog.start.setDate(QDate(2026, 10, 1))
+        wait_for_reports(dialog)
         dialog.end.setDate(QDate(2026, 11, 1))
+        wait_for_reports(dialog)
         assert dialog.model.rowCount() == 1
         assert dialog.model.data(dialog.model.index(0, 0)) == "Food"
         assert dialog.model.data(dialog.model.index(0, 1)) == "$4.00"
@@ -48,23 +53,28 @@ def test_spending_dialog_reads_posted_totals_without_changing_profile(tmp_path: 
         assert "whole profile, 1 activity source row" in dialog.scope.text()
         assert "date range above filters posted journal entries only" in dialog.scope.text()
         dialog.tabs.setCurrentIndex(1)
+        wait_for_reports(dialog)
         assert dialog.account_model.rowCount() == 1
         assert dialog.account_model.data(dialog.account_model.index(0, 0)) == "Checking"
         assert dialog.account_model.data(dialog.account_model.index(0, 2)) == "-$4.00"
         assert dialog.account_model.data(dialog.account_model.index(0, 3)) == "Not established"
         assert "not account balances" in dialog.scope.text()
         dialog.tabs.setCurrentIndex(2)
+        wait_for_reports(dialog)
         dialog.budget_month.setDate(QDate(2026, 10, 1))
+        wait_for_reports(dialog)
         assert dialog.budget_model.rowCount() == 1
         assert dialog.budget_model.data(dialog.budget_model.index(0, 1)) == "$10.00"
         assert dialog.budget_model.data(dialog.budget_model.index(0, 2)) == "$4.00"
         assert dialog.budget_model.data(dialog.budget_model.index(0, 3)) == "$6.00"
         assert "whole calendar months" in dialog.scope.text()
         dialog.end.setDate(QDate(2026, 10, 1))
+        wait_for_reports(dialog)
         assert dialog.model.rowCount() == 0
         assert dialog.account_model.rowCount() == 0
         assert dialog.budget_model.rowCount() == 1
         dialog.tabs.setCurrentIndex(0)
+        wait_for_reports(dialog)
         assert "end date after" in dialog.total.text()
         assert not dialog.export_button.isEnabled()
     finally:
@@ -98,9 +108,12 @@ def test_report_dialog_exports_reviewed_rows_without_changing_profile(tmp_path: 
         lambda _parent, _title, summary, path, detail: notices.append((summary, path, detail)),
     )
     dialog = V2ReviewedReportsDialog(profile)
+    wait_for_reports(dialog)
     try:
         dialog.start.setDate(QDate(2026, 10, 1))
+        wait_for_reports(dialog)
         dialog.end.setDate(QDate(2026, 11, 1))
+        wait_for_reports(dialog)
         assert dialog.export_button.isEnabled()
         dialog.export_button.click()
         assert export_path.is_file()
@@ -135,10 +148,14 @@ def test_income_tab_shows_only_reviewed_income_and_coverage(tmp_path: Path) -> N
         store.post_reviewed_cash_category(evidence.payload.rows[1].row_id, "income:pay", reason="Confirmed income")
     before = hashlib.sha256(profile.read_bytes()).hexdigest()
     dialog = V2ReviewedReportsDialog(profile)
+    wait_for_reports(dialog)
     try:
         dialog.start.setDate(QDate(2026, 10, 1))
+        wait_for_reports(dialog)
         dialog.end.setDate(QDate(2026, 11, 1))
+        wait_for_reports(dialog)
         dialog.tabs.setCurrentIndex(3)
+        wait_for_reports(dialog)
         assert dialog.income_model.rowCount() == 1
         assert dialog.income_model.data(dialog.income_model.index(0, 0)) == "Pay"
         assert dialog.income_model.data(dialog.income_model.index(0, 1)) == "$10.00"
@@ -146,7 +163,9 @@ def test_income_tab_shows_only_reviewed_income_and_coverage(tmp_path: Path) -> N
         assert "1 activity source row" in dialog.scope.text()
         assert "not all deposits" in dialog.scope.text()
         dialog.start.setDate(QDate(2026, 11, 1))
+        wait_for_reports(dialog)
         dialog.end.setDate(QDate(2026, 12, 1))
+        wait_for_reports(dialog)
         assert dialog.income_model.data(dialog.income_model.index(0, 1)) == "$0.00"
     finally:
         dialog.close()

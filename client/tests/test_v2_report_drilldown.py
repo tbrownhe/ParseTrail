@@ -15,6 +15,7 @@ from parsetrail.core.v2_source_pipeline import build_source_evidence
 
 from .test_v2_card_purchase_review import _chase_profile
 from .test_v2_category_reports import DEFINITION, SOURCE
+from .test_v2_reports_responsiveness import wait_for_reports
 
 START, END = date(2026, 10, 1), date(2026, 11, 1)
 
@@ -218,24 +219,32 @@ def test_parent_inspection_uses_selected_category_account_and_budget_month(tmp_p
     seen = []
     monkeypatch.setattr(V2ReviewedEntryDrilldown, "exec", lambda dialog: seen.append(dialog.drilldown) or 0)
     dialog = V2ReviewedReportsDialog(profile)
+    wait_for_reports(dialog)
     try:
         dialog.start.setDate(QDate(2026, 10, 1))
+        wait_for_reports(dialog)
         dialog.end.setDate(QDate(2026, 11, 1))
+        wait_for_reports(dialog)
         for tab, table in ((0, dialog.table), (1, dialog.account_table), (3, dialog.income_table)):
             dialog.tabs.setCurrentIndex(tab)
+            wait_for_reports(dialog)
             table.selectRow(0)
             assert dialog.inspect_button.isEnabled()
             dialog.inspect_button.click()
         assert [report.account.id for report in seen] == ["expense:food", "cash", "income:pay"]
         assert [report.total_minor for report in seen] == [300, 300, 1000]
         dialog.end.setDate(QDate(2026, 10, 1))  # Invalid global range cannot change budget scope.
+        wait_for_reports(dialog)
         dialog.tabs.setCurrentIndex(2)
+        wait_for_reports(dialog)
         dialog.budget_month.setDate(QDate(2026, 10, 1))
+        wait_for_reports(dialog)
         dialog.budget_table.selectRow(0)
         dialog.inspect_button.click()
         assert seen[-1].report.start == START and seen[-1].report.end == END
         assert seen[-1].total_minor == 300
         dialog.tabs.setCurrentIndex(4)
+        wait_for_reports(dialog)
         assert not dialog.inspect_button.isEnabled()
     finally:
         dialog.close()
@@ -263,17 +272,22 @@ def test_malformed_journal_clears_parent_reports_and_can_refresh_after_valid_res
     with V2ProfileStore.open(profile, read_only=True) as store:
         original = store.connection.execute("SELECT payload FROM JournalEntries WHERE key=?", (tea,)).fetchone()[0]
     dialog = V2ReviewedReportsDialog(profile)
+    wait_for_reports(dialog)
     dialog.start.setDate(QDate(2026, 10, 1))
+    wait_for_reports(dialog)
     dialog.end.setDate(QDate(2026, 11, 1))
+    wait_for_reports(dialog)
     assert dialog.model.rowCount() == 2 and dialog.export_button.isEnabled()
     invalid = json.loads(original)
     invalid["postings"][1]["amount_minor"] += 1
     replace_payload(json.dumps(invalid))
     before = profile.read_bytes()
     try:
+        dialog.tabs.setCurrentIndex({"period": 0, "budget": 2, "positions": 4}[refresh_path])
         {"period": dialog.refresh, "budget": dialog._refresh_budget, "positions": dialog._refresh_positions}[
             refresh_path
         ]()
+        wait_for_reports(dialog)
         assert "unavailable" in dialog.total.text()
         assert not dialog.export_button.isEnabled() and not dialog.inspect_button.isEnabled()
         assert dialog.model.rowCount() == dialog.income_model.rowCount() == dialog.account_model.rowCount() == 0
@@ -281,9 +295,16 @@ def test_malformed_journal_clears_parent_reports_and_can_refresh_after_valid_res
         assert profile.read_bytes() == before
         replace_payload(original)
         dialog.start.setDate(QDate(2026, 10, 1))
+        wait_for_reports(dialog)
         dialog.end.setDate(QDate(2026, 11, 1))
+        wait_for_reports(dialog)
         dialog.budget_month.setDate(QDate(2026, 10, 1))
+        wait_for_reports(dialog)
         dialog.refresh_reports_button.click()
+        wait_for_reports(dialog)
+        for tab in (2, 4, 0):
+            dialog.tabs.setCurrentIndex(tab)
+            wait_for_reports(dialog)
         assert dialog.export_button.isEnabled()
         assert dialog.model.rowCount() == dialog.budget_model.rowCount() == 2
         assert dialog.positions_model.rowCount() == 1

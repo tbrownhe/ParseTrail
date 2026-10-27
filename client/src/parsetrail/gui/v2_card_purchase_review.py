@@ -118,9 +118,24 @@ class V2CardPurchaseReview(QDialog):
         )
         self.resize(1200, 650)
         layout = QVBoxLayout(self)
+        self.review_intro = QLabel(
+            "Review whole-liability charges. Repayments use transfer review; principal and interest are not inferred."
+            if register_mode
+            else "Choose a transaction's purpose and category, then confirm it. Card payments use transfer review."
+        )
+        self.review_intro.setWordWrap(True)
+        layout.addWidget(self.review_intro)
+        self.overlap_note = QLabel()
+        self.overlap_note.setWordWrap(True)
+        layout.addWidget(self.overlap_note)
+        self.review_limits_button = QPushButton("Review rules and source limits")
+        self.review_limits_button.setCheckable(True)
+        layout.addWidget(self.review_limits_button, alignment=Qt.AlignLeft)
         self.note = QLabel()
         self.note.setWordWrap(True)
         self.note.setTextFormat(Qt.PlainText)
+        self.note.setVisible(False)
+        self.review_limits_button.toggled.connect(self.note.setVisible)
         layout.addWidget(self.note)
         self.model = _CardRowsModel((), self, register_mode=register_mode)
         self.table = QTableView()
@@ -182,8 +197,7 @@ class V2CardPurchaseReview(QDialog):
         self.history_details.setTextFormat(Qt.PlainText)
         self.history_details.setTextInteractionFlags(Qt.TextSelectableByMouse)
         layout.addWidget(self.history_details)
-        self.preview_source_button = QPushButton("Open immutable register source")
-        self.preview_source_button.setVisible(register_mode)
+        self.preview_source_button = QPushButton("Preview source evidence")
         self.preview_source_button.clicked.connect(self._preview_source)
         layout.addWidget(self.preview_source_button)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
@@ -325,6 +339,7 @@ class V2CardPurchaseReview(QDialog):
             self.model.replace(())
             self._selected()
             self.preview_source_button.setEnabled(False)
+            self.overlap_note.clear()
             self.status.setText(
                 "Register source or retained interpretation history could not be verified. Reopen or refresh before another action."
                 if self.register_mode
@@ -339,6 +354,11 @@ class V2CardPurchaseReview(QDialog):
         self.review_preferences = snapshot.preferences
         self.preview_source_button.setEnabled(True)
         rows, self.categories, overlaps = snapshot.rows, snapshot.categories, snapshot.overlapping_source_ids
+        self.overlap_note.setText(
+            f"Possible overlap with {len(overlaps)} saved document(s). Check repeated evidence before posting."
+            if overlaps
+            else "Source dates and accounting dates remain distinct; review any estimated date before posting."
+        )
         self.note.setText(
             "Only the admitted Yamaha account-total liability register is supported here. Select purpose and category explicitly; a positive credit is not automatically a refund or repayment. "
             "Owned card and loan-register repayments use transfer review and create no second expense. "

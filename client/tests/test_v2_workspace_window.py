@@ -21,6 +21,8 @@ from scripts.v2_catalog_release import signed_catalog_bytes
 from devtools.parser_engine_pilot.review_accountless_export import DEFINITION as MOHELA_DEFINITION
 from devtools.parser_engine_pilot.review_accountless_export import SOURCE as MOHELA_SOURCE
 
+from .test_v2_document_browser import wait_for_inventory
+
 DEFINITION = (
     Path(__file__).parents[2] / "devtools" / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
 ).read_bytes()
@@ -79,6 +81,7 @@ def test_window_imports_pending_evidence_and_reuses_exact_source(tmp_path: Path,
     source = tmp_path / "cash.csv"
     source.write_bytes(SOURCE)
     window = V2WorkspaceWindow(workspace)
+    wait_for_inventory(window)
     try:
         assert window.sources.count() == 0
         category_opens = []
@@ -94,6 +97,7 @@ def test_window_imports_pending_evidence_and_reuses_exact_source(tmp_path: Path,
         assert window.import_button.isEnabled()
         window.start_import(source)
         _wait_finished(window.import_worker, app)
+        wait_for_inventory(window)
         assert window.sources.count() == 1
         assert window.preview_button.isEnabled()
         assert window.cash_review_button.isEnabled()
@@ -103,13 +107,16 @@ def test_window_imports_pending_evidence_and_reuses_exact_source(tmp_path: Path,
         opened = []
         monkeypatch.setattr(V2SourceAccountReview, "exec", lambda dialog: opened.append(dialog.identities.count()))
         window.source_review_button.click()
+        wait_for_inventory(window)
         assert opened == [1]
         expense_opens = []
         monkeypatch.setattr(V2CashActivityReview, "exec", lambda dialog: expense_opens.append(dialog.model.rowCount()))
         window.cash_review_button.click()
+        wait_for_inventory(window)
         assert expense_opens == [1]
         window.start_import(source)
         _wait_finished(window.import_worker, app)
+        wait_for_inventory(window)
         assert window.sources.count() == 1
         assert "already imported" in window.status.text()
     finally:
@@ -138,11 +145,13 @@ def test_window_batch_import_shows_per_file_report_and_retains_successes(tmp_pat
 
     monkeypatch.setattr(V2BatchImportReport, "exec", capture_report)
     window = V2WorkspaceWindow(workspace)
+    wait_for_inventory(window)
     try:
         window.import_button.click()
         worker = window.import_worker
         assert worker is not None
         _wait_finished(worker, app)
+        wait_for_inventory(window)
         assert window.sources.count() == 1
         assert window.import_button.isEnabled()
         assert window.import_folder_button.isEnabled()
@@ -182,6 +191,7 @@ def test_profile_menu_backs_up_restores_and_keeps_failed_selection_on_current_pr
     )
     monkeypatch.setattr(QMessageBox, "warning", lambda _parent, _title, message: warnings.append(message))
     window = V2WorkspaceWindow(workspace)
+    wait_for_inventory(window)
     try:
         window.backup_profile_action.trigger()
         assert backup.is_file()
@@ -218,6 +228,7 @@ def test_profile_menu_shows_current_copyable_data_locations_and_privacy(tmp_path
     shown = []
     monkeypatch.setattr(QDialog, "exec", lambda dialog: shown.append(dialog) or 0)
     window = V2WorkspaceWindow(workspace)
+    wait_for_inventory(window)
     try:
         window.data_locations_action.trigger()
         fields = shown[-1].findChildren(QLineEdit)
@@ -256,6 +267,7 @@ def test_window_cancel_reaches_worker_and_saves_nothing(tmp_path: Path, monkeypa
 
     monkeypatch.setattr(workspace, "import_file", wait_for_cancel)
     window = V2WorkspaceWindow(workspace)
+    wait_for_inventory(window)
     try:
         window.start_import(tmp_path / "unused.csv")
         worker = window.import_worker
@@ -299,6 +311,7 @@ def test_window_installs_local_signed_catalog_before_enabling_import(tmp_path: P
     )
     monkeypatch.setattr(QFileDialog, "getExistingDirectory", lambda *_args: str(release))
     window = V2WorkspaceWindow(workspace)
+    wait_for_inventory(window)
     try:
         assert not window.import_button.isEnabled()
         assert "No verified catalog" in window.catalog_label.text()
@@ -331,6 +344,7 @@ def test_accountless_source_opens_review_and_account_creation(tmp_path: Path, mo
     with V2ProfileStore.open(workspace.profile_path) as store:
         store.import_source(MOHELA_SOURCE, definition, evidence, suffix=".csv")
     window = V2WorkspaceWindow(workspace)
+    wait_for_inventory(window)
     opened = []
 
     def accept_account(dialog):

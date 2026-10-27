@@ -12,6 +12,7 @@ from parsetrail.core.v2_source_pipeline import build_source_evidence
 
 from .test_v2_card_purchase_review import _chase_profile
 from .test_v2_cash_activity_review import DEFINITION
+from .test_v2_reports_responsiveness import wait_for_reports
 
 START, END = date(2026, 10, 1), date(2026, 11, 1)
 SOURCE = (
@@ -155,15 +156,23 @@ def test_report_dialogs_keep_negative_net_spending_and_income_visible(tmp_path, 
     _profile(profile)
     before = profile.read_bytes()
     reports = V2ReviewedReportsDialog(profile)
+    wait_for_reports(reports)
     cash = V2CashMovementDialog(profile)
     try:
         reports.start.setDate(QDate(2026, 10, 1))
+        wait_for_reports(reports)
         reports.end.setDate(QDate(2026, 11, 1))
+        wait_for_reports(reports)
         reports.budget_month.setDate(QDate(2026, 10, 1))
+        wait_for_reports(reports)
         assert reports.spending_report.total_minor == -600
+        reports.tabs.setCurrentIndex(3)
+        wait_for_reports(reports)
         assert reports.income_report.total_minor == -200
         assert reports.model.data(reports.model.index(1, 1)) == "-$10.00"
         assert reports.income_model.data(reports.income_model.index(0, 1)) == "-$2.00"
+        reports.tabs.setCurrentIndex(2)
+        wait_for_reports(reports)
         assert sum(row.remaining_minor for row in reports.budget_model.rows) == 1600
         cash.start.setDate(QDate(2026, 10, 1))
         cash.end.setDate(QDate(2026, 11, 1))
@@ -234,6 +243,7 @@ def test_builtin_and_custom_same_name_remain_distinct_in_reports_and_selected_dr
             store.post_reviewed_cash_category(row.row_id, category_id, purpose=purpose, reason="Explicit category")
             store.set_category_budget_rate(category_id, START, 1000)
     reports = v2_reviewed_reports.V2ReviewedReportsDialog(profile)
+    wait_for_reports(reports)
     inspected = []
 
     class CaptureDrilldown:
@@ -246,13 +256,18 @@ def test_builtin_and_custom_same_name_remain_distinct_in_reports_and_selected_dr
     monkeypatch.setattr(v2_reviewed_reports, "V2ReviewedEntryDrilldown", CaptureDrilldown)
     try:
         reports.start.setDate(QDate(2026, 10, 1))
+        wait_for_reports(reports)
         reports.end.setDate(QDate(2026, 11, 1))
+        wait_for_reports(reports)
         reports.budget_month.setDate(QDate(2026, 10, 1))
+        wait_for_reports(reports)
         expected = {
             "builtin:loan-interest": ("Loan interest [Built-in]", 400),
             "expense:custom-interest": ("Loan interest [Custom: expense:custom-interest]", -1000),
         }
         for model, tab in ((reports.model, 0), (reports.budget_model, 2)):
+            reports.tabs.setCurrentIndex(tab)
+            wait_for_reports(reports)
             labels = set()
             for index, row in enumerate(model.rows):
                 label, amount = expected[row.category_id]

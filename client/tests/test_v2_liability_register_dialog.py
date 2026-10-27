@@ -10,6 +10,8 @@ from parsetrail.core.v2_workspace import V2Workspace
 
 from devtools.parser_engine_pilot.synthetic_family_sources import family_sources
 
+from .test_v2_document_browser import wait_for_inventory
+
 
 @pytest.fixture(scope="module")
 def source():
@@ -318,7 +320,9 @@ def test_workspace_register_action_has_exact_source_and_import_busy_guard(tmp_pa
     path = tmp_path / "workspace.db"
     evidence, _bank = profile(path, source)
     window = V2WorkspaceWindow(workspace(path))
+    wait_for_inventory(window)
     window.refresh(select_source=evidence.source_sha256)
+    wait_for_inventory(window)
     opened = []
     monkeypatch.setattr(V2LiabilityRegisterReview, "exec", lambda view: opened.append(view.source_sha256) or 0)
     assert window.register_review_action.isEnabled() and not window.card_review_button.isEnabled()
@@ -326,6 +330,7 @@ def test_workspace_register_action_has_exact_source_and_import_busy_guard(tmp_pa
     assert opened == [evidence.source_sha256]
     window.import_worker = object()
     window.refresh(select_source=evidence.source_sha256)
+    wait_for_inventory(window)
     assert not window.register_review_action.isEnabled()
     window._review_register_activity()
     assert opened == [evidence.source_sha256]
@@ -333,6 +338,7 @@ def test_workspace_register_action_has_exact_source_and_import_busy_guard(tmp_pa
     with V2ProfileStore.open(path, read_only=True) as store:
         bank_source = next(source_id for source_id in store.source_ids() if source_id != evidence.source_sha256)
     window.refresh(select_source=bank_source)
+    wait_for_inventory(window)
     assert not window.register_review_action.isEnabled()
     window._review_register_activity()
     assert opened == [evidence.source_sha256]

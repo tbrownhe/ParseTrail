@@ -44,27 +44,26 @@ class V2SourceAccountReview(QDialog):
         self.resize(720, 480)
         layout = QVBoxLayout(self)
         intro = QLabel(
-            "Choose the ledger account represented by each source identity. "
-            "A unique full-number match can use signed parser context. Last-four matching "
-            "requires the app preference. You can override either with an explicit assignment. "
-            "No ledger entries are posted here."
+            "Confirm which account each part of this document belongs to. "
+            "A suggested match is not yet a saved assignment. Choose Use this account to confirm it. "
+            "Assigning an account does not add transactions to your books."
         )
         intro.setWordWrap(True)
         layout.addWidget(intro)
         self.status = QLabel()
         layout.addWidget(self.status)
         self.identities = QListWidget()
-        self.identities.currentRowChanged.connect(self._update_controls)
+        self.identities.currentRowChanged.connect(self._identity_changed)
         layout.addWidget(self.identities)
         self.lock_notice = QLabel()
         self.lock_notice.setWordWrap(True)
         layout.addWidget(self.lock_notice)
         controls = QHBoxLayout()
-        controls.addWidget(QLabel("Ledger account:"))
+        controls.addWidget(QLabel("Your account:"))
         self.account_combo = QComboBox()
         self.account_combo.currentIndexChanged.connect(self._update_controls)
         controls.addWidget(self.account_combo)
-        self.assign_button = QPushButton("Assign selected identity")
+        self.assign_button = QPushButton("Use this account")
         self.assign_button.clicked.connect(self._assign)
         controls.addWidget(self.assign_button)
         self.clear_button = QPushButton("Clear assignment")
@@ -74,9 +73,7 @@ class V2SourceAccountReview(QDialog):
         self.correction_button = QPushButton("Review account correction…")
         self.correction_button.clicked.connect(self._correct)
         layout.addWidget(self.correction_button)
-        self.abbreviated_matching_button = QPushButton(
-            "Allow abbreviated account numbers to automatically match to ledger"
-        )
+        self.abbreviated_matching_button = QPushButton("Suggest accounts using abbreviated account numbers")
         self.abbreviated_matching_button.setCheckable(True)
         self.abbreviated_matching_button.clicked.connect(self._toggle_abbreviated_matching)
         layout.addWidget(self.abbreviated_matching_button)
@@ -169,7 +166,9 @@ class V2SourceAccountReview(QDialog):
             if binding.ledger_account_id is not None:
                 assigned = f"Assigned: {names.get(binding.ledger_account_id, 'Unknown account')}"
             elif match.status == "automatic":
-                assigned = f"Automatic match: {names.get(match.ledger_account_id, 'Unknown account')}"
+                assigned = (
+                    f"Suggested account: {names.get(match.ledger_account_id, 'Unknown account')} · confirm to assign"
+                )
             elif match.status == "ambiguous":
                 assigned = "Multiple eligible accounts; choose one"
             elif match.offer_enable_abbreviated_matching:
@@ -196,11 +195,21 @@ class V2SourceAccountReview(QDialog):
                 self.identities.setCurrentItem(item)
         if self.identities.currentRow() < 0 and self.identities.count():
             self.identities.setCurrentRow(0)
-        pending = sum(
-            binding.ledger_account_id is None and match.status != "automatic"
-            for binding, match in zip(self.bindings, self.matches, strict=True)
-        )
+        pending = sum(binding.ledger_account_id is None for binding in self.bindings)
         self.status.setText(f"{pending} of {len(self.bindings)} source identities unassigned")
+        self._update_controls()
+
+    def _identity_changed(self, *_args) -> None:
+        index = self.identities.currentRow()
+        account_id = None
+        if 0 <= index < len(self.bindings):
+            binding, match = self.bindings[index], self.matches[index]
+            account_id = binding.ledger_account_id
+            if account_id is None and match.status == "automatic":
+                account_id = match.ledger_account_id
+            elif account_id is None and match.offer_enable_abbreviated_matching and len(match.suggestions) == 1:
+                account_id = match.suggestions[0]
+        self.account_combo.setCurrentIndex(max(0, self.account_combo.findData(account_id)))
         self._update_controls()
 
     def _selected_key(self) -> tuple[str, str] | None:

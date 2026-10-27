@@ -8,6 +8,8 @@ from pathlib import Path
 from parsetrail.core.v2_profile_store import FinancialAccount, V2ProfileStore
 from parsetrail.core.v2_source_pipeline import build_source_evidence
 
+from .test_v2_document_browser import wait_for_inventory
+
 DEFINITION = (
     Path(__file__).parents[2] / "devtools" / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
 ).read_bytes()
@@ -65,6 +67,7 @@ def test_empty_inventory_and_workspace_entry(tmp_path: Path, monkeypatch):
     opened = []
     monkeypatch.setattr(V2SourceOverlapReview, "exec", lambda review: opened.append(review.profile))
     window = V2WorkspaceWindow(workspace)
+    wait_for_inventory(window)
     try:
         window.overlap_review_button.click()
         assert opened == [workspace.profile_path]

@@ -16,6 +16,7 @@ from devtools.parser_engine_pilot.test_table_card_source_output import DEFINITIO
 from devtools.parser_engine_pilot.test_table_card_source_output import SOURCE as CARD_SOURCE
 from devtools.parser_engine_pilot.test_table_card_source_output import evidence as card_channels
 
+from .test_v2_reports_responsiveness import wait_for_reports
 from .test_v2_reviewed_openings import _profile as opening_profile
 from .test_v2_statement_journal_comparison import _profile as statement_profile
 from .test_v2_statement_reconciliation import _review_and_post
@@ -38,7 +39,9 @@ def _dialog(profile: Path):
     from parsetrail.gui.v2_reviewed_reports import V2ReviewedReportsDialog
 
     dialog = V2ReviewedReportsDialog(profile)
+    wait_for_reports(dialog)
     dialog.tabs.setCurrentIndex(4)
+    wait_for_reports(dialog)
     return dialog
 
 
@@ -52,6 +55,7 @@ def test_positions_empty_and_failed_refresh_clear_data_without_writes(tmp_path: 
         pass
     before = hashlib.sha256(profile.read_bytes()).hexdigest()
     dialog = _dialog(profile)
+    wait_for_reports(dialog)
     try:
         dialog.show()
         app.processEvents()
@@ -67,6 +71,7 @@ def test_positions_empty_and_failed_refresh_clear_data_without_writes(tmp_path: 
 
         monkeypatch.setattr(V2ProfileStore, "account_positions", unavailable)
         dialog._refresh_positions()
+        wait_for_reports(dialog)
         assert dialog.positions_report is None
         assert dialog.positions_model.rowCount() == 0
         assert "unavailable" in dialog.total.text()
@@ -96,8 +101,10 @@ def test_positions_pending_and_unbound_scope_is_independent_of_period_range(tmp_
         store.post_reviewed_cash_category(evidence.payload.rows[0].row_id, "expense:food", reason="Coffee")
     before = hashlib.sha256(profile.read_bytes()).hexdigest()
     dialog = _dialog(profile)
+    wait_for_reports(dialog)
     try:
         dialog.as_of.setDate(QDate(2026, 10, 1))
+        wait_for_reports(dialog)
         assert _cell(dialog.positions_model, 0, 2) == "-$4.00"
         assert _cell(dialog.positions_model, 0, 3) == "Unknown"
         assert _cell(dialog.positions_model, 0, 4) == "Not established"
@@ -109,12 +116,15 @@ def test_positions_pending_and_unbound_scope_is_independent_of_period_range(tmp_
         assert _cell(dialog.history_model, 0, 2) == "-$4.00"
         assert _cell(dialog.history_model, 0, 4) == "Unknown"
         dialog.start.setDate(QDate(2026, 11, 1))
+        wait_for_reports(dialog)
         dialog.end.setDate(QDate(2026, 11, 1))
+        wait_for_reports(dialog)
         assert dialog.model.rowCount() == 0
         assert dialog.positions_model.rowCount() == 1
         assert "As of 2026-10-01" in dialog.total.text()
         assert not dialog.export_button.isEnabled()
         dialog.as_of.setDate(QDate(2026, 9, 30))
+        wait_for_reports(dialog)
         assert _cell(dialog.positions_model, 0, 2) == "$0.00"
         assert _cell(dialog.positions_model, 0, 3) == "Unknown"
         assert dialog.history_model.rowCount() == 0
@@ -125,6 +135,7 @@ def test_positions_pending_and_unbound_scope_is_independent_of_period_range(tmp_
 
         monkeypatch.setattr(V2ProfileStore, "account_positions", unavailable)
         dialog._refresh_positions()
+        wait_for_reports(dialog)
         assert dialog.positions_report is None
         assert dialog.positions_model.rowCount() == 0
         assert dialog.history_model.rowCount() == 0
@@ -146,8 +157,10 @@ def test_positions_opening_cutoff_live_check_corrections_and_stale_state(tmp_pat
         store.correct_reviewed_cash_category(original, "expense:travel", reason="Reviewed category correction")
     before = hashlib.sha256(profile.read_bytes()).hexdigest()
     dialog = _dialog(profile)
+    wait_for_reports(dialog)
     try:
         dialog.as_of.setDate(QDate(2026, 1, 31))
+        wait_for_reports(dialog)
         assert _cell(dialog.positions_model, 0, 2) == "$90.00"
         assert _cell(dialog.positions_model, 0, 3) == "$90.00"
         assert _cell(dialog.positions_model, 0, 4) == "Valid at as-of date"
@@ -159,10 +172,12 @@ def test_positions_opening_cutoff_live_check_corrections_and_stale_state(tmp_pat
         assert "Source page capture unverified" in dialog.position_details.text()
         assert dialog.history_table.columnWidth(1) > 100
         dialog.as_of.setDate(QDate(2025, 12, 30))
+        wait_for_reports(dialog)
         assert _cell(dialog.positions_model, 0, 3) == "Unknown"
         assert _cell(dialog.positions_model, 0, 4) == "After as-of date"
         assert dialog.history_model.rowCount() == 0
         dialog.as_of.setDate(QDate(2025, 12, 31))
+        wait_for_reports(dialog)
         assert _cell(dialog.positions_model, 0, 3) == "$100.00"
         assert _cell(dialog.positions_model, 0, 6) == "None passing"
         assert dialog.history_model.rowCount() == 1
@@ -183,8 +198,10 @@ def test_positions_opening_cutoff_live_check_corrections_and_stale_state(tmp_pat
             source_reference="Updated source inspection",
         )
     dialog = _dialog(profile)
+    wait_for_reports(dialog)
     try:
         dialog.as_of.setDate(QDate(2026, 1, 31))
+        wait_for_reports(dialog)
         assert _cell(dialog.positions_model, 0, 2) == "$90.00"
         assert _cell(dialog.positions_model, 0, 3) == "Unknown"
         assert "Stale" in _cell(dialog.positions_model, 0, 4)
@@ -213,8 +230,10 @@ def test_liability_opening_is_displayed_as_amount_owed(tmp_path: Path, app):
         )
         store.post_reviewed_opening("card")
     dialog = _dialog(profile)
+    wait_for_reports(dialog)
     try:
         dialog.as_of.setDate(QDate(2025, 12, 31))
+        wait_for_reports(dialog)
         assert _cell(dialog.positions_model, 0, 1) == "Liability"
         assert _cell(dialog.positions_model, 0, 2) == "$100.00"
         assert _cell(dialog.positions_model, 0, 3) == "$100.00"
@@ -240,8 +259,10 @@ def test_zero_opening_is_known_without_a_history_posting(tmp_path: Path, app):
         )
         store.post_reviewed_opening("cash")
     dialog = _dialog(profile)
+    wait_for_reports(dialog)
     try:
         dialog.as_of.setDate(QDate(2025, 12, 31))
+        wait_for_reports(dialog)
         assert _cell(dialog.positions_model, 0, 2) == "$0.00"
         assert _cell(dialog.positions_model, 0, 3) == "$0.00"
         assert _cell(dialog.positions_model, 0, 4) == "Valid at as-of date"
@@ -261,14 +282,17 @@ def test_different_date_payment_displays_clearing_and_preserves_selected_account
         store.post_reviewed_transfer(cash_row, card_row, preferences=V2Preferences(), reason="Reviewed payment")
     before = hashlib.sha256(profile.read_bytes()).hexdigest()
     dialog = _dialog(profile)
+    wait_for_reports(dialog)
     try:
         dialog.as_of.setDate(QDate(2026, 1, 3))
+        wait_for_reports(dialog)
         assert "Transfer clearing recorded total: $20.00" in dialog.total.text()
         card_index = next(index for index, row in enumerate(dialog.positions_model.rows) if row.account_id == "card")
         dialog.positions_table.selectRow(card_index)
         assert _cell(dialog.positions_model, card_index, 2) == "$0.00"
         assert dialog.history_model.rowCount() == 0
         dialog.as_of.setDate(QDate(2026, 1, 5))
+        wait_for_reports(dialog)
         assert "Transfer clearing recorded total: $0.00" in dialog.total.text()
         assert dialog.positions_model.rows[dialog.positions_table.currentIndex().row()].account_id == "card"
         assert _cell(dialog.positions_model, card_index, 2) == "-$20.00"

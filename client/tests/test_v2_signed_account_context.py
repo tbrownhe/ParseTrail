@@ -18,6 +18,8 @@ from scripts.v2_catalog_release import signed_catalog_bytes
 
 from devtools.parser_engine_pilot.test_synchrony_source_output import DEFINITION, SOURCE, channels
 
+from .test_v2_document_browser import wait_for_inventory
+
 
 def _workspace(tmp_path: Path, *, context: bool = True, kind: str = "liability") -> V2Workspace:
     tmp_path.mkdir(exist_ok=True)
@@ -97,6 +99,7 @@ def test_review_offers_inline_toggle_and_updates_menu(tmp_path: Path) -> None:
     app = QApplication.instance() or QApplication([])
     workspace = _workspace(tmp_path)
     window = V2WorkspaceWindow(workspace)
+    wait_for_inventory(window)
     dialog = V2SourceAccountReview(workspace, workspace.source_ids()[0], window)
     try:
         window.show()

@@ -12,6 +12,7 @@ from parsetrail.core.v2_profile_store import ProfileFormatError, V2ProfileStore
 from parsetrail.core.v2_source_recovery import recover_source_original
 from parsetrail.core.v2_workspace import V2Workspace
 
+from .test_v2_document_browser import wait_for_inventory
 from .test_v2_workspace import SOURCE, _workspace
 
 
@@ -167,6 +168,7 @@ def test_workspace_recovery_action_cancel_save_and_failure(tmp_path: Path, monke
     )
     monkeypatch.setattr(QMessageBox, "warning", lambda *_args: warnings.append(_args[1:]))
     dialog = V2WorkspaceWindow(workspace)
+    wait_for_inventory(dialog)
     try:
         assert dialog.recover_source_action.isEnabled()
         monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *_args, **_kwargs: ("", ""))
@@ -195,6 +197,7 @@ def test_empty_workspace_has_no_source_to_recover(tmp_path: Path, monkeypatch):
     app = QApplication.instance() or QApplication([])
     workspace = _workspace(tmp_path)
     dialog = V2WorkspaceWindow(workspace)
+    wait_for_inventory(dialog)
     try:
         assert not dialog.recover_source_action.isEnabled()
     finally:

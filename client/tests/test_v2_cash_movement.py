@@ -13,6 +13,7 @@ from parsetrail.core.v2_profile_store import FinancialAccount, ProfileFormatErro
 from parsetrail.core.v2_source_pipeline import build_source_evidence
 
 from .test_v2_card_purchase_review import _chase_profile
+from .test_v2_document_browser import wait_for_inventory
 from .test_v2_report_drilldown import END, START, _profile
 from .test_v2_transfer_corrections import _alternative
 from .test_v2_transfers import BANK_DEFINITION
@@ -334,6 +335,7 @@ def test_workspace_reports_menu_opens_explicit_scope_dialog(tmp_path, app, monke
     seen = []
     monkeypatch.setattr(V2CashMovementDialog, "exec", lambda dialog: seen.append((dialog.profile, dialog.report)) or 0)
     window = V2WorkspaceWindow(workspace)
+    wait_for_inventory(window)
     try:
         window.cash_movement_action.trigger()
         assert seen == [(workspace.profile_path, None)]

@@ -132,8 +132,19 @@ class V2CashActivityReview(QDialog):
         self.setWindowTitle("2.0 cash activity review")
         self.resize(1050, 620)
         layout = QVBoxLayout(self)
+        self.review_intro = QLabel()
+        self.review_intro.setWordWrap(True)
+        layout.addWidget(self.review_intro)
+        self.overlap_note = QLabel()
+        self.overlap_note.setWordWrap(True)
+        layout.addWidget(self.overlap_note)
+        self.review_limits_button = QPushButton("Review rules and source limits")
+        self.review_limits_button.setCheckable(True)
+        layout.addWidget(self.review_limits_button, alignment=Qt.AlignLeft)
         self.note = QLabel()
         self.note.setWordWrap(True)
+        self.note.setVisible(False)
+        self.review_limits_button.toggled.connect(self.note.setVisible)
         layout.addWidget(self.note)
         self.model = _ReviewModel((), self)
         self.table = QTableView()
@@ -181,6 +192,8 @@ class V2CashActivityReview(QDialog):
         self.history_details.setTextInteractionFlags(Qt.TextSelectableByMouse)
         layout.addWidget(self.history_details)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        self.preview_source_button = buttons.addButton("Preview source evidence", QDialogButtonBox.ActionRole)
+        self.preview_source_button.clicked.connect(self._preview_source)
         reload_button = buttons.addButton("Reload saved review", QDialogButtonBox.ActionRole)
         reload_button.clicked.connect(
             lambda: self.refresh(selected_row_id=self._current().row_id if self._current() else None)
@@ -189,6 +202,14 @@ class V2CashActivityReview(QDialog):
         layout.addWidget(buttons)
         self.categories = ()
         self.refresh()
+
+    def _preview_source(self) -> None:
+        from parsetrail.gui.v2_evidence_preview import preview_saved_source
+
+        try:
+            preview_saved_source(self.profile, self.source_sha256, parent=self).exec()
+        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
+            QMessageBox.warning(self, "Source evidence unavailable", str(exc))
 
     def _current(self) -> CashActivityReviewRow | None:
         index = self.table.currentIndex()
@@ -295,6 +316,9 @@ class V2CashActivityReview(QDialog):
             self.basis, self.entries, self.history, self.categories = None, {}, (), ()
             self.model.replace(())
             self._selected()
+            self.preview_source_button.setEnabled(False)
+            self.review_intro.setText("Source review unavailable. Reload saved review to retry.")
+            self.overlap_note.clear()
             self.status.setText(f"Source review unavailable. Reopen or refresh the review: {exc}")
             return
         self.basis, self.entries, self.history = (
@@ -303,6 +327,17 @@ class V2CashActivityReview(QDialog):
             snapshot.history,
         )
         rows, self.categories, overlaps = snapshot.rows, snapshot.categories, snapshot.overlapping_source_ids
+        self.preview_source_button.setEnabled(True)
+        self.review_intro.setText(
+            "Review this account's cash component only; this does not cover the whole HSA or investments. "
+            if any(row.tracking_scope == "cash_component" for row in rows)
+            else "Choose a transaction, its purpose and category, then confirm the entry. "
+        )
+        self.overlap_note.setText(
+            f"Possible overlap with {len(overlaps)} saved document(s). Check repeated evidence before posting."
+            if overlaps
+            else "Transfers and repayments use separate review; do not count them as another expense."
+        )
         self.note.setText(
             "Select a row assigned to an asset account with a source posting date. "
             "Supported bank statements use account-total scope; the admitted HealthEquity cash section uses asset cash-component scope only. "

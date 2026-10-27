@@ -45,7 +45,8 @@ def test_prepare_exact_books_sources_and_pinned_reopen(prepared):
     walkthrough = (destination / "WALKTHROUGH.txt").read_text(encoding="utf-8")
     for source in (destination / "sources").iterdir():
         if source.name != "Import-this-next.csv":
-            assert f"{source.name}: Source {hashlib.sha256(source.read_bytes()).hexdigest()[:16]}" in walkthrough
+            label = next(line for line in walkthrough.splitlines() if line.startswith(f"  {source.name}:"))
+            assert "Demo " in label and hashlib.sha256(source.read_bytes()).hexdigest()[:16] in label
     before = hashlib.sha256((destination / "review.db").read_bytes()).hexdigest()
     for helper in (TOOL, destination / "runtime/devtools/v2_review_demo/prepare_demo.py"):
         checked = subprocess.run(

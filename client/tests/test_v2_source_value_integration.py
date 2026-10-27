@@ -12,6 +12,8 @@ from devtools.parser_engine_pilot.test_loan_history_lines import lines as capita
 from devtools.parser_engine_pilot.test_wells_loan_lines import DEFINITION as WELLS_DEFINITION
 from devtools.parser_engine_pilot.test_wells_loan_lines import parse as wells_source
 
+from .test_v2_reports_responsiveness import wait_for_reports
+
 JAN, FEB = date(2026, 1, 1), date(2026, 2, 1)
 
 
@@ -212,9 +214,12 @@ def test_positions_show_source_sign_and_conflict_without_promoting_value_to_book
     )
     before = profile.read_bytes()
     dialog = V2ReviewedReportsDialog(profile)
+    wait_for_reports(dialog)
     try:
         dialog.tabs.setCurrentIndex(4)
+        wait_for_reports(dialog)
         dialog.as_of.setDate(QDate(2026, 1, 31))
+        wait_for_reports(dialog)
         index = next(index for index, row in enumerate(dialog.positions_model.rows) if row.account_id == "capital")
         dialog.positions_table.selectRow(index)
 
@@ -227,6 +232,7 @@ def test_positions_show_source_sign_and_conflict_without_promoting_value_to_book
         assert "Extracted closing $9,500.00" in tooltip and "reviewed debit -$9,500.00" in tooltip
         assert "does not replace the books or establish settlement" in dialog.position_details.text()
         dialog.source_value_button.click()
+        wait_for_reports(dialog)
         assert seen == [(profile, "capital", 3)]
         assert profile.read_bytes() == before
         with V2ProfileStore.open(profile) as store:
@@ -242,10 +248,12 @@ def test_positions_show_source_sign_and_conflict_without_promoting_value_to_book
                 allow_conflict=True,
             )
         dialog._refresh_positions()
+        wait_for_reports(dialog)
         assert cell(12) == "Conflicting reviewed values\n2026-01-31"
         assert "No single value is selected" in dialog.position_details.text()
         assert cell(3) == "Unknown" and dialog.source_value_button.isEnabled()
         dialog.as_of.setDate(QDate(2026, 10, 31))
+        wait_for_reports(dialog)
         assert cell(12) == "Conflicting reviewed values\n2026-01-31"
         assert "Conflicting reviewed dated values at 2026-01-31" in dialog.position_details.text()
         changed = profile.read_bytes()
@@ -258,6 +266,7 @@ def test_positions_show_source_sign_and_conflict_without_promoting_value_to_book
 
         monkeypatch.setattr(V2ProfileStore, "account_positions", refuse)
         dialog._refresh_positions()
+        wait_for_reports(dialog)
         assert not dialog.source_value_button.isEnabled() and not dialog.account_anchor_button.isEnabled()
         assert dialog.positions_model.rows == () and dialog.position_details.toolTip() == ""
         assert "unavailable" in dialog.position_details.text()

@@ -6,22 +6,22 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None active. The approved [project-wide agent/workflow configuration](docs/work/2026-10-26-project-agent-workflow.md)
-is implemented and verified. This documentation/configuration task does not
-select the broad application redesign or change owner data and evidence formats.
+None active. [Guided client usability and responsive reads](docs/work/2026-10-26-client-ux-performance-evaluation.md#implemented-result)
+completed development and agent/independent verification. One interface with
+discoverable details; evidence format and financial policy are preserved.
 
 ## Recommended next packets (unselected)
 
-1. [Further UI/UX refinement](docs/work/2026-10-26-v2-integrated-ui-review.md#further-owner-feedback-and-recommended-next-work),
-   reduce information density, clarify navigation and guide the ordinary
-   import/review/report workflow. The owner approved the project-wide team/workflow
-   update; broad application refinement remains a separate unselected packet.
+1. [Review efficiency and remaining polish](docs/work/2026-10-26-client-ux-performance-evaluation.md#follow-up-scope):
+   separately designed multi-row confirmation, routine-note ergonomics,
+   focused specialized reviews and substantially posted-history performance.
 
 ## Remaining review and action gates
 
 1. [Real-statement pilot review](docs/work/2026-10-26-v2-real-statement-pilot.md):
    review evidence, account assignments, openings and activity before interpreting
-   posted reports; further interface refinement remains a later selected packet.
+   posted reports. The new guided source interface has separate synthetic agent
+   verification; it does not attest owner accounting review of that pilot.
 2. [Platform/release checks](ROADMAP.md#release-checklist): targeted Intel,
    installed/offline/OS integration and no-build-toolchain environment acceptance.
 3. [Starter signing](docs/work/2026-10-26-v2-catalog-signing-inputs.md), versioning
@@ -33,10 +33,11 @@ they are not selected by this closeout.
 
 ## Most recent product packet
 
-[Archive-sized review performance](docs/work/2026-10-26-v2-review-performance.md)
-completed the measured read optimization and existing-profile runtime handoff.
-Owner accounting review, later interface refinement and
-supported-platform/release gates remain separate.
+[Guided client usability and responsive reads](docs/work/2026-10-26-client-ux-performance-evaluation.md)
+completed recognizable documents, contextual tasks, responsive scoped reports and
+one-pass account positions. A fresh disposable synthetic preview is available;
+existing owner pilots and pinned runtimes remain unchanged. Owner accounting
+review and supported-platform/release gates remain separate.
 
 ## Decisions and gates
 

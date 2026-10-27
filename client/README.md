@@ -204,6 +204,20 @@ and coverage remain separate. V2 source imports use the finite
 [signed parser catalog](../docs/client-v2-parsing.md), not the 1.x bytecode loader.
 These implemented slices do not establish 2.0 release readiness.
 
+The V2 workspace uses Documents, Review, Accounts and Reports navigation.
+Documents are searchable by saved account/source labels and qualified dates;
+their primary action opens the relevant account confirmation or activity review.
+Account suggestions remain pending until explicitly confirmed. Full source
+identifiers, date provenance and overlap details remain available in Show details.
+No presentation mode changes matching preferences or accounting decisions.
+
+Document inventories and selected report tabs load through background read-only
+connections. Loading/error states replace outdated results, and superseded
+profile/date requests cannot publish totals. Account positions defaults to a
+compact asset/liability and tracking-scope view; report/evidence details and
+selected-account history can be expanded. Refresh rereads the profile; retained
+tab results describe their read snapshot rather than a live bank balance.
+
 The [cutover contract](../docs/client-v2-cutover.md) requires a clean profile and
 new authored decisions, with no 1.x updater or category carry-forward. The
 [legacy kernel](../docs/client-ledger-kernel.md), [recovery tool](../devtools/recovery/README.md),

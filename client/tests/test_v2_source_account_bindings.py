@@ -16,6 +16,8 @@ from devtools.parser_engine_pilot.test_synchrony_source_output import DEFINITION
 from devtools.parser_engine_pilot.test_synchrony_source_output import SOURCE as CARD_SOURCE
 from devtools.parser_engine_pilot.test_synchrony_source_output import channels as card_channels
 
+from .test_v2_document_browser import wait_for_inventory
+
 CASH_DEFINITION = (
     Path(__file__).parents[2] / "devtools" / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
 ).read_bytes()
@@ -202,6 +204,7 @@ def test_statement_overlap_uses_explicit_account_and_printed_period(tmp_path: Pa
     app = QApplication.instance() or QApplication([])
     workspace = V2Workspace.open(path, tmp_path / "catalog", preferences_path=tmp_path / "preferences.json")
     window = V2WorkspaceWindow(workspace)
+    wait_for_inventory(window)
     try:
         dialog = V2StatementCoverageDialog(path, window)
         tabs = dialog.findChild(QTabWidget)
@@ -232,11 +235,12 @@ def test_statement_overlap_uses_explicit_account_and_printed_period(tmp_path: Pa
                 window.sources.setCurrentRow(index)
                 break
         assert "Possible period overlap" in window.selected_details.text()
-        assert overlapping_evidence.source_sha256[:16] in window.selected_details.text()
+        assert overlapping_evidence.source_sha256 in window.document_technical_details.toPlainText()
         assert disjoint_evidence.source_sha256[:16] not in window.selected_details.text()
         with V2ProfileStore.open(path) as store:
             store.clear_source_account_binding(overlapping_evidence.source_sha256, identity, form)
         window.refresh(select_source=first_evidence.source_sha256)
+        wait_for_inventory(window)
         assert "Possible period overlap" not in window.selected_details.text()
     finally:
         window.close()
@@ -316,4 +320,38 @@ def test_source_account_review_explains_posted_assignment_lock(tmp_path: Path, m
         assert not dialog.clear_button.isEnabled()
     finally:
         dialog.close()
+        app.processEvents()
+
+
+def test_suggested_account_remains_pending_until_explicit_confirmation(tmp_path: Path):
+    from parsetrail.gui.v2_card_purchase_review import V2CardPurchaseReview
+    from parsetrail.gui.v2_source_account_review import V2SourceAccountReview
+    from PySide6.QtWidgets import QApplication
+
+    from .test_v2_signed_account_context import _workspace
+
+    app = QApplication.instance() or QApplication([])
+    workspace = _workspace(tmp_path)
+    workspace.set_allow_abbreviated_account_matching(True)
+    source_id = workspace.source_ids()[0]
+    before = sha256(workspace.profile_path.read_bytes()).hexdigest()
+    dialog = V2SourceAccountReview(workspace, source_id)
+    card = V2CardPurchaseReview(workspace, source_id)
+    try:
+        assert "1 of 1" in dialog.status.text()
+        assert "Suggested account: Card A" in dialog.identities.item(0).text()
+        assert dialog.account_combo.currentData() == "card-a"
+        assert dialog.assign_button.isEnabled()
+        assert card.model.rows[0].financial_account is None
+        assert sha256(workspace.profile_path.read_bytes()).hexdigest() == before
+        dialog.assign_button.click()
+        card.refresh()
+        assert "0 of 1" in dialog.status.text()
+        assert "Assigned: Card A" in dialog.identities.item(0).text()
+        assert card.model.rows[0].financial_account == "Card A"
+        with V2ProfileStore.open(workspace.profile_path, read_only=True) as store:
+            assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (0,)
+    finally:
+        dialog.close()
+        card.close()
         app.processEvents()

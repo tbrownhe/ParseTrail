@@ -111,6 +111,7 @@ def test_hsa_cash_purpose_explicit_unknown_source_text_and_withdrawal(
     assert len(view.model.rows) == 3
     assert all(row.status == "Ready for purpose review" for row in view.model.rows)
     assert "contributions" in view.note.text() and "cash-component" in view.note.text()
+    assert "cash component only" in view.review_intro.text() and "whole HSA" in view.review_intro.text()
     view.table.selectRow(row_index)
     assert view.purpose.currentData() is None and not view.action_button.isEnabled()
     assert "cash component" in view.source_context.text()

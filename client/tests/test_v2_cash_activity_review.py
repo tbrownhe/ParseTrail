@@ -26,6 +26,7 @@ SOURCE = (
 def test_cash_activity_dialog_keeps_unclassified_deposit_pending(tmp_path: Path, monkeypatch) -> None:
     os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
     from parsetrail.gui.v2_cash_activity_review import V2CashActivityReview
+    from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
     from PySide6.QtWidgets import QApplication, QMessageBox
 
     app = QApplication.instance() or QApplication([])
@@ -39,6 +40,12 @@ def test_cash_activity_dialog_keeps_unclassified_deposit_pending(tmp_path: Path,
     monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.StandardButton.Yes)
     dialog = V2CashActivityReview(profile, evidence.source_sha256)
     try:
+        previews = []
+        monkeypatch.setattr(V2EvidencePreview, "exec", lambda view: previews.append(view.rows_model.rowCount()))
+        before_preview = profile.read_bytes()
+        dialog.preview_source_button.click()
+        assert previews == [2]
+        assert profile.read_bytes() == before_preview
         assert dialog.model.rows[0].status == "Assign a financial account first"
         dialog.table.selectRow(0)
         assert not dialog.action_button.isEnabled()

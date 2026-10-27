@@ -15,6 +15,7 @@ from devtools.parser_engine_pilot.test_table_card_source_output import DEFINITIO
 from devtools.parser_engine_pilot.test_table_card_source_output import SOURCE as CARD_SOURCE
 from devtools.parser_engine_pilot.test_table_card_source_output import evidence as card_channels
 
+from .test_v2_document_browser import wait_for_inventory
 from .test_v2_transfers import BANK_DEFINITION
 
 JAN, FEB = date(2026, 1, 1), date(2026, 2, 1)
@@ -260,6 +261,7 @@ def test_workspace_exposes_whole_settlement_review_and_guards_import_in_progress
     monkeypatch.setattr(v2_settlement_review, "V2SettlementReview", Review)
     monkeypatch.setattr(v2_workspace_window.V2TransferReview, "exec", lambda dialog: transfer_opens.append(dialog) or 0)
     window = V2WorkspaceWindow(workspace)
+    wait_for_inventory(window)
     try:
         window.settlement_review_action.trigger()
         assert opened == [(workspace, None, window)]
@@ -267,6 +269,7 @@ def test_workspace_exposes_whole_settlement_review_and_guards_import_in_progress
         assert len(transfer_opens) == 1
         window.import_worker = object()
         window.refresh()
+        wait_for_inventory(window)
         assert not window.settlement_review_action.isEnabled()
         assert not window.transfer_review_action.isEnabled()
         assert not window.transfer_review_button.isEnabled()

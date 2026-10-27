@@ -21,6 +21,8 @@ from devtools.parser_engine_pilot.test_synchrony_source_output import channels
 from devtools.parser_engine_pilot.test_table_card_source_output import DEFINITION as TABLE_DEFINITION
 from devtools.parser_engine_pilot.test_table_card_source_output import evidence as table_evidence
 
+from .test_v2_document_browser import wait_for_inventory
+
 
 def test_printed_posting_and_assumed_card_dates_have_distinct_gates() -> None:
     chase_lines = page_lines(b"%PDF-synthetic", pages(), extraction_library="synthetic-pdf-1")
@@ -77,6 +79,7 @@ def test_assumed_date_menu_toggle_persists_across_windows(tmp_path: Path, monkey
         preferences_path=tmp_path / "preferences.json",
     )
     first = V2WorkspaceWindow(workspace)
+    wait_for_inventory(first)
     try:
         assert not first.assumed_posting_action.isChecked()
         first.assumed_posting_action.trigger()
@@ -85,6 +88,7 @@ def test_assumed_date_menu_toggle_persists_across_windows(tmp_path: Path, monkey
         first.close()
         app.processEvents()
     second = V2WorkspaceWindow(workspace)
+    wait_for_inventory(second)
     try:
         assert second.assumed_posting_action.isChecked()
         second.assumed_posting_action.trigger()

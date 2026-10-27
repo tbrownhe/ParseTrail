@@ -11,6 +11,7 @@ import pytest
 from parsetrail.core.v2_profile_store import ReconciliationSnapshot, V2ProfileStore
 
 from .test_v2_reconciliation_history import _add_ambiguous_source
+from .test_v2_reports_responsiveness import wait_for_reports
 from .test_v2_source_openings import _variant
 from .test_v2_source_overlap import review as review_overlap
 from .test_v2_statement_journal_comparison import _profile
@@ -112,14 +113,18 @@ def test_save_reopen_stale_history_and_position_cutoffs(tmp_path: Path, app, mon
         dialog.close()
         app.processEvents()
     positions = V2ReviewedReportsDialog(profile)
+    wait_for_reports(positions)
     try:
         positions.tabs.setCurrentIndex(4)
+        wait_for_reports(positions)
         positions.as_of.setDate(QDate(2026, 1, 31))
+        wait_for_reports(positions)
         assert _cell(positions.positions_model, 0, 6) == "2026-01-31"
         assert _cell(positions.positions_model, 0, 8) == "2026-01-31"
         assert _cell(positions.positions_model, 0, 9) == "2026-01-31"
         assert "Latest saved cutoff: 2026-01-31" in positions.position_details.text()
         positions.as_of.setDate(QDate(2026, 1, 30))
+        wait_for_reports(positions)
         assert _cell(positions.positions_model, 0, 8) == "None saved"
         assert _cell(positions.positions_model, 0, 9) == "None current"
     finally:
@@ -129,9 +134,12 @@ def test_save_reopen_stale_history_and_position_cutoffs(tmp_path: Path, app, mon
         original = f"review:cash:expense:{evidence.payload.accounts[0].rows[1].row_id}"
         store.correct_reviewed_cash_category(original, "expense:travel", reason="Correct reviewed category")
     positions = V2ReviewedReportsDialog(profile)
+    wait_for_reports(positions)
     try:
         positions.tabs.setCurrentIndex(4)
+        wait_for_reports(positions)
         positions.as_of.setDate(QDate(2026, 1, 31))
+        wait_for_reports(positions)
         assert _cell(positions.positions_model, 0, 6) == "2026-01-31"
         assert _cell(positions.positions_model, 0, 8) == "2026-01-31"
         assert _cell(positions.positions_model, 0, 9) == "None current"
@@ -198,9 +206,12 @@ def test_stale_save_refuses_and_refreshes_current_check_then_failed_check_disabl
         dialog.close()
         app.processEvents()
     positions = V2ReviewedReportsDialog(profile)
+    wait_for_reports(positions)
     try:
         positions.tabs.setCurrentIndex(4)
+        wait_for_reports(positions)
         positions.as_of.setDate(QDate(2026, 1, 31))
+        wait_for_reports(positions)
         assert _cell(positions.positions_model, 0, 6) == "None passing"
         assert _cell(positions.positions_model, 0, 8) == "2026-01-31"
         assert _cell(positions.positions_model, 0, 9) == "None current"
@@ -390,9 +401,12 @@ def test_multiple_bound_sections_keep_history_visible_and_positions_qualified(tm
         dialog.close()
         app.processEvents()
     positions = V2ReviewedReportsDialog(profile)
+    wait_for_reports(positions)
     try:
         positions.tabs.setCurrentIndex(4)
+        wait_for_reports(positions)
         positions.as_of.setDate(QDate(2026, 1, 31))
+        wait_for_reports(positions)
         assert _cell(positions.positions_model, 0, 6) == "Unavailable"
         assert _cell(positions.positions_model, 0, 8) == "2026-01-31"
         assert _cell(positions.positions_model, 0, 9) == "None current"

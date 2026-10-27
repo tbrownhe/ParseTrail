@@ -51,6 +51,14 @@ sources and observation inventories once per operation, reuse that verified
 evidence within the existing read snapshot and retain all corruption checks.
 No process-wide evidence cache or duplicate authoritative store is introduced.
 
+The document-summary read verifies every retained source within one consistent
+snapshot and reports recognizable saved identities, explicit account assignments,
+typed dates/provenance and conservative pending counts. Empty statement sections
+still need account confirmation even when they contain no activity rows. Source
+period overlaps remain separate from reviewed occurrence decisions. The positions
+read reuses the reconciliation inventory for pending counts within its transaction;
+unavailable reconciliation must not omit pending sources.
+
 ## Authored accounts and decisions
 
 Explicit printed-account bindings, whole-file assertions for accountless exports,
@@ -63,6 +71,9 @@ same institution and asset/liability class. With the choice off, show the unique
 candidate as a suggestion and offer the inline enable control. Ambiguous matches
 always require explicit review. An observed full number may match exactly without
 enabling abbreviated matching; an opaque identity is not a suffix number.
+The account-confirmation UI distinguishes read-time matching suggestions from
+saved explicit associations. A suggestion does not reduce its unassigned count
+or authorize posting; Use this account records the explicit source association.
 
 Financial display/identity edits retain the account ID and ledger class. Tracking
 scope explicitly distinguishes account total, principal component and cash

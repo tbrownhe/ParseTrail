@@ -253,8 +253,21 @@ def prepare(destination: Path | None = None):
             "\n9. Review > Evidenced loan principal and interest: inspect the active Capital event history. It contains the January 14 bank outflow $220 and January 15 lender event: $200 principal plus $20 Loan interest. Original lender activity date remains observed; accounting date is explicitly assumed, not a source posting guess. The fixture author opted in for that review only; saved Settings remain default off. Current Demo Capital principal is $9500 owed from an independent authored $9700 opening; its PDF has no printed opening. Select its source closing point to inspect the separate nonposting proof.\n10. Select Yamaha-February.pdf and Review > Review selected liability register. Whole liability opening $1000 owed is source-backed at January 31. Transaction February 5 posts February 7: $10 Vehicle charge. Transaction February 9 posts February 10: $20 owned repayment from Demo payment checking; no principal/interest split or second expense. Register now $990 owed; its separate source closing agrees. Inspect history/correction without changing source dates.\n11. Reviewed reports: January expense is only $20 Loan interest; February expense is only $10 Vehicle charge, whose February budget is $50/$10/$40. Account positions: payment checking $760, Capital principal $9500 owed (principal component), Yamaha whole register $990 owed. Through January 14, $220 is in clearing until lender January 15; through February 9, $20 clears only at lender February 10. The later HSA $100 expected receipt remains unresolved.\n12. Open Reports > Cash movement by reviewed purpose. In the account CHECKBOX list at the top left, uncheck every account except Demo payment checking (synthetic, asset); highlighting an account or choosing Inspect account entries does not set report scope. Set From (inclusive) to 2026-01-01 and To (exclusive) to 2026-02-01. The MIDDLE record table shows exactly one row: 2026-01-14, Reviewed loan payment cash outflow, -$220.00. Select that row: the LOWER details show -$200.00 loan principal and -$20.00 cash expense; the upper purpose table has those two totals, not two bank payments. Then set From to 2026-02-01 and To to 2026-03-01. The middle table shows exactly one row: 2026-02-09, Transfer sent, -$20.00, with purpose Reviewed card or loan-register repayment and no principal/interest split. January offers bank and Capital source previews; February offers the bank preview, with the Yamaha counterpart date 2026-02-10 in the lower details. Source previews show the WHOLE original statement, including rows outside the report dates; they are not filtered cash records.\n13. Back up and restore into a new file, reopen, and recover Capital/Yamaha originals to new paths. All six embedded originals and complete loan/register histories survive. The runtime is pinned to schema22 for this demo; no old-profile migration or release is performed.\n"
         )
     guide = [
-        "Sources are listed by hash in the workspace. When a step names a file, select its matching Source prefix:",
+        "Use Documents to find the named account and period; search filters the saved document labels. "
+        "Confirm account or Review activity opens the relevant next review. Review groups account, activity and "
+        "statement checks; Accounts groups account setup, openings and values; Reports opens reviewed summaries. "
+        "Existing menus also remain available. Show details contains the source digest when exact identification is needed. "
+        "In Account positions, expand report/evidence details or selected account history for source values and full history.",
+        "The original fixture filenames correspond to these accounts (digests are diagnostic references):",
     ]
+    account_labels = {
+        "Checking-October.csv": "Demo checking · October 2026",
+        "HSA-August.pdf": "Demo HSA cash · August 2026",
+        "Card-January.pdf": "Demo card · January 2026",
+        "Payments-January-February.csv": "Demo payment checking · January–February 2026",
+        "Capital-January.pdf": "Demo Capital principal · January 2026",
+        "Yamaha-February.pdf": "Demo Yamaha whole register · February 2026",
+    }
     for name in (
         "Checking-October.csv",
         "HSA-August.pdf",
@@ -263,7 +276,9 @@ def prepare(destination: Path | None = None):
         "Capital-January.pdf",
         "Yamaha-February.pdf",
     ):
-        guide.append(f"  {name}: Source {hashlib.sha256((sources / name).read_bytes()).hexdigest()[:16]}")
+        guide.append(
+            f"  {name}: {account_labels[name]} · source {hashlib.sha256((sources / name).read_bytes()).hexdigest()[:16]}"
+        )
     guide.append("Before step 6 select the HSA source; before step 10 select the Yamaha source.")
     walkthrough = root / "WALKTHROUGH.txt"
     walkthrough.write_text("\n".join(guide) + "\n\n" + walkthrough.read_text(encoding="utf-8"), encoding="utf-8")
@@ -552,7 +567,7 @@ def open_demo(root, *, smoke=False):
     window.resize(1150, 720)
     if smoke:
         window.setAttribute(Qt.WA_DontShowOnScreen, True)
-        QTimer.singleShot(100, app.quit)
+        QTimer.singleShot(100, window.close)
     window.show()
     result = app.exec()
     window.close()

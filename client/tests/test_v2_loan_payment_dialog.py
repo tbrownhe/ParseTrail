@@ -14,6 +14,7 @@ from devtools.parser_engine_pilot.synthetic_family_sources import family_sources
 from devtools.parser_engine_pilot.test_wells_loan_lines import DEFINITION as WELLS_DEFINITION
 from devtools.parser_engine_pilot.test_wells_loan_lines import parse as wells_evidence
 
+from .test_v2_document_browser import wait_for_inventory
 from .test_v2_loan_payments import _profile
 
 
@@ -266,6 +267,7 @@ def test_workspace_menu_busy_guard_and_preference_synchronization(tmp_path, monk
     _profile(path)
     work = workspace(path)
     window = V2WorkspaceWindow(work)
+    wait_for_inventory(window)
     opened = []
 
     def inspect(view):
@@ -278,6 +280,7 @@ def test_workspace_menu_busy_guard_and_preference_synchronization(tmp_path, monk
     assert opened == [path] and window.assumed_posting_action.isChecked()
     window.import_worker = object()
     window.refresh()
+    wait_for_inventory(window)
     assert not window.loan_payment_action.isEnabled()
     window._review_loan_payments()
     assert opened == [path]

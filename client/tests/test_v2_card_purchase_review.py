@@ -21,6 +21,8 @@ from devtools.parser_engine_pilot.test_table_card_source_output import DEFINITIO
 from devtools.parser_engine_pilot.test_table_card_source_output import SOURCE as CITI_SOURCE
 from devtools.parser_engine_pilot.test_table_card_source_output import evidence as citi_channels
 
+from .test_v2_document_browser import wait_for_inventory
+
 
 def _chase_profile(path: Path):
     source = b"%PDF-card-purchase-test"
@@ -202,6 +204,7 @@ def test_card_review_dialog_toggles_assumed_date_and_corrects_it(tmp_path: Path,
 
     monkeypatch.setattr(QMessageBox, "question", confirm)
     window = V2WorkspaceWindow(workspace)
+    wait_for_inventory(window)
     dialog = V2CardPurchaseReview(workspace, evidence.source_sha256, window)
     try:
         assert window.card_review_button.isEnabled()

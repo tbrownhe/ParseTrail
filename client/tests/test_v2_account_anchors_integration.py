@@ -6,6 +6,8 @@ import pytest
 from parsetrail.core.v2_profile_store import FinancialAccount, V2ProfileStore
 from parsetrail.core.v2_workspace import V2Workspace
 
+from .test_v2_reports_responsiveness import wait_for_reports
+
 
 @pytest.fixture
 def app(monkeypatch):
@@ -91,9 +93,12 @@ def test_positions_show_manual_zero_and_closed_residual_without_overriding_books
         V2AccountAnchors, "exec", lambda dialog: seen.append((dialog.profile, dialog.account.currentData())) or 0
     )
     dialog = V2ReviewedReportsDialog(profile)
+    wait_for_reports(dialog)
     try:
         dialog.tabs.setCurrentIndex(4)
+        wait_for_reports(dialog)
         dialog.as_of.setDate(QDate(2026, 1, 31))
+        wait_for_reports(dialog)
         model = dialog.positions_model
 
         def cell(column):
@@ -108,9 +113,11 @@ def test_positions_show_manual_zero_and_closed_residual_without_overriding_books
         assert "does not zero journals or prove settlement" in dialog.position_details.text()
         assert dialog.account_anchor_button.isEnabled()
         dialog.account_anchor_button.click()
+        wait_for_reports(dialog)
         assert seen == [(profile, "loan")]
         assert profile.read_bytes() == before
         dialog.as_of.setDate(QDate(2026, 1, 1))
+        wait_for_reports(dialog)
         assert "None through as-of" in cell(12) and "No effective closure" in cell(13)
         with V2ProfileStore.open(profile) as store:
             store.withdraw_reviewed_opening(
@@ -118,6 +125,7 @@ def test_positions_show_manual_zero_and_closed_residual_without_overriding_books
             )
         changed = profile.read_bytes()
         dialog.as_of.setDate(QDate(2026, 1, 31))
+        wait_for_reports(dialog)
         assert cell(2) == "$0.00" and cell(3) == "Unknown" and cell(4) == "Withdrawn — unknown"
         assert "$0.00" in cell(12) and "opening-based residual is unknown" in dialog.position_details.text()
         assert profile.read_bytes() == changed
@@ -142,6 +150,8 @@ def test_accounts_menu_opens_authored_review_for_current_profile_and_failures_di
     monkeypatch.setattr(V2AccountAnchors, "exec", lambda dialog: seen.append(dialog.profile) or 0)
     window = V2WorkspaceWindow(workspace)
     reports = V2ReviewedReportsDialog(profile)
+    reports.tabs.setCurrentIndex(4)
+    wait_for_reports(reports)
     try:
         window.account_anchors_action.trigger()
         assert seen == [profile]
@@ -152,6 +162,7 @@ def test_accounts_menu_opens_authored_review_for_current_profile_and_failures_di
 
         monkeypatch.setattr(V2ProfileStore, "account_positions", unavailable)
         reports._refresh_positions()
+        wait_for_reports(reports)
         assert not reports.account_anchor_button.isEnabled() and reports.positions_model.rowCount() == 0
         assert reports.position_details.toolTip() == "" and "unavailable" in reports.position_details.text()
     finally:

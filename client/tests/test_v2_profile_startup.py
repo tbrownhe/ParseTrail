@@ -13,6 +13,8 @@ from parsetrail.gui.v2_profile_startup import (
     choose_restored_workspace,
 )
 
+from .test_v2_document_browser import wait_for_inventory
+
 
 @pytest.fixture
 def app(monkeypatch):
@@ -322,12 +324,15 @@ def test_new_profile_menu_preserves_old_profile_and_is_disabled_during_import(tm
     before = current.read_bytes()
     monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *_args, **_kwargs: (str(new), ""))
     window = V2WorkspaceWindow(workspace)
+    wait_for_inventory(window)
     try:
         window.import_worker = object()
         window.refresh()
+        wait_for_inventory(window)
         assert not window.new_profile_action.isEnabled()
         window.import_worker = None
         window.refresh()
+        wait_for_inventory(window)
         window.new_profile_action.trigger()
         assert window.workspace.profile_path == new.resolve()
         assert str(new.resolve()) == window.profile_label.text()
@@ -369,6 +374,7 @@ def test_invalid_catalog_new_choice_keeps_current_workspace_and_does_not_create_
     current, target, catalog = tmp_path / "current.db", tmp_path / "new.db", tmp_path / "catalog"
     workspace = V2Workspace.create(current, catalog, trusted_keys={}, preferences_path=tmp_path / "prefs.json")
     window = V2WorkspaceWindow(workspace)
+    wait_for_inventory(window)
     before = current.read_bytes()
     try:
         catalog.mkdir()
@@ -403,6 +409,7 @@ def test_failed_refresh_after_staging_selection_rolls_back_workspace_and_visible
     )
     before = workspace.profile_path.read_bytes()
     window = V2WorkspaceWindow(workspace)
+    wait_for_inventory(window)
     original_refresh = window.refresh
 
     def fail_selected_refresh(*args, **kwargs):
@@ -413,6 +420,7 @@ def test_failed_refresh_after_staging_selection_rolls_back_workspace_and_visible
     monkeypatch.setattr(window, "refresh", fail_selected_refresh)
     try:
         window._select_workspace(target)
+        wait_for_inventory(window)
         assert window.workspace is workspace
         assert window.profile_label.text() == str(workspace.profile_path)
         assert window._selected_source() == source_id

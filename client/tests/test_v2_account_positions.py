@@ -217,10 +217,10 @@ def test_positions_pin_one_snapshot_across_concurrent_profile_changes(tmp_path: 
         store.add_financial_account(FinancialAccount("first", "First", "asset", "synthetic"))
         original = store._statement_reconciliation_checks
 
-        def mutate_between_reads():
+        def mutate_between_reads(**kwargs):
             with V2ProfileStore.open(path) as writer:
                 writer.add_financial_account(FinancialAccount("second", "Second", "asset", "synthetic"))
-            return original()
+            return original(**kwargs)
 
         monkeypatch.setattr(store, "_statement_reconciliation_checks", mutate_between_reads)
         report = store.account_positions(as_of=date(2026, 1, 1))
@@ -268,7 +268,7 @@ def test_query_failure_releases_its_own_snapshot(tmp_path: Path, monkeypatch) ->
     path = tmp_path / "failure.db"
     with V2ProfileStore.create(path) as store:
 
-        def fail():
+        def fail(**_kwargs):
             raise RuntimeError("Synthetic read failure")
 
         monkeypatch.setattr(store, "_statement_reconciliation_checks", fail)
