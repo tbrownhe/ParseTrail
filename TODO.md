@@ -6,9 +6,10 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None active. [Guided client usability and responsive reads](docs/work/2026-10-26-client-ux-performance-evaluation.md#implemented-result)
-completed development and agent/independent verification. One interface with
-discoverable details; evidence format and financial policy are preserved.
+None active. [Archive-backed guided UI demo](docs/work/2026-10-26-archive-ui-demo.md)
+completed all 946 imports, integrity/original-preservation and populated-launcher
+verification using committed guided UI f92c025. Evidence remains unposted until
+explicit owner review; originals and existing profiles were left untouched.
 
 ## Recommended next packets (unselected)
 
@@ -18,10 +19,11 @@ discoverable details; evidence format and financial policy are preserved.
 
 ## Remaining review and action gates
 
-1. [Real-statement pilot review](docs/work/2026-10-26-v2-real-statement-pilot.md):
+1. [Archive-backed guided demo review](docs/work/2026-10-26-archive-ui-demo.md):
    review evidence, account assignments, openings and activity before interpreting
-   posted reports. The new guided source interface has separate synthetic agent
-   verification; it does not attest owner accounting review of that pilot.
+   posted reports. The earlier [pilot](docs/work/2026-10-26-v2-real-statement-pilot.md)
+   and its runtime remain separate and unchanged; agent verification does not
+   attest owner accounting review.
 2. [Platform/release checks](ROADMAP.md#release-checklist): targeted Intel,
    installed/offline/OS integration and no-build-toolchain environment acceptance.
 3. [Starter signing](docs/work/2026-10-26-v2-catalog-signing-inputs.md), versioning

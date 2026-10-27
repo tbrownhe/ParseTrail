@@ -66,6 +66,9 @@ The requested [client UI/UX and performance evaluation and implementation](docs/
 completed a single guided workspace with discoverable details and background
 document/report reads. Profile schema and financial rules are unchanged; existing
 owner pilots/runtimes were not activated or replaced. Release status is unchanged.
+The subsequent [archive-backed demo](docs/work/2026-10-26-archive-ui-demo.md)
+imports all 946 owner-selected originals into a new pinned f92c025 workspace for
+review, with verified original preservation and no authored accounting decisions.
 
 ### Parser and catalog track
 
