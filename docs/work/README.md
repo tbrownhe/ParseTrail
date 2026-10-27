@@ -9,7 +9,7 @@ contracts own lasting behavior. Start with those documents, not historical logs.
 
 | Record | Roadmap scope | Implementation / evidence |
 | --- | --- | --- |
-| [Real-statement V1 archive pilot](2026-10-26-v2-real-statement-pilot.md) | V2-3/4/5/6/UX/7, P2-4/5 | Selected by owner before further redesign; isolated whole-archive evidence import, local path pending. |
+| [Real-statement V1 archive pilot](2026-10-26-v2-real-statement-pilot.md) | V2-3/4/5/6/UX/7, P2-4/5 | Selected before further redesign; isolated profile/23-definition catalog/pinned launcher prepared and verified, whole-archive run awaits local input path. |
 | [Independent V2 installation identity](2026-10-26-v2-installation-identity.md) | V2-1/7 | Completed code/portable/native-compiler checks, independent review and full unsigned Windows setup compilation; actual installation acceptance remains open. |
 | [Starter-catalog signing inputs](2026-10-26-v2-catalog-signing-inputs.md) | P2-4/5, V2-7 | Preparation implemented/verified/reviewed; exact final-source unsigned candidate ready, production signing/installed acceptance remain open. |
 | [Default V2 runtime and offline diagnostics](2026-10-26-v2-runtime-cutover.md) | V2-1/6/7, P2-3/4/5 | Completed development, independent review and final frozen Windows verification; owner/Intel/installed/release gates remain. |

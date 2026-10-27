@@ -231,7 +231,7 @@ def _file_hash(path: Path) -> tuple[str, int]:
 
 
 def import_archive(root: Path, archive: Path, *, progress: Callable[[dict], None] | None = None) -> dict:
-    """Import evidence only, with restart-safe receipts written before each file."""
+    """Import evidence only, with restart-safe receipts flushed after each result."""
     from parsetrail.core.v2_profile_store import MAX_SOURCE_BYTES
     from parsetrail.core.v2_workspace import MAX_BATCH_FILES
 

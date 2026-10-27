@@ -3,8 +3,8 @@
 Date: 2026-10-26. Roadmap IDs: V2-3/4/5/6/UX/7, P2-4/5.
 Branch/runtime: feature/client-financial-insights, isolated development pilot.
 Authorization: owner selected the real-statement pilot after checking roadmap dependencies, then requested the entire V1 archive.
-Implementation: pilot tooling complete; concrete preparation and local archive path pending.
-Automated verification: synthetic pilot and existing demo/store/import checks passed; no private archive run yet.
+Implementation: pilot tooling and concrete isolated preparation complete; local archive path pending.
+Automated verification: synthetic integration and actual pinned Windows launcher passed; no private archive run yet.
 Independent review: isolation, evidence provenance, failure bounds and pinner compatibility reviewed; findings fixed.
 Owner acceptance: functional synthetic walkthrough completed separately; real-statement review pending.
 Release authorization: not authorized.
@@ -78,8 +78,15 @@ key checks over the growing database. That can cause substantial bulk overhead.
 It is an observed code path, not yet a measured blocker; preserve the integrity
 gates and measure the real run before selecting an optimization.
 
-Concrete preparation follows the clean tooling commit. A blank profile alone
-will not be described as a completed real-statement pilot.
+Concrete pilot prepared from clean source
+`a43ad1f342dcaaf9a35728cd991c29c99c09ac1c` under
+`scratch/v2-statement-pilot-a43ad1f`. Its `Open-statement-pilot.cmd` and
+`PILOT-GUIDE.txt` are ready. The profile is fresh: schema 22, 23 catalog definitions,
+zero sources, accounts, bindings and journals. Runtime-manifest SHA-256:
+`1be2a4051ab33ff2f02ea28b8df5daa187280ec7644a6709d59e877a4058fedb`.
+Later closeout changes correct one receipt-timing docstring only; they do not
+change the pinned artifact or behavior. A blank profile alone is not a completed
+real-statement pilot; the owner-selected archive path is still needed.
 
 ## Verification
 
@@ -90,6 +97,8 @@ commands use `client/.venv/Scripts/python.exe -m pytest -p no:cacheprovider ...
 - Initial new pilot plus existing demo integration: **12 passed in 46.78s**.
 - Final expanded pilot suite after review findings: **6 passed in 7.33s**;
   independent rerun **6 passed in 7.05s**.
+- Final combined `devtools/v2_statement_pilot devtools/v2_review_demo`:
+  **14 passed in 48.98s**.
 - Independent existing `client/tests/test_v2_profile_store.py` and
   `client/tests/test_v2_catalog_import.py`: **24 passed in 13.88s**.
 
@@ -101,10 +110,23 @@ The Windows leaf-symlink branch is unavailable when OS privilege is denied; no
 native leaf-symlink coverage is claimed. Changed-file Ruff/format, whitespace and
 local document links passed. No private source has been opened or imported yet.
 
+The actual prepared pinned helper passed `--smoke-ui` offscreen with unchanged
+profile bytes. Primary also exercised the **exact CMD launcher** under Windows
+Qt with an external display-suppression shim: exit 0, all 96 loaded first-party
+modules pinned to the copied runtime and profile unchanged. Ignored evidence:
+`scratch/pilot-launcher-probe-a43ad1f/result.json`. This is native initialization
+and invocation evidence, not visible owner acceptance or an installed release.
+
+Independent final artifact inspection verified all 274 copied runtime files'
+hashes/sizes and the manifest digest, repeated pinned zero-state verification,
+and confirmed that the selected catalog directory plus both files inherit the
+owner's read permission. The earlier Windows handoff defect does not recur.
+No profile copies or private-key files were found in the public runtime tree.
+
 ## Remaining work
 
-Obtain the owner-supplied archive path, finish tooling, run the archive import and
-review failures without guessing accounting. Prepare a concrete owner review of
+Obtain the owner-supplied archive path, run the archive import and review failures
+without guessing accounting. Prepare a concrete owner review of
 their imported evidence and record any required fixes. Further UI/UX refinement,
 supported-platform/installed acceptance and explicitly authorized signing/release
 actions retain their separate scope.
