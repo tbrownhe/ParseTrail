@@ -2507,9 +2507,35 @@ class V2ProfileStore:
             )
         }
         rows = {}
-        for source_id in self.source_ids():
-            evidence = self.load_import(source_id).evidence
-            bindings = {binding.row_id: binding.ledger_account_id for binding in self.account_bindings(source_id)}
+        self._read_binding_corrections()
+        file_assignments = dict(
+            self.connection.execute("SELECT source_sha256,ledger_account_id FROM FileAccountAssertions")
+        )
+        source_assignments = {}
+        for source_id, identity, form, account_id in self.connection.execute(
+            "SELECT source_sha256,source_identity,source_identity_form,ledger_account_id FROM SourceAccountBindings"
+        ):
+            source_assignments.setdefault(source_id, {})[identity, form] = account_id
+        row_assignments = {}
+        for source_id, row_id, account_id in self.connection.execute(
+            "SELECT o.source_sha256,a.row_id,a.ledger_account_id FROM RowAccountAssignments a "
+            "JOIN SourceObservations o ON o.row_id=a.row_id"
+        ):
+            row_assignments.setdefault(source_id, {})[row_id] = account_id
+        for source_id, saved in self._iter_verified_imports():
+            evidence = saved.evidence
+            bindings = {
+                binding.row_id: binding.ledger_account_id
+                for binding in self._account_bindings_for_evidence(
+                    source_id,
+                    evidence,
+                    _decisions=(
+                        file_assignments.get(source_id),
+                        row_assignments.get(source_id, {}),
+                        source_assignments.get(source_id, {}),
+                    ),
+                )
+            }
             for row in _rows(evidence):
                 account = accounts.get(bindings.get(row.row_id))
                 if account is None or row.row_role != "activity" or not row.amount.minor:
@@ -2732,8 +2758,8 @@ class V2ProfileStore:
             if owns_snapshot:
                 self.connection.execute("ROLLBACK")
 
-    def _source_overlap_posting_blocks(self, row_ids: tuple[str, ...]) -> dict[str, str]:
-        rows, index, reviews, aliases = self._source_overlap_index()
+    def _source_overlap_posting_blocks(self, row_ids: tuple[str, ...], *, _verified_index=None) -> dict[str, str]:
+        rows, index, reviews, aliases = self._source_overlap_index() if _verified_index is None else _verified_index
         groups = self._source_overlap_groups(rows, aliases)
         blocks = {}
         for row_id in row_ids:
@@ -7104,6 +7130,12 @@ class V2ProfileStore:
         """Show each identity printed by a source and its explicit ledger decision."""
         self._read_binding_corrections()
         evidence = self.load_import(source_sha256).evidence
+        return self._source_account_bindings_for_evidence(source_sha256, evidence)
+
+    def _source_account_bindings_for_evidence(
+        self, source_sha256: str, evidence: SourceEvidence, *, _assignments=None
+    ) -> tuple[SourceAccountBinding, ...]:
+        """Resolve a source already verified in the caller's current read."""
         payload = evidence.payload
         if isinstance(payload, StatementPayload):
             identities = tuple((account.source_identity, account.source_identity_form) for account in payload.accounts)
@@ -7115,14 +7147,18 @@ class V2ProfileStore:
                     if row.source_account is not None
                 )
             )
-        saved = {
-            (identity, form): account_id
-            for identity, form, account_id in self.connection.execute(
-                "SELECT source_identity,source_identity_form,ledger_account_id "
-                "FROM SourceAccountBindings WHERE source_sha256=?",
-                (source_sha256,),
-            )
-        }
+        saved = (
+            {
+                (identity, form): account_id
+                for identity, form, account_id in self.connection.execute(
+                    "SELECT source_identity,source_identity_form,ledger_account_id "
+                    "FROM SourceAccountBindings WHERE source_sha256=?",
+                    (source_sha256,),
+                )
+            }
+            if _assignments is None
+            else _assignments
+        )
         return tuple(SourceAccountBinding(identity, form, saved.get((identity, form))) for identity, form in identities)
 
     def bind_source_account(
@@ -7308,20 +7344,33 @@ class V2ProfileStore:
     def account_bindings(self, source_sha256: str) -> tuple[AccountBinding, ...]:
         """Show effective user decisions; unassigned rows remain unresolved."""
         evidence = self.load_import(source_sha256).evidence
-        file_row = self.connection.execute(
-            "SELECT ledger_account_id FROM FileAccountAssertions WHERE source_sha256=?", (source_sha256,)
-        ).fetchone()
-        file_account_id = file_row[0] if file_row else None
-        row_assignments = dict(
-            self.connection.execute(
-                "SELECT a.row_id,a.ledger_account_id FROM RowAccountAssignments a "
-                "JOIN SourceObservations o ON o.row_id=a.row_id WHERE o.source_sha256=?",
-                (source_sha256,),
+        self._read_binding_corrections()
+        return self._account_bindings_for_evidence(source_sha256, evidence)
+
+    def _account_bindings_for_evidence(
+        self, source_sha256: str, evidence: SourceEvidence, *, _decisions=None
+    ) -> tuple[AccountBinding, ...]:
+        """Reuse verified evidence after validating binding-correction history."""
+        if _decisions is None:
+            file_row = self.connection.execute(
+                "SELECT ledger_account_id FROM FileAccountAssertions WHERE source_sha256=?", (source_sha256,)
+            ).fetchone()
+            file_account_id = file_row[0] if file_row else None
+            row_assignments = dict(
+                self.connection.execute(
+                    "SELECT a.row_id,a.ledger_account_id FROM RowAccountAssignments a "
+                    "JOIN SourceObservations o ON o.row_id=a.row_id WHERE o.source_sha256=?",
+                    (source_sha256,),
+                )
             )
-        )
+            saved_source_assignments = None
+        else:
+            file_account_id, row_assignments, saved_source_assignments = _decisions
         source_assignments = {
             (binding.source_identity, binding.source_identity_form): binding.ledger_account_id
-            for binding in self.source_account_bindings(source_sha256)
+            for binding in self._source_account_bindings_for_evidence(
+                source_sha256, evidence, _assignments=saved_source_assignments
+            )
         }
         result = []
         for row in _rows(evidence):
@@ -7712,8 +7761,11 @@ class V2ProfileStore:
         derived_parents = dict(
             self.connection.execute("SELECT observation_id,row_id FROM DerivedFinancialObservations")
         )
-        overlap_rows, _buckets, _reviews, overlap_aliases = self._source_overlap_index()
-        overlap_blocks = self.source_overlap_posting_blocks(tuple(overlap_rows))
+        verified_overlap_index = self._source_overlap_index()
+        overlap_rows, _buckets, _reviews, overlap_aliases = verified_overlap_index
+        overlap_blocks = self._source_overlap_posting_blocks(
+            tuple(overlap_rows), _verified_index=verified_overlap_index
+        )
         result = []
         for section in coverage:
             comparison = comparisons[(section.account_id, section.source_sha256)]
@@ -10202,6 +10254,50 @@ class V2ProfileStore:
         ).fetchone()
         if row is None:
             raise ProfileFormatError("source_missing")
+        actual = set(
+            self.connection.execute(
+                "SELECT row_id,source_account,source_account_form,row_role,date_role,observed_date,amount_minor "
+                "FROM SourceObservations WHERE source_sha256=?",
+                (source_sha256,),
+            )
+        )
+        return self._verified_saved_import(source_sha256, row, actual)
+
+    def _iter_verified_imports(self):
+        """Stream every source and its exact inventory without repeated full-table scans.
+
+        Keep one source's raw bytes, parsed evidence and observation inventory at a
+        time. Nothing is cached across calls or transactions. Callers retain their
+        existing read-snapshot ownership and every unbound source is still checked.
+        """
+        observations = iter(
+            self.connection.execute(
+                "SELECT source_sha256,row_id,source_account,source_account_form,row_role,date_role,"
+                "observed_date,amount_minor FROM SourceObservations ORDER BY source_sha256,row_id"
+            )
+        )
+        observation = next(observations, None)
+        sources = self.connection.execute(
+            "SELECT s.sha256,s.content,s.size,s.suffix,d.content,d.size,e.content,e.size,e.sha256 "
+            "FROM Sources s LEFT JOIN EvidenceSnapshots e ON e.source_sha256=s.sha256 "
+            "LEFT JOIN Definitions d ON d.sha256=e.definition_sha256 ORDER BY s.sha256"
+        )
+        for source_sha256, *row in sources:
+            if row[-1] is None or row[3] is None:
+                raise ProfileFormatError("source_missing")
+            actual = set()
+            if observation is not None and observation[0] < source_sha256:
+                raise ProfileFormatError("observation_inventory_mismatch")
+            while observation is not None and observation[0] == source_sha256:
+                actual.add(observation[1:])
+                observation = next(observations, None)
+            yield source_sha256, self._verified_saved_import(source_sha256, row, actual)
+        if observation is not None:
+            raise ProfileFormatError("observation_inventory_mismatch")
+
+    @staticmethod
+    def _verified_saved_import(source_sha256: str, row, actual: set[tuple]) -> SavedImport:
+        """Apply the same blob, evidence and inventory checks to single/bulk reads."""
         source, source_size, suffix, definition, definition_size, content, evidence_size, evidence_hash = row
         if (
             len(source) != source_size
@@ -10232,13 +10328,6 @@ class V2ProfileStore:
             )
             for item in _rows(evidence)
         }
-        actual = set(
-            self.connection.execute(
-                "SELECT row_id,source_account,source_account_form,row_role,date_role,observed_date,amount_minor "
-                "FROM SourceObservations WHERE source_sha256=?",
-                (source_sha256,),
-            )
-        )
         if expected != actual:
             raise ProfileFormatError("observation_inventory_mismatch")
         return SavedImport(source, definition, evidence, suffix)

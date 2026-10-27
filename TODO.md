@@ -6,9 +6,10 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None active. The [real-statement archive pilot](docs/work/2026-10-26-v2-real-statement-pilot.md)
-completed intake and integrity/recovery checks. The isolated populated profile,
-launcher and private source index are ready for owner accounting review.
+[Archive-sized review performance](docs/work/2026-10-26-v2-review-performance.md)
+is selected after owner-reported slow Cash activity and Statement coverage actions.
+Profile a disposable pilot copy and optimize repeated read work while preserving
+the evidence format, integrity checks and current owner-reviewed profile.
 
 ## Recommended next packets (unselected)
 

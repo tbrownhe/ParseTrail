@@ -194,3 +194,48 @@ def test_imported_hash_must_match_the_original_checked_bytes(tmp_path, monkeypat
     assert receipt["original_unchanged"] is True
     assert receipt["import_matches_checked_original"] is False
     assert not list((root / "imports").glob("*/summary.json"))
+
+
+def test_separate_runtime_bundle_keeps_existing_workspace_untouched(pilot, tmp_path):
+    from devtools.v2_review_demo.pin_runtime import pin_runtime
+
+    bundle = tmp_path / "public runtime bundle"
+    bundle.mkdir()
+    profile = pilot / "review.db"
+    before = hashlib.sha256(profile.read_bytes()).hexdigest()
+    manifest = pin_runtime(
+        TOOL.parents[2],
+        bundle,
+        Path(sys.executable),
+        TOOL,
+        helper_relative=Path("devtools/v2_statement_pilot/prepare_pilot.py"),
+        launcher_name="Open-updated-pilot.cmd",
+        workspace_root=pilot,
+    )
+    assert manifest["schema_version"] == 22
+    assert not list(bundle.rglob("*.db"))
+    assert not (bundle / "catalog").exists() and not (bundle / "preferences.json").exists()
+    checked = run_tool(bundle / "runtime/devtools/v2_statement_pilot/prepare_pilot.py", "--verify", pilot)
+    assert checked.returncode == 0 and json.loads(checked.stdout)["catalog_definitions"] == 23
+    launcher = (bundle / "Open-updated-pilot.cmd").read_text()
+    assert f'set "DEMO_ROOT={pilot.resolve()}"' in launcher and "%~dp0runtime" in launcher
+    assert hashlib.sha256(profile.read_bytes()).hexdigest() == before
+    with pytest.raises(ValueError, match="demo_runtime_already_exists"):
+        pin_runtime(TOOL.parents[2], bundle, Path(sys.executable), TOOL, workspace_root=pilot)
+
+
+def test_runtime_bundle_refuses_incompatible_existing_workspace(tmp_path):
+    import sqlite3
+
+    from devtools.v2_review_demo.pin_runtime import pin_runtime
+
+    workspace, bundle = tmp_path / "workspace", tmp_path / "bundle"
+    workspace.mkdir()
+    bundle.mkdir()
+    with sqlite3.connect(workspace / "review.db") as connection:
+        connection.execute("PRAGMA user_version=999")
+    before = (workspace / "review.db").read_bytes()
+    with pytest.raises(ValueError, match="demo_runtime_schema_mismatch"):
+        pin_runtime(TOOL.parents[2], bundle, Path(sys.executable), TOOL, workspace_root=workspace)
+    assert not (bundle / "runtime").exists()
+    assert (workspace / "review.db").read_bytes() == before

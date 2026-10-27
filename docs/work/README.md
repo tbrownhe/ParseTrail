@@ -9,6 +9,7 @@ contracts own lasting behavior. Start with those documents, not historical logs.
 
 | Record | Roadmap scope | Implementation / evidence |
 | --- | --- | --- |
+| [Archive-sized review performance](2026-10-26-v2-review-performance.md) | V2-3/4/5/UX/7 | Selected for owner-reported slow cash/coverage actions; measure on a disposable copy, preserve evidence format and accounting integrity. |
 | [Real-statement V1 archive pilot](2026-10-26-v2-real-statement-pilot.md) | V2-3/4/5/6/UX/7, P2-4/5 | All selected archive files imported and independently verified as unposted evidence; actual retry, backup/restore/recovery and populated launcher passed. Owner accounting review pending. |
 | [Independent V2 installation identity](2026-10-26-v2-installation-identity.md) | V2-1/7 | Completed code/portable/native-compiler checks, independent review and full unsigned Windows setup compilation; actual installation acceptance remains open. |
 | [Starter-catalog signing inputs](2026-10-26-v2-catalog-signing-inputs.md) | P2-4/5, V2-7 | Preparation implemented/verified/reviewed; exact final-source unsigned candidate ready, production signing/installed acceptance remain open. |

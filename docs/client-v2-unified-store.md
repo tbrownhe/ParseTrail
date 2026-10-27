@@ -42,6 +42,15 @@ returns saved evidence; a reparse is a comparison, not an overwrite. Revised
 bytes remain a separate pending source. Failure/cancellation must preserve
 completed imports and leave no partial new source.
 
+`EvidenceSnapshots.content` preserves the complete typed parser result as JSON,
+including source locations and provenance. `SourceObservations` is its relational
+projection for observation identity, date, amount and allocation checks; authored
+accounts and journals remain separate. The snapshot is evidence of extraction,
+not an approved transaction list. Archive-wide reads stream and validate retained
+sources and observation inventories once per operation, reuse that verified
+evidence within the existing read snapshot and retain all corruption checks.
+No process-wide evidence cache or duplicate authoritative store is introduced.
+
 ## Authored accounts and decisions
 
 Explicit printed-account bindings, whole-file assertions for accountless exports,

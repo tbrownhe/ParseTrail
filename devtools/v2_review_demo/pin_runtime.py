@@ -22,17 +22,28 @@ def _helper_path(path: Path) -> Path:
 
 
 def launcher_text(
-    python_executable: Path, helper_relative: Path = Path("devtools/v2_review_demo/prepare_demo.py")
+    python_executable: Path,
+    helper_relative: Path = Path("devtools/v2_review_demo/prepare_demo.py"),
+    *,
+    workspace_root: Path | None = None,
 ) -> str:
     executable = str(python_executable.resolve()).replace("%", "%%")
     helper = str(_helper_path(helper_relative)).replace("/", "\\")
+    workspace = "%~dp0."
+    runtime = "%DEMO_ROOT%\\runtime"
+    if workspace_root is not None:
+        workspace = str(workspace_root.resolve())
+        if any(character in workspace for character in ('"', "\r", "\n")):
+            raise ValueError("runtime_workspace_path")
+        workspace = workspace.replace("%", "%%")
+        runtime = "%~dp0runtime"
     return (
         "@echo off\r\nsetlocal DisableDelayedExpansion\r\nchcp 65001 >nul\r\n"
-        'set "DEMO_ROOT=%~dp0."\r\n'
+        f'set "DEMO_ROOT={workspace}"\r\n'
         'set "DEMO_LOG=%DEMO_ROOT%\\last-launch.log"\r\n'
-        'cd /d "%DEMO_ROOT%\\runtime"\r\n'
+        f'cd /d "{runtime}"\r\n'
         "if errorlevel 1 exit /b 3\r\n"
-        '"' + executable + f'" -B -X utf8 "%DEMO_ROOT%\\runtime\\{helper}" --open "%DEMO_ROOT%" >"%DEMO_LOG%" 2>&1\r\n'
+        '"' + executable + f'" -B -X utf8 "{runtime}\\{helper}" --open "%DEMO_ROOT%" >"%DEMO_LOG%" 2>&1\r\n'
         'set "DEMO_EXIT=%ERRORLEVEL%"\r\n'
         'if not "%DEMO_EXIT%"=="0" (\r\n'
         '  type "%DEMO_LOG%"\r\n'
@@ -53,6 +64,7 @@ def pin_runtime(
     helper_relative: Path = Path("devtools/v2_review_demo/prepare_demo.py"),
     launcher_name: str = "Open-review-demo.cmd",
     purpose: str = "Pinned public synthetic review runtime, not release acceptance",
+    workspace_root: Path | None = None,
 ) -> dict:
     """Create once; refuse schema mismatch before copying; retain only public code/resources.
 
@@ -60,12 +72,16 @@ def pin_runtime(
     public pilot trust and preferences. Only public runtime code/resources are copied.
     No financial profile, production trust or private key is copied into the runtime.
     This function never builds, releases, migrates or overwrites a runtime.
+    An optional existing workspace can supply the schema and launch target while
+    the new public runtime bundle stays separate from its profile and settings.
     """
     repository, demo = source_repository.resolve(), demo_directory.resolve()
+    workspace = demo if workspace_root is None else workspace_root.resolve()
     helper_relative = _helper_path(helper_relative)
     if re.fullmatch(r"[A-Za-z0-9_-]+\.cmd", launcher_name) is None:
         raise ValueError("runtime_launcher_name")
-    if not demo.is_dir() or not (demo / "review.db").is_file():
+    launcher = launcher_text(python_executable, helper_relative, workspace_root=workspace_root)
+    if not demo.is_dir() or not (workspace / "review.db").is_file():
         raise ValueError("demo_profile_missing")
     runtime = demo / "runtime"
     if runtime.exists() or runtime.is_symlink():
@@ -83,7 +99,7 @@ def pin_runtime(
     ]
     if len(schemas) != 1 or type(schemas[0]) is not int:
         raise ValueError("runtime_schema_unknown")
-    with sqlite3.connect((demo / "review.db").as_uri() + "?mode=ro", uri=True) as connection:
+    with sqlite3.connect((workspace / "review.db").as_uri() + "?mode=ro", uri=True) as connection:
         profile_schema = connection.execute("PRAGMA user_version").fetchone()[0]
     if schemas[0] != profile_schema:
         raise ValueError("demo_runtime_schema_mismatch")
@@ -137,5 +153,5 @@ def pin_runtime(
             raise ValueError("runtime_source_changed")
         path.chmod(stat.S_IREAD)
     (demo / "runtime-manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
-    (demo / launcher_name).write_text(launcher_text(python_executable, helper_relative), encoding="utf-8", newline="")
+    (demo / launcher_name).write_text(launcher, encoding="utf-8", newline="")
     return manifest
