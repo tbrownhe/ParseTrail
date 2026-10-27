@@ -211,6 +211,13 @@ Account suggestions remain pending until explicitly confirmed. Full source
 identifiers, date provenance and overlap details remain available in Show details.
 No presentation mode changes matching preferences or accounting decisions.
 
+Review account selectors include New account. The shared account form suggests
+the selected document section's identity and scope, with institution/kind from
+its exact verified catalog context when available. Suggestions are editable;
+masked identifiers remain visible while unknown full numbers stay blank. Saving
+selects the new account without assigning the document or posting transactions;
+confirm the existing Use this account or Assign action separately.
+
 Document inventories and selected report tabs load through background read-only
 connections. Loading/error states replace outdated results, and superseded
 profile/date requests cannot publish totals. Account positions defaults to a

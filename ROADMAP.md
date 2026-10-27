@@ -69,6 +69,9 @@ owner pilots/runtimes were not activated or replaced. Release status is unchange
 The subsequent [archive-backed demo](docs/work/2026-10-26-archive-ui-demo.md)
 imports all 946 owner-selected originals into a new pinned f92c025 workspace for
 review, with verified original preservation and no authored accounting decisions.
+[Inline account creation](docs/work/2026-10-27-inline-account-creation.md) now lets
+reviewers create an editable document-backed account without leaving assignment
+review; source assignment and posting remain separately confirmed.
 
 ### Parser and catalog track
 

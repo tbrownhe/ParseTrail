@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
+from PySide6.QtCore import QAbstractTableModel, QItemSelectionModel, QModelIndex, Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from parsetrail.core.source_evidence import ActivityExportPayload, ObservationEvidence
+from parsetrail.core.v2_account_creation import suggest_account_creation
 from parsetrail.core.v2_cash_movement import cash_account_labels
 from parsetrail.core.v2_profile_store import (
     AccountBinding,
@@ -29,8 +30,10 @@ from parsetrail.core.v2_profile_store import (
     ProfileFormatError,
     V2ProfileStore,
 )
+from parsetrail.core.v2_workspace import V2Workspace
 from parsetrail.gui.v2_binding_correction import V2BindingCorrection, ordinary_binding_lock_notice
 from parsetrail.gui.v2_evidence_preview import _location, _money
+from parsetrail.gui.v2_financial_account import create_financial_account
 
 
 class _BindingsModel(QAbstractTableModel):
@@ -86,9 +89,10 @@ class _BindingsModel(QAbstractTableModel):
 class V2AccountBindingReview(QDialog):
     """Review account ownership without changing source facts or posting entries."""
 
-    def __init__(self, profile: Path, source_sha256: str, parent=None):
+    def __init__(self, profile: Path, source_sha256: str, parent=None, *, workspace: V2Workspace | None = None):
         super().__init__(parent)
         self.profile = profile
+        self.workspace = workspace
         self.source_sha256 = source_sha256
         self.setWindowTitle("2.0 account assignment review")
         self.resize(1080, 620)
@@ -112,6 +116,9 @@ class V2AccountBindingReview(QDialog):
         self.account_combo = QComboBox()
         self.account_combo.setMinimumWidth(260)
         controls.addWidget(self.account_combo)
+        self.new_account_button = QPushButton("New account…")
+        self.new_account_button.clicked.connect(self._new_account)
+        controls.addWidget(self.new_account_button)
         self.file_button = QPushButton("Assert entire file")
         self.file_button.clicked.connect(self._assert_file)
         controls.addWidget(self.file_button)
@@ -244,6 +251,7 @@ class V2AccountBindingReview(QDialog):
         self.file_button.setEnabled(
             account_available and self._file_eligible and bool(self.model.rows) and not row_mode and not file_locked
         )
+        self.new_account_button.setEnabled(bool(self.model.rows))
         self.clear_file_button.setEnabled(file_mode and not file_locked)
         self.assign_rows_button.setEnabled(
             account_available and bool(selected) and not file_mode and not selected_locked
@@ -278,6 +286,44 @@ class V2AccountBindingReview(QDialog):
         account_id = self.account_combo.currentData()
         self._write(lambda store: store.assert_file_account(self.source_sha256, account_id))
 
+    def _new_account(self) -> None:
+        if not self.new_account_button.isEnabled():
+            return
+        selected = frozenset(self._selected_row_ids())
+        current = self.table.currentIndex()
+        current_row_id = self.model.rows[current.row()].row_id if current.isValid() else None
+        try:
+            with V2ProfileStore.open(self.profile, read_only=True) as store:
+                evidence = store.load_import(self.source_sha256).evidence
+            catalog = self.workspace.catalog_cache.load_current() if self.workspace is not None else None
+            draft = suggest_account_creation(evidence, catalog=catalog)
+        except (ProfileFormatError, sqlite3.Error, OSError, ValueError) as exc:
+            QMessageBox.warning(self, "Account suggestions are unavailable", str(exc))
+            return
+        account = create_financial_account(self.profile, draft=draft, parent=self)
+        if account is None:
+            return
+        self._reload()
+        self.account_combo.setCurrentIndex(max(0, self.account_combo.findData(account.id)))
+        selection = self.table.selectionModel()
+        selection.blockSignals(True)
+        restored_current = None
+        for index, row in enumerate(self.model.rows):
+            if row.row_id in selected:
+                model_index = self.model.index(index, 0)
+                selection.select(
+                    model_index,
+                    QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows,
+                )
+                if restored_current is None or row.row_id == current_row_id:
+                    restored_current = model_index
+        if restored_current is not None:
+            selection.setCurrentIndex(restored_current, QItemSelectionModel.SelectionFlag.NoUpdate)
+            self.table.scrollTo(restored_current)
+        selection.blockSignals(False)
+        self._update_controls()
+        (self.assign_rows_button if selected else self.file_button).setFocus()
+
     def _clear_file(self) -> None:
         self._write(lambda store: store.clear_file_account_assertion(self.source_sha256))
 
@@ -306,5 +352,7 @@ class V2AccountBindingReview(QDialog):
         self._reload()
 
 
-def review_accountless_export(profile: Path, source_sha256: str, *, parent=None) -> V2AccountBindingReview:
-    return V2AccountBindingReview(profile, source_sha256, parent)
+def review_accountless_export(
+    profile: Path, source_sha256: str, *, parent=None, workspace: V2Workspace | None = None
+) -> V2AccountBindingReview:
+    return V2AccountBindingReview(profile, source_sha256, parent, workspace=workspace)

@@ -74,6 +74,12 @@ enabling abbreviated matching; an opaque identity is not a suffix number.
 The account-confirmation UI distinguishes read-time matching suggestions from
 saved explicit associations. A suggestion does not reduce its unassigned count
 or authorize posting; Use this account records the explicit source association.
+Inline account creation stores only an authored financial account and then
+selects it for a separate assignment decision. Document-backed defaults use the
+exact verified declaration context and selected section's balance scope; unknown
+class/scope stays an explicit choice. Masked/opaque identifiers are retained as
+document context and editable display labels, not invented full account numbers.
+Creation never bypasses existing assignment/correction locks or changes evidence.
 
 Financial display/identity edits retain the account ID and ledger class. Tracking
 scope explicitly distinguishes account total, principal component and cash

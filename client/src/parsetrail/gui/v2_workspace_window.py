@@ -5,16 +5,12 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 from threading import Event
-from uuid import uuid4
 
 from PySide6.QtCore import Qt, QThread, QTimer
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
-    QComboBox,
     QDialog,
-    QDialogButtonBox,
     QFileDialog,
-    QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QInputDialog,
@@ -36,7 +32,6 @@ from parsetrail.core.v2_cash_movement import cash_account_labels
 from parsetrail.core.v2_liability_register import REGISTER_PARSER
 from parsetrail.core.v2_profile_store import (
     CARD_STATEMENT_PARSERS,
-    FinancialAccount,
     ProfileFormatError,
     V2ProfileStore,
 )
@@ -55,6 +50,7 @@ from parsetrail.gui.v2_document_browser import (
     document_title,
 )
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
+from parsetrail.gui.v2_financial_account import V2FinancialAccountDialog
 from parsetrail.gui.v2_opening_review import V2OpeningReview
 from parsetrail.gui.v2_path_notice import show_data_locations, show_path_notice
 from parsetrail.gui.v2_profile_startup import choose_new_workspace
@@ -85,75 +81,6 @@ class V2ImportWorker(QThread):
             self.result = self.workspace.import_file(self.source_path, cancelled=self.cancel_event.is_set)
         except Exception as exc:
             self.error = exc
-
-
-class V2FinancialAccountDialog(QDialog):
-    """Record an account exactly as the owner describes it."""
-
-    def __init__(self, parent=None, *, existing: FinancialAccount | None = None, scope_locked: bool = False):
-        super().__init__(parent)
-        self.existing = existing
-        self.setWindowTitle("Edit financial account" if existing is not None else "Add financial account")
-        form = QFormLayout(self)
-        self.name = QLineEdit()
-        self.name.setMaxLength(200)
-        if existing is not None:
-            self.name.setText(existing.name)
-        form.addRow("Account name", self.name)
-        self.kind = QComboBox()
-        self.kind.addItem("Asset (cash or investment)", "asset")
-        self.kind.addItem("Liability (card or loan)", "liability")
-        if existing is not None:
-            self.kind.setCurrentIndex(self.kind.findData(existing.kind))
-            self.kind.setEnabled(False)
-        form.addRow("Account kind", self.kind)
-        self.scope = QComboBox()
-        self._populate_scopes(existing.tracking_scope if existing is not None else "account_total")
-        self.kind.currentIndexChanged.connect(lambda: self._populate_scopes(self.scope.currentData()))
-        self.scope.setEnabled(not scope_locked)
-        form.addRow("Tracking scope", self.scope)
-        scope_note = QLabel(
-            "Scope specifies the amount represented by this account. Account totals, loan principal and cash "
-            "components are different values. Scope becomes fixed when reviewed history is saved."
-            + (" This account's scope is fixed by its history." if scope_locked else "")
-        )
-        scope_note.setWordWrap(True)
-        form.addRow(scope_note)
-        self.institution = QLineEdit()
-        self.institution.setPlaceholderText("e.g. mohela")
-        self.institution.setMaxLength(80)
-        if existing is not None:
-            self.institution.setText(existing.institution_key)
-        form.addRow("Institution key", self.institution)
-        self.number = QLineEdit()
-        self.number.setPlaceholderText("Optional; full number only")
-        self.number.setMaxLength(80)
-        if existing is not None:
-            self.number.setText(existing.full_account_number or "")
-        form.addRow("Full account number", self.number)
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        form.addRow(buttons)
-
-    def _populate_scopes(self, selected: str) -> None:
-        self.scope.clear()
-        self.scope.addItem("Whole account", "account_total")
-        if self.kind.currentData() == "asset":
-            self.scope.addItem("Cash component only", "cash_component")
-        else:
-            self.scope.addItem("Loan principal only", "principal_component")
-        self.scope.setCurrentIndex(max(0, self.scope.findData(selected)))
-
-    def account(self) -> FinancialAccount:
-        return FinancialAccount(
-            id=self.existing.id if self.existing is not None else uuid4().hex,
-            name=self.name.text().strip(),
-            kind=self.kind.currentData(),
-            institution_key=self.institution.text().strip(),
-            full_account_number=self.number.text().strip() or None,
-            tracking_scope=self.scope.currentData(),
-        )
 
 
 class V2WorkspaceWindow(QMainWindow):
@@ -1090,7 +1017,7 @@ class V2WorkspaceWindow(QMainWindow):
     def _review_account(self) -> None:
         source_id = self._selected_source()
         if source_id is not None:
-            V2AccountBindingReview(self.workspace.profile_path, source_id, self).exec()
+            V2AccountBindingReview(self.workspace.profile_path, source_id, self, workspace=self.workspace).exec()
             self.refresh(select_source=source_id)
 
     def _review_source_account(self) -> None:

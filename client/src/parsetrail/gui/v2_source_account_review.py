@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 )
 
 from parsetrail.core.source_evidence import StatementPayload
+from parsetrail.core.v2_account_creation import suggest_account_creation
 from parsetrail.core.v2_account_matching import LedgerAccountCandidate, match_verified_source_account
 from parsetrail.core.v2_cash_movement import cash_account_labels
 from parsetrail.core.v2_profile_store import (
@@ -29,6 +30,7 @@ from parsetrail.core.v2_profile_store import (
 )
 from parsetrail.core.v2_workspace import V2Workspace
 from parsetrail.gui.v2_binding_correction import V2BindingCorrection, ordinary_binding_lock_notice
+from parsetrail.gui.v2_financial_account import create_financial_account
 
 
 class V2SourceAccountReview(QDialog):
@@ -62,7 +64,10 @@ class V2SourceAccountReview(QDialog):
         controls.addWidget(QLabel("Your account:"))
         self.account_combo = QComboBox()
         self.account_combo.currentIndexChanged.connect(self._update_controls)
-        controls.addWidget(self.account_combo)
+        controls.addWidget(self.account_combo, 1)
+        self.new_account_button = QPushButton("New account…")
+        self.new_account_button.clicked.connect(self._new_account)
+        controls.addWidget(self.new_account_button)
         self.assign_button = QPushButton("Use this account")
         self.assign_button.clicked.connect(self._assign)
         controls.addWidget(self.assign_button)
@@ -92,6 +97,7 @@ class V2SourceAccountReview(QDialog):
             self.identities.clear()
             self.account_combo.clear()
             self.assign_button.setEnabled(False)
+            self.new_account_button.setEnabled(False)
             self.clear_button.setEnabled(False)
             self.correction_button.setEnabled(False)
             self.abbreviated_matching_button.setVisible(False)
@@ -224,6 +230,7 @@ class V2SourceAccountReview(QDialog):
         selected = 0 <= index < len(self.bindings)
         locked = selected and self._selected_key() in self.locked_keys
         self.assign_button.setEnabled(selected and not locked and self.account_combo.currentData() is not None)
+        self.new_account_button.setEnabled(selected)
         self.clear_button.setEnabled(selected and not locked and self.bindings[index].ledger_account_id is not None)
         self.correction_button.setEnabled(selected)
         self.lock_notice.setText(ordinary_binding_lock_notice(self.ordinary_blockers.get(self._selected_key(), ())))
@@ -268,6 +275,30 @@ class V2SourceAccountReview(QDialog):
         account_id = self.account_combo.currentData()
         if key is not None and account_id is not None:
             self._write(lambda store: store.bind_source_account(self.source_sha256, *key, account_id))
+
+    def _new_account(self) -> None:
+        key = self._selected_key()
+        if key is None or not self.new_account_button.isEnabled():
+            return
+        try:
+            with V2ProfileStore.open(self.profile, read_only=True) as store:
+                evidence = store.load_import(self.source_sha256).evidence
+            draft = suggest_account_creation(
+                evidence,
+                catalog=self.workspace.catalog_cache.load_current(),
+                source_identity=key[0],
+                source_form=key[1],
+            )
+        except (ProfileFormatError, sqlite3.Error, OSError, ValueError) as exc:
+            QMessageBox.warning(self, "Account suggestions are unavailable", str(exc))
+            return
+        account = create_financial_account(self.profile, draft=draft, parent=self)
+        if account is None:
+            return
+        self._reload()
+        self.account_combo.setCurrentIndex(max(0, self.account_combo.findData(account.id)))
+        self._update_controls()
+        self.assign_button.setFocus()
 
     def _clear(self) -> None:
         key = self._selected_key()

@@ -6,10 +6,9 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None active. [Archive-backed guided UI demo](docs/work/2026-10-26-archive-ui-demo.md)
-completed all 946 imports, integrity/original-preservation and populated-launcher
-verification using committed guided UI f92c025. Evidence remains unposted until
-explicit owner review; originals and existing profiles were left untouched.
+None active. [Create accounts within document review](docs/work/2026-10-27-inline-account-creation.md)
+implemented and verified inline document-backed account creation, with separate
+assignment confirmation and a versioned demo runtime preserving review state.
 
 ## Recommended next packets (unselected)
 
@@ -35,11 +34,10 @@ they are not selected by this closeout.
 
 ## Most recent product packet
 
-[Guided client usability and responsive reads](docs/work/2026-10-26-client-ux-performance-evaluation.md)
-completed recognizable documents, contextual tasks, responsive scoped reports and
-one-pass account positions. A fresh disposable synthetic preview is available;
-existing owner pilots and pinned runtimes remain unchanged. Owner accounting
-review and supported-platform/release gates remain separate.
+[Inline account creation](docs/work/2026-10-27-inline-account-creation.md) adds
+editable document-backed account suggestions directly within Review. Its public
+versioned runtime opens the same archive-demo profile without resetting review
+state. Owner accounting review and supported-platform/release gates remain separate.
 
 ## Decisions and gates
 
