@@ -233,6 +233,15 @@ remain explicit choices or individual review. Cancel before Apply saves nothing;
 assignments never post transactions. Closing with edited choices or staged
 accounts asks whether to discard them; **Keep working** is the default.
 
+For exports without a printed account, saved individual row assignments already
+associate the document with those accounts. Documents shows the assignment basis
+and whether all rows have accounts; activity allocation remains a separate step.
+You can reopen **Review row account assignments** without making a whole-file
+assertion. Search includes every associated account. Returning to a document or
+batch window refreshes changed profile data, including changes from another
+window. Row selection and account choices use a cached review snapshot; saving
+still checks current accounting/history protections.
+
 **Open original** in Documents, account review, batch assignment or evidence
 preview opens verified database-retained PDF/CSV bytes in a built-in, memory-only
 reader. PDF supports page navigation, fit/zoom, search and selectable page text;

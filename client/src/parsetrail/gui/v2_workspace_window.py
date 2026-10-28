@@ -6,7 +6,7 @@ import sqlite3
 from pathlib import Path
 from threading import Event
 
-from PySide6.QtCore import Qt, QThread, QTimer
+from PySide6.QtCore import QEvent, Qt, QThread, QTimer
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
     QDialog,
@@ -46,9 +46,11 @@ from parsetrail.gui.v2_cash_movement import V2CashMovementDialog
 from parsetrail.gui.v2_categories import V2CategoryDialog
 from parsetrail.gui.v2_document_browser import (
     DocumentInventoryWorker,
+    document_account_association,
     document_period,
     document_status,
     document_title,
+    profile_revision,
 )
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
 from parsetrail.gui.v2_financial_account import V2FinancialAccountDialog
@@ -100,6 +102,7 @@ class V2WorkspaceWindow(QMainWindow):
         self._inventory_selection = None
         self._inventory_account_selection = None
         self._inventory_profile = None
+        self._inventory_revision = profile_revision(workspace.profile_path)
         self._document_summaries = {}
         self._closing = False
         self._search_prior_source = None
@@ -401,6 +404,7 @@ class V2WorkspaceWindow(QMainWindow):
         self.refresh()
 
     def refresh(self, select_source: str | None = None) -> None:
+        self._inventory_revision = profile_revision(self.workspace.profile_path)
         catalog = self.workspace.catalog_cache.load_current()
         self.catalog_label.setText(
             f"Verified catalog release {catalog.release_sequence}"
@@ -471,6 +475,7 @@ class V2WorkspaceWindow(QMainWindow):
                 self.accounts_list.clear()
                 self.accounts_status.setText("Account choices unavailable. Reload documents to retry.")
             else:
+                self._inventory_revision = worker.revision
                 self.inventory_status.setToolTip("")
                 self._apply_inventory(worker.result)
                 selected_id = self._inventory_account_selection
@@ -489,6 +494,8 @@ class V2WorkspaceWindow(QMainWindow):
                     else "No accounts yet. Add an account to connect your documents."
                 )
             self._update_controls()
+            if worker.error is None:
+                QTimer.singleShot(0, self._refresh_changed_profile)
         worker.deleteLater()
         if self._inventory_requested:
             QTimer.singleShot(0, self._start_inventory)
@@ -511,7 +518,18 @@ class V2WorkspaceWindow(QMainWindow):
             elif self.sources.row(item) != position:
                 self.sources.takeItem(self.sources.row(item))
                 self.sources.insertItem(position, item)
-            item.setText(f"{document_title(summary)}\n{document_period(summary)} · {document_status(summary)}")
+            account_note = (
+                (
+                    " · All rows have accounts"
+                    if summary.association_complete
+                    else f" · {summary.assigned_row_count}/{summary.row_count} rows have accounts"
+                )
+                if summary.has_unidentified_rows and summary.assigned_row_count
+                else ""
+            )
+            item.setText(
+                f"{document_title(summary)}\n{document_period(summary)}{account_note} · {document_status(summary)}"
+            )
             item.setToolTip(f"{item.text()}\nParser: {summary.parser_id}\nSource: {summary.source_sha256}")
             if summary.source_sha256 == prior:
                 self.sources.setCurrentItem(item)
@@ -529,7 +547,11 @@ class V2WorkspaceWindow(QMainWindow):
         for i in range(self.sources.count()):
             item = self.sources.item(i)
             summary = self._document_summaries.get(item.data(Qt.UserRole))
-            searchable = item.text() + (f" {summary.parser_id}" if summary else "")
+            searchable = item.text() + (
+                f" {summary.parser_id} {' '.join(summary.bound_account_names)} {' '.join(summary.source_accounts)}"
+                if summary
+                else ""
+            )
             item.setHidden(not all(word in searchable.casefold() for word in words))
             if not item.isHidden():
                 visible.append(item)
@@ -551,6 +573,17 @@ class V2WorkspaceWindow(QMainWindow):
                 else "No documents yet. Import a bank statement PDF or a supported CSV export to begin."
             )
         self._update_controls()
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QEvent.ActivationChange and self.isActiveWindow() and hasattr(self, "_inventory_revision"):
+            self._refresh_changed_profile()
+
+    def _refresh_changed_profile(self):
+        if self._closing or self.import_worker is not None or self.inventory_pending:
+            return
+        if profile_revision(self.workspace.profile_path) != self._inventory_revision:
+            self.refresh(select_source=self._selected_source())
 
     def _selected_source(self) -> str | None:
         item = self.sources.currentItem()
@@ -579,6 +612,11 @@ class V2WorkspaceWindow(QMainWindow):
         self.register_button.setVisible(is_register)
         self.source_review_button.setEnabled(available and summary.has_identified_accounts)
         self.review_button.setEnabled(available and summary.has_unidentified_rows)
+        self.review_button.setText(
+            "Review row account assignments"
+            if summary is not None and summary.has_unidentified_rows and summary.assigned_row_count
+            else "Assign rows without an account"
+        )
         if summary is not None:
             details = f"{document_title(summary)}\n{document_period(summary)} · {summary.row_count} source row(s)"
             if summary.overlapping_source_ids:
@@ -586,7 +624,8 @@ class V2WorkspaceWindow(QMainWindow):
                     f"\nPossible period overlap with {len(summary.overlapping_source_ids)} other document(s) "
                     "on a confirmed account. Check possible repeated rows before posting."
                 )
-            self.selected_details.setText(details)
+            association = document_account_association(summary)
+            self.selected_details.setText(f"{details}\n{association}")
             related = []
             for other_id in summary.overlapping_source_ids:
                 other = self._document_summaries.get(other_id)
@@ -598,13 +637,13 @@ class V2WorkspaceWindow(QMainWindow):
                 "Full allocation does not establish complete source capture or reconciliation."
                 + ("\nPossibly overlapping documents:\n" + "\n".join(related) if summary.overlapping_source_ids else "")
             )
-            self.review_context.setText(f"{details}\n{document_status(summary)}")
+            self.review_context.setText(f"{details}\n{association}\n{document_status(summary)}")
             self.account_assignment_status.setText(
                 f"{summary.unassigned_source_accounts} document account(s) need confirmation."
                 if summary.unassigned_source_accounts
                 else f"{summary.unassigned_activity_rows} activity row(s) still need a confirmed account."
                 if summary.unassigned_activity_rows
-                else "No account assignments outstanding for this document."
+                else association + ". Account assignment is separate from activity review."
             )
             self.review_document_button.setText(
                 "Confirm account"

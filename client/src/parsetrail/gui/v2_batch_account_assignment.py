@@ -7,7 +7,7 @@ import sqlite3
 import time
 from threading import Event
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, QThread, QTimer
+from PySide6.QtCore import QAbstractTableModel, QEvent, QModelIndex, Qt, QThread, QTimer
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -37,6 +37,7 @@ from parsetrail.core.v2_batch_account_assignment import (
 )
 from parsetrail.core.v2_cash_movement import cash_account_labels
 from parsetrail.core.v2_profile_store import V2ProfileStore
+from parsetrail.gui.v2_document_browser import profile_revision
 from parsetrail.gui.v2_financial_account import V2FinancialAccountDialog
 from parsetrail.gui.v2_original_document import open_original_document
 
@@ -70,6 +71,7 @@ class _AssignmentJob(QThread):
         self.plan, self.choices, self.new_accounts = plan, choices, new_accounts
         self.cancel_event = Event()
         self.result, self.error = None, None
+        self.revision = profile_revision(workspace.profile_path)
 
     def cancel(self):
         self.cancel_event.set()
@@ -77,6 +79,7 @@ class _AssignmentJob(QThread):
 
     def run(self):
         try:
+            self.revision = profile_revision(self.workspace.profile_path)
             with V2ProfileStore.open(self.workspace.profile_path, read_only=self.plan is None) as store:
                 store.connection.set_progress_handler(lambda: int(self.cancel_event.is_set()), 1000)
                 if self.plan is None:
@@ -168,6 +171,7 @@ class V2BatchAccountAssignment(QDialog):
         self._close_result = None
         self._prompted = set()
         self._updating = False
+        self._profile_revision = profile_revision(workspace.profile_path)
         self._apply_blocked = False
         self.setWindowTitle("Assign document accounts")
         self.resize(1024, 730)
@@ -324,6 +328,7 @@ class V2BatchAccountAssignment(QDialog):
         if job is None:
             return
         if job.plan is not None and job.result is not None:
+            self._profile_revision = profile_revision(self.workspace.profile_path)
             self.assignment_result = job.result
             self.changed = self.changed or bool(job.result.assigned_sections or job.result.created_accounts)
             self.status.setText(
@@ -344,7 +349,9 @@ class V2BatchAccountAssignment(QDialog):
             self.summary_model.replace(())
             self.counts.setText("Batch saved. Reload proposals to find any remaining unassigned sections.")
         elif job.generation == self._generation and job.error is None and job.result is not None:
+            self._profile_revision = job.revision
             self._load_plan(job.result)
+            QTimer.singleShot(0, self._refresh_changed_profile)
         elif job.error is not None and job.generation == self._generation:
             cancelled = isinstance(job.error, AccountAssignmentCancelled) or (
                 isinstance(job.error, sqlite3.OperationalError)
@@ -489,6 +496,16 @@ class V2BatchAccountAssignment(QDialog):
     def showEvent(self, event):
         super().showEvent(event)
         QTimer.singleShot(0, self._maybe_prompt_new)
+
+    def changeEvent(self, event):
+        super().changeEvent(event)
+        if event.type() == QEvent.ActivationChange and self.isActiveWindow() and hasattr(self, "_profile_revision"):
+            self._refresh_changed_profile()
+
+    def _refresh_changed_profile(self):
+        if not self._closed and not self.pending and self.plan is not None:
+            if profile_revision(self.workspace.profile_path) != self._profile_revision:
+                self.refresh()
 
     def _maybe_prompt_new(self):
         group = self._current()

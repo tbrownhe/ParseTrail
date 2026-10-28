@@ -13,6 +13,18 @@ from parsetrail.core.v2_profile_store import DocumentSummary, V2ProfileStore
 _INVENTORY_READERS: set[QThread] = set()
 
 
+def profile_revision(profile: Path) -> tuple:
+    """Cheap freshness hint for activation, never a substitute for write guards."""
+    result = []
+    for path in (profile, profile.with_name(profile.name + "-wal")):
+        try:
+            info = path.stat()
+            result.append((info.st_size, info.st_mtime_ns, info.st_ino))
+        except OSError:
+            result.append(None)
+    return tuple(result)
+
+
 def _finish_inventory_readers() -> None:
     readers = tuple(_INVENTORY_READERS)
     for reader in readers:
@@ -39,6 +51,7 @@ class DocumentInventoryWorker(QThread):
         self.generation = generation
         self.result: tuple[DocumentSummary, ...] = ()
         self.accounts = ()
+        self.revision = profile_revision(profile)
         self.error: Exception | None = None
 
     def start(self) -> None:
@@ -53,6 +66,7 @@ class DocumentInventoryWorker(QThread):
 
     def run(self) -> None:
         try:
+            self.revision = profile_revision(self.profile)
             with V2ProfileStore.open(self.profile, read_only=True) as store:
                 store.connection.set_progress_handler(lambda: int(self.isInterruptionRequested()), 1000)
                 self.result = store.document_summaries()
@@ -136,3 +150,31 @@ def document_status(summary: DocumentSummary) -> str:
     if summary.pending_activity_rows:
         return f"{summary.pending_activity_rows} unallocated source row(s) · may include repeats"
     return "No activity pending · source checks are separate"
+
+
+def document_account_association(summary: DocumentSummary) -> str:
+    """Explain confirmed source/file/row decisions independently of allocation."""
+    names = ", ".join(summary.bound_account_names)
+    assigned = summary.assigned_row_count
+    if summary.association_kind == "file":
+        return f"Whole document assigned to {names} · {summary.row_count} rows"
+    if summary.association_kind == "rows":
+        if summary.association_complete:
+            return (
+                f"All {summary.row_count} rows assigned individually to {names}"
+                if len(summary.associated_account_ids) == 1
+                else f"All {summary.row_count} rows assigned across {len(summary.associated_account_ids)} accounts: {names}"
+            )
+        return (
+            f"{assigned}/{summary.row_count} rows assigned · {summary.row_count - assigned} still need an account"
+            + (f" · {names}" if names else "")
+        )
+    if summary.association_kind in {"source", "mixed"}:
+        return f"Confirmed account associations: {names}" + (
+            " · some account assignments still need review" if not summary.association_complete else ""
+        )
+    return (
+        "No activity rows; account not established"
+        if not summary.row_count
+        else f"No row accounts assigned · {summary.row_count} rows need an account"
+    )

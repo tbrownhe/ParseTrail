@@ -14,6 +14,7 @@ import sqlite3
 import tempfile
 from dataclasses import asdict, dataclass, replace
 from datetime import date
+from functools import cached_property
 from pathlib import Path
 from typing import Literal
 
@@ -33,6 +34,7 @@ from parsetrail.core.source_evidence import (
     ActivityExportPayload,
     DateValue,
     MoneyValue,
+    ObservationEvidence,
     SourceEvidence,
     StatementAccount,
     StatementPayload,
@@ -554,10 +556,29 @@ _INACTIVE_JOURNAL_SQL = (
     "UNION SELECT original_key FROM JournalRetirements UNION SELECT reversal_key FROM JournalRetirements"
 )
 _UNSET_REVIEW_REVISION = object()
+_ORDINARY_BINDING_BLOCKER_ORDER = (
+    "account_binding_has_journal_history",
+    "account_binding_has_overlap_review_history",
+    "account_binding_has_transfer_review_history",
+    "account_binding_has_correction_history",
+    "account_binding_source_backed_opening_anchor",
+    "account_binding_source_backed_dated_value_anchor",
+)
 
 
 class ProfileFormatError(ValueError):
     """A profile or saved snapshot is unsupported or damaged."""
+
+
+def _ordinary_binding_blockers_from_rows(row_ids, blockers_by_row):
+    ordered = sorted(row_ids)
+    for offset in range(0, len(ordered), 500):
+        codes = {code for row_id in ordered[offset : offset + 500] for code in blockers_by_row[row_id]}
+        for code in _ORDINARY_BINDING_BLOCKER_ORDER[:3]:
+            if code in codes:
+                return (code,)
+    codes = {code for row_id in ordered for code in blockers_by_row[row_id]}
+    return tuple(code for code in _ORDINARY_BINDING_BLOCKER_ORDER[3:] if code in codes)[:1]
 
 
 @dataclass(frozen=True)
@@ -594,6 +615,10 @@ class DocumentSummary:
     has_identified_accounts: bool
     overlapping_source_ids: tuple[str, ...] = ()
     unassigned_source_accounts: int = 0
+    associated_account_ids: tuple[str, ...] = ()
+    association_kind: Literal["unassigned", "source", "file", "rows", "mixed"] = "unassigned"
+    association_complete: bool = False
+    assigned_row_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -634,6 +659,38 @@ class AccountBinding:
     row_id: str
     ledger_account_id: str | None
     basis: Literal["row", "file", "source", "automatic"] | None
+
+
+@dataclass(frozen=True)
+class AccountlessBindingReviewSnapshot:
+    """One verified accountless review; selecting rows never reads the profile.
+
+    The cached guards describe this read only. Mutating assignment/correction
+    methods remain authoritative and recheck the current committed profile.
+    """
+
+    evidence: SourceEvidence
+    rows: tuple[ObservationEvidence, ...]
+    bindings: tuple[AccountBinding, ...]
+    accounts: tuple[FinancialAccount, ...]
+    file_eligible: bool
+    posted_row_ids: frozenset[str]
+    overlap_row_ids: frozenset[str]
+    file_ordinary_blockers: tuple[str, ...]
+    row_ordinary_blockers: tuple[tuple[str, tuple[str, ...]], ...]
+
+    @cached_property
+    def _blockers_by_row(self):
+        return dict(self.row_ordinary_blockers)
+
+    def ordinary_blockers_for_rows(self, row_ids: tuple[str, ...]) -> tuple[str, ...]:
+        if (
+            type(row_ids) is not tuple
+            or any(type(row_id) is not str or row_id not in self._blockers_by_row for row_id in row_ids)
+            or len(row_ids) != len(set(row_ids))
+        ):
+            raise ProfileFormatError("binding_correction_target_invalid")
+        return _ordinary_binding_blockers_from_rows(row_ids, self._blockers_by_row)
 
 
 @dataclass(frozen=True)
@@ -7391,6 +7448,133 @@ class V2ProfileStore:
         self._read_binding_corrections()
         return self._account_bindings_for_evidence(source_sha256, evidence)
 
+    def accountless_binding_review_snapshot(self, source_sha256: str) -> AccountlessBindingReviewSnapshot:
+        """Read accountless evidence, assignments and selection guards together.
+
+        Related history is validated once for this operation. Per-row guard data
+        is then derived from that validated state, without rebuilding the full
+        archive/correction preview for each row or selection change.
+        """
+        if self.connection.in_transaction:
+            raise ProfileFormatError("binding_requires_committed_snapshot")
+        self.connection.execute("BEGIN")
+        try:
+            evidence = self.load_import(source_sha256).evidence
+            payload = evidence.payload
+            if not isinstance(payload, ActivityExportPayload) or not any(
+                row.source_account is None for row in payload.rows
+            ):
+                raise ProfileFormatError("account_review_requires_accountless_export")
+            self._validate_account_metadata()
+            self._active_consumed()
+            self._validate_loan_history()
+            corrections = self._read_binding_corrections()
+            accounts = self.financial_accounts()
+            rows = tuple(row for row in payload.rows if row.source_account is None)
+            bindings = tuple(
+                binding
+                for row, binding in zip(
+                    payload.rows, self._account_bindings_for_evidence(source_sha256, evidence), strict=True
+                )
+                if row.source_account is None
+            )
+            source_rows = {row.row_id for row in payload.rows}
+            posted = frozenset(
+                row_id
+                for (row_id,) in self.connection.execute(
+                    "SELECT row_id FROM JournalAllocations UNION SELECT row_id FROM LoanSourceUses"
+                )
+                if row_id in source_rows
+            )
+            overlap = frozenset(
+                row_id
+                for pair in self.connection.execute("SELECT left_row_id,right_row_id FROM SourceOverlapReviews")
+                for row_id in pair
+                if row_id in source_rows
+            )
+            transfer = frozenset(
+                row_id
+                for pair in self.connection.execute("SELECT outgoing_row_id,incoming_row_id FROM TransferPairReviews")
+                for row_id in pair
+                if row_id in source_rows
+            )
+            correction_rows = set()
+            for correction in corrections:
+                target = correction.target
+                if target.source_sha256 != source_sha256:
+                    continue
+                if target.mode == "file":
+                    correction_rows.update(source_rows)
+                elif target.mode == "rows":
+                    correction_rows.update(target.row_ids)
+                else:
+                    correction_rows.update(
+                        row.row_id
+                        for row in payload.rows
+                        if (row.source_account, row.source_account_form)
+                        == (target.source_identity, target.source_identity_form)
+                    )
+            source_openings = {
+                account.id
+                for account in accounts
+                if (history := self.opening_decision_history(account.id))
+                and history[0].origin == "source"
+                and history[0].state == "active"
+            }
+            source_review_accounts = {
+                account_id
+                for (account_id,) in self.connection.execute(
+                    "SELECT DISTINCT account_id FROM StatementSourceReviews WHERE source_sha256=?", (source_sha256,)
+                )
+            }
+            source_opening_locked = bool(source_review_accounts.intersection(source_openings))
+            row_assignments = self._row_assignments(tuple(row.row_id for row in rows))
+            row_blockers = {}
+            for binding in bindings:
+                row_id = binding.row_id
+                row_blockers[row_id] = tuple(
+                    code
+                    for code, blocked in (
+                        ("account_binding_has_journal_history", row_id in posted),
+                        ("account_binding_has_overlap_review_history", row_id in overlap),
+                        ("account_binding_has_transfer_review_history", row_id in transfer),
+                        ("account_binding_has_correction_history", row_id in correction_rows),
+                        (
+                            "account_binding_source_backed_opening_anchor",
+                            source_opening_locked or row_assignments.get(row_id) in source_openings,
+                        ),
+                    )
+                    if blocked
+                )
+            file_eligible = len(rows) == len(payload.rows)
+            file_blockers = ()
+            if file_eligible:
+                file_assignment = self.connection.execute(
+                    "SELECT ledger_account_id FROM FileAccountAssertions WHERE source_sha256=?", (source_sha256,)
+                ).fetchone()
+                file_opening_locked = source_opening_locked or (
+                    file_assignment is not None and file_assignment[0] in source_openings
+                )
+                file_row_blockers = {
+                    row_id: tuple(code for code in codes if code != "account_binding_source_backed_opening_anchor")
+                    + (("account_binding_source_backed_opening_anchor",) if file_opening_locked else ())
+                    for row_id, codes in row_blockers.items()
+                }
+                file_blockers = _ordinary_binding_blockers_from_rows(tuple(file_row_blockers), file_row_blockers)
+            return AccountlessBindingReviewSnapshot(
+                evidence,
+                rows,
+                bindings,
+                accounts,
+                file_eligible,
+                posted,
+                overlap,
+                file_blockers,
+                tuple(row_blockers.items()),
+            )
+        finally:
+            self.connection.execute("ROLLBACK")
+
     def _account_bindings_for_evidence(
         self, source_sha256: str, evidence: SourceEvidence, *, _decisions=None
     ) -> tuple[AccountBinding, ...]:
@@ -7525,6 +7709,16 @@ class V2ProfileStore:
                     if identity[0] is not None
                 )
                 institutions = {account.institution_key for account in bound_accounts}
+                association_bases = {binding.basis for binding in bindings if binding.ledger_account_id is not None}
+                if source_account_ids:
+                    association_bases.add("source")
+                association_kind = (
+                    "unassigned"
+                    if not association_bases
+                    else "mixed"
+                    if len(association_bases) > 1
+                    else {"source": "source", "file": "file", "row": "rows"}[next(iter(association_bases))]
+                )
                 summaries[source_id] = DocumentSummary(
                     source_id,
                     evidence.parser_id,
@@ -7542,6 +7736,12 @@ class V2ProfileStore:
                     any(row.source_account is None for row in activity),
                     isinstance(payload, StatementPayload) or any(row.source_account is not None for row in rows),
                     unassigned_source_accounts=unassigned_identities,
+                    associated_account_ids=tuple(account.id for account in bound_accounts),
+                    association_kind=association_kind,
+                    association_complete=bool(bound_accounts)
+                    and not unassigned_identities
+                    and all(binding.ledger_account_id in accounts for binding in bindings),
+                    assigned_row_count=sum(binding.ledger_account_id in accounts for binding in bindings),
                 )
             overlaps = {}
             for account_periods in periods.values():

@@ -20,7 +20,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
-from parsetrail.core.source_evidence import ActivityExportPayload, ObservationEvidence
+from parsetrail.core.source_evidence import ObservationEvidence
 from parsetrail.core.v2_account_creation import suggest_account_creation
 from parsetrail.core.v2_cash_movement import cash_account_labels
 from parsetrail.core.v2_profile_store import (
@@ -95,6 +95,9 @@ class V2AccountBindingReview(QDialog):
         self.profile = profile
         self.workspace = workspace
         self.source_sha256 = source_sha256
+        self._snapshot = None
+        self._read_error: str | None = None
+        self._file_mode = self._row_mode = False
         self.setWindowTitle("2.0 account assignment review")
         self.resize(1080, 620)
         layout = QVBoxLayout(self)
@@ -107,6 +110,7 @@ class V2AccountBindingReview(QDialog):
         intro.setWordWrap(True)
         layout.addWidget(intro)
         self.status = QLabel()
+        self.status.setWordWrap(True)
         layout.addWidget(self.status)
         self.lock_notice = QLabel()
         self.lock_notice.setWordWrap(True)
@@ -115,6 +119,7 @@ class V2AccountBindingReview(QDialog):
         controls = QHBoxLayout()
         controls.addWidget(QLabel("Ledger account:"))
         self.account_combo = QComboBox()
+        self.account_combo.currentIndexChanged.connect(self._update_controls)
         self.account_combo.setMinimumWidth(260)
         controls.addWidget(self.account_combo)
         self.new_account_button = QPushButton("New account…")
@@ -136,6 +141,7 @@ class V2AccountBindingReview(QDialog):
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table.setAlternatingRowColors(True)
         header = self.table.horizontalHeader()
+        header.setResizeContentsPrecision(200)
         header.setStretchLastSection(False)
         for column in (0, 2, 3, 4, 5):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
@@ -161,6 +167,8 @@ class V2AccountBindingReview(QDialog):
         correction_controls.addWidget(self.correct_rows_button)
         layout.addLayout(correction_controls)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        self.reload_button = buttons.addButton("Reload saved assignments", QDialogButtonBox.ActionRole)
+        self.reload_button.clicked.connect(self._reload)
         self.open_original_button = buttons.addButton("Open original…", QDialogButtonBox.ActionRole)
         self.open_original_button.clicked.connect(self._open_original)
         buttons.rejected.connect(self.reject)
@@ -179,42 +187,35 @@ class V2AccountBindingReview(QDialog):
         try:
             self._reload_current()
         except (ProfileFormatError, sqlite3.Error, OSError) as exc:
+            self._snapshot = None
+            self._read_error = str(exc)
+            self._file_mode = self._row_mode = False
             self._file_eligible = False
             self.posted_row_ids, self.overlap_row_ids = frozenset(), frozenset()
             self.file_ordinary_blockers = ()
             self.account_combo.clear()
             self.model.replace((), (), ())
             self._update_controls()
-            self.status.setText("Source assignments are unavailable. Reopen this review to retry.")
+            self.status.setText("Source assignments are unavailable. Reload saved assignments to retry.")
             self.lock_notice.setText(str(exc))
 
     def _reload_current(self) -> None:
+        selected_rows = self._selected_row_ids()
+        current = self.table.currentIndex()
+        current_row_id = self.model.rows[current.row()].row_id if current.isValid() else None
         with V2ProfileStore.open(self.profile, read_only=True) as store:
-            evidence = store.load_import(self.source_sha256).evidence
-            payload = evidence.payload
-            if not isinstance(payload, ActivityExportPayload) or not any(
-                row.source_account is None for row in payload.rows
-            ):
-                raise ProfileFormatError("account_review_requires_accountless_export")
-            accounts = store.financial_accounts()
-            rows = tuple(row for row in payload.rows if row.source_account is None)
-            bindings = tuple(
-                binding
-                for row, binding in zip(payload.rows, store.account_bindings(self.source_sha256), strict=True)
-                if row.source_account is None
-            )
-            self._file_eligible = len(rows) == len(payload.rows)
-            self.posted_row_ids = store.journal_history_row_ids(self.source_sha256)
-            self.overlap_row_ids = store.source_overlap_history_row_ids(self.source_sha256)
-            self.file_ordinary_blockers = (
-                store.binding_correction_snapshot(
-                    BindingCorrectionTarget(self.source_sha256, "file"), destination_account_id=None
-                ).ordinary_blockers
-                if self._file_eligible
-                else ()
-            )
+            snapshot = store.accountless_binding_review_snapshot(self.source_sha256)
+        self._snapshot, self._read_error = snapshot, None
+        accounts, rows, bindings = snapshot.accounts, snapshot.rows, snapshot.bindings
+        self._file_eligible = snapshot.file_eligible
+        self.posted_row_ids = snapshot.posted_row_ids
+        self.overlap_row_ids = snapshot.overlap_row_ids
+        self.file_ordinary_blockers = snapshot.file_ordinary_blockers
+        self._file_mode = any(binding.basis == "file" for binding in bindings)
+        self._row_mode = any(binding.basis == "row" for binding in bindings)
         selected_account = self.account_combo.currentData()
         names = cash_account_labels(accounts)
+        self.account_combo.blockSignals(True)
         self.account_combo.clear()
         for account in accounts:
             self.account_combo.addItem(names[account.id], account.id)
@@ -222,7 +223,24 @@ class V2AccountBindingReview(QDialog):
             selected_index = self.account_combo.findData(selected_account)
             if selected_index >= 0:
                 self.account_combo.setCurrentIndex(selected_index)
+        self.account_combo.blockSignals(False)
+        selection = self.table.selectionModel()
+        selection.blockSignals(True)
         self.model.replace(rows, bindings, accounts)
+        indices = {row.row_id: index for index, row in enumerate(rows)}
+        restored = None
+        for row_id in selected_rows:
+            if row_id in indices:
+                index = self.model.index(indices[row_id], 0)
+                selection.select(
+                    index, QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows
+                )
+                if restored is None or row_id == current_row_id:
+                    restored = index
+        if restored is not None:
+            selection.setCurrentIndex(restored, QItemSelectionModel.SelectionFlag.NoUpdate)
+            self.table.scrollTo(restored)
+        selection.blockSignals(False)
         file_count = sum(binding.basis == "file" for binding in bindings)
         row_count = sum(binding.basis == "row" for binding in bindings)
         if file_count:
@@ -230,7 +248,14 @@ class V2AccountBindingReview(QDialog):
             account_name = names[account_id]
             self.status.setText(f"Whole-file assertion: {account_name} · {file_count} rows")
         elif row_count:
-            self.status.setText(f"Row assignments: {row_count} of {len(bindings)} rows")
+            association_note = (
+                "Row assignments already associate this document with the selected accounts; "
+                "no whole-document assertion is required."
+                if row_count == len(bindings)
+                else "Saved row assignments already associate those rows with their selected accounts. "
+                "Assign the remaining rows; no whole-document assertion is required."
+            )
+            self.status.setText(f"Row assignments: {row_count} of {len(bindings)} rows. {association_note}")
         else:
             self.status.setText(f"No account assignments · {len(bindings)} rows pending")
         if not accounts:
@@ -243,19 +268,11 @@ class V2AccountBindingReview(QDialog):
     def _update_controls(self, *_args) -> None:
         selected = self._selected_row_ids()
         selected_bindings = (self.model.bindings[index.row()] for index in self.table.selectionModel().selectedRows())
-        file_mode = any(binding.basis == "file" for binding in self.model.bindings)
-        row_mode = any(binding.basis == "row" for binding in self.model.bindings)
+        file_mode, row_mode = self._file_mode, self._row_mode
         selected_blockers = ()
-        read_error = None
-        if selected and not file_mode:
-            try:
-                with V2ProfileStore.open(self.profile, read_only=True) as store:
-                    selected_blockers = store.binding_correction_snapshot(
-                        BindingCorrectionTarget(self.source_sha256, "rows", row_ids=selected),
-                        destination_account_id=None,
-                    ).ordinary_blockers
-            except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-                read_error = str(exc)
+        read_error = self._read_error
+        if selected and not file_mode and self._snapshot is not None:
+            selected_blockers = self._snapshot.ordinary_blockers_for_rows(selected)
         file_locked = bool(self.file_ordinary_blockers) or read_error is not None
         selected_locked = bool(selected_blockers) or read_error is not None
         account_available = self.account_combo.currentData() is not None
@@ -270,8 +287,10 @@ class V2AccountBindingReview(QDialog):
         self.clear_rows_button.setEnabled(
             not file_mode and not selected_locked and any(binding.basis == "row" for binding in selected_bindings)
         )
-        self.correct_file_button.setEnabled(file_mode and read_error is None)
-        self.correct_rows_button.setEnabled(bool(selected) and not file_mode and read_error is None)
+        self.correct_file_button.setEnabled(file_mode and self._snapshot is not None and read_error is None)
+        self.correct_rows_button.setEnabled(
+            bool(selected) and not file_mode and self._snapshot is not None and read_error is None
+        )
         self.lock_notice.setText(
             f"Assignment review is unavailable. Reopen this review to retry: {read_error}"
             if read_error
@@ -301,8 +320,6 @@ class V2AccountBindingReview(QDialog):
         if not self.new_account_button.isEnabled():
             return
         selected = frozenset(self._selected_row_ids())
-        current = self.table.currentIndex()
-        current_row_id = self.model.rows[current.row()].row_id if current.isValid() else None
         try:
             with V2ProfileStore.open(self.profile, read_only=True) as store:
                 evidence = store.load_import(self.source_sha256).evidence
@@ -316,22 +333,6 @@ class V2AccountBindingReview(QDialog):
             return
         self._reload()
         self.account_combo.setCurrentIndex(max(0, self.account_combo.findData(account.id)))
-        selection = self.table.selectionModel()
-        selection.blockSignals(True)
-        restored_current = None
-        for index, row in enumerate(self.model.rows):
-            if row.row_id in selected:
-                model_index = self.model.index(index, 0)
-                selection.select(
-                    model_index,
-                    QItemSelectionModel.SelectionFlag.Select | QItemSelectionModel.SelectionFlag.Rows,
-                )
-                if restored_current is None or row.row_id == current_row_id:
-                    restored_current = model_index
-        if restored_current is not None:
-            selection.setCurrentIndex(restored_current, QItemSelectionModel.SelectionFlag.NoUpdate)
-            self.table.scrollTo(restored_current)
-        selection.blockSignals(False)
         self._update_controls()
         (self.assign_rows_button if selected else self.file_button).setFocus()
 

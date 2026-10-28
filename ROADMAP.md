@@ -80,6 +80,9 @@ The [embedded reader and account-context follow-up](docs/work/2026-10-27-embedde
 replaces default external handoff with memory-only PDF/CSV viewing, adds selected
 document facts inside account creation, shortens new names to visible last-four
 digits and protects unapplied batch work with discard confirmation.
+The [accountless review follow-up](docs/work/2026-10-27-accountless-review-performance.md)
+removes selection-time database reads, makes confirmed row-based document
+associations explicit and refreshes changed document/batch views on activation.
 
 ### Parser and catalog track
 

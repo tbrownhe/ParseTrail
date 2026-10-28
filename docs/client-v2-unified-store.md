@@ -71,6 +71,21 @@ same institution and asset/liability class. With the choice off, show the unique
 candidate as a suggestion and offer the inline enable control. Ambiguous matches
 always require explicit review. An observed full number may match exactly without
 enabling abbreviated matching; an opaque identity is not a suffix number.
+
+Confirmed individual rows also establish a derived document/account relationship
+for discovery. Document summaries expose saved account IDs/names, source/file/row
+or mixed basis, exact assigned-row count and completeness, including empty source
+sections. This does not create a whole-file assertion, infer a printed identifier
+or establish statement coverage/posting. Partial and multi-account exports remain
+qualified and searchable through every associated account name.
+
+Accountless review reads one committed, verified snapshot of evidence, accounts,
+bindings and relevant history guards. Selection and combo changes query cached
+immutable guard facts without reopening SQLite; save/correction services recheck
+current authoritative history. Failed reload clears the cached presentation.
+Document/batch windows check profile/WAL metadata on activation and queue changed
+reads off the GUI thread. Metadata is a freshness hint, never a write authority;
+write-time validation and stale-plan refusal remain mandatory.
 The account-confirmation UI distinguishes read-time matching suggestions from
 saved explicit associations. A suggestion does not reduce its unassigned count
 or authorize posting; Use this account records the explicit source association.

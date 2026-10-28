@@ -6,9 +6,9 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None. [Embedded originals and account context](docs/work/2026-10-27-embedded-originals-account-context.md)
-completed development, real PDF rendering, native/frozen component checks and
-independent review; a new runtime preserves the existing owner's saved review state.
+None. [Accountless review performance and document association](docs/work/2026-10-27-accountless-review-performance.md)
+completed development, integrated/native performance checks and independent
+review; a new runtime preserves the owner's existing saved review state.
 
 ## Recommended next packets (unselected)
 
