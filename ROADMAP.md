@@ -76,6 +76,10 @@ The subsequent [batch assignment and original preview](docs/work/2026-10-27-batc
 reuse exact institution/printed-account associations across saved documents,
 stage new accounts for one confirmed atomic batch and expose retained originals
 through managed default-app handoff. Parser-known institution is read-only.
+The [embedded reader and account-context follow-up](docs/work/2026-10-27-embedded-originals-account-context.md)
+replaces default external handoff with memory-only PDF/CSV viewing, adds selected
+document facts inside account creation, shortens new names to visible last-four
+digits and protects unapplied batch work with discard confirmation.
 
 ### Parser and catalog track
 

@@ -19,7 +19,7 @@ from parsetrail.core import v2_original_document as storage
 from parsetrail.core.v2_profile_store import SavedImport, V2ProfileStore
 from parsetrail.core.v2_source_pipeline import build_source_evidence
 from parsetrail.core.v2_two_date_card_lines import parse_two_date_card
-from parsetrail.gui import v2_original_document as gui
+from parsetrail.gui import v2_external_document as gui
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QDesktopServices
@@ -290,6 +290,7 @@ def test_default_app_handoff_is_gui_thread_exact_and_retained_for_session(profil
 
 
 def test_failed_launch_removes_copy_and_preview_offers_retry(saved, session, monkeypatch):
+    monkeypatch.setattr("parsetrail.gui.v2_evidence_preview.open_saved_original", gui.open_saved_original)
     preview = V2EvidencePreview(saved)
     try:
         preview.original_button.click()
@@ -419,7 +420,7 @@ def test_process_shutdown_drains_original_read_without_launch(profile, saved, tm
         from PySide6.QtCore import QTimer
         from PySide6.QtWidgets import QApplication
         from PySide6.QtGui import QDesktopServices
-        from parsetrail.gui import v2_original_document as gui
+        from parsetrail.gui import v2_external_document as gui
         from parsetrail.core.v2_original_document import OriginalDocumentSession
         app=QApplication([])
         profile,root,marker=map(Path,sys.argv[1:4]);source=sys.argv[4];use_loop=sys.argv[5]=='True'

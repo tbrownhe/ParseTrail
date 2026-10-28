@@ -1,40 +1,28 @@
-"""Open a verified local original asynchronously in the desktop's default app."""
+"""Read verified retained originals asynchronously into a memory-only viewer."""
 
 from __future__ import annotations
 
 import atexit
-import threading
 import time
 import weakref
 from pathlib import Path
 
-from PySide6.QtCore import QCoreApplication, QEvent, QObject, QThread, QUrl, Signal
-from PySide6.QtGui import QDesktopServices
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QThread, Signal
 from PySide6.QtWidgets import QDialog, QMessageBox
 
-from parsetrail.core.v2_original_document import OriginalDocumentError, OriginalDocumentSession, read_saved_original
-from parsetrail.core.v2_profile_store import SavedImport
+from parsetrail.core.v2_original_document import read_saved_original
+from parsetrail.gui.v2_document_viewer import show_saved_document
 
 _ORIGINAL_READERS: set[QThread] = set()
 _ORIGINAL_OPENERS: set[OriginalDocumentOpen] = set()
-_SESSION: OriginalDocumentSession | None = None
-_SESSION_LOCK = threading.Lock()
 _EXITING = False
-
-
-def _session() -> OriginalDocumentSession:
-    global _SESSION
-    with _SESSION_LOCK:
-        if _SESSION is None:
-            _SESSION = OriginalDocumentSession()
-        return _SESSION
 
 
 def _finish_original_readers() -> None:
     global _EXITING
     _EXITING = True
-    for opener in tuple(_ORIGINAL_OPENERS):
-        opener.cancel()
+    for operation in tuple(_ORIGINAL_OPENERS):
+        operation.cancel()
     for reader in tuple(_ORIGINAL_READERS):
         reader.requestInterruption()
         while reader.isRunning():
@@ -42,54 +30,40 @@ def _finish_original_readers() -> None:
             time.sleep(0.001)
         reader.wait()
         _ORIGINAL_READERS.discard(reader)
-    if _SESSION is not None:
-        _SESSION.close()
 
 
 atexit.register(_finish_original_readers)
 
 
 class _OriginalReader(QThread):
-    def __init__(self, *, profile: Path | None, source_sha256: str, saved: SavedImport | None):
+    def __init__(self, *, profile, source_sha256, saved):
         super().__init__()
         self.profile, self.source_sha256, self.saved = profile, source_sha256, saved
-        self.path: Path | None = None
-        self.session: OriginalDocumentSession | None = None
-        self.error: Exception | None = None
+        self.result, self.error = None, None
 
-    def run(self) -> None:
+    def run(self):
         try:
-            if self.isInterruptionRequested():
-                return
-            saved = self.saved or read_saved_original(
-                self.profile, self.source_sha256, cancelled=self.isInterruptionRequested
-            )
-            if self.isInterruptionRequested():
-                return
-            self.session = _session()
-            self.path = self.session.materialize(saved)
-            if self.isInterruptionRequested():
-                self.session.discard(self.path)
-                self.path = None
+            if not self.isInterruptionRequested():
+                self.result = self.saved or read_saved_original(
+                    self.profile, self.source_sha256, cancelled=self.isInterruptionRequested
+                )
         except Exception as exc:
             self.error = exc
 
 
 class OriginalDocumentOpen(QObject):
-    """Retained operation for one captured source, cancelled when its parent dies."""
+    """Retain a captured read until completion; close the viewer with its host."""
 
     finished = Signal(bool)
     status_changed = Signal(str)
 
-    def __init__(self, *, profile=None, source_sha256: str, saved=None, parent=None):
-        # No QObject parent: cancellation must not destroy a running native worker.
+    def __init__(self, *, profile=None, source_sha256, saved=None, parent=None, initial_page=None, context=""):
         super().__init__()
         self._parent = weakref.ref(parent) if parent is not None else lambda: None
-        self.pending = True
-        self.status = "Preparing original document…"
-        self.path: Path | None = None
-        self.error: Exception | None = None
-        self._cancelled = False
+        self.pending, self._cancelled, self._finished, self._read_pending = True, False, False, True
+        self.status = "Loading saved original…"
+        self.error, self.viewer = None, None
+        self.initial_page, self.context = initial_page, context
         self._reader = _OriginalReader(profile=profile, source_sha256=source_sha256, saved=saved)
         if parent is not None:
             parent.destroyed.connect(self.cancel)
@@ -97,74 +71,113 @@ class OriginalDocumentOpen(QObject):
             if isinstance(parent, QDialog):
                 parent.finished.connect(self.cancel)
         app = QCoreApplication.instance()
-        if app is not None and not app.property("parsetrailOriginalExitHook"):
-            app.setProperty("parsetrailOriginalExitHook", True)
+        if app is not None and not app.property("parsetrailEmbeddedOriginalExitHook"):
+            app.setProperty("parsetrailEmbeddedOriginalExitHook", True)
             app.aboutToQuit.connect(_finish_original_readers)
         _ORIGINAL_OPENERS.add(self)
         _ORIGINAL_READERS.add(self._reader)
-        self._reader.finished.connect(self._complete)
+        self._reader.finished.connect(self._complete_read)
         self._reader.finished.connect(lambda: _ORIGINAL_READERS.discard(self._reader))
         self._reader.finished.connect(self._reader.deleteLater)
         self._reader.start()
 
-    def cancel(self, *_args) -> None:
+    def cancel(self, *_args):
         self._cancelled = True
-        if self.pending:
+        if self._read_pending:
             self._reader.requestInterruption()
+        if self.viewer is not None:
+            try:
+                self.viewer.reject()
+            except RuntimeError:
+                pass
 
-    def eventFilter(self, watched, event) -> bool:
+    def eventFilter(self, watched, event):
         if event.type() == QEvent.Type.Close:
             self.cancel()
         return super().eventFilter(watched, event)
 
-    def _complete(self) -> None:
-        reader = self._reader
-        self.path, self.error = reader.path, reader.error
-        success = False
-        if self._cancelled or _EXITING:
-            self.status = "Opening original cancelled."
-        elif self.error is None and self.path is not None:
-            try:
-                success = QDesktopServices.openUrl(QUrl.fromLocalFile(str(self.path)))
-                if not success:
-                    self.error = OriginalDocumentError("default_application_did_not_accept_document")
-            except Exception as exc:
-                self.error = exc
-        if not success and self.path is not None:
-            try:
-                reader.session.discard(self.path)
-                self.path = None
-            except (OSError, OriginalDocumentError):
-                # A locked file remains private and is retried during session cleanup.
-                pass
-        if success:
-            self.status = "Sent to the default application."
-        elif self.error is not None and not self._cancelled and not _EXITING:
-            self.status = "Original document could not be opened. Try again."
-            QMessageBox.warning(
-                self._parent(),
-                "Original document was not opened",
-                "The saved original could not be prepared or sent to its default application. "
-                "Check that a default application is installed, then retry.\n\n"
-                f"Details: {self.error}",
-            )
-        self.pending = False
+    def _remove_filter(self):
         parent = self._parent()
         if parent is not None:
             try:
                 parent.removeEventFilter(self)
             except RuntimeError:
-                pass  # QObject destruction already cancelled this request.
+                pass
+
+    def _finish(self, success):
+        if self._finished:
+            return
+        self._finished, self.pending = True, False
+        if self.viewer is None:
+            self._remove_filter()
         self.status_changed.emit(self.status)
         self.finished.emit(success)
+        if self.viewer is None:
+            _ORIGINAL_OPENERS.discard(self)
+
+    def _complete_read(self):
+        self._read_pending = False
+        saved = self._reader.result
+        self._reader.result = self._reader.saved = None
+        if self._cancelled or _EXITING:
+            self.status = "Opening original cancelled."
+            self._finish(False)
+            return
+        self.error = self._reader.error
+        if self.error is not None or saved is None:
+            self.status = "Saved original could not be read. Retry or save a recovery copy from Profile."
+            self._finish(False)
+            QMessageBox.warning(
+                self._parent(), "Saved original could not be read", f"{self.status}\n\nDetails: {self.error}"
+            )
+            return
+        try:
+            self.viewer = show_saved_document(
+                saved, self._parent(), initial_page=self.initial_page, context=self.context
+            )
+            self.viewer.load_finished.connect(self._loaded)
+            self.viewer.finished.connect(self._viewer_closed)
+        except Exception as exc:
+            self.error = exc
+            self.status = "Original preview is unavailable. Retry or save a recovery copy from Profile."
+            self._finish(False)
+
+    def _loaded(self, success):
+        if self._cancelled or _EXITING:
+            self.status = "Opening original cancelled."
+            self._finish(False)
+            return
+        if not success and self.viewer.needs_password:
+            self.status = "This original needs a password. Enter it in the viewer for this session."
+            self.status_changed.emit(self.status)
+            return
+        self.error = self.viewer.error
+        self.status = (
+            "Original document opened in ParseTrail."
+            if success
+            else "Original preview could not be displayed. Retry or save a recovery copy from Profile."
+        )
+        self._finish(success)
+
+    def _viewer_closed(self, *_args):
+        self._remove_filter()
+        if self.pending:
+            self.status = "Opening original cancelled."
+            self._finish(False)
         _ORIGINAL_OPENERS.discard(self)
 
 
-def open_original_document(profile: Path, source_sha256: str, parent=None) -> OriginalDocumentOpen:
-    """Read the captured saved source, never its former input/archive pathname."""
-    return OriginalDocumentOpen(profile=Path(profile), source_sha256=source_sha256, parent=parent)
+def open_original_document(profile: Path, source_sha256: str, parent=None, *, initial_page=None, context=""):
+    return OriginalDocumentOpen(
+        profile=Path(profile), source_sha256=source_sha256, parent=parent, initial_page=initial_page, context=context
+    )
 
 
-def open_saved_original(saved: SavedImport, parent=None) -> OriginalDocumentOpen:
-    """Use already-verified preview bytes without reopening its profile."""
-    return OriginalDocumentOpen(saved=saved, source_sha256=saved.evidence.source_sha256, parent=parent)
+def open_saved_original(saved, parent=None, *, initial_page=None, context=""):
+    return OriginalDocumentOpen(
+        saved=saved,
+        source_sha256=saved.evidence.source_sha256,
+        parent=parent,
+        initial_page=initial_page,
+        context=context,
+    )

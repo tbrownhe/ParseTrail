@@ -218,19 +218,27 @@ parser-known institution and printed document identity appear read-only.
 Masked identifiers remain visible while unknown full numbers stay blank. Saving
 selects the new account without assigning the document or posting transactions;
 confirm the existing Use this account or Assign action separately.
+The form also shows the selected document's dates, printed endpoint values,
+tracking scope and source page. **View original document** opens the built-in
+reader while preserving unsaved form edits. Missing product names remain unknown;
+default account names use institution plus the last four visible digits rather
+than a full account number. Existing account names and matching identities do
+not change.
 
 Documents also offers **Assign document accounts** across all saved unassigned
 sections. It reuses exact prior document-account associations and groups repeated
 statements, raises a prefilled account form for unmatched groups, and stages new
 accounts until the final summary's Apply action. Ambiguous or unsupported groups
 remain explicit choices or individual review. Cancel before Apply saves nothing;
-assignments never post transactions.
+assignments never post transactions. Closing with edited choices or staged
+accounts asks whether to discard them; **Keep working** is the default.
 
 **Open original** in Documents, account review, batch assignment or evidence
-preview sends verified database-retained PDF/CSV bytes to the default OS viewer
-through a managed private temporary file. Successful copies stay for the app
-session; locked files may need cleanup on a later run. **Save selected source
-original** remains available for a deliberate permanent copy. See the
+preview opens verified database-retained PDF/CSV bytes in a built-in, memory-only
+reader. PDF supports page navigation, fit/zoom, search and selectable page text;
+CSV keeps original strings in a read-only table. No source temporary file or
+external application is required. **Save selected source original** remains
+available for a deliberate permanent copy. See the
 [local preview lifecycle](../docs/privacy-and-data-flow.md#v2-retained-original-preview).
 
 Document inventories and selected report tabs load through background read-only

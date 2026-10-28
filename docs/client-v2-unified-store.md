@@ -82,8 +82,13 @@ document context and editable display labels, not invented full account numbers.
 Creation never bypasses existing assignment/correction locks or changes evidence.
 
 Document-backed account creation shows the parser-known institution and printed
-account as read-only context. Unknown institution setup remains an explicit
-editable choice. **Assign document accounts** groups saved unassigned sections by
+account as read-only context, plus the selected section's locations, qualified
+dates, printed endpoint values and represented scope. Missing product labels
+stay unknown. Default names use the final up to four contiguous visible digits;
+source identity/form/full number and existing names are unchanged. New account
+can inspect its selected original in a memory-only PDF/CSV reader without losing
+unsaved form edits. Unknown institution setup remains an explicit editable choice.
+**Assign document accounts** groups saved unassigned sections by
 verified institution, class, tracking scope and exact printed identity/form.
 Current explicit associations can seed another document with that exact context,
 including opaque masked identifiers; no hidden digits are reconstructed. Unique
@@ -93,7 +98,10 @@ manual review instead of selecting a first candidate.
 
 New accounts and choices are staged in memory. A final summary and Apply confirm
 selected accounts and bindings in one transaction; Cancel before Apply saves
-nothing. Apply rechecks the same profile, current source/account/history state,
+nothing. Closing with user-edited choices or staged accounts requires explicit
+discard confirmation, defaulting to Keep working; automatic proposals alone are
+not user edits. New account uses the currently selected target's retained context,
+without extra profile scans. Apply rechecks the same profile, current source/account/history state,
 verified catalog and preferences under the write lock. Stale plans and failed or
 cancelled transactions leave no partial accounts/bindings; exact retries report
 already-applied sections. The operation never posts journals or alters sources.

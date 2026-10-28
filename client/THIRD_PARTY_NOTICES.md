@@ -5,7 +5,7 @@ contain the following separately licensed components.
 
 ## Qt for Python and Qt
 
-- PySide6 Essentials 6.11.2 and Shiboken6 6.11.2
+- PySide6 Essentials/Addons 6.11.2 (including Qt PDF/PDF Widgets) and Shiboken6 6.11.2
 - Copyright The Qt Company Ltd. and other contributors
 - License selected for this distribution: GNU Lesser General Public License
   version 3.0 (the packages also offer GPL and commercial alternatives)
@@ -23,3 +23,7 @@ version of those LGPL-covered libraries.
 Qt and PySide include additional third-party components under their own
 licenses. The authoritative component notices and corresponding source are
 available from the Qt source link above for the bundled Qt 6.11.2 release.
+Qt PDF additionally embeds PDFium and its third-party components. Its
+[licensing inventory](https://doc.qt.io/qt-6/qtpdf-licensing.html) links their
+component notices; the corresponding versioned Qt source remains authoritative
+for distributed builds.

@@ -42,6 +42,7 @@ class SourceAccountTarget:
     end: date | None
     start_provenance: str
     end_provenance: str
+    draft: AccountCreationDraft | None = None
 
 
 @dataclass(frozen=True)
@@ -255,6 +256,7 @@ def _build_plan(store, catalog, preferences, cancelled=None):
                 date.fromisoformat(end.iso) if end.iso else None,
                 start.provenance,
                 end.provenance,
+                draft,
             )
             key = (draft.institution_key or None, draft.kind, draft.tracking_scope, identity, form)
             assigned = assignments.get((source_id, identity, form))

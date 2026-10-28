@@ -33,18 +33,22 @@ user's backup encryption protect the local boundary.
 ### V2 retained-original preview
 
 The V2 workspace retains admitted PDF/CSV originals inside its local SQLite
-profile. **Open original** verifies those retained bytes and gives a private,
-randomized temporary copy to the operating system's default application. It
-does not depend on the original import path. Default applications require a
-filename, so this action creates a local plaintext file outside the database.
-The receiving application's own recent-file, cache and cloud settings apply.
+profile. **Open original** verifies those retained bytes and opens a built-in
+read-only PDF/CSV viewer. The PDF device is an in-memory Qt buffer; the action
+creates no source temporary file, invokes no external application and does not
+depend on the original import path. PDF passwords are session-only and cleared
+when the viewer closes. CSV strings remain original strings, with explicit
+decoding and display-limit failures/qualifications. Closing releases the viewer's
+source buffer, rendered document and copied page text; ordinary OS memory,
+swap and crash-dump policies still apply.
 
-Successful copies stay available for the ParseTrail session. Exit attempts
-cleanup; files locked by a viewer may remain. A later session retries narrowly
-scoped cleanup of owned sessions older than 24 hours after confirming their
-lease is inactive. Temporary roots/session permissions, file counts and total
-bytes are checked. This local preview does not use the statement-contribution
-service or alter its in-memory decryption boundary.
+The former external-viewer adapter remains separately available to explicit
+internal callers and earlier pinned runtimes. That adapter creates private
+randomized temporary copies, retains successful copies for its session and
+retries locked-file cleanup in owned inactive sessions older than 24 hours.
+Default UI preview no longer uses that adapter. Deliberately saving a recovery
+copy still creates a permanent file at the user's chosen path. Neither preview
+path uses the contribution service or changes its in-memory decryption boundary.
 
 ## 2. Encrypted statement-contribution boundary
 

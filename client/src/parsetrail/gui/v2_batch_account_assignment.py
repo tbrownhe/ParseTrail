@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QLineEdit,
     QListWidget,
     QListWidgetItem,
+    QMessageBox,
     QPushButton,
     QSplitter,
     QStackedWidget,
@@ -40,6 +41,7 @@ from parsetrail.gui.v2_financial_account import V2FinancialAccountDialog
 from parsetrail.gui.v2_original_document import open_original_document
 
 _JOBS: set[QThread] = set()
+_EXITING = False
 
 
 def _finish_jobs():
@@ -52,7 +54,13 @@ def _finish_jobs():
         _JOBS.discard(job)
 
 
-atexit.register(_finish_jobs)
+def _begin_shutdown():
+    global _EXITING
+    _EXITING = True
+    _finish_jobs()
+
+
+atexit.register(_begin_shutdown)
 
 
 class _AssignmentJob(QThread):
@@ -150,6 +158,7 @@ class V2BatchAccountAssignment(QDialog):
         self.workspace = workspace
         self.plan = None
         self.choices, self.new_accounts = {}, {}
+        self._proposed_choices, self._choice_overrides = {}, {}
         self.assignment_result = None
         self.changed = False
         self._job = None
@@ -265,12 +274,17 @@ class V2BatchAccountAssignment(QDialog):
         app = QApplication.instance()
         if not app.property("parsetrail_batch_assignment_exit_hook"):
             app.setProperty("parsetrail_batch_assignment_exit_hook", True)
-            app.aboutToQuit.connect(_finish_jobs)
+            app.aboutToQuit.connect(_begin_shutdown)
         self.refresh()
 
     @property
     def pending(self):
         return self._job is not None or self._requested or self._timer.isActive()
+
+    @property
+    def has_unsaved_changes(self):
+        """User-authored drafts/choices, separate from automatic proposals."""
+        return bool(self.new_accounts or self._choice_overrides)
 
     def refresh(self):
         if self._closed or (self._job is not None and self._job.plan is not None):
@@ -317,6 +331,15 @@ class V2BatchAccountAssignment(QDialog):
                 f"{job.result.already_applied_sections} assignments were already saved. No transactions were posted."
             )
             self.plan = None
+            saved_account_ids = {choice.account_id for choice in job.choices}
+            self.new_accounts = {
+                account_id: account
+                for account_id, account in self.new_accounts.items()
+                if account_id not in saved_account_ids
+            }
+            self.choices.clear()
+            self._choice_overrides.clear()
+            self._proposed_choices.clear()
             self.groups.clear()
             self.summary_model.replace(())
             self.counts.setText("Batch saved. Reload proposals to find any remaining unassigned sections.")
@@ -341,7 +364,8 @@ class V2BatchAccountAssignment(QDialog):
                 )
                 self.status.setToolTip(str(job.error))
         if self._close_result is not None:
-            self.done(self._close_result)
+            result, self._close_result = self._close_result, None
+            self.done(result)
             return
         if self._requested:
             self._timer.start(0)
@@ -350,10 +374,24 @@ class V2BatchAccountAssignment(QDialog):
     def _load_plan(self, plan):
         self.plan = plan
         accounts = {account.id: account for account in (*plan.accounts, *self.new_accounts.values())}
+        self._proposed_choices = {
+            group.group_id: group.suggested_account_id
+            for group in plan.groups
+            if group.suggested_account_id in accounts
+            and account_compatible(group, accounts[group.suggested_account_id])
+        }
+        self._choice_overrides = {
+            group.group_id: account_id
+            for group in plan.groups
+            if group.group_id in self._choice_overrides
+            and (account_id := self._choice_overrides[group.group_id]) != self._proposed_choices.get(group.group_id)
+            and (account_id is None or (account_id in accounts and account_compatible(group, accounts[account_id])))
+        }
         self.choices = {
             group.group_id: account_id
             for group in plan.groups
-            if (account_id := self.choices.get(group.group_id, group.suggested_account_id)) is not None
+            if (account_id := self._choice_overrides.get(group.group_id, self._proposed_choices.get(group.group_id)))
+            is not None
             and account_id in accounts
             and account_compatible(group, accounts[account_id])
         }
@@ -476,6 +514,10 @@ class V2BatchAccountAssignment(QDialog):
             self.choices.pop(group.group_id, None)
         else:
             self.choices[group.group_id] = account_id
+        if account_id == self._proposed_choices.get(group.group_id):
+            self._choice_overrides.pop(group.group_id, None)
+        else:
+            self._choice_overrides[group.group_id] = account_id
         self._update_counts()
 
     def _new_account(self):
@@ -483,7 +525,10 @@ class V2BatchAccountAssignment(QDialog):
         if group is None or group.status == "manual" or self.pending:
             return
         self._prompted.add(group.group_id)
-        form = V2FinancialAccountDialog(self, draft=group.draft, staged=True)
+        document_index = self.documents.currentRow()
+        target = group.targets[document_index] if 0 <= document_index < len(group.targets) else None
+        draft = getattr(target, "draft", None) or group.draft
+        form = V2FinancialAccountDialog(self, draft=draft, staged=True, profile=self.workspace.profile_path)
         while form.exec() == QDialog.Accepted:
             account = form.account()
             if not account_compatible(group, account):
@@ -493,6 +538,7 @@ class V2BatchAccountAssignment(QDialog):
                 continue
             self.new_accounts[account.id] = account
             self.choices[group.group_id] = account.id
+            self._choice_overrides[group.group_id] = account.id
             self._selected()
             self._update_counts()
             self.review_button.setFocus()
@@ -604,8 +650,24 @@ class V2BatchAccountAssignment(QDialog):
         )
 
     def done(self, result):
+        if self._job is not None:
+            self._requested = False
+            self._timer.stop()
+            self._close_result = result
+            self._job.cancel()
+            self.status.setText("Finishing the current operation before closing…")
+            return
+        if not self._closed and not _EXITING and self.has_unsaved_changes and not self._confirm_discard():
+            self._update_actions()
+            return
         self._requested = False
         self._timer.stop()
+        self.choices.clear()
+        self.new_accounts.clear()
+        self._choice_overrides.clear()
+        self._proposed_choices.clear()
+        # The discard question runs a nested Qt event loop. A queued proposal
+        # read can start while it is open; drain it before completing the close.
         if self._job is not None:
             self._close_result = result
             self._job.cancel()
@@ -614,13 +676,26 @@ class V2BatchAccountAssignment(QDialog):
         self._closed = True
         super().done(result)
 
+    def _confirm_discard(self):
+        message = QMessageBox(self)
+        message.setIcon(QMessageBox.Warning)
+        message.setWindowTitle("Discard unsaved account assignments?")
+        message.setText("Your account choices and new account details have not been applied.")
+        message.setInformativeText("Keep working to review and apply them, or discard the unsaved changes.")
+        message.setStandardButtons(QMessageBox.Discard | QMessageBox.Cancel)
+        message.button(QMessageBox.Cancel).setText("Keep working")
+        message.button(QMessageBox.Discard).setText("Discard changes")
+        message.setDefaultButton(QMessageBox.Cancel)
+        message.setEscapeButton(QMessageBox.Cancel)
+        return message.exec() == QMessageBox.Discard
+
     def close(self):
         self.done(QDialog.Rejected)
-        return True
+        return self._closed
 
     def closeEvent(self, event):
-        if self._job is not None:
-            event.ignore()
-            self.done(QDialog.Rejected)
+        self.done(QDialog.Rejected)
+        if self._closed:
+            event.accept()
         else:
-            super().closeEvent(event)
+            event.ignore()

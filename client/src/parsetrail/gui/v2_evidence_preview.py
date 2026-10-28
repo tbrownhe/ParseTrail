@@ -206,7 +206,7 @@ class V2EvidencePreview(QDialog):
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         self.original_button = buttons.addButton("Open original…", QDialogButtonBox.ActionRole)
         self.original_button.setToolTip(
-            "Open a temporary local copy of the saved original in your default application."
+            "Read the saved original in ParseTrail's built-in viewer without creating a temporary file."
         )
         self.original_button.clicked.connect(self._open_original)
         buttons.rejected.connect(self.reject)

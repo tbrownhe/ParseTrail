@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sqlite3
 from dataclasses import replace
 
@@ -95,7 +96,7 @@ def test_statement_draft_uses_exact_section_scope_and_truthful_number(tmp_path, 
     draft = _suggest(workspace, evidence)
     assert (draft.kind, draft.tracking_scope, draft.full_account_number) == expected
     assert draft.verified_context
-    assert evidence.payload.accounts[0].source_identity in draft.name
+    assert draft.name.endswith(re.findall(r"[0-9]+", evidence.payload.accounts[0].source_identity)[-1][-4:])
     form = V2FinancialAccountDialog(draft=draft)
     try:
         assert form.source_identity.text() == evidence.payload.accounts[0].source_identity
@@ -164,7 +165,7 @@ def test_selected_section_not_first_section_controls_scope_and_number(tmp_path):
     assert _suggest(workspace, evidence, 0).tracking_scope == "principal_component"
     second_draft = _suggest(workspace, evidence, 1)
     assert second_draft.tracking_scope == "account_total"
-    assert second_draft.full_account_number is None and "xxxx7654" in second_draft.name
+    assert second_draft.full_account_number is None and second_draft.name == "Capital One 7654"
     with pytest.raises(ValueError, match="selected_source_account_missing"):
         suggest_account_creation(evidence, catalog=None, source_identity="missing", source_form="opaque")
 
@@ -180,7 +181,7 @@ def test_abbreviated_or_masked_identity_never_becomes_full_number(identity, form
     )
     evidence = evidence.model_copy(update={"payload": evidence.payload.model_copy(update={"accounts": (section,)})})
     draft = suggest_account_creation(evidence, catalog=None, source_identity=identity, source_form=form)
-    assert draft.source_identity == identity and identity in draft.name
+    assert draft.source_identity == identity and draft.name.endswith(identity[-4:])
     assert draft.full_account_number is None
 
 

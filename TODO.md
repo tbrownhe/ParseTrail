@@ -6,9 +6,9 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None. [Batch account assignment and original access](docs/work/2026-10-27-batch-account-assignment.md)
-completed development and agent verification; the updated public runtime preserves
-the owner's existing demo review state. Owner/platform/release gates remain below.
+None. [Embedded originals and account context](docs/work/2026-10-27-embedded-originals-account-context.md)
+completed development, real PDF rendering, native/frozen component checks and
+independent review; a new runtime preserves the existing owner's saved review state.
 
 ## Recommended next packets (unselected)
 

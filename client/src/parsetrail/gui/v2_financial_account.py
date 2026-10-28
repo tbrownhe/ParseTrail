@@ -6,11 +6,39 @@ import sqlite3
 from pathlib import Path
 from uuid import uuid4
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QPalette
-from PySide6.QtWidgets import QComboBox, QDialog, QDialogButtonBox, QFormLayout, QLabel, QLineEdit, QMessageBox
+from PySide6.QtWidgets import (
+    QComboBox,
+    QDialog,
+    QDialogButtonBox,
+    QFormLayout,
+    QGroupBox,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+)
 
 from parsetrail.core.v2_account_creation import AccountCreationDraft
 from parsetrail.core.v2_profile_store import FinancialAccount, ProfileFormatError, V2ProfileStore
+from parsetrail.gui.v2_original_document import open_original_document
+
+
+def _date_context(value):
+    if value is None or value.iso is None:
+        return "Unknown"
+    origin = {"observed": "printed", "derived": "derived", "assumed": "estimated"}[value.provenance]
+    return f"{value.iso} ({origin})"
+
+
+def _money_context(value):
+    if value is None or value.minor is None:
+        return "Unknown"
+    if value.provenance == "observed":
+        return f"{value.raw} (printed)"
+    magnitude = abs(value.minor)
+    return f"{'-' if value.minor < 0 else ''}{magnitude // 100:,}.{magnitude % 100:02d} (derived)"
 
 
 class V2FinancialAccountDialog(QDialog):
@@ -24,10 +52,13 @@ class V2FinancialAccountDialog(QDialog):
         scope_locked: bool = False,
         draft: AccountCreationDraft | None = None,
         staged: bool = False,
+        profile: Path | None = None,
     ):
         super().__init__(parent)
         self.existing = existing
         self.draft = draft
+        self.profile = profile
+        self.original_open = None
         self._account_id = existing.id if existing is not None else uuid4().hex
         self.setWindowTitle(
             "Edit financial account"
@@ -51,6 +82,47 @@ class V2FinancialAccountDialog(QDialog):
             self.source_identity.setCursorPosition(0)
             self.source_identity.setToolTip(draft.source_identity or "This document does not identify an account.")
             form.addRow("Document account (read-only)", self.source_identity)
+            self.source_context = QGroupBox("From this document")
+            context_form = QFormLayout(self.source_context)
+            self.document_type = QLabel(
+                draft.product_label.text
+                if draft.product_label is not None and draft.product_label.text
+                else "Account type not identified in saved evidence — view original."
+            )
+            self.document_type.setWordWrap(True)
+            self.document_type.setTextFormat(Qt.PlainText)
+            context_form.addRow(self.document_type)
+            self.document_period = QLabel(f"{_date_context(draft.period_start)} → {_date_context(draft.period_end)}")
+            self.document_period.setWordWrap(True)
+            context_form.addRow("Document dates", self.document_period)
+            self.document_values = QLabel(
+                f"Opening: {_money_context(draft.opening_balance)}\nClosing: {_money_context(draft.closing_balance)}"
+            )
+            self.document_values.setTextFormat(Qt.PlainText)
+            self.document_values.setWordWrap(True)
+            self.document_values.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard)
+            context_form.addRow("Document values", self.document_values)
+            self._source_page = next(
+                (location.page for location in draft.source_locations if hasattr(location, "page")), None
+            )
+            scope_text = {
+                "account_total": "whole account",
+                "principal_component": "loan principal only",
+                "cash_component": "cash component only",
+            }.get(draft.tracking_scope, "unknown")
+            self.document_scope = QLabel(
+                f"Scope: {scope_text}" + (f" · Source page {self._source_page}" if self._source_page else "")
+            )
+            self.document_scope.setWordWrap(True)
+            context_form.addRow(self.document_scope)
+            self.view_original_button = QPushButton("View original document…")
+            self.view_original_button.setEnabled(profile is not None and draft.source_sha256 is not None)
+            self.view_original_button.clicked.connect(self._view_original)
+            context_form.addRow(self.view_original_button)
+            self.original_status = QLabel()
+            self.original_status.setWordWrap(True)
+            context_form.addRow(self.original_status)
+            form.addRow(self.source_context)
             context_note = QLabel(
                 "These account details will be saved together with the selected document assignments when you apply the batch."
                 if staged
@@ -152,6 +224,25 @@ class V2FinancialAccountDialog(QDialog):
         buttons.rejected.connect(self.reject)
         form.addRow(buttons)
 
+    def _view_original(self):
+        if self.profile is None or self.draft is None or self.draft.source_sha256 is None:
+            return
+        self.view_original_button.setEnabled(False)
+        self.original_open = open_original_document(
+            self.profile,
+            self.draft.source_sha256,
+            self,
+            initial_page=self._source_page,
+            context=f"Document account: {self.draft.source_identity or 'not printed'}. The full original may contain other accounts.",
+        )
+        self.original_status.setText(self.original_open.status)
+        self.original_open.status_changed.connect(self.original_status.setText)
+        self.original_open.finished.connect(self._original_finished)
+
+    def _original_finished(self, _success):
+        self.view_original_button.setEnabled(True)
+        self.view_original_button.setFocus()
+
     def _populate_scopes(self, selected: str | None) -> None:
         self.scope.clear()
         if self.draft is not None:
@@ -195,7 +286,7 @@ class V2FinancialAccountDialog(QDialog):
 
 def create_financial_account(profile: Path, *, draft: AccountCreationDraft, parent=None) -> FinancialAccount | None:
     """Create only an authored account; keep failed form values available for retry."""
-    dialog = V2FinancialAccountDialog(parent, draft=draft)
+    dialog = V2FinancialAccountDialog(parent, draft=draft, profile=profile)
     while dialog.exec() == QDialog.Accepted:
         try:
             account = dialog.account()

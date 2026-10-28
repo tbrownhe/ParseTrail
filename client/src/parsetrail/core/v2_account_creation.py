@@ -6,13 +6,26 @@ import re
 from dataclasses import dataclass
 from typing import Literal
 
-from parsetrail.core.source_evidence import SourceEvidence, StatementPayload
+from parsetrail.core.source_evidence import (
+    DateValue,
+    MoneyValue,
+    SourceEvidence,
+    SourceLocation,
+    StatementPayload,
+    TextValue,
+)
 from parsetrail.core.v2_data_catalog import VerifiedCatalog
 from parsetrail.core.v2_loan_payments import LOAN_PARSERS
 
 
 @dataclass(frozen=True)
 class AccountCreationDraft:
+    """Editable metadata beside immutable document context, never book balances.
+
+    Product labels remain unavailable when the saved evidence omits them.
+    Source locations identify the selected section or first matching export row.
+    """
+
     name: str = ""
     institution_key: str = ""
     kind: Literal["asset", "liability"] | None = None
@@ -21,6 +34,13 @@ class AccountCreationDraft:
     source_identity: str | None = None
     source_form: str | None = None
     verified_context: bool = False
+    source_sha256: str | None = None
+    source_locations: tuple[SourceLocation, ...] = ()
+    product_label: TextValue | None = None
+    period_start: DateValue | None = None
+    period_end: DateValue | None = None
+    opening_balance: MoneyValue | None = None
+    closing_balance: MoneyValue | None = None
 
 
 def suggest_account_creation(
@@ -33,6 +53,7 @@ def suggest_account_creation(
     """Suggest only selected printed facts and exact signed declaration context."""
     payload = evidence.payload
     scope = None
+    section = None
     if source_identity is not None:
         if isinstance(payload, StatementPayload):
             sections = tuple(
@@ -45,6 +66,8 @@ def suggest_account_creation(
             scopes = {account.balance_scope for account in sections}
             if len(scopes) == 1:
                 scope = next(iter(scopes))
+            if len(sections) == 1:
+                section = sections[0]
         elif not any(
             (row.source_account, row.source_account_form) == (source_identity, source_form) for row in payload.rows
         ):
@@ -79,7 +102,24 @@ def suggest_account_creation(
     label = {"mohela": "MOHELA", "capital_one": "Capital One", "healthequity": "HealthEquity"}.get(
         institution, institution.replace("_", " ").title()
     )
-    name = f"{label or 'Account'} {source_identity}" if source_identity is not None else label
+    # This is an editable label, never an identifier or matching key. Do not
+    # concatenate digits separated by masking or other source characters.
+    visible_runs = re.findall(r"[0-9]+", source_identity or "")
+    visible_tail = visible_runs[-1][-4:] if visible_runs else ""
+    name = " ".join(part for part in (label or ("Account" if visible_tail else ""), visible_tail) if part)
+    if section is not None:
+        locations = section.identity_locations
+    elif not isinstance(payload, StatementPayload):
+        locations = next(
+            (
+                tuple(fragment.location for fragment in row.fragments)
+                for row in payload.rows
+                if (row.source_account, row.source_account_form) == (source_identity, source_form)
+            ),
+            (),
+        )
+    else:
+        locations = ()
     return AccountCreationDraft(
         name=name[:200],
         institution_key=institution,
@@ -89,4 +129,10 @@ def suggest_account_creation(
         source_identity=source_identity,
         source_form=source_form,
         verified_context=context is not None,
+        source_sha256=evidence.source_sha256,
+        source_locations=locations,
+        period_start=payload.start if isinstance(payload, StatementPayload) else payload.activity_start,
+        period_end=payload.end if isinstance(payload, StatementPayload) else payload.activity_end,
+        opening_balance=section.opening if section is not None else None,
+        closing_balance=section.closing if section is not None else None,
     )

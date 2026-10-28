@@ -13,7 +13,9 @@ from parsetrail.core.v2_profile_store import FinancialAccount, V2ProfileStore
 from parsetrail.core.v2_two_date_card_lines import parse_two_date_card
 from parsetrail.gui import v2_batch_account_assignment as gui
 from parsetrail.gui.v2_financial_account import V2FinancialAccountDialog
-from PySide6.QtCore import QObject, Signal
+from PySide6.QtCore import QObject, Qt, QTimer, Signal
+from PySide6.QtGui import QCloseEvent
+from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication, QDialog
 
 from devtools.parser_engine_pilot import test_two_date_card_lines as yamaha
@@ -27,6 +29,7 @@ def app(monkeypatch):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
     app = QApplication.instance() or QApplication([])
     monkeypatch.setattr(V2FinancialAccountDialog, "exec", lambda _self: QDialog.Rejected)
+    monkeypatch.setattr(gui.QMessageBox, "exec", lambda _self: gui.QMessageBox.Discard)
     yield app
     gui._finish_jobs()
     app.processEvents()
@@ -164,6 +167,7 @@ def test_staged_new_account_saves_with_all_selected_sections_on_apply(app, archi
         dialog.apply_button.click()
         _wait(app, lambda: not dialog.pending)
         assert (dialog.assignment_result.assigned_sections, dialog.assignment_result.created_accounts) == (3, 1)
+        assert not dialog.has_unsaved_changes and not dialog.new_accounts
         with V2ProfileStore.open(workspace.profile_path, read_only=True) as store:
             assert store.financial_accounts() == (account,)
             assert store.connection.execute(
@@ -331,6 +335,7 @@ def test_parent_destruction_cancels_apply_and_rolls_back_staged_account(app, arc
         assert release.wait(10), "test did not release the staged insert"
 
     monkeypatch.setattr(V2ProfileStore, "add_financial_account", pause_after_account_insert)
+    monkeypatch.setattr(gui.QMessageBox, "exec", lambda _self: pytest.fail("Forced parent destruction must not ask"))
     before = _hash(workspace)
     parent = QDialog()
     dialog = gui.V2BatchAccountAssignment(workspace, parent)
@@ -363,3 +368,226 @@ def test_parent_destruction_cancels_apply_and_rolls_back_staged_account(app, arc
         if shiboken6.isValid(parent):
             shiboken6.delete(parent)
         _wait(app, lambda: not gui._JOBS)
+
+
+@pytest.mark.parametrize("close_action", ["cancel", "escape", "window_close"])
+def test_keep_working_default_preserves_explicit_skip_on_every_user_close_path(app, archive, monkeypatch, close_action):
+    workspace, original, _additional = archive
+    _seed(workspace, original)
+    before = _hash(workspace)
+    messages = []
+    discard = False
+
+    def confirm(message):
+        messages.append(message.windowTitle())
+        assert message.defaultButton().text() == "Keep working"
+        assert message.escapeButton().text() == "Keep working"
+        return gui.QMessageBox.Discard if discard else gui.QMessageBox.Cancel
+
+    monkeypatch.setattr(gui.QMessageBox, "exec", confirm)
+    dialog = gui.V2BatchAccountAssignment(workspace)
+
+    def user_close():
+        if close_action == "cancel":
+            dialog.cancel_button.click()
+        elif close_action == "escape":
+            QTest.keyClick(dialog, Qt.Key_Escape)
+        else:
+            event = QCloseEvent()
+            QApplication.sendEvent(dialog, event)
+            assert event.isAccepted() == discard
+
+    try:
+        dialog.show()
+        _ready(app, dialog)
+        assert not dialog.has_unsaved_changes
+        dialog.account_combo.setCurrentIndex(0)
+        assert dialog.has_unsaved_changes and not dialog.choices
+        choices, drafts = dict(dialog.choices), dict(dialog.new_accounts)
+        user_close()
+        assert len(messages) == 1 and not dialog._closed and dialog.isVisible()
+        assert dialog.choices == choices and dialog.new_accounts == drafts
+        assert dialog.has_unsaved_changes and _hash(workspace) == before
+        discard = True
+        user_close()
+        assert len(messages) == 2 and dialog._closed
+        assert not dialog.has_unsaved_changes and _hash(workspace) == before
+    finally:
+        discard = True
+        dialog.close()
+        _wait(app, lambda: not dialog.pending)
+
+
+def test_reverting_to_proposal_clears_dirty_and_skipping_survives_reload(app, archive, monkeypatch):
+    workspace, original, _additional = archive
+    known = _seed(workspace, original)
+    with V2ProfileStore.open(workspace.profile_path) as store:
+        store.add_financial_account(FinancialAccount("alternative", "Other Yamaha", "liability", "yamaha"))
+    dialog = gui.V2BatchAccountAssignment(workspace)
+    try:
+        dialog.show()
+        _ready(app, dialog)
+        assert not dialog.has_unsaved_changes
+        dialog.account_combo.setCurrentIndex(dialog.account_combo.findData("alternative"))
+        assert dialog.has_unsaved_changes
+        dialog.account_combo.setCurrentIndex(dialog.account_combo.findData(known.id))
+        assert not dialog.has_unsaved_changes
+        dialog.account_combo.setCurrentIndex(0)
+        assert dialog.has_unsaved_changes
+        dialog.refresh_button.click()
+        _ready(app, dialog)
+        assert dialog.account_combo.currentData() is None and not dialog.choices
+        assert dialog.has_unsaved_changes
+        dialog.account_combo.setCurrentIndex(dialog.account_combo.findData(known.id))
+        assert not dialog.has_unsaved_changes
+        monkeypatch.setattr(
+            gui.QMessageBox, "exec", lambda _self: pytest.fail("Reverted choices must close without asking")
+        )
+        dialog.cancel_button.click()
+        assert dialog._closed
+    finally:
+        dialog.close()
+        _wait(app, lambda: not dialog.pending)
+
+
+def test_keep_working_retains_new_account_draft_before_review(app, archive, monkeypatch):
+    workspace, _original, _additional = archive
+    before = _hash(workspace)
+    dialog = gui.V2BatchAccountAssignment(workspace)
+    try:
+        dialog.show()
+        _ready(app, dialog)
+
+        def accept(form):
+            form.name.setText("Draft kept while working")
+            form.accept()
+            return form.result()
+
+        monkeypatch.setattr(V2FinancialAccountDialog, "exec", accept)
+        dialog.new_account_button.click()
+        account = next(iter(dialog.new_accounts.values()))
+        choices = dict(dialog.choices)
+        assert dialog.has_unsaved_changes and dialog.pages.currentIndex() == 0
+        monkeypatch.setattr(gui.QMessageBox, "exec", lambda _self: gui.QMessageBox.Cancel)
+        assert not dialog.close()
+        assert not dialog._closed and dialog.new_accounts == {account.id: account}
+        assert dialog.choices == choices and dialog.account_combo.currentData() == account.id
+        assert _hash(workspace) == before
+        monkeypatch.setattr(gui.QMessageBox, "exec", lambda _self: gui.QMessageBox.Discard)
+        assert dialog.close() and _hash(workspace) == before
+    finally:
+        monkeypatch.setattr(gui.QMessageBox, "exec", lambda _self: gui.QMessageBox.Discard)
+        dialog.close()
+        _wait(app, lambda: not dialog.pending)
+
+
+def test_successful_apply_consumes_saved_draft_but_unused_draft_still_needs_discard(app, archive, monkeypatch):
+    workspace, _original, _additional = archive
+    dialog = gui.V2BatchAccountAssignment(workspace)
+    try:
+        dialog.show()
+        _ready(app, dialog)
+        selected = FinancialAccount("selected", "Saved draft", "liability", "yamaha")
+        unused = FinancialAccount("unused", "Unused draft", "liability", "yamaha")
+        dialog.new_accounts.update({selected.id: selected, unused.id: unused})
+        dialog.choices[dialog.plan.groups[0].group_id] = selected.id
+        dialog._update_counts()
+        dialog.review_button.click()
+        dialog.apply_button.click()
+        _wait(app, lambda: not dialog.pending)
+        assert dialog.assignment_result.created_accounts == 1
+        assert not dialog.choices and dialog.new_accounts == {unused.id: unused}
+        assert dialog.has_unsaved_changes
+        saved_hash = _hash(workspace)
+        monkeypatch.setattr(gui.QMessageBox, "exec", lambda _self: gui.QMessageBox.Cancel)
+        assert not dialog.close() and not dialog._closed
+        assert dialog.new_accounts == {unused.id: unused}
+        with V2ProfileStore.open(workspace.profile_path, read_only=True) as store:
+            assert store.financial_accounts() == (selected,)
+        monkeypatch.setattr(gui.QMessageBox, "exec", lambda _self: gui.QMessageBox.Discard)
+        assert dialog.close() and _hash(workspace) == saved_hash
+    finally:
+        monkeypatch.setattr(gui.QMessageBox, "exec", lambda _self: gui.QMessageBox.Discard)
+        dialog.close()
+        _wait(app, lambda: not dialog.pending)
+
+
+def test_application_shutdown_discards_without_interactive_question(app, archive, monkeypatch):
+    workspace, original, _additional = archive
+    _seed(workspace, original)
+    dialog = gui.V2BatchAccountAssignment(workspace)
+    try:
+        dialog.show()
+        _ready(app, dialog)
+        dialog.account_combo.setCurrentIndex(0)
+        assert dialog.has_unsaved_changes
+        monkeypatch.setattr(gui.QMessageBox, "exec", lambda _self: pytest.fail("Application shutdown must not ask"))
+        monkeypatch.setattr(gui, "_EXITING", False)
+        gui._begin_shutdown()
+        assert dialog.close() and dialog._closed
+    finally:
+        dialog.close()
+
+
+@pytest.mark.parametrize("key", [Qt.Key_Escape, Qt.Key_Return])
+def test_actual_discard_question_escape_and_default_enter_keep_working(app, archive, monkeypatch, key):
+    workspace, original, _additional = archive
+    _seed(workspace, original)
+    dialog = gui.V2BatchAccountAssignment(workspace)
+    try:
+        dialog.show()
+        _ready(app, dialog)
+        dialog.account_combo.setCurrentIndex(0)
+        assert dialog.has_unsaved_changes
+        monkeypatch.setattr(gui.QMessageBox, "exec", QDialog.exec)
+
+        def press_default():
+            message = QApplication.activeModalWidget()
+            assert isinstance(message, gui.QMessageBox)
+            assert message.defaultButton().text() == "Keep working"
+            QTest.keyClick(message, key)
+
+        QTimer.singleShot(0, press_default)
+        dialog.cancel_button.click()
+        assert dialog.isVisible() and not dialog._closed and dialog.has_unsaved_changes
+    finally:
+        monkeypatch.setattr(gui.QMessageBox, "exec", lambda _self: gui.QMessageBox.Discard)
+        dialog.close()
+        _wait(app, lambda: not dialog.pending)
+
+
+def test_new_account_context_uses_selected_second_document_without_another_store_read(app, archive, monkeypatch):
+    workspace, _original, _additional = archive
+    dialog = gui.V2BatchAccountAssignment(workspace)
+    captured = []
+    try:
+        dialog.show()
+        _ready(app, dialog)
+        dialog.documents.setCurrentRow(1)
+        target = dialog._current().targets[1]
+        assert target.draft is not None
+        assert target.source_sha256 != dialog._current().draft.source_sha256
+
+        class ContextForm:
+            def __init__(self, parent, *, draft, staged, profile):
+                captured.append((parent, draft, staged, profile))
+
+            def exec(self):
+                return QDialog.Rejected
+
+        monkeypatch.setattr(gui, "V2FinancialAccountDialog", ContextForm)
+        monkeypatch.setattr(
+            V2ProfileStore, "open", lambda *_args, **_kwargs: pytest.fail("Document context must use the verified plan")
+        )
+        dialog.new_account_button.click()
+        assert len(captured) == 1
+        parent, draft, staged, profile = captured[0]
+        assert parent is dialog and staged and profile == workspace.profile_path
+        assert draft.source_sha256 == target.source_sha256
+        assert draft.period_start.iso == target.start.isoformat()
+        assert draft.period_end.iso == target.end.isoformat()
+        assert draft.source_locations
+        assert not dialog.new_accounts and not dialog.has_unsaved_changes
+    finally:
+        dialog.close()
+        _wait(app, lambda: not dialog.pending)
