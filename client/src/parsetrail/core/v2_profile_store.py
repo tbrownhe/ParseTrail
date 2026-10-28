@@ -12,6 +12,7 @@ import os
 import re
 import sqlite3
 import tempfile
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, replace
 from datetime import date
 from functools import cached_property
@@ -1110,6 +1111,10 @@ class TransferReviewSnapshot:
     events: tuple[ReviewedTransferEvent, ...]
     pair_reviews: tuple[TransferPairReview, ...]
     basis_sha256: str
+    preferences: V2Preferences = V2Preferences()
+    max_day_gap: int = 7
+    profile_sha256: str = ""
+    replacing_event_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1661,6 +1666,33 @@ class V2ProfileStore:
         self._loan_mutating = False
         self._source_interpretation_mutating = False
         self._account_anchors_mutating = False
+        self._transfer_verified_sources = None
+
+    @contextmanager
+    def _verified_transfer_operation(self, cancelled=None):
+        """Reuse verified immutable evidence only within the owning transaction.
+
+        Original bytes are streamed and discarded, not retained in the cache.
+        Mutable bindings, journal consumption and review decisions are not cached.
+        Transfer writes never alter the immutable tables verified by this pass.
+        """
+        if self._transfer_verified_sources is not None:
+            yield
+            return
+        if not self.connection.in_transaction:
+            raise ProfileFormatError("transfer_requires_committed_snapshot")
+        evidence = {}
+        for source_id, saved in self._iter_verified_imports():
+            if cancelled is not None and cancelled():
+                from parsetrail.core.v2_transfer_batch import TransferBatchCancelled
+
+                raise TransferBatchCancelled("transfer_batch_cancelled")
+            evidence[source_id] = (saved.evidence, saved.suffix)
+        self._transfer_verified_sources = evidence
+        try:
+            yield
+        finally:
+            self._transfer_verified_sources = None
 
     @classmethod
     def create(cls, path: Path) -> V2ProfileStore:
@@ -2682,7 +2714,12 @@ class V2ProfileStore:
             "JOIN SourceObservations o ON o.row_id=a.row_id"
         ):
             row_assignments.setdefault(source_id, {})[row_id] = account_id
-        for source_id, saved in self._iter_verified_imports():
+        imports = (
+            self._iter_verified_imports()
+            if self._transfer_verified_sources is None
+            else ((source_id, self.load_import(source_id)) for source_id in self._transfer_verified_sources)
+        )
+        for source_id, saved in imports:
             bindings = self._account_bindings_for_evidence(
                 source_id,
                 saved.evidence,
@@ -2864,7 +2901,7 @@ class V2ProfileStore:
                 other_id not in members
                 and reviews.get(tuple(sorted((member, other_id))), (None, "pending", None))[1] != "distinct"
                 for member in members
-                for other_id in index.neighbors(member)
+                for other_id in index.iter_neighbors(member)
             ):
                 blocks[row_id] = "Cross-source occurrence needs review"
         return blocks
@@ -3875,7 +3912,7 @@ class V2ProfileStore:
         return tuple(result)
 
     def _transfer_movements(
-        self, preferences: V2Preferences, releasing_entry_keys: tuple[str, ...] = ()
+        self, preferences: V2Preferences, releasing_entry_keys: tuple[str, ...] = (), *, _overlap_blocks_out=None
     ) -> tuple[TransferMovement, ...]:
         if type(preferences) is not V2Preferences or type(preferences.allow_assumed_posting_dates) is not bool:
             raise ProfileFormatError("transfer_preferences_invalid")
@@ -3886,16 +3923,14 @@ class V2ProfileStore:
                 "SELECT row_id,amount_minor FROM JournalAllocations WHERE entry_key=?", (key,)
             ):
                 consumed[row_id] = consumed.get(row_id, 0) - amount
-        overlap_rows, _buckets, _reviews, _aliases = self._source_overlap_index()
-        overlap_blocks = self.source_overlap_posting_blocks(tuple(overlap_rows))
         movements = []
-        for source_sha256 in self.source_ids():
-            evidence = self.load_import(source_sha256).evidence
+
+        def collect(source_sha256, evidence, effective_bindings):
             cash_scope = _cash_review_scopes(evidence)
             card_scope = {**_card_review_scopes(evidence), **register_review_scopes(evidence)}
             if not cash_scope and not card_scope:
-                continue
-            bindings = {binding.row_id: binding.ledger_account_id for binding in self.account_bindings(source_sha256)}
+                return
+            bindings = {binding.row_id: binding.ledger_account_id for binding in effective_bindings}
             for row in _rows(evidence):
                 account_id = bindings.get(row.row_id)
                 account = accounts.get(account_id)
@@ -3908,7 +3943,6 @@ class V2ProfileStore:
                     or amount == 0
                     or row.amount.provenance != "observed"
                     or consumed.get(row.row_id, 0)
-                    or row.row_id in overlap_blocks
                 ):
                     continue
                 if (
@@ -3950,11 +3984,25 @@ class V2ProfileStore:
                         bool(row.description.text),
                     )
                 )
-        return tuple(movements)
+
+        verified_index = self._source_overlap_index(_source_consumer=collect)
+        overlap_rows = verified_index[0]
+        overlap_blocks = self._source_overlap_posting_blocks(tuple(overlap_rows), _verified_index=verified_index)
+        if _overlap_blocks_out is not None:
+            _overlap_blocks_out.update(overlap_blocks)
+        return tuple(movement for movement in movements if movement.row_id not in overlap_blocks)
 
     def transfer_candidates(self, *, preferences: V2Preferences, max_day_gap: int = 7) -> tuple[TransferCandidate, ...]:
-        self._validate_transfer_history()
-        return self._transfer_candidates(preferences=preferences, max_day_gap=max_day_gap)
+        owns_snapshot = not self.connection.in_transaction
+        if owns_snapshot:
+            self.connection.execute("BEGIN")
+        try:
+            with self._verified_transfer_operation():
+                self._validate_transfer_history()
+                return self._transfer_candidates(preferences=preferences, max_day_gap=max_day_gap)
+        finally:
+            if owns_snapshot:
+                self.connection.execute("ROLLBACK")
 
     def _transfer_candidates(
         self,
@@ -3963,11 +4011,12 @@ class V2ProfileStore:
         max_day_gap: int = 7,
         releasing_entry_keys: tuple[str, ...] = (),
         include_dismissed: bool = False,
+        _overlap_blocks_out=None,
     ) -> tuple[TransferCandidate, ...]:
         """Suggest equal, opposite owned-account movements; never infer a link."""
         if type(max_day_gap) is not int or not 0 <= max_day_gap <= 31:
             raise ProfileFormatError("transfer_window_invalid")
-        movements = self._transfer_movements(preferences, releasing_entry_keys)
+        movements = self._transfer_movements(preferences, releasing_entry_keys, _overlap_blocks_out=_overlap_blocks_out)
         invalidated = {
             revision
             for record in self._read_binding_corrections()
@@ -4492,25 +4541,34 @@ class V2ProfileStore:
     def transfer_review_snapshot(
         self, *, preferences: V2Preferences, max_day_gap: int = 7, replacing_event_id: str | None = None
     ) -> TransferReviewSnapshot:
+        from parsetrail.core.v2_transfer_batch import profile_identity
+
         if self.connection.in_transaction:
             raise ProfileFormatError("transfer_requires_committed_snapshot")
         self.connection.execute("BEGIN")
         try:
-            events, reviews = self._read_transfer_history()
-            releasing = ()
-            if replacing_event_id is not None:
-                selected = next((e for e in events if e.event_id == replacing_event_id and e.status == "active"), None)
-                if selected is None:
-                    raise ProfileFormatError("transfer_event_not_active")
-                releasing = selected.entry_keys
-            return TransferReviewSnapshot(
-                self._transfer_candidates(
-                    preferences=preferences, max_day_gap=max_day_gap, releasing_entry_keys=releasing
-                ),
-                events,
-                reviews,
-                self._transfer_review_basis(),
-            )
+            with self._verified_transfer_operation():
+                events, reviews = self._read_transfer_history()
+                releasing = ()
+                if replacing_event_id is not None:
+                    selected = next(
+                        (e for e in events if e.event_id == replacing_event_id and e.status == "active"), None
+                    )
+                    if selected is None:
+                        raise ProfileFormatError("transfer_event_not_active")
+                    releasing = selected.entry_keys
+                return TransferReviewSnapshot(
+                    self._transfer_candidates(
+                        preferences=preferences, max_day_gap=max_day_gap, releasing_entry_keys=releasing
+                    ),
+                    events,
+                    reviews,
+                    self._transfer_review_basis(),
+                    preferences,
+                    max_day_gap,
+                    profile_identity(self),
+                    replacing_event_id,
+                )
         finally:
             self.connection.execute("ROLLBACK")
 
@@ -4524,15 +4582,16 @@ class V2ProfileStore:
             raise ProfileFormatError("transfer_requires_committed_snapshot")
         self.connection.execute("BEGIN")
         try:
-            events, _reviews = self._read_transfer_history()
-            releasing = self._settlement_releasing_keys(events, replacing_event_id)
-            return SettlementReviewSnapshot(
-                self._transfer_movements(preferences, releasing),
-                events,
-                tuple(c for c in self.category_accounts() if c.kind == "expense"),
-                self._transfer_review_basis(),
-                self.financial_accounts(),
-            )
+            with self._verified_transfer_operation():
+                events, _reviews = self._read_transfer_history()
+                releasing = self._settlement_releasing_keys(events, replacing_event_id)
+                return SettlementReviewSnapshot(
+                    self._transfer_movements(preferences, releasing),
+                    events,
+                    tuple(c for c in self.category_accounts() if c.kind == "expense"),
+                    self._transfer_review_basis(),
+                    self.financial_accounts(),
+                )
         finally:
             self.connection.execute("ROLLBACK")
 
@@ -4755,28 +4814,30 @@ class V2ProfileStore:
         request = self._settlement_request(outgoing_row_id, incoming_row_ids, fees, expected_destination)
         reason = self._transfer_write_start(reason)
         try:
-            events, _reviews = self._read_transfer_history()
-            active = next(
-                (e for e in events if e.status == "active" and self._settlement_matches(e.settlement, request)), None
-            )
-            if active is not None:
-                original_basis = self.connection.execute(
-                    "SELECT request_basis FROM TransferEvents WHERE event_id=?", (active.event_id,)
-                ).fetchone()[0]
-                if active.reason != reason:
-                    raise ProfileFormatError("transfer_conflicts_with_prior_decision")
-                if expected_basis_sha256 != original_basis:
-                    self._require_transfer_basis(expected_basis_sha256, required=True)
+            with self._verified_transfer_operation():
+                events, _reviews = self._read_transfer_history()
+                active = next(
+                    (e for e in events if e.status == "active" and self._settlement_matches(e.settlement, request)),
+                    None,
+                )
+                if active is not None:
+                    original_basis = self.connection.execute(
+                        "SELECT request_basis FROM TransferEvents WHERE event_id=?", (active.event_id,)
+                    ).fetchone()[0]
+                    if active.reason != reason:
+                        raise ProfileFormatError("transfer_conflicts_with_prior_decision")
+                    if expected_basis_sha256 != original_basis:
+                        self._require_transfer_basis(expected_basis_sha256, required=True)
+                    self.connection.execute("COMMIT")
+                    return active.event_id
+                basis = self._require_transfer_basis(expected_basis_sha256, required=True)
+                settlement = self._build_settlement(request, preferences, ())
+                self._transfer_mutating = True
+                event_id = self._record_settlement_event(settlement, reason, basis)
+                self._transfer_mutating = False
+                self._read_transfer_history()
                 self.connection.execute("COMMIT")
-                return active.event_id
-            basis = self._require_transfer_basis(expected_basis_sha256, required=True)
-            settlement = self._build_settlement(request, preferences, ())
-            self._transfer_mutating = True
-            event_id = self._record_settlement_event(settlement, reason, basis)
-            self._transfer_mutating = False
-            self._read_transfer_history()
-            self.connection.execute("COMMIT")
-            return event_id
+                return event_id
         except BaseException:
             self.connection.execute("ROLLBACK")
             raise
@@ -4798,40 +4859,41 @@ class V2ProfileStore:
         request = self._settlement_request(outgoing_row_id, incoming_row_ids, fees, expected_destination)
         reason = self._transfer_write_start(reason)
         try:
-            events, _reviews = self._read_transfer_history()
-            event = next((e for e in events if e.event_id == event_id), None)
-            if event is None:
-                raise ProfileFormatError("transfer_event_missing")
-            if event.status == "replaced":
-                replacement = next(e for e in events if e.event_id == event.replacement_event_id)
-                action = self.connection.execute(
-                    "SELECT request_basis,reason FROM TransferEventActions WHERE event_id=?", (event_id,)
-                ).fetchone()
-                if (
-                    action == (expected_basis_sha256, reason)
-                    and replacement.status == "active"
-                    and self._settlement_matches(replacement.settlement, request)
-                ):
-                    self.connection.execute("COMMIT")
-                    return replacement.event_id
-            if event.status != "active":
-                raise ProfileFormatError("transfer_event_not_active")
-            basis = self._require_transfer_basis(expected_basis_sha256, required=True)
-            if self._settlement_matches(event.settlement, request):
-                raise ProfileFormatError("settlement_replacement_requires_changed_manifest")
-            settlement = self._build_settlement(request, preferences, event.entry_keys)
-            self._transfer_mutating = True
-            for key in event.entry_keys:
-                payload = self.connection.execute("SELECT payload FROM JournalEntries WHERE key=?", (key,)).fetchone()[
-                    0
-                ]
-                self._retire_journal_entry(_decode_journal(payload), reason=reason)
-            replacement_id = self._record_settlement_event(settlement, reason, basis)
-            self._record_transfer_action(event, "replace", replacement_id, basis, reason)
-            self._transfer_mutating = False
-            self._read_transfer_history()
-            self.connection.execute("COMMIT")
-            return replacement_id
+            with self._verified_transfer_operation():
+                events, _reviews = self._read_transfer_history()
+                event = next((e for e in events if e.event_id == event_id), None)
+                if event is None:
+                    raise ProfileFormatError("transfer_event_missing")
+                if event.status == "replaced":
+                    replacement = next(e for e in events if e.event_id == event.replacement_event_id)
+                    action = self.connection.execute(
+                        "SELECT request_basis,reason FROM TransferEventActions WHERE event_id=?", (event_id,)
+                    ).fetchone()
+                    if (
+                        action == (expected_basis_sha256, reason)
+                        and replacement.status == "active"
+                        and self._settlement_matches(replacement.settlement, request)
+                    ):
+                        self.connection.execute("COMMIT")
+                        return replacement.event_id
+                if event.status != "active":
+                    raise ProfileFormatError("transfer_event_not_active")
+                basis = self._require_transfer_basis(expected_basis_sha256, required=True)
+                if self._settlement_matches(event.settlement, request):
+                    raise ProfileFormatError("settlement_replacement_requires_changed_manifest")
+                settlement = self._build_settlement(request, preferences, event.entry_keys)
+                self._transfer_mutating = True
+                for key in event.entry_keys:
+                    payload = self.connection.execute(
+                        "SELECT payload FROM JournalEntries WHERE key=?", (key,)
+                    ).fetchone()[0]
+                    self._retire_journal_entry(_decode_journal(payload), reason=reason)
+                replacement_id = self._record_settlement_event(settlement, reason, basis)
+                self._record_transfer_action(event, "replace", replacement_id, basis, reason)
+                self._transfer_mutating = False
+                self._read_transfer_history()
+                self.connection.execute("COMMIT")
+                return replacement_id
         except BaseException:
             self.connection.execute("ROLLBACK")
             raise
@@ -4858,28 +4920,69 @@ class V2ProfileStore:
     def _record_transfer_event(
         self, out_id: str, in_id: str, preferences: V2Preferences, reason: str, basis: str
     ) -> str:
-        self._require_source_overlap_postable((out_id, in_id))
+        overlap_blocks = {}
+        candidates = self._transfer_candidates(
+            preferences=preferences, max_day_gap=31, _overlap_blocks_out=overlap_blocks
+        )
+        if out_id in overlap_blocks or in_id in overlap_blocks:
+            raise ProfileFormatError("source_overlap_review_required")
         pair = next(
-            (
-                p
-                for p in self._transfer_candidates(preferences=preferences, max_day_gap=31)
-                if p.outgoing.row_id == out_id and p.incoming.row_id == in_id
-            ),
+            (p for p in candidates if p.outgoing.row_id == out_id and p.incoming.row_id == in_id),
             None,
         )
         if pair is None:
             raise ProfileFormatError("transfer_pair_unavailable_or_already_posted")
         if not pair.posting_allowed:
             raise ProfileFormatError("transfer_assumed_date_disabled")
-        sequence = self.connection.execute("SELECT COALESCE(MAX(sequence),0)+1 FROM TransferEvents").fetchone()[0]
+        return self._insert_validated_transfer_pair(pair, reason, basis)
+
+    def _insert_validated_transfer_pair(self, pair, reason, basis, *, consumed=None, accounts=None, sequence=None):
+        """Insert one pair from the current locked, verified candidate graph.
+
+        Batch callers share validated consumption/accounts across disjoint pairs.
+        No source evidence, binding or reviewed decision is changed here.
+        """
+        out_id, in_id = pair.outgoing.row_id, pair.incoming.row_id
+        if not pair.posting_allowed:
+            raise ProfileFormatError("transfer_assumed_date_disabled")
+        if pair.outgoing.posting_date != pair.incoming.posting_date:
+            self._ensure_transfer_clearing()
+        if accounts is None:
+            accounts = self._ledger_accounts()
+        if consumed is None:
+            consumed = self._active_consumed()
+        if sequence is None:
+            sequence = self.connection.execute("SELECT COALESCE(MAX(sequence),0)+1 FROM TransferEvents").fetchone()[0]
         event_id = "review:transfer:" + _digest((out_id + ":" + in_id).encode()) + f":v{sequence}"
-        self._post_transfer_untracked(out_id, in_id, preferences=preferences, reason=reason, event_id=event_id)
+        entries = self._expected_transfer_entries(pair, event_id, reason)
+        observations = {
+            movement.row_id: Observation(
+                movement.row_id, movement.account_id, movement.amount_minor, date.fromisoformat(movement.posting_date)
+            )
+            for movement in (pair.outgoing, pair.incoming)
+        }
+        try:
+            for entry in entries:
+                usage = validate_entry(entry, accounts, observations, consumed)
+                for row_id, amount in usage.items():
+                    consumed[row_id] = consumed.get(row_id, 0) + amount
+        except LedgerError:
+            raise ProfileFormatError("transfer_posting_refused") from None
+        for entry in entries:
+            self.connection.execute(
+                "INSERT INTO JournalEntries(key,payload) VALUES (?,?)", (entry.key, _journal_payload(entry))
+            )
+            self.connection.executemany(
+                "INSERT INTO JournalAllocations VALUES (?,?,?)",
+                (
+                    (entry.key, allocation.observation_id, allocation.amount_minor)
+                    for posting in entry.postings
+                    for allocation in posting.allocations
+                ),
+            )
         payload = _transfer_pair_payload(pair)
         manifest = json.dumps(
-            [
-                [e.key, _digest(_journal_payload(e).encode())]
-                for e in self._expected_transfer_entries(pair, event_id, reason)
-            ],
+            [[e.key, _digest(_journal_payload(e).encode())] for e in entries],
             separators=(",", ":"),
         )
         checksum = _transfer_record_digest(event_id, sequence, out_id, in_id, payload, manifest, reason, basis)
@@ -4888,6 +4991,87 @@ class V2ProfileStore:
             (event_id, sequence, out_id, in_id, payload, manifest, reason, basis, checksum),
         )
         return event_id
+
+    def post_reviewed_transfer_batch(self, plan, *, preferences: V2Preferences, reason: str, cancelled=None):
+        """Atomically confirm all current graph-isolated pairs from one plan."""
+        from parsetrail.core.v2_transfer_batch import (
+            TransferBatchCancelled,
+            TransferBatchResult,
+            plan_unique_transfers,
+            profile_identity,
+            validate_plan,
+        )
+
+        validate_plan(plan)
+        if preferences != plan.preferences or type(preferences) is not V2Preferences:
+            raise ProfileFormatError("transfer_batch_preferences_changed")
+        reason = self._transfer_write_start(reason)
+
+        def check_cancelled():
+            if cancelled is not None and cancelled():
+                raise TransferBatchCancelled("transfer_batch_cancelled")
+
+        try:
+            check_cancelled()
+            if profile_identity(self) != plan.profile_sha256:
+                raise ProfileFormatError("transfer_batch_profile_changed")
+            with self._verified_transfer_operation(cancelled):
+                events, reviews = self._read_transfer_history()
+                active = {
+                    (event.pair.outgoing.row_id, event.pair.incoming.row_id): event
+                    for event in events
+                    if event.status == "active" and event.pair is not None
+                }
+                existing = [active.get((pair.outgoing.row_id, pair.incoming.row_id)) for pair in plan.pairs]
+                if all(event is not None for event in existing):
+                    for pair, event in zip(plan.pairs, existing, strict=True):
+                        request = self.connection.execute(
+                            "SELECT request_basis FROM TransferEvents WHERE event_id=?", (event.event_id,)
+                        ).fetchone()[0]
+                        if event.pair != pair or event.reason != reason or request != plan.basis_sha256:
+                            raise ProfileFormatError("transfer_conflicts_with_prior_decision")
+                    check_cancelled()
+                    self.connection.execute("COMMIT")
+                    return TransferBatchResult(tuple(event.event_id for event in existing), 0, len(existing))
+                basis = self._require_transfer_basis(plan.basis_sha256, required=True)
+                current = TransferReviewSnapshot(
+                    self._transfer_candidates(preferences=preferences, max_day_gap=plan.max_day_gap),
+                    events,
+                    reviews,
+                    basis,
+                    preferences,
+                    plan.max_day_gap,
+                    plan.profile_sha256,
+                )
+                if plan_unique_transfers(current) != plan:
+                    raise ProfileFormatError("transfer_batch_graph_changed")
+                check_cancelled()
+                self._transfer_mutating = True
+                consumed = self._active_consumed()
+                if any(pair.outgoing.posting_date != pair.incoming.posting_date for pair in plan.pairs):
+                    self._ensure_transfer_clearing()
+                accounts = self._ledger_accounts()
+                sequence = self.connection.execute("SELECT COALESCE(MAX(sequence),0)+1 FROM TransferEvents").fetchone()[
+                    0
+                ]
+                event_ids = []
+                for offset, pair in enumerate(plan.pairs):
+                    check_cancelled()
+                    event_ids.append(
+                        self._insert_validated_transfer_pair(
+                            pair, reason, basis, consumed=consumed, accounts=accounts, sequence=sequence + offset
+                        )
+                    )
+                self._transfer_mutating = False
+                self._read_transfer_history()
+                check_cancelled()
+                self.connection.execute("COMMIT")
+                return TransferBatchResult(tuple(event_ids), len(event_ids))
+        except BaseException:
+            self.connection.execute("ROLLBACK")
+            raise
+        finally:
+            self._transfer_mutating = False
 
     def post_reviewed_transfer(
         self,
@@ -4900,35 +5084,36 @@ class V2ProfileStore:
     ) -> str:
         reason = self._transfer_write_start(reason)
         try:
-            events, _reviews = self._read_transfer_history()
-            active = next(
-                (
-                    e
-                    for e in events
-                    if e.status == "active"
-                    and e.pair is not None
-                    and e.pair.outgoing.row_id == outgoing_row_id
-                    and e.pair.incoming.row_id == incoming_row_id
-                ),
-                None,
-            )
-            if active is not None:
-                original_basis = self.connection.execute(
-                    "SELECT request_basis FROM TransferEvents WHERE event_id=?", (active.event_id,)
-                ).fetchone()[0]
-                if active.reason != reason:
-                    raise ProfileFormatError("transfer_conflicts_with_prior_decision")
-                if expected_basis_sha256 is not None and expected_basis_sha256 != original_basis:
-                    self._require_transfer_basis(expected_basis_sha256)
+            with self._verified_transfer_operation():
+                events, _reviews = self._read_transfer_history()
+                active = next(
+                    (
+                        e
+                        for e in events
+                        if e.status == "active"
+                        and e.pair is not None
+                        and e.pair.outgoing.row_id == outgoing_row_id
+                        and e.pair.incoming.row_id == incoming_row_id
+                    ),
+                    None,
+                )
+                if active is not None:
+                    original_basis = self.connection.execute(
+                        "SELECT request_basis FROM TransferEvents WHERE event_id=?", (active.event_id,)
+                    ).fetchone()[0]
+                    if active.reason != reason:
+                        raise ProfileFormatError("transfer_conflicts_with_prior_decision")
+                    if expected_basis_sha256 is not None and expected_basis_sha256 != original_basis:
+                        self._require_transfer_basis(expected_basis_sha256)
+                    self.connection.execute("COMMIT")
+                    return active.event_id
+                basis = self._require_transfer_basis(expected_basis_sha256)
+                self._transfer_mutating = True
+                event_id = self._record_transfer_event(outgoing_row_id, incoming_row_id, preferences, reason, basis)
+                self._transfer_mutating = False
+                self._read_transfer_history()
                 self.connection.execute("COMMIT")
-                return active.event_id
-            basis = self._require_transfer_basis(expected_basis_sha256)
-            self._transfer_mutating = True
-            event_id = self._record_transfer_event(outgoing_row_id, incoming_row_id, preferences, reason, basis)
-            self._transfer_mutating = False
-            self._read_transfer_history()
-            self.connection.execute("COMMIT")
-            return event_id
+                return event_id
         except BaseException:
             self.connection.execute("ROLLBACK")
             raise
@@ -4947,47 +5132,52 @@ class V2ProfileStore:
     ) -> TransferPairReview:
         reason = self._transfer_write_start(reason)
         try:
-            if decision not in {"dismiss", "reopen"}:
-                raise ProfileFormatError("transfer_pair_decision_invalid")
-            _events, reviews = self._read_transfer_history()
-            pair = next(
-                (
-                    p
-                    for p in self._transfer_candidates(preferences=preferences, max_day_gap=31, include_dismissed=True)
-                    if p.outgoing.row_id == outgoing_row_id and p.incoming.row_id == incoming_row_id
-                ),
-                None,
-            )
-            if pair is None:
-                raise ProfileFormatError("transfer_pair_unavailable_or_already_posted")
-            context = _transfer_pair_context(pair)
-            latest = next((r for r in reviews if r.context_current and _transfer_pair_context(r.pair) == context), None)
-            if latest is not None and latest.decision == decision and latest.reason == reason:
-                request = self.connection.execute(
-                    "SELECT request_basis FROM TransferPairReviews WHERE revision_id=?", (latest.revision_id,)
+            with self._verified_transfer_operation():
+                if decision not in {"dismiss", "reopen"}:
+                    raise ProfileFormatError("transfer_pair_decision_invalid")
+                _events, reviews = self._read_transfer_history()
+                pair = next(
+                    (
+                        p
+                        for p in self._transfer_candidates(
+                            preferences=preferences, max_day_gap=31, include_dismissed=True
+                        )
+                        if p.outgoing.row_id == outgoing_row_id and p.incoming.row_id == incoming_row_id
+                    ),
+                    None,
+                )
+                if pair is None:
+                    raise ProfileFormatError("transfer_pair_unavailable_or_already_posted")
+                context = _transfer_pair_context(pair)
+                latest = next(
+                    (r for r in reviews if r.context_current and _transfer_pair_context(r.pair) == context), None
+                )
+                if latest is not None and latest.decision == decision and latest.reason == reason:
+                    request = self.connection.execute(
+                        "SELECT request_basis FROM TransferPairReviews WHERE revision_id=?", (latest.revision_id,)
+                    ).fetchone()[0]
+                    if request == expected_basis_sha256:
+                        self.connection.execute("COMMIT")
+                        return latest
+                basis = self._require_transfer_basis(expected_basis_sha256, required=True)
+                if decision == "reopen" and (latest is None or latest.decision != "dismiss"):
+                    raise ProfileFormatError("transfer_pair_not_dismissed")
+                if latest is not None and latest.decision == decision:
+                    raise ProfileFormatError("transfer_pair_decision_unchanged")
+                revision = self.connection.execute(
+                    "SELECT COALESCE(MAX(revision_id),0)+1 FROM TransferPairReviews"
                 ).fetchone()[0]
-                if request == expected_basis_sha256:
-                    self.connection.execute("COMMIT")
-                    return latest
-            basis = self._require_transfer_basis(expected_basis_sha256, required=True)
-            if decision == "reopen" and (latest is None or latest.decision != "dismiss"):
-                raise ProfileFormatError("transfer_pair_not_dismissed")
-            if latest is not None and latest.decision == decision:
-                raise ProfileFormatError("transfer_pair_decision_unchanged")
-            revision = self.connection.execute(
-                "SELECT COALESCE(MAX(revision_id),0)+1 FROM TransferPairReviews"
-            ).fetchone()[0]
-            payload = _transfer_pair_payload(pair)
-            checksum = _transfer_record_digest(
-                revision, outgoing_row_id, incoming_row_id, payload, context, decision, basis, reason
-            )
-            self.connection.execute(
-                "INSERT INTO TransferPairReviews(revision_id,outgoing_row_id,incoming_row_id,pair_payload,context_sha256,decision,request_basis,reason,record_sha256) VALUES (?,?,?,?,?,?,?,?,?)",
-                (revision, outgoing_row_id, incoming_row_id, payload, context, decision, basis, reason, checksum),
-            )
-            saved = self._read_transfer_history()[1][0]
-            self.connection.execute("COMMIT")
-            return saved
+                payload = _transfer_pair_payload(pair)
+                checksum = _transfer_record_digest(
+                    revision, outgoing_row_id, incoming_row_id, payload, context, decision, basis, reason
+                )
+                self.connection.execute(
+                    "INSERT INTO TransferPairReviews(revision_id,outgoing_row_id,incoming_row_id,pair_payload,context_sha256,decision,request_basis,reason,record_sha256) VALUES (?,?,?,?,?,?,?,?,?)",
+                    (revision, outgoing_row_id, incoming_row_id, payload, context, decision, basis, reason, checksum),
+                )
+                saved = self._read_transfer_history()[1][0]
+                self.connection.execute("COMMIT")
+                return saved
         except BaseException:
             self.connection.execute("ROLLBACK")
             raise
@@ -5006,31 +5196,32 @@ class V2ProfileStore:
     ) -> ReviewedTransferEvent:
         reason = self._transfer_write_start(reason)
         try:
-            events, _reviews = self._read_transfer_history()
-            event = next((e for e in events if e.event_id == event_id), None)
-            if event is None:
-                raise ProfileFormatError("transfer_event_missing")
-            if event.status == "cancelled":
-                action = self.connection.execute(
-                    "SELECT request_basis,reason FROM TransferEventActions WHERE event_id=?", (event_id,)
-                ).fetchone()
-                if action == (expected_basis_sha256, reason):
-                    self.connection.execute("COMMIT")
-                    return event
-            if event.status != "active":
-                raise ProfileFormatError("transfer_event_not_active")
-            basis = self._require_transfer_basis(expected_basis_sha256, required=True)
-            self._transfer_mutating = True
-            for key in event.entry_keys:
-                payload = self.connection.execute("SELECT payload FROM JournalEntries WHERE key=?", (key,)).fetchone()[
-                    0
-                ]
-                self._retire_journal_entry(_decode_journal(payload), reason=reason)
-            self._record_transfer_action(event, "cancel", None, basis, reason)
-            self._transfer_mutating = False
-            saved = next(e for e in self._read_transfer_history()[0] if e.event_id == event_id)
-            self.connection.execute("COMMIT")
-            return saved
+            with self._verified_transfer_operation():
+                events, _reviews = self._read_transfer_history()
+                event = next((e for e in events if e.event_id == event_id), None)
+                if event is None:
+                    raise ProfileFormatError("transfer_event_missing")
+                if event.status == "cancelled":
+                    action = self.connection.execute(
+                        "SELECT request_basis,reason FROM TransferEventActions WHERE event_id=?", (event_id,)
+                    ).fetchone()
+                    if action == (expected_basis_sha256, reason):
+                        self.connection.execute("COMMIT")
+                        return event
+                if event.status != "active":
+                    raise ProfileFormatError("transfer_event_not_active")
+                basis = self._require_transfer_basis(expected_basis_sha256, required=True)
+                self._transfer_mutating = True
+                for key in event.entry_keys:
+                    payload = self.connection.execute(
+                        "SELECT payload FROM JournalEntries WHERE key=?", (key,)
+                    ).fetchone()[0]
+                    self._retire_journal_entry(_decode_journal(payload), reason=reason)
+                self._record_transfer_action(event, "cancel", None, basis, reason)
+                self._transfer_mutating = False
+                saved = next(e for e in self._read_transfer_history()[0] if e.event_id == event_id)
+                self.connection.execute("COMMIT")
+                return saved
         except BaseException:
             self.connection.execute("ROLLBACK")
             raise
@@ -5049,44 +5240,47 @@ class V2ProfileStore:
     ) -> str:
         reason = self._transfer_write_start(reason)
         try:
-            events, _reviews = self._read_transfer_history()
-            event = next((e for e in events if e.event_id == event_id), None)
-            if event is None:
-                raise ProfileFormatError("transfer_event_missing")
-            if event.status == "replaced":
-                replacement = next(e for e in events if e.event_id == event.replacement_event_id)
-                action = self.connection.execute(
-                    "SELECT request_basis,reason FROM TransferEventActions WHERE event_id=?", (event_id,)
-                ).fetchone()
-                if (
-                    action == (expected_basis_sha256, reason)
-                    and replacement.status == "active"
-                    and replacement.pair is not None
-                    and replacement.pair.outgoing.row_id == outgoing_row_id
-                    and replacement.pair.incoming.row_id == incoming_row_id
+            with self._verified_transfer_operation():
+                events, _reviews = self._read_transfer_history()
+                event = next((e for e in events if e.event_id == event_id), None)
+                if event is None:
+                    raise ProfileFormatError("transfer_event_missing")
+                if event.status == "replaced":
+                    replacement = next(e for e in events if e.event_id == event.replacement_event_id)
+                    action = self.connection.execute(
+                        "SELECT request_basis,reason FROM TransferEventActions WHERE event_id=?", (event_id,)
+                    ).fetchone()
+                    if (
+                        action == (expected_basis_sha256, reason)
+                        and replacement.status == "active"
+                        and replacement.pair is not None
+                        and replacement.pair.outgoing.row_id == outgoing_row_id
+                        and replacement.pair.incoming.row_id == incoming_row_id
+                    ):
+                        self.connection.execute("COMMIT")
+                        return replacement.event_id
+                if event.status != "active":
+                    raise ProfileFormatError("transfer_event_not_active")
+                basis = self._require_transfer_basis(expected_basis_sha256, required=True)
+                if event.pair is not None and (event.pair.outgoing.row_id, event.pair.incoming.row_id) == (
+                    outgoing_row_id,
+                    incoming_row_id,
                 ):
-                    self.connection.execute("COMMIT")
-                    return replacement.event_id
-            if event.status != "active":
-                raise ProfileFormatError("transfer_event_not_active")
-            basis = self._require_transfer_basis(expected_basis_sha256, required=True)
-            if event.pair is not None and (event.pair.outgoing.row_id, event.pair.incoming.row_id) == (
-                outgoing_row_id,
-                incoming_row_id,
-            ):
-                raise ProfileFormatError("transfer_replacement_requires_different_pair")
-            self._transfer_mutating = True
-            for key in event.entry_keys:
-                payload = self.connection.execute("SELECT payload FROM JournalEntries WHERE key=?", (key,)).fetchone()[
-                    0
-                ]
-                self._retire_journal_entry(_decode_journal(payload), reason=reason)
-            replacement_id = self._record_transfer_event(outgoing_row_id, incoming_row_id, preferences, reason, basis)
-            self._record_transfer_action(event, "replace", replacement_id, basis, reason)
-            self._transfer_mutating = False
-            self._read_transfer_history()
-            self.connection.execute("COMMIT")
-            return replacement_id
+                    raise ProfileFormatError("transfer_replacement_requires_different_pair")
+                self._transfer_mutating = True
+                for key in event.entry_keys:
+                    payload = self.connection.execute(
+                        "SELECT payload FROM JournalEntries WHERE key=?", (key,)
+                    ).fetchone()[0]
+                    self._retire_journal_entry(_decode_journal(payload), reason=reason)
+                replacement_id = self._record_transfer_event(
+                    outgoing_row_id, incoming_row_id, preferences, reason, basis
+                )
+                self._record_transfer_action(event, "replace", replacement_id, basis, reason)
+                self._transfer_mutating = False
+                self._read_transfer_history()
+                self.connection.execute("COMMIT")
+                return replacement_id
         except BaseException:
             self.connection.execute("ROLLBACK")
             raise
@@ -10598,6 +10792,20 @@ class V2ProfileStore:
             raise
 
     def load_import(self, source_sha256: str) -> SavedImport:
+        if self._transfer_verified_sources is not None:
+            verified = self._transfer_verified_sources.get(source_sha256)
+            if verified is None:
+                raise ProfileFormatError("source_missing")
+            evidence, suffix = verified
+            # These immutable bytes and their observation inventory were checked
+            # in this operation's owning snapshot before any journal writes.
+            row = self.connection.execute(
+                "SELECT s.content,d.content FROM Sources s JOIN Definitions d ON d.sha256=? WHERE s.sha256=?",
+                (evidence.definition_sha256, source_sha256),
+            ).fetchone()
+            if row is None:
+                raise ProfileFormatError("source_missing")
+            return SavedImport(row[0], row[1], evidence, suffix)
         row = self.connection.execute(
             "SELECT s.content,s.size,s.suffix,d.content,d.size,e.content,e.size,e.sha256 "
             "FROM Sources s JOIN EvidenceSnapshots e ON e.source_sha256=s.sha256 "

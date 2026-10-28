@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from datetime import date
 
@@ -80,7 +81,7 @@ class _CardRowsModel(QAbstractTableModel):
         if provenance == "assumed":
             candidate += " (assumed)"
         elif provenance == "derived":
-            candidate += " (derived from source)"
+            candidate += " (derived)"
         values = (
             (row.transaction_date.isoformat() if row.transaction_date else "Unknown")
             if self.register_mode
@@ -88,10 +89,14 @@ class _CardRowsModel(QAbstractTableModel):
             candidate,
             row.description or "Description not printed",
             _money(row.amount_minor),
-            _register_identity(row) if self.register_mode else row.financial_account or "Not assigned",
+            row.financial_account or "Not assigned",
             row.status,
-            PURPOSE_LABELS.get(row.purpose, "Pending explicit review"),
+            PURPOSE_LABELS.get(
+                row.purpose, "Reviewed elsewhere" if _reviewed_elsewhere(row) else "Pending explicit review"
+            ),
         )
+        if role == Qt.ToolTipRole and self.register_mode and index.column() == 4:
+            return _register_identity(row)
         return values[index.column()]
 
 
@@ -100,6 +105,10 @@ def _register_identity(row):
         f"{row.financial_account or 'Not assigned'} ({row.financial_account_kind or 'kind unavailable'}, "
         f"{(row.tracking_scope or 'scope unavailable').replace('_', ' ')}, ID {row.financial_account_id or 'unassigned'})"
     )
+
+
+def _reviewed_elsewhere(row):
+    return row is not None and row.entry_key is None and row.status == "Already posted to the ledger"
 
 
 class V2CardPurchaseReview(QDialog):
@@ -147,6 +156,12 @@ class V2CardPurchaseReview(QDialog):
         for column in (0, 1, 3, 4, 5, 6):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        header.setMinimumSectionSize(90)
+        self.table.setColumnWidth(2, 180)
+        if register_mode:
+            header.setSectionResizeMode(2, QHeaderView.Interactive)
+            self.table.setColumnWidth(2, 220)
+            header.setSectionResizeMode(6, QHeaderView.Stretch)
         self.table.selectionModel().currentRowChanged.connect(self._selected)
         layout.addWidget(self.table)
         self.source_context = QLabel()
@@ -161,7 +176,12 @@ class V2CardPurchaseReview(QDialog):
         form.addRow("Reviewed purpose", self.purpose)
         self.category = QComboBox()
         self.category.currentIndexChanged.connect(self._update_action)
-        form.addRow("Category", self.category)
+        category_row = QHBoxLayout()
+        category_row.addWidget(self.category, 1)
+        self.manage_categories_button = QPushButton("Manage categories…")
+        self.manage_categories_button.clicked.connect(self._manage_categories)
+        category_row.addWidget(self.manage_categories_button)
+        form.addRow("Category", category_row)
         self.accounting_date = QLineEdit()
         self.accounting_date.setPlaceholderText("YYYY-MM-DD")
         self.accounting_date.setMaxLength(10)
@@ -171,7 +191,6 @@ class V2CardPurchaseReview(QDialog):
         self.reason = QLineEdit()
         self.reason.setMaxLength(500)
         self.reason.setPlaceholderText("Required review or correction reason")
-        self.reason.textChanged.connect(self._update_action)
         self.reason.textChanged.connect(self._update_action)
         form.addRow("Reason", self.reason)
         layout.addLayout(form)
@@ -218,14 +237,40 @@ class V2CardPurchaseReview(QDialog):
         correcting = row is not None and row.entry_key is not None
         self.purpose.blockSignals(True)
         self.purpose.clear()
-        self.purpose.addItem("Choose a purpose; a credit is not necessarily a refund", None)
+        external = _reviewed_elsewhere(row)
+        self.purpose.addItem(
+            "Reviewed elsewhere — inspect related history"
+            if external
+            else "Choose a purpose; a credit is not necessarily a refund",
+            "external_history" if external else None,
+        )
+        repayment_available = (
+            self.register_mode
+            and row is not None
+            and (row.amount_minor or 0) > 0
+            and not correcting
+            and row.financial_account_kind == "liability"
+            and row.tracking_scope == "account_total"
+            and bool(row.allowed_purposes)
+        )
+        if repayment_available:
+            self.purpose.addItem("Repayment / transfer — review both accounts", "repayment")
         purposes = (row.purpose,) if correcting else row.allowed_purposes if row is not None else ()
         for purpose in purposes:
             if purpose in PURPOSE_LABELS:
                 self.purpose.addItem(PURPOSE_LABELS[purpose], purpose)
-        self.purpose.setEnabled(row is not None and not correcting)
+        self.purpose.setEnabled(row is not None and not correcting and not external)
+        self.accounting_date.setEnabled(not external)
         if correcting:
             self.purpose.setCurrentIndex(max(0, self.purpose.findData(row.purpose)))
+        elif (
+            repayment_available
+            and row.status == "Ready for purpose review"
+            and re.search(r"\b(?:payment|pmt|repayment)\b", row.description or "", re.IGNORECASE)
+        ):
+            # A printed payment label suggests a navigation route, not an
+            # accounting interpretation or a principal component assertion.
+            self.purpose.setCurrentIndex(self.purpose.findData("repayment"))
         self.purpose.blockSignals(False)
         self._purpose_changed()
         self.accounting_date.blockSignals(True)
@@ -238,7 +283,17 @@ class V2CardPurchaseReview(QDialog):
         kind = PURPOSE_KINDS.get(self.purpose.currentData())
         self.category.blockSignals(True)
         self.category.clear()
-        self.category.addItem("Choose a category explicitly", None)
+        repayment = self.purpose.currentData() in {"repayment", "external_history"}
+        self.category.addItem(
+            "Reviewed elsewhere; no category needed here"
+            if _reviewed_elsewhere(row)
+            else "Repayments use the paying account, not a category"
+            if repayment
+            else "Choose a category explicitly",
+            None,
+        )
+        self.category.setEnabled(not repayment)
+        self.manage_categories_button.setEnabled(self.basis is not None and not repayment)
         labels = _category_labels(self.categories)
         for category in self.categories:
             if category.kind == kind:
@@ -263,6 +318,14 @@ class V2CardPurchaseReview(QDialog):
         self.action_button.setText(
             f"Correct {self.review_label} {label}" if correction else f"Post {self.review_label} {label}"
         )
+        if purpose == "repayment":
+            self.action_button.setText(
+                "Inspect repayment history…"
+                if row.status == "Already posted to the ledger"
+                else "Review this repayment…"
+            )
+        elif purpose == "external_history":
+            self.action_button.setText("Inspect transfer / repayment history…")
         if self.register_mode:
             self.source_context.setText(
                 f"{_register_identity(row)}. Transaction date: {row.transaction_date.isoformat() if row.transaction_date else 'unavailable'} "
@@ -293,6 +356,8 @@ class V2CardPurchaseReview(QDialog):
             and self.basis is not None
             and bool(self.reason.text().strip())
         )
+        if purpose in {"repayment", "external_history"}:
+            self.action_button.setEnabled(row is not None and self.basis is not None and not correction)
         self.withdraw_button.setEnabled(
             row is not None
             and row.entry_key in self.entries
@@ -310,6 +375,18 @@ class V2CardPurchaseReview(QDialog):
         )
         if row is None:
             self.status.setText(f"{len(self.model.rows)} source row(s). Select one to review.")
+        elif purpose == "external_history":
+            self.status.setText(
+                row.status + ". This movement was reviewed outside this category panel. "
+                "Inspect related transfer or repayment history; no further categorization is required here."
+            )
+        elif purpose == "repayment":
+            self.status.setText(
+                row.status
+                + ". Match this payment with the paying account's source. A confirmed repayment reduces the whole amount owed; "
+                "it creates no income or expense. Interest charges are reviewed separately. "
+                "This register does not establish a principal/interest split. If the other source is missing, the payment stays pending."
+            )
         else:
             self.status.setText(
                 row.status
@@ -318,11 +395,66 @@ class V2CardPurchaseReview(QDialog):
                     if correction
                     else "; choose purpose explicitly; owned card and loan-register repayments use transfer review"
                     if purpose is None
-                    else f"; add an {PURPOSE_KINDS[purpose]} category first"
+                    else f"; use Manage categories to add an {PURPOSE_KINDS[purpose]} category"
                     if self.category.count() == 1
                     else ""
                 )
             )
+
+    def _restore_form(self, row_id, purpose, category_id, accounting_date, reason):
+        self.refresh(selected_row_id=row_id)
+        self.reason.setText(reason)
+        row = self._current()
+        if row is None or row.row_id != row_id or self.basis is None:
+            return
+        index = self.purpose.findData(purpose)
+        if index >= 0 and row.entry_key is None:
+            self.purpose.setCurrentIndex(index)
+        index = self.category.findData(category_id)
+        if index >= 0:
+            self.category.setCurrentIndex(index)
+        if not self.register_mode:
+            self.accounting_date.setText(accounting_date)
+        self.reason.setText(reason)
+        self._update_action()
+
+    def _manage_categories(self):
+        from parsetrail.gui.v2_categories import V2CategoryDialog
+
+        row = self._current()
+        if self.basis is None or self.purpose.currentData() in {"repayment", "external_history"}:
+            return
+        row_id = row.row_id if row is not None else None
+        purpose, category_id = self.purpose.currentData(), self.category.currentData()
+        accounting_date, reason = self.accounting_date.text(), self.reason.text()
+        old_ids = {category.id for category in self.categories}
+        dialog = V2CategoryDialog(self.workspace.profile_path, self)
+        kind = PURPOSE_KINDS.get(purpose)
+        if kind is not None:
+            dialog.add_kind.setCurrentIndex(dialog.add_kind.findData(kind))
+        dialog.exec()
+        selected = dialog.categories.currentItem()
+        created_id = selected.data(Qt.UserRole) if selected is not None else None
+        self._restore_form(row_id, purpose, category_id, accounting_date, reason)
+        if created_id not in old_ids and self.category.findData(created_id) > 0:
+            self.category.setCurrentIndex(self.category.findData(created_id))
+        self.category.setFocus()
+
+    def _review_repayment(self):
+        from parsetrail.gui.v2_transfer_review import V2TransferReview
+
+        row = self._current()
+        if row is None or self.basis is None:
+            return
+        state = (
+            row.row_id,
+            self.purpose.currentData(),
+            self.category.currentData(),
+            self.accounting_date.text(),
+            self.reason.text(),
+        )
+        V2TransferReview(self.workspace, self, focus_row_id=row.row_id).exec()
+        self._restore_form(*state)
 
     def refresh(self, selected_row_id: str | None = None) -> None:
         if self.register_mode:
@@ -410,6 +542,10 @@ class V2CardPurchaseReview(QDialog):
         self.refresh(selected_row_id=selected.row_id if selected is not None else None)
 
     def _act(self) -> None:
+        if self.purpose.currentData() in {"repayment", "external_history"}:
+            if self.action_button.isEnabled():
+                self._review_repayment()
+            return
         row = self._current()
         category_id = self.category.currentData()
         purpose = self.purpose.currentData()
@@ -464,6 +600,7 @@ class V2CardPurchaseReview(QDialog):
         )
         if self.register_mode:
             message += "\n\n" + self.source_context.text()
+        basis = self.basis
         if (
             QMessageBox.question(self, f"Confirm {self.review_label} {label}", message)
             != QMessageBox.StandardButton.Yes
@@ -481,11 +618,11 @@ class V2CardPurchaseReview(QDialog):
             with V2ProfileStore.open(self.workspace.profile_path) as store:
                 if self.register_mode and correction:
                     store.correct_reviewed_register_category(
-                        row.entry_key, category_id, reason=reason, expected_basis_sha256=self.basis
+                        row.entry_key, category_id, reason=reason, expected_basis_sha256=basis
                     )
                 elif self.register_mode:
                     store.post_reviewed_register_category(
-                        row.row_id, category_id, purpose=purpose, reason=reason, expected_basis_sha256=self.basis
+                        row.row_id, category_id, purpose=purpose, reason=reason, expected_basis_sha256=basis
                     )
                 elif correction:
                     store.correct_reviewed_card_purchase(
@@ -493,7 +630,7 @@ class V2CardPurchaseReview(QDialog):
                         category_id,
                         reason=reason,
                         accounting_date=accounting_date,
-                        expected_basis_sha256=self.basis,
+                        expected_basis_sha256=basis,
                     )
                 else:
                     store.post_reviewed_card_purchase(
@@ -505,7 +642,7 @@ class V2CardPurchaseReview(QDialog):
                         accounting_date=accounting_date
                         if accounting_date.isoformat() != row.posting_candidate
                         else None,
-                        expected_basis_sha256=self.basis,
+                        expected_basis_sha256=basis,
                     )
         except (ProfileFormatError, sqlite3.Error, OSError) as exc:
             QMessageBox.warning(
@@ -541,11 +678,12 @@ class V2CardPurchaseReview(QDialog):
         )
         if self.register_mode:
             message += "\n\n" + self.source_context.text()
+        basis = self.basis
         if QMessageBox.question(self, "Confirm interpretation withdrawal", message) != QMessageBox.Yes:
             return
         try:
             with V2ProfileStore.open(self.workspace.profile_path) as store:
-                store.withdraw_reviewed_interpretation(entry.key, expected_basis_sha256=self.basis, reason=reason)
+                store.withdraw_reviewed_interpretation(entry.key, expected_basis_sha256=basis, reason=reason)
         except (ProfileFormatError, sqlite3.Error, OSError) as exc:
             QMessageBox.warning(self, "Interpretation was not withdrawn", str(exc))
             self.refresh(selected_row_id=row.row_id)

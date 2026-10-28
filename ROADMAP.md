@@ -83,6 +83,10 @@ digits and protects unapplied batch work with discard confirmation.
 The [accountless review follow-up](docs/work/2026-10-27-accountless-review-performance.md)
 removes selection-time database reads, makes confirmed row-based document
 associations explicit and refreshes changed document/batch views on activation.
+The [transfer/register follow-up](docs/work/2026-10-27-transfer-performance-register-review.md)
+adds background transfer review, transaction-scoped verification reuse, explicitly
+confirmed batches of isolated matches, repayment navigation and inline category
+management while retaining whole-liability accounting and correction history.
 
 ### Parser and catalog track
 

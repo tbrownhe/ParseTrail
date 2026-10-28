@@ -6,7 +6,7 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None. [Accountless review performance and document association](docs/work/2026-10-27-accountless-review-performance.md)
+None. [Transfer performance and register review](docs/work/2026-10-27-transfer-performance-register-review.md)
 completed development, integrated/native performance checks and independent
 review; a new runtime preserves the owner's existing saved review state.
 

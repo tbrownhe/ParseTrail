@@ -11,6 +11,7 @@ from parsetrail.core.v2_workspace import V2Workspace
 from devtools.parser_engine_pilot.synthetic_family_sources import family_sources
 
 from .test_v2_document_browser import wait_for_inventory
+from .test_v2_transfer_review_async import wait_for_transfers
 
 
 @pytest.fixture(scope="module")
@@ -185,12 +186,13 @@ def test_register_category_correction_preserves_class_date_and_whole_liability_t
 
 
 @pytest.mark.parametrize("purpose,category", [("expense_refund", "expense:vehicle"), ("income", "income:other")])
-def test_positive_register_credit_never_infers_refund_or_repayment(tmp_path, source, purpose, category):
+def test_positive_register_payment_route_preserves_explicit_other_credit_choices(tmp_path, source, purpose, category):
     path = tmp_path / "credit.db"
     evidence, _bank = profile(path, source)
     view = dialog(path, evidence.source_sha256)
     view.table.selectRow(1)
-    assert view.purpose.currentData() is None and not view.action_button.isEnabled()
+    assert view.purpose.currentData() == "repayment" and view.action_button.text() == "Review this repayment…"
+    assert not view.category.isEnabled()
     assert view.accounting_date.text() == "2026-02-10"
     form(view, row=1, purpose=purpose, category=category)
     assert view.action_button.isEnabled()
@@ -275,6 +277,7 @@ def test_owned_register_repayment_is_neutral_whole_liability_with_separate_dates
     register.action_button.click()
     register.close()
     view = V2TransferReview(workspace(path))
+    wait_for_transfers(view)
     assert not view.assumed_dates.isChecked()
     assert len(view.candidates) == 1 and view.candidates[0].kind == "liability payment"
     pair = view.candidates[0]
@@ -284,6 +287,7 @@ def test_owned_register_repayment_is_neutral_whole_liability_with_separate_dates
     prompts = []
     monkeypatch.setattr(QMessageBox, "question", lambda _p, _t, text: prompts.append(text) or QMessageBox.Yes)
     view.confirm.click()
+    wait_for_transfers(view)
     assert "liability payment" in prompts[0] and "card payment" not in prompts[0]
     assert "2026-02-08" in prompts[0] and "2026-02-10" in prompts[0] and "derived" in prompts[0]
     with V2ProfileStore.open(path, read_only=True) as store:

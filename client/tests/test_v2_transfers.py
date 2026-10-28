@@ -180,6 +180,8 @@ def test_transfer_dialog_requires_selection_and_confirmation(tmp_path: Path, mon
     from parsetrail.gui.v2_transfer_review import V2TransferReview
     from PySide6.QtWidgets import QApplication, QMessageBox
 
+    from .test_v2_transfer_review_async import wait_for_transfers
+
     app = QApplication.instance() or QApplication([])
     path = tmp_path / "transfer.db"
     cash_id, card_id = _profile(path, bank_date="01/03/2026")
@@ -194,17 +196,19 @@ def test_transfer_dialog_requires_selection_and_confirmation(tmp_path: Path, mon
     dialog = V2TransferReview(workspace)
     try:
         dialog.show()
-        app.processEvents()
+        wait_for_transfers(dialog)
         assert dialog.table.rowCount() == 1
         assert dialog.profile_path.text() == str(path)
         assert not dialog.confirm.isEnabled()
         dialog.table.selectRow(0)
         assert dialog.confirm.isEnabled()
         dialog.confirm.click()
+        wait_for_transfers(dialog)
         assert len(questions) == 1
         assert "No income or expense is created" in questions[0]
         assert dialog.table.rowCount() == 0
         dialog.refresh()
+        wait_for_transfers(dialog)
         assert "No candidate pairs in this profile" in dialog.status.text()
         with V2ProfileStore.open(path, read_only=True) as store:
             assert store._active_consumed() == {cash_id: -2000, card_id: 2000}

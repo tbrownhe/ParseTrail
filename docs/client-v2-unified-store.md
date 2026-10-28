@@ -155,6 +155,32 @@ Whole-transfer withdrawal/replacement preserves every original leg and creates
 fresh replacement identities. Unsupported interpretations and unknown posting dates remain
 pending.
 
+Transfer review reads and confirmed mutations may reuse verified immutable
+evidence within their owning SQLite transaction. Every original/declaration/
+evidence/inventory is validated at operation start; parsed evidence is released
+unconditionally afterward. Mutable assignments, journal/history, lifecycle and
+consumption remain authoritative. No process-global source trust cache is created.
+Nearby-source Boolean guards iterate lazily in the existing date/row order and
+skip contiguous same-source runs; candidate policy, full enumeration and review
+requirements do not change.
+
+`plan_unique_transfers` captures the reviewed basis, profile identity, preferences,
+date gap and complete current candidate graph. Degree one at both legs is required,
+counting date-disabled competitors; source overlap and prior explicit suggestion
+decisions retain their existing eligibility rules. One explicit manifest confirmation
+posts all captured isolated pairs under one write lock after fresh graph/basis
+validation. Stale, failed or cooperatively cancelled batches roll back every new
+journal/allocation/event/clearing row. Exact retries report already-posted events;
+withdrawal or changed context cannot silently restore a prior batch. Both source
+dates and dated clearing remain exact; repayments create no second spending.
+
+The transfer GUI loads/updates through retained worker-owned connections, clears
+stale actions while requests run and captures confirmation context before modal
+questions. Ordinary confirmed writes finish to a known saved outcome on Close;
+batch Close requests cancellation before commit and reports a committed result
+truthfully. Forced teardown drains workers. No assumed-date setting is silently
+enabled by individual or batch review.
+
 TransferEvents also retains finite reviewed settlement manifests: one complete
 asset outflow, up to 32 distinct owned receipts, and at most 64 explicit fee parts
 assigned to their source legs. Every raw financial amount is allocated once;
@@ -184,6 +210,14 @@ category classes. Initial review requires a purpose/category choice. Category/da
 corrections retain purpose/class; a change of purpose uses withdrawal/fresh review.
 Net spending, income and budgets may be negative; refunds/adjustments never change
 the imported amount or date and never imply an owned transfer or card payment.
+
+Register payment navigation is a presentation hint from a supported printed
+payment description or explicit user choice, not a stored financial purpose.
+Missing assignment/wrong scope/posted-state qualifications remain visible.
+Already allocated rows outside this category workflow show Reviewed elsewhere
+with history navigation and disabled categorization. Creating categories from
+review refreshes basis/category data while preserving draft purpose/date/reason;
+only a newly created compatible category is selected, without posting anything.
 
 The finite `hsa_cash_line_pilot` activity family additionally admits these explicit
 purposes and owned movements only for an asset with cash-component tracking.

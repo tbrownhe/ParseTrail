@@ -242,6 +242,21 @@ batch window refreshes changed profile data, including changes from another
 window. Row selection and account choices use a cached review snapshot; saving
 still checks current accounting/history protections.
 
+**Review transfers** loads matches in the background and coalesces date-gap edits.
+**Review pairs with no other matches** shows a final list of pairs that have no
+competing match on either side in the current date window and reviewed context.
+The list includes both accounts, source dates and their qualifications. Explicit
+confirmation posts the whole batch atomically; ambiguity remains for individual
+review. Equal amounts and nearby dates alone do not establish a transfer.
+
+In a loan register, a printed payment offers **Review this repayment** to find its
+paying-account counterpart. This navigates to whole-liability repayment review;
+it creates no category entry or principal/interest split. Other credits retain
+explicit refund/income choices. **Manage categories** beside the selector supports
+interest and other category-based entries while retaining the selected row,
+purpose, date and reason. A completed repayment shows **Reviewed elsewhere** and
+opens its related history instead of asking for another category.
+
 **Open original** in Documents, account review, batch assignment or evidence
 preview opens verified database-retained PDF/CSV bytes in a built-in, memory-only
 reader. PDF supports page navigation, fit/zoom, search and selectable page text;

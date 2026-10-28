@@ -12,6 +12,7 @@ from parsetrail.core.v2_profile_store import FinancialAccount, V2ProfileStore
 from parsetrail.core.v2_source_pipeline import build_source_evidence
 from parsetrail.core.v2_workspace import V2Workspace
 
+from .test_v2_transfer_review_async import wait_for_transfers
 from .test_v2_transfers import BANK_DEFINITION, _profile
 
 
@@ -33,7 +34,9 @@ def _dialog(profile):
     workspace = V2Workspace.open(
         profile, profile.parent / "catalog", trusted_keys={}, preferences_path=profile.parent / "preferences.json"
     )
-    return V2TransferReview(workspace)
+    dialog = V2TransferReview(workspace)
+    wait_for_transfers(dialog)
+    return dialog
 
 
 def _post(profile, outgoing, incoming):
@@ -56,6 +59,7 @@ def test_dismiss_and_reopen_are_durable_and_never_allocate_money(tmp_path, app, 
         dialog.note.setText("Not the same economic event")
         assert dialog.dismiss.isEnabled()
         dialog.dismiss.click()
+        wait_for_transfers(dialog)
         assert dialog.table.rowCount() == 0
         assert dialog.review_table.rowCount() == 1
         assert dialog.pair_reviews[0].decision == "dismiss"
@@ -64,6 +68,7 @@ def test_dismiss_and_reopen_are_durable_and_never_allocate_money(tmp_path, app, 
         dialog.reopen_reason.setText("Sources inspected again")
         assert dialog.reopen.isEnabled()
         dialog.reopen.click()
+        wait_for_transfers(dialog)
         assert dialog.table.rowCount() == 1
         assert dialog.review_table.rowCount() == 2
         with V2ProfileStore.open(profile, read_only=True) as store:
@@ -105,6 +110,8 @@ def test_whole_event_withdrawal_keeps_dates_and_releases_all_rows(tmp_path, app,
     try:
         dialog.tabs.setCurrentIndex(1)
         dialog.event_table.selectRow(0)
+        dialog.load_replacements.click()
+        wait_for_transfers(dialog)
         assert dialog.selected_event.event_id == event_id
         assert not dialog.withdraw.isEnabled()
         dialog.correction_reason.setText("These source movements were not an owned transfer")
@@ -112,6 +119,7 @@ def test_whole_event_withdrawal_keeps_dates_and_releases_all_rows(tmp_path, app,
         dialog.replacement.setCurrentIndex(1)
         assert not dialog.replace.isEnabled()
         dialog.withdraw.click()
+        wait_for_transfers(dialog)
         assert f"All {legs} journal leg(s)" in questions[0]
         assert "amount owed change $20.00" in questions[0]
         assert "2026-01-05" in questions[0]
@@ -148,6 +156,8 @@ def test_replacement_can_share_outgoing_row_and_change_destination_atomically(tm
     dialog = _dialog(profile)
     try:
         dialog.event_table.selectRow(0)
+        dialog.load_replacements.click()
+        wait_for_transfers(dialog)
         dialog.correction_reason.setText("Correct owned destination after inspecting both sources")
         assert not dialog.replace.isEnabled()
         replacement = next(
@@ -157,6 +167,7 @@ def test_replacement_can_share_outgoing_row_and_change_destination_atomically(tm
         assert dialog.replace.isEnabled()
         assert "asset value change $20.00" in dialog.replacement_details.text()
         dialog.replace.click()
+        wait_for_transfers(dialog)
         assert len(dialog.events) == 2
         original = next(event for event in dialog.events if event.event_id == event_id)
         assert original.status == "replaced" and original.replacement_event_id
@@ -204,12 +215,16 @@ def test_every_confirmation_cancel_leaves_profile_unchanged(tmp_path, app, monke
             dialog.table.selectRow(0)
             dialog.note.setText("Considered action")
             (dialog.confirm if action == "post" else dialog.dismiss).click()
+            wait_for_transfers(dialog)
         elif action == "reopen":
             dialog.review_table.selectRow(0)
             dialog.reopen_reason.setText("Considered reopening")
             dialog.reopen.click()
+            wait_for_transfers(dialog)
         else:
             dialog.event_table.selectRow(0)
+            dialog.load_replacements.click()
+            wait_for_transfers(dialog)
             dialog.correction_reason.setText("Considered correction")
             if action == "replace":
                 replacement = next(
@@ -218,6 +233,7 @@ def test_every_confirmation_cancel_leaves_profile_unchanged(tmp_path, app, monke
                 dialog.replacement.setCurrentIndex(dialog.replacement.findData(replacement))
                 assert dialog.replace.isEnabled()
             (dialog.replace if action == "replace" else dialog.withdraw).click()
+            wait_for_transfers(dialog)
     finally:
         dialog.close()
         app.processEvents()
@@ -236,12 +252,15 @@ def test_stale_event_refuses_refreshes_and_read_failure_clears_actions(tmp_path,
     dialog = _dialog(profile)
     try:
         dialog.event_table.selectRow(0)
+        dialog.load_replacements.click()
+        wait_for_transfers(dialog)
         dialog.correction_reason.setText("From the loaded event")
         previous_basis = dialog.event_basis
         with V2ProfileStore.open(profile) as store:
             store.add_category_account("expense:concurrent", "Concurrent category", "expense")
         before = hashlib.sha256(profile.read_bytes()).hexdigest()
         dialog.withdraw.click()
+        wait_for_transfers(dialog)
         assert len(warnings) == 1 and "context changed" in warnings[0]
         assert hashlib.sha256(profile.read_bytes()).hexdigest() == before
         assert dialog.events[0].status == "active"
@@ -252,6 +271,7 @@ def test_stale_event_refuses_refreshes_and_read_failure_clears_actions(tmp_path,
 
         monkeypatch.setattr(V2ProfileStore, "transfer_review_snapshot", unavailable)
         dialog.refresh()
+        wait_for_transfers(dialog)
         assert dialog.event_table.rowCount() == dialog.table.rowCount() == dialog.review_table.rowCount() == 0
         assert not any(
             button.isEnabled()
@@ -298,9 +318,12 @@ def test_withdrawal_remains_available_after_assumed_date_preference_is_off(tmp_p
     try:
         assert not dialog.assumed_dates.isChecked()
         dialog.event_table.selectRow(0)
+        dialog.load_replacements.click()
+        wait_for_transfers(dialog)
         dialog.correction_reason.setText("Withdraw the previously reviewed interpretation")
         assert dialog.withdraw.isEnabled()
         dialog.withdraw.click()
+        wait_for_transfers(dialog)
         assert dialog.events[0].status == "cancelled"
         assert dialog.table.rowCount() == 1
         dialog.table.selectRow(0)
@@ -385,6 +408,7 @@ def test_reopen_uses_latest_decision_in_current_financial_context_after_rebindin
         dialog.review_table.selectRow(current_index)
         assert dialog.reopen.isEnabled()
         dialog.reopen.click()
+        wait_for_transfers(dialog)
         assert dialog.table.rowCount() == 1
         assert dialog.candidates[0].outgoing.account_id == "checking"
         assert len(dialog.pair_reviews) == 4
@@ -403,6 +427,8 @@ def test_corrupt_blob_transfer_basis_refresh_refuses_and_disables_all_actions(tm
     dialog = _dialog(profile)
     try:
         dialog.event_table.selectRow(0)
+        dialog.load_replacements.click()
+        wait_for_transfers(dialog)
         dialog.correction_reason.setText("Previously selected event")
         assert dialog.withdraw.isEnabled()
         with sqlite3.connect(profile) as connection:
@@ -413,6 +439,7 @@ def test_corrupt_blob_transfer_basis_refresh_refuses_and_disables_all_actions(tm
             connection.execute("UPDATE TransferEvents SET request_basis=?", (b"malformed BLOB basis",))
             connection.execute(trigger)
         dialog.refresh()
+        wait_for_transfers(dialog)
         assert dialog.event_table.rowCount() == dialog.table.rowCount() == dialog.review_table.rowCount() == 0
         assert dialog.selected_event is None and dialog.basis is None
         assert not any(

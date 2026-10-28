@@ -130,20 +130,40 @@ class NearbySourceIndex:
         self._days = {key: tuple(day for day, _row_id in items) for key, items in self._cohorts.items()}
         self._source_items = {key: tuple(sorted(items)) for key, items in by_source.items()}
         self._source_days = {key: tuple(day for day, _row_id in items) for key, items in self._source_items.items()}
+        self._run_ends = {}
+        for cohort, items in self._cohorts.items():
+            ends = [len(items)] * len(items)
+            run_end = len(items)
+            for position in range(len(items) - 1, -1, -1):
+                if position + 1 < len(items) and (
+                    self.rows[items[position][1]].source_sha256 != self.rows[items[position + 1][1]].source_sha256
+                ):
+                    run_end = position + 1
+                ends[position] = run_end
+            self._run_ends[cohort] = tuple(ends)
 
     def neighbors(self, row_id: str) -> tuple[str, ...]:
+        return tuple(self.iter_neighbors(row_id))
+
+    def iter_neighbors(self, row_id: str) -> Iterator[str]:
+        """Yield the unchanged date/row ordering without materializing all edges."""
         row = self.rows[row_id]
         if not _candidate_row(row):
-            return ()
+            return
         key, day = (row.account_id, row.amount_minor), _source_day(row)
-        days = self._days[key]
-        low = bisect_left(days, day - SOURCE_DATE_WINDOW_DAYS)
-        high = bisect_right(days, day + SOURCE_DATE_WINDOW_DAYS)
-        return tuple(
-            other_id
-            for _other_day, other_id in self._cohorts[key][low:high]
-            if self.rows[other_id].source_sha256 != row.source_sha256
-        )
+        low = bisect_left(self._days[key], day - SOURCE_DATE_WINDOW_DAYS)
+        high = bisect_right(self._days[key], day + SOURCE_DATE_WINDOW_DAYS)
+        items, run_ends = self._cohorts[key], self._run_ends[key]
+        position = low
+        while position < high:
+            _other_day, other_id = items[position]
+            if self.rows[other_id].source_sha256 == row.source_sha256:
+                # Runs can extend outside the date window. Jumping past high
+                # simply ends the traversal and cannot omit an outside source.
+                position = run_ends[position]
+            else:
+                yield other_id
+                position += 1
 
     def count_pairs(self, *, source_sha256: str | None = None) -> int:
         total = 0

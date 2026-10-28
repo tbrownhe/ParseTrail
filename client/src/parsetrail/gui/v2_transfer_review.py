@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
-import sqlite3
+import atexit
+import time
+from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread, QTimer
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -26,7 +29,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from parsetrail.core.v2_profile_store import ProfileFormatError, TransferCandidate, V2ProfileStore
+from parsetrail.core.v2_profile_store import TransferCandidate, V2ProfileStore
 from parsetrail.core.v2_workspace import V2Workspace
 from parsetrail.gui.v2_cash_activity_review import _money
 from parsetrail.gui.v2_settlement_review import (
@@ -36,9 +39,56 @@ from parsetrail.gui.v2_settlement_review import (
     settlement_details,
 )
 
+_TRANSFER_WORKERS: set[QThread] = set()
+
+
+def _finish_transfer_workers():
+    workers = tuple(_TRANSFER_WORKERS)
+    for worker in workers:
+        worker.requestInterruption()
+    for worker in workers:
+        while worker.isRunning():
+            worker.wait(10)
+            time.sleep(0.001)
+        worker.wait()
+        _TRANSFER_WORKERS.discard(worker)
+
+
+atexit.register(_finish_transfer_workers)
+
+
+class _TransferWorker(QThread):
+    """Connections and transactions belong solely to this worker."""
+
+    def __init__(self, profile, kind, generation, operation):
+        super().__init__()
+        self.profile, self.kind, self.generation = Path(profile), kind, generation
+        self.operation = operation
+        self.result, self.error = None, None
+        self.completed = False
+
+    def run(self):
+        try:
+            if self.isInterruptionRequested():
+                return
+            with V2ProfileStore.open(self.profile, read_only=self.kind != "write") as store:
+                if self.kind != "write":
+                    store.connection.set_progress_handler(lambda: int(self.isInterruptionRequested()), 1000)
+                self.result = self.operation(store, self)
+                self.completed = True
+        except Exception as exc:
+            self.error = exc
+        finally:
+            self.operation = None
+
 
 def _pair_key(pair):
     return pair.outgoing.row_id, pair.incoming.row_id
+
+
+def _source_date(movement):
+    qualification = f" ({movement.date_provenance})" if movement.date_provenance in {"derived", "assumed"} else ""
+    return movement.posting_date + qualification
 
 
 def _pair_details(pair, *, inverse=False):
@@ -67,6 +117,7 @@ def _history_table(headers):
     table.setEditTriggers(QAbstractItemView.NoEditTriggers)
     table.setSelectionBehavior(QAbstractItemView.SelectRows)
     table.setSelectionMode(QAbstractItemView.SingleSelection)
+    table.horizontalHeader().setResizeContentsPrecision(200)
     for column in range(len(headers) - 1):
         table.horizontalHeader().setSectionResizeMode(column, QHeaderView.ResizeToContents)
     table.horizontalHeader().setSectionResizeMode(len(headers) - 1, QHeaderView.Stretch)
@@ -91,9 +142,26 @@ class V2TransferReview(QDialog):
 
     HEADERS = ("Type", "Sent", "From", "Received", "To", "Amount", "Other matches", "Source descriptions")
 
-    def __init__(self, workspace: V2Workspace, parent=None):
+    def __init__(self, workspace: V2Workspace, parent=None, *, focus_row_id=None):
         super().__init__(parent)
         self.workspace = workspace
+        self._focus_row_id = focus_row_id
+        self._worker = None
+        self._generation = 0
+        self._closed = False
+        self._requested = False
+        self.pending = True
+        self._snapshot = None
+        self._replacement_cache = {}
+        self._selection_ids = self._event_id = None
+        self._completion_message = ""
+        self._read_error = ""
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.timeout.connect(self._start_read)
+        app = QApplication.instance()
+        if app is not None:
+            app.aboutToQuit.connect(_finish_transfer_workers)
         self.candidates: tuple[TransferCandidate, ...] = ()
         self.events, self.pair_reviews, self.replacements = (), (), ()
         self.basis, self.event_basis, self.selected_event = None, None, None
@@ -120,15 +188,15 @@ class V2TransferReview(QDialog):
         self.gap = QSpinBox()
         self.gap.setRange(0, 31)
         self.gap.setValue(7)
-        self.gap.valueChanged.connect(self.refresh)
+        self.gap.valueChanged.connect(lambda: self.refresh(debounce=True))
         controls.addWidget(self.gap)
         self.assumed_dates = QCheckBox("Allow best guess posting dates when a statement does not print one")
         self.assumed_dates.setChecked(workspace.preferences().allow_assumed_posting_dates)
         self.assumed_dates.toggled.connect(self._toggle_assumed_dates)
         controls.addWidget(self.assumed_dates)
-        reload_button = QPushButton("Reload saved state")
-        reload_button.clicked.connect(self.refresh)
-        controls.addWidget(reload_button)
+        self.reload_button = QPushButton("Reload saved state")
+        self.reload_button.clicked.connect(self.refresh)
+        controls.addWidget(self.reload_button)
         controls.addStretch()
         layout.addLayout(controls)
         self.tabs = QTabWidget()
@@ -140,6 +208,7 @@ class V2TransferReview(QDialog):
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         header = self.table.horizontalHeader()
+        header.setResizeContentsPrecision(200)
         for column in range(len(self.HEADERS) - 1):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(len(self.HEADERS) - 1, QHeaderView.ResizeMode.Stretch)
@@ -154,12 +223,21 @@ class V2TransferReview(QDialog):
         self.note.textChanged.connect(self._selected)
         suggestions_layout.addWidget(self.note)
         self.confirm = QPushButton("Confirm and post selected pair")
+        self.confirm.setAutoDefault(False)
         self.confirm.clicked.connect(self._post)
+        self.batch = QPushButton("Review pairs with no other matches…")
+        self.batch.clicked.connect(self._review_batch)
+        self.batch.setDefault(True)
+        self.batch_scope = QLabel()
+        self.batch_scope.setWordWrap(True)
+        suggestions_layout.addWidget(self.batch_scope)
         self.dismiss = QPushButton("Dismiss selected suggestion")
+        self.dismiss.setAutoDefault(False)
         self.dismiss.clicked.connect(self._dismiss)
         suggestion_actions = QHBoxLayout()
         suggestion_actions.addWidget(self.confirm)
         suggestion_actions.addWidget(self.dismiss)
+        suggestion_actions.addWidget(self.batch)
         suggestions_layout.addLayout(suggestion_actions)
         self.tabs.addTab(suggestions, "Suggestions")
         self.full_settlement = QPushButton("Review transfer fees / partial settlements…")
@@ -194,6 +272,9 @@ class V2TransferReview(QDialog):
         self.replacement = QComboBox()
         self.replacement.currentIndexChanged.connect(self._event_actions)
         replacement_row.addWidget(self.replacement, 1)
+        self.load_replacements = QPushButton("Load replacement pairs…")
+        self.load_replacements.clicked.connect(self._load_replacements)
+        replacement_row.addWidget(self.load_replacements)
         layout.addLayout(replacement_row)
         self.replacement_details = QLabel("Select an active event to load eligible replacement pairs.")
         self.replacement_details.setWordWrap(True)
@@ -247,6 +328,15 @@ class V2TransferReview(QDialog):
 
     def _selected(self) -> None:
         pair = self._current()
+        if self.pending:
+            self.confirm.setEnabled(False)
+            self.dismiss.setEnabled(False)
+            return
+        if self._read_error:
+            self.confirm.setEnabled(False)
+            self.dismiss.setEnabled(False)
+            self.status.setText(self._read_error)
+            return
         self.confirm.setEnabled(pair is not None and pair.posting_allowed and self.basis is not None)
         self.dismiss.setEnabled(pair is not None and bool(self.note.text().strip()) and self.basis is not None)
         if pair is None:
@@ -267,29 +357,105 @@ class V2TransferReview(QDialog):
                 "Check both descriptions and sources before confirming."
             )
 
-    def refresh(self, *_args) -> None:
-        preferences = self.workspace.preferences()
+    def refresh(self, *_args, debounce=False) -> None:
+        if self._closed or (self._worker is not None and self._worker.kind == "write"):
+            return
+        selected = self._current()
+        if selected is not None:
+            self._selection_ids = _pair_key(selected)
+        if self.selected_event is not None:
+            self._event_id = self.selected_event.event_id
+        self._generation += 1
+        self._requested = True
+        self.pending = True
+        self._read_error = ""
+        self._snapshot = None
+        self.basis = None
+        self._replacement_cache.clear()
+        self.candidates, self.events, self.pair_reviews = (), (), ()
+        for table in (self.table, self.event_table, self.review_table):
+            _fill_table(table, ())
+        self._clear_event()
+        self._selected()
+        self._review_selected()
+        self.status.setText("Loading saved transfer state…")
+        self.batch_scope.setText("Checking both legs for other matches in the current date window…")
+        self.batch.setEnabled(False)
+        if self._worker is not None:
+            self._worker.requestInterruption()
+        self._timer.start(150 if debounce else 0)
+
+    def _start_read(self):
+        if self._closed or not self._requested or self._worker is not None:
+            return
+        self._requested = False
+        preferences, gap = self.workspace.preferences(), self.gap.value()
         self.assumed_dates.blockSignals(True)
         self.assumed_dates.setChecked(preferences.allow_assumed_posting_dates)
         self.assumed_dates.blockSignals(False)
-        selected = self._current()
-        selected_ids = (selected.outgoing.row_id, selected.incoming.row_id) if selected is not None else None
-        event_id = self.selected_event.event_id if self.selected_event else None
-        try:
-            with V2ProfileStore.open(self.workspace.profile_path, read_only=True) as store:
-                snapshot = store.transfer_review_snapshot(preferences=preferences, max_day_gap=self.gap.value())
-        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            self.basis = None
-            self.candidates, self.events, self.pair_reviews = (), (), ()
-            _fill_table(self.table, ())
-            _fill_table(self.event_table, ())
-            _fill_table(self.review_table, ())
-            self._clear_event()
-            self._selected()
-            self._review_selected()
-            self.status.setText(f"Transfer review unavailable. Reload to retry: {exc}")
-            self.event_status.setText(self.status.text())
+        self._launch(
+            "read", lambda store, _job: store.transfer_review_snapshot(preferences=preferences, max_day_gap=gap)
+        )
+
+    def _launch(self, kind, operation):
+        worker = _TransferWorker(self.workspace.profile_path, kind, self._generation, operation)
+        self._worker = worker
+        _TRANSFER_WORKERS.add(worker)
+        worker.finished.connect(self._finished)
+        worker.finished.connect(lambda: _TRANSFER_WORKERS.discard(worker))
+        worker.finished.connect(worker.deleteLater)
+        self.destroyed.connect(worker.requestInterruption)
+        worker.start()
+
+    def _finished(self):
+        worker, self._worker = self._worker, None
+        if worker is None or self._closed:
             return
+        current = worker.generation == self._generation and worker.profile == Path(self.workspace.profile_path)
+        if worker.kind == "write":
+            self._set_writing(False)
+            if worker.error is not None:
+                self._failed(self._failure_title, worker.error)
+            elif worker.completed:
+                self.note.clear()
+                self.correction_reason.clear()
+                self.reopen_reason.clear()
+                self._completion_message = self._success_message(worker.result)
+                self.refresh()
+            else:
+                self.refresh()
+                self._completion_message = "Action cancelled before it started; no changes were made."
+        elif current and worker.error is not None:
+            self.pending = False
+            self._set_writing(False)
+            self.basis = self.event_basis = None
+            self._snapshot = None
+            self._read_error = f"Transfer review unavailable. Reload to retry: {worker.error}"
+            self.status.setText(self._read_error)
+            self.event_status.setText(self.status.text())
+            self.batch_scope.setText("Saved state unavailable; posting is disabled.")
+        elif current and worker.result is not None:
+            self.pending = False
+            self._set_writing(False)
+            if worker.kind == "replacement":
+                event_id, snapshot = worker.result
+                if snapshot.basis_sha256 != self.basis:
+                    self._completion_message = "Transfer context changed. Inspect the reloaded state before confirming."
+                    self.refresh()
+                else:
+                    self._replacement_cache[event_id] = snapshot
+                    if self.selected_event is not None and self.selected_event.event_id == event_id:
+                        self._event_selected()
+            else:
+                self._apply_snapshot(worker.result)
+        elif not current and worker.profile != Path(self.workspace.profile_path):
+            self.refresh()
+        if self._requested and not self._timer.isActive():
+            self._timer.start(0)
+
+    def _apply_snapshot(self, snapshot):
+        self._snapshot = snapshot
+        selected_ids, event_id = self._selection_ids, self._event_id
         self.basis = snapshot.basis_sha256
         self.candidates, self.events, self.pair_reviews = snapshot.candidates, snapshot.events, snapshot.pair_reviews
         out_counts: dict[str, int] = {}
@@ -304,9 +470,9 @@ class V2TransferReview(QDialog):
         for index, pair in enumerate(self.candidates):
             values = (
                 pair.kind.capitalize(),
-                pair.outgoing.posting_date,
+                _source_date(pair.outgoing),
                 pair.outgoing.account_name,
-                pair.incoming.posting_date + (" (assumed)" if pair.incoming.date_provenance == "assumed" else ""),
+                _source_date(pair.incoming),
                 pair.incoming.account_name,
                 _money(-pair.outgoing.amount_minor),
                 f"{out_counts[pair.outgoing.row_id] - 1} / {in_counts[pair.incoming.row_id] - 1}",
@@ -374,9 +540,52 @@ class V2TransferReview(QDialog):
                     break
         self._selected()
         self._review_selected()
+        self._update_batch()
+        if self._focus_row_id is not None:
+            row_id, self._focus_row_id = self._focus_row_id, None
+            for index, pair in enumerate(self.candidates):
+                if row_id in _pair_key(pair):
+                    self.tabs.setCurrentIndex(0)
+                    self.table.selectRow(index)
+                    self.table.scrollToItem(self.table.item(index, 0))
+                    break
+            else:
+                for index, event in enumerate(self.events):
+                    if row_id in (event.settlement.outgoing.row_id, *(m.row_id for m in event.settlement.incoming)):
+                        self.tabs.setCurrentIndex(1)
+                        self.event_table.selectRow(index)
+                        self.event_table.scrollToItem(self.event_table.item(index, 0))
+                        break
+                else:
+                    self.status.setText(
+                        "No eligible counterpart for this movement in the current date window. "
+                        "Import and assign the paying or receiving account’s source, or widen the date gap. "
+                        "No one-sided transfer entry is created."
+                    )
+        if self._completion_message:
+            self.status.setText(self._completion_message)
+            self.event_status.setText(self._completion_message)
+            self._completion_message = ""
+
+    def _load_replacements(self):
+        event = self.selected_event
+        if event is None or event.status != "active" or self._worker is not None:
+            return
+        event_id, preferences, gap = event.event_id, self.workspace.preferences(), self.gap.value()
+        self.pending = True
+        self._set_writing(True)
+        self.event_status.setText("Loading replacement pairs…")
+        self._launch(
+            "replacement",
+            lambda store, _job: (
+                event_id,
+                store.transfer_review_snapshot(preferences=preferences, max_day_gap=gap, replacing_event_id=event_id),
+            ),
+        )
 
     def _clear_event(self):
         self.selected_event, self.event_basis, self.replacements = None, None, ()
+        self.load_replacements.setEnabled(False)
         self.replacement.clear()
         self.withdraw.setEnabled(False)
         self.replace.setEnabled(False)
@@ -391,18 +600,9 @@ class V2TransferReview(QDialog):
         if not 0 <= index < len(self.events):
             return
         event = self.events[index]
-        try:
-            with V2ProfileStore.open(self.workspace.profile_path, read_only=True) as store:
-                snapshot = store.transfer_review_snapshot(
-                    preferences=self.workspace.preferences(),
-                    max_day_gap=self.gap.value(),
-                    replacing_event_id=event.event_id if event.status == "active" else None,
-                )
-            event = next(item for item in snapshot.events if item.event_id == event.event_id)
-        except (ProfileFormatError, sqlite3.Error, OSError, StopIteration) as exc:
-            self.event_status.setText(f"Selected event unavailable or changed. Reload saved state: {exc}")
-            return
-        self.selected_event, self.event_basis = event, snapshot.basis_sha256
+        snapshot = self._replacement_cache.get(event.event_id)
+        self.selected_event, self.event_basis = event, self.basis
+        self.load_replacements.setEnabled(event.status == "active" and event.pair is not None and not self.pending)
         self.review_settlement.setEnabled(True)
         self.event_details.setPlainText(
             f"{event.status.title()} {event.settlement.kind}; {len(event.entry_keys)} journal leg(s); "
@@ -410,17 +610,23 @@ class V2TransferReview(QDialog):
             f"Action reason: {event.action_reason or 'none'}. Replacement event: {event.replacement_event_id or 'none'}.\n"
             f"{settlement_details(event.settlement)}\nEvent: {event.event_id}; version: {event.version}."
         )
-        self.replacements = snapshot.candidates if event.status == "active" and event.pair is not None else ()
+        self.replacements = (
+            snapshot.candidates if snapshot is not None and event.status == "active" and event.pair is not None else ()
+        )
         self.replacement.blockSignals(True)
         self.replacement.addItem("Choose a replacement pair", None)
         for index, pair in enumerate(self.replacements):
             self.replacement.addItem(
-                f"{pair.outgoing.account_name} {pair.outgoing.posting_date} → "
-                f"{pair.incoming.account_name} {pair.incoming.posting_date}; {_money(-pair.outgoing.amount_minor)}",
+                f"{pair.outgoing.account_name} {_source_date(pair.outgoing)} → "
+                f"{pair.incoming.account_name} {_source_date(pair.incoming)}; {_money(-pair.outgoing.amount_minor)}",
                 index,
             )
         self.replacement.blockSignals(False)
-        self.event_status.clear()
+        self.event_status.setText(
+            "Load replacement pairs to inspect alternatives."
+            if snapshot is None and event.status == "active" and event.pair is not None
+            else ""
+        )
         self._event_actions()
 
     def _new_settlement(self):
@@ -436,7 +642,8 @@ class V2TransferReview(QDialog):
     def _event_actions(self, *_args):
         event = self.selected_event
         ready = (
-            event is not None
+            not self.pending
+            and event is not None
             and event.status == "active"
             and self.event_basis is not None
             and bool(self.correction_reason.text().strip())
@@ -502,7 +709,8 @@ class V2TransferReview(QDialog):
             default=None,
         )
         self.reopen.setEnabled(
-            review is not None
+            not self.pending
+            and review is not None
             and review.revision_id == latest
             and review.decision == "dismiss"
             and review.context_current
@@ -526,30 +734,23 @@ class V2TransferReview(QDialog):
         if pair is None or not pair.posting_allowed or self.basis is None:
             return
         outgoing, incoming = pair.outgoing, pair.incoming
+        preferences, basis = self.workspace.preferences(), self.basis
+        reason = "Confirmed owned-account transfer"
+        if self.note.text().strip():
+            reason += ": " + self.note.text().strip()
         message = (
             f"Confirm this {pair.kind}?\n\n{_pair_details(pair)}\n\n"
             "No income or expense is created. The two source dates are preserved."
         )
         if QMessageBox.question(self, "Confirm transfer pair", message) != QMessageBox.StandardButton.Yes:
             return
-        reason = "Confirmed owned-account transfer"
-        if self.note.text().strip():
-            reason += ": " + self.note.text().strip()
-        try:
-            with V2ProfileStore.open(self.workspace.profile_path) as store:
-                store.post_reviewed_transfer(
-                    outgoing.row_id,
-                    incoming.row_id,
-                    preferences=self.workspace.preferences(),
-                    reason=reason,
-                    expected_basis_sha256=self.basis,
-                )
-        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            self._failed("Transfer was not posted", exc)
-            return
-        self.note.clear()
-        self.refresh()
-        self.status.setText("Transfer pair posted; both source movements are allocated.")
+        self._write(
+            "Transfer was not posted",
+            "Transfer pair posted; both source movements are allocated.",
+            lambda store, _job: store.post_reviewed_transfer(
+                outgoing.row_id, incoming.row_id, preferences=preferences, reason=reason, expected_basis_sha256=basis
+            ),
+        )
 
     def _failed(self, title, exc):
         message = str(exc)
@@ -560,62 +761,59 @@ class V2TransferReview(QDialog):
                 "transfer_event_not_active": "This event is no longer active. Inspect its retained history before choosing another action.",
                 "transfer_pair_unavailable_or_already_posted": "The selected pair is no longer eligible. Review the refreshed source rows and interpretations.",
                 "transfer_assumed_date_disabled": "New postings need the best guess date choice for this pair. Existing interpretations can still be withdrawn.",
+                "transfer_batch_cancelled": "Transfer batch cancelled before commit; no pairs were posted.",
+                "transfer_batch_preferences_changed": "The posting date policy changed. No pairs were posted. Inspect the reloaded suggestions and confirm again.",
+                "transfer_batch_profile_changed": "The profile changed. No pairs were posted. Inspect the reloaded suggestions and confirm again.",
+                "transfer_batch_graph_changed": "The transfer matches changed. No pairs were posted. Inspect the reloaded suggestions and confirm again.",
+                "transfer_batch_plan_invalid": "This batch review is no longer valid. No pairs were posted. Reload and review the pairs again.",
             }.get(message, message)
-        QMessageBox.warning(self, title, message)
+        if str(exc) != "transfer_batch_cancelled":
+            QMessageBox.warning(self, title, message)
+        self._completion_message = message
         self.refresh()
-        self.status.setText(message)
-        self.event_status.setText(message)
 
     def _dismiss(self):
         pair, reason = self._current(), self.note.text().strip()
         if pair is None or not reason or self.basis is None:
             return
+        preferences, basis = self.workspace.preferences(), self.basis
         message = f"Dismiss this suggested {pair.kind}?\n\n{_pair_details(pair)}\n\nReason: {reason}\n\nNo money is posted or allocated. Source evidence remains pending."
         if QMessageBox.question(self, "Dismiss transfer suggestion", message) != QMessageBox.Yes:
             return
-        try:
-            with V2ProfileStore.open(self.workspace.profile_path) as store:
-                store.record_transfer_pair_review(
-                    *_pair_key(pair),
-                    decision="dismiss",
-                    expected_basis_sha256=self.basis,
-                    preferences=self.workspace.preferences(),
-                    reason=reason,
-                )
-        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            self._failed("Suggestion was not dismissed", exc)
-            return
-        self.note.clear()
-        self.refresh()
-        self.status.setText("Suggestion dismissed; source rows remain pending. See Suggestion history to reopen it.")
+        self._write(
+            "Suggestion was not dismissed",
+            "Suggestion dismissed; source rows remain pending. See Suggestion history to reopen it.",
+            lambda store, _job: store.record_transfer_pair_review(
+                *_pair_key(pair),
+                decision="dismiss",
+                expected_basis_sha256=basis,
+                preferences=preferences,
+                reason=reason,
+            ),
+        )
 
     def _reopen(self):
         index, reason = self.review_table.currentRow(), self.reopen_reason.text().strip()
         if not self.reopen.isEnabled() or not 0 <= index < len(self.pair_reviews) or not reason:
             return
         pair = self.pair_reviews[index].pair
+        preferences, basis = self.workspace.preferences(), self.basis
         message = f"Reopen this dismissed pair?\n\n{_pair_details(pair)}\n\nReason: {reason}\n\nReopening creates no journal or evidence allocation."
         if QMessageBox.question(self, "Reopen transfer suggestion", message) != QMessageBox.Yes:
             return
-        try:
-            with V2ProfileStore.open(self.workspace.profile_path) as store:
-                store.record_transfer_pair_review(
-                    *_pair_key(pair),
-                    decision="reopen",
-                    expected_basis_sha256=self.basis,
-                    preferences=self.workspace.preferences(),
-                    reason=reason,
-                )
-        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            self._failed("Suggestion was not reopened", exc)
-            return
-        self.reopen_reason.clear()
-        self.refresh()
+        self._write(
+            "Suggestion was not reopened",
+            "Suggestion reopened; no money was posted or allocated.",
+            lambda store, _job: store.record_transfer_pair_review(
+                *_pair_key(pair), decision="reopen", expected_basis_sha256=basis, preferences=preferences, reason=reason
+            ),
+        )
 
     def _withdraw(self):
         event, reason = self.selected_event, self.correction_reason.text().strip()
         if event is None or event.status != "active" or not reason or self.event_basis is None:
             return
+        basis = self.event_basis
         message = (
             f"Withdraw this whole {event.settlement.kind} settlement?\n\nInverse source and fee effects:\n"
             f"{settlement_details(event.settlement, inverse=True)}\n\nAll {len(event.entry_keys)} journal leg(s) are reversed at "
@@ -629,16 +827,12 @@ class V2TransferReview(QDialog):
         )
         if QMessageBox.question(self, "Confirm whole transfer withdrawal", message) != QMessageBox.Yes:
             return
-        try:
-            with V2ProfileStore.open(self.workspace.profile_path) as store:
-                store.withdraw_reviewed_transfer(event.event_id, expected_basis_sha256=self.event_basis, reason=reason)
-        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            self._failed("Transfer was not withdrawn", exc)
-            return
-        self.correction_reason.clear()
-        self.refresh()
-        self.event_status.setText(
-            "The selected whole-event withdrawal is recorded. Refreshed history shows current source usage; original and inverse entries remain history."
+        self._write(
+            "Transfer was not withdrawn",
+            "Whole-event withdrawal recorded; original and inverse entries remain history.",
+            lambda store, _job: store.withdraw_reviewed_transfer(
+                event.event_id, expected_basis_sha256=basis, reason=reason
+            ),
         )
 
     def _replace(self):
@@ -659,6 +853,7 @@ class V2TransferReview(QDialog):
             or self.event_basis is None
         ):
             return
+        preferences, basis = self.workspace.preferences(), self.event_basis
         message = (
             f"Replace this whole {event.pair.kind} interpretation?\n\nWithdraw original effects:\n"
             f"{_pair_details(event.pair, inverse=True)}\n\nPost selected replacement:\n{_pair_details(pair)}\n\nReason: {reason}\n\n"
@@ -667,20 +862,179 @@ class V2TransferReview(QDialog):
         )
         if QMessageBox.question(self, "Confirm whole transfer replacement", message) != QMessageBox.Yes:
             return
-        try:
-            with V2ProfileStore.open(self.workspace.profile_path) as store:
-                store.replace_reviewed_transfer(
-                    event.event_id,
-                    *_pair_key(pair),
-                    expected_basis_sha256=self.event_basis,
-                    preferences=self.workspace.preferences(),
-                    reason=reason,
-                )
-        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            self._failed("Transfer was not replaced", exc)
-            return
-        self.correction_reason.clear()
-        self.refresh()
-        self.event_status.setText(
-            "Whole event replaced atomically. Original and inverse entries remain history; unused source rows remain pending."
+        self._write(
+            "Transfer was not replaced",
+            "Whole event replaced atomically; original and inverse entries remain history.",
+            lambda store, _job: store.replace_reviewed_transfer(
+                event.event_id, *_pair_key(pair), expected_basis_sha256=basis, preferences=preferences, reason=reason
+            ),
         )
+
+    def _set_writing(self, writing):
+        for widget in (
+            self.gap,
+            self.assumed_dates,
+            self.reload_button,
+            self.full_settlement,
+            self.table,
+            self.event_table,
+            self.review_table,
+            self.note,
+            self.correction_reason,
+            self.reopen_reason,
+            self.replacement,
+        ):
+            widget.setEnabled(not writing)
+        if writing:
+            for button in (
+                self.confirm,
+                self.dismiss,
+                self.batch,
+                self.withdraw,
+                self.replace,
+                self.reopen,
+                self.review_settlement,
+                self.load_replacements,
+            ):
+                button.setEnabled(False)
+
+    def _write(self, failure_title, success_message, operation, *, cancellable=False):
+        if self._worker is not None or self.pending or self._closed:
+            return
+        self._failure_title = failure_title
+        self._cancellable_write = cancellable
+        self._success_message = success_message if callable(success_message) else lambda _result: success_message
+        self.pending = True
+        self._set_writing(True)
+        self.status.setText(
+            "Saving confirmed pairs… Close requests cancellation before commit; a committed batch is retained."
+            if cancellable
+            else "Saving confirmed action… Close waits for its saved outcome."
+        )
+        self.event_status.setText(self.status.text())
+        self._launch("write", operation)
+
+    def _update_batch(self):
+        from parsetrail.core.v2_transfer_batch import plan_unique_transfers
+
+        self.batch_plan = plan_unique_transfers(self._snapshot)
+        plan = self.batch_plan
+        count = len(plan.pairs)
+        pair_label = "pair" if count == 1 else "pairs"
+        self.batch.setText(f"Review {count} {pair_label} with no other matches…")
+        self.batch.setEnabled(bool(plan.pairs) and not self.pending)
+        self.batch_scope.setText(
+            f"Whole profile; maximum date gap {self.gap.value()} days. "
+            f"Best guess posting dates {'allowed' if self.assumed_dates.isChecked() else 'disabled'}. "
+            f"{count} {pair_label} {'has' if count == 1 else 'have'} no other matches on either leg; "
+            f"{plan.ambiguous_pair_count} competing and {plan.date_blocked_pair_count} date-blocked suggestions excluded. "
+            "These are suggestions; inspect both sources before confirming. No income or spending is created."
+        )
+
+    def _review_batch(self):
+        if self.pending or self._worker is not None or not self.batch.isEnabled():
+            return
+        plan = self.batch_plan
+        review = QDialog(self)
+        review.setWindowTitle("Review transfer pairs with no other matches")
+        review.resize(1000, 650)
+        layout = QVBoxLayout(review)
+        scope = QLabel(
+            self.batch_scope.text()
+            + "\nOnly the pairs below will be posted. Equal amounts and nearby dates do not prove a transfer. "
+            "Uniquely suggested within this scope; review both sources. "
+            "Different source dates retain transfer clearing. Liability repayments do not establish a principal/interest split."
+        )
+        scope.setWordWrap(True)
+        layout.addWidget(scope)
+        table = _history_table(("Type", "Sent", "From", "Received", "To", "Amount"))
+        table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
+        table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
+        table.horizontalHeader().setSectionResizeMode(5, QHeaderView.ResizeToContents)
+        _fill_table(
+            table,
+            tuple(
+                (
+                    p.kind.capitalize(),
+                    _source_date(p.outgoing),
+                    reviewed_identity(p.outgoing),
+                    _source_date(p.incoming),
+                    reviewed_identity(p.incoming),
+                    _money(-p.outgoing.amount_minor),
+                )
+                for p in plan.pairs
+            ),
+        )
+        layout.addWidget(table, 1)
+        details = QPlainTextEdit("Select a pair to inspect both source descriptions and retained identifiers.")
+        details.setReadOnly(True)
+        details.setMaximumHeight(155)
+        layout.addWidget(details)
+        table.itemSelectionChanged.connect(
+            lambda: details.setPlainText(
+                _pair_details(plan.pairs[table.currentRow()]) if 0 <= table.currentRow() < len(plan.pairs) else ""
+            )
+        )
+        buttons = QDialogButtonBox(QDialogButtonBox.Cancel)
+        count = len(plan.pairs)
+        post = buttons.addButton(
+            f"Confirm and post {count} {'pair' if count == 1 else 'pairs'}", QDialogButtonBox.AcceptRole
+        )
+        post.setAutoDefault(False)
+        buttons.button(QDialogButtonBox.Cancel).setDefault(True)
+        post.clicked.connect(review.accept)
+        buttons.rejected.connect(review.reject)
+        layout.addWidget(buttons)
+        if review.exec() != QDialog.Accepted:
+            return
+        preferences = self.workspace.preferences()
+        reason = "Confirmed transfer pairs with no other matches"
+        if self.note.text().strip():
+            reason += ": " + self.note.text().strip()
+        from parsetrail.core.v2_transfer_batch import post_reviewed_transfer_batch
+
+        self._write(
+            "Transfer pairs were not posted",
+            lambda result: (
+                f"{result.posted_pairs} transfer pairs posted; {result.already_posted_pairs} already posted. Both source dates and history retained."
+            ),
+            lambda store, job: post_reviewed_transfer_batch(
+                store, plan, preferences=preferences, reason=reason, cancelled=job.isInterruptionRequested
+            ),
+            cancellable=True,
+        )
+
+    def _stop(self):
+        self._closed = True
+        self._generation += 1
+        self._timer.stop()
+        if self._worker is not None:
+            self._worker.requestInterruption()
+
+    def done(self, result):
+        if self._worker is not None and self._worker.kind == "write":
+            self._worker.requestInterruption()
+            self.status.setText(
+                "Cancellation requested; waiting for the saved outcome. A committed batch is retained."
+                if self._cancellable_write
+                else "Finishing the confirmed action; waiting for its saved outcome."
+            )
+            self.event_status.setText(self.status.text())
+            return
+        self._stop()
+        super().done(result)
+
+    def close(self):
+        if self._worker is not None and self._worker.kind == "write":
+            self.done(QDialog.Rejected)
+            return False
+        self._stop()
+        return super().close()
+
+    def closeEvent(self, event):
+        if self._worker is not None and self._worker.kind == "write":
+            self.done(QDialog.Rejected)
+            event.ignore()
+            return
+        self._stop()
+        super().closeEvent(event)
