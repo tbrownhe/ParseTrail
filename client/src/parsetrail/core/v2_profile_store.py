@@ -1667,13 +1667,16 @@ class V2ProfileStore:
         self._source_interpretation_mutating = False
         self._account_anchors_mutating = False
         self._transfer_verified_sources = None
+        self._transfer_history_cache = None
+        self._transfer_history_epoch = None
 
     @contextmanager
     def _verified_transfer_operation(self, cancelled=None):
         """Reuse verified immutable evidence only within the owning transaction.
 
         Original bytes are streamed and discarded, not retained in the cache.
-        Mutable bindings, journal consumption and review decisions are not cached.
+        Validated history may be reused only at the same SQLite write epoch.
+        Source/binding indexes built during validation never cross that epoch.
         Transfer writes never alter the immutable tables verified by this pass.
         """
         if self._transfer_verified_sources is not None:
@@ -1689,10 +1692,13 @@ class V2ProfileStore:
                 raise TransferBatchCancelled("transfer_batch_cancelled")
             evidence[source_id] = (saved.evidence, saved.suffix)
         self._transfer_verified_sources = evidence
+        self._transfer_history_epoch = self.connection.total_changes
         try:
             yield
         finally:
             self._transfer_verified_sources = None
+            self._transfer_history_cache = None
+            self._transfer_history_epoch = None
 
     @classmethod
     def create(cls, path: Path) -> V2ProfileStore:
@@ -4221,37 +4227,108 @@ class V2ProfileStore:
     def _validate_transfer_pair_source(self, pair: TransferCandidate) -> None:
         self._validate_transfer_movements_source((pair.outgoing, pair.incoming))
 
-    def _validate_transfer_movements_source(self, movements: tuple[TransferMovement, ...]) -> None:
+    def _transfer_source_validation_context(self):
+        """Indexes for one validation pass, after its binding corrections check."""
+        file_assignments = dict(
+            self.connection.execute("SELECT source_sha256,ledger_account_id FROM FileAccountAssertions")
+        )
+        source_assignments, row_assignments = {}, {}
+        for source_id, identity, form, account_id in self.connection.execute(
+            "SELECT source_sha256,source_identity,source_identity_form,ledger_account_id FROM SourceAccountBindings"
+        ):
+            source_assignments.setdefault(source_id, {})[identity, form] = account_id
+        for source_id, row_id, account_id in self.connection.execute(
+            "SELECT o.source_sha256,a.row_id,a.ledger_account_id FROM RowAccountAssignments a "
+            "JOIN SourceObservations o ON o.row_id=a.row_id"
+        ):
+            row_assignments.setdefault(source_id, {})[row_id] = account_id
+        return {
+            "sources": {},
+            "file_assignments": file_assignments,
+            "source_assignments": source_assignments,
+            "row_assignments": row_assignments,
+            "accounts": {
+                account_id: (kind, role, scope)
+                for account_id, kind, role, scope in self.connection.execute(
+                    "SELECT id,kind,role,tracking_scope FROM Accounts"
+                )
+            },
+            "observations": {
+                row_id: values
+                for row_id, *values in self.connection.execute(
+                    "SELECT row_id,source_sha256,row_role,date_role,observed_date,amount_minor FROM SourceObservations"
+                )
+            },
+        }
+
+    def _transfer_source_context(self, source_sha256, context):
+        sources = context["sources"]
+        if source_sha256 not in sources:
+            evidence = (
+                self._transfer_verified_sources[source_sha256][0]
+                if self._transfer_verified_sources is not None and source_sha256 in self._transfer_verified_sources
+                else self.load_import(source_sha256).evidence
+            )
+            sources[source_sha256] = {
+                "evidence": evidence,
+                "rows": {row.row_id: row for row in _rows(evidence)},
+                "asset_scope": _cash_review_scopes(evidence),
+                "liability_scope": {**_card_review_scopes(evidence), **register_review_scopes(evidence)},
+                "bindings": None,
+            }
+        return sources[source_sha256]
+
+    def _transfer_current_bindings(self, source_sha256, context):
+        source = self._transfer_source_context(source_sha256, context)
+        if source["bindings"] is None:
+            # The caller has validated all correction records once for this pass.
+            source["bindings"] = {
+                binding.row_id: binding.ledger_account_id
+                for binding in self._account_bindings_for_evidence(
+                    source_sha256,
+                    source["evidence"],
+                    _decisions=(
+                        context["file_assignments"].get(source_sha256),
+                        context["row_assignments"].get(source_sha256, {}),
+                        context["source_assignments"].get(source_sha256, {}),
+                    ),
+                )
+            }
+        return source["bindings"]
+
+    def _validate_transfer_movements_source(self, movements: tuple[TransferMovement, ...], *, _context=None) -> None:
         for movement in movements:
-            saved = self.load_import(movement.source_sha256)
-            row = next((row for row in _rows(saved.evidence) if row.row_id == movement.row_id), None)
-            account = self.connection.execute(
-                "SELECT kind,role,tracking_scope FROM Accounts WHERE id=?", (movement.account_id,)
-            ).fetchone()
+            if _context is None:
+                evidence = self.load_import(movement.source_sha256).evidence
+                row = next((row for row in _rows(evidence) if row.row_id == movement.row_id), None)
+                account = self.connection.execute(
+                    "SELECT kind,role,tracking_scope FROM Accounts WHERE id=?", (movement.account_id,)
+                ).fetchone()
+            else:
+                source = self._transfer_source_context(movement.source_sha256, _context)
+                evidence = source["evidence"]
+                row = source["rows"].get(movement.row_id)
+                account = _context["accounts"].get(movement.account_id)
             if row is None or account != (movement.account_kind, "financial", movement.tracking_scope):
                 raise ProfileFormatError("transfer_history_integrity")
             candidate = (
                 row.date
                 if movement.account_kind == "asset" and row.date_role == "posting_date"
                 else (
-                    register_posting_date(row)
-                    if saved.evidence.parser_id == REGISTER_PARSER
-                    else posting_date_candidate(row)
+                    register_posting_date(row) if evidence.parser_id == REGISTER_PARSER else posting_date_candidate(row)
                 )
             )
             scope = (
-                _cash_review_scopes(saved.evidence)
+                source["asset_scope" if movement.account_kind == "asset" else "liability_scope"]
+                if _context is not None
+                else _cash_review_scopes(evidence)
                 if movement.account_kind == "asset"
-                else {**_card_review_scopes(saved.evidence), **register_review_scopes(saved.evidence)}
+                else {**_card_review_scopes(evidence), **register_review_scopes(evidence)}
             )
             if (
                 not scope.get(row.row_id, False)
                 or movement.tracking_scope
-                != (
-                    cash_tracking_scope(saved.evidence.parser_id)
-                    if movement.account_kind == "asset"
-                    else "account_total"
-                )
+                != (cash_tracking_scope(evidence.parser_id) if movement.account_kind == "asset" else "account_total")
                 or row.row_role != "activity"
                 or row.components
                 or row.amount.provenance != "observed"
@@ -4261,10 +4338,14 @@ class V2ProfileStore:
                 or candidate is None
                 or candidate.iso != movement.posting_date
                 or candidate.provenance != movement.date_provenance
-                or self.connection.execute(
-                    "SELECT source_sha256,row_role,date_role,observed_date,amount_minor FROM SourceObservations WHERE row_id=?",
-                    (row.row_id,),
-                ).fetchone()
+                or (
+                    tuple(_context["observations"].get(row.row_id, ()))
+                    if _context is not None
+                    else self.connection.execute(
+                        "SELECT source_sha256,row_role,date_role,observed_date,amount_minor FROM SourceObservations WHERE row_id=?",
+                        (row.row_id,),
+                    ).fetchone()
+                )
                 != (movement.source_sha256, row.row_role, row.date_role, row.date.iso, row.amount.minor)
                 or (movement.account_kind == "liability" and movement.amount_minor <= 0)
             ):
@@ -4298,14 +4379,40 @@ class V2ProfileStore:
             "INSERT OR IGNORE INTO Accounts VALUES ('internal:transfer-clearing:USD','Transfer clearing','asset','USD','internal','clearing',NULL,NULL,'account_total')"
         )
 
-    def _transfer_pair_context_current(self, pair: TransferCandidate) -> bool:
+    def _transfer_pair_context_current(self, pair: TransferCandidate, *, _context=None) -> bool:
         for movement in (pair.outgoing, pair.incoming):
-            bindings = {b.row_id: b.ledger_account_id for b in self.account_bindings(movement.source_sha256)}
+            bindings = (
+                {b.row_id: b.ledger_account_id for b in self.account_bindings(movement.source_sha256)}
+                if _context is None
+                else self._transfer_current_bindings(movement.source_sha256, _context)
+            )
             if bindings.get(movement.row_id) != movement.account_id:
                 return False
         return True
 
     def _read_transfer_history(self) -> tuple[tuple[ReviewedTransferEvent, ...], tuple[TransferPairReview, ...]]:
+        # A read transaction cannot observe an external commit. Reuse only the
+        # initial, unwritten operation epoch. Once any local DML occurs, even if
+        # rolled back to a savepoint, validate afresh for the rest of the scope.
+        # In particular never cache a transient, partially mutated history.
+        epoch = self.connection.total_changes
+        scoped = (
+            self._transfer_verified_sources is not None
+            and self.connection.in_transaction
+            and epoch == self._transfer_history_epoch
+        )
+        if scoped and self._transfer_history_cache is not None:
+            cached_epoch, result = self._transfer_history_cache
+            if cached_epoch == epoch:
+                return result
+        result = self._read_transfer_history_uncached()
+        if scoped and self.connection.total_changes == epoch:
+            self._transfer_history_cache = (epoch, result)
+        return result
+
+    def _read_transfer_history_uncached(
+        self,
+    ) -> tuple[tuple[ReviewedTransferEvent, ...], tuple[TransferPairReview, ...]]:
         self._validate_journal_retirements()
         invalidated_pair_reviews = {
             revision
@@ -4351,6 +4458,18 @@ class V2ProfileStore:
         inactive = frozenset(key for (key,) in self.connection.execute(_INACTIVE_JOURNAL_SQL))
         retired = dict(self.connection.execute("SELECT original_key,reason FROM JournalRetirements"))
         accounts = self._ledger_accounts()
+        source_context = self._transfer_source_validation_context()
+        journals_by_event = {}
+        for key, (entry, payload) in decoded_journals.items():
+            if entry.origin != "reversal":
+                journals_by_event.setdefault(entry.event_id, {})[key] = payload
+        allocations_by_entry, active_usage_by_row = {}, {}
+        for key, row_id, amount in self.connection.execute(
+            "SELECT entry_key,row_id,amount_minor FROM JournalAllocations"
+        ):
+            allocations_by_entry.setdefault(key, {})[row_id] = amount
+            if key not in inactive:
+                active_usage_by_row.setdefault(row_id, []).append((key, amount))
         for event_id, sequence, out_id, in_id, payload, versions, reason, basis, checksum, created in event_rows:
             if (
                 len(payload) > MAX_SETTLEMENT_PAYLOAD
@@ -4368,7 +4487,7 @@ class V2ProfileStore:
                 validate_settlement(settlement)
             except (TypeError, ValueError, KeyError, AttributeError, RecursionError):
                 raise ProfileFormatError("transfer_history_integrity") from None
-            self._validate_transfer_movements_source(settlement.movements)
+            self._validate_transfer_movements_source(settlement.movements, _context=source_context)
             self._validate_settlement_categories(settlement)
             self._validate_expected_destination(settlement.expected_destination)
             if (
@@ -4392,11 +4511,7 @@ class V2ProfileStore:
                 expected_manifest = [[entry.key, _digest(_journal_payload(entry).encode())] for entry in expected]
                 if manifest != expected_manifest:
                     raise ValueError
-                event_entries = {
-                    key: payload
-                    for key, (entry, payload) in decoded_journals.items()
-                    if entry.event_id == event_id and entry.origin != "reversal"
-                }
+                event_entries = journals_by_event.get(event_id, {})
                 if set(event_entries) != {entry.key for entry in expected}:
                     raise ValueError
                 observations = {
@@ -4407,11 +4522,7 @@ class V2ProfileStore:
                     if event_entries[entry.key] != _journal_payload(entry):
                         raise ValueError
                     validate_entry(entry, accounts, observations, {})
-                    indexed = dict(
-                        self.connection.execute(
-                            "SELECT row_id,amount_minor FROM JournalAllocations WHERE entry_key=?", (entry.key,)
-                        )
-                    )
+                    indexed = allocations_by_entry.get(entry.key, {})
                     allocated = {a.observation_id: a.amount_minor for p in entry.postings for a in p.allocations}
                     if indexed != allocated:
                         raise ValueError
@@ -4423,7 +4534,7 @@ class V2ProfileStore:
                 if any(entry.key in inactive for entry in expected):
                     raise ProfileFormatError("transfer_history_integrity")
                 for movement in settlement.movements:
-                    bindings = {b.row_id: b.ledger_account_id for b in self.account_bindings(movement.source_sha256)}
+                    bindings = self._transfer_current_bindings(movement.source_sha256, source_context)
                     if bindings.get(movement.row_id) != movement.account_id:
                         raise ProfileFormatError("transfer_history_integrity")
                     expected_usage = [
@@ -4433,10 +4544,7 @@ class V2ProfileStore:
                         for allocation in posting.allocations
                         if allocation.observation_id == movement.row_id
                     ]
-                    actual_usage = self.connection.execute(
-                        f"SELECT entry_key,amount_minor FROM JournalAllocations WHERE row_id=? AND entry_key NOT IN ({_INACTIVE_JOURNAL_SQL})",
-                        (movement.row_id,),
-                    ).fetchall()
+                    actual_usage = active_usage_by_row.get(movement.row_id, [])
                     if actual_usage != expected_usage:
                         raise ProfileFormatError("transfer_history_integrity")
             else:
@@ -4505,7 +4613,7 @@ class V2ProfileStore:
             ):
                 raise ProfileFormatError("transfer_history_integrity")
             pair = _decode_transfer_pair(payload)
-            self._validate_transfer_pair_source(pair)
+            self._validate_transfer_movements_source((pair.outgoing, pair.incoming), _context=source_context)
             if (
                 out_id != pair.outgoing.row_id
                 or in_id != pair.incoming.row_id
@@ -4526,7 +4634,8 @@ class V2ProfileStore:
                     reason,
                     created,
                     checksum,
-                    revision not in invalidated_pair_reviews and self._transfer_pair_context_current(pair),
+                    revision not in invalidated_pair_reviews
+                    and self._transfer_pair_context_current(pair, _context=source_context),
                 )
             )
         return tuple(reversed(events)), tuple(reviews)

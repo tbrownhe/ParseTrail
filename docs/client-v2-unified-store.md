@@ -160,6 +160,11 @@ evidence within their owning SQLite transaction. Every original/declaration/
 evidence/inventory is validated at operation start; parsed evidence is released
 unconditionally afterward. Mutable assignments, journal/history, lifecycle and
 consumption remain authoritative. No process-global source trust cache is created.
+History validation builds per-pass source/binding, event/journal and allocation
+indexes instead of scanning the same records for each event. Its complete result
+may be reused only inside the owning transaction before any local write. After
+the first write, including one rolled back to a savepoint, subsequent history
+checks validate afresh; all operation state is cleared on success or failure.
 Nearby-source Boolean guards iterate lazily in the existing date/row order and
 skip contiguous same-source runs; candidate policy, full enumeration and review
 requirements do not change.

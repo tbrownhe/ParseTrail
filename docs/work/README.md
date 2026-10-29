@@ -10,6 +10,7 @@ outside the current board; use the relevant context, not historical logs.
 
 | Record | Roadmap scope | Implementation / evidence |
 | --- | --- | --- |
+| [Populated transfer performance](2026-10-28-transfer-populated-profile-performance.md) | V2-4/5/UX | Indexed transaction-scoped history validation; current-demo read-only parity, realistic posted-history/native checks and same-profile public runtime verified. |
 | [Transfer performance and register review](2026-10-27-transfer-performance-register-review.md) | V2-4/5/UX | Responsive one-pass transfers, explicit atomic unique-match batch, repayment/history navigation and category management implemented; integrated/native/independent checks and public runtime handoff verified. |
 | [Accountless review performance and associations](2026-10-27-accountless-review-performance.md) | V2-3/4/UX | Zero-read row selection, explicit row-based document association and activation refresh implemented; integrated/native/independent checks and same-profile runtime handoff passed. |
 | [Embedded originals and account context](2026-10-27-embedded-originals-account-context.md) | V2-3/4/6/UX | Memory-only PDF/CSV, selected document account context, short default names and discard protection implemented; native rendering, frozen component, independent review and public runtime handoff verified. |

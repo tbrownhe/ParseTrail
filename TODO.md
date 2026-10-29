@@ -6,15 +6,14 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None. [Transfer performance and register review](docs/work/2026-10-27-transfer-performance-register-review.md)
-completed development, integrated/native performance checks and independent
-review; a new runtime preserves the owner's existing saved review state.
+None. The [populated transfer performance packet](docs/work/2026-10-28-transfer-populated-profile-performance.md)
+is implemented and verified; the updated demo retains the existing saved state.
 
 ## Recommended next packets (unselected)
 
 1. [Review efficiency and remaining polish](docs/work/2026-10-26-client-ux-performance-evaluation.md#follow-up-scope):
    separately designed multi-row confirmation, routine-note ergonomics,
-   focused specialized reviews and substantially posted-history performance.
+   focused specialized reviews and broader mixed-workload performance.
 
 ## Remaining review and action gates
 
@@ -34,10 +33,11 @@ they are not selected by this closeout.
 
 ## Most recent product packet
 
-[Inline account creation](docs/work/2026-10-27-inline-account-creation.md) adds
-editable document-backed account suggestions directly within Review. Its public
-versioned runtime opens the same archive-demo profile without resetting review
-state. Owner accounting review and supported-platform/release gates remain separate.
+[Populated transfer performance](docs/work/2026-10-28-transfer-populated-profile-performance.md)
+removes repeated binding/history scans and verifies complete read-only output
+parity against the current demo. Its public versioned runtime opens the same
+archive-demo profile without resetting review state. Owner accounting review and
+supported-platform/release gates remain separate.
 
 ## Decisions and gates
 
