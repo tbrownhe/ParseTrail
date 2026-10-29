@@ -5182,6 +5182,100 @@ class V2ProfileStore:
         finally:
             self._transfer_mutating = False
 
+    def post_reviewed_transfer_selection(self, selection, *, preferences: V2Preferences, reason: str, cancelled=None):
+        """Post one explicitly reviewed full-window selection atomically."""
+        from parsetrail.core.v2_transfer_batch import TransferBatchCancelled, TransferBatchResult, profile_identity
+        from parsetrail.core.v2_transfer_planning import (
+            pair_key,
+            plan_transfers,
+            select_transfer_plan,
+            selection_reason,
+            validate_selection,
+        )
+
+        validate_selection(selection)
+        plan = selection.plan
+        if type(preferences) is not V2Preferences or preferences != plan.preferences:
+            raise ProfileFormatError("transfer_batch_preferences_changed")
+        reason = self._transfer_write_start(selection_reason(selection, reason))
+
+        def check_cancelled():
+            if cancelled is not None and cancelled():
+                raise TransferBatchCancelled("transfer_batch_cancelled")
+
+        try:
+            check_cancelled()
+            if profile_identity(self) != plan.profile_sha256:
+                raise ProfileFormatError("transfer_batch_profile_changed")
+            with self._verified_transfer_operation(cancelled):
+                events, reviews = self._read_transfer_history()
+                active = {
+                    pair_key(event.pair): event
+                    for event in events
+                    if event.status == "active" and event.pair is not None
+                }
+                existing = tuple(active.get(pair_key(pair)) for pair in selection.pairs)
+                retry = all(event is not None for event in existing)
+                releasing = ()
+                if retry:
+                    for pair, event in zip(selection.pairs, existing, strict=True):
+                        request = self.connection.execute(
+                            "SELECT request_basis FROM TransferEvents WHERE event_id=?", (event.event_id,)
+                        ).fetchone()[0]
+                        if event.pair != pair or event.reason != reason or request != plan.basis_sha256:
+                            raise ProfileFormatError("transfer_conflicts_with_prior_decision")
+                    releasing = tuple(key for event in existing for key in event.entry_keys)
+                    basis = plan.basis_sha256
+                else:
+                    basis = self._require_transfer_basis(plan.basis_sha256, required=True)
+                current = TransferReviewSnapshot(
+                    self._transfer_candidates(
+                        preferences=preferences, max_day_gap=plan.max_day_gap, releasing_entry_keys=releasing
+                    ),
+                    events,
+                    reviews,
+                    basis,
+                    preferences,
+                    plan.max_day_gap,
+                    plan.profile_sha256,
+                )
+                rebuilt = plan_transfers(current, cancelled=cancelled)
+                if (
+                    rebuilt != plan
+                    or select_transfer_plan(rebuilt, tuple(pair_key(p) for p in selection.pairs)) != selection
+                ):
+                    raise ProfileFormatError("transfer_planning_graph_changed")
+                check_cancelled()
+                if retry:
+                    self.connection.execute("COMMIT")
+                    return TransferBatchResult(tuple(event.event_id for event in existing), 0, len(existing))
+                self._transfer_mutating = True
+                consumed = self._active_consumed()
+                if any(pair.outgoing.posting_date != pair.incoming.posting_date for pair in selection.pairs):
+                    self._ensure_transfer_clearing()
+                accounts = self._ledger_accounts()
+                sequence = self.connection.execute("SELECT COALESCE(MAX(sequence),0)+1 FROM TransferEvents").fetchone()[
+                    0
+                ]
+                event_ids = []
+                for offset, pair in enumerate(selection.pairs):
+                    check_cancelled()
+                    event_ids.append(
+                        self._insert_validated_transfer_pair(
+                            pair, reason, basis, consumed=consumed, accounts=accounts, sequence=sequence + offset
+                        )
+                    )
+                self._transfer_mutating = False
+                self._read_transfer_history()
+                check_cancelled()
+                self.connection.execute("COMMIT")
+                return TransferBatchResult(tuple(event_ids), len(event_ids))
+        except BaseException:
+            self.connection.execute("ROLLBACK")
+            raise
+        finally:
+            self._transfer_mutating = False
+
     def post_reviewed_transfer(
         self,
         outgoing_row_id: str,

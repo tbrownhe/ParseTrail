@@ -179,6 +179,29 @@ journal/allocation/event/clearing row. Exact retries report already-posted event
 withdrawal or changed context cannot silently restore a prior batch. Both source
 dates and dated clearing remain exact; repayments create no second spending.
 
+Full-window transfer planning additionally groups the complete selected-horizon
+graph into connected components. Non-estimated both-leg-unique pairs are Ready;
+date-only conflict proposals are tentative and initially unchecked. Each bounded
+component maximizes total `maximum_gap + 1 - pair_gap`, with unmatched score zero
+and no cardinality tie-break. Only edges present in every optimum are proposed;
+equal alternatives stay unresolved. Estimated-date competitors remain in the
+graph but their conflict component is not date-ranked. Components exceeding 64
+legs or 512 edges retain all candidates for explicit manual review. Source
+descriptions are displayed, not invented into shared transfer-reference facts.
+
+Selected planning batches freeze the whole graph/rule, scope, basis, profile,
+preferences and exact compatible pair set. Selection is restricted to Ready,
+forced date proposals or explicitly permitted isolated estimated-date pairs;
+other alternatives retain individual review. A single manifest confirmation grants
+posting of that set after fresh validation under the write lock. Rule, scope and
+selection identity remain in immutable reasons; no planning action posts money.
+This preparation adds no unattended-posting or saved-rule policy. Unknown purpose
+and missing evidence remain unknown even when the ranking has a unique optimum.
+Exact retries fully verify history and reconstruct the original horizon while
+releasing only the selected active entries for comparison. Changed competitors,
+withdrawal or replacement cannot recreate the old selection. Non-graph metadata
+may permit an otherwise identical verified no-write retry.
+
 The transfer GUI loads/updates through retained worker-owned connections, clears
 stale actions while requests run and captures confirmation context before modal
 questions. Ordinary confirmed writes finish to a known saved outcome on Close;
