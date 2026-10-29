@@ -243,6 +243,16 @@ window. Row selection and account choices use a cached review snapshot; saving
 still checks current accounting/history protections.
 
 **Review transfers** loads matches in the background and coalesces date-gap edits.
+Its default **Plan transfers** page prepares the complete selected date window.
+Ready pairs have no other candidate on either leg in that window; only pairs
+without estimated dates are initially included. Suggested pairs use the best
+overall date fit within a conflicting group and start unchecked. Dates alone do
+not prove a transfer. Equally ranked alternatives, estimated-date conflicts and
+groups too large to rank remain available for manual review in **All matches**.
+Select the pairs to include, inspect both sources and review the exact batch
+before one **Confirm and post** action. Planning and selection never post money;
+best-guess posting-date permission remains a separate choice.
+
 **Review pairs with no other matches** shows a final list of pairs that have no
 competing match on either side in the current date window and reviewed context.
 The list includes both accounts, source dates and their qualifications. Explicit

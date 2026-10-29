@@ -91,6 +91,9 @@ The [populated transfer performance follow-up](docs/work/2026-10-28-transfer-pop
 removes repeated history/binding scans within a verified transaction; actual-demo
 read-only parity and representative posted-history checks cover the previously
 missed workload. Broader review polish and platform/release gates remain separate.
+The [full-window planning packet](docs/work/2026-10-28-transfer-planning.md) adds
+automatic preparation, explained tentative conflict proposals and one explicit
+confirmation of selected compatible pairs; unresolved alternatives remain pending.
 
 ### Parser and catalog track
 

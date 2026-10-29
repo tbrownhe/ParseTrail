@@ -6,8 +6,8 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None. The [populated transfer performance packet](docs/work/2026-10-28-transfer-populated-profile-performance.md)
-is implemented and verified; the updated demo retains the existing saved state.
+None. [Full-window transfer planning](docs/work/2026-10-28-transfer-planning.md)
+is implemented and verified; the new public demo runtime preserves saved state.
 
 ## Recommended next packets (unselected)
 
@@ -33,11 +33,11 @@ they are not selected by this closeout.
 
 ## Most recent product packet
 
-[Populated transfer performance](docs/work/2026-10-28-transfer-populated-profile-performance.md)
-removes repeated binding/history scans and verifies complete read-only output
-parity against the current demo. Its public versioned runtime opens the same
-archive-demo profile without resetting review state. Owner accounting review and
-supported-platform/release gates remain separate.
+[Full-window transfer planning](docs/work/2026-10-28-transfer-planning.md) prepares
+Ready and tentative Suggested pairs, leaves ties pending and posts an explicitly
+selected batch after one final confirmation. Its public versioned runtime opens
+the same archive-demo profile without resetting review state. Owner accounting
+review and supported-platform/release gates remain separate.
 
 ## Decisions and gates
 

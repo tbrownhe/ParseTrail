@@ -30,6 +30,13 @@ from PySide6.QtWidgets import (
 )
 
 from parsetrail.core.v2_profile_store import TransferCandidate, V2ProfileStore
+from parsetrail.core.v2_transfer_planning import (
+    max_user_reason_length,
+    pair_key,
+    plan_transfers,
+    post_reviewed_transfer_selection,
+    select_transfer_plan,
+)
 from parsetrail.core.v2_workspace import V2Workspace
 from parsetrail.gui.v2_cash_activity_review import _money
 from parsetrail.gui.v2_settlement_review import (
@@ -38,8 +45,20 @@ from parsetrail.gui.v2_settlement_review import (
     reviewed_identity,
     settlement_details,
 )
+from parsetrail.gui.v2_transfer_plan import PLAN_REASON, V2TransferPlanPage, V2TransferSelectionManifest
 
 _TRANSFER_WORKERS: set[QThread] = set()
+
+
+def _planning_error(exc):
+    return {
+        "transfer_planning_graph_changed": "Transfer matches or saved account context changed. No pairs were posted. Review the refreshed plan.",
+        "transfer_planning_plan_invalid": "This transfer plan is no longer valid. Reload saved state and review it again.",
+        "transfer_planning_selection_invalid": "These selected pairs cannot be posted together. Review the refreshed plan.",
+        "transfer_planning_reason_too_long": "The posting note is too long for the retained review record. Shorten it and retry.",
+        "transfer_planning_snapshot_invalid": "The saved transfer context is unavailable. Reload saved state to retry.",
+        "transfer_planning_graph_invalid": "The saved transfer evidence could not be validated. Reload saved state to retry.",
+    }.get(str(exc), str(exc))
 
 
 def _finish_transfer_workers():
@@ -70,6 +89,10 @@ class _TransferWorker(QThread):
     def run(self):
         try:
             if self.isInterruptionRequested():
+                return
+            if self.kind == "prepare":
+                self.result = self.operation(None, self)
+                self.completed = True
                 return
             with V2ProfileStore.open(self.profile, read_only=self.kind != "write") as store:
                 if self.kind != "write":
@@ -152,6 +175,7 @@ class V2TransferReview(QDialog):
         self._requested = False
         self.pending = True
         self._snapshot = None
+        self.window_plan = None
         self._replacement_cache = {}
         self._selection_ids = self._event_id = None
         self._completion_message = ""
@@ -176,10 +200,8 @@ class V2TransferReview(QDialog):
         profile_row.addWidget(self.profile_path)
         layout.addLayout(profile_row)
         note = QLabel(
-            "Equal and opposite movements are suggestions only. Confirm the pair from both sources. "
-            "A liability payment covers card and loan-register repayments; it moves cash to the whole liability and does not add spending or establish a principal/interest split. "
-            "Different source dates use transfer clearing. Corrections withdraw or replace the whole confirmed event. "
-            "Dismissal changes suggestions only; its evidence remains pending. Use the full settlement review for explicit fees, multiple or partial receipts, or an owned outflow awaiting receipt evidence."
+            "Review both sources before confirming a transfer. No income or spending is created. "
+            "Liability repayments do not establish a principal/interest split. Different source dates retain transfer clearing."
         )
         note.setWordWrap(True)
         layout.addWidget(note)
@@ -200,7 +222,11 @@ class V2TransferReview(QDialog):
         controls.addStretch()
         layout.addLayout(controls)
         self.tabs = QTabWidget()
-        suggestions = QWidget()
+        self.plan_page = V2TransferPlanPage(date_label=_source_date, pair_details=_pair_details, parent=self)
+        self.plan_page.review_requested.connect(self._review_selected_plan)
+        self.plan_page.alternatives_requested.connect(self._inspect_plan_alternatives)
+        self.tabs.addTab(self.plan_page, "Plan transfers")
+        suggestions = self.matches_page = QWidget()
         suggestions_layout = QVBoxLayout(suggestions)
         self.table = QTableWidget(0, len(self.HEADERS))
         self.table.setHorizontalHeaderLabels(self.HEADERS)
@@ -227,7 +253,7 @@ class V2TransferReview(QDialog):
         self.confirm.clicked.connect(self._post)
         self.batch = QPushButton("Review pairs with no other matches…")
         self.batch.clicked.connect(self._review_batch)
-        self.batch.setDefault(True)
+        self.batch.setAutoDefault(False)
         self.batch_scope = QLabel()
         self.batch_scope.setWordWrap(True)
         suggestions_layout.addWidget(self.batch_scope)
@@ -239,11 +265,15 @@ class V2TransferReview(QDialog):
         suggestion_actions.addWidget(self.dismiss)
         suggestion_actions.addWidget(self.batch)
         suggestions_layout.addLayout(suggestion_actions)
-        self.tabs.addTab(suggestions, "Suggestions")
+        self.tabs.addTab(suggestions, "All matches")
         self.full_settlement = QPushButton("Review transfer fees / partial settlements…")
         self.full_settlement.clicked.connect(self._new_settlement)
         layout.addWidget(self.full_settlement)
         self._build_history_tabs()
+        self.tabs.currentChanged.connect(
+            lambda: self.plan_page.review.setDefault(self.tabs.currentWidget() is self.plan_page)
+        )
+        self.plan_page.review.setDefault(True)
         layout.addWidget(self.tabs)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         buttons.rejected.connect(self.reject)
@@ -251,7 +281,7 @@ class V2TransferReview(QDialog):
         self.refresh()
 
     def _build_history_tabs(self):
-        confirmed = QWidget()
+        confirmed = self.events_page = QWidget()
         layout = QVBoxLayout(confirmed)
         self.event_table = _history_table(
             ("State", "Type", "Sent", "From", "Received", "To", "Amount", "Legs", "Reason")
@@ -296,7 +326,7 @@ class V2TransferReview(QDialog):
         self.event_status.setWordWrap(True)
         layout.addWidget(self.event_status)
         self.tabs.addTab(confirmed, "Confirmed events")
-        reviews = QWidget()
+        reviews = self.reviews_page = QWidget()
         layout = QVBoxLayout(reviews)
         scope = QLabel(
             "Suggestion decisions retain their reason and source/account context. Reopening changes no money or allocations."
@@ -370,6 +400,8 @@ class V2TransferReview(QDialog):
         self.pending = True
         self._read_error = ""
         self._snapshot = None
+        self.window_plan = None
+        self.plan_page.clear("Finding transfers across the full profile… Draft Include choices reset on reload.")
         self.basis = None
         self._replacement_cache.clear()
         self.candidates, self.events, self.pair_reviews = (), (), ()
@@ -393,12 +425,20 @@ class V2TransferReview(QDialog):
         self.assumed_dates.blockSignals(True)
         self.assumed_dates.setChecked(preferences.allow_assumed_posting_dates)
         self.assumed_dates.blockSignals(False)
-        self._launch(
-            "read", lambda store, _job: store.transfer_review_snapshot(preferences=preferences, max_day_gap=gap)
-        )
 
-    def _launch(self, kind, operation):
-        worker = _TransferWorker(self.workspace.profile_path, kind, self._generation, operation)
+        def read(store, job):
+            snapshot = store.transfer_review_snapshot(preferences=preferences, max_day_gap=gap)
+            plan = plan_transfers(snapshot, cancelled=job.isInterruptionRequested)
+            note_limit = 200
+            if plan.selectable_pairs:
+                sample = select_transfer_plan(plan, (pair_key(plan.selectable_pairs[0]),))
+                note_limit = max_user_reason_length(sample) - len(PLAN_REASON) - 2
+            return snapshot, plan, note_limit
+
+        self._launch("read", read)
+
+    def _launch(self, kind, operation, *, profile=None):
+        worker = _TransferWorker(profile or self.workspace.profile_path, kind, self._generation, operation)
         self._worker = worker
         _TRANSFER_WORKERS.add(worker)
         worker.finished.connect(self._finished)
@@ -430,14 +470,20 @@ class V2TransferReview(QDialog):
             self._set_writing(False)
             self.basis = self.event_basis = None
             self._snapshot = None
-            self._read_error = f"Transfer review unavailable. Reload to retry: {worker.error}"
+            self._read_error = f"Transfer review unavailable. Reload to retry: {_planning_error(worker.error)}"
             self.status.setText(self._read_error)
             self.event_status.setText(self.status.text())
             self.batch_scope.setText("Saved state unavailable; posting is disabled.")
+            self.plan_page.set_available(False)
+            self.plan_page.status.setText(self._read_error)
         elif current and worker.result is not None:
             self.pending = False
             self._set_writing(False)
-            if worker.kind == "replacement":
+            if worker.kind == "prepare":
+                selection, context = worker.result
+                self.plan_page.set_available(True)
+                self._show_plan_manifest(selection, context)
+            elif worker.kind == "replacement":
                 event_id, snapshot = worker.result
                 if snapshot.basis_sha256 != self.basis:
                     self._completion_message = "Transfer context changed. Inspect the reloaded state before confirming."
@@ -447,7 +493,12 @@ class V2TransferReview(QDialog):
                     if self.selected_event is not None and self.selected_event.event_id == event_id:
                         self._event_selected()
             else:
-                self._apply_snapshot(worker.result)
+                snapshot, self.window_plan, note_limit = worker.result
+                self._apply_snapshot(snapshot)
+                self.plan_page.set_plan(self.window_plan, note_limit=note_limit)
+                if self._completion_message:
+                    self.plan_page.status.setText(self._completion_message)
+                self._completion_message = ""
         elif not current and worker.profile != Path(self.workspace.profile_path):
             self.refresh()
         if self._requested and not self._timer.isActive():
@@ -542,17 +593,18 @@ class V2TransferReview(QDialog):
         self._review_selected()
         self._update_batch()
         if self._focus_row_id is not None:
+            self.tabs.setCurrentWidget(self.matches_page)
             row_id, self._focus_row_id = self._focus_row_id, None
             for index, pair in enumerate(self.candidates):
                 if row_id in _pair_key(pair):
-                    self.tabs.setCurrentIndex(0)
+                    self.tabs.setCurrentWidget(self.matches_page)
                     self.table.selectRow(index)
                     self.table.scrollToItem(self.table.item(index, 0))
                     break
             else:
                 for index, event in enumerate(self.events):
                     if row_id in (event.settlement.outgoing.row_id, *(m.row_id for m in event.settlement.incoming)):
-                        self.tabs.setCurrentIndex(1)
+                        self.tabs.setCurrentWidget(self.events_page)
                         self.event_table.selectRow(index)
                         self.event_table.scrollToItem(self.event_table.item(index, 0))
                         break
@@ -565,7 +617,6 @@ class V2TransferReview(QDialog):
         if self._completion_message:
             self.status.setText(self._completion_message)
             self.event_status.setText(self._completion_message)
-            self._completion_message = ""
 
     def _load_replacements(self):
         event = self.selected_event
@@ -753,7 +804,7 @@ class V2TransferReview(QDialog):
         )
 
     def _failed(self, title, exc):
-        message = str(exc)
+        message = _planning_error(exc)
         if "changed_since_selection" in message:
             message = "The selected transfer context changed. Inspect the reloaded state before confirming again."
         else:
@@ -871,6 +922,7 @@ class V2TransferReview(QDialog):
         )
 
     def _set_writing(self, writing):
+        self.plan_page.set_available(not writing and not self.pending)
         for widget in (
             self.gap,
             self.assumed_dates,
@@ -898,8 +950,12 @@ class V2TransferReview(QDialog):
             ):
                 button.setEnabled(False)
 
-    def _write(self, failure_title, success_message, operation, *, cancellable=False):
+    def _write(self, failure_title, success_message, operation, *, cancellable=False, profile=None):
         if self._worker is not None or self.pending or self._closed:
+            return
+        if profile is not None and Path(profile) != Path(self.workspace.profile_path):
+            self._completion_message = "The profile changed; no pairs were posted. Review the refreshed plan."
+            self.refresh()
             return
         self._failure_title = failure_title
         self._cancellable_write = cancellable
@@ -912,7 +968,8 @@ class V2TransferReview(QDialog):
             else "Saving confirmed action… Close waits for its saved outcome."
         )
         self.event_status.setText(self.status.text())
-        self._launch("write", operation)
+        self.plan_page.status.setText(self.status.text())
+        self._launch("write", operation, profile=profile)
 
     def _update_batch(self):
         from parsetrail.core.v2_transfer_batch import plan_unique_transfers
@@ -929,6 +986,93 @@ class V2TransferReview(QDialog):
             f"{count} {pair_label} {'has' if count == 1 else 'have'} no other matches on either leg; "
             f"{plan.ambiguous_pair_count} competing and {plan.date_blocked_pair_count} date-blocked suggestions excluded. "
             "These are suggestions; inspect both sources before confirming. No income or spending is created."
+        )
+
+    def _inspect_plan_alternatives(self, pair):
+        self.tabs.setCurrentWidget(self.matches_page)
+        key = pair_key(pair)
+        for index, candidate in enumerate(self.candidates):
+            if pair_key(candidate) == key:
+                self.table.selectRow(index)
+                self.table.scrollToItem(self.table.item(index, 0))
+                break
+
+    def _review_selected_plan(self):
+        if (
+            self.pending
+            or self._worker is not None
+            or self.window_plan is None
+            or not self.plan_page.review.isEnabled()
+        ):
+            return
+        # Every reviewed value is captured before entering either nested modal
+        # confirmation or background preparation. Checkbox changes are drafts.
+        plan = self.window_plan
+        keys = self.plan_page.selected_keys()
+        preferences = self.workspace.preferences()
+        profile = Path(self.workspace.profile_path)
+        generation = self._generation
+        reason = PLAN_REASON
+        if self.plan_page.note.text().strip():
+            reason += ": " + self.plan_page.note.text().strip()
+        context = (preferences, profile, generation, reason, self.plan_page.scope.text(), self.plan_page.row_lookup())
+        self.pending = True
+        self._set_writing(True)
+        self.plan_page.status.setText(f"Preparing review of {len(keys)} selected pairs…")
+        self._launch("prepare", lambda _store, _job: (select_transfer_plan(plan, keys), context), profile=profile)
+
+    def _plan_context_current(self, context):
+        preferences, profile, generation, _reason, _scope, _rows = context
+        try:
+            return (
+                not self._closed
+                and profile == Path(self.workspace.profile_path)
+                and generation == self._generation
+                and preferences == self.workspace.preferences()
+            )
+        except (ValueError, OSError):
+            return False
+
+    def _show_plan_manifest(self, selection, context):
+        preferences, profile, _generation, reason, scope, rows = context
+        if not self._plan_context_current(context):
+            self._completion_message = (
+                "The profile, date window or date policy changed; no pairs were posted. Review the refreshed plan."
+            )
+            self.refresh()
+            return
+        if len(reason) > max_user_reason_length(selection):
+            self.plan_page.status.setText(
+                "The posting note is too long for the retained review record. Shorten it and retry."
+            )
+            return
+        manifest = V2TransferSelectionManifest(
+            selection,
+            rows,
+            scope=scope,
+            reason=reason,
+            date_label=_source_date,
+            pair_details=_pair_details,
+            parent=self,
+        )
+        if manifest.exec() != QDialog.Accepted:
+            return
+        if not self._plan_context_current(context):
+            self._completion_message = (
+                "The profile, date window or date policy changed; no pairs were posted. Review the refreshed plan."
+            )
+            self.refresh()
+            return
+        self._write(
+            "Selected transfer plan was not posted",
+            lambda result: (
+                f"{result.posted_pairs} selected transfer pairs posted; {result.already_posted_pairs} already posted. Both source dates and history retained."
+            ),
+            lambda store, job: post_reviewed_transfer_selection(
+                store, selection, preferences=preferences, reason=reason, cancelled=job.isInterruptionRequested
+            ),
+            cancellable=True,
+            profile=profile,
         )
 
     def _review_batch(self):
@@ -1020,6 +1164,7 @@ class V2TransferReview(QDialog):
                 else "Finishing the confirmed action; waiting for its saved outcome."
             )
             self.event_status.setText(self.status.text())
+            self.plan_page.status.setText(self.status.text())
             return
         self._stop()
         super().done(result)

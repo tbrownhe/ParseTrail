@@ -152,6 +152,13 @@ evidence, not confirmed links. Resolve multiple matches, duplicates, fees,
 partial settlements, and multiple-leg transfers before posting. A match never
 overwrites imported dates or amounts.
 
+Automatic preparation considers the complete selected date window before ranking
+conflicts. A uniquely ranked date-based assignment remains tentative; appearance
+order cannot break ties or establish financial purpose. Estimated-date permission
+is independent. The user reviews and explicitly confirms an exact compatible
+selection before atomic posting; planning and checkbox selection make no ledger
+entries. The planning rule and selection identity remain in reviewed history.
+
 Unknown purpose can remain a draft; where representing a known account movement
 requires a posted entry, use an explicitly identified suspense account with an
 unresolved review state. The 2.x accounting policy must specify its account class

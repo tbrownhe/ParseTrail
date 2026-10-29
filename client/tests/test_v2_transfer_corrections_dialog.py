@@ -108,7 +108,7 @@ def test_whole_event_withdrawal_keeps_dates_and_releases_all_rows(tmp_path, app,
     monkeypatch.setattr(QMessageBox, "question", confirm)
     dialog = _dialog(profile)
     try:
-        dialog.tabs.setCurrentIndex(1)
+        dialog.tabs.setCurrentWidget(dialog.events_page)
         dialog.event_table.selectRow(0)
         dialog.load_replacements.click()
         wait_for_transfers(dialog)
