@@ -6,8 +6,8 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None. [Full-window transfer planning](docs/work/2026-10-28-transfer-planning.md)
-is implemented and verified; the new public demo runtime preserves saved state.
+None. [Transfer review recovery](docs/work/2026-10-31-transfer-review-recovery.md)
+is implemented and verified; the updated demo preserves saved matches/history.
 
 ## Recommended next packets (unselected)
 
@@ -33,11 +33,11 @@ they are not selected by this closeout.
 
 ## Most recent product packet
 
-[Full-window transfer planning](docs/work/2026-10-28-transfer-planning.md) prepares
-Ready and tentative Suggested pairs, leaves ties pending and posts an explicitly
-selected batch after one final confirmation. Its public versioned runtime opens
-the same archive-demo profile without resetting review state. Owner accounting
-review and supported-platform/release gates remain separate.
+[Transfer review recovery](docs/work/2026-10-31-transfer-review-recovery.md) adds
+direct manual resolution of unresolved pairs, visible correction prerequisites
+and profile-scoped confirmations. Its public versioned runtime opens the same
+archive-demo profile without resetting review state. Owner accounting review and
+supported-platform/release gates remain separate.
 
 ## Decisions and gates
 

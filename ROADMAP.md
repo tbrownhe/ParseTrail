@@ -94,6 +94,9 @@ missed workload. Broader review polish and platform/release gates remain separat
 The [full-window planning packet](docs/work/2026-10-28-transfer-planning.md) adds
 automatic preparation, explained tentative conflict proposals and one explicit
 confirmation of selected compatible pairs; unresolved alternatives remain pending.
+The [transfer review recovery follow-up](docs/work/2026-10-31-transfer-review-recovery.md)
+makes manual resolution and correction prerequisites explicit while retaining
+the same reviewed accounting history and profile-scoped confirmation safeguards.
 
 ### Parser and catalog track
 

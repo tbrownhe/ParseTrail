@@ -10,6 +10,7 @@ outside the current board; use the relevant context, not historical logs.
 
 | Record | Roadmap scope | Implementation / evidence |
 | --- | --- | --- |
+| [Transfer review recovery](2026-10-31-transfer-review-recovery.md) | V2-4/5/UX | Direct unresolved-pair review, visible correction prerequisites and profile-bound confirmations; integrated/native/independent checks and same-profile public runtime verified. |
 | [Full-window transfer planning](2026-10-28-transfer-planning.md) | V2-4/5/UX | Full-window proposals, explicit conflicts and one atomic selected confirmation; integrated/native/independent checks and same-profile public runtime verified. |
 | [Populated transfer performance](2026-10-28-transfer-populated-profile-performance.md) | V2-4/5/UX | Indexed transaction-scoped history validation; current-demo read-only parity, realistic posted-history/native checks and same-profile public runtime verified. |
 | [Transfer performance and register review](2026-10-27-transfer-performance-register-review.md) | V2-4/5/UX | Responsive one-pass transfers, explicit atomic unique-match batch, repayment/history navigation and category management implemented; integrated/native/independent checks and public runtime handoff verified. |

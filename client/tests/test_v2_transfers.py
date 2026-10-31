@@ -209,7 +209,7 @@ def test_transfer_dialog_requires_selection_and_confirmation(tmp_path: Path, mon
         assert dialog.table.rowCount() == 0
         dialog.refresh()
         wait_for_transfers(dialog)
-        assert "No candidate pairs in this profile" in dialog.status.text()
+        assert "No unposted candidate pairs in this date window" in dialog.status.text()
         with V2ProfileStore.open(path, read_only=True) as store:
             assert store._active_consumed() == {cash_id: -2000, card_id: 2000}
     finally:

@@ -209,6 +209,20 @@ batch Close requests cancellation before commit and reports a committed result
 truthfully. Forced teardown drains workers. No assumed-date setting is silently
 enabled by individual or batch review.
 
+Unresolved Plan candidates also have direct manual group review. Its alternatives
+come from the retained complete component, with source descriptions and date
+qualifications; final confirmation uses the existing individual-pair service,
+not an extension of automated selection eligibility. Correction controls label
+their required reason and show the next unmet prerequisite rather than presenting
+unexplained disabled actions. Active manual and planner events share withdrawal
+and replacement services, including full retained inverse history.
+
+Cached transfer actions bind to the profile and preferences of their loaded
+snapshot. They freeze reviewed context before a modal, recheck it afterward and
+pass the captured profile to the writer. An identical cloned profile can share
+event IDs and financial basis, so those values alone do not authorize a cached
+action in another profile. Stale scope reloads without posting to either profile.
+
 TransferEvents also retains finite reviewed settlement manifests: one complete
 asset outflow, up to 32 distinct owned receipts, and at most 64 explicit fee parts
 assigned to their source legs. Every raw financial amount is allocated once;

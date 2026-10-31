@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QDialogButtonBox,
+    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -45,7 +46,12 @@ from parsetrail.gui.v2_settlement_review import (
     reviewed_identity,
     settlement_details,
 )
-from parsetrail.gui.v2_transfer_plan import PLAN_REASON, V2TransferPlanPage, V2TransferSelectionManifest
+from parsetrail.gui.v2_transfer_plan import (
+    PLAN_REASON,
+    V2TransferManualReview,
+    V2TransferPlanPage,
+    V2TransferSelectionManifest,
+)
 
 _TRANSFER_WORKERS: set[QThread] = set()
 
@@ -175,6 +181,7 @@ class V2TransferReview(QDialog):
         self._requested = False
         self.pending = True
         self._snapshot = None
+        self._snapshot_profile = None
         self.window_plan = None
         self._replacement_cache = {}
         self._selection_ids = self._event_id = None
@@ -225,6 +232,7 @@ class V2TransferReview(QDialog):
         self.plan_page = V2TransferPlanPage(date_label=_source_date, pair_details=_pair_details, parent=self)
         self.plan_page.review_requested.connect(self._review_selected_plan)
         self.plan_page.alternatives_requested.connect(self._inspect_plan_alternatives)
+        self.plan_page.manual_review_requested.connect(self._review_plan_pair)
         self.tabs.addTab(self.plan_page, "Plan transfers")
         suggestions = self.matches_page = QWidget()
         suggestions_layout = QVBoxLayout(suggestions)
@@ -283,20 +291,34 @@ class V2TransferReview(QDialog):
     def _build_history_tabs(self):
         confirmed = self.events_page = QWidget()
         layout = QVBoxLayout(confirmed)
+        instructions = QLabel(
+            "Manual and planned matches use the same correction workflow. "
+            "Select an Active row, then enter a reason to correct or undo that match."
+        )
+        instructions.setWordWrap(True)
+        layout.addWidget(instructions)
         self.event_table = _history_table(
             ("State", "Type", "Sent", "From", "Received", "To", "Amount", "Legs", "Reason")
         )
         self.event_table.itemSelectionChanged.connect(self._event_selected)
-        layout.addWidget(self.event_table)
+        layout.addWidget(self.event_table, 1)
         self.event_details = QPlainTextEdit(
             "Select a confirmed event to inspect its complete effect and retained history."
         )
         self.event_details.setReadOnly(True)
-        self.event_details.setMaximumHeight(180)
+        self.event_details.setMaximumHeight(110)
         layout.addWidget(self.event_details)
-        self.review_settlement = QPushButton("Inspect / replace complete settlement manifest…")
-        self.review_settlement.clicked.connect(self._open_settlement)
-        layout.addWidget(self.review_settlement)
+        self.correction_group = QGroupBox("Correct or undo selected transfer")
+        corrections = QVBoxLayout(self.correction_group)
+        reason_row = QHBoxLayout()
+        reason_row.addWidget(QLabel("Reason for correction (required)"))
+        self.correction_reason = QLineEdit()
+        self.correction_reason.setMaxLength(500)
+        self.correction_reason.setAccessibleName("Reason for correction, required")
+        self.correction_reason.setPlaceholderText("Explain why this saved match needs to change")
+        self.correction_reason.textChanged.connect(self._event_actions)
+        reason_row.addWidget(self.correction_reason, 1)
+        corrections.addLayout(reason_row)
         replacement_row = QHBoxLayout()
         replacement_row.addWidget(QLabel("Replacement pair"))
         self.replacement = QComboBox()
@@ -305,26 +327,30 @@ class V2TransferReview(QDialog):
         self.load_replacements = QPushButton("Load replacement pairs…")
         self.load_replacements.clicked.connect(self._load_replacements)
         replacement_row.addWidget(self.load_replacements)
-        layout.addLayout(replacement_row)
+        corrections.addLayout(replacement_row)
         self.replacement_details = QLabel("Select an active event to load eligible replacement pairs.")
         self.replacement_details.setWordWrap(True)
-        layout.addWidget(self.replacement_details)
-        self.correction_reason = QLineEdit()
-        self.correction_reason.setMaxLength(500)
-        self.correction_reason.setPlaceholderText("Required reason to withdraw or replace the whole event")
-        self.correction_reason.textChanged.connect(self._event_actions)
-        layout.addWidget(self.correction_reason)
+        corrections.addWidget(self.replacement_details)
         actions = QHBoxLayout()
-        self.withdraw = QPushButton("Withdraw whole event")
+        self.withdraw = QPushButton("Withdraw selected match")
+        self.withdraw.setAutoDefault(False)
         self.withdraw.clicked.connect(self._withdraw)
         actions.addWidget(self.withdraw)
-        self.replace = QPushButton("Replace with selected pair")
+        self.replace = QPushButton("Replace selected match")
+        self.replace.setAutoDefault(False)
         self.replace.clicked.connect(self._replace)
         actions.addWidget(self.replace)
-        layout.addLayout(actions)
+        self.review_settlement = QPushButton("Inspect full settlement…")
+        self.review_settlement.setAutoDefault(False)
+        self.review_settlement.setToolTip("Inspect or replace the complete set of receipts and fees.")
+        self.review_settlement.clicked.connect(self._open_settlement)
+        actions.addWidget(self.review_settlement)
+        corrections.addLayout(actions)
         self.event_status = QLabel()
         self.event_status.setWordWrap(True)
-        layout.addWidget(self.event_status)
+        self.event_status.setMinimumHeight(self.event_status.fontMetrics().lineSpacing() * 2)
+        corrections.addWidget(self.event_status)
+        layout.addWidget(self.correction_group)
         self.tabs.addTab(confirmed, "Confirmed events")
         reviews = self.reviews_page = QWidget()
         layout = QVBoxLayout(reviews)
@@ -374,8 +400,9 @@ class V2TransferReview(QDialog):
                 self.status.setText(f"{len(self.candidates)} candidate pair(s). Select one to inspect and confirm.")
             else:
                 self.status.setText(
-                    "No candidate pairs in this profile and date window. Import both sources, assign their "
-                    "financial accounts, or widen the date gap. Unmatched movements remain pending."
+                    "No unposted candidate pairs in this date window. Check Confirmed events for existing matches. "
+                    "If evidence is missing, import and assign the counterpart or change the date gap. "
+                    "Other reviewed activity is corrected in its activity review."
                 )
         elif not pair.posting_allowed:
             self.status.setText(
@@ -390,6 +417,8 @@ class V2TransferReview(QDialog):
     def refresh(self, *_args, debounce=False) -> None:
         if self._closed or (self._worker is not None and self._worker.kind == "write"):
             return
+        self.profile_path.setText(str(self.workspace.profile_path))
+        self.profile_path.setCursorPosition(0)
         selected = self._current()
         if selected is not None:
             self._selection_ids = _pair_key(selected)
@@ -400,6 +429,7 @@ class V2TransferReview(QDialog):
         self.pending = True
         self._read_error = ""
         self._snapshot = None
+        self._snapshot_profile = None
         self.window_plan = None
         self.plan_page.clear("Finding transfers across the full profile… Draft Include choices reset on reload.")
         self.basis = None
@@ -494,6 +524,9 @@ class V2TransferReview(QDialog):
                         self._event_selected()
             else:
                 snapshot, self.window_plan, note_limit = worker.result
+                self._snapshot_profile = worker.profile
+                self.profile_path.setText(str(worker.profile))
+                self.profile_path.setCursorPosition(0)
                 self._apply_snapshot(snapshot)
                 self.plan_page.set_plan(self.window_plan, note_limit=note_limit)
                 if self._completion_message:
@@ -643,7 +676,9 @@ class V2TransferReview(QDialog):
         self.review_settlement.setEnabled(False)
         self.event_details.setPlainText("Select a confirmed event to inspect its complete effect and retained history.")
         self.replacement_details.setText("Select an active event to load eligible replacement pairs.")
-        self.event_status.clear()
+        self.correction_reason.setEnabled(False)
+        self.replacement.setEnabled(False)
+        self.event_status.setText("Select an Active row to correct or withdraw a saved match.")
 
     def _event_selected(self):
         index = self.event_table.currentRow()
@@ -687,11 +722,21 @@ class V2TransferReview(QDialog):
     def _open_settlement(self):
         event = self.selected_event
         if event is not None:
+            if self._capture_review_context("Selected transfer is unavailable") is None:
+                return
             V2SettlementReview(self.workspace, event_id=event.event_id, parent=self).exec()
             self.refresh()
 
     def _event_actions(self, *_args):
         event = self.selected_event
+        active = not self.pending and event is not None and event.status == "active" and self.event_basis is not None
+        loaded = event is not None and event.event_id in self._replacement_cache
+        self.correction_reason.setEnabled(active)
+        self.load_replacements.setEnabled(active and event.pair is not None)
+        self.replacement.setEnabled(active and event.pair is not None and loaded)
+        self.withdraw.setText(
+            "Withdraw selected settlement" if event is not None and event.pair is None else "Withdraw selected match"
+        )
         ready = (
             not self.pending
             and event is not None
@@ -712,9 +757,9 @@ class V2TransferReview(QDialog):
         if pair:
             natural = 1 if pair.incoming.account_kind == "asset" else -1
             self.replacement_details.setText(
-                f"{pair.outgoing.account_name}: asset change {_money(pair.outgoing.amount_minor)} on {pair.outgoing.posting_date}; "
+                f"{pair.outgoing.account_name}: asset change {_money(pair.outgoing.amount_minor)} on {_source_date(pair.outgoing)}; "
                 f"{pair.incoming.account_name}: {'asset value' if natural == 1 else 'amount owed'} change "
-                f"{_money(natural * pair.incoming.amount_minor)} on {pair.incoming.posting_date}. "
+                f"{_money(natural * pair.incoming.amount_minor)} on {_source_date(pair.incoming)}. "
                 + (
                     "Confirm both sources before replacing."
                     if pair.posting_allowed
@@ -723,14 +768,51 @@ class V2TransferReview(QDialog):
             )
             if not different_pair:
                 self.replacement_details.setText(
-                    "Choose a different pair. The selected pair is already this event's interpretation."
+                    "Choose a different pair. The selected pair is already this saved match."
                 )
         else:
             self.replacement_details.setText(
-                "This event uses a complete settlement manifest. Inspect / replace it above; a pair cannot represent all of its receipts and fees."
+                "Use Inspect full settlement to replace this complete set of receipts and fees; one pair cannot represent it."
                 if event is not None and event.pair is None
                 else "Choose an eligible replacement pair; its exact account effects will appear here."
             )
+        if event is None:
+            message = "Select an Active row to correct or withdraw a saved match."
+        elif self.pending:
+            message = "Wait for the current read or save to finish before correcting this match."
+        elif event.status != "active":
+            historical_state = "withdrawn" if event.status == "cancelled" else event.status
+            message = f"This historical match was already {historical_state}. Inspect current Active history to make another correction."
+        elif self.event_basis is None:
+            message = "Saved context is unavailable. Reload saved state before correcting this match."
+        else:
+            withdrawal = (
+                "Enter a reason above to enable withdrawal. "
+                if not self.correction_reason.text().strip()
+                else "Withdrawal is ready; it reverses all legs of the entire settlement and releases its source allocations. "
+                if event.pair is None
+                else "Withdrawal is ready; it reverses this match's reviewed entries and releases its source allocations. "
+            )
+            if event.pair is None:
+                replacement = "Use Inspect full settlement to replace its complete receipts and fees."
+            elif not loaded:
+                replacement = "To replace: load replacement pairs, then choose a different eligible pair."
+            elif not any(_pair_key(p) != _pair_key(event.pair) for p in self.replacements):
+                replacement = "No different replacement pair is available in this date window."
+            elif not any(_pair_key(p) != _pair_key(event.pair) and p.posting_allowed for p in self.replacements):
+                replacement = "Different replacements have estimated dates that need the best guess date setting."
+            elif pair is None:
+                replacement = "Choose a different replacement pair, then enter a reason to enable replacement."
+            elif not different_pair:
+                replacement = "The chosen pair is already this match. Choose a different pair to replace it."
+            elif not pair.posting_allowed:
+                replacement = "This replacement's estimated date needs the best guess date setting."
+            elif not self.correction_reason.text().strip():
+                replacement = "Enter a reason above to enable replacement with the chosen pair."
+            else:
+                replacement = "Replacement is ready; the old match is withdrawn and the new pair is posted together."
+            message = withdrawal + replacement + " This changes your accounting interpretation, not a bank payment."
+        self.event_status.setText(message)
 
     def _review_selected(self):
         index = self.review_table.currentRow()
@@ -785,7 +867,11 @@ class V2TransferReview(QDialog):
         if pair is None or not pair.posting_allowed or self.basis is None:
             return
         outgoing, incoming = pair.outgoing, pair.incoming
-        preferences, basis = self.workspace.preferences(), self.basis
+        context = self._capture_review_context("Transfer was not posted")
+        if context is None:
+            return
+        preferences, profile, _generation = context
+        basis = self.basis
         reason = "Confirmed owned-account transfer"
         if self.note.text().strip():
             reason += ": " + self.note.text().strip()
@@ -795,12 +881,16 @@ class V2TransferReview(QDialog):
         )
         if QMessageBox.question(self, "Confirm transfer pair", message) != QMessageBox.StandardButton.Yes:
             return
+        if not self._review_context_current(context):
+            self._failed("Transfer was not posted", "transfer_context_changed_since_selection")
+            return
         self._write(
             "Transfer was not posted",
             "Transfer pair posted; both source movements are allocated.",
             lambda store, _job: store.post_reviewed_transfer(
                 outgoing.row_id, incoming.row_id, preferences=preferences, reason=reason, expected_basis_sha256=basis
             ),
+            profile=profile,
         )
 
     def _failed(self, title, exc):
@@ -827,9 +917,16 @@ class V2TransferReview(QDialog):
         pair, reason = self._current(), self.note.text().strip()
         if pair is None or not reason or self.basis is None:
             return
-        preferences, basis = self.workspace.preferences(), self.basis
+        context = self._capture_review_context("Suggestion was not dismissed")
+        if context is None:
+            return
+        preferences, profile, _generation = context
+        basis = self.basis
         message = f"Dismiss this suggested {pair.kind}?\n\n{_pair_details(pair)}\n\nReason: {reason}\n\nNo money is posted or allocated. Source evidence remains pending."
         if QMessageBox.question(self, "Dismiss transfer suggestion", message) != QMessageBox.Yes:
+            return
+        if not self._review_context_current(context):
+            self._failed("Suggestion was not dismissed", "transfer_context_changed_since_selection")
             return
         self._write(
             "Suggestion was not dismissed",
@@ -841,6 +938,7 @@ class V2TransferReview(QDialog):
                 preferences=preferences,
                 reason=reason,
             ),
+            profile=profile,
         )
 
     def _reopen(self):
@@ -848,9 +946,16 @@ class V2TransferReview(QDialog):
         if not self.reopen.isEnabled() or not 0 <= index < len(self.pair_reviews) or not reason:
             return
         pair = self.pair_reviews[index].pair
-        preferences, basis = self.workspace.preferences(), self.basis
+        context = self._capture_review_context("Suggestion was not reopened")
+        if context is None:
+            return
+        preferences, profile, _generation = context
+        basis = self.basis
         message = f"Reopen this dismissed pair?\n\n{_pair_details(pair)}\n\nReason: {reason}\n\nReopening creates no journal or evidence allocation."
         if QMessageBox.question(self, "Reopen transfer suggestion", message) != QMessageBox.Yes:
+            return
+        if not self._review_context_current(context):
+            self._failed("Suggestion was not reopened", "transfer_context_changed_since_selection")
             return
         self._write(
             "Suggestion was not reopened",
@@ -858,12 +963,17 @@ class V2TransferReview(QDialog):
             lambda store, _job: store.record_transfer_pair_review(
                 *_pair_key(pair), decision="reopen", expected_basis_sha256=basis, preferences=preferences, reason=reason
             ),
+            profile=profile,
         )
 
     def _withdraw(self):
         event, reason = self.selected_event, self.correction_reason.text().strip()
         if event is None or event.status != "active" or not reason or self.event_basis is None:
             return
+        context = self._capture_review_context("Transfer was not withdrawn")
+        if context is None:
+            return
+        _preferences, profile, _generation = context
         basis = self.event_basis
         message = (
             f"Withdraw this whole {event.settlement.kind} settlement?\n\nInverse source and fee effects:\n"
@@ -878,12 +988,16 @@ class V2TransferReview(QDialog):
         )
         if QMessageBox.question(self, "Confirm whole transfer withdrawal", message) != QMessageBox.Yes:
             return
+        if not self._review_context_current(context):
+            self._failed("Transfer was not withdrawn", "transfer_context_changed_since_selection")
+            return
         self._write(
             "Transfer was not withdrawn",
-            "Whole-event withdrawal recorded; original and inverse entries remain history.",
+            "Selected match withdrawn; original and reversing entries remain history. Select an Active row to correct another match.",
             lambda store, _job: store.withdraw_reviewed_transfer(
                 event.event_id, expected_basis_sha256=basis, reason=reason
             ),
+            profile=profile,
         )
 
     def _replace(self):
@@ -904,7 +1018,11 @@ class V2TransferReview(QDialog):
             or self.event_basis is None
         ):
             return
-        preferences, basis = self.workspace.preferences(), self.event_basis
+        context = self._capture_review_context("Transfer was not replaced")
+        if context is None:
+            return
+        preferences, profile, _generation = context
+        basis = self.event_basis
         message = (
             f"Replace this whole {event.pair.kind} interpretation?\n\nWithdraw original effects:\n"
             f"{_pair_details(event.pair, inverse=True)}\n\nPost selected replacement:\n{_pair_details(pair)}\n\nReason: {reason}\n\n"
@@ -913,12 +1031,16 @@ class V2TransferReview(QDialog):
         )
         if QMessageBox.question(self, "Confirm whole transfer replacement", message) != QMessageBox.Yes:
             return
+        if not self._review_context_current(context):
+            self._failed("Transfer was not replaced", "transfer_context_changed_since_selection")
+            return
         self._write(
             "Transfer was not replaced",
             "Whole event replaced atomically; original and inverse entries remain history.",
             lambda store, _job: store.replace_reviewed_transfer(
                 event.event_id, *_pair_key(pair), expected_basis_sha256=basis, preferences=preferences, reason=reason
             ),
+            profile=profile,
         )
 
     def _set_writing(self, writing):
@@ -997,6 +1119,51 @@ class V2TransferReview(QDialog):
                 self.table.scrollToItem(self.table.item(index, 0))
                 break
 
+    def _review_plan_pair(self, pair):
+        if self.pending or self._worker is not None or self.window_plan is None:
+            return
+        row = self.plan_page.row_lookup().get(pair_key(pair))
+        if row is None:
+            return
+        context = self._capture_review_context("Transfer was not posted")
+        if context is None:
+            return
+        preferences, profile, _generation = context
+        basis = self.basis
+        group = tuple(row.component.pairs)
+        reviewed = {pair_key(p): p for p in group}
+        initial_note = self.plan_page.note.text()
+        dialog = V2TransferManualReview(
+            group,
+            pair_key(pair),
+            scope=self.plan_page.scope.text(),
+            explanation=row.component.explanation,
+            date_label=_source_date,
+            pair_details=_pair_details,
+            initial_note=initial_note,
+            parent=self,
+        )
+        if dialog.exec() != QDialog.Accepted:
+            return
+        if not self._review_context_current(context):
+            self._failed("Transfer was not posted", "transfer_context_changed_since_selection")
+            return
+        # The dialog snapshots its own intentional final pair and note on
+        # acceptance. Never substitute the main window's current highlight.
+        chosen, note = dialog.confirmed_pair, dialog.confirmed_note
+        if chosen is None or reviewed.get(pair_key(chosen)) != chosen or not chosen.posting_allowed:
+            self._failed("Transfer was not posted", "transfer_pair_unavailable_or_already_posted")
+            return
+        reason = "Confirmed owned-account transfer" + (": " + note if note else "")
+        self._write(
+            "Transfer was not posted",
+            "Transfer pair posted; both source movements are allocated.",
+            lambda store, _job: store.post_reviewed_transfer(
+                *pair_key(chosen), preferences=preferences, reason=reason, expected_basis_sha256=basis
+            ),
+            profile=profile,
+        )
+
     def _review_selected_plan(self):
         if (
             self.pending
@@ -1009,9 +1176,10 @@ class V2TransferReview(QDialog):
         # confirmation or background preparation. Checkbox changes are drafts.
         plan = self.window_plan
         keys = self.plan_page.selected_keys()
-        preferences = self.workspace.preferences()
-        profile = Path(self.workspace.profile_path)
-        generation = self._generation
+        frame = self._capture_review_context("Selected transfer plan was not posted")
+        if frame is None:
+            return
+        preferences, profile, generation = frame
         reason = PLAN_REASON
         if self.plan_page.note.text().strip():
             reason += ": " + self.plan_page.note.text().strip()
@@ -1021,17 +1189,30 @@ class V2TransferReview(QDialog):
         self.plan_page.status.setText(f"Preparing review of {len(keys)} selected pairs…")
         self._launch("prepare", lambda _store, _job: (select_transfer_plan(plan, keys), context), profile=profile)
 
-    def _plan_context_current(self, context):
-        preferences, profile, generation, _reason, _scope, _rows = context
+    def _capture_review_context(self, failure_title):
+        preferences = self._snapshot.preferences if self._snapshot is not None else None
+        frame = (preferences, self._snapshot_profile, self._generation)
+        if preferences is None or self._snapshot_profile is None or not self._review_context_current(frame):
+            self._failed(failure_title, "transfer_context_changed_since_selection")
+            return None
+        return frame
+
+    def _review_context_current(self, context):
+        preferences, profile, generation = context
         try:
             return (
                 not self._closed
+                and profile is not None
+                and profile == self._snapshot_profile
                 and profile == Path(self.workspace.profile_path)
                 and generation == self._generation
                 and preferences == self.workspace.preferences()
             )
         except (ValueError, OSError):
             return False
+
+    def _plan_context_current(self, context):
+        return self._review_context_current(context[:3])
 
     def _show_plan_manifest(self, selection, context):
         preferences, profile, _generation, reason, scope, rows = context
@@ -1079,6 +1260,13 @@ class V2TransferReview(QDialog):
         if self.pending or self._worker is not None or not self.batch.isEnabled():
             return
         plan = self.batch_plan
+        context = self._capture_review_context("Transfer pairs were not posted")
+        if context is None:
+            return
+        preferences, profile, _generation = context
+        reason = "Confirmed transfer pairs with no other matches"
+        if self.note.text().strip():
+            reason += ": " + self.note.text().strip()
         review = QDialog(self)
         review.setWindowTitle("Review transfer pairs with no other matches")
         review.resize(1000, 650)
@@ -1131,10 +1319,9 @@ class V2TransferReview(QDialog):
         layout.addWidget(buttons)
         if review.exec() != QDialog.Accepted:
             return
-        preferences = self.workspace.preferences()
-        reason = "Confirmed transfer pairs with no other matches"
-        if self.note.text().strip():
-            reason += ": " + self.note.text().strip()
+        if not self._review_context_current(context):
+            self._failed("Transfer pairs were not posted", "transfer_context_changed_since_selection")
+            return
         from parsetrail.core.v2_transfer_batch import post_reviewed_transfer_batch
 
         self._write(
@@ -1146,6 +1333,7 @@ class V2TransferReview(QDialog):
                 store, plan, preferences=preferences, reason=reason, cancelled=job.isInterruptionRequested
             ),
             cancellable=True,
+            profile=profile,
         )
 
     def _stop(self):

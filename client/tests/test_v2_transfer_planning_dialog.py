@@ -249,6 +249,7 @@ def test_tied_and_oversized_groups_never_get_include_checkboxes(app, incoming_co
         page.set_plan(plan, note_limit=200)
         assert "Needs review 1 group" in page.counts.text()
         assert not page.selected_keys() and not page.review.isEnabled()
+        assert page.table.currentRow() == 0 and page.manual.isEnabled()
         for index in range(page.table.rowCount()):
             assert page.rows[index].status == "Needs review"
             assert not page.table.item(index, 0).flags() & Qt.ItemIsUserCheckable

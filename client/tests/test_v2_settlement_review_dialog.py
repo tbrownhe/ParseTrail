@@ -12,6 +12,7 @@ from parsetrail.core.v2_workspace import V2Workspace
 
 from .test_v2_card_purchase_review import _chase_profile
 from .test_v2_settlements import profile
+from .test_v2_transfer_review_async import wait_for_transfers
 from .test_v2_transfers import BANK_DEFINITION
 
 
@@ -254,7 +255,8 @@ def test_multiple_noncontemporaneous_receipts_full_history_and_whole_fee_withdra
         dialog.close()
     transfer = V2TransferReview(_workspace(path))
     try:
-        transfer.tabs.setCurrentIndex(1)
+        wait_for_transfers(transfer)
+        transfer.tabs.setCurrentWidget(transfer.events_page)
         transfer.event_table.selectRow(0)
         assert transfer.selected_event.pair is None
         assert "Full" in transfer.event_table.item(0, 1).text()
@@ -269,6 +271,7 @@ def test_multiple_noncontemporaneous_receipts_full_history_and_whole_fee_withdra
         opened = []
         monkeypatch.setattr(V2SettlementReview, "exec", lambda widget: opened.append(widget.selected_event.event_id))
         transfer.review_settlement.click()
+        wait_for_transfers(transfer)
         assert opened == [event.event_id]
         before = hashlib.sha256(path.read_bytes()).hexdigest()
         monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.No)
@@ -282,6 +285,7 @@ def test_multiple_noncontemporaneous_receipts_full_history_and_whole_fee_withdra
 
         monkeypatch.setattr(QMessageBox, "question", accept)
         transfer.withdraw.click()
+        wait_for_transfers(transfer)
         assert "inverse fee expense: -$10.00" in questions[0]
         assert "All 3 journal leg(s)" in questions[0]
         assert "ID checking" in questions[0] and "ID savings" in questions[0]
@@ -444,6 +448,7 @@ def test_assumed_date_opt_in_remains_explicit_but_opt_out_allows_whole_withdrawa
 
         parent = V2TransferReview(dialog.workspace)
         try:
+            wait_for_transfers(parent)
 
             def nested_preference_change(child):
                 child.assumed_dates.click()
@@ -452,6 +457,7 @@ def test_assumed_date_opt_in_remains_explicit_but_opt_out_allows_whole_withdrawa
             monkeypatch.setattr(review_module.V2SettlementReview, "exec", nested_preference_change)
             for enabled in (True, False):
                 parent.full_settlement.click()
+                wait_for_transfers(parent)
                 assert parent.assumed_dates.isChecked() == enabled
                 assert parent.workspace.preferences().allow_assumed_posting_dates == enabled
                 assert parent.candidates and all(pair.posting_allowed == enabled for pair in parent.candidates)

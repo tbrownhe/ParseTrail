@@ -253,6 +253,16 @@ Select the pairs to include, inspect both sources and review the exact batch
 before one **Confirm and post** action. Planning and selection never post money;
 best-guess posting-date permission remains a separate choice.
 
+For a **Needs review** pair, choose **Review this pair manually** to compare the
+same group's alternatives and both source descriptions, then explicitly confirm
+one pair. A tie is never included automatically. **All matches** remains available.
+In **Confirmed events**, select an active match and enter the visibly required
+correction reason to enable withdrawal. Withdrawal retains the original entries,
+adds inverses at their original dates and returns both movements for matching.
+Replacement additionally requires loading alternatives and choosing a different
+eligible pair. Earlier manual and later planner matches use the same correction
+workflow; saved history does not need to be reset.
+
 **Review pairs with no other matches** shows a final list of pairs that have no
 competing match on either side in the current date window and reviewed context.
 The list includes both accounts, source dates and their qualifications. Explicit

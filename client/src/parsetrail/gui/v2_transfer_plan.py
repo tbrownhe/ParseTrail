@@ -95,6 +95,7 @@ def _put(table, row, values):
 class V2TransferPlanPage(QWidget):
     review_requested = Signal()
     alternatives_requested = Signal(object)
+    manual_review_requested = Signal(object)
 
     def __init__(self, *, date_label, pair_details, parent=None):
         super().__init__(parent)
@@ -137,6 +138,10 @@ class V2TransferPlanPage(QWidget):
         note_row.addWidget(self.note, 1)
         layout.addLayout(note_row)
         actions = QHBoxLayout()
+        self.manual = QPushButton("Review this pair manually…")
+        self.manual.setAutoDefault(False)
+        self.manual.clicked.connect(self._manual_review)
+        actions.addWidget(self.manual)
         self.alternatives = QPushButton("Inspect alternatives in All matches")
         self.alternatives.setAutoDefault(False)
         self.alternatives.clicked.connect(self._inspect)
@@ -219,9 +224,12 @@ class V2TransferPlanPage(QWidget):
             if unproposed
             else "Nothing is posted until you review and confirm the selected pairs."
             if self.rows
-            else "No candidate pairs in this date window. Import and assign both sources, or change the date gap."
+            else "No unposted candidate pairs in this date window. Check Confirmed events for existing matches. "
+            "Import and assign a missing counterpart or change the gap; correct other reviewed activity in its activity review."
         )
         self.set_available(True)
+        if self.rows and not plan.selectable_pairs:
+            self.table.selectRow(0)
 
     def set_available(self, available):
         self._available = available and self.plan is not None
@@ -252,6 +260,7 @@ class V2TransferPlanPage(QWidget):
         count = len(self._included)
         self.review.setText(f"Review {count} selected {'pair' if count == 1 else 'pairs'}…")
         self.review.setEnabled(self._available and bool(count))
+        self.manual.setEnabled(self._available and 0 <= self.table.currentRow() < len(self.rows))
         self.alternatives.setEnabled(self._available and 0 <= self.table.currentRow() < len(self.rows))
 
     def _selected(self):
@@ -276,12 +285,120 @@ class V2TransferPlanPage(QWidget):
                 + " "
                 + "Source descriptions are for your review; they are not structured matching evidence."
             )
+            if row.status in {"Needs review", "Alternative"}:
+                self.status.setText(
+                    "This pair is not included in the plan. Review it manually to choose one match, or inspect All matches."
+                )
         self._update_actions()
 
     def _inspect(self):
         index = self.table.currentRow()
         if 0 <= index < len(self.rows):
             self.alternatives_requested.emit(self.rows[index].pair)
+
+    def _manual_review(self):
+        index = self.table.currentRow()
+        if self._available and 0 <= index < len(self.rows):
+            self.manual_review_requested.emit(self.rows[index].pair)
+
+
+class V2TransferManualReview(QDialog):
+    """One frozen candidate group, with an explicit final choice of one pair."""
+
+    def __init__(
+        self, pairs, selected_key, *, scope, explanation, date_label, pair_details, initial_note="", parent=None
+    ):
+        super().__init__(parent)
+        self.pairs = tuple(pairs)
+        self.confirmed_pair, self.confirmed_note = None, ""
+        self.setWindowTitle("Review a transfer pair manually")
+        self.resize(1100, 680)
+        layout = QVBoxLayout(self)
+        qualification = QLabel(
+            scope + "\nChoose one pair after checking both sources. Equal amounts and dates do not prove a transfer. "
+            "Posting uses both source movements, so other suggestions sharing either leg become unavailable. "
+            "No income or spending is created. Both dates are retained; liability repayments do not establish a principal/interest split."
+        )
+        qualification.setWordWrap(True)
+        layout.addWidget(qualification)
+        self.table = _table(("Sent", "From", "Sent description", "Received", "To", "Received description", "Amount"))
+        for column in (1, 2, 4, 5):
+            self.table.horizontalHeader().setSectionResizeMode(column, QHeaderView.Stretch)
+        self.table.setRowCount(len(self.pairs))
+        selected_index = 0
+        for index, pair in enumerate(self.pairs):
+            descriptions = tuple(
+                m.description
+                if m.source_description_known
+                else "Accounting label (source description unavailable): " + m.description
+                for m in (pair.outgoing, pair.incoming)
+            )
+            _put(
+                self.table,
+                index,
+                (
+                    date_label(pair.outgoing),
+                    reviewed_identity(pair.outgoing),
+                    descriptions[0],
+                    date_label(pair.incoming),
+                    reviewed_identity(pair.incoming),
+                    descriptions[1],
+                    _money(-pair.outgoing.amount_minor),
+                ),
+            )
+            if pair_key(pair) == selected_key:
+                selected_index = index
+        layout.addWidget(self.table, 1)
+        self.details = QPlainTextEdit()
+        self.details.setReadOnly(True)
+        self.details.setMaximumHeight(190)
+        layout.addWidget(self.details)
+        self.status = QLabel()
+        self.status.setWordWrap(True)
+        layout.addWidget(self.status)
+        note_row = QHBoxLayout()
+        note_row.addWidget(QLabel("Posting note (optional)"))
+        self.note = QLineEdit()
+        self.note.setMaxLength(450)
+        self.note.setText(initial_note)
+        note_row.addWidget(self.note, 1)
+        layout.addLayout(note_row)
+        self.buttons = QDialogButtonBox(QDialogButtonBox.Cancel)
+        self.post = self.buttons.addButton("Confirm and post this pair", QDialogButtonBox.AcceptRole)
+        self.post.setAutoDefault(False)
+        self.post.clicked.connect(self.accept)
+        self.buttons.button(QDialogButtonBox.Cancel).setDefault(True)
+        self.buttons.rejected.connect(self.reject)
+        layout.addWidget(self.buttons)
+
+        def selected():
+            pair = self.current_pair()
+            self.post.setEnabled(pair is not None and pair.posting_allowed)
+            self.details.setPlainText(
+                pair_details(pair) + "\n\nGroup review: " + explanation
+                if pair is not None
+                else "Choose one pair to review."
+            )
+            self.status.setText(
+                "Ready for your explicit confirmation. Only this pair will be posted."
+                if pair is not None and pair.posting_allowed
+                else "This pair cannot be posted with the current date policy. Close this review and inspect its estimated dates and the best guess date setting."
+            )
+
+        self.table.itemSelectionChanged.connect(selected)
+        self.table.selectRow(selected_index)
+        selected()
+
+    def current_pair(self):
+        index = self.table.currentRow()
+        return self.pairs[index] if 0 <= index < len(self.pairs) else None
+
+    def accept(self):
+        pair = self.current_pair()
+        if pair is None or not pair.posting_allowed:
+            return
+        self.confirmed_pair, self.confirmed_note = pair, self.note.text().strip()
+        super().accept()
 
 
 class V2TransferSelectionManifest(QDialog):
