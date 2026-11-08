@@ -173,13 +173,16 @@ def test_workspace_recovery_action_cancel_save_and_failure(tmp_path: Path, monke
         assert dialog.recover_source_action.isEnabled()
         monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *_args, **_kwargs: ("", ""))
         dialog.recover_source_action.trigger()
+        wait_for_inventory(dialog)
         assert notices == [] and warnings == [] and not destination.exists()
         monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *_args, **_kwargs: (str(destination), ""))
         dialog.recover_source_action.trigger()
+        wait_for_inventory(dialog)
         assert destination.read_bytes() == SOURCE
         assert notices[0][2] == destination.resolve()
         assert "not encrypted" in notices[0][3]
         dialog.recover_source_action.trigger()
+        wait_for_inventory(dialog)
         assert len(notices) == 1 and len(warnings) == 1
         assert "source_destination_exists" in warnings[0][1]
         assert dialog._selected_source() == source_id

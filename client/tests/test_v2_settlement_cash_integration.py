@@ -17,6 +17,7 @@ from devtools.parser_engine_pilot.test_table_card_source_output import evidence 
 
 from .test_v2_document_browser import wait_for_inventory
 from .test_v2_transfers import BANK_DEFINITION
+from .v2_job_wait import wait_for_jobs
 
 JAN, FEB = date(2026, 1, 1), date(2026, 2, 1)
 
@@ -218,12 +219,16 @@ def test_cash_dialog_shows_parts_without_adding_record_counts_or_movement(tmp_pa
     )
     before = profile.read_bytes()
     dialog = V2CashMovementDialog(profile)
+    wait_for_jobs(dialog)
     try:
         dialog.start.setDate(QDate(2026, 1, 1))
+        wait_for_jobs(dialog)
         dialog.end.setDate(QDate(2026, 2, 1))
+        wait_for_jobs(dialog)
         for index in range(dialog.accounts.count()):
             if dialog.accounts.item(index).data(Qt.UserRole) == "cash":
                 dialog.accounts.item(index).setCheckState(Qt.Checked)
+        wait_for_jobs(dialog)
         assert dialog.report.total_minor == -10000
         assert dialog.entries.rowCount() == 1 and dialog.summary.rowCount() == 2
         assert "counts are not additive" in dialog.scope.text()

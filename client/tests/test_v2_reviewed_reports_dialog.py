@@ -116,6 +116,7 @@ def test_report_dialog_exports_reviewed_rows_without_changing_profile(tmp_path: 
         wait_for_reports(dialog)
         assert dialog.export_button.isEnabled()
         dialog.export_button.click()
+        wait_for_reports(dialog)
         assert export_path.is_file()
         assert "1 active reviewed entries" in notices[0][0]
         assert notices[0][1] == export_path

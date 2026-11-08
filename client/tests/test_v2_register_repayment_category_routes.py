@@ -5,10 +5,11 @@ from __future__ import annotations
 import pytest
 from parsetrail.core.v2_profile_store import V2ProfileStore
 from parsetrail.gui.v2_categories import V2CategoryDialog
-from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
 from .test_v2_liability_register_dialog import dialog, form, profile
 from .test_v2_liability_register_dialog import source as source_fixture
+from .v2_job_wait import wait_for_jobs
 
 source = source_fixture
 
@@ -16,6 +17,7 @@ source = source_fixture
 @pytest.fixture(autouse=True)
 def app(monkeypatch):
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.Yes)
     return QApplication.instance() or QApplication([])
 
 
@@ -25,6 +27,7 @@ def test_printed_payment_routes_to_selected_counterpart_review_without_posting(t
     path = tmp_path / "payment.db"
     evidence, _bank = profile(path, source)
     view = dialog(path, evidence.source_sha256)
+    wait_for_jobs(view)
     opened = []
 
     class Transfer:
@@ -37,7 +40,9 @@ def test_printed_payment_routes_to_selected_counterpart_review_without_posting(t
     monkeypatch.setattr(v2_transfer_review, "V2TransferReview", Transfer)
     try:
         view.table.selectRow(1)
+        wait_for_jobs(view)
         view.reason.setText("Keep this draft note")
+        wait_for_jobs(view)
         assert view.purpose.currentData() == "repayment"
         assert view.action_button.isEnabled()
         assert not view.category.isEnabled() and not view.manage_categories_button.isEnabled()
@@ -45,6 +50,7 @@ def test_printed_payment_routes_to_selected_counterpart_review_without_posting(t
         assert "no income or expense" in view.status.text()
         before = path.read_bytes()
         view.action_button.click()
+        wait_for_jobs(view)
         assert opened == [(path, view, evidence.payload.accounts[0].rows[1].row_id)]
         assert path.read_bytes() == before
         assert view.reason.text() == "Keep this draft note"
@@ -66,8 +72,10 @@ def test_invalid_scope_or_unbound_payment_preserves_source_status(tmp_path, sour
     path = tmp_path / "unsupported.db"
     evidence, _bank = profile(path, source, kind=kind, scope=scope, bind=bind)
     view = dialog(path, evidence.source_sha256)
+    wait_for_jobs(view)
     try:
         view.table.selectRow(1)
+        wait_for_jobs(view)
         assert view.purpose.currentData() is None
         assert view.purpose.findData("repayment") == -1
         assert view._current().status in view.status.text()
@@ -80,8 +88,10 @@ def test_manage_categories_creates_compatible_category_and_preserves_review_edit
     path = tmp_path / "category.db"
     evidence, _bank = profile(path, source)
     view = dialog(path, evidence.source_sha256)
+    wait_for_jobs(view)
     form(view)
     view.reason.setText("Authored interest review reason")
+    wait_for_jobs(view)
     previous_date = view.accounting_date.text()
 
     def add_category(manager):
@@ -93,6 +103,7 @@ def test_manage_categories_creates_compatible_category_and_preserves_review_edit
     monkeypatch.setattr(V2CategoryDialog, "exec", add_category)
     try:
         view.manage_categories_button.click()
+        wait_for_jobs(view)
         assert view.purpose.currentData() == "expense"
         assert view.reason.text() == "Authored interest review reason"
         assert view.accounting_date.text() == previous_date
@@ -110,13 +121,16 @@ def test_category_cancel_does_not_change_profile_or_review_choice(tmp_path, sour
     path = tmp_path / "cancel.db"
     evidence, _bank = profile(path, source)
     view = dialog(path, evidence.source_sha256)
+    wait_for_jobs(view)
     form(view)
     view.reason.setText("Retain reason on category cancel")
+    wait_for_jobs(view)
     old_category = view.category.currentData()
     before = path.read_bytes()
     monkeypatch.setattr(V2CategoryDialog, "exec", lambda _manager: QDialog.Rejected)
     try:
         view.manage_categories_button.click()
+        wait_for_jobs(view)
         assert path.read_bytes() == before
         assert view.category.currentData() == old_category and view.purpose.currentData() == "expense"
         assert view.reason.text() == "Retain reason on category cancel"
@@ -128,6 +142,7 @@ def test_incompatible_new_category_is_not_selected_for_expense(tmp_path, source,
     path = tmp_path / "incompatible.db"
     evidence, _bank = profile(path, source)
     view = dialog(path, evidence.source_sha256)
+    wait_for_jobs(view)
     form(view)
     old_category = view.category.currentData()
 
@@ -140,6 +155,7 @@ def test_incompatible_new_category_is_not_selected_for_expense(tmp_path, source,
     monkeypatch.setattr(V2CategoryDialog, "exec", add_income)
     try:
         view.manage_categories_button.click()
+        wait_for_jobs(view)
         assert view.category.currentData() == old_category
         assert all("A separate income category" not in view.category.itemText(i) for i in range(view.category.count()))
     finally:
@@ -159,11 +175,19 @@ def test_shared_card_category_shortcut_preserves_explicit_corrected_date(tmp_pat
         store.bind_source_account(evidence.source_sha256, section.source_identity, section.source_identity_form, "card")
     workspace = V2Workspace.open(path, tmp_path / "catalog", trusted_keys={}, preferences_path=tmp_path / "prefs.json")
     view = V2CardPurchaseReview(workspace, evidence.source_sha256)
+    wait_for_jobs(view)
+    view.navigation.status_filter.setCurrentIndex(view.navigation.status_filter.findData("all"))
+    wait_for_jobs(view)
     view.table.selectRow(0)
+    wait_for_jobs(view)
     view.purpose.setCurrentIndex(view.purpose.findData("expense"))
+    wait_for_jobs(view)
     view.category.setCurrentIndex(view.category.findData("expense:food"))
+    wait_for_jobs(view)
     view.accounting_date.setText("2026-03-14")
+    wait_for_jobs(view)
     view.reason.setText("Keep explicitly corrected card date")
+    wait_for_jobs(view)
 
     def add_category(manager):
         manager.add_name.setText("Parking")
@@ -173,6 +197,7 @@ def test_shared_card_category_shortcut_preserves_explicit_corrected_date(tmp_pat
     monkeypatch.setattr(V2CategoryDialog, "exec", add_category)
     try:
         view.manage_categories_button.click()
+        wait_for_jobs(view)
         assert view.accounting_date.text() == "2026-03-14"
         assert view.reason.text() == "Keep explicitly corrected card date"
         assert view.purpose.currentData() == "expense" and "Parking" in view.category.currentText()
@@ -190,6 +215,7 @@ def test_register_confirmation_keeps_reviewed_basis_when_nested_events_refresh_v
     path = tmp_path / "nested-refresh.db"
     evidence, _bank = profile(path, source)
     view = dialog(path, evidence.source_sha256)
+    wait_for_jobs(view)
     form(view)
     warnings = []
 
@@ -199,12 +225,14 @@ def test_register_confirmation_keeps_reviewed_basis_when_nested_events_refresh_v
                 FinancialAccount("register", "Changed while confirming", "liability", "synthetic")
             )
         view.refresh(selected_row_id=evidence.payload.accounts[0].rows[0].row_id)
+        wait_for_jobs(view)
         return QMessageBox.Yes
 
     monkeypatch.setattr(QMessageBox, "question", concurrent_refresh)
     monkeypatch.setattr(QMessageBox, "warning", lambda *_args: warnings.append(True))
     try:
         view.action_button.click()
+        wait_for_jobs(view)
         assert warnings
         with V2ProfileStore.open(path, read_only=True) as store:
             assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (0,)
@@ -226,6 +254,7 @@ def test_repayment_posted_elsewhere_shows_history_and_no_pending_category(tmp_pa
             bank, payment.row_id, preferences=ws.preferences(), reason="Confirmed whole-liability repayment"
         )
     view = dialog(path, evidence.source_sha256)
+    wait_for_jobs(view)
     focused = []
 
     class Transfer:
@@ -238,13 +267,15 @@ def test_repayment_posted_elsewhere_shows_history_and_no_pending_category(tmp_pa
     monkeypatch.setattr(v2_transfer_review, "V2TransferReview", Transfer)
     try:
         view.table.selectRow(1)
+        wait_for_jobs(view)
         assert view.model.data(view.model.index(1, 6), Qt.DisplayRole) == "Reviewed elsewhere"
         assert view.purpose.currentData() == "external_history" and not view.purpose.isEnabled()
         assert not view.category.isEnabled() and not view.manage_categories_button.isEnabled()
         assert "no further categorization" in view.status.text()
-        assert view.action_button.text() == "Inspect transfer / repayment history…" and view.action_button.isEnabled()
+        assert view.action_button.text() == "View reviewed transfer" and view.action_button.isEnabled()
         before = path.read_bytes()
         view.action_button.click()
+        wait_for_jobs(view)
         assert focused == [payment.row_id] and path.read_bytes() == before
     finally:
         view.close()

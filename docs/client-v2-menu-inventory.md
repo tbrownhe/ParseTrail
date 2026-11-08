@@ -58,6 +58,18 @@ presentation choices rather than missing export implementation.
 
 ## Approved initial-release deferrals
 
+The guided workspace now embeds ordinary document activity review, qualified
+account positions/history and existing report tabs in Documents / Review /
+Accounts / Reports. Related document actions retain transfer, component-payment,
+fee and evidence-check workflows. Ordinary review supports search/status filters,
+exact sorting, next-pending navigation and explicitly staged atomic category
+batches; correction/withdrawal remains separate. Reviewed-elsewhere activity
+routes to its owning event instead of appearing pending for another posting.
+Signed statement-format setup is explained before import; trust checks are
+unchanged. Background reads, backup/restore/export and source recovery retain
+their scoped progress/outcome ownership. These presentation changes do not
+reactivate any deferred capabilities listed below.
+
 The workspace Reports menu also provides cash movement by reviewed purpose for
 an explicit selection of asset accounts. It separates admitted cash categories,
 owned transfers and card payments, preserving dates and unclassified/pending

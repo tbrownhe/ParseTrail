@@ -86,6 +86,32 @@ current authoritative history. Failed reload clears the cached presentation.
 Document/batch windows check profile/WAL metadata on activation and queue changed
 reads off the GUI thread. Metadata is a freshness hint, never a write authority;
 write-time validation and stale-plan refusal remain mandatory.
+
+Ordinary cash/card/register review reads one committed snapshot on a worker-owned
+connection. All retained sources and observation inventories are still verified;
+the selected evidence model and small verified period/guard facts are reused only
+within that transaction. Cache validity includes the transaction and connection
+change count. It does not create a process-wide source cache or waive corrupt
+unselected-source refusal. Closing or superseding a read discards its presentation
+result; confirmed writes remain owned until their real outcome is delivered.
+
+An ordinary category batch belongs to one explicitly selected document and kind.
+Its immutable preview records each row, purpose/category, independent accounting
+date, exact journal entry, explicit shared reason, current review basis and
+profile identity. Previewing does not post entries or create categories. Final
+posting rebuilds and compares every entry inside one immediate transaction,
+rechecks source/account/overlap/active-use guards and commits all rows together.
+An exact committed retry returns the existing keys; stale, altered, corrected or
+withdrawn previews refuse without partial posting. Ordinary corrections and
+whole-event loan/transfer/settlement corrections retain their existing workflows.
+
+Background profile jobs retain worker connections until completion, coalesce
+superseded reads and serialize their confirmed writes per resolved profile.
+Services remain authoritative for transaction ownership and stale validation.
+Independent restore jobs validate the selected backup without first opening the
+damaged current profile. Backup/restore/export/recovered-original publication
+keeps its existing verification and destination-preservation rules; closing waits
+for a confirmed publication's actual outcome instead of claiming cancellation.
 The account-confirmation UI distinguishes read-time matching suggestions from
 saved explicit associations. A suggestion does not reduce its unassigned count
 or authorize posting; Use this account records the explicit source association.

@@ -12,6 +12,7 @@ from devtools.parser_engine_pilot.test_table_bank_source_output import DEFINITIO
 
 from .test_v2_card_purchase_review import _chase_profile
 from .test_v2_reviewed_openings import _profile
+from .v2_job_wait import wait_for_jobs
 
 
 def _later_source(store: V2ProfileStore, original):
@@ -185,14 +186,17 @@ def test_saved_period_review_action_records_later_source_without_journal(tmp_pat
 
     monkeypatch.setattr(V2StatementSourceReview, "exec", fill_and_save)
     dialog = V2StatementCoverageDialog(path)
+    wait_for_jobs(dialog)
     try:
         dialog.show()
         app.processEvents()
         index = next(i for i, row in enumerate(dialog.model.rows) if row.source_sha256 == later.source_sha256)
         dialog.table.selectRow(index)
+        wait_for_jobs(dialog)
         assert dialog.review_source_button.isEnabled()
         assert "Not recorded" in dialog.review_source_button.text()
         dialog.review_source_button.click()
+        wait_for_jobs(dialog)
         assert dialog.model.data(dialog.model.index(index, 10)) == "Recorded"
         assert "Recorded" in dialog.review_source_button.text()
         with V2ProfileStore.open(path, read_only=True) as store:

@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import sqlite3
 from pathlib import Path
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -23,7 +22,9 @@ from PySide6.QtWidgets import (
 )
 
 from parsetrail.core.v2_builtin_categories import category_labels
-from parsetrail.core.v2_profile_store import CashActivityReviewRow, ProfileFormatError, V2ProfileStore
+from parsetrail.core.v2_profile_store import CashActivityReviewRow
+from parsetrail.gui.v2_ordinary_review import OrdinaryReviewMixin
+from parsetrail.gui.v2_review_navigation import ReviewNavigation, reviewed_elsewhere
 
 PURPOSE_LABELS = {
     "expense": "Expense",
@@ -87,6 +88,7 @@ class _ReviewModel(QAbstractTableModel):
     def __init__(self, rows: tuple[CashActivityReviewRow, ...], parent=None):
         super().__init__(parent)
         self.rows = rows
+        self.owners = {}
 
     def replace(self, rows: tuple[CashActivityReviewRow, ...]) -> None:
         self.beginResetModel()
@@ -105,9 +107,18 @@ class _ReviewModel(QAbstractTableModel):
         return None
 
     def data(self, index: QModelIndex, role: int = Qt.DisplayRole):
-        if not index.isValid() or role not in {Qt.DisplayRole, Qt.ToolTipRole}:
+        if not index.isValid() or role not in {Qt.DisplayRole, Qt.ToolTipRole, Qt.UserRole}:
             return None
         row = self.rows[index.row()]
+        if role == Qt.UserRole:
+            return (
+                row.date,
+                row.description.casefold(),
+                row.amount_minor,
+                (row.financial_account or "").casefold(),
+                row.status,
+                row.purpose or "",
+            )[index.column()]
         values = (
             row.date or "Unknown",
             row.description or "Description not printed",
@@ -115,27 +126,35 @@ class _ReviewModel(QAbstractTableModel):
             f"{row.financial_account} ({row.tracking_scope.replace('_', ' ')})"
             if row.financial_account
             else "Not assigned",
-            row.status,
-            PURPOSE_LABELS.get(row.purpose, "Pending explicit review"),
+            self.owners.get(row.row_id, "Reviewed elsewhere") if reviewed_elsewhere(row) else row.status,
+            PURPOSE_LABELS.get(
+                row.purpose, "Reviewed elsewhere" if reviewed_elsewhere(row) else "Pending explicit review"
+            ),
         )
         return values[index.column()]
 
 
-class V2CashActivityReview(QDialog):
+class V2CashActivityReview(OrdinaryReviewMixin, QDialog):
     """Post or recategorize a selected, source-supported asset movement."""
 
-    def __init__(self, profile: Path, source_sha256: str, parent=None):
+    changed = Signal()
+
+    def __init__(self, profile: Path, source_sha256: str, parent=None, *, workspace=None, embedded=False):
         super().__init__(parent)
         self.profile = profile
+        self.workspace = workspace
+        self.review_kind = "cash"
         self.source_sha256 = source_sha256
         self.basis, self.entries, self.history = None, {}, ()
         self.setWindowTitle("2.0 cash activity review")
         self.resize(1050, 620)
         layout = QVBoxLayout(self)
         self.review_intro = QLabel()
+        self.review_intro.setTextFormat(Qt.PlainText)
         self.review_intro.setWordWrap(True)
         layout.addWidget(self.review_intro)
         self.overlap_note = QLabel()
+        self.overlap_note.setTextFormat(Qt.PlainText)
         self.overlap_note.setWordWrap(True)
         layout.addWidget(self.overlap_note)
         self.review_limits_button = QPushButton("Review rules and source limits")
@@ -148,11 +167,15 @@ class V2CashActivityReview(QDialog):
         layout.addWidget(self.note)
         self.model = _ReviewModel((), self)
         self.table = QTableView()
+        self.table.setAccessibleName("Source cash transactions for review")
         self.table.setModel(self.model)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.navigation = ReviewNavigation(self, self.model, self.table)
+        layout.addWidget(self.navigation)
         header = self.table.horizontalHeader()
+        header.setResizeContentsPrecision(100)
         header.setStretchLastSection(False)
         for column in (0, 2, 3, 4, 5):
             header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
@@ -160,10 +183,12 @@ class V2CashActivityReview(QDialog):
         self.table.selectionModel().currentRowChanged.connect(self._selected)
         layout.addWidget(self.table)
         self.source_context = QLabel()
+        self.source_context.setTextFormat(Qt.PlainText)
         self.source_context.setWordWrap(True)
         self.source_context.setTextInteractionFlags(Qt.TextSelectableByMouse)
         layout.addWidget(self.source_context)
         form = QFormLayout()
+        self.form = form
         self.purpose = QComboBox()
         self.purpose.currentIndexChanged.connect(self._purpose_changed)
         form.addRow("Reviewed purpose", self.purpose)
@@ -181,13 +206,16 @@ class V2CashActivityReview(QDialog):
         self.withdraw_button = QPushButton("Withdraw active interpretation")
         self.withdraw_button.clicked.connect(self._withdraw)
         actions = QHBoxLayout()
+        self.actions_layout = actions
         actions.addWidget(self.action_button)
         actions.addWidget(self.withdraw_button)
         layout.addLayout(actions)
         self.status = QLabel()
+        self.status.setTextFormat(Qt.PlainText)
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
         self.history_details = QLabel()
+        self.history_details.setTextFormat(Qt.PlainText)
         self.history_details.setWordWrap(True)
         self.history_details.setTextInteractionFlags(Qt.TextSelectableByMouse)
         layout.addWidget(self.history_details)
@@ -201,35 +229,42 @@ class V2CashActivityReview(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
         self.categories = ()
+        self._setup_jobs(profile, embedded=embedded)
         self.refresh()
 
     def _preview_source(self) -> None:
-        from parsetrail.gui.v2_evidence_preview import preview_saved_source
-
-        try:
-            preview_saved_source(self.profile, self.source_sha256, parent=self).exec()
-        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            QMessageBox.warning(self, "Source evidence unavailable", str(exc))
+        self._preview_evidence()
 
     def _current(self) -> CashActivityReviewRow | None:
-        index = self.table.currentIndex()
-        return self.model.rows[index.row()] if index.isValid() and index.row() < len(self.model.rows) else None
+        return self.navigation.current()
 
     def _selected(self, *_args) -> None:
+        self._remember_row_form()
         row = self._current()
         correcting = row is not None and row.entry_key is not None
+        external = reviewed_elsewhere(row)
         self.purpose.blockSignals(True)
         self.purpose.clear()
-        self.purpose.addItem("Choose a purpose; amount sign does not decide it", None)
+        self.purpose.addItem(
+            "Reviewed elsewhere — view the owning event"
+            if external
+            else "Choose a purpose; amount sign does not decide it",
+            None,
+        )
         purposes = (row.purpose,) if correcting else row.allowed_purposes if row is not None else ()
         for purpose in purposes:
             if purpose in PURPOSE_LABELS:
                 self.purpose.addItem(PURPOSE_LABELS[purpose], purpose)
-        self.purpose.setEnabled(row is not None and not correcting)
+        self.purpose.setEnabled(row is not None and not correcting and not external)
+        self.category.setEnabled(not external)
+        self.reason.setEnabled(not external)
+        for field in (self.purpose, self.category, self.reason):
+            self.form.setRowVisible(field, not external)
         if correcting:
             self.purpose.setCurrentIndex(max(0, self.purpose.findData(row.purpose)))
         self.purpose.blockSignals(False)
         self._purpose_changed()
+        self._restore_row_form(row)
 
     def _purpose_changed(self, *_args) -> None:
         row = self._current()
@@ -278,11 +313,21 @@ class V2CashActivityReview(QDialog):
                 and self.reason.text().strip()
             )
         )
+        if reviewed_elsewhere(row):
+            owner = (
+                next((owner for owner in getattr(self._snapshot, "owners", ()) if owner.row_id == row.row_id), None)
+                if hasattr(self, "_snapshot")
+                else None
+            )
+            self.action_button.setText(f"View {owner.label.lower()}" if owner is not None else "View reviewed event…")
+            self.action_button.setEnabled(self.basis is not None)
         self.status.setText(
             row.status
             + (
                 "; purpose and category class are retained; withdraw and freshly review to change purpose"
                 if correcting
+                else "; reviewed in another workflow; no ordinary posting is needed"
+                if reviewed_elsewhere(row)
                 else "; choose a purpose explicitly; transfers use their own review"
                 if purpose is None
                 else f"; add an {PURPOSE_KINDS[purpose]} category first"
@@ -298,6 +343,11 @@ class V2CashActivityReview(QDialog):
             and self.basis is not None
             and bool(self.reason.text().strip())
         )
+        if getattr(self, "embedded", False):
+            self.withdraw_button.setVisible(correcting)
+        if hasattr(self, "jobs") and (self.jobs.pending or not self._profile_matches()):
+            self.action_button.setEnabled(False)
+            self.withdraw_button.setEnabled(False)
         history = tuple(action for action in self.history if row and action.row_id == row.row_id)
         self.history_details.setText(
             "Retained interpretation history: "
@@ -309,24 +359,16 @@ class V2CashActivityReview(QDialog):
         )
 
     def refresh(self, selected_row_id: str | None = None) -> None:
-        try:
-            with V2ProfileStore.open(self.profile, read_only=True) as store:
-                snapshot = store.source_interpretation_snapshot(self.source_sha256, kind="cash")
-        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            self.basis, self.entries, self.history, self.categories = None, {}, (), ()
-            self.model.replace(())
-            self._selected()
-            self.preview_source_button.setEnabled(False)
-            self.review_intro.setText("Source review unavailable. Reload saved review to retry.")
-            self.overlap_note.clear()
-            self.status.setText(f"Source review unavailable. Reopen or refresh the review: {exc}")
-            return
+        self._queue_snapshot(selected_row_id)
+
+    def _apply_snapshot(self, snapshot, selected_row_id=None):
         self.basis, self.entries, self.history = (
             snapshot.basis_sha256,
             {entry.key: entry for entry in snapshot.entries},
             snapshot.history,
         )
         rows, self.categories, overlaps = snapshot.rows, snapshot.categories, snapshot.overlapping_source_ids
+        self.model.owners = {owner.row_id: owner.label for owner in snapshot.owners}
         self.preview_source_button.setEnabled(True)
         self.review_intro.setText(
             "Review this account's cash component only; this does not cover the whole HSA or investments. "
@@ -350,16 +392,14 @@ class V2CashActivityReview(QDialog):
                 else ""
             )
         )
-        self.model.replace(rows)
-        if selected_row_id is not None:
-            for index, row in enumerate(rows):
-                if row.row_id == selected_row_id:
-                    self.table.selectRow(index)
-                    break
+        self.navigation.replace(rows, selected_row_id)
         self._selected()
 
     def _act(self) -> None:
         row = self._current()
+        if reviewed_elsewhere(row) and self.action_button.isEnabled():
+            self._open_reviewed_owner()
+            return
         category_id = self.category.currentData()
         reason = self.reason.text().strip()
         purpose = self.purpose.currentData()
@@ -405,28 +445,25 @@ class V2CashActivityReview(QDialog):
             f"{effects}\n"
             f"{PURPOSE_ASSERTIONS[purpose]} Owned transfers and card repayments use a separate review."
         )
+        basis = self.basis
         if QMessageBox.question(self, f"Confirm reviewed {label}", message) != QMessageBox.StandardButton.Yes:
             return
-        try:
-            with V2ProfileStore.open(self.profile) as store:
-                if correcting:
-                    store.correct_reviewed_cash_category(
-                        row.entry_key, category_id, reason=reason, expected_basis_sha256=self.basis
-                    )
-                else:
-                    store.post_reviewed_cash_category(
-                        row.row_id, category_id, purpose=purpose, reason=reason, expected_basis_sha256=self.basis
-                    )
-        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            QMessageBox.warning(self, "Cash activity was not saved", str(exc))
-            self.refresh(selected_row_id=row.row_id)
-            return
-        self.reason.clear()
-        self.refresh(selected_row_id=row.row_id)
-        self.status.setText(
-            "Correction saved with its reversal and replacement; purpose retained."
+
+        def write(store, _cancelled):
+            if correcting:
+                return store.correct_reviewed_cash_category(
+                    row.entry_key, category_id, reason=reason, expected_basis_sha256=basis
+                )
+            return store.post_reviewed_cash_category(
+                row.row_id, category_id, purpose=purpose, reason=reason, expected_basis_sha256=basis
+            )
+
+        self._submit_review_write(
+            write,
+            message="Correction saved with reversal and replacement; purpose retained."
             if correcting
-            else f"{label.title()} posted."
+            else f"{label.title()} posted.",
+            row_id=row.row_id,
         )
 
     def _withdraw(self) -> None:
@@ -443,18 +480,15 @@ class V2CashActivityReview(QDialog):
             "The immutable source row returns to pending; posting it again requires a fresh review. "
             "This withdraws an interpretation, not a bank movement."
         )
+        basis = self.basis
         if QMessageBox.question(self, "Confirm interpretation withdrawal", message) != QMessageBox.Yes:
             return
-        try:
-            with V2ProfileStore.open(self.profile) as store:
-                store.withdraw_reviewed_interpretation(entry.key, expected_basis_sha256=self.basis, reason=reason)
-        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            QMessageBox.warning(self, "Interpretation was not withdrawn", str(exc))
-            self.refresh(selected_row_id=row.row_id)
-            return
-        self.reason.clear()
-        self.refresh(selected_row_id=row.row_id)
-        self.status.setText(
-            "The selected interpretation's withdrawal is recorded. The refreshed row shows its current posting state; "
-            "original and inverse entries remain history."
+
+        def write(store, _cancelled):
+            return store.withdraw_reviewed_interpretation(entry.key, expected_basis_sha256=basis, reason=reason)
+
+        self._submit_review_write(
+            write,
+            message="The selected interpretation's withdrawal is recorded. Refreshed rows show current posting state; original and inverse entries remain history.",
+            row_id=row.row_id,
         )

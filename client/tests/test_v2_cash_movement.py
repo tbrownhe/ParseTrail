@@ -18,6 +18,7 @@ from .test_v2_report_drilldown import END, START, _profile
 from .test_v2_transfer_corrections import _alternative
 from .test_v2_transfers import BANK_DEFINITION
 from .test_v2_transfers import _profile as payment_profile
+from .v2_job_wait import wait_for_jobs
 
 JAN, FEB = date(2026, 1, 1), date(2026, 2, 1)
 
@@ -291,15 +292,21 @@ def test_dialog_requires_scope_previews_saved_sources_inspects_common_entries_an
     monkeypatch.setattr(V2ReviewedEntryDrilldown, "exec", lambda dialog: inspected.append(dialog.drilldown) or 0)
     before = profile.read_bytes()
     dialog = V2CashMovementDialog(profile)
+    wait_for_jobs(dialog)
     try:
         assert dialog.report is None and not dialog.inspect.isEnabled() and not dialog.preview.isEnabled()
         dialog.start.setDate(QDate(2026, 10, 1))
+        wait_for_jobs(dialog)
         dialog.end.setDate(QDate(2026, 11, 1))
+        wait_for_jobs(dialog)
         dialog.accounts.item(0).setCheckState(Qt.Checked)
+        wait_for_jobs(dialog)
         assert dialog.entries.rowCount() == 3 and "$3.00" in dialog.total.text()
         dialog.preview.click()
+        wait_for_jobs(dialog)
         assert seen[0].evidence == evidence
         dialog.inspect.click()
+        wait_for_jobs(dialog)
         assert inspected[0].total_minor == 300 and inspected[0].account.id == "cash"
         assert profile.read_bytes() == before
         key = dialog.report.rows[0].entry.key
@@ -316,6 +323,7 @@ def test_dialog_requires_scope_previews_saved_sources_inspects_common_entries_an
             connection.execute(trigger)
         corrupt = profile.read_bytes()
         dialog.refresh()
+        wait_for_jobs(dialog)
         assert dialog.report is None and "unavailable" in dialog.total.text()
         assert dialog.entries.rowCount() == dialog.summary.rowCount() == dialog.sources.count() == 0
         assert dialog.details.toPlainText() == "" and not dialog.preview.isEnabled() and not dialog.inspect.isEnabled()
@@ -362,9 +370,12 @@ def test_duplicate_account_names_remain_distinguishable_in_scope_and_inspection(
             evidence.payload.rows[0].row_id, "income:pay", reason="Reviewed second account income"
         )
     dialog = V2CashMovementDialog(profile)
+    wait_for_jobs(dialog)
     try:
         dialog.start.setDate(QDate(2026, 10, 1))
+        wait_for_jobs(dialog)
         dialog.end.setDate(QDate(2026, 11, 1))
+        wait_for_jobs(dialog)
         choices = {
             dialog.accounts.item(index).data(Qt.UserRole): dialog.accounts.item(index)
             for index in range(dialog.accounts.count())
@@ -374,8 +385,10 @@ def test_duplicate_account_names_remain_distinguishable_in_scope_and_inspection(
         assert "11110001" not in choices["cash"].text()
         assert "Account ID: cash2" in choices["cash2"].toolTip()
         choices["cash2"].setCheckState(Qt.Checked)
+        wait_for_jobs(dialog)
         assert dialog.report.total_minor == 500 and "ending 0002" in dialog.inspect_account.currentText()
         choices["cash"].setCheckState(Qt.Checked)
+        wait_for_jobs(dialog)
         assert dialog.report.total_minor == 800
         assert len({dialog.inspect_account.itemText(index) for index in range(dialog.inspect_account.count())}) == 2
     finally:

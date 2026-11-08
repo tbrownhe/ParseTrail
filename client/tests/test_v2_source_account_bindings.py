@@ -17,6 +17,7 @@ from devtools.parser_engine_pilot.test_synchrony_source_output import SOURCE as 
 from devtools.parser_engine_pilot.test_synchrony_source_output import channels as card_channels
 
 from .test_v2_document_browser import wait_for_inventory
+from .v2_job_wait import wait_for_jobs
 
 CASH_DEFINITION = (
     Path(__file__).parents[2] / "devtools" / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
@@ -207,6 +208,7 @@ def test_statement_overlap_uses_explicit_account_and_printed_period(tmp_path: Pa
     wait_for_inventory(window)
     try:
         dialog = V2StatementCoverageDialog(path, window)
+        wait_for_jobs(dialog)
         tabs = dialog.findChild(QTabWidget)
         assert [tabs.tabText(index) for index in range(tabs.count())] == [
             "Saved periods",
@@ -337,6 +339,9 @@ def test_suggested_account_remains_pending_until_explicit_confirmation(tmp_path:
     before = sha256(workspace.profile_path.read_bytes()).hexdigest()
     dialog = V2SourceAccountReview(workspace, source_id)
     card = V2CardPurchaseReview(workspace, source_id)
+    wait_for_jobs(card)
+    card.navigation.status_filter.setCurrentIndex(card.navigation.status_filter.findData("all"))
+    wait_for_jobs(card)
     try:
         assert "1 of 1" in dialog.status.text()
         assert "Suggested account: Card A" in dialog.identities.item(0).text()
@@ -346,6 +351,7 @@ def test_suggested_account_remains_pending_until_explicit_confirmation(tmp_path:
         assert sha256(workspace.profile_path.read_bytes()).hexdigest() == before
         dialog.assign_button.click()
         card.refresh()
+        wait_for_jobs(card)
         assert "0 of 1" in dialog.status.text()
         assert "Assigned: Card A" in dialog.identities.item(0).text()
         assert card.model.rows[0].financial_account == "Card A"

@@ -16,6 +16,7 @@ from .test_v2_source_openings import _variant
 from .test_v2_source_overlap import review as review_overlap
 from .test_v2_statement_journal_comparison import _profile
 from .test_v2_statement_reconciliation import _review_and_post
+from .v2_job_wait import wait_for_jobs
 
 
 @pytest.fixture
@@ -37,7 +38,9 @@ def _dialog(profile: Path):
     from parsetrail.gui.v2_statement_coverage import V2StatementCoverageDialog
 
     dialog = V2StatementCoverageDialog(profile)
+    wait_for_jobs(dialog)
     dialog.tabs.setCurrentIndex(3)
+    wait_for_jobs(dialog)
     dialog.reconciliation_table.selectRow(0)
     return dialog
 
@@ -64,6 +67,7 @@ def test_cancel_successful_check_does_not_write(tmp_path: Path, app, monkeypatch
         assert dialog.save_reconciliation_button.isEnabled()
         dialog.reconciliation_reason.setText("Inspected source")
         dialog.save_reconciliation_button.click()
+        wait_for_jobs(dialog)
         assert len(questions) == 1
         assert "through 2026-01-31" in questions[0]
         assert "Page capture and period coverage remain separate" in questions[0]
@@ -89,6 +93,7 @@ def test_save_reopen_stale_history_and_position_cutoffs(tmp_path: Path, app, mon
         app.processEvents()
         dialog.reconciliation_reason.setText("Inspected printed balances")
         dialog.save_reconciliation_button.click()
+        wait_for_jobs(dialog)
         assert "Saved reconciliation through 2026-01-31" in dialog.reconciliation_status.text()
         assert dialog.reconciliation_history_model.rowCount() == 1
         assert _cell(dialog.reconciliation_history_model, 0, 2) == "Current inputs"
@@ -97,6 +102,7 @@ def test_save_reopen_stale_history_and_position_cutoffs(tmp_path: Path, app, mon
         assert dialog.reconciliation_history_table.viewport().height() > 100
         dialog.reconciliation_reason.setText("A second click must retain the original reason")
         dialog.save_reconciliation_button.click()
+        wait_for_jobs(dialog)
         assert dialog.reconciliation_history_model.rowCount() == 1
         assert _cell(dialog.reconciliation_history_model, 0, 4) == (
             "Confirmed statement reconciliation: Inspected printed balances"
@@ -151,6 +157,7 @@ def test_save_reopen_stale_history_and_position_cutoffs(tmp_path: Path, app, mon
         assert "Stale" in _cell(dialog.reconciliation_history_model, 0, 2)
         assert "retained as historical evidence" in dialog.reconciliation_history_details.text()
         dialog.save_reconciliation_button.click()
+        wait_for_jobs(dialog)
         assert dialog.reconciliation_history_model.rowCount() == 2
         assert _cell(dialog.reconciliation_history_model, 0, 2) == "Current inputs"
         assert "Stale" in _cell(dialog.reconciliation_history_model, 1, 2)
@@ -177,12 +184,14 @@ def test_stale_save_refuses_and_refreshes_current_check_then_failed_check_disabl
         with V2ProfileStore.open(profile) as store:
             store.add_category_account("expense:extra", "Extra", "expense")
         dialog.save_reconciliation_button.click()
+        wait_for_jobs(dialog)
         assert len(warnings) == 1
         assert "Inputs changed" in warnings[0]
         assert dialog.reconciliation_history_model.rowCount() == 0
         assert dialog.reconciliation_model.rows[0].input_version != first_version
         assert dialog.save_reconciliation_button.isEnabled()
         dialog.save_reconciliation_button.click()
+        wait_for_jobs(dialog)
         assert dialog.reconciliation_history_model.rowCount() == 1
         with V2ProfileStore.open(profile) as store:
             latest = store.statement_source_reviews("cash")[0]
@@ -197,10 +206,12 @@ def test_stale_save_refuses_and_refreshes_current_check_then_failed_check_disabl
                 source_reference="Closing balance needs review",
             )
         dialog._refresh_reconciliation()
+        wait_for_jobs(dialog)
         assert not dialog.save_reconciliation_button.isEnabled()
         assert "Stale" in _cell(dialog.reconciliation_history_model, 0, 2)
         assert "Needs review" in _cell(dialog.reconciliation_model, 0, 2)
         dialog._save_reconciliation()
+        wait_for_jobs(dialog)
         assert dialog.reconciliation_history_model.rowCount() == 1
     finally:
         dialog.close()
@@ -235,6 +246,7 @@ def test_failed_live_check_and_failed_refresh_never_offer_save(tmp_path: Path, a
 
         monkeypatch.setattr(V2ProfileStore, "reconciliation_snapshot", unavailable)
         dialog._refresh_reconciliation()
+        wait_for_jobs(dialog)
         assert dialog.reconciliation_model.rowCount() == 0
         assert dialog.reconciliation_history_model.rowCount() == 0
         assert not dialog.save_reconciliation_button.isEnabled()
@@ -284,6 +296,7 @@ def test_unsupported_returned_codes_are_visible_and_never_certify_or_enable_save
         assert "Unsupported check code (unknown_balance_rule)" in dialog.reconciliation_history_details.text()
         assert "Matches current check inputs" not in dialog.reconciliation_history_details.text()
         dialog._save_reconciliation()
+        wait_for_jobs(dialog)
     finally:
         dialog.close()
         app.processEvents()
@@ -309,6 +322,7 @@ def test_real_overlap_warning_codes_remain_supported_and_repeats_are_not_allocat
             for retained, supporting in zip(section.rows, repeated.payload.accounts[0].rows, strict=True):
                 review_overlap(store, retained.row_id, supporting.row_id, retained=retained.row_id)
         dialog._refresh_reconciliation()
+        wait_for_jobs(dialog)
         supporting_index = next(
             index
             for index, row in enumerate(dialog.reconciliation_model.rows)
@@ -363,6 +377,7 @@ def test_constructor_and_refresh_use_one_coherent_snapshot_despite_concurrent_ch
             == dialog.reconciliation_model.rows[0].input_version
         )
         dialog._refresh_reconciliation()
+        wait_for_jobs(dialog)
         assert len(calls) == 2
         assert dialog.reconciliation_model.rows[0].input_version != check.input_version
         assert "Stale" in _cell(dialog.reconciliation_history_model, 0, 2)
@@ -395,6 +410,7 @@ def test_multiple_bound_sections_keep_history_visible_and_positions_qualified(tm
         assert dialog.reconciliation_history_model.rowCount() == 1
         assert "Stale" in _cell(dialog.reconciliation_history_model, 0, 2)
         dialog._refresh_reconciliation()
+        wait_for_jobs(dialog)
         assert "multiple sections in a bound source" in dialog.reconciliation_status.text()
         assert dialog.reconciliation_history_model.rowCount() == 1
     finally:

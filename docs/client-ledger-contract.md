@@ -47,6 +47,22 @@ availability. Arbitrary manual journals remain outside DEC-1 scope.
 
 ## Evidence and books
 
+Ordinary cash/card/register category review also admits explicitly staged batches
+within one source document. Every selected row retains an explicit allowed
+purpose/category and its own source/accounting-date meaning; choosing multiple
+rows never copies one accounting-date override across them. The authored reason
+shown for the batch applies to each exact proposed entry. A final preview and one
+explicit confirmation precede an all-or-nothing service transaction. Overlap,
+binding, prior consumption, source integrity and stale review guards apply to
+every member; an exact retry cannot consume the evidence again. Batching does not
+admit new accounting shapes, automate purpose inference, or combine correction
+and new-entry operations.
+
+Source review rows consumed in other workflows expose the owning reviewed event.
+They do not require another ordinary category posting. Source date provenance
+(including derived dates) remains visible in the batch preview, independently
+of an explicit accounting-date override.
+
 Keep three separate layers:
 
 1. Imported evidence: statements, their declared intervals/balances, normalized

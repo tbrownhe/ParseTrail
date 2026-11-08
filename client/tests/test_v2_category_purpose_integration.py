@@ -13,6 +13,7 @@ from parsetrail.core.v2_source_pipeline import build_source_evidence
 from .test_v2_card_purchase_review import _chase_profile
 from .test_v2_cash_activity_review import DEFINITION
 from .test_v2_reports_responsiveness import wait_for_reports
+from .v2_job_wait import wait_for_jobs
 
 START, END = date(2026, 10, 1), date(2026, 11, 1)
 SOURCE = (
@@ -158,6 +159,7 @@ def test_report_dialogs_keep_negative_net_spending_and_income_visible(tmp_path, 
     reports = V2ReviewedReportsDialog(profile)
     wait_for_reports(reports)
     cash = V2CashMovementDialog(profile)
+    wait_for_jobs(cash)
     try:
         reports.start.setDate(QDate(2026, 10, 1))
         wait_for_reports(reports)
@@ -175,9 +177,12 @@ def test_report_dialogs_keep_negative_net_spending_and_income_visible(tmp_path, 
         wait_for_reports(reports)
         assert sum(row.remaining_minor for row in reports.budget_model.rows) == 1600
         cash.start.setDate(QDate(2026, 10, 1))
+        wait_for_jobs(cash)
         cash.end.setDate(QDate(2026, 11, 1))
+        wait_for_jobs(cash)
         assert cash.report is None
         cash.accounts.item(0).setCheckState(Qt.Checked)
+        wait_for_jobs(cash)
         assert cash.report.total_minor == 400
         assert cash.summary.rowCount() == 4
         purposes = {cash.summary.item(index, 0).text() for index in range(4)}

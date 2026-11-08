@@ -1052,6 +1052,7 @@ class CashActivityReviewRow:
     tracking_scope: str | None = None
     accounting_description: str | None = None
     source_description_known: bool = True
+    date_provenance: Literal["observed", "derived", "assumed", "unknown"] | None = None
 
 
 @dataclass(frozen=True)
@@ -1164,6 +1165,15 @@ class SourceInterpretationSnapshot:
     preferences: V2Preferences | None
     statement: bool
     overlapping_source_ids: tuple[str, ...]
+    owners: tuple[SourceInterpretationOwner, ...] = ()
+
+
+@dataclass(frozen=True)
+class SourceInterpretationOwner:
+    row_id: str
+    owner_kind: Literal["transfer", "settlement", "loan", "other"]
+    event_id: str
+    label: str
 
 
 @dataclass(frozen=True)
@@ -1183,6 +1193,7 @@ class ReviewedCategorySummary:
     activity_rows_without_full_allocation: int
     sources_with_incomplete_activity: int
     excluded_unreviewed_entries: int
+    reviewed_entry_count: int | None = None
 
 
 @dataclass(frozen=True)
@@ -1669,6 +1680,36 @@ class V2ProfileStore:
         self._transfer_verified_sources = None
         self._transfer_history_cache = None
         self._transfer_history_epoch = None
+        self._source_read_evidence = None
+        self._source_read_periods = None
+        self._source_read_epoch = None
+        self._source_read_cancelled = None
+
+    @contextmanager
+    def _verified_source_operation(self, cancelled=None):
+        """Reuse requested imports and history only in an unwritten snapshot.
+
+        The archive-wide overlap scan still streams every other import. Retaining
+        its entire decoded archive would make a selected-document read consume
+        archive-sized memory and increase Python collection work.
+        """
+        if self._source_read_evidence is not None:
+            yield
+            return
+        if not self.connection.in_transaction:
+            raise ProfileFormatError("source_interpretation_requires_committed_snapshot")
+        self._source_read_evidence = {}
+        self._source_read_periods = {}
+        self._source_read_epoch = self.connection.total_changes
+        self._source_read_cancelled = cancelled
+        try:
+            yield
+        finally:
+            self._source_read_evidence = None
+            self._source_read_periods = None
+            self._source_read_epoch = None
+            self._source_read_cancelled = None
+            self._transfer_history_cache = None
 
     @contextmanager
     def _verified_transfer_operation(self, cancelled=None):
@@ -2612,7 +2653,7 @@ class V2ProfileStore:
             )
         )
 
-    def _source_overlap_index(self, *, _source_consumer=None):
+    def _source_overlap_index(self, *, _source_consumer=None, _posting_only=False):
         """Build the full finite date-window index, retaining supporting rows."""
         accounts = {account.id: account for account in self.financial_accounts()}
         consumed = self._active_consumed()
@@ -2648,8 +2689,10 @@ class V2ProfileStore:
                     row.date_role,
                     row.date.provenance,
                     row.amount.minor,
-                    row.description.text or "Description not printed",
-                    tuple(dict.fromkeys(fragment.location.model_dump_json() for fragment in row.fragments)),
+                    "" if _posting_only else row.description.text or "Description not printed",
+                    ()
+                    if _posting_only
+                    else tuple(dict.fromkeys(fragment.location.model_dump_json() for fragment in row.fragments)),
                     consumed.get(row.row_id, 0),
                     row.row_id in history,
                     row.row_id in proven_support and not consumed.get(row.row_id, 0),
@@ -2783,11 +2826,13 @@ class V2ProfileStore:
         ):
             digest.update(table.encode())
             columns = "source_sha256,definition_sha256,size,sha256" if table == "EvidenceSnapshots" else "*"
-            for row in sorted(
-                self.connection.execute(f"SELECT {columns} FROM {table}").fetchall(),
-                key=lambda item: json.dumps(item, separators=(",", ":")),
+            # Order and hash the very same encoding. The former sort-key pass
+            # serialized every observation a second time in growing archives.
+            for encoded in sorted(
+                json.dumps(row, separators=(",", ":"))
+                for row in self.connection.execute(f"SELECT {columns} FROM {table}")
             ):
-                digest.update(json.dumps(row, separators=(",", ":")).encode())
+                digest.update(encoded.encode())
         return digest.hexdigest()
 
     @staticmethod
@@ -2892,7 +2937,9 @@ class V2ProfileStore:
                 self.connection.execute("ROLLBACK")
 
     def _source_overlap_posting_blocks(self, row_ids: tuple[str, ...], *, _verified_index=None) -> dict[str, str]:
-        rows, index, reviews, aliases = self._source_overlap_index() if _verified_index is None else _verified_index
+        rows, index, reviews, aliases = (
+            self._source_overlap_index(_posting_only=True) if _verified_index is None else _verified_index
+        )
         groups = self._source_overlap_groups(rows, aliases)
         blocks = {}
         for row_id in row_ids:
@@ -3502,7 +3549,12 @@ class V2ProfileStore:
         )
 
     def source_interpretation_snapshot(
-        self, source_sha256: str, *, kind: Literal["cash", "card", "register"], preferences: V2Preferences | None = None
+        self,
+        source_sha256: str,
+        *,
+        kind: Literal["cash", "card", "register"],
+        preferences: V2Preferences | None = None,
+        cancelled=None,
     ) -> SourceInterpretationSnapshot:
         if kind not in {"cash", "card", "register"} or (kind == "card" and type(preferences) is not V2Preferences):
             raise ProfileFormatError("source_interpretation_kind_invalid")
@@ -3510,33 +3562,72 @@ class V2ProfileStore:
             raise ProfileFormatError("source_interpretation_requires_committed_snapshot")
         self.connection.execute("BEGIN")
         try:
-            actions, _repairs = self._read_source_interpretation_history()
-            saved = self.load_import(source_sha256)
-            rows = (
-                self.cash_activity_review_rows(source_sha256)
-                if kind == "cash"
-                else self.register_activity_review_rows(source_sha256)
-                if kind == "register"
-                else self.card_purchase_review_rows(source_sha256, preferences=preferences)
-            )
-            keys = tuple(dict.fromkeys(row.entry_key for row in rows if row.entry_key is not None))
-            entries = tuple(self._ordinary_category_entry(key)[0] for key in keys)
-            row_ids = {row.row_id for row in _rows(saved.evidence)}
-            statement = isinstance(saved.evidence.payload, StatementPayload)
-            return SourceInterpretationSnapshot(
-                source_sha256,
-                kind,
-                rows,
-                self.category_accounts(),
-                entries,
-                tuple(action for action in actions if action.row_id in row_ids),
-                self._source_overlap_basis(),
-                preferences,
-                statement,
-                self.overlapping_statement_sources(source_sha256) if statement else (),
-            )
+            with self._verified_source_operation(cancelled):
+                if cancelled is not None and cancelled():
+                    raise ProfileFormatError("source_interpretation_cancelled")
+                actions, _repairs = self._read_source_interpretation_history()
+                saved = self.load_import(source_sha256)
+                rows = (
+                    self.cash_activity_review_rows(source_sha256)
+                    if kind == "cash"
+                    else self.register_activity_review_rows(source_sha256)
+                    if kind == "register"
+                    else self.card_purchase_review_rows(source_sha256, preferences=preferences)
+                )
+                keys = tuple(dict.fromkeys(row.entry_key for row in rows if row.entry_key is not None))
+                entries = tuple(self._ordinary_category_entry(key)[0] for key in keys)
+                row_ids = {row.row_id for row in _rows(saved.evidence)}
+                statement = isinstance(saved.evidence.payload, StatementPayload)
+                owners = self._source_interpretation_owners(row_ids - {r.row_id for r in rows if r.entry_key})
+                return SourceInterpretationSnapshot(
+                    source_sha256,
+                    kind,
+                    rows,
+                    self.category_accounts(),
+                    entries,
+                    tuple(action for action in actions if action.row_id in row_ids),
+                    self._source_overlap_basis(),
+                    preferences,
+                    statement,
+                    self.overlapping_statement_sources(source_sha256) if statement else (),
+                    owners,
+                )
         finally:
             self.connection.execute("ROLLBACK")
+
+    def _source_interpretation_owners(self, row_ids: set[str]) -> tuple[SourceInterpretationOwner, ...]:
+        """Link active consumed evidence to its verified whole-event workflow."""
+        owners = {}
+        for event in self._read_transfer_history()[0]:
+            if event.status != "active":
+                continue
+            kind = "transfer" if event.pair is not None else "settlement"
+            for row_id in set(event.settlement.row_ids) & row_ids:
+                owners[row_id] = SourceInterpretationOwner(row_id, kind, event.event_id, "Reviewed " + kind)
+        for event in self._read_loan_history()[0]:
+            if event.status == "active":
+                for row_id in set(event.manifest.row_ids) & row_ids:
+                    owners[row_id] = SourceInterpretationOwner(row_id, "loan", event.event_id, "Reviewed loan payment")
+        for row_id, entries in self._active_reviewed_entries_for_rows(row_ids).items():
+            if row_id not in owners:
+                owners[row_id] = SourceInterpretationOwner(
+                    row_id, "other", entries[0].event_id, "Reviewed in another activity workflow"
+                )
+        return tuple(owners[key] for key in sorted(owners))
+
+    def _active_reviewed_entries_for_rows(self, row_ids: set[str]) -> dict[str, list[JournalEntry]]:
+        active = {}
+        ordered = sorted(row_ids)
+        for offset in range(0, len(ordered), 500):
+            selected = ordered[offset : offset + 500]
+            placeholders = ",".join("?" for _ in selected)
+            for row_id, payload in self.connection.execute(
+                "SELECT a.row_id,e.payload FROM JournalAllocations a JOIN JournalEntries e ON e.key=a.entry_key "
+                f"WHERE a.row_id IN ({placeholders}) AND a.entry_key NOT IN ({_INACTIVE_JOURNAL_SQL})",
+                selected,
+            ):
+                active.setdefault(row_id, []).append(_decode_journal(payload))
+        return active
 
     def _append_source_interpretation_action(
         self, entry: JournalEntry, row_id: str, kind: str, basis: str, reason: str
@@ -3776,6 +3867,7 @@ class V2ProfileStore:
                     tracking_scopes.get(account_id),
                     accounting_description,
                     bool(row.description.text),
+                    row.date.provenance,
                 )
             )
         return tuple(result)
@@ -4396,10 +4488,9 @@ class V2ProfileStore:
         # rolled back to a savepoint, validate afresh for the rest of the scope.
         # In particular never cache a transient, partially mutated history.
         epoch = self.connection.total_changes
-        scoped = (
-            self._transfer_verified_sources is not None
-            and self.connection.in_transaction
-            and epoch == self._transfer_history_epoch
+        scoped = self.connection.in_transaction and (
+            (self._transfer_verified_sources is not None and epoch == self._transfer_history_epoch)
+            or (self._source_read_evidence is not None and epoch == self._source_read_epoch)
         )
         if scoped and self._transfer_history_cache is not None:
             cached_epoch, result = self._transfer_history_cache
@@ -6175,11 +6266,13 @@ class V2ProfileStore:
         categories = {category.id: category for category in self.category_accounts() if category.kind == kind}
         totals = dict.fromkeys(categories, 0)
         excluded_unreviewed = 0
+        reviewed_entry_count = 0
         direction = 1 if kind == "expense" else -1
         for entry in self._journal_entries_in_period(start, end):
             if not entry.reviewed:
                 excluded_unreviewed += any(posting.account_id in totals for posting in entry.postings)
                 continue
+            reviewed_entry_count += any(posting.account_id in totals for posting in entry.postings)
             for posting in entry.postings:
                 if posting.account_id in totals:
                     totals[posting.account_id] += direction * posting.amount_minor
@@ -6196,6 +6289,7 @@ class V2ProfileStore:
             unresolved_rows,
             unresolved_sources,
             excluded_unreviewed,
+            reviewed_entry_count,
         )
 
     def monthly_budget_summary(self, month: date) -> MonthlyBudgetSummary:
@@ -6651,6 +6745,245 @@ class V2ProfileStore:
         self.connection.execute("INSERT INTO JournalEntries(key,payload) VALUES (?,?)", (entry.key, payload))
         self.connection.execute("INSERT INTO JournalAllocations VALUES (?,?,?)", (entry.key, row_id, amount))
         return entry.key
+
+    @staticmethod
+    def _ordinary_batch_request(source_sha256, kind, selections, reason, preferences):
+        from parsetrail.core.v2_ordinary_batch import OrdinaryCategorySelection
+
+        if (
+            type(source_sha256) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", source_sha256) is None
+            or type(kind) is not str
+            or kind not in {"cash", "card", "register"}
+            or type(selections) is not tuple
+            or not 1 <= len(selections) <= 2000
+            or any(
+                type(item) is not OrdinaryCategorySelection
+                or type(item.row_id) is not str
+                or not item.row_id
+                or type(item.category_id) is not str
+                or not item.category_id
+                or type(item.purpose) is not str
+                or item.purpose not in CATEGORY_PURPOSE_KINDS
+                or (item.accounting_date is not None and type(item.accounting_date) is not date)
+                for item in selections
+            )
+            or len({item.row_id for item in selections}) != len(selections)
+        ):
+            raise ProfileFormatError("ordinary_batch_selection_invalid")
+        if type(reason) is not str or not 0 < len(reason.strip()) <= 500:
+            raise ProfileFormatError("ordinary_batch_reason_required")
+        if (kind == "card" and type(preferences) is not V2Preferences) or (
+            preferences is not None
+            and (type(preferences) is not V2Preferences or type(preferences.allow_assumed_posting_dates) is not bool)
+        ):
+            raise ProfileFormatError("ordinary_batch_preferences_invalid")
+
+    def _ordinary_batch_entries(self, source_sha256, kind, selections, reason, preferences, cancelled, *, retry=False):
+        from parsetrail.core.v2_ordinary_batch import check_cancelled
+
+        check_cancelled(cancelled)
+        consumed = self._active_consumed()
+        inactive = self._inactive_journal_keys()
+        accounts = self._ledger_accounts()
+        entries = []
+        for item in selections:
+            check_cancelled(cancelled)
+            source = self.connection.execute(
+                "SELECT source_sha256 FROM SourceObservations WHERE row_id=?", (item.row_id,)
+            ).fetchone()
+            if source != (source_sha256,):
+                raise ProfileFormatError("ordinary_batch_row_outside_source")
+            category = self.connection.execute(
+                "SELECT kind,role FROM Accounts WHERE id=?", (item.category_id,)
+            ).fetchone()
+            built_in = builtin_category(item.category_id)
+            if category is None and built_in is not None:
+                category = (built_in.kind, "category")
+                accounts[item.category_id] = LedgerAccount(
+                    item.category_id, built_in.name, AccountKind(built_in.kind), "USD"
+                )
+            if category not in {("expense", "category"), ("income", "category")}:
+                raise ProfileFormatError("ordinary_batch_category_invalid")
+            if kind == "cash":
+                row, financial_id, _accounts, description = self._cash_category_source(item.row_id)
+                posting_date = date.fromisoformat(row.date.iso)
+                if item.accounting_date is not None and item.accounting_date != posting_date:
+                    raise ProfileFormatError("ordinary_batch_source_date_required")
+            else:
+                row, financial_id, _accounts, candidate = self._card_purchase_source(
+                    item.row_id, _register=kind == "register"
+                )
+                description = row.description.text
+                permitted = (
+                    register_posting_date(row) if kind == "register" else permitted_posting_date(row, preferences)
+                )
+                if (
+                    kind == "register"
+                    and item.accounting_date is not None
+                    and (permitted is None or item.accounting_date.isoformat() != permitted.iso)
+                ):
+                    raise ProfileFormatError("ordinary_batch_source_date_required")
+                if item.accounting_date is None:
+                    if permitted is None:
+                        raise ProfileFormatError("card_purchase_assumed_date_disabled")
+                    posting_date = date.fromisoformat(permitted.iso)
+                else:
+                    if permitted is None and item.accounting_date.isoformat() == candidate.iso:
+                        raise ProfileFormatError("card_purchase_assumed_date_disabled")
+                    posting_date = item.accounting_date
+            amount = row.amount.minor
+            if item.purpose not in _category_purposes(amount) or CATEGORY_PURPOSE_KINDS[item.purpose] != category[0]:
+                raise ProfileFormatError("ordinary_batch_purpose_invalid")
+            key = f"review:{kind}:{item.purpose}:{item.row_id}"
+            if self.connection.execute("SELECT 1 FROM JournalEntries WHERE key=?", (key,)).fetchone():
+                if key in inactive:
+                    generation = self.connection.execute(
+                        "SELECT MAX(action_id) FROM SourceInterpretationActions WHERE row_id=?", (item.row_id,)
+                    ).fetchone()[0]
+                    if generation is None:
+                        raise ProfileFormatError("ordinary_batch_row_already_reviewed")
+                    key += f":repost:{generation}"
+                elif not retry:
+                    raise ProfileFormatError("ordinary_batch_row_already_reviewed")
+            entry = JournalEntry(
+                key=key,
+                event_id=f"source:{item.row_id}",
+                posting_date=posting_date,
+                description=description,
+                postings=(
+                    Posting(financial_id, amount, (Allocation(item.row_id, amount),)),
+                    Posting(item.category_id, -amount),
+                ),
+                reviewed=True,
+                reason=reason,
+            )
+            if retry:
+                prior = self.connection.execute("SELECT payload FROM JournalEntries WHERE key=?", (key,)).fetchone()
+                if key in inactive or prior != (_journal_payload(entry),) or consumed.get(item.row_id) != amount:
+                    raise ProfileFormatError("ordinary_batch_retry_changed")
+                # The complete journal validation above has already established
+                # unique active use, binding and the original source amount.
+                consumed.pop(item.row_id, None)
+            validate_entry(
+                entry, accounts, {item.row_id: Observation(item.row_id, financial_id, amount, posting_date)}, consumed
+            )
+            consumed[item.row_id] = amount
+            entries.append(entry)
+        self._require_source_overlap_postable(tuple(item.row_id for item in selections))
+        check_cancelled(cancelled)
+        return tuple(entries)
+
+    def preview_reviewed_ordinary_batch(
+        self,
+        source_sha256: str,
+        *,
+        kind: Literal["cash", "card", "register"],
+        selections,
+        reason: str,
+        expected_basis_sha256: str,
+        preferences: V2Preferences | None = None,
+        cancelled=None,
+    ):
+        """Preview only explicitly selected eligible rows; author no account or money."""
+        from parsetrail.core.v2_ordinary_batch import OrdinaryBatchPreview, preview_digest
+        from parsetrail.core.v2_transfer_batch import profile_identity
+
+        self._ordinary_batch_request(source_sha256, kind, selections, reason, preferences)
+        if self.connection.in_transaction:
+            raise ProfileFormatError("source_interpretation_requires_committed_snapshot")
+        self.connection.execute("BEGIN")
+        try:
+            with self._verified_source_operation(cancelled):
+                self._require_source_interpretation_basis(expected_basis_sha256, required=True)
+                entries = self._ordinary_batch_entries(
+                    source_sha256, kind, selections, reason.strip(), preferences, cancelled
+                )
+                preview = OrdinaryBatchPreview(
+                    source_sha256,
+                    kind,
+                    selections,
+                    entries,
+                    expected_basis_sha256,
+                    profile_identity(self),
+                    preferences,
+                    reason.strip(),
+                    "",
+                )
+                return replace(preview, preview_sha256=preview_digest(preview))
+        except LedgerError:
+            raise ProfileFormatError("ordinary_batch_refused") from None
+        finally:
+            self.connection.execute("ROLLBACK")
+
+    def post_reviewed_ordinary_batch(self, preview, *, cancelled=None):
+        """Revalidate the exact preview and commit every selected entry atomically."""
+        from parsetrail.core.v2_ordinary_batch import (
+            OrdinaryBatchPreview,
+            OrdinaryBatchResult,
+            check_cancelled,
+            preview_digest,
+        )
+        from parsetrail.core.v2_transfer_batch import profile_identity
+
+        self._require_writable()
+        if (
+            type(preview) is not OrdinaryBatchPreview
+            or type(preview.entries) is not tuple
+            or not preview.entries
+            or any(type(entry) is not JournalEntry for entry in preview.entries)
+            or preview.preview_sha256 != preview_digest(preview)
+        ):
+            raise ProfileFormatError("ordinary_batch_preview_invalid")
+        self._ordinary_batch_request(
+            preview.source_sha256, preview.kind, preview.selections, preview.reason, preview.preferences
+        )
+        if self.connection.in_transaction:
+            raise ProfileFormatError("source_interpretation_requires_committed_snapshot")
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            with self._verified_source_operation(cancelled):
+                check_cancelled(cancelled)
+                if preview.profile_sha256 != profile_identity(self):
+                    raise ProfileFormatError("ordinary_batch_profile_changed")
+                prior = tuple(
+                    self.connection.execute("SELECT payload FROM JournalEntries WHERE key=?", (entry.key,)).fetchone()
+                    for entry in preview.entries
+                )
+                retry = bool(prior) and all(item is not None for item in prior)
+                if not retry:
+                    self._require_source_interpretation_basis(preview.basis_sha256, required=True)
+                entries = self._ordinary_batch_entries(
+                    preview.source_sha256,
+                    preview.kind,
+                    preview.selections,
+                    preview.reason,
+                    preview.preferences,
+                    cancelled,
+                    retry=retry,
+                )
+                if entries != preview.entries:
+                    raise ProfileFormatError("ordinary_batch_preview_changed")
+                if not retry:
+                    for category_id in dict.fromkeys(item.category_id for item in preview.selections):
+                        self._category_for_posting(category_id)
+                    for entry, item in zip(entries, preview.selections, strict=True):
+                        check_cancelled(cancelled)
+                        self.connection.execute(
+                            "INSERT INTO JournalEntries(key,payload) VALUES (?,?)", (entry.key, _journal_payload(entry))
+                        )
+                        self.connection.execute(
+                            "INSERT INTO JournalAllocations VALUES (?,?,?)",
+                            (entry.key, item.row_id, entry.postings[0].amount_minor),
+                        )
+                check_cancelled(cancelled)
+                self.connection.execute("COMMIT")
+                return OrdinaryBatchResult(tuple(entry.key for entry in entries), retry)
+        except BaseException as exc:
+            self.connection.execute("ROLLBACK")
+            if isinstance(exc, LedgerError):
+                raise ProfileFormatError("ordinary_batch_refused") from None
+            raise
 
     def post_reviewed_cash_category(
         self,
@@ -10925,6 +11258,20 @@ class V2ProfileStore:
         )
         overlaps = []
         for (candidate_id,) in candidates:
+            if (
+                self._source_read_periods is not None
+                and self.connection.total_changes == self._source_read_epoch
+                and candidate_id in self._source_read_periods
+            ):
+                period = self._source_read_periods[candidate_id]
+                if (
+                    period is not None
+                    and period[0] is not None
+                    and payload.start.iso <= period[1]
+                    and period[0] <= payload.end.iso
+                ):
+                    overlaps.append(candidate_id)
+                continue
             other = self.load_import(candidate_id).evidence.payload
             if (
                 isinstance(other, StatementPayload)
@@ -11009,6 +11356,9 @@ class V2ProfileStore:
             if row is None:
                 raise ProfileFormatError("source_missing")
             return SavedImport(row[0], row[1], evidence, suffix)
+        scoped = self._source_read_evidence is not None and self.connection.total_changes == self._source_read_epoch
+        if scoped and source_sha256 in self._source_read_evidence:
+            return self._source_read_evidence[source_sha256]
         row = self.connection.execute(
             "SELECT s.content,s.size,s.suffix,d.content,d.size,e.content,e.size,e.sha256 "
             "FROM Sources s JOIN EvidenceSnapshots e ON e.source_sha256=s.sha256 "
@@ -11024,7 +11374,10 @@ class V2ProfileStore:
                 (source_sha256,),
             )
         )
-        return self._verified_saved_import(source_sha256, row, actual)
+        saved = self._verified_saved_import(source_sha256, row, actual)
+        if scoped:
+            self._source_read_evidence[source_sha256] = saved
+        return saved
 
     def _iter_verified_imports(self):
         """Stream every source and its exact inventory without repeated full-table scans.
@@ -11046,6 +11399,10 @@ class V2ProfileStore:
             "LEFT JOIN Definitions d ON d.sha256=e.definition_sha256 ORDER BY s.sha256"
         )
         for source_sha256, *row in sources:
+            if self._source_read_cancelled is not None and self._source_read_cancelled():
+                from parsetrail.core.v2_ordinary_batch import OrdinaryBatchCancelled
+
+                raise OrdinaryBatchCancelled("source_interpretation_cancelled")
             if row[-1] is None or row[3] is None:
                 raise ProfileFormatError("source_missing")
             actual = set()
@@ -11054,7 +11411,18 @@ class V2ProfileStore:
             while observation is not None and observation[0] == source_sha256:
                 actual.add(observation[1:])
                 observation = next(observations, None)
-            yield source_sha256, self._verified_saved_import(source_sha256, row, actual)
+            cached = (
+                self._source_read_evidence.get(source_sha256)
+                if self._source_read_evidence is not None and self.connection.total_changes == self._source_read_epoch
+                else None
+            )
+            saved = cached or self._verified_saved_import(source_sha256, row, actual)
+            if self._source_read_periods is not None and self.connection.total_changes == self._source_read_epoch:
+                payload = saved.evidence.payload
+                self._source_read_periods[source_sha256] = (
+                    (payload.start.iso, payload.end.iso) if isinstance(payload, StatementPayload) else None
+                )
+            yield source_sha256, saved
         if observation is not None:
             raise ProfileFormatError("observation_inventory_mismatch")
 

@@ -21,11 +21,11 @@ def wait_for_inventory(window, timeout=10000):
     app = QApplication.instance()
     timer = QElapsedTimer()
     timer.start()
-    while window.inventory_pending and timer.elapsed() < timeout:
+    while (window.inventory_pending or window.profile_jobs.pending) and timer.elapsed() < timeout:
         app.processEvents()
         sleep(0.005)
     app.processEvents()
-    assert not window.inventory_pending, "Document inventory did not settle"
+    assert not window.inventory_pending and not window.profile_jobs.pending, "Workspace jobs did not settle"
 
 
 def _populated_workspace(tmp_path):
@@ -43,16 +43,11 @@ def _populated_workspace(tmp_path):
     return workspace
 
 
-def test_documents_are_recognizable_searchable_and_preserve_context(tmp_path: Path, monkeypatch):
+def test_documents_are_recognizable_searchable_and_preserve_context(tmp_path: Path):
     from parsetrail.gui.v2_workspace_window import V2WorkspaceWindow
 
     app = QApplication.instance() or QApplication([])
     window = V2WorkspaceWindow(_populated_workspace(tmp_path))
-    reviews = []
-    monkeypatch.setattr(
-        "parsetrail.gui.v2_workspace_window.V2CashActivityReview.exec",
-        lambda dialog: reviews.append(dialog.model.rowCount()),
-    )
     try:
         wait_for_inventory(window)
         assert window.sources.count() == 1
@@ -70,7 +65,11 @@ def test_documents_are_recognizable_searchable_and_preserve_context(tmp_path: Pa
         window.review_document_button.click()
         wait_for_inventory(window)
         assert window.navigation.currentRow() == 1
-        assert reviews == [1]
+        from .v2_job_wait import wait_for_jobs
+
+        wait_for_jobs(window._review_widget)
+        assert window._review_widget.model.rowCount() == 1
+        assert window._review_widget.embedded
         assert "Everyday checking" in window.review_context.text()
         assert window.cash_review_button.isEnabled()
     finally:

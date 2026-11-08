@@ -14,6 +14,7 @@ from .test_v2_card_purchase_review import _chase_profile
 from .test_v2_settlements import profile
 from .test_v2_transfer_review_async import wait_for_transfers
 from .test_v2_transfers import BANK_DEFINITION
+from .v2_job_wait import wait_for_jobs
 
 
 @pytest.fixture
@@ -38,7 +39,9 @@ def _workspace(path):
 def _dialog(path, event_id=None):
     from parsetrail.gui.v2_settlement_review import V2SettlementReview
 
-    return V2SettlementReview(_workspace(path), event_id=event_id)
+    dialog = V2SettlementReview(_workspace(path), event_id=event_id)
+    wait_for_jobs(dialog)
+    return dialog
 
 
 def _check(dialog, incoming, *, checked=True):
@@ -48,24 +51,29 @@ def _check(dialog, incoming, *, checked=True):
         item = dialog.receipts.item(index, 0)
         if item.data(Qt.UserRole) == incoming:
             item.setCheckState(Qt.Checked if checked else Qt.Unchecked)
+            wait_for_jobs(dialog)
             return
     pytest.fail("Receipt must be reachable by its exact source row identity")
 
 
 def _select(dialog, outgoing, incoming):
     dialog.outgoing.setCurrentIndex(dialog.outgoing.findData(outgoing))
+    wait_for_jobs(dialog)
     for row_id in incoming:
         _check(dialog, row_id)
 
 
 def _fee(dialog, row_id, amount):
     dialog.fee_leg.setCurrentIndex(dialog.fee_leg.findData(row_id))
+    wait_for_jobs(dialog)
     dialog.fee_amount.setText(amount)
     dialog.fee_category.setCurrentIndex(dialog.fee_category.findData("expense:fees"))
+    wait_for_jobs(dialog)
     dialog.fee_reference.setText("Reviewed source leg / fee detail")
     dialog.fee_reason.setText("Explicit source-backed fee, not inferred from mismatch")
     assert dialog.add_fee.isEnabled()
     dialog.add_fee.click()
+    wait_for_jobs(dialog)
 
 
 def test_empty_profile_keeps_all_source_and_fee_actions_disabled_without_writes(tmp_path, app):
@@ -106,6 +114,7 @@ def test_preference_change_during_confirmation_resets_draft_without_posting(tmp_
 
         monkeypatch.setattr(QMessageBox, "question", concurrent_preference_change)
         dialog.confirm.click()
+        wait_for_jobs(dialog)
         assert "preferences changed" in dialog.status.text()
         assert dialog.assumed_dates.isChecked()
         assert dialog.preview is None and dialog.outgoing.currentData() is None
@@ -157,6 +166,7 @@ def test_no_inferred_fee_exact_preview_cancel_post_and_reopen(
         assert dialog.confirm.isEnabled()
         monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.No)
         dialog.confirm.click()
+        wait_for_jobs(dialog)
         assert hashlib.sha256(path.read_bytes()).hexdigest() == before
         questions = []
 
@@ -166,6 +176,7 @@ def test_no_inferred_fee_exact_preview_cancel_post_and_reopen(
 
         monkeypatch.setattr(QMessageBox, "question", accept)
         dialog.confirm.click()
+        wait_for_jobs(dialog)
         event = dialog.selected_event
         assert event is not None and event.pair is None and event.status == "active"
         assert event.settlement.residual_minor == residual
@@ -202,7 +213,9 @@ def test_fee_requires_each_explicit_field_and_overallocation_can_be_removed(tmp_
     try:
         _select(dialog, outgoing, incoming)
         dialog.fee_leg.setCurrentIndex(dialog.fee_leg.findData(outgoing))
+        wait_for_jobs(dialog)
         dialog.fee_category.setCurrentIndex(dialog.fee_category.findData("expense:fees"))
+        wait_for_jobs(dialog)
         dialog.fee_reference.setText("Source fee detail")
         dialog.fee_reason.setText("Explicit fee support")
         for bad in ("", "0", "-1", "1.001"):
@@ -213,11 +226,13 @@ def test_fee_requires_each_explicit_field_and_overallocation_can_be_removed(tmp_
         assert not dialog.add_fee.isEnabled()
         dialog.fee_reference.setText("Source fee detail")
         dialog.add_fee.click()
+        wait_for_jobs(dialog)
         assert dialog.preview is None and "exceed" in dialog.summary.text()
         dialog.reason.setText("Invalid over-allocation cannot post")
         assert not dialog.confirm.isEnabled()
         dialog.fee_table.selectRow(0)
         dialog.remove_fee.click()
+        wait_for_jobs(dialog)
         assert dialog.preview is not None and dialog.preview.settlement.residual_minor == 1000
         assert dialog.fees == ()
     finally:
@@ -249,6 +264,7 @@ def test_multiple_noncontemporaneous_receipts_full_history_and_whole_fee_withdra
         }
         dialog.reason.setText("Receipts have independent dates, including before the outflow")
         dialog.confirm.click()
+        wait_for_jobs(dialog)
         event = dialog.selected_event
         assert len(event.settlement.incoming) == 2 and len(event.entry_keys) == 3
     finally:
@@ -269,7 +285,11 @@ def test_multiple_noncontemporaneous_receipts_full_history_and_whole_fee_withdra
         assert transfer.withdraw.isEnabled() and not transfer.replace.isEnabled()
         assert transfer.review_settlement.isEnabled()
         opened = []
-        monkeypatch.setattr(V2SettlementReview, "exec", lambda widget: opened.append(widget.selected_event.event_id))
+        monkeypatch.setattr(
+            V2SettlementReview,
+            "exec",
+            lambda widget: (wait_for_jobs(widget), opened.append(widget.selected_event.event_id))[1],
+        )
         transfer.review_settlement.click()
         wait_for_transfers(transfer)
         assert opened == [event.event_id]
@@ -315,6 +335,7 @@ def test_later_receipt_replaces_every_old_leg_and_preserves_original_fee_history
         _fee(dialog, outgoing, "10.00")
         dialog.reason.setText("Review initial partial receipt")
         dialog.confirm.click()
+        wait_for_jobs(dialog)
         original = dialog.selected_event
         assert original.settlement.residual_minor == 3000
         _check(dialog, incoming[1])
@@ -323,6 +344,7 @@ def test_later_receipt_replaces_every_old_leg_and_preserves_original_fee_history
         before = hashlib.sha256(path.read_bytes()).hexdigest()
         monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.No)
         dialog.confirm.click()
+        wait_for_jobs(dialog)
         assert hashlib.sha256(path.read_bytes()).hexdigest() == before
         questions = []
 
@@ -332,6 +354,7 @@ def test_later_receipt_replaces_every_old_leg_and_preserves_original_fee_history
 
         monkeypatch.setattr(QMessageBox, "question", accept)
         dialog.confirm.click()
+        wait_for_jobs(dialog)
         assert "Inverse original source and fee effects" in questions[0]
         assert "Replacement entry effects only" in questions[0]
         assert dialog.selected_event.event_id != original.event_id
@@ -369,6 +392,7 @@ def test_stale_confirmation_and_failed_refresh_clear_source_versions_and_actions
 
         monkeypatch.setattr(QMessageBox, "question", concurrent_change)
         dialog.confirm.click()
+        wait_for_jobs(dialog)
         assert "not recorded" in dialog.status.text()
         assert dialog.preview is None and dialog.outgoing.currentData() is None
         assert not dialog.confirm.isEnabled()
@@ -380,6 +404,7 @@ def test_stale_confirmation_and_failed_refresh_clear_source_versions_and_actions
 
         monkeypatch.setattr(V2ProfileStore, "settlement_review_snapshot", failed)
         dialog.refresh()
+        wait_for_jobs(dialog)
         assert dialog.snapshot is None and dialog.receipts.rowCount() == 0
         assert not dialog.confirm.isEnabled() and not dialog.withdraw.isEnabled()
         assert not dialog.add_fee.isEnabled() and not dialog.remove_fee.isEnabled()
@@ -421,6 +446,7 @@ def test_assumed_date_opt_in_remains_explicit_but_opt_out_allows_whole_withdrawa
 
         monkeypatch.setattr(review_module, "preview_saved_source", preview_source)
         dialog.open_outgoing.click()
+        wait_for_jobs(dialog)
         index = next(
             index
             for index in range(dialog.receipts.rowCount())
@@ -428,19 +454,24 @@ def test_assumed_date_opt_in_remains_explicit_but_opt_out_allows_whole_withdrawa
         )
         dialog.receipts.selectRow(index)
         dialog.open_receipt.click()
+        wait_for_jobs(dialog)
         assert [source for _profile_path, source, _parent in opened] == [bank.source_sha256, card.source_sha256]
         assert all(profile_path == path and parent is dialog for profile_path, _source, parent in opened)
         dialog.assumed_dates.click()
+        wait_for_jobs(dialog)
         _select(dialog, outgoing, (incoming,))
         dialog.reason.setText("Confirm reviewed source dates with explicit preference")
         assert dialog.confirm.isEnabled()
         dialog.confirm.click()
+        wait_for_jobs(dialog)
         assert dialog.selected_event.status == "active"
         dialog.assumed_dates.click()
+        wait_for_jobs(dialog)
         assert not dialog.assumed_dates.isChecked()
         dialog.reason.setText("Withdraw saved event after disabling new best guess dates")
         assert dialog.withdraw.isEnabled() and not dialog.confirm.isEnabled()
         dialog.withdraw.click()
+        wait_for_jobs(dialog)
         assert dialog.selected_event.status == "cancelled"
         with V2ProfileStore.open(path, read_only=True) as store:
             assert store._active_consumed() == {}

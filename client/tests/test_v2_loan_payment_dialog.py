@@ -16,6 +16,7 @@ from devtools.parser_engine_pilot.test_wells_loan_lines import parse as wells_ev
 
 from .test_v2_document_browser import wait_for_inventory
 from .test_v2_loan_payments import _profile
+from .v2_job_wait import wait_for_jobs
 
 
 @pytest.fixture(autouse=True)
@@ -37,7 +38,9 @@ def workspace(path):
 def dialog(path, event_id=None):
     from parsetrail.gui.v2_loan_payment_review import V2LoanPaymentReview
 
-    return V2LoanPaymentReview(workspace(path), event_id=event_id)
+    view = V2LoanPaymentReview(workspace(path), event_id=event_id)
+    wait_for_jobs(view)
+    return view
 
 
 def check(view, row_id):
@@ -47,6 +50,7 @@ def check(view, row_id):
         item = view.components.item(index, 0)
         if item.data(Qt.UserRole) == row_id:
             item.setCheckState(Qt.Checked)
+            wait_for_jobs(view)
             return
     pytest.fail("Exact loan row must be reachable")
 
@@ -54,7 +58,9 @@ def check(view, row_id):
 def form(view, bank_id, loan_ids):
     if not view.assumed_dates.isChecked():
         view.assumed_dates.click()
+        wait_for_jobs(view)
     view.bank.setCurrentIndex(view.bank.findData(bank_id))
+    wait_for_jobs(view)
     for row_id in loan_ids:
         check(view, row_id)
     view.reference.setText("Inspected bank outflow and full printed principal / interest")
@@ -78,6 +84,7 @@ def test_empty_profile_and_unavailable_read_clear_all_actions_without_writes(tmp
 
     monkeypatch.setattr(V2ProfileStore, "loan_review_snapshot", unavailable)
     view.refresh()
+    wait_for_jobs(view)
     assert view.snapshot is None and view.preview is None and view.components.rowCount() == 0
     assert not view.confirm.isEnabled() and not view.withdraw.isEnabled()
     assert not view.open_history_source.isEnabled()
@@ -114,15 +121,19 @@ def test_capital_date_preference_exact_preview_source_inspection_cancel_post_and
         lambda *args, **kwargs: previews.append(args[1]) or SimpleNamespace(exec=lambda: None),
     )
     view.open_bank.click()
+    wait_for_jobs(view)
     view.open_component.click()
+    wait_for_jobs(view)
     assert previews == [view.preview.manifest.bank.source_sha256, view.preview.manifest.components[0].source_sha256]
     before = path.read_bytes()
     monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.No)
     view.confirm.click()
+    wait_for_jobs(view)
     assert path.read_bytes() == before
     prompts = []
     monkeypatch.setattr(QMessageBox, "question", lambda _p, _t, text: prompts.append(text) or QMessageBox.Yes)
     view.confirm.click()
+    wait_for_jobs(view)
     event = view.selected_event
     assert event is not None and event.status == "active"
     assert "NOT reported posting" in prompts[0] and "gross payment is not a second expense" in prompts[0]
@@ -181,6 +192,7 @@ def test_explicit_complete_source_shapes_and_zero_components(tmp_path, variant):
     )
     assert len(view.preview.manifest.components) == len(selected)
     view.confirm.click()
+    wait_for_jobs(view)
     assert view.selected_event.status == "active"
     with V2ProfileStore.open(path, read_only=True) as store:
         entries = store._active_journal_entries()
@@ -234,6 +246,7 @@ def test_confirmation_changed_context_or_failure_clears_stale_controls(tmp_path,
 
     monkeypatch.setattr(QMessageBox, "question", concurrent)
     view.confirm.click()
+    wait_for_jobs(view)
     assert not view.confirm.isEnabled() and view.preview is None and view.bank.currentData() is None
     assert not view.reference.text() and not view.reason.text()
     with V2ProfileStore.open(path, read_only=True) as store:
@@ -252,6 +265,7 @@ def test_wrong_scope_and_unbound_sources_stay_inspectable_without_posting(tmp_pa
         )
     view = dialog(path)
     view.assumed_dates.click()
+    wait_for_jobs(view)
     view.components.selectRow(0)
     assert "principal component" in view.components.item(0, 7).text()
     assert "unavailable components" in view.source_details.toPlainText()
@@ -312,20 +326,24 @@ def test_whole_replacement_retains_dates_proofs_inverses_and_fresh_derived_ids(t
     view = dialog(path)
     form(view, bank, rows)
     view.confirm.click()
+    wait_for_jobs(view)
     original = view.selected_event
     with V2ProfileStore.open(path, read_only=True) as store:
         old_ids = {link.derived_observation_id for link in store.loan_source_links()}
     view.bank.setCurrentIndex(view.bank.findData(other))
+    wait_for_jobs(view)
     view.reference.setText("Corrected bank source; same complete printed loan components")
     view.reason.setText("Replace the whole incorrectly attributed payment")
     assert view.confirm.isEnabled() and "2222" in view.bank.currentText()
     before = path.read_bytes()
     monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.No)
     view.confirm.click()
+    wait_for_jobs(view)
     assert path.read_bytes() == before
     prompts = []
     monkeypatch.setattr(QMessageBox, "question", lambda _p, _t, text: prompts.append(text) or QMessageBox.Yes)
     view.confirm.click()
+    wait_for_jobs(view)
     replacement = view.selected_event
     assert replacement.event_id != original.event_id and replacement.manifest.bank.row_id == other
     assert "Inverse original entries at their original dates" in prompts[0]
@@ -340,15 +358,18 @@ def test_whole_replacement_retains_dates_proofs_inverses_and_fresh_derived_ids(t
             == 2000
         )
     view.assumed_dates.click()
+    wait_for_jobs(view)
     assert not view.assumed_dates.isChecked()
     view.reason.setText("Withdraw whole replaced payment with preference now off")
     assert view.withdraw.isEnabled()
     before = path.read_bytes()
     monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.No)
     view.withdraw.click()
+    wait_for_jobs(view)
     assert path.read_bytes() == before
     monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.Yes)
     view.withdraw.click()
+    wait_for_jobs(view)
     assert view.selected_event.status == "cancelled"
     with V2ProfileStore.open(path, read_only=True) as store:
         assert store._active_consumed() == {} and store._active_journal_entries() == ()
@@ -361,7 +382,9 @@ def test_context_change_before_preview_resets_cached_selection_and_reference(tmp
     bank, rows = _profile(path)
     view = dialog(path)
     view.assumed_dates.click()
+    wait_for_jobs(view)
     view.bank.setCurrentIndex(view.bank.findData(bank))
+    wait_for_jobs(view)
     view.reference.setText("Loaded old account context")
     view.reason.setText("Loaded old review context")
     with V2ProfileStore.open(path) as store:
@@ -385,17 +408,21 @@ def test_historical_withdrawal_retry_cannot_retire_fresh_payment(tmp_path):
     first = dialog(path)
     form(first, bank, rows)
     first.confirm.click()
+    wait_for_jobs(first)
     old = first.selected_event
     stale = dialog(path, old.event_id)
     stale.reason.setText("Withdraw loaded whole payment")
     first.reason.setText("Withdraw loaded whole payment")
     first.withdraw.click()
+    wait_for_jobs(first)
     fresh = dialog(path)
     form(fresh, bank, rows)
     fresh.confirm.click()
+    wait_for_jobs(fresh)
     new = fresh.selected_event
     assert new.event_id != old.event_id
     stale.withdraw.click()
+    wait_for_jobs(stale)
     assert stale.selected_event.status == "cancelled" and not stale.withdraw.isEnabled()
     assert "Refreshed history shows current state" in stale.status.text()
     with V2ProfileStore.open(path, read_only=True) as store:
@@ -415,8 +442,10 @@ def test_stale_selected_event_cannot_be_replaced_after_concurrent_withdrawal(tmp
     view = dialog(path)
     form(view, bank, rows)
     view.confirm.click()
+    wait_for_jobs(view)
     old = view.selected_event
     view.bank.setCurrentIndex(view.bank.findData(other))
+    wait_for_jobs(view)
     view.reference.setText("Whole correction reference")
     view.reason.setText("Whole correction reason")
     assert view.confirm.isEnabled()
@@ -430,6 +459,7 @@ def test_stale_selected_event_cannot_be_replaced_after_concurrent_withdrawal(tmp
 
     monkeypatch.setattr(QMessageBox, "question", concurrent)
     view.confirm.click()
+    wait_for_jobs(view)
     assert view.selected_event.status == "cancelled" and not view.confirm.isEnabled() and not view.withdraw.isEnabled()
     with V2ProfileStore.open(path, read_only=True) as store:
         assert len(store.loan_history()) == 1 and store._active_consumed() == {}
@@ -469,6 +499,7 @@ def test_incomplete_unsupported_or_unbound_components_remain_pending_without_mon
     original = path.read_bytes()
     view = dialog(path)
     view.assumed_dates.click()
+    wait_for_jobs(view)
     view.components.selectRow(0)
     if case == "gross_mismatch":
         form(view, bank, rows)

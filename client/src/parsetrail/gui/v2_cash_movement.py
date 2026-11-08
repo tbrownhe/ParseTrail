@@ -14,6 +14,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -34,6 +35,7 @@ from parsetrail.core.v2_cash_movement import MOVEMENT_LABELS, cash_account_label
 from parsetrail.core.v2_profile_store import ProfileFormatError, V2ProfileStore
 from parsetrail.gui.v2_cash_activity_review import _money
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
+from parsetrail.gui.v2_profile_jobs import ProfileJobs
 from parsetrail.gui.v2_report_drilldown import V2ReviewedEntryDrilldown
 
 
@@ -67,6 +69,9 @@ class V2CashMovementDialog(QDialog):
     def __init__(self, profile: Path, parent=None):
         super().__init__(parent)
         self.profile = profile
+        self.jobs = ProfileJobs(self, profile)
+        self.jobs.completed.connect(self._job_completed)
+        self.jobs.failed.connect(self._job_failed)
         self.report = None
         self.setWindowTitle("2.0 reviewed cash movement")
         self.resize(1100, 780)
@@ -84,7 +89,7 @@ class V2CashMovementDialog(QDialog):
         self.account_choices_label.setWordWrap(True)
         account_choices.addWidget(self.account_choices_label)
         self.accounts = QListWidget()
-        self.accounts.setMaximumHeight(160)
+        self.accounts.setMaximumHeight(110)
         self.accounts.setVerticalScrollBarPolicy(Qt.ScrollBarAlwaysOn)
         self.accounts.setAccessibleName("Cash accounts to include")
         account_choices.addWidget(self.accounts)
@@ -107,9 +112,21 @@ class V2CashMovementDialog(QDialog):
         self.total = QLabel()
         self.total.setWordWrap(True)
         layout.addWidget(self.total)
+        self.scope_summary = QLabel()
+        self.scope_summary.setWordWrap(True)
+        layout.addWidget(self.scope_summary)
+        qualifications = QGroupBox("Full report scope and evidence limits")
+        qualifications.setCheckable(True)
+        qualifications.setChecked(False)
+        qualifications_layout = QVBoxLayout(qualifications)
+        qualifications_layout.setContentsMargins(8, 0, 8, 0)
         self.scope = QLabel()
         self.scope.setWordWrap(True)
-        layout.addWidget(self.scope)
+        self.scope.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        qualifications_layout.addWidget(self.scope)
+        self.scope.hide()
+        qualifications.toggled.connect(self.scope.setVisible)
+        layout.addWidget(qualifications)
         self.summary = _table(("Reviewed purpose", "Records with purpose", "Net selected-scope movement"))
         self.entries = _table(
             ("Accounting date", "Reviewed purpose", "Net selected scope", "Description", "Selected accounts")
@@ -139,9 +156,9 @@ class V2CashMovementDialog(QDialog):
         refresh.clicked.connect(self.refresh)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
-        self.accounts.itemChanged.connect(self.refresh)
-        self.start.dateChanged.connect(self.refresh)
-        self.end.dateChanged.connect(self.refresh)
+        self.accounts.itemChanged.connect(self._scope_changed)
+        self.start.dateChanged.connect(self._scope_changed)
+        self.end.dateChanged.connect(self._scope_changed)
         self.entries.itemSelectionChanged.connect(self._selected)
         self._reload_accounts()
 
@@ -163,18 +180,26 @@ class V2CashMovementDialog(QDialog):
         self.inspect.setEnabled(False)
         self.total.setText(message)
         self.scope.clear()
+        self.scope_summary.clear()
 
     def _reload_accounts(self):
         selected = set(self._selected_ids())
-        try:
-            with V2ProfileStore.open(self.profile, read_only=True) as store:
+        self.jobs.cancel_reads()
+        self._clear("Loading cash account choices...")
+        self.account_choices_label.setText("Loading available financial asset accounts...")
+
+        def read(store, _cancelled):
+            store.connection.execute("BEGIN")
+            try:
                 financial = store.financial_accounts()
                 accounts = tuple(account for account in financial if account.kind == "asset")
-                labels = cash_account_labels(financial)
-        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            self.account_choices_label.setText("Cash accounts unavailable")
-            self._clear(f"Account choices are unavailable: {exc}")
-            return
+                return accounts, cash_account_labels(financial)
+            finally:
+                store.connection.execute("ROLLBACK")
+
+        self.jobs.submit(("accounts", tuple(sorted(selected))), read)
+
+    def _apply_accounts(self, accounts, labels, selected):
         self.account_choices_label.setText(
             f"Cash accounts ({len(accounts)} available). Check accounts to include; scroll to see all."
         )
@@ -190,18 +215,24 @@ class V2CashMovementDialog(QDialog):
         self.accounts.blockSignals(False)
         self.refresh()
 
-    def refresh(self, *_args):
+    def _scope_changed(self, *_args):
+        self.refresh(delay=180)
+
+    def refresh(self, *_args, delay=0):
+        self.jobs.cancel_reads()
         selected = self._selected_ids()
         if not selected:
             self._clear("Choose one or more cash asset accounts. No cash scope has been established.")
             return
-        try:
-            report = read_cash_movement(
-                self.profile, selected, start=self.start.date().toPython(), end=self.end.date().toPython()
-            )
-        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            self._clear(f"Reviewed cash movement is unavailable: {exc}")
-            return
+        start, end, profile = self.start.date().toPython(), self.end.date().toPython(), self.profile
+        self._clear("Loading reviewed movement for the selected accounts and dates...")
+
+        def read(_store, cancelled):
+            return read_cash_movement(profile, selected, start=start, end=end, cancelled=cancelled)
+
+        self.jobs.submit(("movement", selected, start, end), read, delay=delay)
+
+    def _apply_report(self, report):
         self.report = report
         self.total.setText(
             f"Net reviewed selected-account movement: {_money(report.total_minor)}. "
@@ -210,6 +241,13 @@ class V2CashMovementDialog(QDialog):
         )
         unknown = sum(row.classification == "unclassified" for row in report.rows)
         journal = report.journal
+        self.scope_summary.setText(
+            f"{journal.start} inclusive to {journal.end} exclusive, USD; {len(report.rows)} reviewed record(s); "
+            f"{unknown} unclassified. Whole profile, all dates: {journal.activity_rows_without_full_allocation} "
+            f"activity row(s) lack full allocation; {report.expected_receipts_without_source} owned outflow(s) involving selected accounts lack receipt evidence. "
+            "An expected receipt is not a destination posting. "
+            "Pending evidence and capture/coverage gaps prevent a complete cash-flow claim. Purpose counts are not additive."
+        )
         self.scope.setText(
             f"{journal.start} inclusive to {journal.end} exclusive, USD; {len(report.rows)} selected journal record(s), "
             f"{report.outside_scope_entries} reviewed record(s) outside scope; {unknown} selected record(s) unclassified. "
@@ -322,3 +360,22 @@ class V2CashMovementDialog(QDialog):
             expected_total_minor=total,
             parent=self,
         ).exec()
+
+    def _job_completed(self, key, result):
+        if key[0] == "accounts":
+            self._apply_accounts(*result, selected=set(key[1]))
+        else:
+            self._apply_report(result)
+
+    def _job_failed(self, key, exc):
+        if key[0] == "accounts":
+            self.account_choices_label.setText("Cash accounts unavailable; reload account choices to retry.")
+        self._clear(f"Reviewed cash movement is unavailable: {exc}")
+
+    def reject(self):
+        self.jobs.close()
+        super().reject()
+
+    def closeEvent(self, event):
+        self.jobs.close()
+        super().closeEvent(event)

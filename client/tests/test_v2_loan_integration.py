@@ -15,6 +15,7 @@ from devtools.parser_engine_pilot import test_wells_loan_lines as wells
 from devtools.parser_engine_pilot.synthetic_family_sources import family_sources
 
 from .test_v2_loan_payments import INTEREST, PREFERENCES, _post, _profile
+from .v2_job_wait import wait_for_jobs
 
 JAN, FEB = date(2026, 1, 1), date(2026, 2, 1)
 
@@ -70,10 +71,15 @@ def test_cash_principal_and_interest_purposes_export_distinct_evidence_dimension
     from PySide6.QtCore import QDate, Qt
 
     dialog = V2CashMovementDialog(profile)
+    wait_for_jobs(dialog)
     dialog.start.setDate(QDate(2026, 1, 1))
+    wait_for_jobs(dialog)
     dialog.end.setDate(QDate(2026, 2, 1))
+    wait_for_jobs(dialog)
     dialog.accounts.item(0).setCheckState(Qt.Checked)
+    wait_for_jobs(dialog)
     dialog.entries.selectRow(0)
+    wait_for_jobs(dialog)
     app.processEvents()
     assert len(dialog.report.rows) == 1 and dialog.summary.rowCount() == 2
     assert all(dialog.summary.item(index, 1).text() == "1" for index in range(2))

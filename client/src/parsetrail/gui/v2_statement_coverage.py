@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import sqlite3
+from collections import Counter
 from pathlib import Path
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QDialog,
     QDialogButtonBox,
     QHBoxLayout,
@@ -15,7 +16,9 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QMessageBox,
+    QPlainTextEdit,
     QPushButton,
+    QSplitter,
     QTableView,
     QTabWidget,
     QVBoxLayout,
@@ -23,9 +26,9 @@ from PySide6.QtWidgets import (
 )
 
 from parsetrail.core.source_evidence import MoneyValue
+from parsetrail.core.v2_cash_movement import cash_account_labels
 from parsetrail.core.v2_profile_store import (
     EarliestSourceOpening,
-    ProfileFormatError,
     ReconciliationDecision,
     StatementCoverageRow,
     StatementJournalComparison,
@@ -33,6 +36,7 @@ from parsetrail.core.v2_profile_store import (
     V2ProfileStore,
 )
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview, _money
+from parsetrail.gui.v2_profile_jobs import ProfileJobs
 from parsetrail.gui.v2_statement_source_review import V2StatementSourceReview
 
 
@@ -57,7 +61,7 @@ class _CoverageModel(QAbstractTableModel):
     HEADERS = (
         "Financial account",
         "Source period",
-        "Compared with known periods",
+        "Calendar relation",
         "Opening",
         "Closing",
         "Scope",
@@ -86,6 +90,7 @@ class _CoverageModel(QAbstractTableModel):
         super().__init__(parent)
         self.rows = rows
         self.reviewed = reviewed
+        self.account_labels = {}
 
     def set_reviewed(self, reviewed: frozenset[tuple[str, str]]) -> None:
         self.reviewed = reviewed
@@ -108,7 +113,7 @@ class _CoverageModel(QAbstractTableModel):
             return None
         row = self.rows[index.row()]
         values = (
-            row.account_name,
+            self.account_labels.get(row.account_id, row.account_name),
             f"{row.period_start.isoformat() if row.period_start else 'Unknown'} to {row.period_end.isoformat()}",
             self.RELATIONS[row.relation_to_known_periods],
             _balance(row.opening),
@@ -122,7 +127,7 @@ class _CoverageModel(QAbstractTableModel):
         )
         if role == Qt.ToolTipRole:
             return (
-                f"Source: {row.source_sha256}\nParser: {row.parser_id}\n"
+                f"Financial account: {row.account_name}; ID {row.account_id}\nSource: {row.source_sha256}\nParser: {row.parser_id}\n"
                 f"Period start: {row.period_start_provenance}; end: {row.period_end_provenance}\n"
                 f"Compared closing source: {row.compared_source_sha256 or 'None'}"
             )
@@ -452,22 +457,15 @@ class V2StatementCoverageDialog(QDialog):
     def __init__(self, profile: Path, parent=None):
         super().__init__(parent)
         self.profile = profile
+        self.jobs = ProfileJobs(self, profile)
+        self.jobs.completed.connect(self._job_completed)
+        self.jobs.failed.connect(self._job_failed)
+        self.jobs.busy_changed.connect(self._busy_changed)
         self.setWindowTitle("2.0 statement coverage")
         self.resize(1320, 760)
-        with V2ProfileStore.open(profile, read_only=True) as store:
-            rows = store.statement_coverage()
-            openings = store.earliest_source_openings()
-            comparisons = store.statement_journal_comparisons()
-            reconciliation_snapshot = store.reconciliation_snapshot()
-            reconciliation = reconciliation_snapshot.checks
-            history = reconciliation_snapshot.history
-            accounts = store.financial_accounts()
-            reviewed = frozenset(
-                (account.id, review.source_sha256)
-                for account in accounts
-                for review in store.statement_source_reviews(account.id)
-            )
-            account_count = len(accounts)
+        rows = openings = comparisons = reconciliation = history = ()
+        reviewed = frozenset()
+        account_count = 0
         layout = QVBoxLayout(self)
         profile_row = QHBoxLayout()
         profile_row.addWidget(QLabel("Profile:"))
@@ -477,19 +475,15 @@ class V2StatementCoverageDialog(QDialog):
         profile_row.addWidget(self.profile_path)
         layout.addLayout(profile_row)
         bound_accounts = len({row.account_id for row in rows})
-        summary = QLabel(
+        self.summary = summary = QLabel(
             f"{len(rows)} explicitly bound statement section(s) on {bound_accounts} account(s); "
             f"{account_count - bound_accounts} financial account(s) have no bound statement."
         )
+        summary.setWordWrap(True)
         layout.addWidget(summary)
         scope = QLabel(
-            "Calendar comparisons use saved, explicitly bound statements only. Source period dates may be derived; "
-            "hover a row for provenance. A gap or adjacent dates do not establish missing or complete activity. "
-            "Printed endpoint comparisons use observed amounts under the admitted account-total or exact HSA cash-component rule on adjacent dated periods only; "
-            "a cash-component comparison applies only to that component. "
-            "equal amounts do not certify reconciliation or complete coverage. "
-            "Printed balances are source evidence, not posted account balances. "
-            "In Saved periods, double-click a row to inspect its source."
+            "Bound statement evidence only. Calendar continuity, balance equation, page capture and source review are independent checks. "
+            "Printed balances are source facts; they do not establish posted balances or complete coverage. Select a row for full scope and provenance."
         )
         scope.setWordWrap(True)
         layout.addWidget(scope)
@@ -499,12 +493,27 @@ class V2StatementCoverageDialog(QDialog):
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         for column in range(len(_CoverageModel.HEADERS)):
-            self.table.horizontalHeader().setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+            self.table.horizontalHeader().setSectionResizeMode(column, QHeaderView.Interactive)
+        for column, width in {0: 245, 1: 195, 2: 150, 6: 135, 7: 100, 10: 100}.items():
+            self.table.setColumnWidth(column, width)
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Stretch)
+        for column in (3, 4, 5, 8, 9):
+            self.table.setColumnHidden(column, True)
         self.table.doubleClicked.connect(self._preview)
         saved_panel = QWidget()
         saved_layout = QVBoxLayout(saved_panel)
-        saved_layout.addWidget(self.table)
+        self.coverage_splitter = QSplitter(Qt.Vertical)
+        self.coverage_splitter.addWidget(self.table)
+        self.coverage_details = QPlainTextEdit(
+            "Select a saved period to inspect its balances, scope, endpoint comparison and source provenance."
+        )
+        self.coverage_details.setReadOnly(True)
+        self.coverage_splitter.addWidget(self.coverage_details)
+        self.coverage_splitter.setSizes([340, 120])
+        saved_layout.addWidget(self.coverage_splitter, 1)
+        self.show_all_columns = QCheckBox("Show all evidence columns")
+        self.show_all_columns.toggled.connect(self._show_all_columns)
+        saved_layout.addWidget(self.show_all_columns)
         self.review_source_button = QPushButton("Review selected source")
         self.review_source_button.clicked.connect(self._review_selected_source)
         self.table.selectionModel().currentRowChanged.connect(self._update_review_source_button)
@@ -604,9 +613,7 @@ class V2StatementCoverageDialog(QDialog):
         save_controls.addWidget(self.refresh_reconciliation_button)
         reconciliation_layout.addLayout(save_controls)
         self.reconciliation_status = QLabel()
-        self.reconciliation_status.setText(
-            _reconciliation_unavailable_message(reconciliation_snapshot.unavailable_reason)
-        )
+        self.reconciliation_status.setText("Loading verified checks and history...")
         self.reconciliation_status.setWordWrap(True)
         reconciliation_layout.addWidget(self.reconciliation_status)
         tabs.addTab(reconciliation_panel, "Reconciliation check")
@@ -641,8 +648,7 @@ class V2StatementCoverageDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
         self._update_review_source_button()
-        if history:
-            self.reconciliation_history_table.selectRow(0)
+        self._refresh_reconciliation()
 
     def _preview(self, index: QModelIndex) -> None:
         if not index.isValid():
@@ -660,11 +666,33 @@ class V2StatementCoverageDialog(QDialog):
 
     def _update_review_source_button(self, *_args) -> None:
         index = self.table.currentIndex()
-        self.review_source_button.setEnabled(index.isValid())
+        self.review_source_button.setEnabled(index.isValid() and not self.jobs.pending)
         if index.isValid():
+            lines = [
+                f"{name}: {self.model.data(self.model.index(index.row(), col))}"
+                for col, name in enumerate(self.model.HEADERS)
+            ]
+            row = self.model.rows[index.row()]
+            if row.balance_scope == "cash_component":
+                lines.append(
+                    "Cash component only: this printed endpoint comparison does not establish a whole HSA or investment portfolio balance, reconciliation or coverage."
+                )
+            lines.append(
+                "Adjacent printed endpoint comparisons use observed amounts under the admitted account-total or exact HSA cash-component rule only. Equal amounts do not establish complete activity."
+            )
+            lines.extend(
+                (
+                    self.model.data(index, Qt.ToolTipRole),
+                    "Printed balances remain source evidence. Matching endpoint amounts do not certify coverage or reconciliation.",
+                )
+            )
+            self.coverage_details.setPlainText("\n".join(lines))
             status = self.model.data(self.model.index(index.row(), 10))
             self.review_source_button.setText(f"Review selected source ({status})")
         else:
+            self.coverage_details.setPlainText(
+                "Select a saved period to inspect balances, scope and source provenance."
+            )
             self.review_source_button.setText("Review selected source")
 
     def _show_reconciliation_details(self, current: QModelIndex, _previous: QModelIndex) -> None:
@@ -673,7 +701,8 @@ class V2StatementCoverageDialog(QDialog):
             row = self.reconciliation_model.rows[current.row()]
             self.reconciliation_details.setText(self.reconciliation_model.details(row))
             self.save_reconciliation_button.setEnabled(
-                row.reconciled
+                not self.jobs.pending
+                and row.reconciled
                 and row.posted_interpretations_reviewed
                 and self.reconciliation_model.supported_codes(row)
             )
@@ -693,21 +722,69 @@ class V2StatementCoverageDialog(QDialog):
         if selected.isValid():
             row = self.reconciliation_model.rows[selected.row()]
             selected_key = row.account_id, row.source_sha256
-        try:
-            with V2ProfileStore.open(self.profile, read_only=True) as store:
-                reconciliation_snapshot = store.reconciliation_snapshot()
-                reconciliation = reconciliation_snapshot.checks
-                history = reconciliation_snapshot.history
-        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            self.reconciliation_model.replace(())
-            self.reconciliation_history_model.replace(())
-            self.save_reconciliation_button.setEnabled(False)
-            self.reconciliation_details.setText("Reconciliation checks are unavailable. Refresh to retry.")
-            self.reconciliation_history_details.setText(
-                "Saved reconciliation history is unavailable. Refresh to retry."
-            )
-            self.reconciliation_status.setText(f"Refresh failed: {exc}")
+        if self.jobs.writing:
             return
+        self.save_reconciliation_button.setEnabled(False)
+        self.summary.setText("Loading bound statement periods, independent checks and saved history...")
+
+        def read(store, cancelled):
+            reconciliation = store.reconciliation_snapshot()
+            if cancelled():
+                return None
+            store.connection.execute("BEGIN")
+            try:
+                rows = store.statement_coverage()
+                openings = store.earliest_source_openings()
+                comparisons = store.statement_journal_comparisons()
+                accounts = store.financial_accounts()
+                reviewed = frozenset(
+                    (account.id, review.source_sha256)
+                    for account in accounts
+                    for review in store.statement_source_reviews(account.id)
+                )
+                labels = cash_account_labels(accounts)
+                counts = Counter(account.name for account in accounts)
+                duplicates = {name for name, count in counts.items() if count > 1}
+                labels = {account.id: labels[account.id] for account in accounts if account.name in duplicates}
+                result = rows, openings, comparisons, reconciliation, reviewed, len(accounts), labels
+            finally:
+                store.connection.execute("ROLLBACK")
+            return result
+
+        self.jobs.submit(("snapshot", selected_key), read)
+
+    def _apply_snapshot(self, selected_key, result):
+        selected = self.table.currentIndex()
+        selected_source = None
+        if selected.isValid() and selected.row() < len(self.model.rows):
+            row = self.model.rows[selected.row()]
+            selected_source = row.account_id, row.source_sha256, row.source_identity, row.source_identity_form
+        scroll = self.table.verticalScrollBar().value()
+        rows, openings, comparisons, reconciliation_snapshot, reviewed, account_count, labels = result
+        self.model.account_labels = labels
+        reconciliation, history = reconciliation_snapshot.checks, reconciliation_snapshot.history
+        for model, values in ((self.model, rows), (self.comparison_model, comparisons)):
+            model.beginResetModel()
+            model.rows = values
+            model.endResetModel()
+        self.model.set_reviewed(reviewed)
+        if selected_source is not None:
+            for index, row in enumerate(rows):
+                if (
+                    row.account_id,
+                    row.source_sha256,
+                    row.source_identity,
+                    row.source_identity_form,
+                ) == selected_source:
+                    self.table.selectRow(index)
+                    break
+        self.table.verticalScrollBar().setValue(scroll)
+        self.opening_model.replace(openings)
+        self.summary.setText(
+            f"{len(rows)} explicitly bound statement section(s) on {len({row.account_id for row in rows})} account(s); "
+            f"{account_count - len({row.account_id for row in rows})} financial account(s) have no bound statement."
+        )
+        self._update_review_source_button()
         self.reconciliation_model.replace(reconciliation)
         self.reconciliation_history_model.replace(history)
         self.reconciliation_status.setText(
@@ -722,10 +799,13 @@ class V2StatementCoverageDialog(QDialog):
                 break
         if history:
             self.reconciliation_history_table.selectRow(0)
+        if getattr(self, "_notice", None):
+            self.reconciliation_status.setText(self._notice)
+            self._notice = None
 
     def _save_reconciliation(self) -> None:
         index = self.reconciliation_table.currentIndex()
-        if not index.isValid():
+        if self.jobs.pending or not index.isValid():
             return
         row = self.reconciliation_model.rows[index.row()]
         if (
@@ -746,44 +826,83 @@ class V2StatementCoverageDialog(QDialog):
         )
         if QMessageBox.question(self, "Confirm reconciliation decision", message) != QMessageBox.StandardButton.Yes:
             return
-        try:
-            with V2ProfileStore.open(self.profile) as store:
-                decision = store.save_reconciliation_decision(
-                    row.account_id, row.source_sha256, expected_input_version=row.input_version, reason=reason
-                )
-        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            reasons = {
-                "reconciliation_changed_since_selection": "Inputs changed after this check was selected. Review the refreshed result.",
-                "reconciliation_check_not_successful": "The current check is not successful and cannot be saved.",
-            }
-            message = reasons.get(str(exc), str(exc))
-            QMessageBox.warning(self, "Reconciliation was not saved", message)
-            self._refresh_reconciliation()
-            self.reconciliation_status.setText(message)
-            return
-        self.reconciliation_reason.clear()
-        self._refresh_reconciliation()
-        self.reconciliation_status.setText(
-            f"Saved reconciliation through {decision.cutoff_date.isoformat()}. "
-            "See Saved reconciliations for retained inputs and current/stale state."
-        )
+        account_id, source, input_version = row.account_id, row.source_sha256, row.input_version
+
+        def write(store, _cancelled):
+            return store.save_reconciliation_decision(
+                account_id, source, expected_input_version=input_version, reason=reason
+            )
+
+        self.jobs.submit(("save",), write, write=True)
+        self.reconciliation_status.setText("Saving the explicitly confirmed reconciliation decision...")
 
     def _review_selected_source(self) -> None:
         index = self.table.currentIndex()
-        if not index.isValid():
+        if self.jobs.pending or not index.isValid():
             return
         section = self.model.rows[index.row()]
         if V2StatementSourceReview(self.profile, section, self).exec() != QDialog.Accepted:
             return
-        with V2ProfileStore.open(self.profile, read_only=True) as store:
-            accounts = store.financial_accounts()
-            reviewed = frozenset(
-                (account.id, review.source_sha256)
-                for account in accounts
-                for review in store.statement_source_reviews(account.id)
-            )
-            openings = store.earliest_source_openings()
-        self.model.set_reviewed(reviewed)
-        self.opening_model.replace(openings)
         self._refresh_reconciliation()
+
+    def _show_all_columns(self, checked):
+        for column in (3, 4, 5, 8, 9):
+            self.table.setColumnHidden(column, not checked)
+
+    def _job_completed(self, key, result):
+        if key[0] == "snapshot":
+            if result is not None:
+                self._apply_snapshot(key[1], result)
+        else:
+            self.reconciliation_reason.clear()
+            self._notice = f"Saved reconciliation through {result.cutoff_date.isoformat()}. See Saved reconciliations for retained inputs and current/stale state."
+            self._refresh_reconciliation()
+            self.reconciliation_status.setText(
+                f"Saved reconciliation through {result.cutoff_date.isoformat()}. See Saved reconciliations for retained inputs and current/stale state."
+            )
+
+    def _job_failed(self, key, exc):
+        self.save_reconciliation_button.setEnabled(False)
+        if key[0] == "save":
+            reasons = {
+                "reconciliation_changed_since_selection": "Inputs changed after this check was selected. Review the refreshed result.",
+                "reconciliation_check_not_successful": "The current check is not successful and cannot be saved.",
+            }
+            self._notice = reasons.get(str(exc), str(exc))
+            QMessageBox.warning(self, "Reconciliation was not saved", self._notice)
+            self._refresh_reconciliation()
+        if key[0] == "snapshot":
+            for model in (self.model, self.comparison_model):
+                model.beginResetModel()
+                model.rows = ()
+                model.endResetModel()
+            self.opening_model.replace(())
+            self.reconciliation_model.replace(())
+            self.reconciliation_history_model.replace(())
+            self.summary.setText("Statement evidence is unavailable. Refresh checks and history to retry.")
+            self.coverage_details.setPlainText("Statement inventory could not be verified.")
+        self.reconciliation_status.setText(f"{'Save' if key[0] == 'save' else 'Refresh'} failed: {exc}")
+
+    def _busy_changed(self, _busy):
+        self.tabs.setEnabled(not self.jobs.writing)
+        self.refresh_reconciliation_button.setEnabled(not self.jobs.writing)
         self._update_review_source_button()
+        if self.jobs.pending:
+            self.save_reconciliation_button.setEnabled(False)
+
+    def reject(self):
+        if self.jobs.close():
+            super().reject()
+        else:
+            self.reconciliation_status.setText(
+                "The confirmed save is still running. Wait for its result before closing."
+            )
+
+    def closeEvent(self, event):
+        if self.jobs.close():
+            super().closeEvent(event)
+        else:
+            event.ignore()
+            self.reconciliation_status.setText(
+                "The confirmed save is still running. Wait for its result before closing."
+            )

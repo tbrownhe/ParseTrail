@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QProgressDialog,
@@ -36,7 +37,7 @@ from parsetrail.core.v2_profile_store import (
     V2ProfileStore,
 )
 from parsetrail.core.v2_source_import import ImportCancelled, SourceImportResult
-from parsetrail.core.v2_workspace import V2Workspace, WorkspaceError, folder_source_files
+from parsetrail.core.v2_workspace import V2Workspace, folder_source_files
 from parsetrail.gui.v2_account_binding_review import V2AccountBindingReview
 from parsetrail.gui.v2_batch_account_assignment import V2BatchAccountAssignment
 from parsetrail.gui.v2_batch_import import V2BatchImportReport, V2BatchImportWorker
@@ -57,6 +58,7 @@ from parsetrail.gui.v2_financial_account import V2FinancialAccountDialog
 from parsetrail.gui.v2_opening_review import V2OpeningReview
 from parsetrail.gui.v2_original_document import open_original_document
 from parsetrail.gui.v2_path_notice import show_data_locations, show_path_notice
+from parsetrail.gui.v2_profile_jobs import ProfileJobs
 from parsetrail.gui.v2_profile_startup import choose_new_workspace
 from parsetrail.gui.v2_reviewed_reports import V2ReviewedReportsDialog
 from parsetrail.gui.v2_source_account_review import V2SourceAccountReview
@@ -106,6 +108,16 @@ class V2WorkspaceWindow(QMainWindow):
         self._document_summaries = {}
         self._closing = False
         self._search_prior_source = None
+        self._review_widget = None
+        self._review_source_id = None
+        self._positions_view = None
+        self._reports_view = None
+        self._close_after_job = False
+        self._profile_job_handlers = {}
+        self.profile_jobs = ProfileJobs(self, workspace.profile_path)
+        self.profile_jobs.completed.connect(self._profile_job_finished)
+        self.profile_jobs.failed.connect(self._profile_job_failed)
+        self.profile_jobs.busy_changed.connect(self._profile_job_busy)
         self.setWindowTitle("ParseTrail 2.0 workspace")
         self.resize(1050, 700)
         profile_menu = self.menuBar().addMenu("Profile")
@@ -176,16 +188,29 @@ class V2WorkspaceWindow(QMainWindow):
         layout = QVBoxLayout(central)
         profile_row = QHBoxLayout()
         profile_row.addWidget(QLabel("Profile:"))
+        self.profile_name = QLabel(workspace.profile_path.stem)
+        self.profile_name.setTextFormat(Qt.PlainText)
+        self.profile_name.setToolTip(str(workspace.profile_path))
+        profile_row.addWidget(self.profile_name)
         self.profile_label = QLineEdit(str(workspace.profile_path))
         self.profile_label.setReadOnly(True)
         self.profile_label.setCursorPosition(0)
         profile_row.addWidget(self.profile_label)
+        self.profile_label.hide()
+        profile_details = QPushButton("Show profile path")
+        profile_details.setCheckable(True)
+        profile_details.toggled.connect(self.profile_label.setVisible)
+        profile_row.addWidget(profile_details)
+        profile_row.addStretch()
         layout.addLayout(profile_row)
         catalog_controls = QHBoxLayout()
         self.catalog_label = QLabel()
         catalog_controls.addWidget(self.catalog_label)
-        self.install_catalog_button = QPushButton("Install signed catalog…")
-        self.install_catalog_button.setToolTip("Choose a folder containing catalog.json and catalog.sig")
+        self.install_catalog_button = QPushButton("Install statement formats…")
+        self.install_catalog_button.setToolTip(
+            "Choose the local signed statement-format package folder containing catalog.json and catalog.sig. "
+            "ParseTrail verifies its signature before enabling import."
+        )
         self.install_catalog_button.clicked.connect(self._choose_catalog_release)
         catalog_controls.addWidget(self.install_catalog_button)
         catalog_controls.addStretch()
@@ -268,11 +293,31 @@ class V2WorkspaceWindow(QMainWindow):
         self.review_context = QLabel("Choose a document to review.")
         self.review_context.setWordWrap(True)
         self.review_context.setTextFormat(Qt.PlainText)
-        review_layout.addWidget(self.review_context)
+        review_heading = QHBoxLayout()
+        review_heading.addWidget(self.review_context, 1)
         choose_document = QPushButton("Choose a document")
         choose_document.clicked.connect(lambda: self.navigation.setCurrentRow(0))
-        review_layout.addWidget(choose_document, alignment=Qt.AlignLeft)
-        account_group = QGroupBox("1. Confirm the account")
+        review_heading.addWidget(choose_document)
+        related = QPushButton("Related actions…")
+        self.related_menu = QMenu(related)
+        self.related_menu.addAction(self.transfer_review_action)
+        self.related_menu.addAction(self.settlement_review_action)
+        self.related_menu.addAction(self.loan_payment_action)
+        self.related_menu.addSeparator()
+        self.change_document_account_action = self.related_menu.addAction("Change document accounts…")
+        self.change_document_account_action.triggered.connect(self._review_source_account)
+        self.change_row_accounts_action = self.related_menu.addAction("Review row account assignments…")
+        self.change_row_accounts_action.triggered.connect(self._review_account)
+        original_action = self.related_menu.addAction("Open original document…")
+        original_action.triggered.connect(self._open_original)
+        self.related_menu.addSeparator()
+        self.related_menu.addAction("Check possible repeated rows…", self._review_source_overlap)
+        self.related_menu.addAction("Statement coverage and checks…", self._open_statement_coverage)
+        related.setMenu(self.related_menu)
+        review_heading.addWidget(related)
+        review_layout.addLayout(review_heading)
+        account_group = QGroupBox("Account association")
+        self.account_group = account_group
         account_controls = QHBoxLayout(account_group)
         self.source_review_button = QPushButton("Confirm document accounts")
         self.source_review_button.clicked.connect(self._review_source_account)
@@ -283,8 +328,9 @@ class V2WorkspaceWindow(QMainWindow):
         review_layout.addWidget(account_group)
         self.account_assignment_status = QLabel()
         self.account_assignment_status.setWordWrap(True)
-        review_layout.addWidget(self.account_assignment_status)
-        activity_group = QGroupBox("2. Review activity")
+        account_controls.insertWidget(0, self.account_assignment_status, 1)
+        activity_group = QGroupBox("Activity and related workflows")
+        self.activity_group = activity_group
         activity_layout = QVBoxLayout(activity_group)
         controls = QHBoxLayout()
         self.cash_review_button = QPushButton("Review cash activity")
@@ -296,8 +342,12 @@ class V2WorkspaceWindow(QMainWindow):
         self.transfer_review_button = QPushButton("Review transfers")
         self.transfer_review_button.clicked.connect(self._review_transfers)
         controls.addWidget(self.transfer_review_button)
+        self.more_review_button = QPushButton("More actions")
+        self.more_review_button.setCheckable(True)
+        controls.addWidget(self.more_review_button)
         activity_layout.addLayout(controls)
-        specialized = QHBoxLayout()
+        specialized_widget = QWidget()
+        specialized = QHBoxLayout(specialized_widget)
         self.register_button = QPushButton("Review loan register")
         self.register_button.clicked.connect(self._review_register_activity)
         specialized.addWidget(self.register_button)
@@ -307,13 +357,21 @@ class V2WorkspaceWindow(QMainWindow):
         loan_button = QPushButton("Loan principal and interest…")
         loan_button.clicked.connect(self._review_loan_payments)
         specialized.addWidget(loan_button)
-        activity_layout.addLayout(specialized)
+        activity_layout.addWidget(specialized_widget)
+        specialized_widget.hide()
+        self.more_review_button.toggled.connect(specialized_widget.setVisible)
         specialized.setContentsMargins(12, 0, 12, 0)
         self.review_guidance = QLabel()
         self.review_guidance.setWordWrap(True)
         activity_layout.addWidget(self.review_guidance)
         review_layout.addWidget(activity_group)
-        checks = QGroupBox("3. Check supporting evidence")
+        activity_group.hide()
+        self.review_host = QVBoxLayout()
+        review_layout.addLayout(self.review_host, 1)
+        self.review_empty = QLabel("Select a document to see its supported activity and remaining decisions.")
+        self.review_empty.setWordWrap(True)
+        self.review_host.addWidget(self.review_empty)
+        checks = QGroupBox("Supporting evidence and checks")
         checks_layout = QHBoxLayout(checks)
         self.overlap_review_button = QPushButton("Check possible repeated rows")
         self.overlap_review_button.clicked.connect(self._review_source_overlap)
@@ -322,13 +380,7 @@ class V2WorkspaceWindow(QMainWindow):
         check_statement.clicked.connect(self._open_statement_coverage)
         checks_layout.addWidget(check_statement)
         review_layout.addWidget(checks)
-        review_note = QLabel(
-            "Importing does not add transactions to reports. Review supported activity explicitly. "
-            "You can review spending while an opening balance is still unknown."
-        )
-        review_note.setWordWrap(True)
-        review_layout.addWidget(review_note)
-        review_layout.addStretch()
+        checks.hide()
 
         accounts = QWidget()
         accounts_layout = QVBoxLayout(accounts)
@@ -342,29 +394,28 @@ class V2WorkspaceWindow(QMainWindow):
         self.accounts_list = QListWidget()
         self.accounts_list.setAccessibleName("Your financial accounts")
         self.accounts_list.setWordWrap(True)
-        accounts_layout.addWidget(self.accounts_list, 1)
+        accounts_layout.addWidget(self.accounts_list)
         self.accounts_list.itemDoubleClicked.connect(self._edit_account)
         self.accounts_status = QLabel("Loading accounts…")
         self.accounts_status.setWordWrap(True)
         accounts_layout.addWidget(self.accounts_status)
+        account_actions = QHBoxLayout()
         self.account_button = QPushButton("Add account…")
         self.account_button.clicked.connect(self._add_account)
-        accounts_layout.addWidget(self.account_button, alignment=Qt.AlignLeft)
+        account_actions.addWidget(self.account_button)
         self.edit_account_button = QPushButton("Edit account…")
         self.edit_account_button.clicked.connect(self._edit_account)
-        accounts_layout.addWidget(self.edit_account_button, alignment=Qt.AlignLeft)
+        account_actions.addWidget(self.edit_account_button)
         self.openings_button = QPushButton("Review source-backed openings…")
         self.openings_button.clicked.connect(self._review_openings)
-        accounts_layout.addWidget(self.openings_button, alignment=Qt.AlignLeft)
-        anchors_button = QPushButton("Openings, dated values and account closure…")
-        anchors_button.clicked.connect(self._review_account_anchors)
-        accounts_layout.addWidget(anchors_button, alignment=Qt.AlignLeft)
+        account_actions.addWidget(self.openings_button)
         self.categories_button = QPushButton("Categories and budgets…")
         self.categories_button.clicked.connect(self._edit_categories)
-        accounts_layout.addWidget(self.categories_button, alignment=Qt.AlignLeft)
-        positions_button = QPushButton("View account positions…")
-        positions_button.clicked.connect(self._open_account_positions)
-        accounts_layout.addWidget(positions_button, alignment=Qt.AlignLeft)
+        account_actions.addWidget(self.categories_button)
+        account_actions.addStretch()
+        accounts_layout.addLayout(account_actions)
+        self.positions_host = QVBoxLayout()
+        accounts_layout.addLayout(self.positions_host, 1)
 
         reports = QWidget()
         report_layout = QVBoxLayout(reports)
@@ -375,42 +426,250 @@ class V2WorkspaceWindow(QMainWindow):
         )
         reports_note.setWordWrap(True)
         report_layout.addWidget(reports_note)
-        self.reports_button = QPushButton("Reviewed reports")
-        self.reports_button.clicked.connect(self._open_reviewed_reports)
-        report_layout.addWidget(self.reports_button, alignment=Qt.AlignLeft)
-        report_layout.addWidget(QLabel("Spending, income, budgets, account movement and positions"))
+        report_actions = QHBoxLayout()
+        self.reports_button = QPushButton("Review pending activity")
+        self.reports_button.clicked.connect(lambda: self.navigation.setCurrentRow(1))
+        report_actions.addWidget(self.reports_button)
         movement_button = QPushButton("Cash movement…")
         movement_button.clicked.connect(lambda: V2CashMovementDialog(self.workspace.profile_path, self).exec())
-        report_layout.addWidget(movement_button, alignment=Qt.AlignLeft)
-        movement_note = QLabel(
-            "Choose the cash accounts to include; transfers and repayments remain separate from spending."
-        )
-        movement_note.setWordWrap(True)
-        report_layout.addWidget(movement_note)
+        report_actions.addWidget(movement_button)
         self.coverage_button = QPushButton("Statement coverage and checks…")
         self.coverage_button.clicked.connect(self._open_statement_coverage)
-        report_layout.addWidget(self.coverage_button, alignment=Qt.AlignLeft)
-        coverage_note = QLabel(
-            "Inspect saved periods, source arithmetic and separate live or saved reconciliation decisions."
-        )
-        coverage_note.setWordWrap(True)
-        report_layout.addWidget(coverage_note)
-        report_layout.addStretch()
-        self.navigation.currentRowChanged.connect(self.pages.setCurrentIndex)
+        report_actions.addWidget(self.coverage_button)
+        report_actions.addStretch()
+        report_layout.addLayout(report_actions)
+        self.reports_host = QVBoxLayout()
+        report_layout.addLayout(self.reports_host, 1)
+        self.navigation.currentRowChanged.connect(self._navigation_changed)
         self.navigation.setCurrentRow(0)
         self.status = QLabel()
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
         self.refresh()
 
+    def _navigation_changed(self, page):
+        self.pages.setCurrentIndex(page)
+        if page == 1:
+            self._ensure_review_view()
+        elif page in (2, 3):
+            self._ensure_report_view(page)
+        if hasattr(self, "status"):
+            self._refresh_changed_profile()
+
+    def _ensure_report_view(self, page):
+        attribute = "_positions_view" if page == 2 else "_reports_view"
+        view = getattr(self, attribute)
+        if view is None:
+            view = V2ReviewedReportsDialog(
+                self.workspace.profile_path,
+                self,
+                embedded=True,
+                initial_tab=4 if page == 2 else 0,
+                positions_only=page == 2,
+            )
+            setattr(self, attribute, view)
+            view.review_requested.connect(lambda: self._open_pending_review(page))
+            if page == 3:
+                view.review_pending_button.hide()
+            (self.positions_host if page == 2 else self.reports_host).addWidget(view)
+            if page == 2:
+                self.accounts_list.hide()
+                view.positions_table.selectionModel().currentRowChanged.connect(self._position_selected)
+            view.export_jobs.busy_changed.connect(self._embedded_busy)
+        elif view._loaded.get(view.tabs.currentIndex()) != view._key(view.tabs.currentIndex()):
+            view._queue_selected_read(0)
+        return view
+
+    def _open_pending_review(self, page):
+        account_id = None
+        view = self._positions_view if page == 2 else self._reports_view
+        if view is not None and view.tabs.currentIndex() in (1, 4):
+            table = view.account_table if view.tabs.currentIndex() == 1 else view.positions_table
+            model = view.account_model if view.tabs.currentIndex() == 1 else view.positions_model
+            index = table.currentIndex()
+            if index.isValid() and index.row() < len(model.rows):
+                account_id = model.rows[index.row()].account_id
+        if account_id is not None:
+            related = [
+                summary for summary in self._document_summaries.values() if account_id in summary.associated_account_ids
+            ]
+            if not related:
+                self.status.setText(
+                    "No saved document is associated with this account. Import a statement or inspect its history."
+                )
+                return
+            selected = next(
+                (
+                    summary
+                    for summary in related
+                    if summary.pending_activity_rows
+                    or summary.unassigned_activity_rows
+                    or summary.unassigned_source_accounts
+                ),
+                related[0],
+            )
+            if self.document_search.text():
+                self.document_search.clear()
+            for index in range(self.sources.count()):
+                item = self.sources.item(index)
+                if item.data(Qt.UserRole) == selected.source_sha256:
+                    self.sources.setCurrentItem(item)
+                    break
+        self.navigation.setCurrentRow(1)
+
+    def _position_selected(self, *_args):
+        view = self._positions_view
+        index = view.positions_table.currentIndex()
+        if not index.isValid() or index.row() >= len(view.positions_model.rows):
+            return
+        account_id = view.positions_model.rows[index.row()].account_id
+        for position in range(self.accounts_list.count()):
+            item = self.accounts_list.item(position)
+            if item.data(Qt.UserRole) == account_id:
+                self.accounts_list.setCurrentItem(item)
+                break
+
+    def _review_has_draft(self):
+        draft = getattr(self._review_widget, "has_unsaved_draft", False)
+        return bool(draft() if callable(draft) else draft)
+
+    def _discard_review(self):
+        if self._review_widget is None:
+            return True
+        if getattr(getattr(self._review_widget, "jobs", None), "writing", False):
+            self.status.setText("Finishing the confirmed review before changing its document…")
+            return False
+        if (
+            self._review_has_draft()
+            and QMessageBox.question(
+                self,
+                "Leave this review?",
+                "Discard the staged or edited review choices? Saved entries and source evidence remain available.",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No,
+            )
+            != QMessageBox.Yes
+        ):
+            return False
+        cancel = getattr(self._review_widget, "request_cancel", None)
+        if cancel is not None and cancel() is False:
+            return False
+        self.review_host.removeWidget(self._review_widget)
+        self._review_widget.hide()
+        self._review_widget.deleteLater()
+        self._review_widget = None
+        self._review_source_id = None
+        return True
+
+    def _ensure_review_view(self):
+        source_id = self._selected_source()
+        summary = self._document_summaries.get(source_id)
+        if summary is None:
+            return
+        if self._review_source_id == source_id and self._review_widget is not None:
+            return
+        if not self._discard_review():
+            return
+        if summary.parser_id == REGISTER_PARSER:
+            from parsetrail.gui.v2_liability_register_review import V2LiabilityRegisterReview
+
+            view = V2LiabilityRegisterReview(self.workspace, source_id, self, embedded=True)
+        elif summary.parser_id in CARD_STATEMENT_PARSERS:
+            view = V2CardPurchaseReview(self.workspace, source_id, self, embedded=True)
+        else:
+            view = V2CashActivityReview(
+                self.workspace.profile_path,
+                source_id,
+                self,
+                workspace=self.workspace,
+                embedded=True,
+            )
+        self._review_widget, self._review_source_id = view, source_id
+        self.review_empty.hide()
+        self.review_host.addWidget(view)
+        changed = getattr(view, "changed", None)
+        if changed is not None:
+            changed.connect(lambda: self.refresh(select_source=self._review_source_id))
+        view.jobs.busy_changed.connect(self._embedded_busy)
+
+    def _embedded_busy(self, busy):
+        self._update_controls()
+        if not busy and self._close_after_job:
+            QTimer.singleShot(0, self.close)
+
+    def _write_in_progress(self):
+        return bool(
+            self.import_worker is not None
+            or self.profile_jobs.writing
+            or self._reports_writing()
+            or getattr(getattr(self._review_widget, "jobs", None), "writing", False)
+        )
+
+    def _reports_writing(self):
+        return any(view is not None and view.export_jobs.writing for view in (self._positions_view, self._reports_view))
+
+    def _reset_embedded_views(self):
+        for attribute, host in (("_positions_view", self.positions_host), ("_reports_view", self.reports_host)):
+            view = getattr(self, attribute)
+            if view is not None:
+                if not view.shutdown():
+                    return False
+                host.removeWidget(view)
+                view.hide()
+                view.deleteLater()
+                setattr(self, attribute, None)
+        return True
+
+    def _profile_job_busy(self, busy):
+        for action in (
+            self.new_profile_action,
+            self.open_profile_action,
+            self.backup_profile_action,
+            self.restore_profile_action,
+            self.recover_source_action,
+        ):
+            action.setEnabled(not busy and self.import_worker is None)
+        self._update_controls()
+        if not busy and self._close_after_job:
+            QTimer.singleShot(0, self.close)
+
+    def _profile_job_finished(self, key, result):
+        handlers = self._profile_job_handlers.pop(key, None)
+        self.status.setText("Operation completed.")
+        if handlers:
+            handlers[0](result)
+
+    def _profile_job_failed(self, key, exc):
+        handlers = self._profile_job_handlers.pop(key, None)
+        self.status.setText("Operation failed; inspect details and retry.")
+        QMessageBox.warning(self, handlers[1] if handlers else "Operation failed", str(exc))
+
+    def _run_profile_job(self, key, operation, on_success, failure_title, status, *, write=True, connection=True):
+        if self.profile_jobs.pending or self.import_worker is not None:
+            return False
+        self._profile_job_handlers[key] = on_success, failure_title
+        if not self.profile_jobs.submit(key, operation, write=write, connection=connection):
+            self._profile_job_handlers.pop(key, None)
+            return False
+        self.status.setText(status)
+        return True
+
     def refresh(self, select_source: str | None = None) -> None:
+        revision_changed = profile_revision(self.workspace.profile_path) != self._inventory_revision
         self._inventory_revision = profile_revision(self.workspace.profile_path)
         catalog = self.workspace.catalog_cache.load_current()
         self.catalog_label.setText(
-            f"Verified catalog release {catalog.release_sequence}"
+            f"Statement formats ready · Verified catalog release {catalog.release_sequence}"
             if catalog is not None
-            else "No verified catalog installed. Choose Install signed catalog to enable import."
+            else "Install statement formats to enable import. No verified catalog installed."
         )
+        self._catalog_available = catalog is not None
+        self.install_catalog_button.setText("Manage statement formats…" if catalog else "Install statement formats…")
+        for page, view in ((2, self._positions_view), (3, self._reports_view)):
+            if view is not None:
+                view.invalidate(read=self.navigation.currentRow() == page)
+        if revision_changed and self._review_widget is not None and not self._review_has_draft():
+            self._review_widget.refresh()
         self.import_button.setEnabled(catalog is not None and self.import_worker is None)
         self.import_folder_button.setEnabled(catalog is not None and self.import_worker is None)
         for action in (
@@ -440,7 +699,7 @@ class V2WorkspaceWindow(QMainWindow):
         self._inventory_requested = True
         self._document_summaries = {}
         self.inventory_status.setText("Loading saved documents…")
-        self.status.setText("Imported documents stay pending review until you confirm their activity.")
+        self.status.setText("Review supported activity to include it in reports. Source checks remain separate.")
         self._update_controls()
         QTimer.singleShot(0, self._start_inventory)
 
@@ -489,10 +748,12 @@ class V2WorkspaceWindow(QMainWindow):
                     if account.id == selected_id:
                         self.accounts_list.setCurrentItem(item)
                 self.accounts_status.setText(
-                    f"{len(worker.accounts)} accounts · view positions for supported balances and history"
+                    f"{len(worker.accounts)} accounts · positions show reviewed books and their limits"
                     if worker.accounts
                     else "No accounts yet. Add an account to connect your documents."
                 )
+                if self._positions_view is not None:
+                    self._position_selected()
             self._update_controls()
             if worker.error is None:
                 QTimer.singleShot(0, self._refresh_changed_profile)
@@ -571,6 +832,8 @@ class V2WorkspaceWindow(QMainWindow):
                 else f"{self.sources.count()} saved documents · select one to continue"
                 if self.sources.count()
                 else "No documents yet. Import a bank statement PDF or a supported CSV export to begin."
+                if self._catalog_available
+                else "First install a signed statement-format package using Install statement formats above."
             )
         self._update_controls()
 
@@ -592,11 +855,44 @@ class V2WorkspaceWindow(QMainWindow):
     def _update_controls(self, *_args) -> None:
         source_id = self._selected_source()
         summary = self._document_summaries.get(source_id)
-        available = summary is not None and self.import_worker is None and not self._closing
+        if summary is not None and self._review_widget is not None and self._review_source_id != source_id:
+            previous_source = self._review_source_id
+            if not self._discard_review():
+                self.sources.blockSignals(True)
+                for index in range(self.sources.count()):
+                    item = self.sources.item(index)
+                    if item.data(Qt.UserRole) == previous_source:
+                        self.sources.setCurrentItem(item)
+                        break
+                self.sources.blockSignals(False)
+                return
+        available = summary is not None and not self._write_in_progress() and not self._closing
+        if self._review_widget is not None:
+            self._review_widget.setEnabled(summary is not None and not self._closing)
         self.recover_source_action.setEnabled(available)
         self.preview_button.setEnabled(available)
         self.open_original_button.setEnabled(available)
-        batch_available = self.import_worker is None and not self._closing
+        batch_available = not self._write_in_progress() and not self._closing
+        self.import_button.setEnabled(self._catalog_available and batch_available)
+        self.import_folder_button.setEnabled(self.import_button.isEnabled())
+        for action in (
+            self.new_profile_action,
+            self.open_profile_action,
+            self.backup_profile_action,
+            self.restore_profile_action,
+            self.add_financial_account_action,
+            self.edit_financial_account_action,
+            self.account_anchors_action,
+            self.source_values_action,
+            self.source_opening_action,
+            self.transfer_review_action,
+            self.settlement_review_action,
+            self.loan_payment_action,
+        ):
+            action.setEnabled(batch_available)
+        self.install_catalog_button.setEnabled(batch_available)
+        for button in (self.account_button, self.edit_account_button, self.categories_button, self.openings_button):
+            button.setEnabled(batch_available)
         self.batch_accounts_button.setEnabled(batch_available)
         self.batch_accounts_action.setEnabled(batch_available)
         self.review_document_button.setEnabled(available)
@@ -611,6 +907,13 @@ class V2WorkspaceWindow(QMainWindow):
         self.register_button.setEnabled(available and is_register)
         self.register_button.setVisible(is_register)
         self.source_review_button.setEnabled(available and summary.has_identified_accounts)
+        self.change_document_account_action.setEnabled(available and summary.has_identified_accounts)
+        self.change_row_accounts_action.setEnabled(available and summary.has_unidentified_rows)
+        self.source_review_button.setText(
+            "Confirm document accounts"
+            if summary and summary.unassigned_source_accounts
+            else "Change document accounts…"
+        )
         self.review_button.setEnabled(available and summary.has_unidentified_rows)
         self.review_button.setText(
             "Review row account assignments"
@@ -637,7 +940,9 @@ class V2WorkspaceWindow(QMainWindow):
                 "Full allocation does not establish complete source capture or reconciliation."
                 + ("\nPossibly overlapping documents:\n" + "\n".join(related) if summary.overlapping_source_ids else "")
             )
-            self.review_context.setText(f"{details}\n{association}\n{document_status(summary)}")
+            self.review_context.setText(
+                f"{document_title(summary)} · {document_period(summary)}\n{document_status(summary)}"
+            )
             self.account_assignment_status.setText(
                 f"{summary.unassigned_source_accounts} document account(s) need confirmation."
                 if summary.unassigned_source_accounts
@@ -660,6 +965,13 @@ class V2WorkspaceWindow(QMainWindow):
                 if summary.pending_activity_rows
                 else "Activity has full allocation. Statement checks, source completeness and corrections remain separate tasks."
             )
+            self.account_group.setTitle(
+                "Confirm account" if summary.unassigned_source_accounts or summary.unassigned_activity_rows else ""
+            )
+            self.account_group.setVisible(bool(summary.unassigned_source_accounts or summary.unassigned_activity_rows))
+            self.review_button.setVisible(summary.has_unidentified_rows)
+            if self.navigation.currentRow() == 1:
+                self._ensure_review_view()
         else:
             self.selected_details.setText("Select a document to see its account, dates and next action.")
             self.document_technical_details.clear()
@@ -711,9 +1023,8 @@ class V2WorkspaceWindow(QMainWindow):
                 self.cash_review_button.setFocus()
 
     def _open_account_positions(self) -> None:
-        dialog = V2ReviewedReportsDialog(self.workspace.profile_path, self)
-        dialog.tabs.setCurrentIndex(4)
-        dialog.exec()
+        self.navigation.setCurrentRow(2)
+        self._ensure_report_view(2)
 
     def _choose_import(self) -> None:
         sources, _filter = QFileDialog.getOpenFileNames(
@@ -732,24 +1043,38 @@ class V2WorkspaceWindow(QMainWindow):
         directory = QFileDialog.getExistingDirectory(self, "Select a folder of statements or exports")
         if not directory:
             return
-        try:
-            paths = folder_source_files(Path(directory))
-        except WorkspaceError as exc:
-            QMessageBox.warning(self, "Folder was not imported", str(exc))
-            return
-        self.start_batch_import(paths)
+        folder = Path(directory)
+        self._run_profile_job(
+            "scan_folder",
+            lambda _store, _cancelled: folder_source_files(folder),
+            self.start_batch_import,
+            "Folder was not imported",
+            "Finding supported documents in the selected folder…",
+            connection=False,
+        )
 
     def _choose_catalog_release(self) -> None:
-        directory = QFileDialog.getExistingDirectory(self, "Select a signed catalog release folder")
+        directory = QFileDialog.getExistingDirectory(
+            self, "Select signed statement formats (folder containing catalog.json and catalog.sig)"
+        )
         if not directory:
             return
-        try:
-            release = self.workspace.install_catalog_release(Path(directory))
-        except (ValueError, OSError) as exc:
-            QMessageBox.warning(self, "Catalog was not installed", str(exc))
-            return
-        self.refresh()
-        self.status.setText(f"Verified catalog release {release.release_sequence} installed.")
+        workspace, package = self.workspace, Path(directory)
+
+        def installed(release):
+            self.refresh()
+            self.status.setText(
+                f"Statement formats ready. Verified catalog release {release.release_sequence} installed."
+            )
+
+        self._run_profile_job(
+            "install_formats",
+            lambda _store, _cancelled: workspace.install_catalog_release(package),
+            installed,
+            "Statement formats were not installed",
+            "Verifying the signed statement-format package…",
+            connection=False,
+        )
 
     def _new_profile(self) -> None:
         if self.import_worker is not None:
@@ -765,6 +1090,9 @@ class V2WorkspaceWindow(QMainWindow):
             self._select_workspace(selected)
 
     def _select_workspace(self, selected: V2Workspace) -> None:
+        if self._write_in_progress():
+            self.status.setText("Finish the current confirmed operation before opening another profile.")
+            return
         previous = self.workspace
         previous_source = self._selected_source()
         try:
@@ -774,6 +1102,14 @@ class V2WorkspaceWindow(QMainWindow):
             if candidate_source is not None:
                 selected.saved_import(candidate_source)
                 selected.overlapping_statement_sources(candidate_source)
+            if not self._discard_review() or not self._reset_embedded_views():
+                return
+            self.profile_jobs.close()
+            self.profile_jobs.deleteLater()
+            self.profile_jobs = ProfileJobs(self, selected.profile_path)
+            self.profile_jobs.completed.connect(self._profile_job_finished)
+            self.profile_jobs.failed.connect(self._profile_job_failed)
+            self.profile_jobs.busy_changed.connect(self._profile_job_busy)
             self.workspace = selected
             self.refresh()
         except (ProfileFormatError, sqlite3.Error, OSError, ValueError) as exc:
@@ -792,6 +1128,10 @@ class V2WorkspaceWindow(QMainWindow):
             return
         self.profile_label.setText(str(selected.profile_path))
         self.profile_label.setCursorPosition(0)
+        self.profile_name.setText(selected.profile_path.stem)
+        self.profile_name.setToolTip(str(selected.profile_path))
+        if self.navigation.currentRow() in (2, 3):
+            self._ensure_report_view(self.navigation.currentRow())
         self.status.setText("Opened 2.0 profile. Its path is shown above.")
 
     def _switch_profile(self, path: Path) -> None:
@@ -835,25 +1175,40 @@ class V2WorkspaceWindow(QMainWindow):
         source_id = self._selected_source()
         if source_id is None or self.import_worker is not None:
             return
-        try:
-            saved_import = self.workspace.saved_import(source_id)
-            proposed = self.workspace.profile_path.with_name(f"source-{source_id[:16]}{saved_import.suffix}")
+        workspace = self.workspace
+
+        def choose_destination(suffix):
+            if workspace is not self.workspace or self._selected_source() != source_id:
+                return
+            proposed = workspace.profile_path.with_name(f"source-{source_id[:16]}{suffix}")
             selected, _filter = QFileDialog.getSaveFileName(
                 self, "Save selected source original", str(proposed), "All files (*)"
             )
             if not selected:
                 return
-            saved = self.workspace.recover_source_original(source_id, Path(selected))
-        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            QMessageBox.warning(self, "Source original was not saved", str(exc))
-            return
-        show_path_notice(
-            self,
-            "Source original saved",
-            "Saved the exact original document retained in this profile:",
-            saved,
-            "This file contains financial data and is not encrypted by ParseTrail. "
-            "The profile and its saved evidence were not changed.",
+            destination = Path(selected)
+            self._run_profile_job(
+                "recover_original",
+                lambda _store, _cancelled: workspace.recover_source_original(source_id, destination),
+                lambda saved: show_path_notice(
+                    self,
+                    "Source original saved",
+                    "Saved the exact original document retained in this profile:",
+                    saved,
+                    "This file contains financial data and is not encrypted by ParseTrail. "
+                    "The profile and its saved evidence were not changed.",
+                ),
+                "Source original was not saved",
+                "Verifying and saving the selected original…",
+            )
+
+        self._run_profile_job(
+            "prepare_recovery",
+            lambda store, _cancelled: store.load_import(source_id).suffix,
+            choose_destination,
+            "Source original unavailable",
+            "Loading the selected original…",
+            write=False,
         )
 
     def _backup_profile(self) -> None:
@@ -868,17 +1223,19 @@ class V2WorkspaceWindow(QMainWindow):
         destination = Path(selected)
         if not destination.suffix:
             destination = destination.with_suffix(".dbb")
-        try:
-            saved = V2ProfileStore.snapshot_to(self.workspace.profile_path, destination)
-        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            QMessageBox.warning(self, "Backup was not created", str(exc))
-            return
-        show_path_notice(
-            self,
-            "Backup verified",
-            "Verified 2.0 profile backup:",
-            saved,
-            "This file contains financial source evidence and is not encrypted by ParseTrail.",
+        source = self.workspace.profile_path
+        self._run_profile_job(
+            "backup",
+            lambda _store, _cancelled: V2ProfileStore.snapshot_to(source, destination),
+            lambda saved: show_path_notice(
+                self,
+                "Backup verified",
+                "Verified 2.0 profile backup:",
+                saved,
+                "This file contains financial source evidence and is not encrypted by ParseTrail.",
+            ),
+            "Backup was not created",
+            "Creating and verifying profile backup…",
         )
 
     def _restore_profile(self) -> None:
@@ -902,12 +1259,15 @@ class V2WorkspaceWindow(QMainWindow):
         destination = Path(selected)
         if not destination.suffix:
             destination = destination.with_suffix(".db")
-        try:
-            restored = V2ProfileStore.snapshot_to(Path(backup), destination)
-        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            QMessageBox.warning(self, "Restore was not created", str(exc))
-            return
-        self._switch_profile(restored)
+        backup_path = Path(backup)
+        self._run_profile_job(
+            "restore",
+            lambda _store, _cancelled: V2ProfileStore.snapshot_to(backup_path, destination),
+            self._switch_profile,
+            "Restore was not created",
+            "Restoring and verifying a new profile…",
+            connection=False,
+        )
 
     def start_import(self, source_path: Path) -> None:
         if self.import_worker is not None:
@@ -1019,22 +1379,31 @@ class V2WorkspaceWindow(QMainWindow):
     def _preview(self, *_args) -> None:
         source_id = self._selected_source()
         if source_id is not None:
-            V2EvidencePreview(self.workspace.saved_import(source_id), self).exec()
+
+            def show(saved):
+                if self._selected_source() == source_id:
+                    V2EvidencePreview(saved, self).exec()
+
+            self._run_profile_job(
+                "preview",
+                lambda store, _cancelled: store.load_import(source_id),
+                show,
+                "Evidence preview unavailable",
+                "Loading selected source evidence…",
+                write=False,
+            )
 
     def _review_cash_activity(self) -> None:
         source_id = self._selected_source()
         if source_id is not None:
-            V2CashActivityReview(self.workspace.profile_path, source_id, self).exec()
-            self.refresh(select_source=source_id)
+            self.navigation.setCurrentRow(1)
+            self._ensure_review_view()
 
     def _review_card_purchases(self) -> None:
         source_id = self._selected_source()
         if source_id is not None:
-            V2CardPurchaseReview(self.workspace, source_id, self).exec()
-            self.assumed_posting_action.blockSignals(True)
-            self.assumed_posting_action.setChecked(self.workspace.preferences().allow_assumed_posting_dates)
-            self.assumed_posting_action.blockSignals(False)
-            self.refresh(select_source=source_id)
+            self.navigation.setCurrentRow(1)
+            self._ensure_review_view()
 
     def _review_transfers(self) -> None:
         if self.import_worker is not None:
@@ -1043,7 +1412,7 @@ class V2WorkspaceWindow(QMainWindow):
         self.assumed_posting_action.blockSignals(True)
         self.assumed_posting_action.setChecked(self.workspace.preferences().allow_assumed_posting_dates)
         self.assumed_posting_action.blockSignals(False)
-        self.refresh()
+        self._refresh_changed_profile()
 
     def _review_settlements(self) -> None:
         if self.import_worker is not None:
@@ -1054,7 +1423,7 @@ class V2WorkspaceWindow(QMainWindow):
         self.assumed_posting_action.blockSignals(True)
         self.assumed_posting_action.setChecked(self.workspace.preferences().allow_assumed_posting_dates)
         self.assumed_posting_action.blockSignals(False)
-        self.refresh()
+        self._refresh_changed_profile()
 
     def _review_loan_payments(self) -> None:
         if self.import_worker is not None:
@@ -1065,21 +1434,21 @@ class V2WorkspaceWindow(QMainWindow):
         self.assumed_posting_action.blockSignals(True)
         self.assumed_posting_action.setChecked(self.workspace.preferences().allow_assumed_posting_dates)
         self.assumed_posting_action.blockSignals(False)
-        self.refresh()
+        self._refresh_changed_profile()
 
     def _review_register_activity(self) -> None:
         if self.import_worker is not None:
             return
         source_id = self._selected_source()
-        if source_id is None or self.workspace.saved_import(source_id).evidence.parser_id != REGISTER_PARSER:
+        summary = self._document_summaries.get(source_id)
+        if summary is None or summary.parser_id != REGISTER_PARSER:
             return
-        from parsetrail.gui.v2_liability_register_review import V2LiabilityRegisterReview
-
-        V2LiabilityRegisterReview(self.workspace, source_id, self).exec()
-        self.refresh(select_source=source_id)
+        self.navigation.setCurrentRow(1)
+        self._ensure_review_view()
 
     def _open_reviewed_reports(self) -> None:
-        V2ReviewedReportsDialog(self.workspace.profile_path, self).exec()
+        self.navigation.setCurrentRow(3)
+        self._ensure_report_view(3)
 
     def _open_statement_coverage(self) -> None:
         V2StatementCoverageDialog(self.workspace.profile_path, self).exec()
@@ -1130,6 +1499,7 @@ class V2WorkspaceWindow(QMainWindow):
             self.status.setText(
                 "Financial account and tracking scope saved. Bind sources or review its opening and values."
             )
+            self.refresh()
             break
 
     def _edit_account(self, *_args) -> None:
@@ -1172,9 +1542,11 @@ class V2WorkspaceWindow(QMainWindow):
 
     def _edit_categories(self) -> None:
         V2CategoryDialog(self.workspace.profile_path, self).exec()
+        self._refresh_changed_profile()
 
     def _review_openings(self) -> None:
         V2OpeningReview(self.workspace, self).exec()
+        self._refresh_changed_profile()
 
     def _review_account_anchors(self) -> None:
         if self.import_worker is not None:
@@ -1193,6 +1565,16 @@ class V2WorkspaceWindow(QMainWindow):
         self.refresh()
 
     def close(self) -> bool:
+        if self._write_in_progress():
+            self._close_after_job = True
+            if self.import_worker is not None:
+                self._close_after_import = True
+                self.import_worker.cancel()
+            self.status.setText("Finishing the current operation before closing…")
+            return False
+        if not self._discard_review() or not self._reset_embedded_views():
+            return False
+        self.profile_jobs.close()
         if not self.isVisible() and self.import_worker is None:
             # Qt may skip closeEvent for an unseen window. Do not let its
             # queued initial read start after this explicit close request.
@@ -1209,6 +1591,15 @@ class V2WorkspaceWindow(QMainWindow):
             self.status.setText("Cancelling import before closing…")
             event.ignore()
             return
+        if self._write_in_progress():
+            self._close_after_job = True
+            self.status.setText("Finishing the confirmed operation before closing…")
+            event.ignore()
+            return
+        if not self._discard_review() or not self._reset_embedded_views():
+            event.ignore()
+            return
+        self.profile_jobs.close()
         self._closing = True
         self._inventory_requested = False
         if self._inventory_worker is not None:

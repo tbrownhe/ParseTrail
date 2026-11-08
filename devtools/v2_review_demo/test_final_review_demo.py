@@ -76,7 +76,7 @@ def test_walkthrough_cash_scope_dates_and_record_details(prepared):
     destination, _ = prepared
     before = hashlib.sha256((destination / "review.db").read_bytes()).hexdigest()
     helper = destination / "runtime/devtools/v2_review_demo/prepare_demo.py"
-    code = """import importlib.util,json,sys
+    code = """import importlib.util,json,sys,time
 from pathlib import Path
 helper,root=map(Path,sys.argv[1:])
 spec=importlib.util.spec_from_file_location('pinned_demo',helper)
@@ -85,6 +85,12 @@ from PySide6.QtCore import QDate,Qt
 from PySide6.QtWidgets import QApplication
 from parsetrail.gui.v2_cash_movement import V2CashMovementDialog
 app=QApplication([]);dialog=V2CashMovementDialog(root/'review.db')
+def settle():
+ deadline=time.monotonic()+15
+ while dialog.jobs.pending and time.monotonic()<deadline:
+  app.processEvents();time.sleep(.005)
+ assert not dialog.jobs.pending,'Cash movement did not finish'
+settle()
 items={dialog.accounts.item(i).data(Qt.UserRole):dialog.accounts.item(i) for i in range(dialog.accounts.count())}
 items['payment-checking'].setSelected(True)
 assert dialog.report is None
@@ -92,6 +98,7 @@ items['hsa'].setCheckState(Qt.Checked)
 for key,item in items.items():item.setCheckState(Qt.Checked if key=='payment-checking' else Qt.Unchecked)
 assert dialog._selected_ids()==('payment-checking',)
 dialog.start.setDate(QDate(2026,1,1));dialog.end.setDate(QDate(2026,2,1))
+settle()
 assert dialog.entries.rowCount()==1 and dialog.summary.rowCount()==2
 assert [dialog.entries.item(0,c).text() for c in (0,2,3)]==['2026-01-14','-$220.00','Reviewed loan payment cash outflow']
 assert dialog.report.total_minor==-22000
@@ -100,6 +107,7 @@ assert 'Reviewed loan principal payment: -$200.00' in dialog.details.toPlainText
 assert 'Reviewed cash expense: -$20.00' in dialog.details.toPlainText()
 assert dialog.sources.count()==2
 dialog.start.setDate(QDate(2026,2,1));dialog.end.setDate(QDate(2026,3,1))
+settle()
 assert dialog.entries.rowCount()==1 and dialog.summary.rowCount()==1
 assert [dialog.entries.item(0,c).text() for c in (0,2,3)]==['2026-02-09','-$20.00','Transfer sent']
 assert dialog.report.total_minor==-2000

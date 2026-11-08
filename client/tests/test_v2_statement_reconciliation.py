@@ -8,6 +8,7 @@ from parsetrail.core.v2_profile_store import V2ProfileStore
 
 from .test_v2_statement_journal_comparison import _profile
 from .test_v2_statement_source_review import _later_source
+from .v2_job_wait import wait_for_jobs
 
 
 def _review_and_post(store: V2ProfileStore, evidence) -> None:
@@ -93,12 +94,14 @@ def test_coverage_dialog_shows_reconciliation_blockers_and_exact_positions(tmp_p
     path = tmp_path / "reconciliation-ui.db"
     _profile(path)
     dialog = V2StatementCoverageDialog(path)
+    wait_for_jobs(dialog)
     try:
         dialog.show()
         app.processEvents()
         assert dialog.reconciliation_model.rowCount() == 1
         assert "Needs review" in dialog.reconciliation_model.data(dialog.reconciliation_model.index(0, 2))
         dialog.reconciliation_table.selectRow(0)
+        wait_for_jobs(dialog)
         app.processEvents()
         assert "Printed opening $100.00; journal opening $0.00" in dialog.reconciliation_details.text()
         assert "Source page capture incomplete" in dialog.reconciliation_details.text()

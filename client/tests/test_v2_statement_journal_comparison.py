@@ -11,6 +11,8 @@ from parsetrail.core.v2_table_bank_source_output import from_anchored_bank
 from devtools.parser_engine_pilot.test_table_bank_source_output import DEFINITION, SOURCE
 from devtools.parser_engine_pilot.test_table_bank_source_output import evidence as bank_channels
 
+from .v2_job_wait import wait_for_jobs
+
 
 def _profile(path: Path):
     evidence = from_anchored_bank(DEFINITION, *bank_channels())
@@ -61,6 +63,7 @@ def test_coverage_dialog_shows_journal_comparison_without_reconciliation_claim(t
     path = tmp_path / "comparison.db"
     _profile(path)
     dialog = V2StatementCoverageDialog(path)
+    wait_for_jobs(dialog)
     try:
         dialog.show()
         app.processEvents()

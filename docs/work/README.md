@@ -10,6 +10,9 @@ outside the current board; use the relevant context, not historical logs.
 
 | Record | Roadmap scope | Implementation / evidence |
 | --- | --- | --- |
+| [Current V2 source-backed demo](2026-11-01-v2-success-source-demo.md) | V2-3/6/UX/7 | All 946 selected originals imported into a new isolated runtime; original hashes, evidence integrity, backup/recovery and populated Windows launcher verified; accounting remains unreviewed. |
+| [Guided review and responsive workspace](2026-11-01-v2-guided-review-optimization.md) | V2-UX, V2-3/4/5/6 | Implemented ordinary atomic batches, responsive snapshots/jobs and embedded working views; 286 combined checks plus independent UX/integrity/acceptance passed; fresh public synthetic preview prepared. |
+| [V2 workflow and performance evaluation](2026-11-01-v2-ux-performance-evaluation.md) | V2-UX, V2-3/4/5/6 | Current synthetic UI/code review, independent UX/performance findings, archive-sized read timings and prioritized proposals; no application changes or owner acceptance. |
 | [Transfer review recovery](2026-10-31-transfer-review-recovery.md) | V2-4/5/UX | Direct unresolved-pair review, visible correction prerequisites and profile-bound confirmations; integrated/native/independent checks and same-profile public runtime verified. |
 | [Full-window transfer planning](2026-10-28-transfer-planning.md) | V2-4/5/UX | Full-window proposals, explicit conflicts and one atomic selected confirmation; integrated/native/independent checks and same-profile public runtime verified. |
 | [Populated transfer performance](2026-10-28-transfer-populated-profile-performance.md) | V2-4/5/UX | Indexed transaction-scoped history validation; current-demo read-only parity, realistic posted-history/native checks and same-profile public runtime verified. |

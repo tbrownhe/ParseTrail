@@ -211,6 +211,27 @@ Account suggestions remain pending until explicitly confirmed. Full source
 identifiers, date provenance and overlap details remain available in Show details.
 No presentation mode changes matching preferences or accounting decisions.
 
+Review embeds the selected document's supported cash/card/register activity.
+Search, status filters, exact sorting and Next pending keep the current task
+visible. Explicitly staged ordinary rows share the authored batch reason and
+receive one exact preview and atomic confirmation; each row retains its own
+date and allowed purpose/category. Corrections remain individual or whole-event
+operations. Already-consumed rows show their owning reviewed workflow rather
+than requesting another ordinary posting. Related actions exposes transfers,
+loan components, fees, account reassignment and evidence checks.
+
+Accounts embeds qualified positions and history, and Reports embeds the existing
+report tabs and entry drill-down. Selected dates and context persist when moving
+between pages. Empty selected periods are distinguished from a complete zero-
+activity claim. Statement-format setup explains the signed local package needed
+before imports; signature verification is unchanged.
+
+Ordinary and specialized reads/previews use worker-owned snapshots with loading,
+retry and superseded-result guards. Confirmed review writes and backup/restore/
+export/recovery jobs retain ownership through their real outcome. Independent
+backup restore does not require a healthy current profile. Live-data and release
+activation remain separately authorized actions.
+
 Review account selectors include New account. The shared account form suggests
 the selected document section's identity and scope, with institution/kind from
 its exact verified catalog context when available. Account details are editable;

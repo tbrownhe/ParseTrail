@@ -11,6 +11,7 @@ from parsetrail.core.v2_workspace import V2Workspace
 from devtools.parser_engine_pilot.synthetic_family_sources import family_sources
 
 from .test_v2_document_browser import wait_for_inventory
+from .test_v2_ordinary_review_async import wait_for_review, wait_until
 from .test_v2_transfer_review_async import wait_for_transfers
 
 
@@ -74,7 +75,10 @@ def workspace(path):
 def dialog(path, source_sha256):
     from parsetrail.gui.v2_liability_register_review import V2LiabilityRegisterReview
 
-    return V2LiabilityRegisterReview(workspace(path), source_sha256)
+    view = V2LiabilityRegisterReview(workspace(path), source_sha256)
+    wait_for_review(view)
+    view.navigation.status_filter.setCurrentIndex(view.navigation.status_filter.findData("all"))
+    return view
 
 
 def form(view, *, row=0, purpose="expense", category="expense:vehicle"):
@@ -85,9 +89,7 @@ def form(view, *, row=0, purpose="expense", category="expense:vehicle"):
 
 
 def test_both_actual_dates_fixed_posting_no_assumptions_cancel_post_reopen(tmp_path, source, monkeypatch):
-    from types import SimpleNamespace
-
-    from parsetrail.gui import v2_card_purchase_review as shared
+    from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
     from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QMessageBox
 
@@ -106,21 +108,24 @@ def test_both_actual_dates_fixed_posting_no_assumptions_cancel_post_reopen(tmp_p
     assert view.source_context.textFormat() == Qt.PlainText
     previews = []
     monkeypatch.setattr(
-        shared,
-        "preview_saved_source",
-        lambda *args, **kwargs: previews.append(args[1]) or SimpleNamespace(exec=lambda: None),
+        V2EvidencePreview,
+        "exec",
+        lambda preview: previews.append(preview.saved.evidence.source_sha256),
     )
     view.preview_source_button.click()
+    wait_for_review(view)
     assert previews == [evidence.source_sha256]
     form(view)
     assert view.action_button.isEnabled()
     before = path.read_bytes()
     monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.No)
     view.action_button.click()
+    wait_for_review(view)
     assert path.read_bytes() == before
     prompts = []
     monkeypatch.setattr(QMessageBox, "question", lambda _p, _t, text: prompts.append(text) or QMessageBox.Yes)
     view.action_button.click()
+    wait_for_review(view)
     assert "2026-02-05" in prompts[0] and "2026-02-07" in prompts[0] and "derived" in prompts[0]
     assert "reviewed card" not in prompts[0] and "principal/interest" in prompts[0]
     with V2ProfileStore.open(path, read_only=True) as store:
@@ -150,6 +155,7 @@ def test_register_category_correction_preserves_class_date_and_whole_liability_t
     view = dialog(path, evidence.source_sha256)
     form(view)
     view.action_button.click()
+    wait_for_review(view)
     first = view.model.rows[0].entry_key
     view.category.setCurrentIndex(view.category.findData("expense:other"))
     view.reason.setText("Explicit category-only register correction")
@@ -161,6 +167,7 @@ def test_register_category_correction_preserves_class_date_and_whole_liability_t
     prompts = []
     monkeypatch.setattr(QMessageBox, "question", lambda _p, _t, text: prompts.append(text) or QMessageBox.Yes)
     view.action_button.click()
+    wait_for_review(view)
     assert "Replacement entry effects only" in prompts[0] and "$0.00 net account movement" in prompts[0]
     assert "principal/interest" in prompts[0]
     assert view.model.rows[0].entry_key != first
@@ -174,13 +181,16 @@ def test_register_category_correction_preserves_class_date_and_whole_liability_t
     before = path.read_bytes()
     monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.No)
     view.withdraw_button.click()
+    wait_for_review(view)
     assert path.read_bytes() == before
     monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.Yes)
     view.withdraw_button.click()
+    wait_for_review(view)
     assert view.model.rows[0].entry_key is None and view.purpose.isEnabled()
     assert "withdraw" in view.history_details.text().lower()
     form(view, purpose="income_adjustment", category="income:other")
     view.action_button.click()
+    wait_for_review(view)
     assert view.model.rows[0].purpose == "income_adjustment" and view.model.rows[0].entry_key != first
     view.close()
 
@@ -197,6 +207,7 @@ def test_positive_register_payment_route_preserves_explicit_other_credit_choices
     form(view, row=1, purpose=purpose, category=category)
     assert view.action_button.isEnabled()
     view.action_button.click()
+    wait_for_review(view)
     assert view.model.rows[1].purpose == purpose
     with V2ProfileStore.open(path, read_only=True) as store:
         assert store.transfer_history() == () and store.loan_history() == ()
@@ -250,14 +261,16 @@ def test_register_stale_confirmation_and_failed_read_clear_authoring_state(tmp_p
     warnings = []
     monkeypatch.setattr(QMessageBox, "warning", lambda _p, _t, text: warnings.append(text))
     view.action_button.click()
+    wait_for_review(view)
     assert warnings and view.model.rows[0].entry_key is None
-    assert not view.action_button.isEnabled() and not view.reason.text()
+    assert view.model.rows[0].entry_key is None and view.reason.text()
 
     def unavailable(*_args, **_kwargs):
         raise ProfileFormatError("source_interpretation_history_integrity")
 
     monkeypatch.setattr(V2ProfileStore, "source_interpretation_snapshot", unavailable)
     view.refresh()
+    wait_for_review(view)
     assert view.basis is None and view.model.rowCount() == 0
     assert not view.action_button.isEnabled() and not view.withdraw_button.isEnabled()
     view.close()
@@ -275,6 +288,7 @@ def test_owned_register_repayment_is_neutral_whole_liability_with_separate_dates
     register = dialog(path, evidence.source_sha256)
     form(register)
     register.action_button.click()
+    wait_for_review(register)
     register.close()
     view = V2TransferReview(workspace(path))
     wait_for_transfers(view)
@@ -303,6 +317,7 @@ def test_owned_register_repayment_is_neutral_whole_liability_with_separate_dates
             category.id != "builtin:loan-interest" for category in store.category_accounts()
         )
     full = V2SettlementReview(workspace(path), event_id=event.event_id)
+    wait_until(lambda: not full.jobs.pending)
     assert "liability payment" in full.mode.currentText()
     from PySide6.QtWidgets import QLabel
 
@@ -310,6 +325,7 @@ def test_owned_register_repayment_is_neutral_whole_liability_with_separate_dates
     assert "liability owed" in full.history_details.toPlainText() or "amount owed" in full.history_details.toPlainText()
     full.reason.setText("Withdraw whole register repayment")
     full.withdraw.click()
+    wait_until(lambda: not full.jobs.pending)
     with V2ProfileStore.open(path, read_only=True) as store:
         assert store.transfer_history()[0].status == "cancelled"
         assert store._active_consumed() == {evidence.payload.accounts[0].rows[0].row_id: -1000}
@@ -317,7 +333,7 @@ def test_owned_register_repayment_is_neutral_whole_liability_with_separate_dates
     view.close()
 
 
-def test_workspace_register_action_has_exact_source_and_import_busy_guard(tmp_path, source, monkeypatch):
+def test_workspace_register_action_has_exact_source_and_import_busy_guard(tmp_path, source):
     from parsetrail.gui.v2_liability_register_review import V2LiabilityRegisterReview
     from parsetrail.gui.v2_workspace_window import V2WorkspaceWindow
 
@@ -327,17 +343,17 @@ def test_workspace_register_action_has_exact_source_and_import_busy_guard(tmp_pa
     wait_for_inventory(window)
     window.refresh(select_source=evidence.source_sha256)
     wait_for_inventory(window)
-    opened = []
-    monkeypatch.setattr(V2LiabilityRegisterReview, "exec", lambda view: opened.append(view.source_sha256) or 0)
     assert window.register_review_action.isEnabled() and not window.card_review_button.isEnabled()
     window.register_review_action.trigger()
-    assert opened == [evidence.source_sha256]
+    assert isinstance(window._review_widget, V2LiabilityRegisterReview)
+    assert window._review_widget.embedded and window._review_widget.source_sha256 == evidence.source_sha256
+    original_review = window._review_widget
     window.import_worker = object()
     window.refresh(select_source=evidence.source_sha256)
     wait_for_inventory(window)
     assert not window.register_review_action.isEnabled()
     window._review_register_activity()
-    assert opened == [evidence.source_sha256]
+    assert window._review_widget is original_review
     window.import_worker = None
     with V2ProfileStore.open(path, read_only=True) as store:
         bank_source = next(source_id for source_id in store.source_ids() if source_id != evidence.source_sha256)
@@ -345,7 +361,7 @@ def test_workspace_register_action_has_exact_source_and_import_busy_guard(tmp_pa
     wait_for_inventory(window)
     assert not window.register_review_action.isEnabled()
     window._review_register_activity()
-    assert opened == [evidence.source_sha256]
+    assert not isinstance(window._review_widget, V2LiabilityRegisterReview)
     window.close()
 
 
@@ -369,18 +385,22 @@ def test_register_historical_withdrawal_retry_preserves_fresh_interpretation(tmp
     current = dialog(path, evidence.source_sha256)
     form(current)
     current.action_button.click()
+    wait_for_review(current)
     oldkey = current.model.rows[0].entry_key
     stale = dialog(path, evidence.source_sha256)
     stale.table.selectRow(0)
     stale.reason.setText("Withdraw this exact register interpretation")
     current.reason.setText("Withdraw this exact register interpretation")
     current.withdraw_button.click()
+    wait_for_review(current)
     form(current)
     current.action_button.click()
+    wait_for_review(current)
     freshkey = current.model.rows[0].entry_key
     assert freshkey != oldkey
     stale.withdraw_button.click()
-    assert stale.model.rows[0].entry_key == freshkey and "current posting state" in stale.status.text()
+    wait_for_review(stale)
+    assert stale.model.rows[0].entry_key == freshkey and "current posting state" in stale.operation_status.text()
     with V2ProfileStore.open(path, read_only=True) as store:
         assert store._active_consumed() == {evidence.payload.accounts[0].rows[0].row_id: -1000}
         assert (

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sqlite3
 from collections import Counter
 from dataclasses import dataclass
 from datetime import date
@@ -93,7 +94,7 @@ class CashMovementReport:
 
 
 def read_cash_movement(
-    profile: Path, selected_account_ids: tuple[str, ...], *, start: date, end: date
+    profile: Path, selected_account_ids: tuple[str, ...], *, start: date, end: date, cancelled=None
 ) -> CashMovementReport:
     """No default cash scope, inferred purpose, or source-to-money reconstruction."""
     if (
@@ -103,8 +104,17 @@ def read_cash_movement(
         or len(set(selected_account_ids)) != len(selected_account_ids)
     ):
         raise ProfileFormatError("cash_movement_scope_required")
+
+    def checkpoint():
+        if cancelled is not None and cancelled():
+            raise ProfileFormatError("cash_movement_cancelled")
+
+    checkpoint()
     selected = frozenset(selected_account_ids)
     with V2ProfileStore.open(profile, read_only=True) as store:
+        checkpoint()
+        if cancelled is not None:
+            store.connection.set_progress_handler(lambda: int(bool(cancelled())), 1000)
         store.connection.execute("BEGIN")
         try:
             financial = store.financial_accounts()
@@ -113,6 +123,7 @@ def read_cash_movement(
             if not selected <= allowed:
                 raise ProfileFormatError("cash_movement_scope_invalid")
             journal = store.reviewed_journal_export(start=start, end=end)
+            checkpoint()
             # Full validated event context can place the counterpart leg outside
             # this period. Its money is still excluded from this period's rows.
             events = {event.event_id: event for event in store._read_transfer_history()[0] if event.status == "active"}
@@ -121,6 +132,7 @@ def read_cash_movement(
             category_names = category_labels((account.id, account.name, account.kind) for account in journal.accounts)
             rows = []
             for entry in journal.entries:
+                checkpoint()
                 effects = tuple((p.account_id, p.amount_minor) for p in entry.postings if p.account_id in selected)
                 if not effects:
                     continue
@@ -260,6 +272,7 @@ def read_cash_movement(
                 for classification in MOVEMENT_LABELS
                 if any(component.classification == classification for row in rows for component in row.components)
             )
+            checkpoint()
             return CashMovementReport(
                 journal,
                 tuple(account for account in journal.accounts if account.id in selected),
@@ -277,5 +290,9 @@ def read_cash_movement(
                     for event in events.values()
                 ),
             )
+        except sqlite3.OperationalError:
+            checkpoint()
+            raise
         finally:
+            store.connection.set_progress_handler(None, 0)
             store.connection.execute("ROLLBACK")

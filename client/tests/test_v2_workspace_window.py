@@ -71,9 +71,7 @@ def _wait_finished(worker, app) -> None:
 
 def test_window_imports_pending_evidence_and_reuses_exact_source(tmp_path: Path, monkeypatch) -> None:
     app = _app()
-    from parsetrail.gui.v2_cash_activity_review import V2CashActivityReview
     from parsetrail.gui.v2_categories import V2CategoryDialog
-    from parsetrail.gui.v2_reviewed_reports import V2ReviewedReportsDialog
     from parsetrail.gui.v2_source_account_review import V2SourceAccountReview
     from parsetrail.gui.v2_workspace_window import V2WorkspaceWindow
 
@@ -88,12 +86,8 @@ def test_window_imports_pending_evidence_and_reuses_exact_source(tmp_path: Path,
         monkeypatch.setattr(V2CategoryDialog, "exec", lambda dialog: category_opens.append(dialog.categories.count()))
         window.categories_button.click()
         assert category_opens == [0]
-        spending_opens = []
-        monkeypatch.setattr(
-            V2ReviewedReportsDialog, "exec", lambda dialog: spending_opens.append(dialog.model.rowCount())
-        )
-        window.reports_button.click()
-        assert spending_opens == [0]
+        window._open_reviewed_reports()
+        assert window.navigation.currentRow() == 3 and window._reports_view.embedded
         assert window.import_button.isEnabled()
         window.start_import(source)
         _wait_finished(window.import_worker, app)
@@ -109,11 +103,12 @@ def test_window_imports_pending_evidence_and_reuses_exact_source(tmp_path: Path,
         window.source_review_button.click()
         wait_for_inventory(window)
         assert opened == [1]
-        expense_opens = []
-        monkeypatch.setattr(V2CashActivityReview, "exec", lambda dialog: expense_opens.append(dialog.model.rowCount()))
         window.cash_review_button.click()
         wait_for_inventory(window)
-        assert expense_opens == [1]
+        from .v2_job_wait import wait_for_jobs
+
+        wait_for_jobs(window._review_widget)
+        assert window._review_widget.model.rowCount() == 1
         window.start_import(source)
         _wait_finished(window.import_worker, app)
         wait_for_inventory(window)
@@ -194,12 +189,14 @@ def test_profile_menu_backs_up_restores_and_keeps_failed_selection_on_current_pr
     wait_for_inventory(window)
     try:
         window.backup_profile_action.trigger()
+        wait_for_inventory(window)
         assert backup.is_file()
         assert notices[0][1] == backup.resolve()
         assert "not encrypted" in notices[0][2]
         with V2ProfileStore.open(workspace.profile_path) as store:
             store.rename_category_account("expense:food", "Changed")
         window.restore_profile_action.trigger()
+        wait_for_inventory(window)
         assert window.workspace.profile_path == restored.resolve()
         assert str(restored.resolve()) in window.profile_label.text()
         with V2ProfileStore.open(restored, read_only=True) as store:
@@ -316,6 +313,7 @@ def test_window_installs_local_signed_catalog_before_enabling_import(tmp_path: P
         assert not window.import_button.isEnabled()
         assert "No verified catalog" in window.catalog_label.text()
         window.install_catalog_button.click()
+        wait_for_inventory(window)
         assert window.import_button.isEnabled()
         assert "Verified catalog release 1" in window.catalog_label.text()
     finally:
@@ -368,6 +366,7 @@ def test_accountless_source_opens_review_and_account_creation(tmp_path: Path, mo
     try:
         assert window.review_button.isEnabled()
         window.account_button.click()
+        wait_for_inventory(window)
         window.review_button.click()
         assert opened == [6]
         window.edit_account_button.click()

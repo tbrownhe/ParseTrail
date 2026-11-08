@@ -158,6 +158,13 @@ def _local_work(window, root, release, diagnostics, app, result):
     from parsetrail.gui.v2_cash_activity_review import V2CashActivityReview
     from parsetrail.gui.v2_reviewed_reports import V2ReviewedReportsDialog
 
+    def settle(predicate, label):
+        deadline = time.monotonic() + 10
+        while predicate() and time.monotonic() < deadline:
+            app.processEvents()
+            time.sleep(0.005)
+        _require(not predicate(), f"{label} did not finish")
+
     work = window.workspace
     diagnostics.mark("verify local signed catalog and import/retry embedded CSV")
     work.install_catalog_release(release)
@@ -178,6 +185,7 @@ def _local_work(window, root, release, diagnostics, app, result):
     cash = V2CashActivityReview(work.profile_path, imported.source_sha256, window)
     cash.setAttribute(Qt.WA_DontShowOnScreen)
     cash.show()
+    settle(lambda: cash.review_pending, "Cash review loading")
     cash.table.selectRow(next(index for index, row in enumerate(cash.model.rows) if row.amount_minor == -5743))
     cash.purpose.setCurrentIndex(cash.purpose.findData("expense"))
     cash.category.setCurrentIndex(cash.category.findData("expense:food"))
@@ -186,14 +194,15 @@ def _local_work(window, root, release, diagnostics, app, result):
     _require(cash.action_button.isEnabled(), "Expense review did not become actionable")
     with patch.object(QMessageBox, "question", lambda *_args: QMessageBox.Yes):
         cash.action_button.click()
-    _require(cash._current().entry_key is not None, "Expense review did not persist")
+        settle(lambda: cash.review_pending, "Confirmed expense review")
+    _require(any(row.entry_key is not None for row in cash.model.rows), "Expense review did not persist")
     cash.close()
     reports = V2ReviewedReportsDialog(work.profile_path, window)
     reports.setAttribute(Qt.WA_DontShowOnScreen)
     reports.start.setDate(QDate(2026, 10, 1))
     reports.end.setDate(QDate(2026, 11, 1))
     reports.show()
-    app.processEvents()
+    settle(lambda: reports.reports_pending, "Reviewed reports")
     with V2ProfileStore.open(work.profile_path, read_only=True) as store:
         summary = store.reviewed_category_summary(kind="expense", start=date(2026, 10, 1), end=date(2026, 11, 1))
         _require(summary.total_minor == 5743, "Reviewed expense is not exact")

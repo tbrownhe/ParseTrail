@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -20,6 +21,8 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QScrollArea,
+    QSplitter,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -28,10 +31,11 @@ from PySide6.QtWidgets import (
 )
 
 from parsetrail.core.v2_cash_movement import cash_account_labels
-from parsetrail.core.v2_profile_store import ProfileFormatError, V2ProfileStore
+from parsetrail.core.v2_profile_store import ProfileFormatError
 from parsetrail.core.v2_settlements import ExpectedOwnedDestination, SettlementFee
 from parsetrail.gui.v2_cash_activity_review import _category_labels, _money
 from parsetrail.gui.v2_evidence_preview import preview_saved_source
+from parsetrail.gui.v2_profile_jobs import ProfileJobs
 
 
 def _positive_minor(text):
@@ -128,13 +132,17 @@ class V2SettlementReview(QDialog):
     def __init__(self, workspace, event_id: str | None = None, parent=None):
         super().__init__(parent)
         self.workspace = workspace
+        self.jobs = ProfileJobs(self, workspace.profile_path)
+        self.jobs.completed.connect(self._job_completed)
+        self.jobs.failed.connect(self._job_failed)
+        self.jobs.busy_changed.connect(self._busy_changed)
         self.snapshot, self.preview, self.selected_event = None, None, None
         self.review_preferences = workspace.preferences()
         self.fees = ()
         self.labels, self.movements = {}, {}
         self._expected_outgoing_id = None
         self.setWindowTitle("2.0 transfer fees and partial settlements")
-        self.resize(1180, 790)
+        self.resize(1100, 720)
         layout = QVBoxLayout(self)
         path = QHBoxLayout()
         path.addWidget(QLabel("Profile:"))
@@ -163,7 +171,15 @@ class V2SettlementReview(QDialog):
             "Unlisted unsupported or already consumed rows remain outside this review."
         )
         note.setWordWrap(True)
-        layout.addWidget(note)
+        rules = QGroupBox("Review rules and settlement qualifications")
+        rules.setCheckable(True)
+        rules.setChecked(False)
+        rules_layout = QVBoxLayout(rules)
+        rules_layout.setContentsMargins(8, 0, 8, 0)
+        rules_layout.addWidget(note)
+        note.hide()
+        rules.toggled.connect(note.setVisible)
+        layout.addWidget(rules)
         self.tabs = QTabWidget()
         layout.addWidget(self.tabs, 1)
         self._build_sources()
@@ -222,11 +238,14 @@ class V2SettlementReview(QDialog):
             self.receipts.setColumnWidth(column, width)
         self.receipts.itemChanged.connect(self._draft_changed)
         self.receipts.itemSelectionChanged.connect(self._receipt_selected)
-        layout.addWidget(self.receipts, 1)
+        self.source_splitter = QSplitter(Qt.Vertical)
+        self.source_splitter.addWidget(self.receipts)
         self.source_details = QPlainTextEdit()
         self.source_details.setReadOnly(True)
-        self.source_details.setMaximumHeight(125)
-        layout.addWidget(self.source_details)
+        self.source_splitter.addWidget(self.source_details)
+        self.source_details.hide()
+        self.source_splitter.setSizes([280, 90])
+        layout.addWidget(self.source_splitter, 1)
         self.open_receipt = QPushButton("Open selected receipt evidence")
         self.open_receipt.clicked.connect(lambda: self._open_source(self._selected_receipt_id()))
         layout.addWidget(self.open_receipt)
@@ -255,7 +274,14 @@ class V2SettlementReview(QDialog):
         self.expected_ack.toggled.connect(self._draft_changed)
         expected_form.addRow("Explicit ownership review", self.expected_ack)
         self.expected_panel.hide()
-        layout.addWidget(self.expected_panel)
+        if hasattr(self, "expected_scroll"):
+            self.expected_scroll.hide()
+        expected_scroll = QScrollArea()
+        expected_scroll.setWidgetResizable(True)
+        expected_scroll.setWidget(self.expected_panel)
+        self.expected_scroll = expected_scroll
+        self.source_splitter.addWidget(expected_scroll)
+        expected_scroll.hide()
         self.tabs.addTab(panel, "Source legs")
 
     def _build_fees(self):
@@ -319,11 +345,13 @@ class V2SettlementReview(QDialog):
         self.entry_table = _table(("Accounting date", "Ledger account", "Debit (+) / credit (-)", "Source allocation"))
         for column, width in enumerate((140, 420, 170, 300)):
             self.entry_table.setColumnWidth(column, width)
-        layout.addWidget(self.entry_table, 1)
+        preview_splitter = QSplitter(Qt.Vertical)
+        preview_splitter.addWidget(self.entry_table)
         self.preview_details = QPlainTextEdit()
         self.preview_details.setReadOnly(True)
-        self.preview_details.setMaximumHeight(145)
-        layout.addWidget(self.preview_details)
+        preview_splitter.addWidget(self.preview_details)
+        preview_splitter.setSizes([270, 110])
+        layout.addWidget(preview_splitter, 1)
         self.tabs.addTab(panel, "Exact journal preview")
 
     def _caption(self, movement):
@@ -347,6 +375,7 @@ class V2SettlementReview(QDialog):
 
     def _receipt_selected(self):
         movement = self.movements.get(self._selected_receipt_id())
+        self.source_details.setVisible(movement is not None)
         self.open_receipt.setEnabled(movement is not None)
         self.source_details.setPlainText(
             self._caption(movement)
@@ -361,30 +390,29 @@ class V2SettlementReview(QDialog):
         )
 
     def refresh(self, *_args):
+        if self.jobs.writing:
+            return
         selected_id = self.mode.currentData() or self._requested_event_id
         self._requested_event_id = None
         self.snapshot, self.preview, self.selected_event = None, None, None
         self.fees = ()
         self.reason.clear()
         self.review_preferences = self.workspace.preferences()
-        try:
-            with V2ProfileStore.open(self.workspace.profile_path, read_only=True) as store:
-                snapshot = store.settlement_review_snapshot(preferences=self.review_preferences)
-                event = next((item for item in snapshot.events if item.event_id == selected_id), None)
-                if event is not None and event.status == "active":
-                    snapshot = store.settlement_review_snapshot(
-                        preferences=self.review_preferences, replacing_event_id=event.event_id
-                    )
-                    event = next(item for item in snapshot.events if item.event_id == selected_id)
-        except (ProfileFormatError, sqlite3.Error, OSError, StopIteration):
-            self.movements, self.labels = {}, {}
-            self.mode.blockSignals(True)
-            self.mode.clear()
-            self.mode.addItem("Saved settlement state unavailable", None)
-            self.mode.blockSignals(False)
-            self._clear_draft()
-            self.status.setText("Settlement state unavailable. Reload saved state before reviewing another event.")
-            return
+        self._clear_draft()
+        self.status.setText("Loading verified settlement sources and saved history...")
+        preferences = self.review_preferences
+
+        def read(store, cancelled):
+            snapshot = store.settlement_review_snapshot(preferences=preferences)
+            event = next((item for item in snapshot.events if item.event_id == selected_id), None)
+            if event is not None and event.status == "active" and not cancelled():
+                snapshot = store.settlement_review_snapshot(preferences=preferences, replacing_event_id=event.event_id)
+                event = next(item for item in snapshot.events if item.event_id == selected_id)
+            return snapshot, event
+
+        self.jobs.submit(("snapshot", selected_id), read)
+
+    def _apply_snapshot(self, snapshot, event):
         self.snapshot, self.selected_event = snapshot, event
         self.labels = cash_account_labels(snapshot.accounts)
         self.movements = {movement.row_id: movement for movement in snapshot.movements}
@@ -468,6 +496,12 @@ class V2SettlementReview(QDialog):
             for widget in (self.expected_destination, self.expected_reference, self.expected_ack):
                 widget.blockSignals(False)
         self._draft_changed()
+        if event is not None and event.status != "active":
+            self.tabs.setCurrentIndex(self.tabs.count() - 1)
+        if getattr(self, "_notice", None):
+            self.status.setText(self._notice)
+            if not self.jobs.pending:
+                self._notice = None
 
     def _clear_draft(self):
         self._expected_outgoing_id = None
@@ -492,6 +526,9 @@ class V2SettlementReview(QDialog):
         self._update_actions()
 
     def _draft_changed(self, *_args):
+        if self.jobs.writing:
+            return
+        self.jobs.cancel_reads()
         self.preview = None
         self._sync_expectation()
         self.open_outgoing.setEnabled(self.outgoing.currentData() in self.movements)
@@ -540,6 +577,8 @@ class V2SettlementReview(QDialog):
         for widget in (self.expected_destination, self.expected_reference, self.expected_ack):
             widget.blockSignals(False)
         self.expected_panel.hide()
+        if hasattr(self, "expected_scroll"):
+            self.expected_scroll.hide()
 
     def _sync_expectation(self):
         outgoing_id = self.outgoing.currentData()
@@ -563,7 +602,11 @@ class V2SettlementReview(QDialog):
             self._expected_outgoing_id = None
             self._sync_expectation()
             return
+        was_visible = not self.expected_scroll.isHidden()
         self.expected_panel.setVisible(missing)
+        self.expected_scroll.setVisible(missing)
+        if missing and not was_visible:
+            self.source_splitter.setSizes([130, 0, 140])
         self.expected_panel.setEnabled(
             self.snapshot is not None and (self.selected_event is None or self.selected_event.status == "active")
         )
@@ -600,46 +643,57 @@ class V2SettlementReview(QDialog):
             )
             self._update_actions()
             return
-        try:
-            with V2ProfileStore.open(self.workspace.profile_path, read_only=True) as store:
-                self.preview = store.preview_reviewed_settlement(
-                    self.outgoing.currentData(),
-                    self._receipt_ids(),
-                    fees=self.fees,
-                    preferences=self.review_preferences,
-                    expected_basis_sha256=self.snapshot.basis_sha256,
-                    replacing_event_id=self.selected_event.event_id if self.selected_event else None,
-                    expected_destination=expected,
-                )
-        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            self.preview = None
-            if "changed_since_selection" in str(exc):
-                self.refresh()
-                self.status.setText(
-                    "Source or event context changed. The draft was reset; inspect the reloaded complete source legs before confirming."
-                )
-                return
-            if isinstance(exc, (sqlite3.Error, OSError)) or "integrity" in str(exc):
-                self.snapshot, self.selected_event = None, None
-                self.movements, self.labels = {}, {}
-                self._clear_draft()
-                self.status.setText(
-                    "Preview source state could not be verified. Reload saved state before another action."
-                )
-                return
-            messages = {
-                "settlement_overallocated": "Receipts and explicit fees exceed the source outflow, or leave no transfer principal. Review every allocation.",
-                "transfer_assumed_date_disabled": "A selected leg has an assumed date. Explicitly enable the global best guess choice before new postings; withdrawal remains available.",
-            }
-            self.summary.setText(
-                "Preview unavailable: "
-                + messages.get(
-                    str(exc),
-                    "Source context, dates, allocations or the selected fee details do not support this manifest. Reload after source changes.",
-                )
+        outgoing, incoming = self.outgoing.currentData(), self._receipt_ids()
+        fees, preferences, basis = self.fees, self.review_preferences, self.snapshot.basis_sha256
+        replacing = self.selected_event.event_id if self.selected_event else None
+
+        def read(store, _cancelled):
+            return store.preview_reviewed_settlement(
+                outgoing,
+                incoming,
+                fees=fees,
+                preferences=preferences,
+                expected_basis_sha256=basis,
+                replacing_event_id=replacing,
+                expected_destination=expected,
             )
-            self._update_actions()
+
+        self.jobs.submit(("preview", outgoing, incoming, fees, basis, replacing, expected), read, delay=100)
+        self.summary.setText("Checking the exact selected settlement preview...")
+        self._update_actions()
+
+    def _preview_failed(self, exc):
+        self.preview = None
+        if "changed_since_selection" in str(exc):
+            self._notice = "Sources or event context changed. The draft was reset; inspect the reloaded source facts."
+            self.refresh()
+            self.status.setText(
+                "Source or event context changed. The draft was reset; inspect the reloaded complete source legs before confirming."
+            )
             return
+        if isinstance(exc, (sqlite3.Error, OSError)) or "integrity" in str(exc):
+            self.snapshot, self.selected_event = None, None
+            self.movements, self.labels = {}, {}
+            self._clear_draft()
+            self.status.setText("Preview source state could not be verified. Reload saved state before another action.")
+            return
+        messages = {
+            "settlement_overallocated": "Receipts and explicit fees exceed the source outflow, or leave no transfer principal. Review every allocation.",
+            "transfer_assumed_date_disabled": "A selected leg has an assumed date. Explicitly enable the global best guess choice before new postings; withdrawal remains available.",
+        }
+        self.summary.setText(
+            "Preview unavailable: "
+            + messages.get(
+                str(exc),
+                "Source context, dates, allocations or the selected fee details do not support this manifest. Reload after source changes.",
+            )
+        )
+        self._update_actions()
+        return
+
+    def _apply_preview(self, preview):
+        self.preview = preview
+        expected = preview.settlement.expected_destination
         settlement = self.preview.settlement
         incoming_fee = sum(fee.amount_minor for fee in settlement.fees) - settlement.outgoing_fee_minor
         self.summary.setText(
@@ -679,6 +733,9 @@ class V2SettlementReview(QDialog):
             settlement_details(settlement, labels=self.labels, categories=self.snapshot.categories)
         )
         self._update_actions()
+        if getattr(self, "_notice", None):
+            self.status.setText(self._notice)
+            self._notice = None
 
     def _fee_actions(self, *_args):
         if not hasattr(self, "add_fee"):
@@ -743,11 +800,14 @@ class V2SettlementReview(QDialog):
                 self.snapshot is not None
                 and self.preview is not None
                 and changed
+                and not self.jobs.writing
                 and (event is None or active)
                 and self.reason.text().strip()
             )
         )
-        self.withdraw.setEnabled(bool(self.snapshot is not None and active and self.reason.text().strip()))
+        self.withdraw.setEnabled(
+            bool(self.snapshot is not None and active and self.reason.text().strip() and not self.jobs.writing)
+        )
         if self.snapshot is None:
             self.status.setText("Reload saved state before reviewing an event.")
         elif event is not None and not active:
@@ -819,55 +879,46 @@ class V2SettlementReview(QDialog):
         ):
             return
         if self.workspace.preferences() != self.review_preferences:
+            self._notice = "Posting-date preferences changed during confirmation. Rebuild the draft under the current visible choice."
             self.refresh()
             self.status.setText(
                 "Posting-date preferences changed during review. Inspect the reloaded source legs and rebuild the draft before confirming."
             )
             return
-        try:
-            with V2ProfileStore.open(self.workspace.profile_path) as store:
-                kwargs = {
-                    "fees": preview.settlement.fees,
-                    "preferences": self.review_preferences,
-                    "expected_basis_sha256": snapshot.basis_sha256,
-                    "reason": reason,
-                    "expected_destination": (
-                        ExpectedOwnedDestination(
-                            preview.settlement.expected_destination.account_id,
-                            preview.settlement.expected_destination.reference,
-                            True,
-                        )
-                        if preview.settlement.expected_destination is not None
-                        else None
-                    ),
-                }
-                if event is not None:
-                    saved_id = store.replace_reviewed_settlement(
-                        event.event_id,
-                        preview.settlement.outgoing.row_id,
-                        tuple(m.row_id for m in preview.settlement.incoming),
-                        **kwargs,
+        preferences = self.review_preferences
+
+        def write(store, _cancelled):
+            kwargs = {
+                "fees": preview.settlement.fees,
+                "preferences": preferences,
+                "expected_basis_sha256": snapshot.basis_sha256,
+                "reason": reason,
+                "expected_destination": (
+                    ExpectedOwnedDestination(
+                        preview.settlement.expected_destination.account_id,
+                        preview.settlement.expected_destination.reference,
+                        True,
                     )
-                else:
-                    saved_id = store.post_reviewed_settlement(
-                        preview.settlement.outgoing.row_id,
-                        tuple(m.row_id for m in preview.settlement.incoming),
-                        **kwargs,
-                    )
-        except (ProfileFormatError, sqlite3.Error, OSError):
-            self.refresh()
-            self.status.setText(
-                "Settlement was not recorded. Source usage, bindings, repeated evidence, fees or another event may have changed. Inspect the reloaded complete state."
-            )
-            return
-        self._requested_event_id = saved_id
-        self.mode.blockSignals(True)
-        self.mode.setCurrentIndex(0)
-        self.mode.blockSignals(False)
-        self.refresh()
-        self.status.setText(
-            "The selected settlement review is recorded. Refreshed complete event history shows the current state and unresolved clearing."
-        )
+                    if preview.settlement.expected_destination is not None
+                    else None
+                ),
+            }
+            if event is not None:
+                return store.replace_reviewed_settlement(
+                    event.event_id,
+                    preview.settlement.outgoing.row_id,
+                    tuple(m.row_id for m in preview.settlement.incoming),
+                    **kwargs,
+                )
+            else:
+                return store.post_reviewed_settlement(
+                    preview.settlement.outgoing.row_id,
+                    tuple(m.row_id for m in preview.settlement.incoming),
+                    **kwargs,
+                )
+
+        self.jobs.submit(("post",), write, write=True)
+        self.status.setText("Recording the confirmed whole settlement. Wait for the saved result...")
 
     def _withdraw(self):
         event, snapshot, reason = self.selected_event, self.snapshot, self.reason.text().strip()
@@ -882,18 +933,62 @@ class V2SettlementReview(QDialog):
         )
         if QMessageBox.question(self, "Confirm whole settlement withdrawal", message) != QMessageBox.Yes:
             return
-        try:
-            with V2ProfileStore.open(self.workspace.profile_path) as store:
-                store.withdraw_reviewed_transfer(
-                    event.event_id, expected_basis_sha256=snapshot.basis_sha256, reason=reason
-                )
-        except (ProfileFormatError, sqlite3.Error, OSError):
+
+        def write(store, _cancelled):
+            store.withdraw_reviewed_transfer(event.event_id, expected_basis_sha256=snapshot.basis_sha256, reason=reason)
+
+        self.jobs.submit(("withdraw",), write, write=True)
+        self.status.setText("Recording the confirmed whole-event withdrawal...")
+
+    def _job_completed(self, key, result):
+        if key[0] == "snapshot":
+            self._apply_snapshot(*result)
+        elif key[0] == "preview":
+            if self.workspace.preferences() != self.review_preferences:
+                self.refresh()
+            else:
+                self._apply_preview(result)
+        else:
+            self._notice = "Recorded. Refreshed history shows current state; original source facts, date provenance and whole-event actions remain inspectable."
+            if key[0] == "post":
+                self._requested_event_id = result
+                self.mode.blockSignals(True)
+                self.mode.setCurrentIndex(0)
+                self.mode.blockSignals(False)
+            self.refresh()
+
+    def _job_failed(self, key, exc):
+        if key[0] == "preview":
+            self._preview_failed(exc)
+        elif key[0] == "snapshot":
+            self.snapshot = self.preview = self.selected_event = None
+            self.movements, self.labels = {}, {}
+            self._clear_draft()
+            self.status.setText("Settlement state unavailable. Reload saved state before reviewing another event.")
+        else:
+            self._notice = "The confirmed action was not recorded. Inspect refreshed sources and whole-event history."
             self.refresh()
             self.status.setText(
-                "Whole-event withdrawal was not recorded. Inspect the reloaded full event and its source usage before trying again."
+                "The confirmed action was not recorded. Inspect the reloaded complete source usage and event history."
             )
-            return
-        self.refresh()
-        self.status.setText(
-            "The selected whole-event withdrawal is recorded. Refreshed event history shows current source consumption and fee state."
-        )
+
+    def _busy_changed(self, _busy):
+        writing = self.jobs.writing
+        for widget in (self.tabs, self.mode, self.reload, self.assumed_dates, self.reason):
+            widget.setEnabled(not writing)
+        if writing:
+            self.confirm.setEnabled(False)
+            self.withdraw.setEnabled(False)
+
+    def reject(self):
+        if self.jobs.close():
+            super().reject()
+        else:
+            self.status.setText("The confirmed write is still running. Wait for its saved outcome before closing.")
+
+    def closeEvent(self, event):
+        if self.jobs.close():
+            super().closeEvent(event)
+        else:
+            event.ignore()
+            self.status.setText("The confirmed write is still running. Wait for its saved outcome before closing.")

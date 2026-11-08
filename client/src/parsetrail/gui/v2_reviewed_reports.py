@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import atexit
-import sqlite3
 import time
 from datetime import date
 from pathlib import Path
 
-from PySide6.QtCore import QAbstractTableModel, QDate, QModelIndex, Qt, QThread, QTimer
+from PySide6.QtCore import QAbstractTableModel, QDate, QModelIndex, Qt, QThread, QTimer, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -39,14 +38,14 @@ from parsetrail.core.v2_profile_store import (
     FinancialJournalSummary,
     MonthlyBudgetRow,
     MonthlyBudgetSummary,
-    ProfileFormatError,
     ReviewedCategorySummary,
     ReviewedCategoryTotal,
     V2ProfileStore,
 )
-from parsetrail.core.v2_report_export import ReportExportError, write_reviewed_journal_workbook
+from parsetrail.core.v2_report_export import write_reviewed_journal_workbook
 from parsetrail.gui.v2_evidence_preview import _money
 from parsetrail.gui.v2_path_notice import show_path_notice
+from parsetrail.gui.v2_profile_jobs import ProfileJobs
 from parsetrail.gui.v2_report_drilldown import V2ReviewedEntryDrilldown
 
 # A closed dialog must not destroy a still-running QThread. Workers own no widgets
@@ -422,13 +421,22 @@ class _AccountPositionHistoryModel(QAbstractTableModel):
 class V2ReviewedReportsDialog(QDialog):
     """Show reviewed journal totals with visible source coverage limits."""
 
-    def __init__(self, profile: Path, parent=None):
+    review_requested = Signal()
+
+    def __init__(self, profile: Path, parent=None, *, embedded=False, initial_tab=0, positions_only=False):
         super().__init__(parent)
+        self.embedded = embedded
+        if embedded:
+            self.setWindowFlags(Qt.Widget)
         app = QApplication.instance()
         if app is not None and not app.property("parsetrailReportShutdownHook"):
             app.aboutToQuit.connect(_finish_report_readers)
             app.setProperty("parsetrailReportShutdownHook", True)
         self.profile = profile
+        self.export_jobs = ProfileJobs(self, profile)
+        self.export_jobs.completed.connect(self._export_finished)
+        self.export_jobs.failed.connect(self._export_failed)
+        self.export_jobs.busy_changed.connect(lambda _busy: self._show_selected_tab())
         self._closed = False
         self._generation = 0
         self._reader: _ReportReader | None = None
@@ -507,6 +515,9 @@ class V2ReviewedReportsDialog(QDialog):
         self.income_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self.tabs.addTab(self.income_table, "Income")
         self._create_positions_panel(today)
+        self.tabs.setCurrentIndex(initial_tab)
+        if positions_only:
+            self.tabs.tabBar().hide()
         layout.addWidget(self.tabs)
         self.total = QLabel()
         self.total.setWordWrap(True)
@@ -523,6 +534,10 @@ class V2ReviewedReportsDialog(QDialog):
         self.scope.hide()
         layout.addWidget(self.scope)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        if embedded:
+            buttons.button(QDialogButtonBox.Close).hide()
+            self.review_pending_button = buttons.addButton("Review pending activity", QDialogButtonBox.ActionRole)
+            self.review_pending_button.clicked.connect(self.review_requested.emit)
         self.inspect_button = buttons.addButton("Inspect entries…", QDialogButtonBox.ActionRole)
         self.inspect_button.clicked.connect(self._inspect_current)
         self.inspect_button.setEnabled(False)
@@ -554,8 +569,10 @@ class V2ReviewedReportsDialog(QDialog):
 
     @property
     def reports_pending(self) -> bool:
-        """Whether the event loop still has a requested report read to finish."""
-        return self._read_requested or self._read_timer.isActive() or self._reader is not None
+        """Whether this view still has a requested read or confirmed export."""
+        return (
+            self._read_requested or self._read_timer.isActive() or self._reader is not None or self.export_jobs.pending
+        )
 
     def _dates(self, tab: int) -> tuple[date, ...]:
         if tab == 4:
@@ -694,18 +711,39 @@ class V2ReviewedReportsDialog(QDialog):
             self._reader.requestInterruption()
 
     def close(self) -> bool:
+        if not self.export_jobs.close():
+            self.total.setText("Finishing the confirmed export before closing…")
+            return False
         # Qt can skip closeEvent/done for a dialog that has never been shown.
         # Explicit close must still stop its queued initial read.
         self._stop_reads()
         return super().close()
 
     def closeEvent(self, event) -> None:
+        if not self.export_jobs.close():
+            self.total.setText("Finishing the confirmed export before closing…")
+            event.ignore()
+            return
         self._stop_reads()
         super().closeEvent(event)
 
     def done(self, result: int) -> None:
+        if self.embedded or not self.export_jobs.close():
+            return
         self._stop_reads()
         super().done(result)
+
+    def invalidate(self, *, read=True) -> None:
+        """Invalidate an embedded view after profile changes without losing dates."""
+        self._invalidate(range(5))
+        if read:
+            self._queue_selected_read(0)
+
+    def shutdown(self) -> bool:
+        if not self.export_jobs.close():
+            return False
+        self._stop_reads()
+        return True
 
     def _refresh_all_reports(self) -> None:
         self._invalidate(range(5))
@@ -980,17 +1018,27 @@ class V2ReviewedReportsDialog(QDialog):
         destination = Path(selected)
         if not destination.suffix:
             destination = destination.with_suffix(".xlsx")
-        try:
-            with V2ProfileStore.open(self.profile, read_only=True) as store:
-                report = store.reviewed_journal_export(start=start, end=end)
+
+        def export(store, _cancelled):
+            report = store.reviewed_journal_export(start=start, end=end)
             saved = write_reviewed_journal_workbook(report, destination)
-        except (ProfileFormatError, ReportExportError, sqlite3.Error, OSError) as exc:
-            QMessageBox.warning(self, "Export was not saved", str(exc))
-            return
+            return saved, len(report.entries)
+
+        # Publication is a confirmed, noncancellable job: never hide a completed
+        # file behind a late cancellation or close the host before its outcome.
+        if self.export_jobs.submit("export", export, write=True):
+            self.total.setText("Preparing and saving reviewed export…")
+            self.export_button.setEnabled(False)
+
+    def _export_failed(self, _key, exc):
+        QMessageBox.warning(self, "Export was not saved", str(exc))
+
+    def _export_finished(self, _key, result):
+        saved, count = result
         show_path_notice(
             self,
             "Reviewed export saved",
-            f"Saved {len(report.entries)} active reviewed entries.",
+            f"Saved {count} active reviewed entries.",
             saved,
             "The workbook includes posting lines, source allocations, corrections and coverage notes. "
             "It contains financial data and is not encrypted by ParseTrail.",
@@ -1008,7 +1056,7 @@ class V2ReviewedReportsDialog(QDialog):
         self.period_controls.setVisible(tab in (0, 1, 3))
         self.export_button.setVisible(tab in (0, 1, 3))
         ready = self._loaded.get(tab) == self._key(tab)
-        self.export_button.setEnabled(ready and tab in (0, 1, 3))
+        self.export_button.setEnabled(ready and tab in (0, 1, 3) and not self.export_jobs.pending)
         if not ready:
             self.inspect_button.setEnabled(False)
             if tab in self._errors:
@@ -1037,6 +1085,11 @@ class V2ReviewedReportsDialog(QDialog):
             "across the whole profile and all dates; source coverage may be incomplete. "
             "Show details for scope and evidence limits."
         )
+        if tab in (0, 3) and getattr(report, "reviewed_entry_count", None) == 0:
+            self.qualification.setText(
+                "No reviewed activity in this period. This does not establish zero total activity. "
+                + self.qualification.text()
+            )
         self._update_inspect_button()
         if self.tabs.currentIndex() == 4:
             positions = self.positions_report

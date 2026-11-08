@@ -11,6 +11,7 @@ from devtools.parser_engine_pilot.synthetic_family_sources import family_sources
 
 from .test_v2_settlement_review_dialog import _check
 from .test_v2_transfers import BANK_DEFINITION
+from .v2_job_wait import wait_for_jobs
 
 
 @pytest.fixture(scope="module")
@@ -108,20 +109,28 @@ def test_hsa_cash_purpose_explicit_unknown_source_text_and_withdrawal(
     path = tmp_path / "cash.db"
     evidence = profile(path, hsa_source)
     view = V2CashActivityReview(path, evidence.source_sha256)
+    wait_for_jobs(view)
+    view.navigation.status_filter.setCurrentIndex(view.navigation.status_filter.findData("all"))
+    wait_for_jobs(view)
     assert len(view.model.rows) == 3
     assert all(row.status == "Ready for purpose review" for row in view.model.rows)
     assert "contributions" in view.note.text() and "cash-component" in view.note.text()
     assert "cash component only" in view.review_intro.text() and "whole HSA" in view.review_intro.text()
     view.table.selectRow(row_index)
+    wait_for_jobs(view)
     assert view.purpose.currentData() is None and not view.action_button.isEnabled()
     assert "cash component" in view.source_context.text()
     view.purpose.setCurrentIndex(view.purpose.findData(purpose))
+    wait_for_jobs(view)
     view.category.setCurrentIndex(view.category.findData(category))
+    wait_for_jobs(view)
     view.reason.setText("Explicit interpretation independent of source description")
+    wait_for_jobs(view)
     prompts = []
     monkeypatch.setattr(QMessageBox, "question", lambda _p, _t, message: prompts.append(message) or QMessageBox.Yes)
     assert view.action_button.isEnabled()
     view.action_button.click()
+    wait_for_jobs(view)
     assert "Only this cash component" in prompts[0]
     if row_index == 2:
         assert "Source description unavailable / unknown" in prompts[0]
@@ -136,8 +145,10 @@ def test_hsa_cash_purpose_explicit_unknown_source_text_and_withdrawal(
             assert entry.description == "Reviewed HSA cash movement; source description unavailable"
         assert store.load_import(evidence.source_sha256).evidence == evidence
     view.reason.setText("Withdraw reviewed component interpretation")
+    wait_for_jobs(view)
     assert view.withdraw_button.isEnabled()
     view.withdraw_button.click()
+    wait_for_jobs(view)
     assert view.model.rows[row_index].entry_key is None
     view.close()
 
@@ -149,8 +160,13 @@ def test_hsa_whole_account_scope_is_refused_for_cash_and_source_opening(tmp_path
     path = tmp_path / "wrong-scope.db"
     evidence = profile(path, hsa_source, scope="account_total")
     cash = V2CashActivityReview(path, evidence.source_sha256)
+    wait_for_jobs(cash)
+    cash.navigation.status_filter.setCurrentIndex(cash.navigation.status_filter.findData("all"))
+    wait_for_jobs(cash)
     cash.table.selectRow(0)
+    wait_for_jobs(cash)
     cash.reason.setText("Source scope must not become whole account")
+    wait_for_jobs(cash)
     assert not cash.action_button.isEnabled()
     assert not cash.model.rows[0].allowed_purposes
     opening = V2OpeningReview(workspace(path))
@@ -172,7 +188,11 @@ def test_unbound_cash_row_has_unknown_scope_and_no_interpretation_controls(tmp_p
             evidence.source_sha256, section.source_identity, section.source_identity_form
         )
     view = V2CashActivityReview(path, evidence.source_sha256)
+    wait_for_jobs(view)
+    view.navigation.status_filter.setCurrentIndex(view.navigation.status_filter.findData("all"))
+    wait_for_jobs(view)
     view.table.selectRow(0)
+    wait_for_jobs(view)
     assert "unavailable until account assignment" in view.source_context.text()
     assert "Assign a financial account" in view.status.text()
     assert not view.action_button.isEnabled() and not view.withdraw_button.isEnabled()
@@ -182,15 +202,22 @@ def test_unbound_cash_row_has_unknown_scope_and_no_interpretation_controls(tmp_p
 def settlement_view(path, event_id=None):
     from parsetrail.gui.v2_settlement_review import V2SettlementReview
 
-    return V2SettlementReview(workspace(path), event_id=event_id)
+    view = V2SettlementReview(workspace(path), event_id=event_id)
+    wait_for_jobs(view)
+    return view
 
 
 def owned_form(view, outgoing):
     view.outgoing.setCurrentIndex(view.outgoing.findData(outgoing))
+    wait_for_jobs(view)
     view.expected_destination.setCurrentIndex(view.expected_destination.findData("investment"))
+    wait_for_jobs(view)
     view.expected_reference.setText("Independent owned investment account / transfer request")
+    wait_for_jobs(view)
     view.expected_ack.setChecked(True)
+    wait_for_jobs(view)
     view.reason.setText("Owned outflow observed; receipt history not yet available")
+    wait_for_jobs(view)
 
 
 def receipt(path):
@@ -214,18 +241,24 @@ def test_missing_receipt_requires_explicit_ownership_cancel_preview_post_reopen_
     evidence = profile(path, hsa_source)
     outgoing = evidence.payload.accounts[0].rows[1].row_id
     view = settlement_view(path)
+    wait_for_jobs(view)
     assert not view.expected_panel.isVisible() and view.expected_destination.currentData() is None
     view.outgoing.setCurrentIndex(view.outgoing.findData(outgoing))
+    wait_for_jobs(view)
     assert not view.expected_panel.isHidden() and view.expected_destination.currentData() is None
     assert view.expected_destination.findData("hsa") == -1
     assert (
         "account total" in view.expected_destination.itemText(view.expected_destination.findData("investment")).lower()
     )
     view.reason.setText("Explicit missing receipt review")
+    wait_for_jobs(view)
     view.expected_destination.setCurrentIndex(view.expected_destination.findData("investment"))
+    wait_for_jobs(view)
     view.expected_reference.setText("Independent ownership reference")
+    wait_for_jobs(view)
     assert view.preview is None and not view.confirm.isEnabled()
     view.expected_ack.setChecked(True)
+    wait_for_jobs(view)
     assert view.preview is not None and view.confirm.isEnabled()
     assert view.preview.settlement.incoming == () and len(view.preview.entries) == 1
     assert "NO RECEIPT EVIDENCE" in view.preview_details.toPlainText()
@@ -234,10 +267,12 @@ def test_missing_receipt_requires_explicit_ownership_cancel_preview_post_reopen_
     before = path.read_bytes()
     monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.No)
     view.confirm.click()
+    wait_for_jobs(view)
     assert path.read_bytes() == before
     prompts = []
     monkeypatch.setattr(QMessageBox, "question", lambda _p, _t, message: prompts.append(message) or QMessageBox.Yes)
     view.confirm.click()
+    wait_for_jobs(view)
     assert "NO RECEIPT EVIDENCE" in prompts[0] and "metadata, not a printed source fact" in prompts[0]
     event = view.selected_event
     assert event.settlement.expected_destination.account_id == "investment"
@@ -252,16 +287,22 @@ def test_missing_receipt_requires_explicit_ownership_cancel_preview_post_reopen_
         )
     view.close()
     reopened = settlement_view(path, event.event_id)
+    wait_for_jobs(reopened)
     assert reopened.expected_ack.isChecked() and reopened.expected_destination.currentData() == "investment"
     assert "NO RECEIPT EVIDENCE" in reopened.history_details.toPlainText()
     assert not reopened.confirm.isEnabled()
     legacy = V2TransferReview(workspace(path))
+    from .test_v2_transfer_review_async import wait_for_transfers
+
+    wait_for_transfers(legacy)
     legacy.event_table.selectRow(0)
     assert "Receipt missing" in legacy.event_table.item(0, 5).text()
     assert "investment" in legacy.event_details.toPlainText() and "account total" in legacy.event_details.toPlainText()
     assert "no destination receipt" in legacy.event_details.toPlainText()
     reopened.reason.setText("Withdraw the entire outflow awaiting receipt")
+    wait_for_jobs(reopened)
     reopened.withdraw.click()
+    wait_for_jobs(reopened)
     assert reopened.selected_event.status == "cancelled"
     with V2ProfileStore.open(path, read_only=True) as store:
         assert store._active_consumed() == {} and store._active_journal_entries() == ()
@@ -280,20 +321,25 @@ def test_later_actual_receipt_clears_expectation_and_replaces_whole_event_then_w
     evidence = profile(path, hsa_source)
     outgoing = evidence.payload.accounts[0].rows[1].row_id
     view = settlement_view(path)
+    wait_for_jobs(view)
     owned_form(view, outgoing)
     view.confirm.click()
+    wait_for_jobs(view)
     old_id = view.selected_event.event_id
     incoming = receipt(path)
     view.refresh()
+    wait_for_jobs(view)
     _check(view, incoming)
     assert view.expected_panel.isHidden() and view.expected_destination.currentData() is None
     assert not view.expected_ack.isChecked() and not view.expected_reference.text()
     assert view.preview.settlement.expected_destination is None
     assert view.preview.settlement.residual_minor == 0
     view.reason.setText("Actual receipt now reviewed under exact source date")
+    wait_for_jobs(view)
     prompts = []
     monkeypatch.setattr(QMessageBox, "question", lambda _p, _t, message: prompts.append(message) or QMessageBox.Yes)
     view.confirm.click()
+    wait_for_jobs(view)
     assert "Inverse original" in prompts[0] and "Replacement entry effects only" in prompts[0]
     assert "2026-08-20" in prompts[0] and "2026-09-01" in prompts[0]
     assert view.selected_event.event_id != old_id and view.selected_event.settlement.expected_destination is None
@@ -307,7 +353,9 @@ def test_later_actual_receipt_clears_expectation_and_replaces_whole_event_then_w
             "investment": 10000,
         }
     view.reason.setText("Withdraw whole receipt replacement")
+    wait_for_jobs(view)
     view.withdraw.click()
+    wait_for_jobs(view)
     assert view.selected_event.status == "cancelled"
     with V2ProfileStore.open(path, read_only=True) as store:
         assert store._active_consumed() == {}
@@ -321,6 +369,7 @@ def test_missing_receipt_failed_reload_clears_expected_destination_and_actions(t
     path = tmp_path / "read-error.db"
     evidence = profile(path, hsa_source)
     view = settlement_view(path)
+    wait_for_jobs(view)
     owned_form(view, evidence.payload.accounts[0].rows[1].row_id)
     assert view.preview is not None and view.confirm.isEnabled()
 
@@ -329,6 +378,7 @@ def test_missing_receipt_failed_reload_clears_expected_destination_and_actions(t
 
     monkeypatch.setattr(V2ProfileStore, "settlement_review_snapshot", unavailable)
     view.refresh()
+    wait_for_jobs(view)
     assert view.snapshot is None and view.preview is None
     assert not view.confirm.isEnabled() and not view.withdraw.isEnabled()
     assert view.expected_panel.isHidden() and not view.expected_ack.isChecked()
@@ -343,7 +393,7 @@ def test_reconciliation_live_confirmation_and_saved_history_are_explicit_cash_co
     from parsetrail.core.v2_preferences import V2Preferences
     from parsetrail.core.v2_settlements import ExpectedOwnedDestination
     from parsetrail.gui.v2_statement_coverage import V2StatementCoverageDialog
-    from PySide6.QtWidgets import QLabel, QMessageBox
+    from PySide6.QtWidgets import QMessageBox
 
     path = tmp_path / "component-check.db"
     evidence = profile(path, hsa_source)
@@ -379,8 +429,12 @@ def test_reconciliation_live_confirmation_and_saved_history_are_explicit_cash_co
             reason="Source cash outflow only; retain unresolved clearing",
         )
     view = V2StatementCoverageDialog(path)
-    assert any("exact HSA cash-component rule" in label.text() for label in view.findChildren(QLabel))
+    wait_for_jobs(view)
+    view.table.selectRow(0)
+    assert "Cash component only" in view.coverage_details.toPlainText()
+    assert "whole HSA" in view.coverage_details.toPlainText()
     view.reconciliation_table.selectRow(0)
+    wait_for_jobs(view)
     check = view.reconciliation_model.rows[0]
     assert check.reconciled and check.balance_scope == check.tracking_scope == "cash_component"
     assert "Reconciled (cash component)" == view.reconciliation_model.data(view.reconciliation_model.index(0, 2))
@@ -389,14 +443,17 @@ def test_reconciliation_live_confirmation_and_saved_history_are_explicit_cash_co
     before = path.read_bytes()
     monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.No)
     view.save_reconciliation_button.click()
+    wait_for_jobs(view)
     assert path.read_bytes() == before
     prompts = []
     monkeypatch.setattr(QMessageBox, "question", lambda _p, _t, message: prompts.append(message) or QMessageBox.Yes)
     view.save_reconciliation_button.click()
+    wait_for_jobs(view)
     assert "Source balance scope: cash component" in prompts[0] and "investment portfolio" in prompts[0]
     assert "only to the cash component" in view.reconciliation_history_details.text()
     view.close()
     reopened = V2StatementCoverageDialog(path)
+    wait_for_jobs(reopened)
     assert "tracked account scope: cash component" in reopened.reconciliation_history_details.text()
     reopened.close()
 
@@ -408,6 +465,7 @@ def test_missing_receipt_confirmation_stale_context_resets_without_posting(tmp_p
     path = tmp_path / "stale.db"
     evidence = profile(path, hsa_source)
     view = settlement_view(path)
+    wait_for_jobs(view)
     owned_form(view, evidence.payload.accounts[0].rows[1].row_id)
     assert view.confirm.isEnabled()
 
@@ -423,6 +481,7 @@ def test_missing_receipt_confirmation_stale_context_resets_without_posting(tmp_p
 
     monkeypatch.setattr(QMessageBox, "question", concurrent_change)
     view.confirm.click()
+    wait_for_jobs(view)
     assert not view.confirm.isEnabled() and view.preview is None
     assert not view.expected_ack.isChecked() and not view.expected_reference.text()
     with V2ProfileStore.open(path, read_only=True) as store:

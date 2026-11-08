@@ -22,6 +22,7 @@ from devtools.parser_engine_pilot.test_table_card_source_output import SOURCE as
 from devtools.parser_engine_pilot.test_table_card_source_output import evidence as citi_channels
 
 from .test_v2_document_browser import wait_for_inventory
+from .test_v2_ordinary_review_async import wait_for_review
 
 
 def _chase_profile(path: Path):
@@ -206,6 +207,8 @@ def test_card_review_dialog_toggles_assumed_date_and_corrects_it(tmp_path: Path,
     window = V2WorkspaceWindow(workspace)
     wait_for_inventory(window)
     dialog = V2CardPurchaseReview(workspace, evidence.source_sha256, window)
+    wait_for_review(dialog)
+    dialog.navigation.status_filter.setCurrentIndex(dialog.navigation.status_filter.findData("all"))
     try:
         assert window.card_review_button.isEnabled()
         dialog.show()
@@ -215,6 +218,7 @@ def test_card_review_dialog_toggles_assumed_date_and_corrects_it(tmp_path: Path,
         assert dialog.assumed_dates.isVisible()
         assert dialog.model.data(dialog.model.index(0, 1)) == "2026-03-16 (assumed)"
         dialog.assumed_dates.click()
+        wait_for_review(dialog)
         assert workspace.preferences().allow_assumed_posting_dates
         assert dialog.purpose.currentData() is None and dialog.category.currentData() is None
         dialog.purpose.setCurrentIndex(dialog.purpose.findData("expense"))
@@ -222,12 +226,14 @@ def test_card_review_dialog_toggles_assumed_date_and_corrects_it(tmp_path: Path,
         dialog.reason.setText("Reviewed card charge")
         assert dialog.action_button.isEnabled()
         dialog.action_button.click()
+        wait_for_review(dialog)
         assert dialog.model.rows[0].status == "Posted: Food"
         assert dialog.model.rows[1].status == "Ready for purpose review" and dialog.model.rows[1].purpose is None
         dialog.accounting_date.setText("2026-03-17")
         dialog.reason.setText("Corrected date")
         assert dialog.action_button.isEnabled()
         dialog.action_button.click()
+        wait_for_review(dialog)
         assert dialog.model.rows[0].effective_date == "2026-03-17"
         assert "Replacement entry effects only:" in confirmations[1]
         assert "original accounting date (2026-03-16)" in confirmations[1]

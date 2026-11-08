@@ -18,6 +18,7 @@ from devtools.parser_engine_pilot.test_card_lines import pages
 from devtools.parser_engine_pilot.test_card_source_output import DEFINITION as CARD_DEFINITION
 
 from .test_v2_cash_activity_review import DEFINITION, SOURCE
+from .v2_job_wait import wait_for_jobs
 
 
 @pytest.fixture
@@ -67,14 +68,20 @@ def _dialog(profile, evidence, kind):
     if kind == "cash":
         from parsetrail.gui.v2_cash_activity_review import V2CashActivityReview
 
-        return V2CashActivityReview(profile, evidence.source_sha256)
+        view = V2CashActivityReview(profile, evidence.source_sha256)
+        wait_for_jobs(view)
+        view.navigation.status_filter.setCurrentIndex(view.navigation.status_filter.findData("all"))
+        return view
     from parsetrail.gui.v2_card_purchase_review import V2CardPurchaseReview
 
     workspace = V2Workspace.open(
         profile, profile.parent / "catalog", trusted_keys={}, preferences_path=profile.parent / "preferences.json"
     )
     workspace.set_allow_assumed_posting_dates(True)
-    return V2CardPurchaseReview(workspace, evidence.source_sha256)
+    view = V2CardPurchaseReview(workspace, evidence.source_sha256)
+    wait_for_jobs(view)
+    view.navigation.status_filter.setCurrentIndex(view.navigation.status_filter.findData("all"))
+    return view
 
 
 def _choose(dialog, purpose, category):
@@ -93,10 +100,12 @@ def test_explicit_purpose_and_category_cancel_post_correct_class_and_exact_effec
     profile = tmp_path / "purposes.db"
     evidence = _profile(profile, kind)
     dialog = _dialog(profile, evidence, kind)
+    wait_for_jobs(dialog)
     row_index = 0 if purpose in {"expense", "income_adjustment"} else 1
     category_kind = "expense" if purpose in {"expense", "expense_refund"} else "income"
     try:
         dialog.table.selectRow(row_index)
+        wait_for_jobs(dialog)
         row = dialog.model.rows[row_index]
         assert row.purpose is None and purpose in row.allowed_purposes
         assert dialog.purpose.currentData() is None and dialog.category.currentData() is None
@@ -107,6 +116,7 @@ def test_explicit_purpose_and_category_cancel_post_correct_class_and_exact_effec
         before = hashlib.sha256(profile.read_bytes()).hexdigest()
         monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.No)
         dialog.action_button.click()
+        wait_for_jobs(dialog)
         assert hashlib.sha256(profile.read_bytes()).hexdigest() == before
         questions = []
 
@@ -116,6 +126,7 @@ def test_explicit_purpose_and_category_cancel_post_correct_class_and_exact_effec
 
         monkeypatch.setattr(QMessageBox, "question", accept)
         dialog.action_button.click()
+        wait_for_jobs(dialog)
         posted = dialog.model.rows[row_index]
         assert posted.purpose == purpose and posted.entry_key is not None
         assert "Purpose:" in questions[0] and f"reviewed {category_kind} change:" in questions[0]
@@ -125,10 +136,14 @@ def test_explicit_purpose_and_category_cancel_post_correct_class_and_exact_effec
         if kind == "card":
             dialog.workspace.set_allow_assumed_posting_dates(False)
             dialog.refresh(selected_row_id=posted.row_id)
+            wait_for_jobs(dialog)
             assert not dialog.assumed_dates.isChecked()
         dialog.category.setCurrentIndex(dialog.category.findData(f"{category_kind}:b"))
+        wait_for_jobs(dialog)
         dialog.reason.setText("Correct category while retaining purpose and class")
+        wait_for_jobs(dialog)
         dialog.action_button.click()
+        wait_for_jobs(dialog)
         assert "Replacement entry effects only:" in questions[1]
         assert "previous entry is reversed at its original accounting date" in questions[1]
         assert "category-only correction adds $0.00 net account movement" in questions[1]
@@ -153,20 +168,26 @@ def test_purpose_change_requires_withdrawal_then_fresh_explicit_review(tmp_path,
     profile = tmp_path / "change-purpose.db"
     evidence = _profile(profile, kind)
     dialog = _dialog(profile, evidence, kind)
+    wait_for_jobs(dialog)
     try:
         dialog.table.selectRow(1)
+        wait_for_jobs(dialog)
         _choose(dialog, "expense_refund", "expense:a")
         dialog.action_button.click()
+        wait_for_jobs(dialog)
         original = dialog.model.rows[1].entry_key
         assert not dialog.purpose.isEnabled() and dialog.purpose.findData("income") == -1
         assert dialog.category.findData("income:a") == -1
         dialog.reason.setText("Withdraw incorrect refund interpretation before reviewing income")
+        wait_for_jobs(dialog)
         dialog.withdraw_button.click()
+        wait_for_jobs(dialog)
         assert dialog.model.rows[1].entry_key is None
         assert dialog.purpose.currentData() is None and dialog.category.currentData() is None
         assert not dialog.action_button.isEnabled()
         _choose(dialog, "income", "income:a")
         dialog.action_button.click()
+        wait_for_jobs(dialog)
         assert dialog.model.rows[1].purpose == "income"
         assert dialog.model.rows[1].entry_key not in {None, original}
         with V2ProfileStore.open(profile, read_only=True) as store:
@@ -188,23 +209,27 @@ def test_purpose_change_requires_withdrawal_then_fresh_explicit_review(tmp_path,
 
 
 @pytest.mark.parametrize("kind", ["cash", "card"])
-def test_stale_purpose_form_refreshes_without_posting_or_retaining_default_choices(tmp_path, app, monkeypatch, kind):
+def test_stale_purpose_form_refreshes_without_posting_and_retains_authored_choices(tmp_path, app, monkeypatch, kind):
     from PySide6.QtWidgets import QMessageBox
 
     profile = tmp_path / "stale-purpose.db"
     evidence = _profile(profile, kind)
     dialog = _dialog(profile, evidence, kind)
+    wait_for_jobs(dialog)
     warnings = []
     monkeypatch.setattr(QMessageBox, "warning", lambda _parent, _title, message: warnings.append(message))
     try:
         dialog.table.selectRow(1)
+        wait_for_jobs(dialog)
         _choose(dialog, "expense_refund", "expense:a")
         with V2ProfileStore.open(profile) as store:
             store.rename_category_account("expense:a", "Concurrent category rename")
         dialog.action_button.click()
+        wait_for_jobs(dialog)
         assert warnings and dialog.model.rows[1].entry_key is None
-        assert dialog.purpose.currentData() is None and dialog.category.currentData() is None
-        assert not dialog.action_button.isEnabled()
+        assert dialog.purpose.currentData() == "expense_refund" and dialog.category.currentData() == "expense:a"
+        assert dialog.category.currentText() == "Concurrent category rename"
+        assert "error" in dialog.operation_status.text() and "retained" in dialog.operation_status.text()
         with V2ProfileStore.open(profile, read_only=True) as store:
             assert not store._active_consumed()
     finally:
@@ -261,13 +286,17 @@ def test_only_builtin_category_is_never_selected_by_default_for_ordinary_spendin
         store.ensure_builtin_category("builtin:loan-interest")
     before = hashlib.sha256(profile.read_bytes()).hexdigest()
     dialog = _dialog(profile, evidence, "cash")
+    wait_for_jobs(dialog)
     try:
         dialog.table.selectRow(0)
+        wait_for_jobs(dialog)
         assert dialog.purpose.currentData() is None and dialog.category.currentData() is None
         dialog.purpose.setCurrentIndex(dialog.purpose.findData("expense"))
+        wait_for_jobs(dialog)
         assert dialog.category.count() == 2 and dialog.category.currentData() is None
         assert "Built-in" in dialog.category.itemText(dialog.category.findData("builtin:loan-interest"))
         dialog.reason.setText("No category has been explicitly selected")
+        wait_for_jobs(dialog)
         assert not dialog.action_button.isEnabled()
         assert hashlib.sha256(profile.read_bytes()).hexdigest() == before
     finally:

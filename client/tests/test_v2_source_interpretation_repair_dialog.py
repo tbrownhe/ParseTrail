@@ -16,6 +16,7 @@ from .test_v2_card_purchase_review import _chase_profile
 from .test_v2_cash_activity_review import DEFINITION, SOURCE
 from .test_v2_source_overlap_dialog import _profile as overlap_profile
 from .test_v2_transfers import _profile as transfer_profile
+from .v2_job_wait import wait_for_jobs
 
 
 @pytest.fixture
@@ -27,6 +28,7 @@ def app(monkeypatch):
         pytest.fail(f"{title}: {message}")
 
     monkeypatch.setattr(QMessageBox, "warning", unexpected)
+    monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.Yes)
     return QApplication.instance() or QApplication([])
 
 
@@ -116,12 +118,18 @@ def test_corrected_cash_withdrawal_uses_active_entry_then_reposts_fresh(tmp_path
 
     monkeypatch.setattr(QMessageBox, "question", confirm)
     dialog = V2CashActivityReview(profile, evidence.source_sha256)
+    wait_for_jobs(dialog)
+    dialog.navigation.status_filter.setCurrentIndex(dialog.navigation.status_filter.findData("all"))
+    wait_for_jobs(dialog)
     try:
         dialog.table.selectRow(row_index)
+        wait_for_jobs(dialog)
         assert not dialog.withdraw_button.isEnabled()
         dialog.reason.setText("Withdraw the corrected interpretation")
+        wait_for_jobs(dialog)
         assert dialog.withdraw_button.isEnabled()
         dialog.withdraw_button.click()
+        wait_for_jobs(dialog)
         assert f"Active entry: {old_key}" in questions[0]
         assert "Accounting date: 2026-10-0" in questions[0]
         assert (
@@ -133,9 +141,13 @@ def test_corrected_cash_withdrawal_uses_active_entry_then_reposts_fresh(tmp_path
         assert "withdraw" in dialog.history_details.text()
         assert not dialog.action_button.isEnabled()
         dialog.purpose.setCurrentIndex(dialog.purpose.findData("expense" if row_index == 0 else "income"))
+        wait_for_jobs(dialog)
         dialog.category.setCurrentIndex(dialog.category.findData("expense:food" if row_index == 0 else "income:pay"))
+        wait_for_jobs(dialog)
         dialog.reason.setText("Freshly reviewed after withdrawal")
+        wait_for_jobs(dialog)
         dialog.action_button.click()
+        wait_for_jobs(dialog)
         assert dialog.model.rows[row_index].entry_key not in {None, old_key}
         with V2ProfileStore.open(profile, read_only=True) as store:
             expected = -400 if row_index == 0 else 1000
@@ -161,13 +173,21 @@ def test_card_withdrawal_uses_recorded_corrected_date_and_category_then_reposts_
 
     monkeypatch.setattr(QMessageBox, "question", confirm)
     dialog = V2CardPurchaseReview(_workspace(profile), evidence.source_sha256)
+    wait_for_jobs(dialog)
+    dialog.navigation.status_filter.setCurrentIndex(dialog.navigation.status_filter.findData("all"))
+    wait_for_jobs(dialog)
     try:
         dialog.table.selectRow(0)
+        wait_for_jobs(dialog)
         dialog.accounting_date.setText("2026-04-30")
+        wait_for_jobs(dialog)
         dialog.category.setCurrentIndex(dialog.category.findData("expense:food"))
+        wait_for_jobs(dialog)
         dialog.reason.setText("Withdraw active corrected expense")
+        wait_for_jobs(dialog)
         assert dialog.withdraw_button.isEnabled()
         dialog.withdraw_button.click()
+        wait_for_jobs(dialog)
         assert "Accounting date: 2026-04-01" in questions[0]
         assert "2026-04-30" not in questions[0]
         assert "Travel: reviewed expense change -$10.00" in questions[0]
@@ -175,10 +195,15 @@ def test_card_withdrawal_uses_recorded_corrected_date_and_category_then_reposts_
         assert dialog.model.rows[0].entry_key is None
         assert not dialog.action_button.isEnabled()
         dialog.purpose.setCurrentIndex(dialog.purpose.findData("expense"))
+        wait_for_jobs(dialog)
         dialog.category.setCurrentIndex(dialog.category.findData("expense:food"))
+        wait_for_jobs(dialog)
         dialog.accounting_date.setText("2026-04-02")
+        wait_for_jobs(dialog)
         dialog.reason.setText("Fresh explicit date review")
+        wait_for_jobs(dialog)
         dialog.action_button.click()
+        wait_for_jobs(dialog)
         assert dialog.model.rows[0].entry_key not in {None, old_key}
         assert dialog.model.rows[0].effective_date == "2026-04-02"
     finally:
@@ -201,10 +226,15 @@ def test_cancel_withdrawal_and_failed_snapshot_preserve_books_and_clear_actions(
         if kind == "cash"
         else V2CardPurchaseReview(_workspace(profile), evidence.source_sha256)
     )
+    wait_for_jobs(dialog)
+    dialog.navigation.status_filter.setCurrentIndex(dialog.navigation.status_filter.findData("all"))
     try:
         dialog.table.selectRow(0)
+        wait_for_jobs(dialog)
         dialog.reason.setText("Considered withdrawal")
+        wait_for_jobs(dialog)
         dialog.withdraw_button.click()
+        wait_for_jobs(dialog)
         assert hashlib.sha256(profile.read_bytes()).hexdigest() == before
 
         def unavailable(*_args, **_kwargs):
@@ -212,6 +242,7 @@ def test_cancel_withdrawal_and_failed_snapshot_preserve_books_and_clear_actions(
 
         monkeypatch.setattr(V2ProfileStore, "source_interpretation_snapshot", unavailable)
         dialog.refresh()
+        wait_for_jobs(dialog)
         assert dialog.model.rowCount() == 0 and dialog.basis is None
         assert not dialog.withdraw_button.isEnabled() and not dialog.action_button.isEnabled()
     finally:
@@ -231,11 +262,18 @@ def test_stale_cash_context_cannot_post_correct_or_withdraw(tmp_path, app, monke
     monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.Yes)
     monkeypatch.setattr(QMessageBox, "warning", lambda _parent, _title, message: warnings.append(message))
     dialog = V2CashActivityReview(profile, evidence.source_sha256)
+    wait_for_jobs(dialog)
+    dialog.navigation.status_filter.setCurrentIndex(dialog.navigation.status_filter.findData("all"))
+    wait_for_jobs(dialog)
     try:
         dialog.table.selectRow(0)
+        wait_for_jobs(dialog)
         dialog.purpose.setCurrentIndex(dialog.purpose.findData("expense"))
+        wait_for_jobs(dialog)
         dialog.category.setCurrentIndex(dialog.category.findData("expense:travel"))
+        wait_for_jobs(dialog)
         dialog.reason.setText("From loaded review frame")
+        wait_for_jobs(dialog)
         old_basis = dialog.basis
         with V2ProfileStore.open(profile) as store:
             if action == "post":
@@ -245,6 +283,7 @@ def test_stale_cash_context_cannot_post_correct_or_withdraw(tmp_path, app, monke
                 store.rename_category_account("expense:travel", "Concurrent renamed category")
         before = hashlib.sha256(profile.read_bytes()).hexdigest()
         (dialog.withdraw_button if action == "withdraw" else dialog.action_button).click()
+        wait_for_jobs(dialog)
         assert len(warnings) == 1
         assert "changed_since_selection" in warnings[0]
         assert dialog.basis != old_basis
@@ -267,12 +306,17 @@ def test_single_row_review_never_withdraws_a_transfer_leg(tmp_path, app):
             "SELECT source_sha256 FROM SourceObservations WHERE row_id=?", (outgoing,)
         ).fetchone()[0]
     dialog = V2CashActivityReview(profile, source_id)
+    wait_for_jobs(dialog)
+    dialog.navigation.status_filter.setCurrentIndex(dialog.navigation.status_filter.findData("all"))
+    wait_for_jobs(dialog)
     try:
         dialog.table.selectRow(0)
+        wait_for_jobs(dialog)
         dialog.reason.setText("Cannot cancel one transfer leg")
+        wait_for_jobs(dialog)
         assert dialog.model.rows[0].entry_key is None
         assert not dialog.withdraw_button.isEnabled()
-        assert not dialog.action_button.isEnabled()
+        assert dialog.action_button.isEnabled() and dialog.action_button.text().startswith("View ")
     finally:
         dialog.close()
         app.processEvents()
@@ -376,14 +420,23 @@ def test_card_preference_change_during_confirmation_reloads_without_posting(tmp_
     monkeypatch.setattr(QMessageBox, "warning", lambda _parent, _title, message: warnings.append(message))
     before = hashlib.sha256(profile.read_bytes()).hexdigest()
     dialog = V2CardPurchaseReview(workspace, evidence.source_sha256)
+    wait_for_jobs(dialog)
+    dialog.navigation.status_filter.setCurrentIndex(dialog.navigation.status_filter.findData("all"))
+    wait_for_jobs(dialog)
     try:
         dialog.table.selectRow(0)
+        wait_for_jobs(dialog)
         dialog.purpose.setCurrentIndex(dialog.purpose.findData("expense"))
+        wait_for_jobs(dialog)
         dialog.category.setCurrentIndex(dialog.category.findData("expense:food"))
+        wait_for_jobs(dialog)
         dialog.accounting_date.setText("2026-03-17")
+        wait_for_jobs(dialog)
         dialog.reason.setText("Review from initial date preference")
+        wait_for_jobs(dialog)
         assert dialog.action_button.isEnabled()
         dialog.action_button.click()
+        wait_for_jobs(dialog)
         assert len(warnings) == 1 and "preferences changed" in warnings[0]
         assert dialog.assumed_dates.isChecked()
         assert dialog.model.rows[0].entry_key is None
@@ -487,10 +540,14 @@ def test_prior_withdrawal_retry_after_fresh_repost_reports_current_state_truthfu
         if kind == "cash"
         else V2CardPurchaseReview(_workspace(profile), evidence.source_sha256)
     )
+    wait_for_jobs(dialog)
+    dialog.navigation.status_filter.setCurrentIndex(dialog.navigation.status_filter.findData("all"))
     try:
         dialog.table.selectRow(0)
+        wait_for_jobs(dialog)
         reason = "Same selected-entry withdrawal request"
         dialog.reason.setText(reason)
+        wait_for_jobs(dialog)
         with V2ProfileStore.open(profile) as store:
             store.withdraw_reviewed_interpretation(old_key, expected_basis_sha256=dialog.basis, reason=reason)
             if kind == "cash":
@@ -507,11 +564,12 @@ def test_prior_withdrawal_retry_after_fresh_repost_reports_current_state_truthfu
                 )
         before = hashlib.sha256(profile.read_bytes()).hexdigest()
         dialog.withdraw_button.click()
+        wait_for_jobs(dialog)
         assert hashlib.sha256(profile.read_bytes()).hexdigest() == before
         assert dialog.model.rows[0].entry_key == fresh_key
-        assert "recorded" in dialog.status.text()
-        assert "remains pending" not in dialog.status.text()
-        assert "current posting state" in dialog.status.text()
+        assert "recorded" in dialog.operation_status.text()
+        assert "remains pending" not in dialog.operation_status.text()
+        assert "current posting state" in dialog.operation_status.text()
         with V2ProfileStore.open(profile, read_only=True) as store:
             assert len(store._active_consumed()) == 1
     finally:

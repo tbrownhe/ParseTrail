@@ -13,6 +13,8 @@ from devtools.parser_engine_pilot.test_table_bank_source_output import DEFINITIO
 from devtools.parser_engine_pilot.test_table_bank_source_output import SOURCE as BANK_SOURCE
 from devtools.parser_engine_pilot.test_table_bank_source_output import evidence as bank_channels
 
+from .test_v2_ordinary_review_async import wait_for_review
+
 DEFINITION = (
     Path(__file__).parents[2] / "devtools" / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
 ).read_bytes()
@@ -39,11 +41,14 @@ def test_cash_activity_dialog_keeps_unclassified_deposit_pending(tmp_path: Path,
         store.add_category_account("expense:travel", "Travel", "expense")
     monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.StandardButton.Yes)
     dialog = V2CashActivityReview(profile, evidence.source_sha256)
+    wait_for_review(dialog)
+    dialog.navigation.status_filter.setCurrentIndex(dialog.navigation.status_filter.findData("all"))
     try:
         previews = []
         monkeypatch.setattr(V2EvidencePreview, "exec", lambda view: previews.append(view.rows_model.rowCount()))
         before_preview = profile.read_bytes()
         dialog.preview_source_button.click()
+        wait_for_review(dialog)
         assert previews == [2]
         assert profile.read_bytes() == before_preview
         assert dialog.model.rows[0].status == "Assign a financial account first"
@@ -52,6 +57,7 @@ def test_cash_activity_dialog_keeps_unclassified_deposit_pending(tmp_path: Path,
         with V2ProfileStore.open(profile) as store:
             store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
         dialog.refresh()
+        wait_for_review(dialog)
         assert [row.status for row in dialog.model.rows] == [
             "Ready for purpose review",
             "Ready for purpose review",
@@ -67,6 +73,7 @@ def test_cash_activity_dialog_keeps_unclassified_deposit_pending(tmp_path: Path,
         dialog.reason.setText("Reviewed purchase")
         assert dialog.action_button.isEnabled()
         dialog.action_button.click()
+        wait_for_review(dialog)
         assert dialog.model.rows[0].status == "Posted: Food"
         assert dialog.model.rows[1].status == "Ready for purpose review"
         assert dialog.action_button.text() == "Correct expense category"
@@ -74,6 +81,7 @@ def test_cash_activity_dialog_keeps_unclassified_deposit_pending(tmp_path: Path,
         with V2ProfileStore.open(profile) as store:
             store.update_financial_account(FinancialAccount("cash", renamed, "asset", "synthetic"))
         dialog.refresh(selected_row_id=evidence.payload.rows[0].row_id)
+        wait_for_review(dialog)
         dialog.show()
         app.processEvents()
         assert dialog.model.rows[0].financial_account == renamed
@@ -81,6 +89,7 @@ def test_cash_activity_dialog_keeps_unclassified_deposit_pending(tmp_path: Path,
         dialog.category.setCurrentIndex(dialog.category.findData("expense:travel"))
         dialog.reason.setText("Correct category")
         dialog.action_button.click()
+        wait_for_review(dialog)
         assert dialog.model.rows[0].status == "Posted: Travel"
         assert dialog.model.rows[1].status == "Ready for purpose review"
     finally:
@@ -116,6 +125,8 @@ def test_cash_activity_dialog_explicitly_posts_and_corrects_income(tmp_path: Pat
 
     monkeypatch.setattr(QMessageBox, "question", confirm)
     dialog = V2CashActivityReview(profile, evidence.source_sha256)
+    wait_for_review(dialog)
+    dialog.navigation.status_filter.setCurrentIndex(dialog.navigation.status_filter.findData("all"))
     try:
         dialog.table.selectRow(1)
         assert dialog.purpose.currentData() is None and dialog.category.currentData() is None
@@ -126,12 +137,14 @@ def test_cash_activity_dialog_explicitly_posts_and_corrects_income(tmp_path: Pat
         dialog.category.setCurrentIndex(dialog.category.findData("income:pay"))
         dialog.reason.setText("Confirmed income")
         dialog.action_button.click()
+        wait_for_review(dialog)
         assert dialog.model.rows[1].status == "Posted: Pay"
         assert any("I confirm this receipt is income." in message for message in confirmations)
         assert dialog.action_button.text() == "Correct income category"
         dialog.category.setCurrentIndex(dialog.category.findData("income:gift"))
         dialog.reason.setText("Correct classification")
         dialog.action_button.click()
+        wait_for_review(dialog)
         assert dialog.model.rows[1].status == "Posted: Gift"
         assert dialog.model.rows[0].status == "Ready for purpose review"
     finally:
@@ -164,6 +177,8 @@ def test_bank_statement_rows_use_explicit_cash_review_dialog(tmp_path: Path, mon
 
     monkeypatch.setattr(QMessageBox, "question", confirm)
     dialog = V2CashActivityReview(profile, evidence.source_sha256)
+    wait_for_review(dialog)
+    dialog.navigation.status_filter.setCurrentIndex(dialog.navigation.status_filter.findData("all"))
     try:
         assert [row.status for row in dialog.model.rows] == ["Ready for purpose review", "Ready for purpose review"]
         assert "account-total scope" in dialog.note.text()
@@ -172,6 +187,7 @@ def test_bank_statement_rows_use_explicit_cash_review_dialog(tmp_path: Path, mon
         dialog.category.setCurrentIndex(dialog.category.findData("income:interest"))
         dialog.reason.setText("Confirmed interest")
         dialog.action_button.click()
+        wait_for_review(dialog)
         assert dialog.model.rows[0].status == "Posted: Interest"
         assert any("I confirm this receipt is income." in message for message in confirmations)
         dialog.table.selectRow(1)
@@ -179,6 +195,7 @@ def test_bank_statement_rows_use_explicit_cash_review_dialog(tmp_path: Path, mon
         dialog.category.setCurrentIndex(dialog.category.findData("expense:other"))
         dialog.reason.setText("Reviewed withdrawal")
         dialog.action_button.click()
+        wait_for_review(dialog)
         assert dialog.model.rows[1].status == "Posted: Other"
     finally:
         dialog.close()

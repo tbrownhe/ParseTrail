@@ -6,14 +6,15 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None. [Transfer review recovery](docs/work/2026-10-31-transfer-review-recovery.md)
-is implemented and verified; the updated demo preserves saved matches/history.
+None. [Guided review and responsive workspace](docs/work/2026-11-01-v2-guided-review-optimization.md)
+is implemented and independently checked. A new public synthetic preview preserves
+existing profiles/demos; native/owner/platform/release review remains separate.
 
 ## Recommended next packets (unselected)
 
-1. [Review efficiency and remaining polish](docs/work/2026-10-26-client-ux-performance-evaluation.md#follow-up-scope):
-   separately designed multi-row confirmation, routine-note ergonomics,
-   focused specialized reviews and broader mixed-workload performance.
+1. [Broader performance and native validation](docs/work/2026-11-01-v2-guided-review-optimization.md#remaining-work):
+   cold/large-original/posted-history workloads and native accessibility/platform
+   checks; preserve complete source verification while assessing remaining read cost.
 
 ## Remaining review and action gates
 
@@ -33,11 +34,11 @@ they are not selected by this closeout.
 
 ## Most recent product packet
 
-[Transfer review recovery](docs/work/2026-10-31-transfer-review-recovery.md) adds
-direct manual resolution of unresolved pairs, visible correction prerequisites
-and profile-scoped confirmations. Its public versioned runtime opens the same
-archive-demo profile without resetting review state. Owner accounting review and
-supported-platform/release gates remain separate.
+[Guided review and responsive workspace](docs/work/2026-11-01-v2-guided-review-optimization.md)
+adds filtered/staged ordinary atomic review, owning-event navigation, responsive
+operations and embedded account/report views. Its separate public synthetic
+preview is ready; existing archive-demo/runtime state is preserved. Owner
+accounting review and supported-platform/release gates remain separate.
 
 ## Decisions and gates
 

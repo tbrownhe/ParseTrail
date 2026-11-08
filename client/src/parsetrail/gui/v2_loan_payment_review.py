@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -19,6 +20,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QSplitter,
     QTableWidget,
     QTableWidgetItem,
     QTabWidget,
@@ -29,9 +31,10 @@ from PySide6.QtWidgets import (
 from parsetrail.core.source_evidence import ObservationEvidence
 from parsetrail.core.v2_cash_movement import cash_account_labels
 from parsetrail.core.v2_loan_payments import CLEARING, INTEREST
-from parsetrail.core.v2_profile_store import ProfileFormatError, V2ProfileStore
+from parsetrail.core.v2_profile_store import ProfileFormatError
 from parsetrail.gui.v2_cash_activity_review import _money
 from parsetrail.gui.v2_evidence_preview import _location, preview_saved_source
+from parsetrail.gui.v2_profile_jobs import ProfileJobs
 
 REASONS = {
     "loan_account_assignment_required": "Assign this source to a financial account first.",
@@ -161,12 +164,16 @@ class V2LoanPaymentReview(QDialog):
     def __init__(self, workspace, parent=None, *, event_id=None):
         super().__init__(parent)
         self.workspace = workspace
+        self.jobs = ProfileJobs(self, workspace.profile_path)
+        self.jobs.completed.connect(self._job_completed)
+        self.jobs.failed.connect(self._job_failed)
+        self.jobs.busy_changed.connect(self._busy_changed)
         self.snapshot = self.preview = self.selected_event = None
         self._requested_event_id = event_id
         self.labels, self.banks, self.rows = {}, {}, ()
         self.review_preferences = workspace.preferences()
         self.setWindowTitle("2.0 evidenced loan payments")
-        self.resize(1240, 800)
+        self.resize(1100, 720)
         layout = QVBoxLayout(self)
         path = QHBoxLayout()
         path.addWidget(_label("Profile:"))
@@ -184,15 +191,23 @@ class V2LoanPaymentReview(QDialog):
         self.mode.currentIndexChanged.connect(self.refresh)
         layout.addWidget(self.mode)
         self.assumed_dates = QCheckBox("Allow best guess posting dates when a statement does not print one")
+        self.assumed_dates.setChecked(self.review_preferences.allow_assumed_posting_dates)
         self.assumed_dates.toggled.connect(self._toggle_dates)
         layout.addWidget(self.assumed_dates)
-        layout.addWidget(
-            _label(
-                "Select the actual bank outflow and complete printed loan components explicitly. No payment group or counterpart is inferred. "
-                "Loan dates are observed activity dates; using them as accounting dates is an explicit assumed-date choice. "
-                "Nonzero fees, incomplete components and unsupported source/account scopes stay pending."
-            )
+        rules = QGroupBox("Review rules and date qualifications")
+        rules.setCheckable(True)
+        rules.setChecked(False)
+        rules_layout = QVBoxLayout(rules)
+        rules_layout.setContentsMargins(8, 0, 8, 0)
+        rules_text = _label(
+            "Select the actual bank outflow and complete printed loan components explicitly. No payment group or counterpart is inferred. "
+            "Loan dates are observed activity dates; accounting dates require the explicit assumed-date choice. "
+            "Nonzero fees, incomplete components and unsupported source/account scopes stay pending. Unknown opening stays unknown."
         )
+        rules_text.hide()
+        rules.toggled.connect(rules_text.setVisible)
+        rules_layout.addWidget(rules_text)
+        layout.addWidget(rules)
         self.tabs = QTabWidget()
         layout.addWidget(self.tabs, 1)
         self._build_sources()
@@ -205,11 +220,13 @@ class V2LoanPaymentReview(QDialog):
         )
         for column, width in enumerate((210, 360, 160, 410)):
             self.entry_table.setColumnWidth(column, width)
-        preview_layout.addWidget(self.entry_table, 1)
+        preview_splitter = QSplitter(Qt.Vertical)
+        preview_splitter.addWidget(self.entry_table)
         self.preview_details = QPlainTextEdit()
         self.preview_details.setReadOnly(True)
-        self.preview_details.setMaximumHeight(175)
-        preview_layout.addWidget(self.preview_details)
+        preview_splitter.addWidget(self.preview_details)
+        preview_splitter.setSizes([270, 110])
+        preview_layout.addWidget(preview_splitter, 1)
         self.tabs.addTab(preview_panel, "Exact journal preview")
         history_panel = QWidget()
         history_layout = QVBoxLayout(history_panel)
@@ -285,15 +302,19 @@ class V2LoanPaymentReview(QDialog):
                 "Source",
             )
         )
-        for column, width in enumerate((45, 130, 165, 240, 100, 110, 110, 280, 150)):
+        for column, width in enumerate((45, 115, 135, 200, 85, 95, 95, 180, 150)):
             self.components.setColumnWidth(column, width)
+        self.components.setColumnHidden(8, True)
         self.components.itemChanged.connect(self._draft_changed)
         self.components.itemSelectionChanged.connect(self._component_selected)
-        layout.addWidget(self.components, 1)
+        self.source_splitter = QSplitter(Qt.Vertical)
+        self.source_splitter.addWidget(self.components)
         self.source_details = QPlainTextEdit()
         self.source_details.setReadOnly(True)
-        self.source_details.setMaximumHeight(190)
-        layout.addWidget(self.source_details)
+        self.source_splitter.addWidget(self.source_details)
+        self.source_details.hide()
+        self.source_splitter.setSizes([300, 100])
+        layout.addWidget(self.source_splitter, 1)
         self.open_component = QPushButton("Open selected loan source evidence")
         self.open_component.clicked.connect(self._preview_component)
         layout.addWidget(self.open_component)
@@ -312,26 +333,27 @@ class V2LoanPaymentReview(QDialog):
         return f"{self.labels.get(movement.account_id, _identity(movement.account_id, movement.account_name, movement.account_kind, movement.tracking_scope))}; {movement.posting_date} ({movement.date_provenance}); {_money(movement.amount_minor)}; {movement.row_id[:12]}"
 
     def refresh(self, *_args):
+        if self.jobs.writing:
+            return
         selected_id = self.mode.currentData() or self._requested_event_id
         self._requested_event_id = None
         self.snapshot = self.preview = self.selected_event = None
         self.review_preferences = self.workspace.preferences()
-        try:
-            with V2ProfileStore.open(self.workspace.profile_path, read_only=True) as store:
-                snapshot = store.loan_review_snapshot(self.review_preferences)
-                event = next((event for event in snapshot.history if event.event_id == selected_id), None)
-                if event is not None and event.status == "active":
-                    snapshot = store.loan_review_snapshot(self.review_preferences, replacing_event_id=event.event_id)
-                    event = next(event for event in snapshot.history if event.event_id == selected_id)
-        except (ProfileFormatError, sqlite3.Error, OSError, StopIteration):
-            self.banks, self.rows, self.labels = {}, (), {}
-            self.mode.blockSignals(True)
-            self.mode.clear()
-            self.mode.addItem("Loan review state unavailable", None)
-            self.mode.blockSignals(False)
-            self._clear_draft()
-            self.status.setText("Loan sources and event history could not be verified. Reload before another action.")
-            return
+        self._clear_draft()
+        self.status.setText("Loading verified loan sources and saved history...")
+        preferences = self.review_preferences
+
+        def read(store, cancelled):
+            snapshot = store.loan_review_snapshot(preferences)
+            event = next((item for item in snapshot.history if item.event_id == selected_id), None)
+            if event is not None and event.status == "active" and not cancelled():
+                snapshot = store.loan_review_snapshot(preferences, replacing_event_id=event.event_id)
+                event = next(item for item in snapshot.history if item.event_id == selected_id)
+            return snapshot, event
+
+        self.jobs.submit(("snapshot", selected_id), read)
+
+    def _apply_snapshot(self, snapshot, event):
         self.snapshot, self.selected_event = snapshot, event
         self.labels = cash_account_labels(snapshot.accounts)
         self.banks = {bank.row_id: bank for bank in snapshot.bank_movements}
@@ -379,15 +401,27 @@ class V2LoanPaymentReview(QDialog):
                 _money(proof.interest_minor) if proof else "Unavailable",
                 "Eligible for explicit review"
                 if row.eligible
-                else " ".join(
-                    REASONS.get(code, "This row is outside the admitted loan payment review.") for code in row.blockers
+                else "; ".join(
+                    {
+                        "loan_account_assignment_required": "Assign financial account",
+                        "loan_principal_scope_required": "Requires principal component",
+                        "loan_component_unsupported": "Unsupported printed components",
+                        "loan_source_already_used": "Already reviewed",
+                        "loan_assumed_date_disabled": "Assumed date disabled (default-off)",
+                        "source_overlap_review_required": "Repeated source needs review",
+                    }.get(code, "Select for review limits")
+                    for code in row.blockers
                 ),
                 row.source_sha256[:16],
             )
             for column, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 item.setData(Qt.UserRole, row.row_id)
-                item.setToolTip(str(value))
+                item.setToolTip(
+                    " ".join(REASONS.get(code, code) for code in row.blockers)
+                    if column == 7 and row.blockers
+                    else str(value)
+                )
                 if column == 0:
                     item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
                     if not row.eligible:
@@ -418,6 +452,12 @@ class V2LoanPaymentReview(QDialog):
                 self.history_source.addItem(f"Loan component source {source}", source)
             self.open_history_source.setEnabled(True)
         self._draft_changed()
+        if event is not None and event.status != "active":
+            self.tabs.setCurrentIndex(self.tabs.count() - 1)
+        if getattr(self, "_notice", None):
+            self.status.setText(self._notice)
+            if not self.jobs.pending:
+                self._notice = None
 
     def _clear_draft(self):
         self.reference.clear()
@@ -444,6 +484,7 @@ class V2LoanPaymentReview(QDialog):
     def _component_selected(self):
         index = self.components.currentRow()
         row = self.rows[index] if 0 <= index < len(self.rows) else None
+        self.source_details.setVisible(row is not None)
         self.open_component.setEnabled(row is not None)
         self.source_details.setPlainText(
             component_details(row.proof)
@@ -466,6 +507,9 @@ class V2LoanPaymentReview(QDialog):
             )
 
     def _draft_changed(self, *_args):
+        if self.jobs.writing:
+            return
+        self.jobs.cancel_reads()
         self.preview = None
         self.open_bank.setEnabled(self.bank.currentData() in self.banks)
         self._component_selected()
@@ -487,37 +531,49 @@ class V2LoanPaymentReview(QDialog):
                 "Posting-date preferences changed. The draft was reset to the current visible preference."
             )
             return
-        try:
-            with V2ProfileStore.open(self.workspace.profile_path, read_only=True) as store:
-                preview = store.loan_payment_preview(
-                    self.bank.currentData(),
-                    self._component_ids(),
-                    preferences=self.review_preferences,
-                    expected_basis_sha256=self.snapshot.basis_sha256,
-                    replacing_event_id=self.selected_event.event_id if self.selected_event else None,
-                )
-            if preview.basis_sha256 != self.snapshot.basis_sha256:
-                raise ProfileFormatError("loan_changed_since_selection")
-        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            if "changed_since_selection" in str(exc):
-                self.refresh()
-                self.status.setText(REASONS.get(str(exc), REASONS["loan_changed_since_selection"]))
-                return
-            if isinstance(exc, (sqlite3.Error, OSError)) or "integrity" in str(exc):
-                self.snapshot = self.preview = self.selected_event = None
-                self.banks, self.rows, self.labels = {}, (), {}
-                self._clear_draft()
-                self.status.setText("Loan source or history could not be verified. Reload before another action.")
-                return
-            self.summary.setText(
-                "Preview unavailable. "
-                + REASONS.get(
-                    str(exc),
-                    "The selected sources do not support this exact payment; inspect scope, full components, dates and source use.",
-                )
+        bank_id, component_ids = self.bank.currentData(), self._component_ids()
+        preferences, basis = self.review_preferences, self.snapshot.basis_sha256
+        replacing = self.selected_event.event_id if self.selected_event else None
+
+        def read(store, _cancelled):
+            preview = store.loan_payment_preview(
+                bank_id,
+                component_ids,
+                preferences=preferences,
+                expected_basis_sha256=basis,
+                replacing_event_id=replacing,
             )
-            self._update_actions()
+            if preview.basis_sha256 != basis:
+                raise ProfileFormatError("loan_changed_since_selection")
+            return preview
+
+        self.jobs.submit(("preview", bank_id, component_ids, basis, replacing), read, delay=100)
+        self.summary.setText("Checking the exact selected payment preview...")
+        self._update_actions()
+
+    def _preview_failed(self, exc):
+        if "changed_since_selection" in str(exc):
+            self._notice = "Sources or event context changed. The draft was reset; inspect the reloaded source facts."
+            self.refresh()
+            self.status.setText(REASONS.get(str(exc), REASONS["loan_changed_since_selection"]))
             return
+        if isinstance(exc, (sqlite3.Error, OSError)) or "integrity" in str(exc):
+            self.snapshot = self.preview = self.selected_event = None
+            self.banks, self.rows, self.labels = {}, (), {}
+            self._clear_draft()
+            self.status.setText("Loan source or history could not be verified. Reload before another action.")
+            return
+        self.summary.setText(
+            "Preview unavailable. "
+            + REASONS.get(
+                str(exc),
+                "The selected sources do not support this exact payment; inspect scope, full components, dates and source use.",
+            )
+        )
+        self._update_actions()
+        return
+
+    def _apply_preview(self, preview):
         self.preview = preview
         manifest = preview.manifest
         self.summary.setText(
@@ -549,6 +605,9 @@ class V2LoanPaymentReview(QDialog):
         )
         self.preview_details.setPlainText(manifest_details(manifest))
         self._update_actions()
+        if getattr(self, "_notice", None):
+            self.status.setText(self._notice)
+            self._notice = None
 
     def _update_actions(self, *_args):
         if not hasattr(self, "confirm"):
@@ -562,12 +621,15 @@ class V2LoanPaymentReview(QDialog):
                 self.snapshot
                 and self.preview
                 and changed
+                and not self.jobs.writing
                 and (event is None or active)
                 and self.reference.text().strip()
                 and self.reason.text().strip()
             )
         )
-        self.withdraw.setEnabled(bool(self.snapshot and active and self.reason.text().strip()))
+        self.withdraw.setEnabled(
+            bool(self.snapshot and active and self.reason.text().strip() and not self.jobs.writing)
+        )
         if self.snapshot is None:
             self.status.setText("Reload verified state before reviewing another payment.")
         elif event is not None and not active:
@@ -634,50 +696,37 @@ class V2LoanPaymentReview(QDialog):
         ):
             return
         if self.workspace.preferences() != self.review_preferences:
+            self._notice = "Posting-date preferences changed during confirmation. Rebuild the draft under the current visible choice."
             self.refresh()
             self.status.setText(
                 "Posting-date preferences changed during confirmation. Rebuild the draft under the current visible choice."
             )
             return
-        try:
-            with V2ProfileStore.open(self.workspace.profile_path) as store:
-                kwargs = {
-                    "expected_basis_sha256": snapshot.basis_sha256,
-                    "preferences": self.review_preferences,
-                    "reference": reference,
-                    "reason": reason,
-                }
-                if event:
-                    saved_id = store.replace_reviewed_loan(
-                        event.event_id,
-                        preview.manifest.bank.row_id,
-                        tuple(proof.row_id for proof in preview.manifest.components),
-                        expected_event_version=event.version,
-                        **kwargs,
-                    )
-                else:
-                    saved_id = store.post_reviewed_loan_payment(
-                        preview.manifest.bank.row_id,
-                        tuple(proof.row_id for proof in preview.manifest.components),
-                        **kwargs,
-                    )
-        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
-            self.refresh()
-            self.status.setText(
-                "Payment was not recorded. "
-                + REASONS.get(
-                    str(exc), "Inspect refreshed sources, scopes, complete components and current event history."
+        preferences = self.review_preferences
+
+        def write(store, _cancelled):
+            kwargs = {
+                "expected_basis_sha256": snapshot.basis_sha256,
+                "preferences": preferences,
+                "reference": reference,
+                "reason": reason,
+            }
+            if event:
+                return store.replace_reviewed_loan(
+                    event.event_id,
+                    preview.manifest.bank.row_id,
+                    tuple(proof.row_id for proof in preview.manifest.components),
+                    expected_event_version=event.version,
+                    **kwargs,
                 )
+            return store.post_reviewed_loan_payment(
+                preview.manifest.bank.row_id,
+                tuple(proof.row_id for proof in preview.manifest.components),
+                **kwargs,
             )
-            return
-        self.mode.blockSignals(True)
-        self.mode.setCurrentIndex(0)
-        self.mode.blockSignals(False)
-        self._requested_event_id = saved_id.event_id
-        self.refresh()
-        self.status.setText(
-            "The selected payment review is recorded. Refreshed full history shows the current state; source facts and date provenance are retained."
-        )
+
+        self.jobs.submit(("post",), write, write=True)
+        self.status.setText("Recording the confirmed whole payment. Wait for the saved result...")
 
     def _withdraw(self):
         event = self.selected_event
@@ -691,17 +740,63 @@ class V2LoanPaymentReview(QDialog):
         )
         if QMessageBox.question(self, "Confirm whole loan payment withdrawal", message) != QMessageBox.Yes:
             return
-        try:
-            with V2ProfileStore.open(self.workspace.profile_path) as store:
-                store.withdraw_reviewed_loan(event.event_id, expected_event_version=event.version, reason=reason)
-        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
+
+        def write(store, _cancelled):
+            store.withdraw_reviewed_loan(event.event_id, expected_event_version=event.version, reason=reason)
+
+        self.jobs.submit(("withdraw",), write, write=True)
+        self.status.setText("Recording the confirmed whole-payment withdrawal...")
+
+    def _job_completed(self, key, result):
+        if key[0] == "snapshot":
+            self._apply_snapshot(*result)
+        elif key[0] == "preview":
+            if self.workspace.preferences() != self.review_preferences:
+                self.refresh()
+            else:
+                self._apply_preview(result)
+        else:
+            self._notice = "Recorded. Refreshed history shows current state; original source facts, date provenance and whole-event actions remain inspectable."
+            if key[0] == "post":
+                self._requested_event_id = result.event_id
+                self.mode.blockSignals(True)
+                self.mode.setCurrentIndex(0)
+                self.mode.blockSignals(False)
+            self.refresh()
+
+    def _job_failed(self, key, exc):
+        if key[0] == "preview":
+            self._preview_failed(exc)
+        elif key[0] == "snapshot":
+            self.snapshot = self.preview = self.selected_event = None
+            self.banks, self.rows, self.labels = {}, (), {}
+            self._clear_draft()
+            self.status.setText("Loan sources and event history could not be verified. Reload before another action.")
+        else:
+            self._notice = "The confirmed action was not recorded. Inspect refreshed sources and whole-event history."
             self.refresh()
             self.status.setText(
-                "Withdrawal was not recorded. "
-                + REASONS.get(str(exc), "Inspect refreshed event history before another action.")
+                "The confirmed action was not recorded. "
+                + REASONS.get(str(exc), "Inspect refreshed source and event history.")
             )
-            return
-        self.refresh()
-        self.status.setText(
-            "The selected whole-payment withdrawal is recorded. Refreshed history shows current state; original and inverse entries remain inspectable."
-        )
+
+    def _busy_changed(self, _busy):
+        writing = self.jobs.writing
+        for widget in (self.tabs, self.mode, self.reload, self.assumed_dates, self.reference, self.reason):
+            widget.setEnabled(not writing)
+        if writing:
+            self.confirm.setEnabled(False)
+            self.withdraw.setEnabled(False)
+
+    def reject(self):
+        if self.jobs.close():
+            super().reject()
+        else:
+            self.status.setText("The confirmed write is still running. Wait for its saved outcome before closing.")
+
+    def closeEvent(self, event):
+        if self.jobs.close():
+            super().closeEvent(event)
+        else:
+            event.ignore()
+            self.status.setText("The confirmed write is still running. Wait for its saved outcome before closing.")
