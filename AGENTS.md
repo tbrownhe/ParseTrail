@@ -47,9 +47,21 @@ session permits it. Use the smallest useful team from [.codex/agents](.codex/age
 ## Design and human review
 
 Desktop, dashboard and website work includes usability and visual quality.
+Treat feature requests as desired user outcomes; agents are responsible for
+integrating them into coherent journeys without requiring the user to prescribe
+navigation, layout or recovery. Establish the journey and observable usability
+criteria before dividing substantial UI implementation work. Existing screen and
+navigation boundaries are design choices to examine, not fixed requirements.
 Substantial interaction changes receive agent design review before implementation
 and inspection of the actual integrated UI afterward. Small fixes need only
 proportionate checks. Follow the workflow's [design criteria](.agents/skills/parsetrail-workflow/SKILL.md#design-and-ui-verification).
+
+The primary integrator owns resolution of integrated UX findings. Within scope,
+`ui_ux` owns the interaction model and may propose restructuring existing screens;
+`acceptance` independently checks task discovery and comprehension as well as
+functional behavior. Passing tests or completing design review does not close
+significant usability findings. Resolve them or report the affected outcome as
+incomplete with its impact and remaining work.
 
 Agents make ordinary implementation and design decisions within scope. No new
 feature or substantial UI change creates a per-feature owner approval gate.

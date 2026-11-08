@@ -32,14 +32,14 @@ that same record through closeout. Small changes can use a concise existing entr
 
 | Agent | Responsibility | Expected result |
 | --- | --- | --- |
-| `ui_ux` | User journeys, information architecture, interaction/visual design and accessibility across desktop, dashboard and website. | Screen/state plan and observable criteria; actual UI inspection and prioritized usability findings. |
+| `ui_ux` | Integrated user journeys, information architecture, interaction/visual design and accessibility across desktop, dashboard and website. | Journey/screen/state plan and observable criteria; actual UI inspection, prioritized usability findings and rechecks. |
 | `desktop` | PySide6 client implementation and desktop integration. | Working interactions consistent with the agreed design, relevant tests and inspected Qt screens. |
 | `evidence` | Parser declarations, extraction, source models, routing and bounded workers. | Exact source/provenance behavior, refusal/capture limits and relevant client/devtool checks. |
 | `ledger` | Local financial services, profile persistence, import/recovery and reports. | Exact money/date examples, atomicity/history/unknown behavior and focused checks. |
 | `backend` | API, auth, service persistence, artifact hosting and explicit contributions. | Interface/schema/privacy effects, migration/recovery implications and isolated checks. |
 | `web` | React dashboard and static public website implementation. | Usable responsive/accessibility behavior, truthful content and relevant static/browser checks. |
 | `integrity` | Independent financial, evidence, persistence, security or privacy review. | Concrete findings with locations, reproductions, impact and verification limits. |
-| `acceptance` | Independent integrated behavior, regression and platform/release-readiness verification. | Exact checks/results, observed behavior and unmet criteria/gates; no owner attestation. |
+| `acceptance` | Independent integrated behavior, task discovery/comprehension, regression and platform/release-readiness verification. | Separate functional and uncoached task results, observed misunderstandings and unmet criteria/gates; no owner attestation. |
 
 Give each specialist a compact brief with outcome, relevant contracts/decisions,
 write set, data permission, dependencies, verification and return expectations.
@@ -62,23 +62,34 @@ task does not authorize unrelated work.
 
 ## Design and UI verification
 
-For substantial interaction work, identify the user's task and observed friction,
-then agree a concise journey, screen/state plan and usability criteria before
-widget/page implementation. Inspect current behavior and relevant service/API
-contracts. Design and service planning can inform each other; preserve established
-financial meaning and transaction ownership. Use `ui_ux` for navigation, shared
-patterns, multi-screen work or recurring confusion; proportionate local review
-suffices for a small wording/layout fix.
+Translate the feature request into the user's intended outcome and inspect current
+friction and relevant service/API contracts. For substantial interaction work,
+establish a concise end-to-end journey, screen/state plan and observable usability
+criteria before dividing UI implementation assignments. Include entry, decisions,
+result and correction/recovery across affected existing features. Examine whether
+current navigation and screen boundaries serve that journey. Use `ui_ux` for
+navigation, shared patterns, multi-screen work or recurring confusion; a small
+wording/layout fix needs proportionate local review.
 
-Desktop/web own implementation; ui_ux owns assigned design artifacts and critique.
-Assign shared presentation code explicitly rather than giving them overlapping
-write sets. Reuse coherent typography, spacing, navigation, terminology and state
-patterns, adapting to Qt, dashboard and public-site conventions. Improve existing
-capabilities within scope; do not turn design review into a new feature program.
+Within scope, ui_ux owns the integrated interaction model and may propose combining,
+reordering or restructuring existing screens. Desktop/web own implementation;
+assign shared presentation code explicitly without overlapping writers. The primary
+resolves design/engineering conflicts and coordinates necessary read-model changes.
+Preserve financial meaning, transaction ownership and component authorization;
+route new capabilities or changed accounting policy through the primary rather
+than expanding scope through design review.
 
-Preserve distinctions in data and financial meaning. Keep current scope and
-material limitations beside affected values. Use concise status summaries and
-discoverable details for full provenance, diagnostic identifiers and explanations;
+Define criteria for discovery and comprehension separately from functional success:
+can the reviewer identify account/period/scope, what needs attention and why, the
+next action, the effect of confirmation, and what a result includes or leaves
+unknown? Add relevant recovery and repeated-use criteria. Reuse coherent typography,
+spacing, table density, amount/date formatting, terminology, statuses, focus and
+action placement, adapting to each surface.
+
+Preserve distinctions in data and financial meaning. Lead with the answer or task,
+keep scope and material limitations beside affected values, then make next actions
+clear and supporting detail discoverable. Use concise status summaries with full
+provenance, diagnostic identifiers and explanations available through details;
 separate evidence dimensions need not all occupy the primary view at once.
 Unknown remains unknown, and engineering review never removes the application's
 explicit confirmation of contributions, account bindings or postings.
@@ -91,11 +102,21 @@ empty, pending, failure, correction and recovery states, long labels/lists, agre
 window sizes or viewports, keyboard focus and available native scaling. Record
 actual screenshots/scenarios and untested limits for substantial changes.
 
-For integrated journeys, a fresh reviewer should attempt the user task without
-control-by-control instructions that conceal discovery problems. Useful criteria
-include finding the intended source/account, understanding scope and next actions,
-recovering from refusal and inspecting full evidence. Use targeted regressions
+For integrated journeys, give a fresh reviewer the goal and permitted data, without
+control-by-control instructions or an implementation walkthrough. Record completion,
+wrong turns, assistance, misunderstandings of results and recovery; if coaching or
+prior implementation knowledge was needed, qualify the discovery evidence. Keep
+these attempts separate from scripted functional checks. Agent inference is not
+evidence that an unfamiliar person will understand the UI. Use targeted regressions
 for observed risks rather than brittle pixel matches or arbitrary click counts.
+
+The primary owns the disposition of UX findings; ui_ux rechecks affected interactions
+after fixes. Close the loop against the original task and observed friction, not
+just a checklist of edits or test counts. Significant inability to discover, complete,
+understand or recover from the task leaves that usability outcome incomplete until
+resolved or explicitly dispositioned with impact and remaining work. Do not silently
+defer it because functional tests pass. Keep technical completion and demonstrated
+usability distinct in the work record.
 
 Agents resolve ordinary design/architecture choices and findings autonomously.
 Do not require per-feature owner walkthroughs or screenshot approval. Consolidate
