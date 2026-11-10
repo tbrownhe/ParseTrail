@@ -6,10 +6,15 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None. [One staging flow for ordinary review](docs/work/2026-11-07-v2-core-desktop-journey.md#november-8-one-staging-flow-for-ordinary-review)
-is implemented; process-isolated journey checks pass. At the owner's request,
-the unresolved native heap diagnostic is [archived](devtools/qt_heap_crash/README.md)
-and active investigation is deferred. Test containment does not fix the defect.
+None. [Saved review notes and new correction reasons](docs/work/2026-11-07-v2-core-desktop-journey.md#november-9-separate-saved-review-notes-from-correction-reasons)
+are implemented. The [window-owned focus mitigation](docs/work/2026-11-07-v2-core-desktop-journey.md#native-heap-capture-and-window-owned-opening-focus)
+passed 40 archive cycles and the integrated/native/focus/disposal checks on Qt
+6.11.2. Subsequent [standalone reduction](docs/work/2026-11-07-v2-core-desktop-journey.md#standalone-reproducer-reduction-and-thread-lifetime-finding)
+confirmed GUI teardown on background workers in saved native stacks. GUI-thread
+lifetime correctness remains unresolved; no reliable standalone reproducer or
+proven upstream defect is ready. Crash experiments stopped after repeated
+classifier interruptions. [Diagnostic archive](devtools/qt_heap_crash/README.md),
+symbols, candidates and positive/negative evidence remain retained.
 Human/platform/release gates and recorded product limitations remain separate.
 
 ## Recommended next packets (unselected)

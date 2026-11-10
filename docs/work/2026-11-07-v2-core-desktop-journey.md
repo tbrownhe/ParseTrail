@@ -5,11 +5,592 @@ Branch: `feature/client-financial-insights`; client only.
 Authorization: user requested integrated journey implementation and verification;
 synthetic disposable profiles/statements only. No live profiles, private archives,
 production, signing, publication or release actions.
-Implementation: staging-only ordinary review and prior account-first import/product, routing, focus, budget and color improvements implemented.
-Automated verification: focused and process-isolated journey checks passed; unresolved native heap diagnostic archived and active investigation deferred at the owner's request.
+Implementation: window-owned opening-focus filters, saved-note/correction-reason separation, staging-only ordinary review and prior account-first import/product, routing, budget and color improvements implemented.
+Automated verification: the focus-scope mitigation passed 40 archive cycles and the integrated/focus/disposal checks recorded below. Subsequent standalone reduction identified GUI teardown on background workers in the saved native traces. GUI lifetime/thread correctness therefore remains unresolved; a reliable standalone reproducer has not yet been obtained.
 Design verification: actual Windows Qt rendering/software-event checks passed.
-Independent review: staging usability findings fixed and rechecked; process containment and archive reviewed; correction-note feedback and lifecycle limits remain recorded below.
+Independent review: native captures/symbol matching and focus changes were reviewed; later raw-stack review independently confirmed worker-thread GUI destruction. Earlier bounded passing checks remain valid but do not close this additional lifetime concern.
 Owner acceptance: walkthrough feedback recorded; integrated acceptance remains pending. Release authorization: not requested.
+
+## Local commit closeout
+
+Owner requested committing the accumulated diff in logical hunks:
+
+- `f0863f1`: separate saved review notes from new correction reasons, with
+  isolated scenarios, retention checks and user-facing guidance.
+- `4a67134`: scope opening-focus filters to their task windows, with lifecycle
+  checks and the runtime mitigation/remaining-risk guidance.
+- `30562b3`: retain sanitized runtime/style/native evidence and explicit
+  incomplete standalone-reproducer status.
+- This documentation closeout records verification and the unresolved GUI-thread
+  lifetime concern in the existing work record and planning index.
+
+Commit preparation passed changed-file Ruff check/format for 25 Python files,
+JSON parsing/privacy-field checks and diff checks. Python AST fingerprints stayed
+unchanged through commit hooks; the original frozen reproducer SHA-256 matches.
+Hooks normalized generated JSON line endings. Existing behavioral verification
+above was retained; no stopped crash/debugger experiment was restarted. Raw
+dumps, SDKs, source builds, tools and candidate experiments remain ignored scratch
+artifacts. No push, upstream issue or release action was performed.
+
+## Standalone reproducer reduction and thread-lifetime finding
+
+Owner authorized a standalone reduction for a potential upstream report, using
+scratch for experiments and `devtools/qt_focus_repro/` for a confirmed small
+example. No external posting, product-code change or live/private data was
+authorized or performed in this follow-up. The primary owns the result and this
+record; specialists investigated disjoint widget/object reductions and reviewed
+saved native stacks. The historical archive and final product source are untouched.
+
+Created a clean CPython 3.13.15 environment containing only PySide6 Essentials
+6.11.2 and Shiboken 6.11.2, with no base-environment `.pth`, ParseTrail or pytest
+dependencies. Synthetic process settings/temp directories are isolated.
+Qt-only candidates covered object/widget timers, Python cycles, global/window
+filters, modal loops, model/proxy changes, file dialogs, focus, styles, worker
+completion and teardown. Normal-GC runs were distinguished from explicitly
+requested full collections and lowered-threshold diagnostic variants. These
+variants are reproduction experiments, not production GC changes/workarounds.
+
+The widget specialist retained 21 fresh-process trials (1,096 GUI cycles), all
+clean, including native controls and explicit collection/pressure variants.
+Primary/object trials likewise did not establish a simple main-thread case.
+The preserved pre-fix focus helper, loaded only into a disposable full-application
+positive control, still reproduced `0xc0000374` (`positive-legacy-2`). The first
+positive-control setup attempt failed collection because its helper file was
+not yet written; it is not counted as product/crash evidence. The original helper
+was subsequently recovered from Git and its SHA-256 matched the original source
+manifest. The product's per-window implementation was never reverted.
+
+Reviewing all native thread stacks, rather than only the faulting thread, exposed
+an important additional lifetime concern:
+
+- `source-1/console.log:778` identifies thread 41, `DocumentInventoryWorker`.
+  That thread's stack contains QObject/layout/QWidget/QHeaderView/QTableViewWrapper/
+  QStackedWidget/QDialogWrapper destruction, then `SbkDeallocWrapperCommon`, and
+  ends through `QThreadWrapper::run`.
+- `baseline-4/console.log:710` identifies thread 40, `_ProfileJob`. Its stack has
+  the warning path through QBasicTimer::stop and item/table/widget destruction,
+  then Shiboken deallocation and the worker's run path.
+- Independent read-only review confirmed both. GUI teardown on worker threads
+  is direct evidence; Python cyclic GC as the exact mechanism is a hypothesis
+  from these traces, not an explicitly named `gc_collect` frame.
+
+Qt documents that GUI objects belong on the GUI thread and QObject deletion
+across threads should use the appropriate deferred-deletion/lifetime mechanism:
+[Threads and QObjects](https://doc.qt.io/qt-6.11/threads-qobject.html).
+This finding changes the interpretation of the previous focus result: narrowing
+the global filter mitigates the reproduced symptom, but does not establish that
+GUI destruction is correctly confined or that PySide is independently defective.
+A defensible upstream case must account for this thread/lifetime precondition.
+
+A standalone candidate creates GUI widgets on the main thread and performs only
+Python allocation/collection in a worker. One earlier explicit-worker-collection
+trial (`thread-visible-forced`) exited `3221226356`/`0xc0000374`; a preceding
+window-filter control timed out. The owner reported a matching Windows fault
+popup at about that time. No causal connection to a security classifier is
+established. Targeted, elevated read-only process inspection after the timeout
+found no matching candidate Python processes remaining.
+
+Later instrumentation recorded destruction-thread identities and added controls
+for GUI-thread collection or explicit GUI-thread disposal. Both subsequent global
+worker-collection runs and the GUI/window controls exited 0. Consequently neither
+repeatability nor equivalence to the original crash path is established. The
+earlier failing candidate bytes were not independently hashed/snapshotted before
+instrumentation, so the current script must not be described as a confirmed
+minimal reproducer. Raw commands/logs/outcomes remain retained, including negative
+results; no repeat has been relabelled as a pass or crash.
+
+One delegated diagnostic turn was explicitly halted by an automated security
+classifier; the owner reported further interruptions. The exact classification
+reason is unavailable. This is not an exploitability or severity assessment.
+Further crash/debugger experiments were stopped after the repeated reports.
+Process-local Windows error-dialog suppression was added for the final bounded
+trials; it does not change GC, successful-exit criteria or nonzero crash results.
+No system debugger registration/security setting was changed.
+
+The reserved `devtools/qt_focus_repro/` contains an explicit incomplete-status
+README and environment pins, not a falsely labelled reproducer. All candidates,
+trace helpers and generated results remain in ignored
+`scratch/qt-focus-reduction-20261110/`; they are not ready to attach as a supported
+PySide-only failing case. No external repository, account, issue or upload was
+created. Remaining work is to establish correct GUI-thread lifetime in the
+application and/or obtain a reliable standalone case with clearly stated legal
+ownership/thread preconditions. The previous 40-cycle focus-mitigation evidence
+remains historical bounded verification, not closure of this new finding.
+
+## Native heap capture and window-owned opening focus
+
+Owner explicitly authorized beginning native debugging and a matching source
+build after the bounded version/styling comparisons. Primary owns the integrated
+result, debugger/captures and this record; desktop specialists own the isolated
+source build and the reviewed per-window focus implementation. Acceptance
+independently inspects isolation, matching symbols, code/lifetimes and raw final
+results. No live profile, private archive, production, signing, publication or
+release work is selected. Financial services, evidence and all existing journey
+assertions remain unchanged. Historical unresolved-heap statements below describe
+the state before this focus-scope change.
+
+### Native evidence and source build
+
+Obtained only the x64 console engine/standard extensions from Microsoft's official
+WinDbg package into ignored `scratch/qt-native-debug-20261109/tools/`, using HTTP
+ranges rather than downloading the full 1.2 GB bundle. CDB, dbgeng, dbghelp and
+symsrv Authenticode signatures are valid Microsoft signatures. No AppX install,
+system debugger registration, registry/IFEO/PageHeap change or unrelated-process
+attachment was performed. CDB launches only the synthetic target and its new
+descendants; Windows venv Python is a launcher, so `-o` is required to follow its
+real Python child. `-hd` disables the debugger's implicit debug heap.
+
+The target environment allowlists OS variables rather than copying credentials;
+profile/appdata/temp directories and keyring are isolated. An initially omitted
+SystemDrive variable caused generated Windows cache files beneath a literal
+workspace `%SystemDrive%` directory. Moved that generated directory beneath the
+ignored diagnostic tools directory and corrected the future launcher environment.
+No source/private profile was involved. Full-memory dumps remain ignored and
+were taken only from the newly launched synthetic Python target.
+
+Setup attempts 1–3 are retained but are not successful captures: the first watched
+only the venv launcher, the second stopped at the child's initial breakpoint,
+and the third reached the internal heap breakpoint without a usable stdin pipe.
+Authoritative baseline capture is `baseline-4`: one cycle passed, then the next
+reported `Critical error detected c0000374`. Windows stopped at an internal
+`int3` (`80000003`) before the named heap exception; live `.ecxr` failed. The
+current breakpoint registers/stack and full-memory dump were saved, not an
+invented `c0000374` exception context. Dump size: 1,082,671,105 bytes. Initial
+frames had export symbols only, showing free/heap checking below PySide QObject
+wrapping and Qt application event filtering. Debugger exit 0 denotes completed
+capture, not a passing application run. Independent targeted PID-only follow-up
+confirmed that the debugger, venv launcher and actual Python child had exited.
+
+Built the official 6.11.2 PySide/Shiboken source against matching Qt base/PDF SDKs
+with release Python 3.13.15, MSVC 19.51.36260 x64, CMake 4.3.1-msvc1,
+Ninja 1.13.2 and Qt libclang 20.1.3. All downloads/checksums, exact commands,
+versions and native artifact hashes are under `source-build/`. The successful
+module subset is `Core,Gui,Widgets,Network,Test,Pdf,PdfWidgets`, with
+`--relwithdebinfo --no-strip --no-qt-tools --limited-api=yes --parallel=4`.
+Network is a QtPdf dependency. Shorter build paths fixed a Ninja/CMake path-length
+failure. All native compilation/linking completed in 117.9 seconds; packaging
+then required an empty generated omitted-Designer plugin directory and an
+`--only-package` retry. Neither upstream nor application source was patched for
+the build. Matching PDBs and generated wrappers are retained. This demonstrates
+this tested compiler/SDK subset, not universal toolchain compatibility.
+
+Fresh `source-1` capture uses those rebuilt binaries, not mismatched PDBs applied
+to pip-wheel DLLs. Preflight verifies package origins and unchanged versions of
+the other 79 baseline packages; build-environment dependencies are not admitted
+into the application's runtime. Three cycles passed, then cycle four reached
+the same critical-heap breakpoint. Dump size: 1,087,365,096 bytes. Private matching
+PDBs resolve `PySide::getWrapperForQObject` at local `pyside.cpp:843`, generated
+watched-QObject conversion/event-filter code, `QObjectWrapper::eventFilter`,
+and Qt application event filtering. Corrected offline `.ecxr` restores the saved
+breakpoint context; the earlier offline log that selected thread index 2 is not
+the authoritative exception-context analysis. One folded generated frame is
+labelled `QWinEventNotifierWrapper`, but its ownerClassName local is `QObject`;
+this is not evidence that the watched object is a QWinEventNotifier. These
+source-backed frames locate detection/cleanup, not the first corrupting write/free
+or the Python filter subclass by themselves.
+
+### Controlled focus-policy comparison and implementation
+
+The application-wide opening-focus filter was a concrete lead from that native
+path. Its Python type check happens after PySide has already converted the
+watched QObject for the Python callback, so checking for dialogs inside that
+callback does not restrict which native objects cross the binding boundary.
+
+A narrow diagnostic import overlay disables only `install_initial_focus` while
+retaining all colors, repolishing, test assertions and normal GC `(2000,10,10)`.
+Two enabled controls heap-aborted. Five independent disabled runs completed all
+four archive cycles and exited 0 (20 cycles); both complete journey sizes also
+passed with clean exits. Logs confirm filter presence/absence. This implicates
+the policy's installation/callback/focus path; the intervention alone does not
+separate those effects or prove the native library's original defect. Plugin,
+runner, hashes and raw results are retained in the ignored diagnostic directory.
+
+Dropping automatic focus would lose the requested keyboard behavior. Keeping an
+application-wide callback would continue observing unrelated Qt internals. Chose
+explicit window-owned registration: each V2 task window retains a policy parented
+to itself and installs it on itself. Shared styled surfaces pass their root;
+startup/workspace and 13 additional editable task-dialog constructors explicitly
+register. Three report/evidence/manifest surfaces with no eligible input require
+no registration. Embedded views are excluded. No widget sweep, global Qt monkeypatch
+or new native dependency is introduced into the product.
+
+The existing eligible-input/tab-chain rules and context-bound zero timers remain.
+An opening generation invalidated on hide/deactivate prevents stale queued work
+from affecting a reopening or later activation. Destruction cancels context-bound
+work; later user focus/typing is preserved. Focused tests cover ownership,
+idempotence, unrelated/non-V2/embedded windows, hide/reopen, destruction and
+deactivated queued callbacks in addition to existing account/category/Tab behavior.
+The 17-file focus change is limited to the helper, registration sites and focused
+tests. Existing correction-note changes are preserved. Qt remains pinned at 6.11.2;
+the source build is diagnostic only and no GC workaround is shipped.
+
+### Final verification and limits
+
+Final source has one independent manifest with no drift across these checks:
+
+- Unchanged four-cycle archive on normal pip 6.11.2: five offscreen and three
+  native Windows fresh processes, **32 cycles passed**, every process exit 0.
+- The same archive with source-built 6.11.2 bindings: **4 cycles passed**, clean
+  exit, imports verified in the rebuilt package tree.
+- A further source-built run under CDB after the fix: **4 cycles passed**, clean
+  debugger/test exit, no fault marker or dump. `fixed-debugger-source-1` retains
+  that positive control. Total unchanged archive coverage: **40 cycles** across
+  ten fresh test processes. The reusable capture tool now defaults to protecting
+  the fixed source manifest; `--source-state original` instead requires the
+  preserved original-source fingerprint.
+- Integrated selection: **17 passed offscreen and 17 passed native Windows**.
+  Each mode includes all 11 correction/journey/category child process records
+  with exit 0 and no timeout; full journey assertions are unchanged.
+- Focus suite: **12 passed** in the desktop specialist's isolated offscreen run
+  and **12 passed native Windows** on final source. Disposal/cancel coverage:
+  **2 passed**, retaining PDF buffer/hidden-close and destroyed-host async checks.
+- Changed-file Ruff and diff checks passed. Independent review found no material
+  focus/lifetime or verification finding. Actual native category rendering shows
+  readable Segoe UI, first-name focus and existing colors/budget controls. Native
+  artifacts confirm the Windows plugin and 100% scaling. Native full-journey
+  artifacts cover 1050x700/1280x800 and retain the review/correction/report UI.
+
+The known reproduced Windows failure is resolved by narrowing the focus policy
+under these bounded checks. General heap safety, the original native invalid
+instruction and whether an upstream PySide/Qt defect should be reported remain
+unproven. No installed/offline/macOS/accessibility-tool or actual human acceptance
+is inferred. The original diagnostic archive is preserved; it imports current
+code and now passes, as expected after the application change. Raw earlier
+failures, native dumps, original source manifest, symbols/build inputs and control
+results remain available for future investigation. At this diagnostic checkpoint,
+the changes were uncommitted; the later owner-requested local commits are recorded
+in the closeout above. No release action was performed.
+
+Durable sanitized native/build/control/final-result metadata and a compact native
+stack are in [native investigation evidence](../../devtools/qt_heap_crash/native-investigation-20261109.json).
+Full dumps, builds, tools, logs and screenshots stay under the ignored
+`scratch/qt-native-debug-20261109/` directory. `capture.py` and `verify_fix.py`
+are the retained diagnostic entry points; the latter protects the final source
+manifest and runs the original archive without an overlay or GC changes.
+
+## November 9: workflow styling and native diagnostic feasibility
+
+Owner requested the proposed styled/unstyled comparison, then asked about
+source-built PySide6/Shiboken for meaningful native stacks and supplied two
+Stack Overflow references. Primary owns this experiment and record; acceptance
+independently checks the import overlay, source hashes, raw outcomes and runtime
+artifacts. Desktop separately researches official build/debug guidance and
+read-only local tool availability. No product UI, financial logic, assertions,
+dependency pins, live profiles, services or release artifacts are changed.
+
+Implemented a diagnostic import-time AST overlay in ignored
+`scratch/qt-unstyled-20261110/style_probe.py`, selected explicitly as a pytest
+plugin by adjacent `run_probe.py`. It transforms ten presentation sites in only
+`v2_form_state`, `v2_review_navigation` and `v2_import_account_review`: three
+stylesheet calls, two unpolish/two polish calls, two selection palette colors
+and the staged-row BackgroundRole color. Both arms have the same counters;
+styled retains each original call, unstyled bypasses it. Counters in the latter
+mean reached/bypassed attempts, not executed Qt polish operations. No global
+Qt method monkeypatch, GC manipulation, forced collection, delays, retries or
+object-retention workaround is used.
+
+Field-state validation, properties, accessible descriptions, initial focus,
+geometry/repaint updates and navigation event handling remain. Full journeys run
+their original scenario nodes directly, with each size in its own fresh process;
+assertions are unchanged. Every probe uses synthetic disposable profiles, null
+keyring and isolated HOME/USERPROFILE/APPDATA/LOCALAPPDATA/TEMP/TMP, with user-site
+imports explicitly disabled. All 516 frozen Python sources remained unchanged.
+The baseline is Python 3.13.15, Qt/PySide6/Shiboken 6.11.2, normal GC thresholds
+`(2000,10,10)` and unchanged other dependencies.
+
+| Probe (one fresh-process trial per arm) | Styled | Unstyled |
+| --- | --- | --- |
+| Four-cycle archive, offscreen | Cycle 4 heap abort | Cycle 4 heap abort |
+| Complete journey, 1050x700, offscreen | Heap abort at scenario line 343 | Heap abort at scenario line 343 |
+| Complete journey, 1280x800, offscreen | Heap abort at scenario line 343 | Heap abort at scenario line 343 |
+| Four-cycle archive, native Windows | Cycle 4 heap abort | Cycle 4 heap abort |
+
+All eight probes exited `3221226356` / `0xc0000374`, without timeout.
+Runtime artifacts confirm the requested actual `offscreen`/`windows` plugins
+and Segoe UI. Inspected paired actual 1050x700 staged-review screenshots
+`06-category-manager-cancel-keeps-staged-choices.png` in each offscreen archive's
+first-case artifacts: styled shows green fields/blue action; unstyled has native
+fields/button/selection, with the same staged choice and review note. This is
+diagnostic visual confirmation, not new usability or human acceptance evidence.
+
+Independent acceptance review confirmed all ten sites, unchanged source hashes
+and all eight failure signatures. Removing these workflow shading/repolishing
+operations does not eliminate the fault: they are not necessary for this
+reproduction. This does not exonerate every rendering/lifetime path. Native
+painting, fonts, frames and account display native palette-role remapping remain;
+instrumentation changes allocations, though both arms reproduce the signature.
+Product colors remain unchanged. Raw logs/screenshots/plugin/runner are retained
+in that ignored scratch directory; the durable
+[style comparison artifact](../../devtools/qt_heap_crash/style-comparison-20261109.json)
+retains commands, outcomes, runtime examples, counters and harness/source hashes.
+
+Reference investigation:
+
+- [CPython C-extension example](https://stackoverflow.com/questions/64957662/cpython-memory-heap-corruption-issue)
+  resolved an ownership/reference-count error when returning boolean globals.
+  The general use-after-free category is relevant to a Python/C++ boundary, but
+  is not evidence that ParseTrail has that particular defect. Its literal old
+  True/False deallocation mechanism differs from our Python 3.13 runtime:
+  [CPython documents booleans as immortal since 3.12](https://docs.python.org/3.13/c-api/bool.html).
+- [Odoo/Windows example](https://stackoverflow.com/questions/61935980/process-finished-with-exit-code-1073740940-0xc0000374)
+  reports a system UTF-8 locale workaround, with mixed follow-up results and no
+  demonstrated shared native cause. Read-only local measurement: ANSI code page
+  1252, OEM 437, preferred encoding cp1252, filesystem encoding UTF-8, Python
+  UTF-8 mode off. No Windows language/locale setting was changed. Process-only
+  PYTHONUTF8 is not equivalent to changing the system ANSI code page; no locale
+  experiment was claimed.
+
+Source-built PySide6/Shiboken can be imported from Python and debugged natively:
+[Qt's mixed-debugging guide](https://doc.qt.io/qtforpython-6/tutorials/debugging/mixed_debugging.html)
+explicitly supports attaching a C++ debugger to Python. Keep exact matching
+PYD/DLL/PDB files and generated wrapper sources; prefer a release-compatible
+symbol build first to preserve the failing runtime, verifying the selected
+release's actual build options. Qt symbols must match the DLLs actually loaded;
+rebuilding Qt is optional when only binding frames or matching Qt symbols are
+needed. Importing source-built modules alone does not enrich a Python traceback.
+An allocation/free fault may precede the visible detection stack, so a native
+debugger plus targeted heap diagnostics may still be needed. No global
+`python.exe` PageHeap setting should affect unrelated owner work.
+
+The [Windows full-Debug instructions](https://doc.qt.io/qtforpython-6/building_from_source/windows.html#creating-debug-builds)
+use `python_d.exe` and debug Python libraries; that is a separate environment,
+not an interchangeable replacement for the current release interpreter.
+Required native tooling is not currently on PATH (`cmake`, `ninja`, `cl`, `cdb`,
+`windbg`, `gflags`). Exact-path vswhere reports Visual Studio Community 2026,
+but C++ workload/toolset availability is not established. No compiler/debugger
+installation, Qt/bindings source build or native-debug run was undertaken by
+this feasibility check; the meaningful native corruption stack remains missing.
+
+Owner subsequently confirmed installing the C++ toolchain while learning Rust.
+Additional read-only exact-path inspection confirms Visual Studio Community 2026
+with the x64 C++ tools component, MSVC `14.51.36231` (`cl.exe`), `VsDevCmd.bat`,
+and bundled CMake/Ninja under `C:\Program Files\Microsoft Visual Studio\18\Community`.
+Their absence from the original PATH is not absence from the machine. The usual
+Windows Kit x64 `cdb.exe`/`gflags.exe` paths and `C:\Qt\MaintenanceTool.exe`
+are absent; this does not prove no alternate installation exists. Existing
+Visual Studio native debugging is the first path to try before a large source
+build. Verified the exact upstream
+[v6.11.2 options source](https://github.com/pyside/pyside-setup/blob/v6.11.2/build_scripts/options.py):
+`--relwithdebinfo` is supported for release-mode builds with debug information,
+as are `--module-subset`, `--qtpaths` and `--parallel`. This resolves the earlier
+build-option uncertainty. A source build would use matching 6.11.2 Qt development
+files and PySide/Shiboken source, a separate environment with Python 3.13.15,
+Qt-provided libclang and retained matching PDB/generated wrapper sources. No
+compiler/debugger/SDK download or build has started from these read-only checks.
+
+## November 9: bounded Python and Qt version comparison
+
+Owner explicitly authorized trying several runtime combinations for the recurring
+Windows heap fault. Primary owns the comparison, integration and this record;
+desktop specialists own disjoint candidate environments and acceptance separately
+reviews isolation, archive fidelity and observed outcomes. This is diagnostic
+work with synthetic disposable profiles, without changing the application,
+financial policy, tests, live profiles, production or release artifacts.
+
+Baseline: Windows 11 x64, CPython 3.13.15, PySide6/Qt/Shiboken 6.11.2,
+pytest 9.1.1, pytest-qt 4.5.0. New virtual environments hold matched Qt families;
+the 79 other installed package versions are shared read-only with the baseline.
+The Python 3.13.9 control uses the installed older interpreter with the same
+Qt 6.11.2 and other dependencies. These controlled overlays are diagnostic
+environments, not independently resolved clean installations. Actual module
+origins and Qt runtime versions are asserted; loaded DLL origins are not
+inventoried. The baseline environment and dependency pins remain unchanged.
+
+The controller hashes all 516 Python files in `client/src`, `client/tests` and
+`devtools/qt_heap_crash` before and after each probe. All remained unchanged, and
+independent review verified the frozen reproducer/helper/declaration hashes.
+The diagnostic README was deliberately updated with these results; its
+historical hash is not claimed to match. Each probe has fresh
+HOME/USERPROFILE/APPDATA/LOCALAPPDATA/TEMP/TMP directories, null keyring and
+synthetic profiles. Normal GC stays enabled with thresholds `(2000, 10, 10)`;
+there are no added waits, retries, GC suppression, forced collection, object
+retention or relaxed assertions. Full journeys retain their existing separate
+child processes and both 1050x700/1280x800 sizes. Parent invocations use `-s`;
+journey children omit it, with redirected user directories mitigating user-site
+contamination. No human interaction or acceptance is established by these runs.
+
+Offscreen comparison (one fresh-process trial per cell):
+
+| Python | Matched PySide6 / Qt / Shiboken | Archived four-cycle review | Both full journey sizes |
+| --- | --- | --- | --- |
+| 3.13.15 | 6.11.2 baseline | Heap abort in cycle 4 | Both child processes heap-aborted |
+| 3.13.15 | 6.11.3 | Heap abort in cycle 4 | Both child processes heap-aborted |
+| 3.13.15 | 6.10.3 | Heap abort in cycle 4 | Both child processes heap-aborted |
+| 3.13.9 | 6.11.2 | Heap abort in cycle 4 | Both child processes heap-aborted |
+| 3.13.15 | 6.12.0 + Pdf 6.12.0.140 | Four bodies passed, then fatal shutdown and timeout | Both passed; clean process exit |
+
+These heap aborts are `0xc0000374` / unsigned exit `3221226356`. The archived
+wait at line 174 detects corruption during GC; this does not identify where
+memory was corrupted. An additional native Windows Qt 6.10.3 probe heap-aborted
+in cycle 2. Both native journey sizes instead reported deleted `QAction` wrappers
+in workspace `_profile_job_busy`/refresh and failed. Runtime artifacts confirm
+the `windows` plugin, Segoe UI and 100% scaling. This gives additional lifetime
+failure evidence; it does not establish its causal relationship to heap corruption.
+
+Qt 6.12.0 requires the separately packaged `PySide6-Pdf==6.12.0.140` to supply
+the application's QtPdf/QtPdfWidgets imports. Installed that wheel only in its
+candidate environment with no dependency resolution, verified its Essentials
+6.12.0 requirement and candidate module origins, and recorded it separately
+from the unchanged non-Qt dependencies. Its archived four test bodies passed,
+then the process reported a fatal abort and Windows access violations after the
+pytest summary, apparently during interpreter shutdown (no Python frame).
+A pytest pass summary before a process crash is not a
+successful probe. The process remained alive until the 240-second timeout;
+the controller terminated its own test process (return code 1 after cleanup,
+not a natural crash exit). Both complete journey sizes passed with clean process
+exit in 11.112 seconds. This is promising but insufficient for adoption while
+the archive still fatally fails. Neither 6.12.0 probe logged `0xc0000374`; its
+shutdown abort/access violations are a separate observed failure signature.
+The taskkill tree-cleanup attempt reported access denied; the controller's
+fallback killed its own process. This was an OS cleanup error, without an
+approval-review rejection or any targeting of unrelated processes.
+
+Across twelve probe invocations, the bounded comparison found no fully clean
+replacement and weakens a Python-3.13.15-only regression hypothesis.
+No candidate justifies changing
+the 6.11.2 pin or claiming the fault fixed. Further runtime expansion is not
+selected; any future investigation should use native memory/lifetime diagnostics
+to locate corruption rather than hide it. Independent acceptance review found
+no source/assertion/GC workaround and agreed with retaining the existing pin.
+Final independent review matched all twelve durable result records and five
+runtime records against raw evidence after path sanitization, including the
+6.12.0 distinction between a clean journey and a fatal archive shutdown.
+
+Raw setup logs, runtime metadata, command arrays, per-probe `result.json`, stdout,
+screenshots, controller and frozen source manifest are under the ignored
+`scratch/qt-version-matrix-20261109/` directory, partitioned by runtime and probe.
+The durable [comparison artifact](../../devtools/qt_heap_crash/version-comparison-20261109.json)
+retains all twelve result records/command arrays, sanitized runtime metadata,
+and hashes of the exact scratch controller and source manifest.
+Representative invocation from the repository root:
+
+```powershell
+& .\client\.venv\Scripts\python.exe -s scratch/qt-version-matrix-20261109/matrix.py probe 6.11.3 --kind archive --mode offscreen --trial 2
+& .\client\.venv\Scripts\python.exe -s scratch/qt-version-matrix-20261109/matrix.py probe 6.11.3 --kind journey --mode offscreen --trial 2
+```
+
+The controller deliberately refuses to overwrite an existing trial directory.
+The archived reproducer remains available independently of these scratch
+environments. No current-source correction-note implementation was reverted.
+
+## November 9: separate saved review notes from correction reasons
+
+Owner approved separating read-only saved context from a new correction draft.
+Selected outcome: ordinary cash/card/register review shows **Saved review note**
+above an initially empty **Reason for correction**. Untouched reviewed entries
+have no unsaved cue, enabled correction/withdrawal action or discard prompt.
+An actual category change (or already-supported card accounting-date correction)
+requires an explicitly authored reason before confirmation. Reason-only input
+is an unsaved draft and can support the separate explicit withdrawal confirmation.
+No stored note silently authorizes either action. Cancel retains the draft;
+successful save refreshes the active saved note and clears the editable reason.
+
+ui_ux reviewed the interaction before implementation: one compact read-only
+context row, at most two wrapped lines with keyboard-readable/copyable overflow;
+preserve at least four cash/three card table rows at 1050x700 and never hide
+nonempty staged work. Row-switch-back/category management/same-entry refresh
+retain appropriate drafts. A changed active entry key invalidates its old draft.
+Pending/multi/external-owner flows keep their existing staging/ownership model.
+
+Primary owns integrated result, contracts/this record and existing report/cue
+regressions. Desktop owns shared/adaptor presentation and focused isolated
+correction scenarios; acceptance independently verifies the integrated result.
+Synthetic/disposable profiles only. No core/schema/accounting/source-policy
+changes, live profiles, production services or release work are selected.
+The archived native fault stays deferred; focused Qt cases use process isolation.
+
+Implemented the model in the shared ordinary review plus cash/card adapters
+(register inherits card behavior). Saved context is a neutral, read-only
+QPlainTextEdit with keyboard/mouse selection and scrolling, bounded to two lines.
+Pending/multi/externally owned rows hide it. Reason-only edits are real drafts
+but do not enable category correction; correction/date edits show **Unsaved
+correction** and require an explicitly entered reason. A user may deliberately
+enter the same text as a prior reason; text inequality is not an authorization
+rule. The separate withdrawal confirmation still describes the inverse effects.
+
+Fixed the underlying presentation leaks: a row without a matching draft now
+clears the preceding row's reason, and asynchronous draft restoration checks both
+row ID and active entry key. Same-entry edits/category manager/cancel retain the
+draft; stale-entry proposals are removed without discarding unrelated row drafts
+or captured staged notes. Successful writes clear the current draft and show the
+replacement entry's saved reason. Only an empty staged-summary strip hides in
+correction mode; unrelated nonempty staged work stays visible. No ledger/schema,
+source policy or financial handlers were changed.
+
+Final native inspection exposed two concrete implementation issues and rechecks:
+at 1050x700 the long-note form initially left only 107 pixels versus the required
+120 for four cash rows; compacting existing decision margins/gaps recovered the
+space without smaller fonts/controls. After a confirmed write disables its action,
+native Qt could have no focused widget. Successful refresh now restores table
+focus only when this view is visible, its window active and focus absent, leaving
+existing focus/other windows alone. Card date remains before saved context/reason
+in keyboard order. The focused helper also uses a real Tab event to recover from
+an initially unfocused native surface. Long saved notes explicitly enable
+keyboard selection, which read-only QPlainTextEdit did not provide by default.
+
+Verification and observations:
+
+- Final offscreen selection: **7 new correction scenarios passed; 2 original full
+  journeys failed with heap corruption**, 28.63s total. Each scenario ran in a
+  fresh child. New coverage includes long/max-500-character notes at 1050x700 and
+  1280x800, keyboard select/scroll/Tab, reason-only/blank states, category-manager
+  close, canceled confirmation, row-switch-back/same-entry refresh, save/withdraw,
+  unrelated drafts, retained staged notes, stale replacement, card-date and fixed
+  register-date policy. Earlier clean new-only check: 7 passed in 21.38s.
+- First native combined run: **8 passed, 4 failed** in 45.09s. All original
+  journeys/refusal/cancel/category-navigation cases passed; four new cases found
+  the layout/focus issues above. After fixes, all **4 affected native cases passed
+  in 14.05s**, with no assertion weakening. The other three new native scenarios
+  had passed in the first run. These are targeted rechecks, not a claim that a
+  single final unchanged 12-case command passed.
+- Existing report-return/cash cue regressions were strengthened: **2 passed in
+  4.09s**. Targeted existing async/filter, unrelated common proposal, captured
+  batch note and card category/date retention checks: **4 passed in 7.29s**.
+  Counts overlap; they are not summed as unique coverage.
+- ui_ux inspected actual final native images, including 1050x700 long/canceled
+  correction and saved card/register states. Two full note lines, internal
+  scrolling and four full cash rows are readable; no material remaining design
+  finding. Primary inspected the final long-note image too. A final minor hint
+  now says "enter a new reason" consistently with the field terminology.
+- Acceptance attempted the native 1050x700 report-to-correction goal using its
+  own synthetic data and a 500-character original reason, without a control
+  walkthrough/new-test inspection. No product wrong turns or assistance were
+  reported. It distinguished saved context/blank new input, canceled then saved
+  Food-to-Travel correction, returned to unchanged November report dates/tab,
+  saw Food $0/Travel $4/total $4/one pending Tea, and declined withdrawal with no
+  saved change. PageDown scrolled the long note; Tab reached the editable reason.
+  Read-only verification found exact original source/evidence, preserved original
+  note, exact new reason, one balanced correction, net checking -400 minor and no
+  Tea allocation or withdrawal. This was an agent with prior ParseTrail familiarity,
+  not unfamiliar-human acceptance. Its attempt did not separately author an
+  unrelated pending draft; scripted checks supply that coverage.
+- Acceptance's harness selected rather than deleted its final withdrawal draft
+  when sending empty text. That final clear-state recheck was not performed and
+  is not claimed. Its normal leave-review prompt then blocked harness shutdown;
+  the agent identified and stopped only its uniquely titled disposable process.
+  This is distinct from a product hang or crash. Earlier untouched/post-save
+  defaults and data checks completed. No owner's app/profile was accessed.
+- Eight changed/new Python files passed Ruff check/format; scoped diff checks
+  passed. No extra dependency or commit was requested for this follow-up.
+
+The general native/GC defect **recurred** during an intermediate offscreen mixed
+run (8 passed, 2 full-child heap aborts) and again in both full journeys of the
+final offscreen selection above, at the original post-correction wait (scenario
+line 343). Process isolation therefore is not a sufficient guarantee as allocations
+change. Native full journeys passed; targeted note scenarios passed on both modes.
+A bounded read-only desktop review found no clear new ownership or direct
+reason-signal recursion defect, but does not establish cause or innocence. The
+crashes remain failures, not skipped/retried/GC-suppressed successes. No deeper
+root-cause experiment or production workaround was added. The existing archive
+stays unchanged; further investigation remains a separate decision. Integrated
+offscreen stability is incomplete despite the implemented/verified note behavior.
+
+Evidence: `scratch/v2-correction-note-primary/` and adjacent
+`v2-correction-note-primary-{focused,integrated,retention,native,final-offscreen}.log`,
+`scratch/v2-correction-notes-offscreen-clean/`,
+`scratch/v2-correction-notes-native-fixes/`, and
+`scratch/correction-note-acceptance-20261109/` (images 03-11 and seed.json).
+Human acceptance and broader platform/installed/release readiness remain separate.
 
 ## November 8: one staging flow for ordinary review
 
@@ -119,10 +700,11 @@ fails. The next useful evidence is a native heap allocation/free stack; a native
 debugger is not installed in this environment. No speculative lifecycle fix or
 GC suppression is shipped. No live-profile, service or release action was added.
 
-One minor separate usability observation remains: a report-return correction can
+One minor separate usability observation was recorded: a report-return correction can
 prefill the original review note and describe it as a new unsaved note, enabling
 withdrawal without a new edit. No withdrawal occurs without confirmation. This is
-distinct from the resolved staged-badge finding and is not attested as fixed.
+distinct from the resolved staged-badge finding. The November 9 saved-note/reason
+follow-up above implements and verifies its fix; the lifecycle fault remains open.
 Actual human acceptance, OS-input/assistive technology, other scaling/platforms,
 installed/offline behavior and release authorization remain separate.
 
