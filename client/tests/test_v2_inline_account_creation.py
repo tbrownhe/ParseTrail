@@ -35,6 +35,7 @@ from devtools.parser_engine_pilot import test_two_date_card_lines as yamaha
 from .test_v2_account_binding_review import DEFINITION as ACCOUNTLESS_DEFINITION
 from .test_v2_account_binding_review import SOURCE as ACCOUNTLESS_SOURCE
 from .test_v2_source_account_bindings import CASH_DEFINITION, CASH_SOURCE
+from .v2_institution_helpers import add_test_financial_account
 
 PDF_SOURCE = b"%PDF-synthetic"
 
@@ -337,7 +338,7 @@ def test_locked_assignment_cannot_use_creation_to_bypass_correction(tmp_path, mo
     evidence = build_source_evidence(source, definition, suffix=".csv")
     workspace = _workspace(tmp_path, definition, evidence, institution="synthetic", kind="asset", source=source)
     with V2ProfileStore.open(workspace.profile_path) as store:
-        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Checking", "asset", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         if accountless:
             store.assert_file_account(evidence.source_sha256, "cash")

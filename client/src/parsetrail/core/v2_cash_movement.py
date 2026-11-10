@@ -10,6 +10,7 @@ from pathlib import Path
 
 from parsetrail.core.ledger import JournalEntry
 from parsetrail.core.v2_builtin_categories import category_labels
+from parsetrail.core.v2_institutions import Institution, institution_label
 from parsetrail.core.v2_profile_store import (
     FinancialAccount,
     JournalExportAccount,
@@ -34,7 +35,9 @@ MOVEMENT_LABELS = {
 }
 
 
-def cash_account_labels(accounts: tuple[FinancialAccount, ...]) -> dict[str, str]:
+def cash_account_labels(
+    accounts: tuple[FinancialAccount, ...], institutions: tuple[Institution, ...] = ()
+) -> dict[str, str]:
     """Distinguish permitted duplicate names without showing full account numbers."""
     scopes = {
         "account_total": "whole account",
@@ -45,7 +48,7 @@ def cash_account_labels(accounts: tuple[FinancialAccount, ...]) -> dict[str, str
         raise ProfileFormatError("financial_account_scope_invalid")
     bases = {
         account.id: (
-            f"{account.name} ({account.institution_key}, {account.kind}"
+            f"{account.name} ({institution_label(account.institution_key, institutions)}, {account.kind}"
             + (f", {scopes[account.tracking_scope]}" if account.tracking_scope != "account_total" else "")
             + (f", ending {account.full_account_number[-4:]}" if account.full_account_number else "")
             + ")"

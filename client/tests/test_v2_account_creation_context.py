@@ -57,7 +57,7 @@ def test_exact_selected_section_retains_source_page_period_and_reported_balances
     evidence = _evidence()
     draft = _suggest(evidence, catalog=_catalog(evidence))
     savings, checking = evidence.payload.accounts
-    assert draft.name == "Occu 3479"
+    assert draft.name == "Oregon Community Credit Union 3479"
     assert (draft.kind, draft.tracking_scope) == ("asset", "account_total")
     assert draft.source_sha256 == evidence.source_sha256
     assert draft.source_locations == checking.identity_locations
@@ -94,7 +94,7 @@ def test_missing_or_mismatched_catalog_does_not_turn_section_label_into_financia
     for supplied in (None, stale):
         draft = _suggest(evidence, catalog=supplied)
         assert draft.name == "Account 3479"
-        assert draft.kind is None and draft.institution_key == "" and not draft.verified_context
+        assert draft.kind is None and draft.institution_key is None and not draft.verified_context
         assert draft.product_label is None
         assert draft.tracking_scope == "account_total"
         assert draft.opening_balance == evidence.payload.accounts[1].opening
@@ -181,7 +181,7 @@ def test_default_name_uses_only_last_visible_run_and_preserves_separate_full_num
     )
     changed = evidence.model_copy(update={"payload": evidence.payload.model_copy(update={"accounts": (section,)})})
     draft = suggest_account_creation(changed, catalog=_catalog(changed), source_identity=identity, source_form=form)
-    assert draft.name == " ".join(part for part in ("Occu", expected_tail) if part)
+    assert draft.name == " ".join(part for part in ("Oregon Community Credit Union", expected_tail) if part)
     assert draft.source_identity == identity and draft.source_form == form
     assert draft.full_account_number == full_number
     if not expected_tail:

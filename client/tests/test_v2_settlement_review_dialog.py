@@ -14,6 +14,7 @@ from .test_v2_card_purchase_review import _chase_profile
 from .test_v2_settlements import profile
 from .test_v2_transfer_review_async import wait_for_transfers
 from .test_v2_transfers import BANK_DEFINITION
+from .v2_institution_helpers import add_test_financial_account
 from .v2_job_wait import wait_for_jobs
 
 
@@ -428,7 +429,7 @@ def test_assumed_date_opt_in_remains_explicit_but_opt_out_allows_whole_withdrawa
     bank = build_source_evidence(content, BANK_DEFINITION, suffix=".csv")
     with V2ProfileStore.open(path) as store:
         store.import_source(content, BANK_DEFINITION, bank, suffix=".csv")
-        store.add_financial_account(FinancialAccount("checking", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("checking", "Checking", "asset", "synthetic"))
         store.bind_source_account(bank.source_sha256, "Checking A", "opaque", "checking")
         account = card.payload.accounts[0]
         store.bind_source_account(card.source_sha256, account.source_identity, account.source_identity_form, "card")

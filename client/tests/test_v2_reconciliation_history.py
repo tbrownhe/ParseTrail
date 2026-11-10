@@ -17,6 +17,7 @@ from devtools.parser_engine_pilot.test_table_bank_source_output import evidence 
 
 from .test_v2_statement_journal_comparison import _profile
 from .test_v2_statement_reconciliation import _review_and_post
+from .v2_institution_helpers import add_test_financial_account
 
 
 def _save(store: V2ProfileStore, source: str, *, reason: str = "Reviewed exact synthetic endpoints"):
@@ -227,7 +228,7 @@ def test_history_reads_one_snapshot_and_uses_conservative_global_version(tmp_pat
         def mutate_after_version_is_read():
             result = original()
             with V2ProfileStore.open(path) as other:
-                other.add_financial_account(FinancialAccount("other", "Other", "asset", "synthetic"))
+                add_test_financial_account(other, FinancialAccount("other", "Other", "asset", "synthetic"))
             return result
 
         monkeypatch.setattr(store, "_statement_reconciliation_checks", mutate_after_version_is_read)

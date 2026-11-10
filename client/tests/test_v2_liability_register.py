@@ -17,6 +17,7 @@ from devtools.parser_engine_pilot import test_two_date_card_lines as yamaha
 from devtools.parser_engine_pilot.synthetic_family_sources import family_sources
 
 from .test_v2_card_purchase_review import _chase_profile
+from .v2_institution_helpers import add_test_financial_account
 
 
 def test_finite_register_policy_preserves_printed_dates_and_full_signed_effect():
@@ -72,10 +73,10 @@ def _profile(
     with V2ProfileStore.create(path) as store:
         store.import_source(raw, definition, evidence, suffix=".pdf")
         store.import_source(bank_raw, bank_definition, bank, suffix=".csv")
-        store.add_financial_account(
-            FinancialAccount("register", "Yamaha register", kind, "synthetic", tracking_scope=scope)
+        add_test_financial_account(
+            store, FinancialAccount("register", "Yamaha register", kind, "synthetic", tracking_scope=scope)
         )
-        store.add_financial_account(FinancialAccount("bank", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("bank", "Checking", "asset", "synthetic"))
         store.add_category_account("expense:first", "Expense", "expense")
         store.add_category_account("expense:other", "Other expense", "expense")
         store.add_category_account("income:first", "Income", "income")

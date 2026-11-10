@@ -18,6 +18,8 @@ from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
 
+from parsetrail.core.v2_account_products import AccountProductProfile, account_product, validate_product_type
+
 MAX_CATALOG_BYTES = 1024 * 1024
 MAX_DEFINITION_BYTES = 64 * 1024
 MAX_DEFINITIONS = 128
@@ -46,6 +48,32 @@ class CatalogAccountContext(BaseModel):
 
     institution_key: str = Field(pattern=IDENTIFIER)
     kind: Literal["asset", "liability"]
+    product_type: str | None = None
+
+    @model_validator(mode="after")
+    def product_agrees_with_class(self):
+        if self.product_type is not None and account_product(self.product_type).kind != self.kind:
+            raise ValueError("account_product_incompatible")
+        return self
+
+
+class CatalogAccountProfile(BaseModel):
+    """Signed format compatibility, independent of source-identifying context."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
+
+    institution_key: str | None = Field(default=None, pattern=IDENTIFIER)
+    product_type: str
+    tracking_scope: Literal["account_total", "principal_component", "cash_component"]
+
+    @model_validator(mode="after")
+    def valid_product_scope(self):
+        product = account_product(self.product_type)
+        validate_product_type(self.product_type, product.kind, self.tracking_scope)
+        return self
+
+    def profile(self) -> AccountProductProfile:
+        return AccountProductProfile(self.institution_key, self.product_type, self.tracking_scope)
 
 
 class CatalogDefinition(BaseModel):
@@ -58,6 +86,14 @@ class CatalogDefinition(BaseModel):
     sha256: str = Field(pattern=SHA256)
     content_base64: str = Field(min_length=1, max_length=MAX_DEFINITION_BYTES * 2)
     account_context: CatalogAccountContext | None = None
+    account_profiles: tuple[CatalogAccountProfile, ...] = Field(default=(), max_length=16)
+
+    @model_validator(mode="after")
+    def unique_profiles(self):
+        profiles = [profile.profile() for profile in self.account_profiles]
+        if len(set(profiles)) != len(profiles):
+            raise ValueError("duplicate_account_profile")
+        return self
 
 
 class CatalogEnvelope(BaseModel):
@@ -91,6 +127,7 @@ class VerifiedDefinition:
     content: bytes
     sha256: str
     account_context: CatalogAccountContext | None = None
+    account_profiles: tuple[AccountProductProfile, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -157,8 +194,16 @@ def verify_catalog(
             entry.parser_id, entry.revision, entry.suffix
         ):
             raise CatalogError("definition_identity_mismatch")
-        verified.append(VerifiedDefinition(identity, content, entry.sha256, entry.account_context))
-    return VerifiedCatalog(
+        verified.append(
+            VerifiedDefinition(
+                identity,
+                content,
+                entry.sha256,
+                entry.account_context,
+                tuple(profile.profile() for profile in entry.account_profiles),
+            )
+        )
+    catalog = VerifiedCatalog(
         envelope.release_sequence,
         envelope.source_revision,
         envelope.key_id,
@@ -166,6 +211,16 @@ def verify_catalog(
         signature,
         tuple(verified),
     )
+    # A signed catalog still must not introduce indistinguishable institution
+    # identities. Local import avoids a module-initialization cycle with the
+    # registry's typed VerifiedCatalog input.
+    from parsetrail.core.v2_institutions import catalog_institutions
+
+    try:
+        catalog_institutions(catalog)
+    except ValueError as exc:
+        raise CatalogError(str(exc)) from None
+    return catalog
 
 
 def _read_limited(path: Path, limit: int) -> bytes:
@@ -220,14 +275,19 @@ class CatalogCache:
             raise CatalogError("catalog_pointer")
         return verified
 
-    def activate_directory(self, release_dir: Path) -> VerifiedCatalog:
-        """Activate a local signed release pair through the normal trust boundary."""
+    def inspect_directory(self, release_dir: Path) -> VerifiedCatalog:
+        """Authenticate a selected release without changing the active pointer."""
         release_dir = release_dir.expanduser()
         if release_dir.is_symlink() or not release_dir.is_dir():
             raise CatalogError("catalog_release_directory")
         snapshot = _read_limited(release_dir / "catalog.json", MAX_CATALOG_BYTES)
         signature = _read_limited(release_dir / "catalog.sig", SIGNATURE_BYTES)
-        return self.activate(snapshot, signature)
+        return verify_catalog(snapshot, signature, self.trusted_keys, self.admit_definition)
+
+    def activate_directory(self, release_dir: Path) -> VerifiedCatalog:
+        """Activate exactly the authenticated bytes read from the selected pair."""
+        release = self.inspect_directory(release_dir)
+        return self.activate(release.snapshot, release.signature)
 
     def activate(
         self,

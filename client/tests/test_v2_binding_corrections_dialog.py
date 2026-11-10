@@ -16,6 +16,7 @@ from .test_v2_cash_activity_review import DEFINITION, SOURCE
 from .test_v2_reviewed_openings import _profile as opening_profile
 from .test_v2_source_overlap_dialog import _profile as overlap_profile
 from .test_v2_transfers import _profile as transfer_profile
+from .v2_institution_helpers import add_test_financial_account
 
 
 @pytest.fixture
@@ -44,8 +45,8 @@ def _profile(profile, mode="source", *, posted=False):
     row_ids = tuple(row.row_id for row in evidence.payload.rows)
     with V2ProfileStore.create(profile) as store:
         store.import_source(source, definition, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("a", "Checking A", "asset", "synthetic"))
-        store.add_financial_account(FinancialAccount("b", "Checking B", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("a", "Checking A", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("b", "Checking B", "asset", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         if mode == "source":
             store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "a")
@@ -80,7 +81,7 @@ def test_transfer_suggestion_history_alone_disables_ordinary_reassignment(tmp_pa
     )
     incoming = build_source_evidence(incoming_source, DEFINITION, suffix=".csv")
     with V2ProfileStore.open(profile) as store:
-        store.add_financial_account(FinancialAccount("c", "Savings C", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("c", "Savings C", "asset", "synthetic"))
         store.import_source(incoming_source, DEFINITION, incoming, suffix=".csv")
         store.bind_source_account(incoming.source_sha256, "Savings C", "opaque", "c")
         snapshot = store.transfer_review_snapshot(preferences=V2Preferences())
@@ -188,7 +189,7 @@ def test_repeat_context_returns_pending_after_a_to_b_to_a_without_posting(tmp_pa
     profile = tmp_path / "repeat-context.db"
     evidence = overlap_profile(profile)[0]
     with V2ProfileStore.open(profile) as store:
-        store.add_financial_account(FinancialAccount("b", "Checking B", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("b", "Checking B", "asset", "synthetic"))
         pair = store.source_overlap_inventory().candidates[0]
         store.record_source_overlap_review(
             pair.left.row_id,
@@ -309,7 +310,7 @@ def test_source_backed_opening_anchor_remains_blocking_even_without_active_row_a
     evidence = opening_profile(profile, amount_minor=opening_minor)
     section = evidence.payload.accounts[0]
     with V2ProfileStore.open(profile) as store:
-        store.add_financial_account(FinancialAccount("b", "Other account", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("b", "Other account", "asset", "synthetic"))
         store.record_opening_source_review(
             "cash",
             evidence.source_sha256,
@@ -343,7 +344,7 @@ def test_transfer_consumption_blocks_until_whole_event_is_withdrawn(tmp_path, ap
         event_id = store.post_reviewed_transfer(
             outgoing, incoming, preferences=V2Preferences(), reason="Originally confirmed whole event"
         )
-        store.add_financial_account(FinancialAccount("b", "Other account", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("b", "Other account", "asset", "synthetic"))
         source_id = store.connection.execute(
             "SELECT source_sha256 FROM SourceObservations WHERE row_id=?", (outgoing,)
         ).fetchone()[0]
@@ -447,7 +448,7 @@ def test_empty_printed_section_retains_explicit_prior_and_new_account_context(tm
         }
     )
     with V2ProfileStore.open(profile) as store:
-        store.add_financial_account(FinancialAccount("b", "Checking B", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("b", "Checking B", "asset", "synthetic"))
         definition = store.load_import(original.source_sha256).definition
         store.import_source(source, definition, empty, suffix=".pdf")
         store.bind_source_account(empty.source_sha256, section.source_identity, section.source_identity_form, "cash")
@@ -603,7 +604,7 @@ def test_connected_repeat_preview_lists_other_sources_with_readable_context(tmp_
     sources = overlap_profile(profile, variants=("original", "exported", "third"))
     root, supporting, third = (source.payload.rows[0].row_id for source in sources)
     with V2ProfileStore.open(profile) as store:
-        store.add_financial_account(FinancialAccount("b", "Checking B", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("b", "Checking B", "asset", "synthetic"))
         for other in (supporting, third):
             pair = next(
                 pair
@@ -664,7 +665,7 @@ def test_transfer_suggestion_invalidation_is_visible_and_cannot_reactivate_after
             preferences=V2Preferences(),
             reason="Previously dismissed suggested pair",
         )
-        store.add_financial_account(FinancialAccount("b", "Other checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("b", "Other checking", "asset", "synthetic"))
         source_id = store.connection.execute(
             "SELECT source_sha256 FROM SourceObservations WHERE row_id=?", (outgoing,)
         ).fetchone()[0]

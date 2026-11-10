@@ -19,6 +19,7 @@ from devtools.parser_engine_pilot.test_card_lines import pages
 from devtools.parser_engine_pilot.test_card_source_output import DEFINITION as CARD_DEFINITION
 
 from .test_v2_statement_journal_comparison import _profile as bank_profile
+from .v2_institution_helpers import add_test_financial_account
 
 DEFINITION = (
     Path(__file__).parents[2] / "devtools" / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
@@ -26,7 +27,7 @@ DEFINITION = (
 
 
 def account(store, account_id="cash"):
-    store.add_financial_account(FinancialAccount(account_id, account_id.title(), "asset", "synthetic"))
+    add_test_financial_account(store, FinancialAccount(account_id, account_id.title(), "asset", "synthetic"))
 
 
 def source(

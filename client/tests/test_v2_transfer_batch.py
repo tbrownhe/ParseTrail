@@ -15,6 +15,7 @@ from parsetrail.core.v2_transfer_batch import (
 
 from .test_v2_review_read_performance import _tamper
 from .test_v2_transfers import BANK_DEFINITION
+from .v2_institution_helpers import add_test_financial_account
 
 REASON = "Confirmed unique owned-account transfers"
 
@@ -33,7 +34,7 @@ def _profile(path, *, competing=False):
     with V2ProfileStore.create(path) as store:
         store.import_source(source, BANK_DEFINITION, evidence, suffix=".csv")
         for identity, account_id in (("Checking A", "a"), ("Savings B", "b"), ("Other C", "c")):
-            store.add_financial_account(FinancialAccount(account_id, identity, "asset", "synthetic"))
+            add_test_financial_account(store, FinancialAccount(account_id, identity, "asset", "synthetic"))
             if identity != "Other C" or competing:
                 store.bind_source_account(evidence.source_sha256, identity, "opaque", account_id)
     return evidence
@@ -186,7 +187,7 @@ def test_stale_state_scope_preferences_and_copied_profile_refuse_without_posting
             post_reviewed_transfer_batch(
                 store, plan, preferences=V2Preferences(allow_assumed_posting_dates=True), reason=REASON
             )
-        store.add_financial_account(FinancialAccount("new", "New unrelated account", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("new", "New unrelated account", "asset", "synthetic"))
         before = path.read_bytes()
         with pytest.raises(ProfileFormatError, match="transfer_review_changed_since_selection"):
             _post(store, plan)

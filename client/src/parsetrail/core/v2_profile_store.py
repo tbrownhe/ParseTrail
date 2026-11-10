@@ -40,12 +40,20 @@ from parsetrail.core.source_evidence import (
     StatementAccount,
     StatementPayload,
 )
+from parsetrail.core.v2_account_products import validate_product_type
 from parsetrail.core.v2_builtin_categories import builtin_category, is_builtin_id_reserved
 from parsetrail.core.v2_cash_source_policy import (
     HSA_CASH_PARSER,
     admitted_statement_scope,
     cash_accounting_description,
     cash_tracking_scope,
+)
+from parsetrail.core.v2_institutions import (
+    BUILTIN_INSTITUTIONS,
+    Institution,
+    catalog_institutions,
+    merge_institutions,
+    validate_institution,
 )
 from parsetrail.core.v2_liability_register import (
     REGISTER_PARSER,
@@ -109,7 +117,7 @@ from parsetrail.core.v2_source_values import (
 )
 
 APPLICATION_ID = 0x50543230  # PT20
-SCHEMA_VERSION = 22
+SCHEMA_VERSION = 24
 TRACKING_SCOPES = {"account_total", "principal_component", "cash_component"}
 CategoryPurpose = Literal["expense", "expense_refund", "income", "income_adjustment"]
 CATEGORY_PURPOSE_KINDS = {
@@ -134,6 +142,7 @@ MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_DEFINITION_BYTES = 64 * 1024
 MAX_EVIDENCE_BYTES = 32 * 1024 * 1024
 TABLE_COLUMNS = {
+    "Institutions": (("id", "TEXT", 0, 1), ("name", "TEXT", 1, 0)),
     "BindingCorrections": (
         ("correction_id", "INTEGER", 0, 1),
         ("source_sha256", "TEXT", 1, 0),
@@ -180,6 +189,7 @@ TABLE_COLUMNS = {
         ("institution_key", "TEXT", 0, 0),
         ("full_account_number", "TEXT", 0, 0),
         ("tracking_scope", "TEXT", 1, 0),
+        ("product_type", "TEXT", 0, 0),
     ),
     "CategoryBudgetRates": (
         ("category_id", "TEXT", 1, 1),
@@ -443,7 +453,8 @@ FOREIGN_KEYS = {
     "Definitions": (),
     "EvidenceSnapshots": (("definition_sha256", "Definitions", "sha256"), ("source_sha256", "Sources", "sha256")),
     "SourceObservations": (("source_sha256", "Sources", "sha256"),),
-    "Accounts": (),
+    "Institutions": (),
+    "Accounts": (("institution_key", "Institutions", "id"),),
     "CategoryBudgetRates": (("category_id", "Accounts", "id"),),
     "FileAccountAssertions": (("ledger_account_id", "Accounts", "id"), ("source_sha256", "Sources", "sha256")),
     "RowAccountAssignments": (
@@ -523,6 +534,7 @@ FOREIGN_KEYS.update(
 )
 
 IMMUTABLE_TABLES = (
+    "Institutions",
     "LoanEvents",
     "LoanEventActions",
     "LoanSourceUses",
@@ -627,9 +639,10 @@ class FinancialAccount:
     id: str
     name: str
     kind: Literal["asset", "liability"]
-    institution_key: str
+    institution_key: str | None
     full_account_number: str | None = None
     tracking_scope: Literal["account_total", "principal_component", "cash_component"] = "account_total"
+    product_type: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1633,6 +1646,19 @@ def _decode_reconciliation_check(payload: str) -> StatementReconciliationCheck:
         raise ProfileFormatError("saved_reconciliation_integrity") from None
 
 
+def _validate_institution_records(connection: sqlite3.Connection) -> tuple[Institution, ...]:
+    try:
+        institutions = merge_institutions(
+            Institution(*row) for row in connection.execute("SELECT id,name FROM Institutions ORDER BY name,id")
+        )
+        current = {institution.id: institution for institution in institutions}
+        if any(current.get(institution.id) != institution for institution in BUILTIN_INSTITUTIONS):
+            raise ValueError("institution_identity_conflict")
+    except (TypeError, ValueError):
+        raise ProfileFormatError("institution_registry_integrity") from None
+    return institutions
+
+
 def _check_format(connection: sqlite3.Connection) -> None:
     try:
         marker = connection.execute("PRAGMA application_id").fetchone()[0]
@@ -1663,6 +1689,16 @@ def _check_format(connection: sqlite3.Connection) -> None:
             raise ProfileFormatError("profile_integrity")
         if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
             raise ProfileFormatError("profile_integrity")
+        _validate_institution_records(connection)
+        for kind, role, scope, product_type in connection.execute(
+            "SELECT kind,role,tracking_scope,product_type FROM Accounts"
+        ):
+            try:
+                if role != "financial" and product_type is not None:
+                    raise ValueError
+                validate_product_type(product_type, kind, scope)
+            except ValueError:
+                raise ProfileFormatError("account_product_integrity") from None
     except sqlite3.DatabaseError:
         raise ProfileFormatError("profile_integrity") from None
 
@@ -1684,6 +1720,23 @@ class V2ProfileStore:
         self._source_read_periods = None
         self._source_read_epoch = None
         self._source_read_cancelled = None
+
+    @contextmanager
+    def _atomic_write(self, savepoint: str):
+        """Own a transaction or isolate this operation inside its caller's write."""
+        self._require_writable()
+        owns_transaction = not self.connection.in_transaction
+        self.connection.execute("BEGIN IMMEDIATE" if owns_transaction else f"SAVEPOINT {savepoint}")
+        try:
+            yield
+            self.connection.execute("COMMIT" if owns_transaction else f"RELEASE {savepoint}")
+        except BaseException:
+            if owns_transaction:
+                self.connection.execute("ROLLBACK")
+            else:
+                self.connection.execute(f"ROLLBACK TO {savepoint}")
+                self.connection.execute(f"RELEASE {savepoint}")
+            raise
 
     @contextmanager
     def _verified_source_operation(self, cancelled=None):
@@ -1774,17 +1827,20 @@ class V2ProfileStore:
                     observed_date TEXT NOT NULL, amount_minor INTEGER NOT NULL,
                     CHECK((source_account IS NULL) = (source_account_form IS NULL))
                 );
+                CREATE TABLE Institutions (
+                    id TEXT PRIMARY KEY, name TEXT NOT NULL
+                );
                 CREATE TABLE Accounts (
                     id TEXT PRIMARY KEY, name TEXT NOT NULL,
                     kind TEXT NOT NULL CHECK(kind IN ('asset','liability','equity','income','expense')),
                     currency TEXT NOT NULL CHECK(currency='USD'),
                     role TEXT NOT NULL CHECK(role IN ('financial','category','internal')),
                     purpose TEXT NOT NULL CHECK(purpose IN ('normal','clearing','opening_equity','suspense')),
-                    institution_key TEXT, full_account_number TEXT,
+                    institution_key TEXT REFERENCES Institutions(id), full_account_number TEXT,
                     tracking_scope TEXT NOT NULL DEFAULT 'account_total' CHECK(tracking_scope IN ('account_total','principal_component','cash_component')),
+                    product_type TEXT CHECK(product_type IN ('checking','savings','credit_card','loan','hsa','investment','cash')),
                     CHECK(
-                        (role='financial' AND kind IN ('asset','liability') AND purpose='normal'
-                            AND institution_key IS NOT NULL)
+                        (role='financial' AND kind IN ('asset','liability') AND purpose='normal')
                         OR (role='category' AND kind IN ('income','expense') AND purpose='normal'
                             AND institution_key IS NULL AND full_account_number IS NULL)
                         OR (role='internal' AND institution_key IS NULL AND full_account_number IS NULL)
@@ -2003,6 +2059,9 @@ class V2ProfileStore:
                 );
                 COMMIT;
             """)
+            connection.executemany(
+                "INSERT INTO Institutions VALUES (?,?)", ((item.id, item.name) for item in BUILTIN_INSTITUTIONS)
+            )
             for table in IMMUTABLE_TABLES:
                 for action in ("UPDATE", "DELETE"):
                     connection.execute(
@@ -2097,18 +2156,121 @@ class V2ProfileStore:
         if self.read_only:
             raise ProfileFormatError("profile_read_only")
 
-    def add_financial_account(self, account: FinancialAccount) -> None:
+    def institutions(self) -> tuple[Institution, ...]:
+        """Read managed identities independently of installed document formats."""
+        return _validate_institution_records(self.connection)
+
+    def register_institution(self, institution: Institution) -> Institution:
+        """Explicitly register one managed category; account writes never invent it.
+
+        This operation also supports deliberately authored local institutions and
+        isolated fixtures. Existing identity/name pairs cannot be overwritten.
+        It participates in any caller-owned transaction without committing it.
+        """
+        self._require_writable()
+        try:
+            validate_institution(institution)
+        except ValueError as exc:
+            raise ProfileFormatError(str(exc)) from None
+        owns_transaction = not self.connection.in_transaction
+        if owns_transaction:
+            self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            try:
+                merge_institutions(self.institutions(), (institution,))
+            except ValueError as exc:
+                raise ProfileFormatError(str(exc)) from None
+            self.connection.execute(
+                "INSERT INTO Institutions(id,name) VALUES (?,?) ON CONFLICT(id) DO NOTHING",
+                (institution.id, institution.name),
+            )
+            if self.connection.execute("SELECT name FROM Institutions WHERE id=?", (institution.id,)).fetchone() != (
+                institution.name,
+            ):
+                raise ProfileFormatError("institution_identity_conflict")
+            if owns_transaction:
+                self.connection.execute("COMMIT")
+        except BaseException:
+            if owns_transaction and self.connection.in_transaction:
+                self.connection.execute("ROLLBACK")
+            raise
+        return institution
+
+    def register_catalog_institutions(self, catalog) -> tuple[Institution, ...]:
+        """Explicitly add authenticated catalog identities atomically, not on reads."""
+        self._require_writable()
+        try:
+            institutions = catalog_institutions(catalog)
+        except ValueError as exc:
+            raise ProfileFormatError(str(exc)) from None
+        owns_transaction = not self.connection.in_transaction
+        if owns_transaction:
+            self.connection.execute("BEGIN IMMEDIATE")
+        self.connection.execute("SAVEPOINT register_catalog_institutions")
+        savepoint_active = True
+        try:
+            for institution in institutions:
+                self.register_institution(institution)
+            self.connection.execute("RELEASE register_catalog_institutions")
+            savepoint_active = False
+            if owns_transaction:
+                self.connection.execute("COMMIT")
+        except BaseException:
+            if savepoint_active:
+                self.connection.execute("ROLLBACK TO register_catalog_institutions")
+                self.connection.execute("RELEASE register_catalog_institutions")
+            if owns_transaction and self.connection.in_transaction:
+                self.connection.execute("ROLLBACK")
+            raise
+        return institutions
+
+    def _require_registered_institution(self, institution_key: str | None) -> None:
+        institutions = self.institutions()
+        if institution_key is not None and not any(item.id == institution_key for item in institutions):
+            raise ProfileFormatError("institution_not_registered")
+
+    def add_financial_account(self, account: FinancialAccount, *, catalog=None) -> None:
         """Create one user-authored financial account before any source binding."""
         self._require_writable()
+        if catalog is not None:
+            owns_transaction = not self.connection.in_transaction
+            if owns_transaction:
+                self.connection.execute("BEGIN IMMEDIATE")
+            self.connection.execute("SAVEPOINT add_financial_account")
+            savepoint_active = True
+            try:
+                self.register_catalog_institutions(catalog)
+                self.add_financial_account(account)
+                self.connection.execute("RELEASE add_financial_account")
+                savepoint_active = False
+                if owns_transaction:
+                    self.connection.execute("COMMIT")
+            except BaseException:
+                if savepoint_active:
+                    self.connection.execute("ROLLBACK TO add_financial_account")
+                    self.connection.execute("RELEASE add_financial_account")
+                if owns_transaction and self.connection.in_transaction:
+                    self.connection.execute("ROLLBACK")
+                raise
+            return
         self._validate_builtin_categories()
         name, institution_key, full_number = self._financial_account_values(account)
+        self._require_registered_institution(institution_key)
         self.connection.execute(
-            "INSERT INTO Accounts VALUES (?,?,?,'USD','financial','normal',?,?,?)",
-            (account.id, name, account.kind, institution_key, full_number, account.tracking_scope),
+            "INSERT INTO Accounts VALUES (?,?,?,'USD','financial','normal',?,?,?,?)",
+            (
+                account.id,
+                name,
+                account.kind,
+                institution_key,
+                full_number,
+                account.tracking_scope,
+                account.product_type,
+            ),
         )
 
     @staticmethod
-    def _financial_account_values(account: FinancialAccount) -> tuple[str, str, str | None]:
+    def _financial_account_values(account: FinancialAccount) -> tuple[str, str | None, str | None]:
         if (
             not isinstance(account, FinancialAccount)
             or type(account.id) is not str
@@ -2120,8 +2282,13 @@ class V2ProfileStore:
             or account.kind not in {"asset", "liability"}
             or type(account.tracking_scope) is not str
             or account.tracking_scope not in TRACKING_SCOPES
-            or type(account.institution_key) is not str
-            or re.fullmatch(r"[a-z][a-z0-9_-]{2,79}", account.institution_key) is None
+            or (
+                account.institution_key is not None
+                and (
+                    type(account.institution_key) is not str
+                    or re.fullmatch(r"[a-z][a-z0-9_-]{2,79}", account.institution_key) is None
+                )
+            )
             or (
                 account.full_account_number is not None
                 and (
@@ -2131,13 +2298,17 @@ class V2ProfileStore:
             )
         ):
             raise ProfileFormatError("invalid_financial_account")
+        try:
+            validate_product_type(account.product_type, account.kind, account.tracking_scope)
+        except ValueError as exc:
+            raise ProfileFormatError(str(exc)) from None
         return (
             account.name.strip(),
             account.institution_key,
             account.full_account_number.strip() if account.full_account_number is not None else None,
         )
 
-    def update_financial_account(self, account: FinancialAccount) -> None:
+    def update_financial_account(self, account: FinancialAccount, *, catalog=None) -> None:
         """Edit account identity labels while preserving its ledger class and ID."""
         self._require_writable()
         name, institution_key, full_number = self._financial_account_values(account)
@@ -2145,8 +2316,11 @@ class V2ProfileStore:
             raise ProfileFormatError("account_anchor_requires_committed_snapshot")
         self.connection.execute("BEGIN IMMEDIATE")
         try:
+            if catalog is not None:
+                self.register_catalog_institutions(catalog)
+            self._require_registered_institution(institution_key)
             current = self.connection.execute(
-                "SELECT kind,tracking_scope FROM Accounts WHERE id=? AND role='financial'", (account.id,)
+                "SELECT kind,tracking_scope,product_type FROM Accounts WHERE id=? AND role='financial'", (account.id,)
             ).fetchone()
             if current is None:
                 raise ProfileFormatError("financial_account_missing")
@@ -2154,9 +2328,14 @@ class V2ProfileStore:
                 raise ProfileFormatError("financial_account_kind_immutable")
             if current[1] != account.tracking_scope and self.financial_account_scope_locked(account.id):
                 raise ProfileFormatError("financial_account_scope_locked")
+            product_type = account.product_type if account.product_type is not None else current[2]
+            try:
+                validate_product_type(product_type, account.kind, account.tracking_scope)
+            except ValueError as exc:
+                raise ProfileFormatError(str(exc)) from None
             self.connection.execute(
-                "UPDATE Accounts SET name=?,institution_key=?,full_account_number=?,tracking_scope=? WHERE id=? AND role='financial'",
-                (name, institution_key, full_number, account.tracking_scope, account.id),
+                "UPDATE Accounts SET name=?,institution_key=?,full_account_number=?,tracking_scope=?,product_type=? WHERE id=? AND role='financial'",
+                (name, institution_key, full_number, account.tracking_scope, product_type, account.id),
             )
             self.connection.execute("COMMIT")
         except BaseException:
@@ -2168,7 +2347,7 @@ class V2ProfileStore:
         return tuple(
             FinancialAccount(*row)
             for row in self.connection.execute(
-                "SELECT id,name,kind,institution_key,full_account_number,tracking_scope FROM Accounts "
+                "SELECT id,name,kind,institution_key,full_account_number,tracking_scope,product_type FROM Accounts "
                 "WHERE role='financial' ORDER BY name,id"
             )
         )
@@ -2234,7 +2413,7 @@ class V2ProfileStore:
         ):
             raise ProfileFormatError("invalid_category_account")
         self.connection.execute(
-            "INSERT INTO Accounts VALUES (?,?,?,'USD','category','normal',NULL,NULL,'account_total')",
+            "INSERT INTO Accounts VALUES (?,?,?,'USD','category','normal',NULL,NULL,'account_total',NULL)",
             (account_id, name, kind),
         )
 
@@ -2255,7 +2434,7 @@ class V2ProfileStore:
             raise ProfileFormatError("builtin_category_unknown")
         self._validate_builtin_categories()
         self.connection.execute(
-            "INSERT INTO Accounts VALUES (?,?,?,'USD','category','normal',NULL,NULL,'account_total') "
+            "INSERT INTO Accounts VALUES (?,?,?,'USD','category','normal',NULL,NULL,'account_total',NULL) "
             "ON CONFLICT(id) DO NOTHING",
             (category.account_id, category.name, category.kind),
         )
@@ -2278,6 +2457,7 @@ class V2ProfileStore:
                 None,
                 None,
                 "account_total",
+                None,
             ):
                 raise ProfileFormatError("builtin_category_integrity")
 
@@ -4462,13 +4642,14 @@ class V2ProfileStore:
             None,
             None,
             "account_total",
+            None,
         ):
             raise ProfileFormatError("transfer_clearing_integrity")
 
     def _ensure_transfer_clearing(self) -> None:
         self._validate_transfer_clearing()
         self.connection.execute(
-            "INSERT OR IGNORE INTO Accounts VALUES ('internal:transfer-clearing:USD','Transfer clearing','asset','USD','internal','clearing',NULL,NULL,'account_total')"
+            "INSERT OR IGNORE INTO Accounts VALUES ('internal:transfer-clearing:USD','Transfer clearing','asset','USD','internal','clearing',NULL,NULL,'account_total',NULL)"
         )
 
     def _transfer_pair_context_current(self, pair: TransferCandidate, *, _context=None) -> bool:
@@ -8003,8 +8184,7 @@ class V2ProfileStore:
         }:
             raise ProfileFormatError("source_account_missing")
         self._require_financial_account(account_id)
-        self.connection.execute("BEGIN IMMEDIATE")
-        try:
+        with self._atomic_write("bind_source_account"):
             prior = self.connection.execute(
                 "SELECT ledger_account_id FROM SourceAccountBindings "
                 "WHERE source_sha256=? AND source_identity=? AND source_identity_form=?",
@@ -8020,10 +8200,6 @@ class V2ProfileStore:
                     "DO UPDATE SET ledger_account_id=excluded.ledger_account_id",
                     (source_sha256, source_identity, source_identity_form, account_id),
                 )
-            self.connection.execute("COMMIT")
-        except BaseException:
-            self.connection.execute("ROLLBACK")
-            raise
 
     def clear_source_account_binding(self, source_sha256: str, source_identity: str, source_identity_form: str) -> None:
         self._require_writable()
@@ -8062,8 +8238,7 @@ class V2ProfileStore:
             or any(row.source_account is not None for row in payload.rows)
         ):
             raise ProfileFormatError("file_account_assertion_requires_accountless_export")
-        self.connection.execute("BEGIN IMMEDIATE")
-        try:
+        with self._atomic_write("assert_file_account"):
             if self.connection.execute(
                 "SELECT 1 FROM RowAccountAssignments a JOIN SourceObservations o ON o.row_id=a.row_id "
                 "WHERE o.source_sha256=? LIMIT 1",
@@ -8080,10 +8255,6 @@ class V2ProfileStore:
                 "ON CONFLICT(source_sha256) DO UPDATE SET ledger_account_id=excluded.ledger_account_id",
                 (source_sha256, account_id),
             )
-            self.connection.execute("COMMIT")
-        except BaseException:
-            self.connection.execute("ROLLBACK")
-            raise
 
     def clear_file_account_assertion(self, source_sha256: str) -> None:
         self._require_writable()
@@ -8122,8 +8293,7 @@ class V2ProfileStore:
             or not set(row_ids) <= {row.row_id for row in payload.rows if row.source_account is None}
         ):
             raise ProfileFormatError("row_account_assignment_requires_accountless_export")
-        self.connection.execute("BEGIN IMMEDIATE")
-        try:
+        with self._atomic_write("assign_rows_account"):
             if self.connection.execute(
                 "SELECT 1 FROM FileAccountAssertions WHERE source_sha256=?", (source_sha256,)
             ).fetchone():
@@ -8137,10 +8307,6 @@ class V2ProfileStore:
                 "ON CONFLICT(row_id) DO UPDATE SET ledger_account_id=excluded.ledger_account_id",
                 ((row_id, account_id) for row_id in row_ids),
             )
-            self.connection.execute("COMMIT")
-        except BaseException:
-            self.connection.execute("ROLLBACK")
-            raise
 
     def clear_row_account_assignment(self, row_id: str) -> None:
         row = self.connection.execute(
@@ -10855,7 +11021,7 @@ class V2ProfileStore:
                 if state == "active" and amount != 0:
                     equity = "internal:opening-equity:USD"
                     self.connection.execute(
-                        "INSERT OR IGNORE INTO Accounts VALUES (?,?,?,'USD','internal','opening_equity',NULL,NULL,'account_total')",
+                        "INSERT OR IGNORE INTO Accounts VALUES (?,?,?,'USD','internal','opening_equity',NULL,NULL,'account_total',NULL)",
                         (equity, "Opening equity", "equity"),
                     )
                     if current is None:
@@ -11306,10 +11472,8 @@ class V2ProfileStore:
         if evidence.source_sha256 != source_hash or evidence.definition_sha256 != definition_hash:
             raise ProfileFormatError("evidence_hash_mismatch")
         c = self.connection
-        c.execute("BEGIN IMMEDIATE")
-        try:
+        with self._atomic_write("import_source"):
             if c.execute("SELECT 1 FROM Sources WHERE sha256=?", (source_hash,)).fetchone():
-                c.execute("COMMIT")
                 return False
             c.execute(
                 "INSERT OR IGNORE INTO Definitions VALUES (?,?,?)", (definition_hash, len(definition), definition)
@@ -11335,11 +11499,7 @@ class V2ProfileStore:
                     for row in _rows(evidence)
                 ),
             )
-            c.execute("COMMIT")
             return True
-        except BaseException:
-            c.execute("ROLLBACK")
-            raise
 
     def load_import(self, source_sha256: str) -> SavedImport:
         if self._transfer_verified_sources is not None:

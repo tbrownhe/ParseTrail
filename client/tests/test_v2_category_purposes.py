@@ -12,6 +12,7 @@ from parsetrail.core.v2_profile_store import FinancialAccount, ProfileFormatErro
 
 from .test_v2_card_purchase_review import _chase_profile
 from .test_v2_source_overlap import review, setup, source
+from .v2_institution_helpers import add_test_financial_account
 
 START, END = date(2026, 10, 1), date(2026, 11, 1)
 
@@ -232,7 +233,7 @@ def test_builtin_namespace_is_code_owned_and_custom_same_name_remains_distinct(t
         with pytest.raises(ProfileFormatError, match="invalid_category_account"):
             store.add_category_account("builtin:future", "Future", "expense")
         with pytest.raises(ProfileFormatError, match="invalid_financial_account"):
-            store.add_financial_account(FinancialAccount("builtin:bank", "Bank", "asset", "synthetic"))
+            add_test_financial_account(store, FinancialAccount("builtin:bank", "Bank", "asset", "synthetic"))
         with pytest.raises(ProfileFormatError, match="builtin_category_unknown"):
             store.ensure_builtin_category("builtin:future")
         fixed = store.ensure_builtin_category("builtin:loan-interest")

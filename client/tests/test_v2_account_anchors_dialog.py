@@ -11,6 +11,7 @@ from parsetrail.core.v2_profile_store import FinancialAccount, ProfileFormatErro
 from .test_v2_opening_corrections_dialog import _dialog as source_dialog
 from .test_v2_opening_corrections_dialog import _initial, _review
 from .test_v2_source_openings import _variant
+from .v2_institution_helpers import add_test_financial_account
 
 
 @pytest.fixture
@@ -28,8 +29,8 @@ def app(monkeypatch):
 
 def _profile(profile, *, kind="liability", scope="principal_component"):
     with V2ProfileStore.create(profile) as store:
-        store.add_financial_account(
-            FinancialAccount("loan", "Synthetic account", kind, "synthetic", tracking_scope=scope)
+        add_test_financial_account(
+            store, FinancialAccount("loan", "Synthetic account", kind, "synthetic", tracking_scope=scope)
         )
 
 
@@ -266,10 +267,11 @@ def test_dated_zero_does_not_supply_unknown_opening_and_duplicate_names_are_dist
     profile = tmp_path / "unknown.db"
     _profile(profile)
     with V2ProfileStore.open(profile) as store:
-        store.add_financial_account(
+        add_test_financial_account(
+            store,
             FinancialAccount(
                 "other", "Synthetic account", "liability", "synthetic", tracking_scope="principal_component"
-            )
+            ),
         )
     dialog = _dialog(profile)
     try:

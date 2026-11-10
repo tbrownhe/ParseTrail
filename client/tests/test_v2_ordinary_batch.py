@@ -13,6 +13,7 @@ from parsetrail.core.v2_source_pipeline import build_source_evidence
 
 from .test_v2_card_purchase_review import _chase_profile
 from .test_v2_review_read_performance import _tamper
+from .v2_institution_helpers import add_test_financial_account
 
 DEFINITION = (Path(__file__).parents[2] / "devtools/v2_fresh_slice/synthetic-posted-cash-definition.json").read_bytes()
 SOURCE = (
@@ -27,7 +28,7 @@ def _profile(path):
     evidence = build_source_evidence(SOURCE, DEFINITION, suffix=".csv")
     with V2ProfileStore.create(path) as store:
         store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("cash", "Synthetic checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Synthetic checking", "asset", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         store.add_category_account("income:pay", "Pay", "income")
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")

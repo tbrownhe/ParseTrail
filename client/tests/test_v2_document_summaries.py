@@ -18,6 +18,7 @@ from .test_v2_source_account_bindings import (
 )
 from .test_v2_statement_journal_comparison import _profile
 from .test_v2_statement_reconciliation import _review_and_post
+from .v2_institution_helpers import add_test_financial_account
 
 
 @pytest.fixture
@@ -48,7 +49,7 @@ def test_export_labels_dates_and_explicit_assignment_state(archive):
         assert summary.row_count == summary.pending_activity_rows == summary.unassigned_activity_rows == 2
         assert summary.unassigned_source_accounts == 2
         assert not summary.has_unidentified_rows and summary.has_identified_accounts
-        store.add_financial_account(FinancialAccount("cash", "Everyday checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Everyday checking", "asset", "synthetic"))
         store.bind_source_account(source, "Checking A", "opaque", "cash")
         assigned = next(summary for summary in store.document_summaries() if summary.source_sha256 == source)
         assert assigned.unassigned_activity_rows == 1 and assigned.pending_activity_rows == 2
@@ -284,7 +285,7 @@ def test_concurrent_assignment_uses_current_snapshot_then_next_read(archive, mon
         if not written:
             written = True
             with V2ProfileStore.open(path) as writer:
-                writer.add_financial_account(FinancialAccount("cash", "Cash", "asset", "synthetic"))
+                add_test_financial_account(writer, FinancialAccount("cash", "Cash", "asset", "synthetic"))
                 writer.bind_source_account(selected, "Checking A", "opaque", "cash")
         yield from original(store)
 

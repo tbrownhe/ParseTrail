@@ -9,6 +9,8 @@ import pytest
 from parsetrail.core.v2_profile_store import FinancialAccount, ProfileFormatError, V2ProfileStore
 from parsetrail.core.v2_source_pipeline import build_source_evidence
 
+from .v2_institution_helpers import add_test_financial_account
+
 DEFINITION = (
     Path(__file__).parents[2] / "devtools" / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
 ).read_bytes()
@@ -26,8 +28,8 @@ def test_spending_summary_nets_corrections_and_keeps_unallocated_activity_visibl
     coffee, tea, deposit = evidence.payload.rows
     with V2ProfileStore.create(profile) as store:
         store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
-        store.add_financial_account(FinancialAccount("card", "Card", "liability", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("card", "Card", "liability", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         store.add_category_account("expense:travel", "Travel", "expense")
         store.set_category_budget_rate("expense:food", date(2026, 10, 1), 1_000)
@@ -91,7 +93,7 @@ def test_reviewed_income_uses_natural_sign_and_nets_category_correction(tmp_path
     deposit = evidence.payload.rows[2]
     with V2ProfileStore.create(profile) as store:
         store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Checking", "asset", "synthetic"))
         store.add_category_account("income:pay", "Pay", "income")
         store.add_category_account("income:gift", "Gift", "income")
         store.add_category_account("expense:food", "Food", "expense")

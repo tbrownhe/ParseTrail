@@ -16,6 +16,7 @@ from .test_v2_card_purchase_review import _chase_profile
 from .test_v2_cash_activity_review import DEFINITION, SOURCE
 from .test_v2_source_overlap_dialog import _profile as overlap_profile
 from .test_v2_transfers import _profile as transfer_profile
+from .v2_institution_helpers import add_test_financial_account
 from .v2_job_wait import wait_for_jobs
 
 
@@ -36,7 +37,7 @@ def _cash(profile, *, row_index=0, posted=True, corrected=False):
     evidence = build_source_evidence(SOURCE, DEFINITION, suffix=".csv")
     with V2ProfileStore.create(profile) as store:
         store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Checking", "asset", "synthetic"))
         for identity, name, kind in (
             ("expense:food", "Food", "expense"),
             ("expense:travel", "Travel", "expense"),
@@ -277,7 +278,7 @@ def test_stale_cash_context_cannot_post_correct_or_withdraw(tmp_path, app, monke
         old_basis = dialog.basis
         with V2ProfileStore.open(profile) as store:
             if action == "post":
-                store.add_financial_account(FinancialAccount("other", "Other checking", "asset", "synthetic"))
+                add_test_financial_account(store, FinancialAccount("other", "Other checking", "asset", "synthetic"))
                 store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "other")
             else:
                 store.rename_category_account("expense:travel", "Concurrent renamed category")

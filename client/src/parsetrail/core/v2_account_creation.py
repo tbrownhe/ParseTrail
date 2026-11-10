@@ -15,7 +15,9 @@ from parsetrail.core.source_evidence import (
     TextValue,
 )
 from parsetrail.core.v2_data_catalog import VerifiedCatalog
+from parsetrail.core.v2_institutions import institution_label
 from parsetrail.core.v2_loan_payments import LOAN_PARSERS
+from parsetrail.core.v2_source_account_context import verified_source_account_context
 
 
 @dataclass(frozen=True)
@@ -27,7 +29,7 @@ class AccountCreationDraft:
     """
 
     name: str = ""
-    institution_key: str = ""
+    institution_key: str | None = None
     kind: Literal["asset", "liability"] | None = None
     tracking_scope: Literal["account_total", "principal_component", "cash_component"] | None = None
     full_account_number: str | None = None
@@ -41,6 +43,7 @@ class AccountCreationDraft:
     period_end: DateValue | None = None
     opening_balance: MoneyValue | None = None
     closing_balance: MoneyValue | None = None
+    product_type: str | None = None
 
 
 def suggest_account_creation(
@@ -74,19 +77,8 @@ def suggest_account_creation(
             raise ValueError("selected_source_account_missing")
     elif isinstance(payload, StatementPayload) or not any(row.source_account is None for row in payload.rows):
         raise ValueError("account_creation_requires_selected_identity")
-    entries = (
-        tuple(
-            item
-            for item in catalog.definitions
-            if item.identity.parser_id == evidence.parser_id
-            and item.identity.revision == evidence.definition_revision
-            and item.sha256 == evidence.definition_sha256
-        )
-        if catalog is not None
-        else ()
-    )
-    context = entries[0].account_context if len(entries) == 1 else None
-    institution = context.institution_key if context is not None else ""
+    context = verified_source_account_context(evidence, catalog)
+    institution = context.institution_key if context is not None else None
     kind = context.kind if context is not None else None
     if not isinstance(payload, StatementPayload) and context is not None and evidence.parser_id in LOAN_PARSERS:
         if kind == "liability":
@@ -99,9 +91,7 @@ def suggest_account_creation(
         and re.search(r"[*xX•●#…]", source_identity) is None
         else None
     )
-    label = {"mohela": "MOHELA", "capital_one": "Capital One", "healthequity": "HealthEquity"}.get(
-        institution, institution.replace("_", " ").title()
-    )
+    label = institution_label(institution) if institution is not None else ""
     # This is an editable label, never an identifier or matching key. Do not
     # concatenate digits separated by masking or other source characters.
     visible_runs = re.findall(r"[0-9]+", source_identity or "")
@@ -135,4 +125,5 @@ def suggest_account_creation(
         period_end=payload.end if isinstance(payload, StatementPayload) else payload.activity_end,
         opening_balance=section.opening if section is not None else None,
         closing_balance=section.closing if section is not None else None,
+        product_type=context.product_type if context is not None else None,
     )

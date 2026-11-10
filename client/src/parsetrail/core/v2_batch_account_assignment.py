@@ -125,6 +125,7 @@ def _state_basis(store, authority):
         ("Sources", "sha256,size,suffix"),
         ("Definitions", "sha256,size"),
         ("EvidenceSnapshots", "source_sha256,definition_sha256,sha256,size"),
+        ("Institutions", "*"),
         ("Accounts", "*"),
         ("SourceAccountBindings", "*"),
         ("FileAccountAssertions", "*"),
@@ -191,7 +192,11 @@ def _binding_guards(store, accounts):
 
 def _compatible(account, key):
     institution, kind, scope, _identity, _form = key
-    return (account.institution_key, account.kind, account.tracking_scope) == (institution, kind, scope)
+    return (
+        institution is not None
+        and account.institution_key is not None
+        and (account.institution_key, account.kind, account.tracking_scope) == (institution, kind, scope)
+    )
 
 
 def account_compatible(group: AccountAssignmentGroup, account: FinancialAccount) -> bool:
@@ -263,6 +268,7 @@ def _build_plan(store, catalog, preferences, cancelled=None):
             sections[source_id, identity, form] = (target, key, assigned)
             trusted = (
                 draft.verified_context
+                and bool(draft.institution_key)
                 and draft.kind is not None
                 and draft.tracking_scope is not None
                 and identity is not None
@@ -279,6 +285,8 @@ def _build_plan(store, catalog, preferences, cancelled=None):
                 reason = "accountless_export_requires_file_or_row_review"
             elif not draft.verified_context:
                 reason = "verified_catalog_context_unavailable"
+            elif not draft.institution_key:
+                reason = "verified_institution_unavailable"
             elif draft.tracking_scope is None:
                 reason = "tracking_scope_unavailable"
             elif (draft.kind == "asset" and draft.tracking_scope == "principal_component") or (
@@ -439,7 +447,8 @@ def apply_account_assignments(
     store.connection.execute("BEGIN IMMEDIATE")
     try:
         _cancel(cancelled)
-        current, sections = _build_plan(store, catalog_loader(), preferences_loader(), cancelled)
+        catalog = catalog_loader()
+        current, sections = _build_plan(store, catalog, preferences_loader(), cancelled)
         if current.authority_sha256 != plan.authority_sha256 or current.profile_sha256 != plan.profile_sha256:
             raise ProfileFormatError("batch_assignment_plan_stale")
         staged = {account.id: account for account in new_accounts}
@@ -481,6 +490,8 @@ def apply_account_assignments(
             raise ProfileFormatError("batch_assignment_plan_stale")
         if any(existing is not None for _target, _account, existing in selected_targets):
             raise ProfileFormatError("batch_assignment_existing_binding")
+        if catalog is not None:
+            store.register_catalog_institutions(catalog)
         created = 0
         for account_id in {choice.account_id for choice in choices}:
             if account_id not in accounts:

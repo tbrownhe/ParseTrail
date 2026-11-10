@@ -10,6 +10,7 @@ from parsetrail.core.v2_profile_store import FinancialAccount, ProfileFormatErro
 from parsetrail.core.v2_source_pipeline import build_source_evidence
 
 from .test_v2_source_overlap_dialog import DEFINITION
+from .v2_institution_helpers import add_test_financial_account
 
 
 @pytest.fixture
@@ -23,7 +24,7 @@ def app(monkeypatch):
 def _profile(profile, days, *, roles=None):
     sources = []
     with V2ProfileStore.create(profile) as store:
-        store.add_financial_account(FinancialAccount("cash", "Synthetic checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Synthetic checking", "asset", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         for index, day in enumerate(days):
             definition = json.loads(DEFINITION)

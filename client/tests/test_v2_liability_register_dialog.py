@@ -13,6 +13,7 @@ from devtools.parser_engine_pilot.synthetic_family_sources import family_sources
 from .test_v2_document_browser import wait_for_inventory
 from .test_v2_ordinary_review_async import wait_for_review, wait_until
 from .test_v2_transfer_review_async import wait_for_transfers
+from .v2_institution_helpers import add_test_financial_account
 
 
 @pytest.fixture(scope="module")
@@ -44,16 +45,17 @@ def profile(path, source, *, kind="liability", scope="account_total", bind=True)
     with V2ProfileStore.create(path) as store:
         store.import_source(content, definition, evidence, suffix=".pdf")
         store.import_source(bank_raw, bank_definition, bank, suffix=".csv")
-        store.add_financial_account(
+        add_test_financial_account(
+            store,
             FinancialAccount(
                 "register",
                 "Motor account",
                 "liability" if kind == "liability" else "asset",
                 "synthetic",
                 tracking_scope=scope,
-            )
+            ),
         )
-        store.add_financial_account(FinancialAccount("bank", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("bank", "Checking", "asset", "synthetic"))
         store.add_category_account("expense:vehicle", "Vehicle", "expense")
         store.add_category_account("expense:other", "Other expense", "expense")
         store.add_category_account("income:other", "Other income", "income")

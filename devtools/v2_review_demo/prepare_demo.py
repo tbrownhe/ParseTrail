@@ -85,6 +85,7 @@ def prepare(destination: Path | None = None):
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
     from parsetrail.core.v2_data_catalog import key_id_for_public_key
+    from parsetrail.core.v2_institutions import Institution
     from parsetrail.core.v2_preferences import V2Preferences, save_preferences
     from parsetrail.core.v2_profile_store import SCHEMA_VERSION, FinancialAccount, V2ProfileStore
     from parsetrail.core.v2_settlements import ExpectedOwnedDestination
@@ -136,6 +137,7 @@ def prepare(destination: Path | None = None):
     (sources / "Import-this-next.csv").write_bytes(extra)
     loan_sources = add_loan_sources(workspace, sources, family_sources())
     with V2ProfileStore.open(workspace.profile_path) as store:
+        store.register_institution(Institution("synthetic", "Synthetic example"))
         for account in (
             FinancialAccount("checking", "Demo checking", "asset", "synthetic"),
             FinancialAccount("savings", "Demo zero savings", "asset", "synthetic"),
@@ -309,9 +311,11 @@ def add_loan_sources(workspace, sources, cases):
 
 def seed_loan_reviews(store, sources):
     """Seed explicit fixture-author decisions; do not change saved global preferences."""
+    from parsetrail.core.v2_institutions import Institution
     from parsetrail.core.v2_preferences import V2Preferences
     from parsetrail.core.v2_profile_store import FinancialAccount
 
+    store.register_institution(Institution("synthetic", "Synthetic example"))
     for account in (
         FinancialAccount("payment-checking", "Demo payment checking", "asset", "synthetic"),
         FinancialAccount(

@@ -20,6 +20,7 @@ from .test_v2_review_read_performance import _tamper
 from .test_v2_reviewed_openings import _profile as opening_profile
 from .test_v2_source_account_bindings import CASH_DEFINITION
 from .test_v2_transfers import _profile as transfer_profile
+from .v2_institution_helpers import add_test_financial_account
 
 
 def _cash_definition():
@@ -40,7 +41,7 @@ def _cash_profile(path):
     with V2ProfileStore.create(path) as store:
         store.import_source(source, definition, evidence, suffix=".csv")
         for account_id in ("cash", "other"):
-            store.add_financial_account(FinancialAccount(account_id, account_id, "asset", "synthetic"))
+            add_test_financial_account(store, FinancialAccount(account_id, account_id, "asset", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         store.assert_file_account(evidence.source_sha256, "cash")
     return source, definition, evidence

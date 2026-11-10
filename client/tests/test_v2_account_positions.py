@@ -17,6 +17,7 @@ from .test_v2_source_openings import _variant
 from .test_v2_statement_journal_comparison import _profile
 from .test_v2_statement_reconciliation import _review_and_post
 from .test_v2_transfers import _profile as transfer_profile
+from .v2_institution_helpers import add_test_financial_account
 
 
 def test_inclusive_cutoff_missing_future_valid_and_stale_opening(tmp_path: Path) -> None:
@@ -214,12 +215,12 @@ def test_positions_pin_one_snapshot_across_concurrent_profile_changes(tmp_path: 
     path = tmp_path / "concurrent.db"
     with V2ProfileStore.create(path) as store:
         store.connection.execute("PRAGMA journal_mode=WAL")
-        store.add_financial_account(FinancialAccount("first", "First", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("first", "First", "asset", "synthetic"))
         original = store._statement_reconciliation_checks
 
         def mutate_between_reads(**kwargs):
             with V2ProfileStore.open(path) as writer:
-                writer.add_financial_account(FinancialAccount("second", "Second", "asset", "synthetic"))
+                add_test_financial_account(writer, FinancialAccount("second", "Second", "asset", "synthetic"))
             return original(**kwargs)
 
         monkeypatch.setattr(store, "_statement_reconciliation_checks", mutate_between_reads)
@@ -275,4 +276,4 @@ def test_query_failure_releases_its_own_snapshot(tmp_path: Path, monkeypatch) ->
         with pytest.raises(RuntimeError, match="Synthetic read failure"):
             store.account_positions(as_of=date(2026, 1, 31))
         assert not store.connection.in_transaction
-        store.add_financial_account(FinancialAccount("cash", "Cash", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Cash", "asset", "synthetic"))

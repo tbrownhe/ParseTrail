@@ -18,6 +18,7 @@ from .test_v2_cash_movement import _profile as cash_profile
 from .test_v2_loan_payments import _profile as loan_profile
 from .test_v2_settlements import profile as settlement_profile
 from .test_v2_statement_journal_comparison import _profile as coverage_profile
+from .v2_institution_helpers import add_test_financial_account
 from .v2_job_wait import wait_for_jobs
 
 
@@ -218,10 +219,11 @@ def test_working_font_layouts_and_discoverable_coverage_details(tmp_path, app):
             )
     with V2ProfileStore.open(paths["cash"]) as store:
         for index in range(24):
-            store.add_financial_account(
+            add_test_financial_account(
+                store,
                 FinancialAccount(
                     f"extra:{index}", f"Synthetic reserve {index:02d} with a long account label", "asset", "synthetic"
-                )
+                ),
             )
     views = [
         V2LoanPaymentReview(workspace(paths["loan"])),

@@ -23,6 +23,7 @@ from devtools.parser_engine_pilot.test_table_card_source_output import evidence 
 
 from .test_v2_document_browser import wait_for_inventory
 from .test_v2_ordinary_review_async import wait_for_review
+from .v2_institution_helpers import add_test_financial_account
 
 
 def _chase_profile(path: Path):
@@ -31,7 +32,7 @@ def _chase_profile(path: Path):
     evidence = from_card(parse_card_lines(CHASE_DEFINITION, lines), lines)
     with V2ProfileStore.create(path) as store:
         store.import_source(source, CHASE_DEFINITION, evidence, suffix=".pdf")
-        store.add_financial_account(FinancialAccount("card", "Card", "liability", "chase"))
+        add_test_financial_account(store, FinancialAccount("card", "Card", "liability", "chase"))
         store.add_category_account("expense:food", "Food", "expense")
         store.add_category_account("expense:travel", "Travel", "expense")
         store.add_category_account("income:other", "Other income", "income")
@@ -166,7 +167,7 @@ def test_printed_post_date_card_purchase_needs_no_assumption_toggle(tmp_path: Pa
     path = tmp_path / "printed.db"
     with V2ProfileStore.create(path) as store:
         store.import_source(CITI_SOURCE, CITI_DEFINITION, evidence, suffix=".pdf")
-        store.add_financial_account(FinancialAccount("card", "Card", "liability", "citi"))
+        add_test_financial_account(store, FinancialAccount("card", "Card", "liability", "citi"))
         store.add_category_account("expense:travel", "Travel", "expense")
         source_account = evidence.payload.accounts[0]
         store.bind_source_account(

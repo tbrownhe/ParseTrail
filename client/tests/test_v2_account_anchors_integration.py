@@ -7,6 +7,7 @@ from parsetrail.core.v2_profile_store import FinancialAccount, V2ProfileStore
 from parsetrail.core.v2_workspace import V2Workspace
 
 from .test_v2_reports_responsiveness import wait_for_reports
+from .v2_institution_helpers import add_test_financial_account
 
 
 @pytest.fixture
@@ -19,8 +20,8 @@ def app(monkeypatch):
 
 def _loan(profile):
     with V2ProfileStore.create(profile) as store:
-        store.add_financial_account(
-            FinancialAccount("loan", "New loan", "liability", "synthetic", tracking_scope="principal_component")
+        add_test_financial_account(
+            store, FinancialAccount("loan", "New loan", "liability", "synthetic", tracking_scope="principal_component")
         )
         frame = store.account_anchor_snapshot("loan")
         opening = store.post_reviewed_manual_opening(
@@ -178,7 +179,9 @@ def test_edit_account_choice_shows_component_scope_and_refuses_unavailable_detai
     profile = tmp_path / "scope-identities.db"
     with V2ProfileStore.create(profile) as store:
         for account_id, scope in (("whole", "account_total"), ("cash", "cash_component")):
-            store.add_financial_account(FinancialAccount(account_id, "HSA", "asset", "synthetic", "11112222", scope))
+            add_test_financial_account(
+                store, FinancialAccount(account_id, "HSA", "asset", "synthetic", "11112222", scope)
+            )
     workspace = V2Workspace.open(
         profile, tmp_path / "catalog", trusted_keys={}, preferences_path=tmp_path / "preferences.json"
     )

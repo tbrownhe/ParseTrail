@@ -10,6 +10,8 @@ from PySide6.QtWidgets import QApplication
 
 from devtools.parser_engine_pilot.review_source_overlap import DEFINITION, SOURCES, prepare_demo
 
+from .v2_institution_helpers import add_test_financial_account
+
 
 @pytest.mark.parametrize("accountless", [False, True])
 def test_overlap_history_disables_account_reassignment_controls(tmp_path: Path, accountless: bool) -> None:
@@ -19,7 +21,7 @@ def test_overlap_history_disables_account_reassignment_controls(tmp_path: Path, 
         prepare_demo(profile)
     else:
         with V2ProfileStore.create(profile) as store:
-            store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+            add_test_financial_account(store, FinancialAccount("cash", "Checking", "asset", "synthetic"))
             for source in SOURCES:
                 evidence = build_source_evidence(source, DEFINITION, suffix=".csv")
                 rows = tuple(

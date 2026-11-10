@@ -18,6 +18,7 @@ from .test_v2_report_drilldown import END, START, _profile
 from .test_v2_transfer_corrections import _alternative
 from .test_v2_transfers import BANK_DEFINITION
 from .test_v2_transfers import _profile as payment_profile
+from .v2_institution_helpers import add_test_financial_account
 from .v2_job_wait import wait_for_jobs
 
 JAN, FEB = date(2026, 1, 1), date(2026, 2, 1)
@@ -48,7 +49,7 @@ def _asset_transfer(profile, *, incoming_day="01/05/2026"):
         ):
             evidence = build_source_evidence(source, BANK_DEFINITION, suffix=".csv")
             store.import_source(source, BANK_DEFINITION, evidence, suffix=".csv")
-            store.add_financial_account(FinancialAccount(account_id, account_id.title(), "asset", "synthetic"))
+            add_test_financial_account(store, FinancialAccount(account_id, account_id.title(), "asset", "synthetic"))
             store.bind_source_account(evidence.source_sha256, identity, "opaque", account_id)
         pair = store.transfer_candidates(preferences=V2Preferences())[0]
         store.post_reviewed_transfer(
@@ -82,7 +83,7 @@ def test_card_purchase_is_spending_without_selected_asset_movement(tmp_path):
     profile = tmp_path / "card.db"
     evidence = _chase_profile(profile)
     with V2ProfileStore.open(profile) as store:
-        store.add_financial_account(FinancialAccount("checking", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("checking", "Checking", "asset", "synthetic"))
         account = evidence.payload.accounts[0]
         store.bind_source_account(evidence.source_sha256, account.source_identity, account.source_identity_form, "card")
         store.post_reviewed_card_purchase(
@@ -361,7 +362,7 @@ def test_duplicate_account_names_remain_distinguishable_in_scope_and_inspection(
     _profile(profile)
     with V2ProfileStore.open(profile) as store:
         store.update_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic", "11110001"))
-        store.add_financial_account(FinancialAccount("cash2", "Checking", "asset", "synthetic", "22220002"))
+        add_test_financial_account(store, FinancialAccount("cash2", "Checking", "asset", "synthetic", "22220002"))
         source = b"Date,Account,Description,Amount,ReportedBalance\n10/06/2026,Checking B,Deposit,$5.00,$1005.00\n"
         evidence = build_source_evidence(source, BANK_DEFINITION, suffix=".csv")
         store.import_source(source, BANK_DEFINITION, evidence, suffix=".csv")

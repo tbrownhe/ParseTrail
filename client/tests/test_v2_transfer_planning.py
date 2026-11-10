@@ -30,6 +30,7 @@ from parsetrail.core.v2_transfer_planning import (
 )
 
 from .test_v2_transfers import BANK_DEFINITION
+from .v2_institution_helpers import add_test_financial_account
 
 PREFERENCES = V2Preferences()
 
@@ -158,7 +159,7 @@ def _profile(path):
     with V2ProfileStore.create(path) as store:
         store.import_source(source, BANK_DEFINITION, evidence, suffix=".csv")
         for identity, account_id in (("Account A", "a"), ("Account B", "b"), ("Account C", "c")):
-            store.add_financial_account(FinancialAccount(account_id, identity, "asset", "synthetic"))
+            add_test_financial_account(store, FinancialAccount(account_id, identity, "asset", "synthetic"))
             store.bind_source_account(evidence.source_sha256, identity, "opaque", account_id)
     return evidence
 

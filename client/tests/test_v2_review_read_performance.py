@@ -10,6 +10,8 @@ import pytest
 from parsetrail.core.v2_profile_store import FinancialAccount, ProfileFormatError, V2ProfileStore
 from parsetrail.core.v2_source_pipeline import build_source_evidence
 
+from .v2_institution_helpers import add_test_financial_account
+
 DEFINITION = (Path(__file__).parents[2] / "devtools/v2_fresh_slice/synthetic-posted-cash-definition.json").read_bytes()
 
 
@@ -150,7 +152,7 @@ def test_archive_snapshot_keeps_external_writes_out_then_observes_next_read(popu
             if not written:
                 written = True
                 with V2ProfileStore.open(path) as writer:
-                    writer.add_financial_account(FinancialAccount("cash", "Cash", "asset", "synthetic"))
+                    add_test_financial_account(writer, FinancialAccount("cash", "Cash", "asset", "synthetic"))
                     writer.bind_source_account(selected, "Checking A", "opaque", "cash")
             yield from original(store)
 
@@ -168,7 +170,7 @@ def test_bulk_read_sees_own_later_write_without_retaining_an_index(populated):
     selected = evidence[0].source_sha256
     with V2ProfileStore.open(path) as store:
         old = store.source_interpretation_snapshot(selected, kind="cash")
-        store.add_financial_account(FinancialAccount("cash", "Cash", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Cash", "asset", "synthetic"))
         store.bind_source_account(selected, "Checking A", "opaque", "cash")
         current = store.source_interpretation_snapshot(selected, kind="cash")
         assert old.rows[0].financial_account is None and current.rows[0].financial_account == "Cash"

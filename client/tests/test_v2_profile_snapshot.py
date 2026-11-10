@@ -12,6 +12,8 @@ import pytest
 from parsetrail.core.v2_profile_store import FinancialAccount, ProfileFormatError, V2ProfileStore
 from parsetrail.core.v2_source_pipeline import build_source_evidence
 
+from .v2_institution_helpers import add_test_financial_account
+
 DEFINITION = (
     Path(__file__).parents[2] / "devtools" / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
 ).read_bytes()
@@ -25,7 +27,7 @@ def test_snapshot_and_restore_as_new_profile_preserve_independent_state(tmp_path
     evidence = build_source_evidence(SOURCE, DEFINITION, suffix=".csv")
     with V2ProfileStore.create(profile) as store:
         store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Checking", "asset", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         store.set_category_budget_rate("expense:food", date(2026, 10, 1), 10_000)
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")

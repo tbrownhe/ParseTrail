@@ -5,22 +5,24 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal, Protocol
+from typing import Literal
 
 from parsetrail.core.source_evidence import SourceEvidence
 from parsetrail.core.v2_data_catalog import VerifiedCatalog
+from parsetrail.core.v2_format_recognition import (
+    CatalogImportError,
+    CatalogParser,
+    FormatCandidate,
+    FormatSelection,
+    ImportCancelled,
+    candidate_from_evidence,
+    selected_definition,
+    validate_catalog_evidence,
+)
 from parsetrail.core.v2_pdf_routing import PDFRoutingError, select_pdf_definition
 from parsetrail.core.v2_profile_store import V2ProfileStore
 from parsetrail.core.v2_source_pipeline import SourcePipelineError, build_source_evidence
 from parsetrail.core.v2_worker_limits import WorkerError
-
-
-class ImportCancelled(ValueError):
-    """Cancellation left the new source and observations unrecorded."""
-
-
-class CatalogImportError(ValueError):
-    """No unique verified definition admits the source evidence."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,6 +30,56 @@ class SourceImportResult:
     status: Literal["imported", "already_imported"]
     source_sha256: str
     evidence: SourceEvidence
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedSourceImport:
+    """Revalidated source/evidence for an atomic account-and-import commit."""
+
+    source: bytes
+    definition: bytes
+    evidence: SourceEvidence
+    suffix: Literal[".csv", ".pdf"]
+    candidate: FormatCandidate
+
+
+def prepare_catalog_source(
+    source: bytes,
+    *,
+    catalog: VerifiedCatalog,
+    suffix: Literal[".csv", ".pdf"],
+    selection: FormatSelection,
+    cancelled: Callable[[], bool] | None = None,
+    parse: CatalogParser = build_source_evidence,
+) -> PreparedSourceImport:
+    """Reparse exact selected bytes without opening or writing a profile."""
+    if cancelled is not None and cancelled():
+        raise ImportCancelled("cancelled")
+    definition = selected_definition(source, catalog=catalog, suffix=suffix, selection=selection)
+    if suffix == ".pdf":
+        try:
+            routed_id = select_pdf_definition(source, catalog, cancelled=cancelled)
+        except (PDFRoutingError, WorkerError) as error:
+            if cancelled is not None and cancelled():
+                raise ImportCancelled("cancelled") from None
+            raise CatalogImportError(
+                str(error) if isinstance(error, PDFRoutingError) else "pdf_routing_failed"
+            ) from None
+        if routed_id != definition.identity.parser_id:
+            raise CatalogImportError("catalog_selected_route_mismatch")
+    try:
+        evidence = parse(source, definition.content, suffix=suffix, cancelled=cancelled)
+    except Exception:
+        if cancelled is not None and cancelled():
+            raise ImportCancelled("cancelled") from None
+        raise
+    if cancelled is not None and cancelled():
+        raise ImportCancelled("cancelled")
+    validate_catalog_evidence(evidence, hashlib.sha256(source).hexdigest(), definition)
+    candidate = candidate_from_evidence(definition, evidence, catalog)
+    if cancelled is not None and cancelled():
+        raise ImportCancelled("cancelled")
+    return PreparedSourceImport(source, definition.content, evidence, suffix, candidate)
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,17 +91,6 @@ class ReparseComparison:
 
 
 Parser = Callable[[bytes, bytes], SourceEvidence]
-
-
-class CatalogParser(Protocol):
-    def __call__(
-        self,
-        source: bytes,
-        definition: bytes,
-        *,
-        suffix: Literal[".csv", ".pdf"],
-        cancelled: Callable[[], bool] | None = None,
-    ) -> SourceEvidence: ...
 
 
 def _saved_retry(store: V2ProfileStore, source: bytes) -> SourceImportResult | None:
@@ -90,6 +131,7 @@ def import_catalog_source(
     *,
     catalog: VerifiedCatalog,
     parser_id: str | None = None,
+    selection: FormatSelection | None = None,
     suffix: Literal[".csv", ".pdf"],
     parse: CatalogParser = build_source_evidence,
     cancelled: Callable[[], bool] | None = None,
@@ -97,10 +139,15 @@ def import_catalog_source(
     """Import a verified entry; PDFs must have one matching signed route."""
     if cancelled is not None and cancelled():
         raise ImportCancelled("cancelled")
+    selected = None
+    if selection is not None:
+        selected = selected_definition(source, catalog=catalog, suffix=suffix, selection=selection)
+        if parser_id is not None and parser_id != selected.identity.parser_id:
+            raise CatalogImportError("catalog_selection_mismatch")
+        parser_id = selected.identity.parser_id
     existing = _saved_retry(store, source)
     if existing is not None:
         return existing
-    selected = None
     if parser_id is not None:
         choices = tuple(item for item in catalog.definitions if item.identity.parser_id == parser_id)
         if len(choices) != 1 or choices[0].identity.suffix != suffix:
@@ -131,13 +178,7 @@ def import_catalog_source(
                 if cancelled is not None and cancelled():
                     raise ImportCancelled("cancelled") from None
                 continue
-            if (
-                not isinstance(candidate, SourceEvidence)
-                or candidate.parser_id != item.identity.parser_id
-                or candidate.definition_revision != item.identity.revision
-                or candidate.definition_sha256 != item.sha256
-            ):
-                raise CatalogImportError("catalog_evidence_mismatch")
+            validate_catalog_evidence(candidate, hashlib.sha256(source).hexdigest(), item)
             matches.append((item, candidate))
         if len(matches) != 1:
             raise CatalogImportError("catalog_ambiguous_match" if matches else "catalog_no_match")
@@ -159,13 +200,7 @@ def import_catalog_source(
             if cancelled is not None and cancelled():
                 raise ImportCancelled("cancelled") from None
             raise
-        if (
-            not isinstance(evidence, SourceEvidence)
-            or evidence.parser_id != selected.identity.parser_id
-            or evidence.definition_revision != selected.identity.revision
-            or evidence.definition_sha256 != selected.sha256
-        ):
-            raise CatalogImportError("catalog_evidence_mismatch")
+        validate_catalog_evidence(evidence, hashlib.sha256(source_bytes).hexdigest(), selected)
         return evidence
 
     return import_source(

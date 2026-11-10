@@ -21,6 +21,7 @@ from parsetrail.core.v2_two_date_card_lines import parse_two_date_card
 from devtools.parser_engine_pilot import test_two_date_card_lines as yamaha
 
 from .test_v2_inline_account_creation import PDF_SOURCE, _workspace
+from .v2_institution_helpers import add_test_financial_account, register_test_institutions
 
 
 def _variant(store, original, label, *, empty=False, identity=None, form=None, scope=None):
@@ -86,8 +87,8 @@ def test_opaque_prior_identity_reuses_one_account_across_all_unassigned_includin
     workspace, original, additional = archive
     section = original.payload.accounts[0]
     with V2ProfileStore.open(workspace.profile_path) as store:
-        store.add_financial_account(
-            FinancialAccount("yamaha", "Owner authored label without a number", "liability", "yamaha")
+        add_test_financial_account(
+            store, FinancialAccount("yamaha", "Owner authored label without a number", "liability", "yamaha")
         )
         store.bind_source_account(
             original.source_sha256, section.source_identity, section.source_identity_form, "yamaha"
@@ -131,6 +132,56 @@ def test_staged_account_and_all_sections_save_atomically_with_idempotent_retry(a
         assert store.financial_accounts() == (staged,)
 
 
+def test_unknown_institution_prior_assignment_never_seeds_other_documents(archive):
+    workspace, original, _additional = archive
+    section = original.payload.accounts[0]
+    unknown = FinancialAccount("unknown", "Explicitly assigned card", "liability", None)
+    with V2ProfileStore.open(workspace.profile_path) as store:
+        add_test_financial_account(store, unknown)
+        store.bind_source_account(
+            original.source_sha256, section.source_identity, section.source_identity_form, unknown.id
+        )
+        group = _plan(store, workspace).groups[0]
+        assert group.status == "manual" and group.reason == "prior_assignment_incompatible"
+        assert group.suggested_account_id is None and group.eligible_account_ids == ()
+        assert not account_compatible(group, unknown)
+
+
+@pytest.mark.parametrize("cancel_after_registry", [False, True])
+def test_catalog_institution_is_registered_inside_atomic_apply(tmp_path, monkeypatch, cancel_after_registry):
+    evidence = parse_two_date_card(yamaha.DEFINITION, yamaha.lines())
+    workspace = _workspace(tmp_path, yamaha.DEFINITION, evidence, institution="future_bank")
+    account = FinancialAccount("future", "Future card", "liability", "future_bank")
+    with V2ProfileStore.open(workspace.profile_path) as store:
+        assert "future_bank" not in {item.id for item in store.institutions()}
+        plan = _plan(store, workspace)
+        choice = (AccountAssignmentChoice(plan.groups[0].group_id, account.id),)
+        registered = False
+        original_register = store.register_catalog_institutions
+
+        def register(catalog):
+            nonlocal registered
+            result = original_register(catalog)
+            registered = True
+            return result
+
+        monkeypatch.setattr(store, "register_catalog_institutions", register)
+        if cancel_after_registry:
+            with pytest.raises(AccountAssignmentCancelled):
+                _apply(store, workspace, plan, choice, new_accounts=(account,), cancelled=lambda: registered)
+            assert "future_bank" not in {item.id for item in store.institutions()}
+            assert store.financial_accounts() == ()
+            assert store.source_account_bindings(evidence.source_sha256)[0].ledger_account_id is None
+        else:
+            result = _apply(store, workspace, plan, choice, new_accounts=(account,))
+            assert registered and result.created_accounts == result.assigned_sections == 1
+            assert "future_bank" in {item.id for item in store.institutions()}
+            retry = _apply(store, workspace, plan, choice, new_accounts=(account,))
+            assert retry.already_applied_sections == 1
+        assert store.load_import(evidence.source_sha256).evidence == evidence
+        assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (0,)
+
+
 @pytest.mark.parametrize(
     "field,value", [("institution_key", "other"), ("kind", "asset"), ("tracking_scope", "principal_component")]
 )
@@ -158,7 +209,7 @@ def test_multiple_prior_accounts_are_ambiguous_and_incompatible_prior_is_manual(
     identity = original.payload.accounts[0]
     with V2ProfileStore.open(workspace.profile_path) as store:
         for ident in ("one", "two"):
-            store.add_financial_account(FinancialAccount(ident, ident, "liability", "yamaha"))
+            add_test_financial_account(store, FinancialAccount(ident, ident, "liability", "yamaha"))
         store.bind_source_account(
             original.source_sha256, identity.source_identity, identity.source_identity_form, "one"
         )
@@ -167,6 +218,7 @@ def test_multiple_prior_accounts_are_ambiguous_and_incompatible_prior_is_manual(
         )
         ambiguous = _plan(store, workspace).groups[0]
         assert ambiguous.status == "ambiguous" and ambiguous.suggested_account_id is None
+        register_test_institutions(store, "other")
         store.update_financial_account(FinancialAccount("two", "two", "liability", "other"))
         manual = _plan(store, workspace).groups[0]
         assert manual.status == "manual" and manual.reason == "prior_assignment_incompatible"
@@ -176,7 +228,7 @@ def test_locked_section_does_not_block_other_documents_with_same_identity(archiv
     workspace, original, additional = archive
     identity = original.payload.accounts[0]
     with V2ProfileStore.open(workspace.profile_path) as store:
-        store.add_financial_account(FinancialAccount("known", "Known", "liability", "yamaha"))
+        add_test_financial_account(store, FinancialAccount("known", "Known", "liability", "yamaha"))
         store.bind_source_account(
             original.source_sha256, identity.source_identity, identity.source_identity_form, "known"
         )
@@ -220,8 +272,8 @@ def test_full_match_is_exact_and_last_four_obeys_policy_without_changing_it(arch
     with V2ProfileStore.open(workspace.profile_path) as store:
         _variant(store, original, "full", identity="999991234", form="full")
         _variant(store, original, "suffix", identity="1234", form="last_four")
-        store.add_financial_account(
-            FinancialAccount("numbered", "Not parsed for identity", "liability", "yamaha", "999991234")
+        add_test_financial_account(
+            store, FinancialAccount("numbered", "Not parsed for identity", "liability", "yamaha", "999991234")
         )
         plan = _plan(store, workspace)
         full = next(group for group in plan.groups if group.source_identity_form == "full")
@@ -233,7 +285,7 @@ def test_full_match_is_exact_and_last_four_obeys_policy_without_changing_it(arch
         enabled_suffix = next(group for group in enabled.groups if group.source_identity_form == "last_four")
         assert enabled_suffix.suggested_account_id == "numbered"
         assert enabled_suffix.reason == "opted_in_abbreviated_number_match"
-        store.add_financial_account(FinancialAccount("other", "Other", "liability", "yamaha", "888881234"))
+        add_test_financial_account(store, FinancialAccount("other", "Other", "liability", "yamaha", "888881234"))
         ambiguous = _plan(store, workspace, V2Preferences(allow_abbreviated_account_matching=True))
         suffix = next(group for group in ambiguous.groups if group.source_identity_form == "last_four")
         assert suffix.status == "ambiguous" and suffix.suggested_account_id is None
@@ -255,16 +307,19 @@ def test_accountless_exports_remain_per_document_manual(archive):
         assert group.reason == "accountless_export_requires_file_or_row_review"
 
 
-@pytest.mark.parametrize("change", ["account", "binding", "source", "policy", "catalog"])
+@pytest.mark.parametrize("change", ["account", "institution", "binding", "source", "policy", "catalog"])
 def test_stale_plan_refuses_all_staged_writes(archive, change):
     workspace, original, _additional = archive
     staged = FinancialAccount("staged", "New", "liability", "yamaha")
     with V2ProfileStore.open(workspace.profile_path) as store:
         plan = _plan(store, workspace)
         if change == "account":
-            store.add_financial_account(FinancialAccount("other", "Other", "asset", "other"))
+            register_test_institutions(store, "other")
+            add_test_financial_account(store, FinancialAccount("other", "Other", "asset", "other"))
+        elif change == "institution":
+            register_test_institutions(store, "new_institution")
         elif change == "binding":
-            store.add_financial_account(FinancialAccount("other", "Other", "liability", "yamaha"))
+            add_test_financial_account(store, FinancialAccount("other", "Other", "liability", "yamaha"))
             identity = original.payload.accounts[0]
             store.bind_source_account(
                 original.source_sha256, identity.source_identity, identity.source_identity_form, "other"

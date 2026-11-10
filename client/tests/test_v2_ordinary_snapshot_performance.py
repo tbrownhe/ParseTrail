@@ -11,6 +11,7 @@ from parsetrail.core.v2_source_pipeline import build_source_evidence
 
 from .test_v2_ordinary_batch import DEFINITION, SOURCE, _counts, _profile
 from .test_v2_transfers import _profile as _transfer_profile
+from .v2_institution_helpers import add_test_financial_account
 
 
 def test_cash_read_model_preserves_derived_date_origin(tmp_path):
@@ -26,7 +27,7 @@ def test_cash_read_model_preserves_derived_date_origin(tmp_path):
     path = tmp_path / "derived-dates.db"
     with V2ProfileStore.create(path) as store:
         store.import_source(BANK_SOURCE, BANK_DEFINITION, evidence, suffix=".pdf")
-        store.add_financial_account(FinancialAccount("cash", "Synthetic bank", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Synthetic bank", "asset", "synthetic"))
         store.bind_source_account(evidence.source_sha256, account.source_identity, account.source_identity_form, "cash")
         frame = store.source_interpretation_snapshot(evidence.source_sha256, kind="cash")
         assert {row.row_id: row.date_provenance for row in frame.rows} == {
@@ -224,7 +225,7 @@ def test_statement_period_warnings_reuse_verified_dates_without_retaining_archiv
     path = tmp_path / "statements.db"
     sources = []
     with V2ProfileStore.create(path) as store:
-        store.add_financial_account(FinancialAccount("card", "Synthetic card", "liability", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("card", "Synthetic card", "liability", "synthetic"))
         for number in range(4):
             raw = f"%PDF-public-synthetic-{number}".encode()
             lines = page_lines(raw, pages(), extraction_library="synthetic-pdf-1")

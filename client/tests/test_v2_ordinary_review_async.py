@@ -15,6 +15,8 @@ from parsetrail.gui.v2_profile_jobs import _JOBS, ProfileJobs
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox
 
+from .v2_institution_helpers import add_test_financial_account
+
 DEFINITION = (Path(__file__).parents[2] / "devtools/v2_fresh_slice/synthetic-posted-cash-definition.json").read_bytes()
 
 
@@ -53,7 +55,7 @@ def cash(tmp_path):
     path = tmp_path / "ordinary.db"
     with V2ProfileStore.create(path) as store:
         store.import_source(raw, DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("cash", "Synthetic checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Synthetic checking", "asset", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         store.add_category_account("expense:travel", "Travel", "expense")
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")

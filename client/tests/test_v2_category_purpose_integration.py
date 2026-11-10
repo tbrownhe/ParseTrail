@@ -13,6 +13,7 @@ from parsetrail.core.v2_source_pipeline import build_source_evidence
 from .test_v2_card_purchase_review import _chase_profile
 from .test_v2_cash_activity_review import DEFINITION
 from .test_v2_reports_responsiveness import wait_for_reports
+from .v2_institution_helpers import add_test_financial_account
 from .v2_job_wait import wait_for_jobs
 
 START, END = date(2026, 10, 1), date(2026, 11, 1)
@@ -30,7 +31,7 @@ def _profile(path):
     evidence = build_source_evidence(SOURCE, DEFINITION, suffix=".csv")
     with V2ProfileStore.create(path) as store:
         store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Checking", "asset", "synthetic"))
         for account_id, name, kind in (
             ("expense:food", "Food", "expense"),
             ("expense:travel", "Travel", "expense"),
@@ -130,7 +131,7 @@ def test_first_builtin_post_uses_the_selected_source_basis_before_atomic_materia
     evidence = build_source_evidence(SOURCE, DEFINITION, suffix=".csv")
     with V2ProfileStore.create(profile) as store:
         store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Checking", "asset", "synthetic"))
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
         selected = store.source_interpretation_snapshot(evidence.source_sha256, kind="cash")
         assert store.category_accounts() == ()
@@ -236,7 +237,7 @@ def test_builtin_and_custom_same_name_remain_distinct_in_reports_and_selected_dr
     evidence = build_source_evidence(SOURCE, DEFINITION, suffix=".csv")
     with V2ProfileStore.create(profile) as store:
         store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Checking", "asset", "synthetic"))
         store.add_category_account("expense:custom-interest", "Loan interest", "expense")
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
         for row, category_id, purpose in zip(

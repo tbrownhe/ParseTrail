@@ -22,6 +22,7 @@ from devtools.parser_engine_pilot.test_table_card_source_output import evidence 
 from .test_v2_card_purchase_review import _chase_profile
 from .test_v2_statement_journal_comparison import _profile as bank_profile
 from .test_v2_transfers import BANK_DEFINITION, _profile
+from .v2_institution_helpers import add_test_financial_account
 
 PREFERENCES = V2Preferences()
 
@@ -41,7 +42,7 @@ def _alternative(store):
     source = b"Date,Account,Description,Amount,ReportedBalance\n01/06/2026,Savings B,Transfer in,$20.00,$1020.00\n"
     evidence = build_source_evidence(source, BANK_DEFINITION, suffix=".csv")
     store.import_source(source, BANK_DEFINITION, evidence, suffix=".csv")
-    store.add_financial_account(FinancialAccount("savings", "Savings", "asset", "synthetic"))
+    add_test_financial_account(store, FinancialAccount("savings", "Savings", "asset", "synthetic"))
     store.bind_source_account(evidence.source_sha256, "Savings B", "opaque", "savings")
     return evidence.payload.rows[0].row_id
 
@@ -196,7 +197,7 @@ def test_dismiss_reopen_is_durable_nonposting_and_bound_to_reviewed_account_cont
             preferences=PREFERENCES,
             reason="Still unrelated",
         )
-        store.add_financial_account(FinancialAccount("other", "Other checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("other", "Other checking", "asset", "synthetic"))
         source_id = store.connection.execute(
             "SELECT source_sha256 FROM SourceObservations WHERE row_id=?", (outgoing,)
         ).fetchone()[0]
@@ -328,7 +329,7 @@ def test_new_assumed_date_posting_requires_opt_in_but_existing_event_withdrawal_
     cash = build_source_evidence(source, BANK_DEFINITION, suffix=".csv")
     with V2ProfileStore.open(path) as store:
         store.import_source(source, BANK_DEFINITION, cash, suffix=".csv")
-        store.add_financial_account(FinancialAccount("checking", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("checking", "Checking", "asset", "synthetic"))
         store.bind_source_account(cash.source_sha256, "Checking A", "opaque", "checking")
         account = card.payload.accounts[0]
         store.bind_source_account(card.source_sha256, account.source_identity, account.source_identity_form, "card")

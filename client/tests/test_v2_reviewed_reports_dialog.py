@@ -11,6 +11,7 @@ from parsetrail.core.v2_profile_store import FinancialAccount, V2ProfileStore
 from parsetrail.core.v2_source_pipeline import build_source_evidence
 
 from .test_v2_reports_responsiveness import wait_for_reports
+from .v2_institution_helpers import add_test_financial_account
 
 DEFINITION = (
     Path(__file__).parents[2] / "devtools" / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
@@ -33,7 +34,7 @@ def test_spending_dialog_reads_posted_totals_without_changing_profile(tmp_path: 
     profile = tmp_path / "fresh.db"
     with V2ProfileStore.create(profile) as store:
         store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Checking", "asset", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         store.set_category_budget_rate("expense:food", date(2026, 10, 1), 1_000)
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
@@ -95,7 +96,7 @@ def test_report_dialog_exports_reviewed_rows_without_changing_profile(tmp_path: 
     profile = tmp_path / "fresh.db"
     with V2ProfileStore.create(profile) as store:
         store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Checking", "asset", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
         store.post_reviewed_cash_category(evidence.payload.rows[0].row_id, "expense:food", reason="Reviewed coffee")
@@ -143,7 +144,7 @@ def test_income_tab_shows_only_reviewed_income_and_coverage(tmp_path: Path) -> N
     profile = tmp_path / "fresh.db"
     with V2ProfileStore.create(profile) as store:
         store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Checking", "asset", "synthetic"))
         store.add_category_account("income:pay", "Pay", "income")
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
         store.post_reviewed_cash_category(evidence.payload.rows[1].row_id, "income:pay", reason="Confirmed income")

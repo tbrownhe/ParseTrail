@@ -17,6 +17,7 @@ from devtools.parser_engine_pilot.test_synchrony_source_output import SOURCE as 
 from devtools.parser_engine_pilot.test_synchrony_source_output import channels as card_channels
 
 from .test_v2_document_browser import wait_for_inventory
+from .v2_institution_helpers import add_test_financial_account
 from .v2_job_wait import wait_for_jobs
 
 CASH_DEFINITION = (
@@ -35,8 +36,8 @@ def test_identified_export_binds_only_selected_identity_and_survives_reopen(tmp_
     source_id = evidence.source_sha256
     with V2ProfileStore.create(path) as store:
         store.import_source(CASH_SOURCE, CASH_DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("checking-a", "Checking A", "asset", "synthetic"))
-        store.add_financial_account(FinancialAccount("checking-b", "Checking B", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("checking-a", "Checking A", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("checking-b", "Checking B", "asset", "synthetic"))
         assert store.connection.execute("SELECT role,currency FROM Accounts WHERE id='checking-a'").fetchone() == (
             "financial",
             "USD",
@@ -259,7 +260,7 @@ def test_source_account_review_assigns_and_clears_without_posting(tmp_path: Path
     evidence = build_source_evidence(CASH_SOURCE, CASH_DEFINITION, suffix=".csv")
     with V2ProfileStore.create(path) as store:
         store.import_source(CASH_SOURCE, CASH_DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("checking-a", "Checking A", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("checking-a", "Checking A", "asset", "synthetic"))
     workspace = V2Workspace.open(path, tmp_path / "catalog", preferences_path=tmp_path / "preferences.json")
     dialog = V2SourceAccountReview(workspace, evidence.source_sha256)
     try:
@@ -293,7 +294,7 @@ def test_source_account_review_explains_posted_assignment_lock(tmp_path: Path, m
     row = evidence.payload.rows[0]
     with V2ProfileStore.create(path) as store:
         store.import_source(CASH_SOURCE, CASH_DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("checking-a", "Checking A", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("checking-a", "Checking A", "asset", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         store.bind_source_account(evidence.source_sha256, row.source_account, row.source_account_form, "checking-a")
     workspace = V2Workspace.open(path, tmp_path / "catalog", preferences_path=tmp_path / "preferences.json")

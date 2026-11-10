@@ -25,6 +25,7 @@ from devtools.parser_engine_pilot.synthetic_family_sources import family_sources
 from devtools.parser_engine_pilot.test_hsa_cash_lines import pages
 
 from .test_v2_settlements import profile as settlement_profile
+from .v2_institution_helpers import add_test_financial_account
 
 PREFS = V2Preferences()
 EXPECTED = ExpectedOwnedDestination("savings", "Reviewed ownership; receipt not yet available", True)
@@ -52,8 +53,8 @@ def hsa_profile(path, source, *, kind="asset", scope="cash_component", opening=N
         evidence = build_source_evidence(content, definition, suffix=".pdf")
     with V2ProfileStore.create(path) as store:
         store.import_source(content, definition, evidence, suffix=".pdf")
-        store.add_financial_account(FinancialAccount("hsa", "HSA cash", kind, "synthetic", tracking_scope=scope))
-        store.add_financial_account(FinancialAccount("investment", "Investment", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("hsa", "HSA cash", kind, "synthetic", tracking_scope=scope))
+        add_test_financial_account(store, FinancialAccount("investment", "Investment", "asset", "synthetic"))
         store.add_category_account("expense:first", "Expense", "expense")
         store.add_category_account("expense:other", "Other expense", "expense")
         store.add_category_account("income:first", "Income", "income")
@@ -373,7 +374,7 @@ def test_scope_edit_validates_bounded_history_and_rolls_back_malformed_payload(t
     _, outgoing, _ = settlement_profile(path)
     with V2ProfileStore.open(path) as store:
         post_missing(store, outgoing)
-        store.add_financial_account(FinancialAccount("spare", "Spare", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("spare", "Spare", "asset", "synthetic"))
         trigger = store.connection.execute(
             "SELECT sql FROM sqlite_master WHERE name='immutable_TransferEvents_update'"
         ).fetchone()[0]

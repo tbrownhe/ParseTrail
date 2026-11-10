@@ -165,9 +165,9 @@ def test_local_signed_catalog_install_is_idempotent_and_refuses_rollback(tmp_pat
         return directory
 
     first, second = release(1), release(2)
-    assert workspace.install_catalog_release(first).release_sequence == 1
-    assert workspace.install_catalog_release(first).release_sequence == 1
-    assert workspace.install_catalog_release(second).release_sequence == 2
+    assert workspace.install_catalog_release(first).catalog.release_sequence == 1
+    assert workspace.install_catalog_release(first).catalog.release_sequence == 1
+    assert workspace.install_catalog_release(second).catalog.release_sequence == 2
     with pytest.raises(CatalogRollbackError, match="catalog_rollback"):
         workspace.install_catalog_release(first)
     assert workspace.catalog_cache.load_current().release_sequence == 2

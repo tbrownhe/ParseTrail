@@ -22,6 +22,7 @@ from devtools.parser_engine_pilot import test_two_date_card_lines as yamaha
 
 from .test_v2_batch_account_assignment import _variant
 from .test_v2_inline_account_creation import _workspace
+from .v2_institution_helpers import add_test_financial_account
 
 
 @pytest.fixture
@@ -66,7 +67,7 @@ def _seed(workspace, original):
     section = original.payload.accounts[0]
     account = FinancialAccount("known", "Owner Yamaha account", "liability", "yamaha")
     with V2ProfileStore.open(workspace.profile_path) as store:
-        store.add_financial_account(account)
+        add_test_financial_account(store, account)
         store.bind_source_account(
             original.source_sha256, section.source_identity, section.source_identity_form, account.id
         )
@@ -184,7 +185,7 @@ def test_stale_refusal_then_reload_keeps_compatible_choice(app, archive):
     _seed(workspace, original)
     account = FinancialAccount("alternate", "Explicit alternative", "liability", "yamaha")
     with V2ProfileStore.open(workspace.profile_path) as store:
-        store.add_financial_account(account)
+        add_test_financial_account(store, account)
     dialog = gui.V2BatchAccountAssignment(workspace)
     try:
         dialog.show()
@@ -194,7 +195,7 @@ def test_stale_refusal_then_reload_keeps_compatible_choice(app, archive):
         assert dialog.choices[group_id] == account.id
         dialog.review_button.click()
         with V2ProfileStore.open(workspace.profile_path) as store:
-            store.add_financial_account(FinancialAccount("unrelated", "Different account", "asset", "other"))
+            add_test_financial_account(store, FinancialAccount("unrelated", "Different account", "asset", "other"))
         before = _hash(workspace)
         dialog.apply_button.click()
         _wait(app, lambda: not dialog.pending)
@@ -422,7 +423,7 @@ def test_reverting_to_proposal_clears_dirty_and_skipping_survives_reload(app, ar
     workspace, original, _additional = archive
     known = _seed(workspace, original)
     with V2ProfileStore.open(workspace.profile_path) as store:
-        store.add_financial_account(FinancialAccount("alternative", "Other Yamaha", "liability", "yamaha"))
+        add_test_financial_account(store, FinancialAccount("alternative", "Other Yamaha", "liability", "yamaha"))
     dialog = gui.V2BatchAccountAssignment(workspace)
     try:
         dialog.show()

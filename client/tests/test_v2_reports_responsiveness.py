@@ -20,6 +20,8 @@ from parsetrail.gui.v2_reviewed_reports import _REPORT_READERS, V2ReviewedReport
 from PySide6.QtCore import QDate, QTimer
 from PySide6.QtWidgets import QApplication
 
+from .v2_institution_helpers import add_test_financial_account
+
 
 def wait_for_reports(dialog, timeout=5000):
     """Drive normal queued Qt delivery; never disable production asynchronous reads."""
@@ -49,7 +51,7 @@ def app(monkeypatch):
 def profile(tmp_path):
     path = tmp_path / "reports.db"
     with V2ProfileStore.create(path) as store:
-        store.add_financial_account(FinancialAccount("cash", "Synthetic checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Synthetic checking", "asset", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
     return path
 
@@ -133,7 +135,7 @@ def test_filter_edits_coalesce_and_superseded_read_cannot_publish(profile, monke
 
 def test_tab_dates_compact_positions_details_and_history(profile):
     with V2ProfileStore.open(profile) as store:
-        store.add_financial_account(FinancialAccount("card", "Synthetic checking", "liability", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("card", "Synthetic checking", "liability", "synthetic"))
     dialog = V2ReviewedReportsDialog(profile)
     try:
         wait_for_reports(dialog)

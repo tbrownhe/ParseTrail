@@ -21,6 +21,8 @@ from devtools.parser_engine_pilot.test_table_card_source_output import DEFINITIO
 from devtools.parser_engine_pilot.test_table_card_source_output import SOURCE as CARD_SOURCE
 from devtools.parser_engine_pilot.test_table_card_source_output import evidence as card_channels
 
+from .v2_institution_helpers import add_test_financial_account
+
 BANK_DEFINITION = (
     Path(__file__).parents[2] / "devtools" / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
 ).read_bytes()
@@ -35,7 +37,7 @@ def _profile(path: Path, *, bank_date: str):
     with V2ProfileStore.create(path) as store:
         store.import_source(source, BANK_DEFINITION, bank, suffix=".csv")
         store.import_source(CARD_SOURCE, CARD_DEFINITION, card, suffix=".pdf")
-        store.add_financial_account(FinancialAccount("checking", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("checking", "Checking", "asset", "synthetic"))
         store.add_financial_account(FinancialAccount("card", "Card", "liability", "citi"))
         store.add_category_account("expense:food", "Food", "expense")
         store.bind_source_account(bank.source_sha256, "Checking A", "opaque", "checking")
@@ -114,7 +116,7 @@ def test_assumed_card_payment_date_needs_global_choice(tmp_path: Path):
     with V2ProfileStore.create(path) as store:
         store.import_source(cash_source, BANK_DEFINITION, cash, suffix=".csv")
         store.import_source(card_source, CHASE_DEFINITION, card, suffix=".pdf")
-        store.add_financial_account(FinancialAccount("checking", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("checking", "Checking", "asset", "synthetic"))
         store.add_financial_account(FinancialAccount("card", "Card", "liability", "chase"))
         store.bind_source_account(cash.source_sha256, "Checking A", "opaque", "checking")
         account = card.payload.accounts[0]
@@ -149,8 +151,8 @@ def test_asset_transfer_candidates_keep_multiple_matches_explicit(tmp_path: Path
     with V2ProfileStore.create(path) as store:
         for source, evidence in ((outgoing_source, outgoing), (incoming_source, incoming)):
             store.import_source(source, BANK_DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("checking", "Checking", "asset", "synthetic"))
-        store.add_financial_account(FinancialAccount("savings", "Savings", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("checking", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("savings", "Savings", "asset", "synthetic"))
         store.bind_source_account(outgoing.source_sha256, "Checking A", "opaque", "checking")
         store.bind_source_account(incoming.source_sha256, "Savings B", "opaque", "savings")
         pairs = store.transfer_candidates(preferences=V2Preferences())

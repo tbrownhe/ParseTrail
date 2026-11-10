@@ -11,6 +11,7 @@ from devtools.parser_engine_pilot.synthetic_family_sources import family_sources
 
 from .test_v2_settlement_review_dialog import _check
 from .test_v2_transfers import BANK_DEFINITION
+from .v2_institution_helpers import add_test_financial_account
 from .v2_job_wait import wait_for_jobs
 
 
@@ -35,11 +36,12 @@ def profile(path, hsa_source, *, scope="cash_component"):
     content, definition, evidence = hsa_source
     with V2ProfileStore.create(path) as store:
         store.import_source(content, definition, evidence, suffix=".pdf")
-        store.add_financial_account(
-            FinancialAccount("hsa", "Health savings", "asset", "synthetic", tracking_scope=scope)
+        add_test_financial_account(
+            store, FinancialAccount("hsa", "Health savings", "asset", "synthetic", tracking_scope=scope)
         )
-        store.add_financial_account(
-            FinancialAccount("investment", "Health savings", "asset", "synthetic", tracking_scope="account_total")
+        add_test_financial_account(
+            store,
+            FinancialAccount("investment", "Health savings", "asset", "synthetic", tracking_scope="account_total"),
         )
         store.add_category_account("expense:review", "Reviewed expense", "expense")
         store.add_category_account("income:review", "Reviewed income", "income")

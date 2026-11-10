@@ -6,6 +6,7 @@ import argparse
 import tempfile
 from pathlib import Path
 
+from parsetrail.core.v2_institutions import Institution
 from parsetrail.core.v2_profile_store import FinancialAccount, V2ProfileStore
 from parsetrail.core.v2_source_pipeline import build_source_evidence
 
@@ -26,6 +27,7 @@ SOURCES = (
 def prepare_demo(profile: Path) -> None:
     """Create a new profile with two equal occurrences versus one candidate."""
     with V2ProfileStore.create(profile) as store:
+        store.register_institution(Institution("synthetic", "Synthetic example"))
         store.add_financial_account(FinancialAccount("cash", "Synthetic checking", "asset", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         for source in SOURCES:

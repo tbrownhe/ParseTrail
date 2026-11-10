@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import sqlite3
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -11,6 +13,14 @@ from parsetrail.core.source_evidence import StatementPayload
 from parsetrail.core.v2_account_matching import LedgerAccountCandidate, match_verified_source_account
 from parsetrail.core.v2_catalog_admission import admit_pilot_definition
 from parsetrail.core.v2_data_catalog import CatalogCache, VerifiedCatalog, load_trusted_catalog_keys
+from parsetrail.core.v2_format_recognition import FormatRecognition, FormatSelection, recognize_catalog_source
+from parsetrail.core.v2_import_accounts import (
+    ImportAccountPlan,
+    ImportAccountReview,
+    build_import_account_review,
+    commit_import_accounts,
+)
+from parsetrail.core.v2_institutions import Institution, catalog_institutions, merge_institutions
 from parsetrail.core.v2_preferences import V2Preferences, default_preferences_path, load_preferences, save_preferences
 from parsetrail.core.v2_profile_store import (
     MAX_SOURCE_BYTES,
@@ -24,6 +34,7 @@ from parsetrail.core.v2_source_import import (
     ImportCancelled,
     SourceImportResult,
     import_catalog_source,
+    prepare_catalog_source,
 )
 from parsetrail.core.v2_source_pipeline import SourcePipelineError
 
@@ -32,13 +43,29 @@ class WorkspaceError(ValueError):
     """A 2.0 workspace cannot import this local source."""
 
 
+class ImportSkipped(WorkspaceError):
+    """An explicit preview decision left this file unimported."""
+
+
+FormatReview = Callable[[Path, FormatRecognition], FormatSelection | None]
+ImportReview = Callable[[Path, ImportAccountReview], ImportAccountPlan | None]
+
+
+@dataclass(frozen=True)
+class CatalogInstallResult:
+    """Activation and profile retention have separate, truthful outcomes."""
+
+    catalog: VerifiedCatalog
+    institution_error_code: str | None = None
+
+
 MAX_BATCH_FILES = 2_000
 
 
 @dataclass(frozen=True)
 class BatchFileResult:
     path: Path
-    status: Literal["imported", "already_imported", "failed", "cancelled", "not_attempted"]
+    status: Literal["imported", "already_imported", "failed", "skipped", "cancelled", "not_attempted"]
     source_sha256: str | None = None
     error_code: str | None = None
 
@@ -221,24 +248,181 @@ class V2Workspace:
             )
         return tuple(resolved)
 
-    def install_catalog_release(self, release_dir: Path) -> VerifiedCatalog:
+    def install_catalog_release(self, release_dir: Path) -> CatalogInstallResult:
         """Install only a locally selected, authenticated catalog release."""
-        return self.catalog_cache.activate_directory(release_dir)
+        candidate = self.catalog_cache.inspect_directory(release_dir)
+        # Refuse predictable identity conflicts before activating formats. The
+        # later profile write and filesystem pointer are separate resources:
+        # report retention failure honestly instead of claiming install failed.
+        with V2ProfileStore.open(self.profile_path, read_only=True) as store:
+            registered = store.institutions()
+        try:
+            merge_institutions(registered, catalog_institutions(candidate))
+        except ValueError as exc:
+            raise ProfileFormatError(str(exc)) from None
+        catalog = self.catalog_cache.activate(candidate.snapshot, candidate.signature)
+        try:
+            self.sync_catalog_institutions(catalog)
+        except (ProfileFormatError, sqlite3.Error, OSError) as exc:
+            return CatalogInstallResult(catalog, str(exc))
+        return CatalogInstallResult(catalog)
+
+    def institutions(self) -> tuple[Institution, ...]:
+        """Offer managed names without writing merely to populate a selector."""
+        with V2ProfileStore.open(self.profile_path, read_only=True) as store:
+            registered = store.institutions()
+        catalog = self.catalog_cache.load_current()
+        try:
+            return merge_institutions(registered, catalog_institutions(catalog) if catalog is not None else ())
+        except ValueError as exc:
+            raise ProfileFormatError(str(exc)) from None
+
+    def sync_catalog_institutions(self, catalog: VerifiedCatalog | None = None) -> tuple[Institution, ...]:
+        """Explicitly retain verified catalog identities independently of formats."""
+        selected = catalog if catalog is not None else self.catalog_cache.load_current()
+        if selected is None:
+            return ()
+        with V2ProfileStore.open(self.profile_path) as store:
+            return store.register_catalog_institutions(selected)
 
     def import_file(
         self,
         source_path: Path,
         *,
         cancelled: Callable[[], bool] | None = None,
+        review_format: FormatReview | None = None,
+        review_import: ImportReview | None = None,
     ) -> SourceImportResult:
+        if review_format is not None and review_import is not None:
+            raise WorkspaceError("import_review_conflict")
         if cancelled is not None and cancelled():
             raise ImportCancelled("cancelled")
         catalog = self.catalog_cache.load_current()
         if catalog is None:
             raise WorkspaceError("verified_catalog_missing")
         source, suffix = _read_source(source_path)
+        if review_import is not None:
+            return self._import_with_accounts(source_path, review_import, cancelled=cancelled)
+        selection = None
+        if review_format is not None and suffix == ".csv":
+            # An exact retry needs no new interpretation or preview. This read
+            # also verifies the existing profile before any review is requested.
+            with V2ProfileStore.open(self.profile_path, read_only=True) as store:
+                if store.source_imported(source):
+                    source_hash = hashlib.sha256(source).hexdigest()
+                    saved = store.load_import(source_hash)
+                    return SourceImportResult("already_imported", source_hash, saved.evidence)
+            recognition = recognize_catalog_source(source, catalog=catalog, suffix=suffix, cancelled=cancelled)
+            if not recognition.candidates:
+                raise CatalogImportError("catalog_no_match")
+            selection = review_format(source_path, recognition)
+            if cancelled is not None and cancelled():
+                raise ImportCancelled("cancelled")
+            if selection is None:
+                raise ImportSkipped("import_skipped")
+            # No connection or write lock was held while the user reviewed.
+            # Re-read both mutable inputs: confirmation cannot authorize bytes
+            # or a signed declaration release different from the preview.
+            source, current_suffix = _read_source(source_path)
+            if current_suffix != suffix or hashlib.sha256(source).hexdigest() != recognition.source_sha256:
+                raise WorkspaceError("source_changed_since_preview")
+            catalog = self.catalog_cache.load_current()
+            if catalog is None:
+                raise WorkspaceError("verified_catalog_missing")
+        if cancelled is not None and cancelled():
+            raise ImportCancelled("cancelled")
         with V2ProfileStore.open(self.profile_path) as store:
-            return import_catalog_source(store, source, catalog=catalog, suffix=suffix, cancelled=cancelled)
+            return import_catalog_source(
+                store, source, catalog=catalog, suffix=suffix, cancelled=cancelled, selection=selection
+            )
+
+    def _import_with_accounts(self, source_path, review_import, *, cancelled=None):
+        notice = ""
+        while True:
+            if cancelled is not None and cancelled():
+                raise ImportCancelled("cancelled")
+            source, suffix = _read_source(source_path)
+            catalog = self.catalog_cache.load_current()
+            if catalog is None:
+                raise WorkspaceError("verified_catalog_missing")
+            with V2ProfileStore.open(self.profile_path, read_only=True) as store:
+                if store.source_imported(source):
+                    source_hash = hashlib.sha256(source).hexdigest()
+                    saved = store.load_import(source_hash)
+                    return SourceImportResult("already_imported", source_hash, saved.evidence)
+            recognition = recognize_catalog_source(source, catalog=catalog, suffix=suffix, cancelled=cancelled)
+            if not recognition.candidates:
+                raise CatalogImportError("catalog_no_match")
+            with V2ProfileStore.open(self.profile_path, read_only=True) as store:
+                review = build_import_account_review(store, recognition, catalog, preferences=self.preferences())
+            if notice:
+                review = replace(review, recovery_notice=notice)
+            decision = review_import(source_path, review)
+            if cancelled is not None and cancelled():
+                raise ImportCancelled("cancelled")
+            if decision is None:
+                raise ImportSkipped("import_skipped")
+            current_source, current_suffix = _read_source(source_path)
+            if current_suffix != suffix or hashlib.sha256(current_source).hexdigest() != recognition.source_sha256:
+                notice = "The file changed after the preview. Check the refreshed account choices and interpretation before importing. Nothing from the earlier preview was saved."
+                continue
+            current_catalog = self.catalog_cache.load_current()
+            if current_catalog is None:
+                raise WorkspaceError("verified_catalog_missing")
+            if current_catalog.snapshot != catalog.snapshot:
+                notice = "Statement formats changed after the preview. Check the refreshed choices before importing. Nothing from the earlier preview was saved."
+                continue
+            prepared = prepare_catalog_source(
+                current_source,
+                catalog=current_catalog,
+                suffix=suffix,
+                selection=decision.selection,
+                cancelled=cancelled,
+            )
+            latest_source, latest_suffix = _read_source(source_path)
+            if latest_suffix != suffix or hashlib.sha256(latest_source).hexdigest() != recognition.source_sha256:
+                notice = "The file changed while its import was being checked. Review the refreshed document before confirming again. Nothing from the earlier preview was saved."
+                continue
+            latest_catalog = self.catalog_cache.load_current()
+            if latest_catalog is None:
+                raise WorkspaceError("verified_catalog_missing")
+            if latest_catalog.snapshot != current_catalog.snapshot:
+                notice = "Statement formats changed while the import was being checked. Review the refreshed interpretation before confirming again. Nothing from the earlier preview was saved."
+                continue
+            try:
+
+                def check_current_inputs(
+                    expected_suffix=suffix,
+                    expected_hash=recognition.source_sha256,
+                    expected_catalog=current_catalog.snapshot,
+                ):
+                    final_source, final_suffix = _read_source(source_path)
+                    if final_suffix != expected_suffix or hashlib.sha256(final_source).hexdigest() != expected_hash:
+                        raise WorkspaceError("import_source_changed_during_validation")
+                    final_catalog = self.catalog_cache.load_current()
+                    if final_catalog is None:
+                        raise WorkspaceError("verified_catalog_missing")
+                    if final_catalog.snapshot != expected_catalog:
+                        raise WorkspaceError("import_catalog_changed_during_validation")
+
+                with V2ProfileStore.open(self.profile_path) as store:
+                    return commit_import_accounts(
+                        store,
+                        prepared,
+                        current_catalog,
+                        decision,
+                        cancelled=cancelled,
+                        before_write=check_current_inputs,
+                    )
+            except (ProfileFormatError, WorkspaceError) as exc:
+                notices = {
+                    "import_account_review_stale": "Accounts or saved document assignments changed after the preview. Check the refreshed choices and confirm again. Nothing from the earlier preview was saved.",
+                    "import_source_changed_during_validation": "The file changed while its supported formats were being checked. Review the refreshed document before confirming again. Nothing from the earlier preview was saved.",
+                    "import_catalog_changed_during_validation": "Statement formats changed while the import was being checked. Review the refreshed document before confirming again. Nothing from the earlier preview was saved.",
+                }
+                if str(exc) not in notices:
+                    raise
+                notice = notices[str(exc)]
 
     def import_files(
         self,
@@ -246,6 +430,8 @@ class V2Workspace:
         *,
         cancelled: Callable[[], bool] | None = None,
         progress: Callable[[int, BatchFileResult], None] | None = None,
+        review_format: FormatReview | None = None,
+        review_import: ImportReview | None = None,
     ) -> BatchImportResult:
         """Continue after per-file failures; cancellation keeps completed imports."""
         if not paths or len(paths) > MAX_BATCH_FILES or any(not isinstance(path, Path) for path in paths):
@@ -260,8 +446,12 @@ class V2Workspace:
                 files.extend(BatchFileResult(remaining, "not_attempted") for remaining in paths[index:])
                 break
             try:
-                imported = self.import_file(path, cancelled=cancelled)
+                imported = self.import_file(
+                    path, cancelled=cancelled, review_format=review_format, review_import=review_import
+                )
                 result = BatchFileResult(path, imported.status, imported.source_sha256)
+            except ImportSkipped:
+                result = BatchFileResult(path, "skipped")
             except ImportCancelled:
                 result = BatchFileResult(path, "cancelled")
                 was_cancelled = True

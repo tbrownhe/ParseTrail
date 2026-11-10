@@ -14,6 +14,7 @@ from parsetrail.core.v2_workspace import V2Workspace
 
 from .test_v2_transfer_review_async import wait_for_transfers
 from .test_v2_transfers import BANK_DEFINITION, _profile
+from .v2_institution_helpers import add_test_financial_account
 
 
 @pytest.fixture
@@ -149,7 +150,7 @@ def test_replacement_can_share_outgoing_row_and_change_destination_atomically(tm
     source = b"Date,Account,Description,Amount,ReportedBalance\n01/04/2026,Savings B,Owned transfer,$20.00,$1020.00\n"
     evidence = build_source_evidence(source, BANK_DEFINITION, suffix=".csv")
     with V2ProfileStore.open(profile) as store:
-        store.add_financial_account(FinancialAccount("savings", "Savings", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("savings", "Savings", "asset", "synthetic"))
         store.import_source(source, BANK_DEFINITION, evidence, suffix=".csv")
         store.bind_source_account(evidence.source_sha256, "Savings B", "opaque", "savings")
     monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.Yes)
@@ -193,7 +194,7 @@ def test_every_confirmation_cancel_leaves_profile_unchanged(tmp_path, app, monke
             source = b"Date,Account,Description,Amount,ReportedBalance\n01/04/2026,Savings B,Owned transfer,$20.00,$1020.00\n"
             evidence = build_source_evidence(source, BANK_DEFINITION, suffix=".csv")
             with V2ProfileStore.open(profile) as store:
-                store.add_financial_account(FinancialAccount("savings", "Savings", "asset", "synthetic"))
+                add_test_financial_account(store, FinancialAccount("savings", "Savings", "asset", "synthetic"))
                 store.import_source(source, BANK_DEFINITION, evidence, suffix=".csv")
                 store.bind_source_account(evidence.source_sha256, "Savings B", "opaque", "savings")
     elif action == "reopen":
@@ -301,8 +302,8 @@ def test_withdrawal_remains_available_after_assumed_date_preference_is_off(tmp_p
     with V2ProfileStore.create(profile) as store:
         store.import_source(source, BANK_DEFINITION, cash, suffix=".csv")
         store.import_source(card_source, CHASE_DEFINITION, card, suffix=".pdf")
-        store.add_financial_account(FinancialAccount("checking", "Checking", "asset", "synthetic"))
-        store.add_financial_account(FinancialAccount("card", "Card", "liability", "chase"))
+        add_test_financial_account(store, FinancialAccount("checking", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("card", "Card", "liability", "chase"))
         store.bind_source_account(cash.source_sha256, "Checking A", "opaque", "checking")
         account = card.payload.accounts[0]
         store.bind_source_account(card.source_sha256, account.source_identity, account.source_identity_form, "card")
@@ -340,7 +341,7 @@ def test_reopen_uses_latest_decision_in_current_financial_context_after_rebindin
     profile = tmp_path / "rebound-context.db"
     outgoing, incoming = _profile(profile, bank_date="01/03/2026")
     with V2ProfileStore.open(profile) as store:
-        store.add_financial_account(FinancialAccount("checking-b", "Checking B", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("checking-b", "Checking B", "asset", "synthetic"))
         snapshot_a = store.transfer_review_snapshot(preferences=V2Preferences())
         pair = snapshot_a.candidates[0]
         review_a = store.record_transfer_pair_review(

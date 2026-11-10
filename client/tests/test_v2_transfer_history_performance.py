@@ -10,6 +10,7 @@ from parsetrail.core.v2_transfer_batch import TransferBatchCancelled, plan_uniqu
 
 from .test_v2_review_read_performance import _tamper
 from .test_v2_transfers import BANK_DEFINITION
+from .v2_institution_helpers import add_test_financial_account
 
 
 def _posted_profile(path, *, posted_pairs=96, source_count=8, pending_pairs=2, extra_rows=0):
@@ -30,8 +31,8 @@ def _posted_profile(path, *, posted_pairs=96, source_count=8, pending_pairs=2, e
             f"01/09/2026,Checking A,Public unpaired {index},-${100000 + index}.05,$0.00\n"
         )
     with V2ProfileStore.create(path) as store:
-        store.add_financial_account(FinancialAccount("a", "Checking", "asset", "synthetic"))
-        store.add_financial_account(FinancialAccount("b", "Savings", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("a", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("b", "Savings", "asset", "synthetic"))
         for rows in sources:
             if not rows:
                 continue

@@ -25,6 +25,7 @@ from parsetrail.core.v2_data_catalog import (
     MAX_DEFINITION_BYTES,
     MAX_DEFINITIONS,
     CatalogAccountContext,
+    CatalogAccountProfile,
     CatalogEnvelope,
     DefinitionIdentity,
     VerifiedCatalog,
@@ -179,6 +180,23 @@ def unsigned_catalog_bytes(
             raise ValueError("account_context_manifest_shape") from None
         if type(contexts) is not dict:
             raise ValueError("account_context_manifest_shape")
+    profile_path = definitions_dir / "account-profiles.json"
+    profiles = {}
+    if profile_path.exists() or profile_path.is_symlink():
+        if profile_path.is_symlink() or not profile_path.is_file() or not 0 < profile_path.stat().st_size <= 32 * 1024:
+            raise ValueError("account_profile_manifest_shape")
+        try:
+            with profile_path.open("rb") as stream:
+                profile_bytes = stream.read(32 * 1024 + 1)
+            if not 0 < len(profile_bytes) <= 32 * 1024:
+                raise ValueError("account_profile_manifest_shape")
+            profiles = json.loads(profile_bytes, object_pairs_hook=_unique_pairs)
+        except (UnicodeError, ValueError, RecursionError):
+            raise ValueError("account_profile_manifest_shape") from None
+        if type(profiles) is not dict or any(
+            type(options) is not list or len(options) > 16 for options in profiles.values()
+        ):
+            raise ValueError("account_profile_manifest_shape")
     entries = []
     for path in paths:
         if path.is_symlink() or not path.is_file():
@@ -205,6 +223,10 @@ def unsigned_catalog_bytes(
                 "sha256": hashlib.sha256(content).hexdigest(),
                 "content_base64": base64.b64encode(content).decode("ascii"),
                 "account_context": context,
+                "account_profiles": [
+                    CatalogAccountProfile.model_validate(profile).model_dump()
+                    for profile in profiles.get(identity.parser_id, ())
+                ],
             }
         )
     entries.sort(key=lambda item: item["parser_id"])
@@ -212,6 +234,8 @@ def unsigned_catalog_bytes(
         raise ValueError("duplicate_parser_id")
     if set(contexts) - {item["parser_id"] for item in entries}:
         raise ValueError("unknown_account_context_parser")
+    if set(profiles) - {item["parser_id"] for item in entries}:
+        raise ValueError("unknown_account_profile_parser")
     snapshot = json.dumps(
         {
             "schema_version": 1,

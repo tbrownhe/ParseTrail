@@ -13,6 +13,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from parsetrail.core.v2_citi_source_output import from_citi
 from parsetrail.core.v2_data_catalog import key_id_for_public_key
+from parsetrail.core.v2_institutions import Institution
 from parsetrail.core.v2_legacy_citi_lines import parse_legacy_citi
 from parsetrail.core.v2_profile_store import FinancialAccount, V2ProfileStore
 from parsetrail.core.v2_synchrony_source_output import from_synchrony_table
@@ -143,6 +144,7 @@ def main(argv: list[str] | None = None) -> int:
             store.import_source(CARD_SOURCE, CARD_DEFINITION, card_evidence, suffix=".pdf")
             bank_evidence = from_anchored_bank(BANK_DEFINITION, *bank_channels(definition=BANK_DEFINITION, tail=True))
             store.import_source(BANK_SOURCE, BANK_DEFINITION, bank_evidence, suffix=".pdf")
+            store.register_institution(Institution("synthetic", "Synthetic example"))
             store.add_financial_account(FinancialAccount("loan-a", "Loan A", "liability", "mohela"))
             store.add_financial_account(FinancialAccount("loan-b", "Loan B", "liability", "mohela"))
             store.add_financial_account(FinancialAccount("checking-a", "Checking A", "asset", "synthetic"))

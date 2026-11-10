@@ -17,6 +17,7 @@ from devtools.parser_engine_pilot.test_table_card_source_output import evidence 
 
 from .test_v2_reviewed_openings import _profile
 from .test_v2_source_openings import _variant
+from .v2_institution_helpers import add_test_financial_account
 
 
 @pytest.fixture
@@ -308,7 +309,7 @@ def test_liability_correction_and_history_show_positive_amount_owed(tmp_path: Pa
     evidence = from_anchored_card(CARD_DEFINITION, *card_channels())
     with V2ProfileStore.create(profile) as store:
         store.import_source(CARD_SOURCE, CARD_DEFINITION, evidence, suffix=".pdf")
-        store.add_financial_account(FinancialAccount("card", "Card", "liability", "citi"))
+        add_test_financial_account(store, FinancialAccount("card", "Card", "liability", "citi"))
         section = evidence.payload.accounts[0]
         store.bind_source_account(evidence.source_sha256, section.source_identity, section.source_identity_form, "card")
         store.record_opening_source_review(

@@ -13,6 +13,7 @@ from devtools.parser_engine_pilot.test_wells_loan_lines import DEFINITION as WEL
 from devtools.parser_engine_pilot.test_wells_loan_lines import parse as wells_source
 
 from .test_v2_reports_responsiveness import wait_for_reports
+from .v2_institution_helpers import add_test_financial_account
 
 JAN, FEB = date(2026, 1, 1), date(2026, 2, 1)
 
@@ -26,14 +27,15 @@ def _profile(path):
             ("wells", "Wells Fargo loan", b"%PDF-synthetic-loan", WELLS_DEFINITION, wells),
         ):
             store.import_source(source, definition, evidence, suffix=".pdf")
-            store.add_financial_account(
+            add_test_financial_account(
+                store,
                 FinancialAccount(
                     account_id,
                     name,
                     "liability",
                     "synthetic",
                     tracking_scope="principal_component",
-                )
+                ),
             )
             section = evidence.payload.accounts[0]
             store.bind_source_account(

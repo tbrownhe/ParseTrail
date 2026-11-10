@@ -153,6 +153,7 @@ def _local_work(window, root, release, diagnostics, app, result):
     from PySide6.QtCore import QDate, Qt
     from PySide6.QtWidgets import QMessageBox
 
+    from parsetrail.core.v2_institutions import Institution
     from parsetrail.core.v2_profile_store import FinancialAccount, V2ProfileStore
     from parsetrail.core.v2_workspace import V2Workspace
     from parsetrail.gui.v2_cash_activity_review import V2CashActivityReview
@@ -177,6 +178,7 @@ def _local_work(window, root, release, diagnostics, app, result):
         imported.status == "imported" and retry.status == "already_imported", "Import/retry did not preserve one source"
     )
     with V2ProfileStore.open(work.profile_path) as store:
+        store.register_institution(Institution("synthetic", "Synthetic example"))
         store.add_financial_account(FinancialAccount("cash", "Synthetic checking", "asset", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         store.bind_source_account(imported.source_sha256, "Checking A", "opaque", "cash")

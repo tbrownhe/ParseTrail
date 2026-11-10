@@ -19,6 +19,8 @@ from parsetrail.core.v2_source_pipeline import build_source_evidence
 
 from devtools.parser_engine_pilot.synthetic_family_sources import family_sources
 
+from .v2_institution_helpers import add_test_financial_account
+
 ROOT = Path(__file__).parents[2] / "devtools" / "parser_engine_pilot"
 AS_OF = date(2026, 12, 31)
 FAMILY_FACTS = {
@@ -77,8 +79,8 @@ def setup(
     kind, scope, _ = FAMILY_FACTS[family]
     with V2ProfileStore.create(path) as store:
         store.import_source(content, definition, evidence, suffix=suffix)
-        store.add_financial_account(
-            FinancialAccount(account, "Synthetic account", kind, "synthetic", tracking_scope=scope)
+        add_test_financial_account(
+            store, FinancialAccount(account, "Synthetic account", kind, "synthetic", tracking_scope=scope)
         )
         section = evidence.payload.accounts[0]
         store.bind_source_account(
@@ -237,8 +239,11 @@ def test_empty_section_anchor_blocks_rebind_until_withdrawal_then_retains_origin
     section = evidence.payload.accounts[0]
     with V2ProfileStore.open(path) as store:
         original = record_source(store)
-        store.add_financial_account(
-            FinancialAccount("other", "Other principal", "liability", "synthetic", tracking_scope="principal_component")
+        add_test_financial_account(
+            store,
+            FinancialAccount(
+                "other", "Other principal", "liability", "synthetic", tracking_scope="principal_component"
+            ),
         )
         target = BindingCorrectionTarget(
             evidence.source_sha256, "source", section.source_identity, section.source_identity_form
@@ -362,7 +367,7 @@ def test_sequential_section_rebinding_cannot_inherit_opening_or_closing_review_a
         revision = review_source(store, evidence.source_sha256)
         sourced = record_source(store)
         withdraw(store, sourced)
-        store.add_financial_account(FinancialAccount("other", "Other asset", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("other", "Other asset", "asset", "synthetic"))
         target = BindingCorrectionTarget(
             evidence.source_sha256, "source", first.source_identity, first.source_identity_form
         )
@@ -671,7 +676,7 @@ def test_historical_source_value_retry_returns_old_withdrawn_receipt_without_rev
 def test_withdrawing_wrong_manual_point_removes_only_its_opening_date_boundary(tmp_path):
     path = tmp_path / "boundaries.db"
     with V2ProfileStore.create(path) as store:
-        store.add_financial_account(FinancialAccount("target", "Synthetic cash", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("target", "Synthetic cash", "asset", "synthetic"))
         wrong = manual(store, 100, date(2026, 1, 1))
         assert store.account_anchor_snapshot("target").earliest_known_history_date == date(2026, 1, 1)
         withdraw(store, wrong)
@@ -695,10 +700,11 @@ def test_mohela_export_running_principal_is_never_admitted_as_statement_closing(
     content, definition, evidence, suffix = samples[family]
     with V2ProfileStore.create(path) as store:
         store.import_source(content, definition, evidence, suffix=suffix)
-        store.add_financial_account(
+        add_test_financial_account(
+            store,
             FinancialAccount(
                 "target", "Synthetic principal", "liability", "synthetic", tracking_scope="principal_component"
-            )
+            ),
         )
         first = evidence.payload.rows[0]
         if first.source_account is None:

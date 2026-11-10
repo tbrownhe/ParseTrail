@@ -14,6 +14,7 @@ from parsetrail.core.v2_source_pipeline import build_source_evidence
 from .test_v2_category_reports import DEFINITION, SOURCE
 from .test_v2_opening_corrections import _correct, _new_source, _review
 from .test_v2_reviewed_openings import _profile
+from .v2_institution_helpers import add_test_financial_account
 
 
 def test_retired_replacement_releases_allocation_without_resurrecting_original_correction(tmp_path: Path) -> None:
@@ -21,7 +22,7 @@ def test_retired_replacement_releases_allocation_without_resurrecting_original_c
     evidence = build_source_evidence(SOURCE, DEFINITION, suffix=".csv")
     with V2ProfileStore.create(path) as store:
         store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Checking", "asset", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         store.add_category_account("expense:travel", "Travel", "expense")
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")

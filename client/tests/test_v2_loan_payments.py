@@ -43,6 +43,7 @@ from devtools.parser_engine_pilot.synthetic_family_sources import family_sources
 
 from .test_v2_hsa_cash import hsa_profile, post_missing, source_review
 from .test_v2_hsa_cash import hsa_source as hsa_source
+from .v2_institution_helpers import add_test_financial_account
 
 
 def _proof():
@@ -150,9 +151,10 @@ def _profile(path, *, amount=22000, bank_day="01/14/2026", evidence=None, defini
         store.import_source(
             raw, definition, evidence, suffix=".csv" if evidence.payload.kind == "activity_export" else ".pdf"
         )
-        store.add_financial_account(FinancialAccount("bank", "Checking", "asset", "synthetic"))
-        store.add_financial_account(
-            FinancialAccount("loan", "Loan principal", "liability", "synthetic", tracking_scope="principal_component")
+        add_test_financial_account(store, FinancialAccount("bank", "Checking", "asset", "synthetic"))
+        add_test_financial_account(
+            store,
+            FinancialAccount("loan", "Loan principal", "liability", "synthetic", tracking_scope="principal_component"),
         )
         store.bind_source_account(bank.source_sha256, "Checking A", "opaque", "bank")
         if evidence.payload.kind == "statement":
@@ -462,8 +464,9 @@ def test_withdrawn_history_keeps_original_binding_and_interest_only_scope_lock(t
         target = BindingCorrectionTarget(
             evidence.source_sha256, "source", section.source_identity, section.source_identity_form
         )
-        store.add_financial_account(
-            FinancialAccount("other", "Other loan", "liability", "synthetic", tracking_scope="principal_component")
+        add_test_financial_account(
+            store,
+            FinancialAccount("other", "Other loan", "liability", "synthetic", tracking_scope="principal_component"),
         )
         preview = store.binding_correction_snapshot(target, destination_account_id="other")
         assert "active_source_consumption" in preview.blockers
@@ -749,7 +752,7 @@ def test_loan_snapshot_is_coherent_during_concurrent_wal_writer_and_save_refuses
         def concurrent(preferences, releasing=()):
             result = original(preferences, releasing)
             with V2ProfileStore.open(path) as other:
-                other.add_financial_account(FinancialAccount("new", "New", "asset", "synthetic"))
+                add_test_financial_account(other, FinancialAccount("new", "New", "asset", "synthetic"))
             return result
 
         monkeypatch.setattr(store, "_loan_component_rows", concurrent)

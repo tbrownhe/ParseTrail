@@ -9,6 +9,7 @@ from parsetrail.core.v2_workspace import V2Workspace
 
 from . import test_v2_source_values as source_fixtures
 from .test_v2_source_values import FAMILY_FACTS, manual, record_source, setup, withdraw
+from .v2_institution_helpers import add_test_financial_account
 
 
 @pytest.fixture(scope="module")
@@ -258,8 +259,11 @@ def test_empty_source_value_binding_protection_plain_reason_and_retired_proof(tm
     evidence = setup(path, samples, empty=True)
     with V2ProfileStore.open(path) as store:
         value = record_source(store)
-        store.add_financial_account(
-            FinancialAccount("other", "Other principal", "liability", "synthetic", tracking_scope="principal_component")
+        add_test_financial_account(
+            store,
+            FinancialAccount(
+                "other", "Other principal", "liability", "synthetic", tracking_scope="principal_component"
+            ),
         )
     section = evidence.payload.accounts[0]
     target = BindingCorrectionTarget(

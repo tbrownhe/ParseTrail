@@ -14,6 +14,7 @@ from devtools.parser_engine_pilot.test_table_bank_source_output import SOURCE as
 from devtools.parser_engine_pilot.test_table_bank_source_output import evidence as bank_channels
 
 from .test_v2_ordinary_review_async import wait_for_review
+from .v2_institution_helpers import add_test_financial_account
 
 DEFINITION = (
     Path(__file__).parents[2] / "devtools" / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
@@ -36,7 +37,7 @@ def test_cash_activity_dialog_keeps_unclassified_deposit_pending(tmp_path: Path,
     profile = tmp_path / "fresh.db"
     with V2ProfileStore.create(profile) as store:
         store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Checking", "asset", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         store.add_category_account("expense:travel", "Travel", "expense")
     monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.StandardButton.Yes)
@@ -112,7 +113,7 @@ def test_cash_activity_dialog_explicitly_posts_and_corrects_income(tmp_path: Pat
     profile = tmp_path / "fresh.db"
     with V2ProfileStore.create(profile) as store:
         store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Checking", "asset", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         store.add_category_account("income:pay", "Pay", "income")
         store.add_category_account("income:gift", "Gift", "income")
@@ -165,7 +166,7 @@ def test_bank_statement_rows_use_explicit_cash_review_dialog(tmp_path: Path, mon
     profile = tmp_path / "bank.db"
     with V2ProfileStore.create(profile) as store:
         store.import_source(BANK_SOURCE, BANK_DEFINITION, evidence, suffix=".pdf")
-        store.add_financial_account(FinancialAccount("cash", "Savings", "asset", "lendingclub"))
+        add_test_financial_account(store, FinancialAccount("cash", "Savings", "asset", "lendingclub"))
         store.add_category_account("expense:other", "Other", "expense")
         store.add_category_account("income:interest", "Interest", "income")
         store.bind_source_account(evidence.source_sha256, account.source_identity, account.source_identity_form, "cash")

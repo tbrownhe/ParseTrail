@@ -14,6 +14,8 @@ from devtools.parser_engine_pilot.test_table_bank_source_output import DEFINITIO
 from devtools.parser_engine_pilot.test_table_bank_source_output import SOURCE as BANK_SOURCE
 from devtools.parser_engine_pilot.test_table_bank_source_output import evidence as bank_channels
 
+from .v2_institution_helpers import add_test_financial_account, register_test_institutions
+
 DEFINITION = (
     Path(__file__).parents[2] / "devtools" / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
 ).read_bytes()
@@ -30,7 +32,7 @@ def test_reviewed_cash_expense_reopens_once_and_other_row_stays_pending(tmp_path
     outflow, inflow = evidence.payload.rows
     with V2ProfileStore.create(profile) as store:
         store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Checking", "asset", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
         key = store.post_reviewed_cash_category(outflow.row_id, "expense:food", reason="Reviewed coffee purchase")
@@ -76,8 +78,8 @@ def test_cash_expense_requires_explicit_mapping_and_expense_category(tmp_path: P
     row_id = evidence.payload.rows[0].row_id
     with V2ProfileStore.create(profile) as store:
         store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
-        store.add_financial_account(FinancialAccount("card", "Card", "liability", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("card", "Card", "liability", "synthetic"))
         store.add_category_account("income:other", "Other income", "income")
         with pytest.raises(ProfileFormatError, match="cash_category_requires_bound_posted_movement"):
             store.post_reviewed_cash_category(row_id, "income:other", reason="Missing account decision")
@@ -97,8 +99,8 @@ def test_cash_expense_correction_reverses_and_replaces_without_reusing_evidence(
     row_id = evidence.payload.rows[0].row_id
     with V2ProfileStore.create(profile) as store:
         store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
-        store.add_financial_account(FinancialAccount("other-cash", "Other checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("other-cash", "Other checking", "asset", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         store.add_category_account("expense:travel", "Travel", "expense")
         store.add_category_account("income:other", "Other income", "income")
@@ -107,6 +109,7 @@ def test_cash_expense_correction_reverses_and_replaces_without_reusing_evidence(
         old_payload = store.connection.execute(
             "SELECT payload FROM JournalEntries WHERE key=?", (original,)
         ).fetchone()[0]
+        register_test_institutions(store, "new-bank")
         store.update_financial_account(FinancialAccount("cash", "Main checking", "asset", "new-bank", "12345678"))
         assert store.financial_accounts()[0].name == "Main checking"
         assert (
@@ -158,7 +161,7 @@ def test_positive_cash_requires_explicit_income_category_and_corrects_with_histo
     expense_row, deposit = evidence.payload.rows
     with V2ProfileStore.create(profile) as store:
         store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Checking", "asset", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         store.add_category_account("income:pay", "Pay", "income")
         store.add_category_account("income:gift", "Gift", "income")
@@ -202,8 +205,8 @@ def test_accountless_assignment_stays_fixed_after_cash_expense_post(tmp_path: Pa
     row_id = evidence.payload.rows[0].row_id
     with V2ProfileStore.create(tmp_path / "fresh.db") as store:
         store.import_source(source, definition_bytes, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
-        store.add_financial_account(FinancialAccount("other-cash", "Other checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("other-cash", "Other checking", "asset", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         if assignment == "file":
             store.assert_file_account(evidence.source_sha256, "cash")

@@ -9,6 +9,8 @@ from pathlib import Path
 import pytest
 from parsetrail.core.v2_profile_store import FinancialAccount, ProfileFormatError, V2ProfileStore
 
+from .v2_institution_helpers import add_test_financial_account
+
 
 def test_budget_rates_take_effect_by_month_and_survive_reopen(tmp_path: Path) -> None:
     path = tmp_path / "fresh.db"
@@ -18,7 +20,7 @@ def test_budget_rates_take_effect_by_month_and_survive_reopen(tmp_path: Path) ->
     with V2ProfileStore.create(path) as store:
         store.add_category_account("category:food", "Food", "expense")
         store.add_category_account("category:wages", "Wages", "income")
-        store.add_financial_account(FinancialAccount("checking", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("checking", "Checking", "asset", "synthetic"))
         assert [
             (target.name, target.effective_month, target.amount_minor)
             for target in store.category_budget_targets(january)
@@ -58,7 +60,7 @@ def test_budget_rate_rejects_invalid_month_amount_and_account(tmp_path: Path) ->
     path = tmp_path / "fresh.db"
     with V2ProfileStore.create(path) as store:
         store.add_category_account("category:food", "Food", "expense")
-        store.add_financial_account(FinancialAccount("checking", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("checking", "Checking", "asset", "synthetic"))
         for invalid in (True, -1, 1.5, 9_000_000_000_000_000):
             with pytest.raises(ProfileFormatError, match="budget_amount_invalid"):
                 store.set_category_budget_rate("category:food", date(2026, 1, 1), invalid)

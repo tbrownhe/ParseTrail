@@ -16,6 +16,8 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 
 from devtools.parser_engine_pilot.review_accountless_export import main as demo_main
 
+from .v2_institution_helpers import add_test_financial_account
+
 DEFINITION = (
     Path(__file__).parents[2] / "devtools" / "parser_engine_pilot" / "mohela-account-history-definition.json"
 ).read_bytes()
@@ -34,8 +36,8 @@ def test_review_switches_explicit_file_and_mixed_row_modes(tmp_path: Path) -> No
     evidence = build_source_evidence(SOURCE, DEFINITION, suffix=".csv")
     with V2ProfileStore.create(profile) as store:
         store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("loan-a", "Loan A", "liability", "mohela"))
-        store.add_financial_account(FinancialAccount("loan-b", "Loan B", "liability", "mohela"))
+        add_test_financial_account(store, FinancialAccount("loan-a", "Loan A", "liability", "mohela"))
+        add_test_financial_account(store, FinancialAccount("loan-b", "Loan B", "liability", "mohela"))
     dialog = review_accountless_export(profile, evidence.source_sha256)
     try:
         assert dialog.model.rowCount() == 2
@@ -95,7 +97,7 @@ def test_mixed_identity_export_reviews_only_unidentified_rows(tmp_path: Path) ->
     profile = tmp_path / "mixed.db"
     with V2ProfileStore.create(profile) as store:
         store.import_source(SOURCE, DEFINITION, mixed, suffix=".csv")
-        store.add_financial_account(FinancialAccount("loan-a", "Loan A", "liability", "mohela"))
+        add_test_financial_account(store, FinancialAccount("loan-a", "Loan A", "liability", "mohela"))
     dialog = V2AccountBindingReview(profile, mixed.source_sha256)
     try:
         assert dialog.model.rowCount() == 1
@@ -136,7 +138,7 @@ def test_accountless_review_explains_posted_assignment_lock(tmp_path: Path, assi
     profile = tmp_path / "review.db"
     with V2ProfileStore.create(profile) as store:
         store.import_source(source, definition, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("cash", "Renamed Checking Account", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Renamed Checking Account", "asset", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         if assignment == "file":
             store.assert_file_account(evidence.source_sha256, "cash")
@@ -171,8 +173,8 @@ def _review_profile(tmp_path, *, rows=2):
     with V2ProfileStore.create(profile) as store:
         store.import_source(raw, DEFINITION, evidence, suffix=".csv")
         for suffix in ("a", "b"):
-            store.add_financial_account(
-                FinancialAccount(f"loan-{suffix}", f"Synthetic loan {suffix}", "liability", "mohela")
+            add_test_financial_account(
+                store, FinancialAccount(f"loan-{suffix}", f"Synthetic loan {suffix}", "liability", "mohela")
             )
     return profile, evidence
 
@@ -269,7 +271,9 @@ def test_cached_selection_never_bypasses_a_new_posted_history_lock_at_save(tmp_p
     with V2ProfileStore.create(profile) as store:
         store.import_source(source, definition, evidence, suffix=".csv")
         for suffix in ("a", "b"):
-            store.add_financial_account(FinancialAccount(f"cash-{suffix}", f"Checking {suffix}", "asset", "synthetic"))
+            add_test_financial_account(
+                store, FinancialAccount(f"cash-{suffix}", f"Checking {suffix}", "asset", "synthetic")
+            )
         store.add_category_account("expense:food", "Food", "expense")
         store.assign_row_account(row_id, "cash-a")
     dialog = V2AccountBindingReview(profile, evidence.source_sha256)

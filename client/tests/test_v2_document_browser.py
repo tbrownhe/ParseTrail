@@ -16,6 +16,8 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QElapsedTimer, QTimer  # noqa: E402
 from PySide6.QtWidgets import QApplication  # noqa: E402
 
+from .v2_institution_helpers import add_test_financial_account
+
 
 def wait_for_inventory(window, timeout=10000):
     app = QApplication.instance()
@@ -38,7 +40,7 @@ def _populated_workspace(tmp_path):
     evidence = build_source_evidence(SOURCE, DEFINITION, suffix=".csv")
     with V2ProfileStore.open(workspace.profile_path) as store:
         store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("cash", "Everyday checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Everyday checking", "asset", "synthetic"))
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
     return workspace
 

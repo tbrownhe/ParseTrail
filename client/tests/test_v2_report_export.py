@@ -12,6 +12,8 @@ from parsetrail.core.v2_profile_store import FinancialAccount, V2ProfileStore
 from parsetrail.core.v2_report_export import ReportExportError, write_reviewed_journal_workbook
 from parsetrail.core.v2_source_pipeline import build_source_evidence
 
+from .v2_institution_helpers import add_test_financial_account
+
 DEFINITION = (
     Path(__file__).parents[2] / "devtools" / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
 ).read_bytes()
@@ -29,7 +31,7 @@ def test_workbook_has_active_reviewed_entries_postings_corrections_and_scope(tmp
     profile = tmp_path / "fresh.db"
     with V2ProfileStore.create(profile) as store:
         store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Checking", "asset", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         store.add_category_account("expense:travel", "Travel", "expense")
         store.add_category_account("income:pay", "Pay", "income")

@@ -17,6 +17,7 @@ from PySide6.QtWidgets import QApplication, QDialog
 from .test_v2_account_binding_review import DEFINITION, SOURCE
 from .test_v2_document_browser import wait_for_inventory
 from .test_v2_inline_account_creation import _workspace
+from .v2_institution_helpers import add_test_financial_account
 
 
 @pytest.fixture
@@ -32,7 +33,7 @@ def accountless(tmp_path):
     workspace = _workspace(tmp_path, DEFINITION, evidence, institution="mohela", source=source)
     with V2ProfileStore.open(workspace.profile_path) as store:
         for index, name in enumerate(("Alpha loan", "Beta loan", "Zebra third account")):
-            store.add_financial_account(FinancialAccount(str(index), name, "liability", "mohela"))
+            add_test_financial_account(store, FinancialAccount(str(index), name, "liability", "mohela"))
     return workspace, evidence
 
 

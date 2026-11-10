@@ -22,6 +22,7 @@ from .test_v2_opening_corrections import _review
 from .test_v2_reviewed_openings import _profile
 from .test_v2_source_overlap import setup, source
 from .test_v2_transfers import _profile as transfer_profile
+from .v2_institution_helpers import add_test_financial_account
 
 
 def manual(
@@ -197,8 +198,8 @@ def test_manual_opening_explicit_kind_scope_sign_zero_and_unknown_source_do_not_
 ):
     path = tmp_path / "manual.db"
     with V2ProfileStore.create(path) as store:
-        store.add_financial_account(
-            FinancialAccount("cash", "Tracked account", kind, "synthetic", tracking_scope=scope)
+        add_test_financial_account(
+            store, FinancialAccount("cash", "Tracked account", kind, "synthetic", tracking_scope=scope)
         )
         result = manual(store, amount=amount)
         assert result.origin == "manual" and not result.stale and result.tracking_scope == scope

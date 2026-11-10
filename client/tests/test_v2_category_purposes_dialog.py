@@ -18,6 +18,7 @@ from devtools.parser_engine_pilot.test_card_lines import pages
 from devtools.parser_engine_pilot.test_card_source_output import DEFINITION as CARD_DEFINITION
 
 from .test_v2_cash_activity_review import DEFINITION, SOURCE
+from .v2_institution_helpers import add_test_financial_account
 from .v2_job_wait import wait_for_jobs
 
 
@@ -45,8 +46,9 @@ def _profile(profile, kind="cash", *, categories=True):
         evidence = from_card(parse_card_lines(definition, lines), lines)
     with V2ProfileStore.create(profile) as store:
         store.import_source(source, definition, evidence, suffix=".csv" if kind == "cash" else ".pdf")
-        store.add_financial_account(
-            FinancialAccount("financial", "Reviewed account", "asset" if kind == "cash" else "liability", "synthetic")
+        add_test_financial_account(
+            store,
+            FinancialAccount("financial", "Reviewed account", "asset" if kind == "cash" else "liability", "synthetic"),
         )
         if categories:
             for category_kind in ("expense", "income"):

@@ -17,6 +17,7 @@ from devtools.parser_engine_pilot.test_table_card_source_output import evidence 
 
 from .test_v2_document_browser import wait_for_inventory
 from .test_v2_transfers import BANK_DEFINITION
+from .v2_institution_helpers import add_test_financial_account
 from .v2_job_wait import wait_for_jobs
 
 JAN, FEB = date(2026, 1, 1), date(2026, 2, 1)
@@ -38,7 +39,7 @@ def _assets(profile, receipts=(6000, 3000)):
             ("Checking", "cash"),
             *((f"Receiving {index}", f"receiving:{index}") for index in range(len(receipts))),
         ):
-            store.add_financial_account(FinancialAccount(account_id, identity, "asset", "synthetic"))
+            add_test_financial_account(store, FinancialAccount(account_id, identity, "asset", "synthetic"))
             store.bind_source_account(evidence.source_sha256, identity, "opaque", account_id)
         store.add_category_account("expense:fee", "Transfer fee", "expense")
     return tuple(row.row_id for row in evidence.payload.rows)
@@ -135,7 +136,7 @@ def test_receiving_card_fee_does_not_manufacture_selected_cash_on_card_date(tmp_
     with V2ProfileStore.create(profile) as store:
         store.import_source(source, BANK_DEFINITION, bank, suffix=".csv")
         store.import_source(CARD_SOURCE, CARD_DEFINITION, card, suffix=".pdf")
-        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Checking", "asset", "synthetic"))
         store.add_financial_account(FinancialAccount("card", "Card", "liability", "citi"))
         store.add_category_account("expense:fee", "Payment fee", "expense")
         store.bind_source_account(bank.source_sha256, "Checking", "opaque", "cash")

@@ -13,6 +13,7 @@ from parsetrail.gui.v2_transfer_review import V2TransferReview
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QTableWidget
 
 from .test_v2_transfers import _profile
+from .v2_institution_helpers import add_test_financial_account
 
 
 def wait_for_transfers(dialog, timeout=10):
@@ -332,8 +333,8 @@ def test_assumed_dates_are_qualified_in_candidates_and_final_manifest(tmp_path, 
     with V2ProfileStore.create(path) as store:
         store.import_source(source, BANK_DEFINITION, cash, suffix=".csv")
         store.import_source(card_source, DEFINITION, card, suffix=".pdf")
-        store.add_financial_account(FinancialAccount("checking", "Checking", "asset", "synthetic"))
-        store.add_financial_account(FinancialAccount("card", "Card", "liability", "chase"))
+        add_test_financial_account(store, FinancialAccount("checking", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("card", "Card", "liability", "chase"))
         store.bind_source_account(cash.source_sha256, "Checking A", "opaque", "checking")
         account = card.payload.accounts[0]
         store.bind_source_account(card.source_sha256, account.source_identity, account.source_identity_form, "card")
@@ -375,7 +376,7 @@ def test_nested_confirmation_refresh_keeps_original_review_basis(tmp_path, app, 
 
         def nested_refresh(_parent, _title, _message):
             with V2ProfileStore.open(workspace.profile_path) as store:
-                store.add_financial_account(FinancialAccount("checking-b", "Checking B", "asset", "synthetic"))
+                add_test_financial_account(store, FinancialAccount("checking-b", "Checking B", "asset", "synthetic"))
                 target = BindingCorrectionTarget(pair.outgoing.source_sha256, "source", "Checking A", "opaque")
                 frame = store.binding_correction_snapshot(target, destination_account_id="checking-b")
                 store.correct_reviewed_binding(

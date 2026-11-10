@@ -14,6 +14,7 @@ from parsetrail.core.v2_source_pipeline import build_source_evidence
 
 from .test_v2_card_purchase_review import _chase_profile
 from .test_v2_category_reports import DEFINITION, SOURCE
+from .v2_institution_helpers import add_test_financial_account
 
 START, END = date(2026, 10, 1), date(2026, 11, 1)
 
@@ -23,7 +24,7 @@ def _profile(path):
     coffee, tea, deposit = evidence.payload.rows
     with V2ProfileStore.create(path) as store:
         store.import_source(SOURCE, DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Checking", "asset", "synthetic"))
         for name in ("food", "travel"):
             store.add_category_account(f"expense:{name}", name.title(), "expense")
         store.add_category_account("income:pay", "Pay", "income")

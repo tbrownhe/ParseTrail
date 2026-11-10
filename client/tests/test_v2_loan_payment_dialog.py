@@ -16,6 +16,7 @@ from devtools.parser_engine_pilot.test_wells_loan_lines import parse as wells_ev
 
 from .test_v2_document_browser import wait_for_inventory
 from .test_v2_loan_payments import _profile
+from .v2_institution_helpers import add_test_financial_account
 from .v2_job_wait import wait_for_jobs
 
 
@@ -309,8 +310,8 @@ def second_bank_source(path):
     raw = b"Date,Account,Description,Amount,ReportedBalance\n01/13/2026,Corrected checking,Loan payment,-$220.00,Unavailable\n"
     evidence = build_source_evidence(raw, definition, suffix=".csv")
     with V2ProfileStore.open(path) as store:
-        store.add_financial_account(
-            FinancialAccount("other-bank", "Checking", "asset", "synthetic", full_account_number="2222")
+        add_test_financial_account(
+            store, FinancialAccount("other-bank", "Checking", "asset", "synthetic", full_account_number="2222")
         )
         store.import_source(raw, definition, evidence, suffix=".csv")
         store.bind_source_account(evidence.source_sha256, "Corrected checking", "opaque", "other-bank")

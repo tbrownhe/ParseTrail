@@ -9,6 +9,7 @@ from parsetrail.core.v2_profile_store import FinancialAccount, V2ProfileStore
 from parsetrail.core.v2_source_pipeline import build_source_evidence
 
 from .test_v2_document_browser import wait_for_inventory
+from .v2_institution_helpers import add_test_financial_account
 
 DEFINITION = (
     Path(__file__).parents[2] / "devtools" / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
@@ -26,7 +27,7 @@ def _profile(
     profile: Path, *, amounts: tuple[int, ...] = (-400,), variants: tuple[str, ...] = ("original", "exported")
 ):
     with V2ProfileStore.create(profile) as store:
-        store.add_financial_account(FinancialAccount("checking", "Synthetic checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("checking", "Synthetic checking", "asset", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         sources = []
         for suffix in variants:

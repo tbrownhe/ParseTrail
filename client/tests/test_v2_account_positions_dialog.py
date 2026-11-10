@@ -21,6 +21,7 @@ from .test_v2_reviewed_openings import _profile as opening_profile
 from .test_v2_statement_journal_comparison import _profile as statement_profile
 from .test_v2_statement_reconciliation import _review_and_post
 from .test_v2_transfers import _profile as transfer_profile
+from .v2_institution_helpers import add_test_financial_account
 
 CASH_DEFINITION = (
     Path(__file__).parents[2] / "devtools" / "v2_fresh_slice" / "synthetic-posted-cash-definition.json"
@@ -95,7 +96,7 @@ def test_positions_pending_and_unbound_scope_is_independent_of_period_range(tmp_
     profile = tmp_path / "pending.db"
     with V2ProfileStore.create(profile) as store:
         store.import_source(source, CASH_DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("cash", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("cash", "Checking", "asset", "synthetic"))
         store.add_category_account("expense:food", "Food", "expense")
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "cash")
         store.post_reviewed_cash_category(evidence.payload.rows[0].row_id, "expense:food", reason="Coffee")
@@ -218,7 +219,7 @@ def test_liability_opening_is_displayed_as_amount_owed(tmp_path: Path, app):
     evidence = from_anchored_card(CARD_DEFINITION, *card_channels())
     with V2ProfileStore.create(profile) as store:
         store.import_source(CARD_SOURCE, CARD_DEFINITION, evidence, suffix=".pdf")
-        store.add_financial_account(FinancialAccount("card", "Card", "liability", "citi"))
+        add_test_financial_account(store, FinancialAccount("card", "Card", "liability", "citi"))
         account = evidence.payload.accounts[0]
         store.bind_source_account(evidence.source_sha256, account.source_identity, account.source_identity_form, "card")
         store.record_opening_source_review(

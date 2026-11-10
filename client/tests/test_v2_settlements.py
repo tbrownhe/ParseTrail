@@ -21,6 +21,7 @@ from parsetrail.core.v2_settlements import SettlementFee
 from parsetrail.core.v2_source_pipeline import build_source_evidence
 
 from .test_v2_transfers import BANK_DEFINITION, _profile
+from .v2_institution_helpers import add_test_financial_account
 
 PREFS = V2Preferences()
 START, END = date(2026, 10, 1), date(2026, 11, 1)
@@ -46,8 +47,8 @@ def profile(path, *, receipts=(("10/03/2026", "6000"),), outgoing_date="10/01/20
         )
     with V2ProfileStore.create(path) as store:
         store.import_source(content, BANK_DEFINITION, evidence, suffix=".csv")
-        store.add_financial_account(FinancialAccount("checking", "Checking", "asset", "synthetic"))
-        store.add_financial_account(FinancialAccount("savings", "Savings", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("checking", "Checking", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("savings", "Savings", "asset", "synthetic"))
         store.add_category_account("expense:fees", "Fees", "expense")
         store.add_category_account("income:pay", "Pay", "income")
         store.bind_source_account(evidence.source_sha256, "Checking A", "opaque", "checking")
@@ -417,7 +418,7 @@ def test_all_receipt_bindings_lock_until_whole_withdrawal_then_history_retains_o
     path = tmp_path / "binding.db"
     evidence, outgoing, incoming = profile(path, receipts=(("10/03/2026", "6000"), ("10/08/2026", "3000")))
     with V2ProfileStore.open(path) as store:
-        store.add_financial_account(FinancialAccount("other", "Other savings", "asset", "synthetic"))
+        add_test_financial_account(store, FinancialAccount("other", "Other savings", "asset", "synthetic"))
         original = post(store, outgoing, incoming, fees=(fee(outgoing, 1000),))
         target = BindingCorrectionTarget(evidence.source_sha256, "source", "Savings B", "opaque")
         selected = store.binding_correction_snapshot(target, destination_account_id="other")
@@ -517,6 +518,6 @@ def test_authored_accounts_cannot_claim_the_reserved_internal_namespace(tmp_path
         with pytest.raises(ProfileFormatError, match="invalid_category_account"):
             store.add_category_account(account_id, "Custom category", "expense")
         with pytest.raises(ProfileFormatError, match="invalid_financial_account"):
-            store.add_financial_account(FinancialAccount(account_id, "Custom cash", "asset", "synthetic"))
+            add_test_financial_account(store, FinancialAccount(account_id, "Custom cash", "asset", "synthetic"))
         assert store.connection.execute("SELECT count(*) FROM Accounts").fetchone() == (0,)
         assert store.category_accounts() == () and store.financial_accounts() == ()
