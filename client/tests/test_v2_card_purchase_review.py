@@ -21,6 +21,7 @@ from devtools.parser_engine_pilot.test_table_card_source_output import DEFINITIO
 from devtools.parser_engine_pilot.test_table_card_source_output import SOURCE as CITI_SOURCE
 from devtools.parser_engine_pilot.test_table_card_source_output import evidence as citi_channels
 
+from .ordinary_staging_helpers import review_action, stage_and_confirm
 from .test_v2_document_browser import wait_for_inventory
 from .test_v2_ordinary_review_async import wait_for_review
 from .v2_institution_helpers import add_test_financial_account
@@ -215,7 +216,7 @@ def test_card_review_dialog_toggles_assumed_date_and_corrects_it(tmp_path: Path,
         dialog.show()
         dialog.table.selectRow(0)
         app.processEvents()
-        assert not dialog.action_button.isEnabled()
+        assert not review_action(dialog).isEnabled()
         assert dialog.assumed_dates.isVisible()
         assert dialog.model.data(dialog.model.index(0, 1)) == "2026-03-16 (assumed)"
         dialog.assumed_dates.click()
@@ -225,25 +226,26 @@ def test_card_review_dialog_toggles_assumed_date_and_corrects_it(tmp_path: Path,
         dialog.purpose.setCurrentIndex(dialog.purpose.findData("expense"))
         dialog.category.setCurrentIndex(dialog.category.findData("expense:food"))
         dialog.reason.setText("Reviewed card charge")
-        assert dialog.action_button.isEnabled()
-        dialog.action_button.click()
+        assert review_action(dialog).isEnabled()
+        stage_and_confirm(dialog)
         wait_for_review(dialog)
         assert dialog.model.rows[0].status == "Posted: Food"
         assert dialog.model.rows[1].status == "Ready for purpose review" and dialog.model.rows[1].purpose is None
         dialog.accounting_date.setText("2026-03-17")
         dialog.reason.setText("Corrected date")
-        assert dialog.action_button.isEnabled()
+        assert review_action(dialog).isEnabled()
         dialog.action_button.click()
         wait_for_review(dialog)
         assert dialog.model.rows[0].effective_date == "2026-03-17"
         assert "Replacement entry effects only:" in confirmations[1]
+        assert "Category: Food (unchanged)" in confirmations[1]
         assert "original accounting date (2026-03-16)" in confirmations[1]
         assert "replacement is dated 2026-03-17" in confirmations[1]
         assert "Individual dates and periods are restated" in confirmations[1]
         assert "$0.00 net account movement" in confirmations[1]
         assert "category-only correction" not in confirmations[1]
         dialog.table.selectRow(1)
-        assert not dialog.action_button.isEnabled()
+        assert not review_action(dialog).isEnabled()
     finally:
         dialog.close()
         window.close()

@@ -38,6 +38,7 @@ path = "src/parsetrail/version.py"
 [project.optional-dependencies]
 dev = [
   "pytest",
+  "pytest-qt>=4.5,<5",
   "ruff",
   "mypy",
 ]
@@ -48,6 +49,7 @@ include = ["src/parsetrail/assets/**"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+qt_api = "pyside6"
 
 [tool.uv]
 required-version = ">=0.12.5"

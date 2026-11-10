@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 
 from parsetrail.core.v2_profile_store import ProfileFormatError, V2ProfileStore
 from parsetrail.core.v2_workspace import V2Workspace
+from parsetrail.gui.v2_form_state import install_initial_focus
 
 
 def _failure(parent, error: Exception) -> None:
@@ -121,6 +122,7 @@ def choose_restored_workspace(parent, directory: Path, catalog: Path, *, trusted
 class V2ProfileStartupDialog(QDialog):
     def __init__(self, catalog: Path, *, trusted_keys=None, preferences_path=None, parent=None):
         super().__init__(parent)
+        install_initial_focus()
         self.catalog = catalog
         self.trusted_keys = trusted_keys
         self.preferences_path = preferences_path

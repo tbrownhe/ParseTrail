@@ -34,6 +34,7 @@ from parsetrail.core.v2_workspace import V2Workspace
 from parsetrail.gui.v2_binding_correction import V2BindingCorrection, ordinary_binding_lock_notice
 from parsetrail.gui.v2_evidence_preview import _location, _money
 from parsetrail.gui.v2_financial_account import create_financial_account
+from parsetrail.gui.v2_form_state import install_form_styles, set_field_state, set_status
 from parsetrail.gui.v2_original_document import open_original_document
 
 
@@ -92,6 +93,7 @@ class V2AccountBindingReview(QDialog):
 
     def __init__(self, profile: Path, source_sha256: str, parent=None, *, workspace: V2Workspace | None = None):
         super().__init__(parent)
+        install_form_styles(self)
         self.profile = profile
         self.workspace = workspace
         self.source_sha256 = source_sha256
@@ -117,7 +119,7 @@ class V2AccountBindingReview(QDialog):
         layout.addWidget(self.lock_notice)
 
         controls = QHBoxLayout()
-        controls.addWidget(QLabel("Ledger account:"))
+        controls.addWidget(QLabel("1. Your account *"))
         self.account_combo = QComboBox()
         self.account_combo.currentIndexChanged.connect(self._update_controls)
         self.account_combo.setMinimumWidth(260)
@@ -132,6 +134,9 @@ class V2AccountBindingReview(QDialog):
         self.clear_file_button.clicked.connect(self._clear_file)
         controls.addWidget(self.clear_file_button)
         layout.addLayout(controls)
+        self.choice_status = QLabel()
+        self.choice_status.setWordWrap(True)
+        layout.addWidget(self.choice_status)
 
         self.model = _BindingsModel(self)
         self.table = QTableView()
@@ -214,9 +219,10 @@ class V2AccountBindingReview(QDialog):
         self._file_mode = any(binding.basis == "file" for binding in bindings)
         self._row_mode = any(binding.basis == "row" for binding in bindings)
         selected_account = self.account_combo.currentData()
-        names = cash_account_labels(accounts)
+        names = cash_account_labels(accounts, self.workspace.institutions() if self.workspace else ())
         self.account_combo.blockSignals(True)
         self.account_combo.clear()
+        self.account_combo.addItem("Choose an account…", None)
         for account in accounts:
             self.account_combo.addItem(names[account.id], account.id)
         if selected_account is not None:
@@ -301,6 +307,39 @@ class V2AccountBindingReview(QDialog):
                 self.lock_notice.text()
                 + " Review an account correction to inspect withdrawal/opening prerequisites and retained history."
             )
+        chosen = self.account_combo.currentData()
+        relevant = (
+            tuple(self.model.bindings[index.row()] for index in self.table.selectionModel().selectedRows())
+            if selected and not file_mode
+            else self.model.bindings
+        )
+        saved = (
+            bool(relevant) and chosen is not None and all(binding.ledger_account_id == chosen for binding in relevant)
+        )
+        actionable = self.file_button.isEnabled() or self.assign_rows_button.isEnabled()
+        if read_error or not self.model.rows or (file_locked and selected_locked):
+            state, message = (
+                "blocked",
+                "Assignment needs attention. Inspect the prerequisite above before changing accounts.",
+            )
+        elif saved:
+            state, message = "saved", "Saved · The relevant rows use this account. Account assignment adds no spending."
+        elif chosen is None:
+            state, message = (
+                "required",
+                "Required · Choose or create your account, then assign the file or selected rows.",
+            )
+        elif actionable:
+            state, message = (
+                "ready",
+                "Chosen · Not saved. Confirm the entire file or selected rows below; no activity is posted.",
+            )
+        else:
+            state, message = "blocked", "Choose rows to assign, or inspect the account correction prerequisites above."
+        set_field_state(self.account_combo, state)
+        set_status(self.choice_status, state, message)
+        for button in (self.file_button, self.assign_rows_button):
+            set_field_state(button, "ready" if state == "ready" and button.isEnabled() else "neutral")
 
     def _write(self, action) -> None:
         try:

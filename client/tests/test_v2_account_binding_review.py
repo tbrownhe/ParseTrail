@@ -43,6 +43,8 @@ def test_review_switches_explicit_file_and_mixed_row_modes(tmp_path: Path) -> No
         assert dialog.model.rowCount() == 2
         assert "No account assignments" in dialog.status.text()
         assert "already associate" not in dialog.status.text()
+        assert dialog.account_combo.currentData() is None
+        dialog.account_combo.setCurrentIndex(dialog.account_combo.findData("loan-a"))
         dialog.file_button.click()
         assert "Whole-file assertion: Loan A" in dialog.status.text()
         assert not dialog.assign_rows_button.isEnabled()
@@ -57,7 +59,7 @@ def test_review_switches_explicit_file_and_mixed_row_modes(tmp_path: Path) -> No
         assert "Row assignments: 1 of 2" in dialog.status.text()
         assert "Assign the remaining rows" in dialog.status.text()
         assert "no whole-document assertion is required" in dialog.status.text()
-        assert dialog.model.data(dialog.model.index(1, 3)) == "Loan B (mohela, liability)"
+        assert dialog.model.data(dialog.model.index(1, 3)) == "Loan B (MOHELA, liability)"
         assert not dialog.file_button.isEnabled()
     finally:
         dialog.close()
@@ -103,6 +105,7 @@ def test_mixed_identity_export_reviews_only_unidentified_rows(tmp_path: Path) ->
         assert dialog.model.rowCount() == 1
         assert not dialog.file_button.isEnabled()
         dialog.table.selectRow(0)
+        dialog.account_combo.setCurrentIndex(dialog.account_combo.findData("loan-a"))
         assert dialog.assign_rows_button.isEnabled()
         dialog.assign_rows_button.click()
         assert "1 of 1" in dialog.status.text()
@@ -205,7 +208,7 @@ def test_one_reload_snapshot_and_100_row_selections_or_combo_repaints_do_no_data
         monkeypatch.setattr(V2ProfileStore, "accountless_binding_review_snapshot", forbidden)
         for index in range(100):
             dialog.table.selectRow(index)
-            dialog.account_combo.setCurrentIndex(index % 2)
+            dialog.account_combo.setCurrentIndex(1 + index % 2)
             dialog.table.viewport().repaint()
             dialog.account_combo.repaint()
             app.processEvents()
@@ -281,6 +284,7 @@ def test_cached_selection_never_bypasses_a_new_posted_history_lock_at_save(tmp_p
     monkeypatch.setattr(QMessageBox, "warning", lambda _parent, _title, message: warnings.append(message))
     try:
         dialog.table.selectRow(0)
+        dialog.account_combo.setCurrentIndex(dialog.account_combo.findData("cash-a"))
         assert dialog.assign_rows_button.isEnabled()
         with V2ProfileStore.open(profile) as store:
             store.post_reviewed_cash_category(row_id, "expense:food", reason="Reviewed after the GUI snapshot")
@@ -307,6 +311,7 @@ def test_reload_failure_invalidates_cached_safe_guards_models_and_actions_then_r
     original = V2ProfileStore.accountless_binding_review_snapshot
     try:
         dialog.table.selectRow(0)
+        dialog.account_combo.setCurrentIndex(1)
         assert dialog.assign_rows_button.isEnabled()
 
         def unavailable(*_args):
@@ -331,7 +336,10 @@ def test_reload_failure_invalidates_cached_safe_guards_models_and_actions_then_r
         monkeypatch.setattr(V2ProfileStore, "accountless_binding_review_snapshot", original)
         dialog.reload_button.click()
         assert dialog._snapshot is not None and dialog.model.rowCount() == 2
-        assert "No account assignments" in dialog.status.text() and dialog.file_button.isEnabled()
+        assert "No account assignments" in dialog.status.text()
+        assert dialog.account_combo.currentData() is None and not dialog.file_button.isEnabled()
+        dialog.account_combo.setCurrentIndex(1)
+        assert dialog.file_button.isEnabled()
     finally:
         dialog.close()
         app.processEvents()

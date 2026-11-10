@@ -10,6 +10,7 @@ from parsetrail.core.v2_workspace import V2Workspace
 
 from devtools.parser_engine_pilot.synthetic_family_sources import family_sources
 
+from .ordinary_staging_helpers import review_action, stage_and_confirm
 from .test_v2_document_browser import wait_for_inventory
 from .test_v2_ordinary_review_async import wait_for_review, wait_until
 from .test_v2_transfer_review_async import wait_for_transfers
@@ -118,15 +119,15 @@ def test_both_actual_dates_fixed_posting_no_assumptions_cancel_post_reopen(tmp_p
     wait_for_review(view)
     assert previews == [evidence.source_sha256]
     form(view)
-    assert view.action_button.isEnabled()
+    assert review_action(view).isEnabled()
     before = path.read_bytes()
     monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.No)
-    view.action_button.click()
+    stage_and_confirm(view)
     wait_for_review(view)
     assert path.read_bytes() == before
     prompts = []
     monkeypatch.setattr(QMessageBox, "question", lambda _p, _t, text: prompts.append(text) or QMessageBox.Yes)
-    view.action_button.click()
+    stage_and_confirm(view)
     wait_for_review(view)
     assert "2026-02-05" in prompts[0] and "2026-02-07" in prompts[0] and "derived" in prompts[0]
     assert "reviewed card" not in prompts[0] and "principal/interest" in prompts[0]
@@ -156,16 +157,16 @@ def test_register_category_correction_preserves_class_date_and_whole_liability_t
     evidence, _bank = profile(path, source)
     view = dialog(path, evidence.source_sha256)
     form(view)
-    view.action_button.click()
+    stage_and_confirm(view)
     wait_for_review(view)
     first = view.model.rows[0].entry_key
     view.category.setCurrentIndex(view.category.findData("expense:other"))
     view.reason.setText("Explicit category-only register correction")
     assert view.purpose.currentData() == "expense" and not view.purpose.isEnabled()
     view.accounting_date.setText("2026-02-06")
-    assert not view.action_button.isEnabled()
+    assert not review_action(view).isEnabled()
     view.accounting_date.setText("2026-02-07")
-    assert view.action_button.isEnabled()
+    assert review_action(view).isEnabled()
     prompts = []
     monkeypatch.setattr(QMessageBox, "question", lambda _p, _t, text: prompts.append(text) or QMessageBox.Yes)
     view.action_button.click()
@@ -191,7 +192,7 @@ def test_register_category_correction_preserves_class_date_and_whole_liability_t
     assert view.model.rows[0].entry_key is None and view.purpose.isEnabled()
     assert "withdraw" in view.history_details.text().lower()
     form(view, purpose="income_adjustment", category="income:other")
-    view.action_button.click()
+    stage_and_confirm(view)
     wait_for_review(view)
     assert view.model.rows[0].purpose == "income_adjustment" and view.model.rows[0].entry_key != first
     view.close()
@@ -203,12 +204,12 @@ def test_positive_register_payment_route_preserves_explicit_other_credit_choices
     evidence, _bank = profile(path, source)
     view = dialog(path, evidence.source_sha256)
     view.table.selectRow(1)
-    assert view.purpose.currentData() == "repayment" and view.action_button.text() == "Review this repayment…"
+    assert view.purpose.currentData() == "repayment" and review_action(view).text() == "Review this repayment…"
     assert not view.category.isEnabled()
     assert view.accounting_date.text() == "2026-02-10"
     form(view, row=1, purpose=purpose, category=category)
-    assert view.action_button.isEnabled()
-    view.action_button.click()
+    assert review_action(view).isEnabled()
+    stage_and_confirm(view)
     wait_for_review(view)
     assert view.model.rows[1].purpose == purpose
     with V2ProfileStore.open(path, read_only=True) as store:
@@ -232,7 +233,7 @@ def test_register_wrong_financial_scope_or_unbound_is_visible_and_blocked(tmp_pa
     view = dialog(path, evidence.source_sha256)
     view.table.selectRow(0)
     view.reason.setText("Source scope must be explicitly eligible")
-    assert not view.action_button.isEnabled() and not view.withdraw_button.isEnabled()
+    assert not review_action(view).isEnabled() and not view.withdraw_button.isEnabled()
     assert view.purpose.currentData() is None
     assert path.read_bytes() == before
     assert (
@@ -262,7 +263,7 @@ def test_register_stale_confirmation_and_failed_read_clear_authoring_state(tmp_p
     monkeypatch.setattr(QMessageBox, "question", concurrent)
     warnings = []
     monkeypatch.setattr(QMessageBox, "warning", lambda _p, _t, text: warnings.append(text))
-    view.action_button.click()
+    stage_and_confirm(view)
     wait_for_review(view)
     assert warnings and view.model.rows[0].entry_key is None
     assert view.model.rows[0].entry_key is None and view.reason.text()
@@ -274,7 +275,7 @@ def test_register_stale_confirmation_and_failed_read_clear_authoring_state(tmp_p
     view.refresh()
     wait_for_review(view)
     assert view.basis is None and view.model.rowCount() == 0
-    assert not view.action_button.isEnabled() and not view.withdraw_button.isEnabled()
+    assert not review_action(view).isEnabled() and not view.withdraw_button.isEnabled()
     view.close()
 
 
@@ -289,7 +290,7 @@ def test_owned_register_repayment_is_neutral_whole_liability_with_separate_dates
     evidence, bank = profile(path, source)
     register = dialog(path, evidence.source_sha256)
     form(register)
-    register.action_button.click()
+    stage_and_confirm(register)
     wait_for_review(register)
     register.close()
     view = V2TransferReview(workspace(path))
@@ -376,7 +377,7 @@ def test_wrong_family_register_entry_stays_pending_without_card_alias_admission(
     view = dialog(path, bank_source)
     view.table.selectRow(0)
     assert "Outside supported liability register scope" in view.status.text()
-    assert view.purpose.currentData() is None and not view.action_button.isEnabled()
+    assert view.purpose.currentData() is None and not review_action(view).isEnabled()
     assert path.read_bytes() == before
     view.close()
 
@@ -386,7 +387,7 @@ def test_register_historical_withdrawal_retry_preserves_fresh_interpretation(tmp
     evidence, _bank = profile(path, source)
     current = dialog(path, evidence.source_sha256)
     form(current)
-    current.action_button.click()
+    stage_and_confirm(current)
     wait_for_review(current)
     oldkey = current.model.rows[0].entry_key
     stale = dialog(path, evidence.source_sha256)
@@ -396,7 +397,7 @@ def test_register_historical_withdrawal_retry_preserves_fresh_interpretation(tmp
     current.withdraw_button.click()
     wait_for_review(current)
     form(current)
-    current.action_button.click()
+    stage_and_confirm(current)
     wait_for_review(current)
     freshkey = current.model.rows[0].entry_key
     assert freshkey != oldkey

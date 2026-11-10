@@ -170,6 +170,7 @@ class V2LoanPaymentReview(QDialog):
         self.jobs.busy_changed.connect(self._busy_changed)
         self.snapshot = self.preview = self.selected_event = None
         self._requested_event_id = event_id
+        self._open_saved_history = event_id is not None
         self.labels, self.banks, self.rows = {}, {}, ()
         self.review_preferences = workspace.preferences()
         self.setWindowTitle("2.0 evidenced loan payments")
@@ -451,7 +452,16 @@ class V2LoanPaymentReview(QDialog):
             for source in dict.fromkeys(proof.source_sha256 for proof in event.manifest.components):
                 self.history_source.addItem(f"Loan component source {source}", source)
             self.open_history_source.setEnabled(True)
-        self._draft_changed()
+        if event is not None and self._open_saved_history:
+            self._open_saved_history = False
+            self.tabs.setCurrentIndex(self.tabs.count() - 1)
+            self.summary.setText(
+                "Saved reviewed payment. Current date preferences do not invalidate it. "
+                "Inspect its source evidence here; use Bank and printed components to propose a replacement."
+            )
+            self._update_actions()
+        else:
+            self._draft_changed()
         if event is not None and event.status != "active":
             self.tabs.setCurrentIndex(self.tabs.count() - 1)
         if getattr(self, "_notice", None):

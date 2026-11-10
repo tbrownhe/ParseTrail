@@ -9,6 +9,7 @@ from parsetrail.core.v2_workspace import V2Workspace
 
 from devtools.parser_engine_pilot.synthetic_family_sources import family_sources
 
+from .ordinary_staging_helpers import review_action, stage_and_confirm
 from .test_v2_settlement_review_dialog import _check
 from .test_v2_transfers import BANK_DEFINITION
 from .v2_institution_helpers import add_test_financial_account
@@ -120,7 +121,7 @@ def test_hsa_cash_purpose_explicit_unknown_source_text_and_withdrawal(
     assert "cash component only" in view.review_intro.text() and "whole HSA" in view.review_intro.text()
     view.table.selectRow(row_index)
     wait_for_jobs(view)
-    assert view.purpose.currentData() is None and not view.action_button.isEnabled()
+    assert view.purpose.currentData() is None and not review_action(view).isEnabled()
     assert "cash component" in view.source_context.text()
     view.purpose.setCurrentIndex(view.purpose.findData(purpose))
     wait_for_jobs(view)
@@ -130,14 +131,17 @@ def test_hsa_cash_purpose_explicit_unknown_source_text_and_withdrawal(
     wait_for_jobs(view)
     prompts = []
     monkeypatch.setattr(QMessageBox, "question", lambda _p, _t, message: prompts.append(message) or QMessageBox.Yes)
-    assert view.action_button.isEnabled()
-    view.action_button.click()
+    assert review_action(view).isEnabled()
+    stage_and_confirm(view)
     wait_for_jobs(view)
     assert "Only this cash component" in prompts[0]
     if row_index == 2:
         assert "Source description unavailable / unknown" in prompts[0]
         assert "Code-owned accounting label only" in prompts[0]
-        assert "interest" not in prompts[0].lower()
+        assert (
+            "Code-owned accounting label only: Reviewed HSA cash movement; source description unavailable" in prompts[0]
+        )
+        assert "no interest, contribution or investment purpose is inferred" in prompts[0]
         assert view.model.rows[2].description is None
         assert not view.model.rows[2].source_description_known
     with V2ProfileStore.open(path, read_only=True) as store:
@@ -169,7 +173,7 @@ def test_hsa_whole_account_scope_is_refused_for_cash_and_source_opening(tmp_path
     wait_for_jobs(cash)
     cash.reason.setText("Source scope must not become whole account")
     wait_for_jobs(cash)
-    assert not cash.action_button.isEnabled()
+    assert not review_action(cash).isEnabled()
     assert not cash.model.rows[0].allowed_purposes
     opening = V2OpeningReview(workspace(path))
     assert not opening.confirm.isEnabled()
@@ -197,7 +201,7 @@ def test_unbound_cash_row_has_unknown_scope_and_no_interpretation_controls(tmp_p
     wait_for_jobs(view)
     assert "unavailable until account assignment" in view.source_context.text()
     assert "Assign a financial account" in view.status.text()
-    assert not view.action_button.isEnabled() and not view.withdraw_button.isEnabled()
+    assert not review_action(view).isEnabled() and not view.withdraw_button.isEnabled()
     view.close()
 
 

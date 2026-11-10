@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QVBoxLayout
+from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QScrollArea, QVBoxLayout, QWidget
 
 from parsetrail.version import __developer__, __version__
 
@@ -13,6 +13,12 @@ def show_workspace_help(parent=None) -> None:
     dialog.setWindowTitle("Getting started with your 2.0 workspace")
     dialog.resize(680, 570)
     layout = QVBoxLayout(dialog)
+    scroll = QScrollArea()
+    scroll.setWidgetResizable(True)
+    content = QWidget()
+    guide = QVBoxLayout(content)
+    scroll.setWidget(content)
+    layout.addWidget(scroll)
     steps = (
         (
             "1. Keep your profiles separate",
@@ -23,18 +29,41 @@ def show_workspace_help(parent=None) -> None:
             "2. Install a signed catalog and import originals",
             "Choose Install signed catalog, then import a CSV/PDF file or a folder. Ordinary imports and "
             "analysis stay on your device. Original files stay where you selected them; the profile retains "
-            "a copy of every successfully imported original.",
+            "a copy of every successfully imported original. Choose an existing account or Create a new account, "
+            "then review the recognized dates and amounts. CSV headers must match a declared format; account "
+            "details narrow formats automatically. Unresolved format conflicts block import without a column-mapping "
+            "choice. Import and assign saves original/evidence, new account drafts and "
+            "assignments together without posting transactions. Back keeps choices; Skip/Cancel discards unsaved "
+            "drafts and keeps completed files. PDF uses automatic signed routing.",
         ),
         (
             "3. Confirm accounts and repeated evidence",
-            "Select a saved source and review its account bindings. Use Review repeated rows for possible "
-            "overlap. Equal amounts are suggestions to inspect, not proof of a duplicate or a transfer.",
+            "Import shows every account group in the document. Header compatibility does not identify your account; "
+            "Create a new account stays available beside compatible existing choices. Product supplies the "
+            "asset/liability class and permitted scope. Use Review possible repeated transactions for overlap. "
+            "Choose institutions by name or deliberately choose Institution not identified. "
+            "Generic CSV headers do not identify a bank; a listed institution does not mean every format "
+            "from it is supported. Equal amounts are suggestions to inspect, not proof of a duplicate or a transfer.",
         ),
         (
             "4. Review before posting",
             "Review supported cash activity, card purchases and transfers explicitly. Importing and account "
             "binding do not post money. Transfers and card repayments do not create a second expense. "
-            "Unsupported activity remains pending.",
+            "Unsupported activity remains pending. Use Ctrl-click or Shift to select several unreviewed rows, "
+            "choose a shared purpose/category/note, then Stage selected and Review staged before confirming. "
+            "One transaction uses the same staging flow. The table distinguishes staged unsaved proposals from "
+            "not-staged and reviewed rows; remove selected proposals to undo staging. "
+            "Each row keeps its own date. Successful staging captures the note for every staged row; "
+            "later unstaged edits do not change it. Saved entries are corrected individually.",
+        ),
+        (
+            "Reading the choice colors",
+            "Pale red marks a required choice that is missing or needs correction. Pale green marks a valid "
+            "choice that has not been saved. Unchanged saved choices, read-only source facts and empty optional "
+            "fields stay neutral. Light-blue buttons show available next actions; read their labels and confirmations. "
+            "An amber message explains a prerequisite. Nearby messages give the same "
+            "meaning without color. Green does not certify an interpretation, complete coverage or reconciliation. "
+            "Read the confirmation before saving; cancelling it retains your draft.",
         ),
         (
             "5. Establish openings and inspect reports",
@@ -56,11 +85,11 @@ def show_workspace_help(parent=None) -> None:
         font = heading.font()
         font.setBold(True)
         heading.setFont(font)
-        layout.addWidget(heading)
+        guide.addWidget(heading)
         text = QLabel(body)
         text.setWordWrap(True)
         text.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        layout.addWidget(text)
+        guide.addWidget(text)
     buttons = QDialogButtonBox(QDialogButtonBox.Close)
     buttons.rejected.connect(dialog.accept)
     layout.addWidget(buttons)

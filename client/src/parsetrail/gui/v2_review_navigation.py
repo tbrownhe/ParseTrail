@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QSortFilterProxyModel, Qt, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtCore import QEvent, QItemSelectionModel, QSortFilterProxyModel, Qt, Signal
+from PySide6.QtGui import QColor, QFont, QKeySequence, QPalette, QShortcut
 from PySide6.QtWidgets import QAbstractItemView, QComboBox, QHBoxLayout, QLabel, QLineEdit, QPushButton, QWidget
 
 
@@ -11,10 +11,64 @@ def reviewed_elsewhere(row):
     return row is not None and row.entry_key is None and row.status == "Already posted to the ledger"
 
 
+def review_status_label(status):
+    """Keep table labels compact; the row status and tooltip retain full detail."""
+    return {
+        "Cross-source occurrence needs review": "Possible repeat — review needed",
+        "Repeated supporting evidence; post the retained row": "Supporting — use retained row",
+    }.get(status, status)
+
+
 def review_state(row):
     if row.entry_key is not None or reviewed_elsewhere(row):
         return "reviewed"
     return "ready" if row.status == "Ready for purpose review" else "blocked"
+
+
+class StagedRowPresentation:
+    """Local proposal cues; the immutable financial row never changes state."""
+
+    def set_staged(self, staged, details, changed=()):
+        if getattr(self, "_resetting", False):
+            # Selection signals emitted by begin/endResetModel may update form
+            # cues. A dataChanged notification during that reset is invalid;
+            # the completed snapshot refresh projects staging afterward.
+            return
+        values = (dict(staged), dict(details), frozenset(changed))
+        if values == getattr(self, "_stage_presentation", None):
+            return
+        self._stage_presentation = values
+        self.staged, self.staging_details, self.staging_changed = values
+        if self.rowCount():
+            self.dataChanged.emit(self.index(0, 0), self.index(self.rowCount() - 1, self.columnCount() - 1))
+
+    def staged_data(self, index, role, row):
+        staged = row.row_id in getattr(self, "staged", {})
+        choice_column = index.column() == self.columnCount() - 1
+        if staged and role == Qt.BackgroundRole:
+            return True, QColor("#EDF7EF")
+        if staged and role == Qt.FontRole and choice_column:
+            font = QFont()
+            font.setBold(True)
+            return True, font
+        if choice_column and role in {Qt.DisplayRole, Qt.AccessibleTextRole, Qt.UserRole}:
+            value = (
+                "Staged · needs recheck"
+                if staged and (row.entry_key is not None or reviewed_elsewhere(row))
+                else "Staged · changes not staged"
+                if staged and row.row_id in self.staging_changed
+                else "Staged · not saved"
+                if staged
+                else "Reviewed elsewhere"
+                if reviewed_elsewhere(row)
+                else "Reviewed · " + (row.purpose or "").replace("_", " ").title()
+                if row.entry_key is not None
+                else "Not staged"
+            )
+            return True, value
+        if staged and role == Qt.ToolTipRole:
+            return True, self.staging_details.get(row.row_id, "Staged locally; not saved.")
+        return False, None
 
 
 class ReviewProxy(QSortFilterProxyModel):
@@ -54,6 +108,19 @@ class ReviewNavigation(QWidget):
         self.proxy.setSourceModel(model)
         table.setModel(self.proxy)
         table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        palette = table.palette()
+        palette.setColor(QPalette.Inactive, QPalette.Highlight, QColor("#DCEBFA"))
+        palette.setColor(QPalette.Inactive, QPalette.HighlightedText, QColor("#172B4D"))
+        table.setPalette(palette)
+        # Windows' native unfocused selection ignores the palette highlight.
+        # Scope the fallback to this table after focus moves into review fields;
+        # focused keyboard/table selection keeps the platform's native painting.
+        table.setProperty("reviewSelectionFocus", table.hasFocus())
+        table.setStyleSheet(
+            'QTableView[reviewSelectionFocus="false"]::item:selected { background-color: #DCEBFA; color: #172B4D; }'
+        )
+        table.installEventFilter(self)
+        table.setTabKeyNavigation(False)
         table.setSortingEnabled(True)
         table.sortByColumn(-1, Qt.AscendingOrder)
         layout = QHBoxLayout(self)
@@ -72,9 +139,13 @@ class ReviewNavigation(QWidget):
         ):
             self.status_filter.addItem(label, key)
         self.count = QLabel()
-        self.next_button = QPushButton("Next pending")
+        self.count.setToolTip(
+            "Ctrl+click adds or removes rows; Shift selects a range; Ctrl+A selects visible rows only."
+        )
+        table.selectionModel().selectionChanged.connect(self.update_count)
+        self.next_button = QPushButton("Next unstaged")
         self.next_button.setShortcut(QKeySequence("Alt+N"))
-        self.next_button.setToolTip("Move to the next visible row needing review (Alt+N)")
+        self.next_button.setToolTip("Move to the next visible unstaged row needing review (Alt+N)")
         self.next_button.clicked.connect(self.next_pending)
         layout.addWidget(self.search, 1)
         layout.addWidget(self.status_filter)
@@ -85,9 +156,18 @@ class ReviewNavigation(QWidget):
         self.proxy.modelReset.connect(self.update_count)
         self.proxy.rowsInserted.connect(self.update_count)
         self.proxy.rowsRemoved.connect(self.update_count)
+        self.model.dataChanged.connect(self.update_count)
         shortcut = QShortcut(QKeySequence.Find, parent)
         shortcut.activated.connect(self.search.setFocus)
         self.update_count()
+
+    def eventFilter(self, watched, event):
+        if watched is self.table and event.type() in {QEvent.FocusIn, QEvent.FocusOut}:
+            watched.setProperty("reviewSelectionFocus", event.type() == QEvent.FocusIn)
+            watched.style().unpolish(watched)
+            watched.style().polish(watched)
+            watched.viewport().update()
+        return super().eventFilter(watched, event)
 
     def _filter(self, *_args):
         selected = self.current()
@@ -103,16 +183,35 @@ class ReviewNavigation(QWidget):
         self.scope_changed.emit()
 
     def update_count(self, *_args):
-        self.count.setText(f"{self.proxy.rowCount()} of {len(self.model.rows)}")
-        self.next_button.setEnabled(any(review_state(row) != "reviewed" for row in self.model.rows))
+        selected = len(self.table.selectionModel().selectedRows())
+        self.count.setText(
+            f"{self.proxy.rowCount()} of {len(self.model.rows)} · {selected} selected · Ctrl/Shift selects"
+        )
+        self.next_button.setEnabled(
+            any(
+                review_state(row) != "reviewed" and row.row_id not in getattr(self.model, "staged", {})
+                for row in (
+                    self.model.rows[self.proxy.mapToSource(self.proxy.index(index, 0)).row()]
+                    for index in range(self.proxy.rowCount())
+                )
+            )
+        )
 
     def current(self):
-        index = self.proxy.mapToSource(self.table.currentIndex())
+        selected = self.table.selectionModel().selectedRows()
+        if not selected:
+            return None
+        # Ctrl may leave currentIndex on a deselected anchor. A single selected
+        # row, rather than that anchor, is the only possible single-entry scope.
+        current = selected[0] if len(selected) == 1 else self.table.currentIndex()
+        index = self.proxy.mapToSource(current)
         return self.model.rows[index.row()] if index.isValid() and index.row() < len(self.model.rows) else None
 
     def selected(self):
         return tuple(
-            self.model.rows[self.proxy.mapToSource(index).row()] for index in self.table.selectionModel().selectedRows()
+            self.model.rows[self.proxy.mapToSource(index).row()]
+            for index in sorted(self.table.selectionModel().selectedRows(), key=lambda index: index.row())
+            if index.isValid() and self.proxy.mapToSource(index).isValid()
         )
 
     def select_id(self, row_id):
@@ -125,6 +224,25 @@ class ReviewNavigation(QWidget):
                     return True
         return False
 
+    def select_ids(self, row_ids):
+        """Restore only still-visible members after an explicit category refresh."""
+        wanted = set(row_ids)
+        selection = self.table.selectionModel()
+        selection.blockSignals(True)
+        selection.clearSelection()
+        for i, row in enumerate(self.model.rows):
+            index = self.proxy.mapFromSource(self.model.index(i, 0))
+            if row.row_id in wanted and index.isValid():
+                selection.select(index, QItemSelectionModel.Select | QItemSelectionModel.Rows)
+        selection.blockSignals(False)
+        self.update_count()
+
+    def reveal_row(self, row_id):
+        """Expose an exact report-linked row, including a reviewed or blocked owner."""
+        self.search.clear()
+        self.status_filter.setCurrentIndex(self.status_filter.findData("all"))
+        return self.select_id(row_id)
+
     def next_pending(self):
         count = self.proxy.rowCount()
         if not count:
@@ -133,7 +251,7 @@ class ReviewNavigation(QWidget):
         for offset in range(1, count + 1):
             index = self.proxy.index((start + offset) % count, 0)
             row = self.model.rows[self.proxy.mapToSource(index).row()]
-            if review_state(row) != "reviewed":
+            if review_state(row) != "reviewed" and row.row_id not in getattr(self.model, "staged", {}):
                 self.table.selectRow(index.row())
                 self.table.scrollTo(index)
                 return

@@ -31,6 +31,7 @@ from parsetrail.core.v2_profile_store import (
 from parsetrail.core.v2_workspace import V2Workspace
 from parsetrail.gui.v2_binding_correction import V2BindingCorrection, ordinary_binding_lock_notice
 from parsetrail.gui.v2_financial_account import create_financial_account
+from parsetrail.gui.v2_form_state import install_form_styles, set_field_state, set_status
 from parsetrail.gui.v2_original_document import open_original_document
 
 
@@ -39,12 +40,13 @@ class V2SourceAccountReview(QDialog):
 
     def __init__(self, workspace: V2Workspace, source_sha256: str, parent=None):
         super().__init__(parent)
+        install_form_styles(self)
         self.workspace = workspace
         self.profile = workspace.profile_path
         self.source_sha256 = source_sha256
         self.bindings: tuple[SourceAccountBinding, ...] = ()
         self.setWindowTitle("2.0 source account review")
-        self.resize(720, 480)
+        self.resize(780, 520)
         layout = QVBoxLayout(self)
         intro = QLabel(
             "Confirm which account each part of this document belongs to. "
@@ -62,7 +64,7 @@ class V2SourceAccountReview(QDialog):
         self.lock_notice.setWordWrap(True)
         layout.addWidget(self.lock_notice)
         controls = QHBoxLayout()
-        controls.addWidget(QLabel("Your account:"))
+        controls.addWidget(QLabel("1. Your account *"))
         self.account_combo = QComboBox()
         self.account_combo.currentIndexChanged.connect(self._update_controls)
         controls.addWidget(self.account_combo, 1)
@@ -71,11 +73,16 @@ class V2SourceAccountReview(QDialog):
         controls.addWidget(self.new_account_button)
         self.assign_button = QPushButton("Use this account")
         self.assign_button.clicked.connect(self._assign)
-        controls.addWidget(self.assign_button)
         self.clear_button = QPushButton("Clear assignment")
         self.clear_button.clicked.connect(self._clear)
-        controls.addWidget(self.clear_button)
         layout.addLayout(controls)
+        self.choice_status = QLabel()
+        layout.addWidget(self.choice_status)
+        confirmation = QHBoxLayout()
+        confirmation.addWidget(self.assign_button)
+        confirmation.addWidget(self.clear_button)
+        confirmation.addStretch()
+        layout.addLayout(confirmation)
         self.correction_button = QPushButton("Review account correction…")
         self.correction_button.clicked.connect(self._correct)
         layout.addWidget(self.correction_button)
@@ -172,7 +179,7 @@ class V2SourceAccountReview(QDialog):
             | self.overlap_locked_keys
             | {key for key, blockers in self.ordinary_blockers.items() if blockers}
         )
-        names = cash_account_labels(accounts)
+        names = cash_account_labels(accounts, self.workspace.institutions())
         self.account_combo.clear()
         self.account_combo.addItem("Choose a ledger account…", None)
         for account in accounts:
@@ -255,6 +262,42 @@ class V2SourceAccountReview(QDialog):
             and self.bindings[index].source_identity_form == "last_four"
             and (self.matches[index].offer_enable_abbreviated_matching or self.matches[index].status == "automatic")
         )
+        chosen = self.account_combo.currentData()
+        saved = self.bindings[index].ledger_account_id if selected else None
+        if not selected or locked:
+            set_field_state(self.account_combo, "blocked")
+            set_field_state(self.assign_button, "neutral")
+            set_status(
+                self.choice_status,
+                "blocked",
+                "Account assignment is locked; use Review account correction to inspect prerequisites."
+                if locked
+                else "Select a document account above before assigning it.",
+            )
+        elif chosen is None:
+            set_field_state(self.account_combo, "required")
+            set_field_state(self.assign_button, "neutral")
+            set_status(
+                self.choice_status,
+                "required",
+                "Required: choose an account or create one. Then confirm the assignment.",
+            )
+        elif chosen == saved:
+            set_field_state(self.account_combo, "saved")
+            set_field_state(self.assign_button, "neutral")
+            set_status(
+                self.choice_status,
+                "saved",
+                "Saved assignment. Activity review is a separate step; assigning an account posts no spending.",
+            )
+        else:
+            set_field_state(self.account_combo, "ready")
+            set_field_state(self.assign_button, "ready")
+            set_status(
+                self.choice_status,
+                "ready",
+                "Chosen · Not saved. Use this account to confirm the document assignment. No activity is posted.",
+            )
 
     def _toggle_abbreviated_matching(self, enabled: bool) -> None:
         try:

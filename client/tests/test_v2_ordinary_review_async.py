@@ -15,6 +15,7 @@ from parsetrail.gui.v2_profile_jobs import _JOBS, ProfileJobs
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox
 
+from .ordinary_staging_helpers import review_action, stage_and_confirm
 from .v2_institution_helpers import add_test_financial_account
 
 DEFINITION = (Path(__file__).parents[2] / "devtools/v2_fresh_slice/synthetic-posted-cash-definition.json").read_bytes()
@@ -84,7 +85,7 @@ def test_cash_shell_and_search_remain_responsive_during_worker_read(cash, monkey
     monkeypatch.setattr(V2ProfileStore, "source_interpretation_snapshot", delayed)
     view = V2CashActivityReview(path, evidence.source_sha256)
     try:
-        assert view.basis is None and not view.action_button.isEnabled()
+        assert view.basis is None and not review_action(view).isEnabled()
         assert "Loading" in view.operation_status.text()
         view.show()
         wait_until(started.is_set)
@@ -127,21 +128,21 @@ def test_exact_sort_filter_and_next_pending_preserve_row_identity(cash):
 def test_async_write_advances_pending_and_retains_correction_history(cash, monkeypatch):
     path, evidence = cash
     writes = []
-    original = V2ProfileStore.post_reviewed_cash_category
+    original = V2ProfileStore.post_reviewed_ordinary_batch
 
     def record(store, *args, **kwargs):
         writes.append(threading.get_ident())
         return original(store, *args, **kwargs)
 
-    monkeypatch.setattr(V2ProfileStore, "post_reviewed_cash_category", record)
+    monkeypatch.setattr(V2ProfileStore, "post_reviewed_ordinary_batch", record)
     view = wait_for_review(V2CashActivityReview(path, evidence.source_sha256))
     try:
         row_id = view._current().row_id
         view.purpose.setCurrentIndex(view.purpose.findData("expense"))
         view.category.setCurrentIndex(view.category.findData("expense:food"))
         view.reason.setText("Inspected purchase")
-        assert view.action_button.isEnabled()
-        view.action_button.click()
+        assert review_action(view).isEnabled()
+        stage_and_confirm(view)
         wait_for_review(view)
         assert writes and writes[0] != threading.get_ident()
         assert view.navigation.proxy.rowCount() == 2
@@ -177,7 +178,7 @@ def test_confirmation_cannot_write_to_switched_workspace(cash, tmp_path, monkeyp
             return QMessageBox.Yes
 
         monkeypatch.setattr(QMessageBox, "question", switch)
-        view.action_button.click()
+        stage_and_confirm(view)
         assert warnings
         for profile in (path, other):
             with V2ProfileStore.open(profile, read_only=True) as store:
@@ -292,7 +293,7 @@ def test_cancelled_read_and_failure_never_reenable_posting(cash, monkeypatch):
         view._cancel_loading()
         release.set()
         wait_for_review(view)
-        assert view.basis is None and not view.action_button.isEnabled()
+        assert view.basis is None and not review_action(view).isEnabled()
         assert "cancelled" in view.operation_status.text()
 
         def failure(*_args, **_kwargs):
@@ -367,7 +368,7 @@ def test_reviewed_elsewhere_uses_owning_event_and_hides_ordinary_form(tmp_path, 
         view.navigation.status_filter.setCurrentIndex(view.navigation.status_filter.findData("reviewed"))
         assert view._current().row_id == outgoing
         assert view.purpose.isHidden() and view.category.isHidden() and view.reason.isHidden()
-        assert "View reviewed" in view.action_button.text()
+        assert "View reviewed" in review_action(view).text()
         assert "Pending" not in view.model.data(view.model.index(0, 5))
         view.action_button.click()
         wait_for_review(view)
@@ -387,7 +388,7 @@ def test_exact_batch_dialog_cancel_then_confirm_preserves_staged_choices(cash, m
     accepted = False
 
     def inspect(dialog):
-        assert dialog.windowTitle() == "Confirm staged ordinary review"
+        assert dialog.windowTitle() == "Confirm staged review"
         previews.append(dialog.findChild(QPlainTextEdit).toPlainText())
         return QDialog.Accepted if accepted else QDialog.Rejected
 

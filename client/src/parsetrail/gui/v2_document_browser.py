@@ -8,6 +8,7 @@ from pathlib import Path
 
 from PySide6.QtCore import QCoreApplication, QThread
 
+from parsetrail.core.v2_institutions import Institution, institution_label
 from parsetrail.core.v2_profile_store import DocumentSummary, V2ProfileStore
 
 _INVENTORY_READERS: set[QThread] = set()
@@ -75,31 +76,13 @@ class DocumentInventoryWorker(QThread):
             self.error = exc
 
 
-def document_title(summary: DocumentSummary) -> str:
+def document_title(summary: DocumentSummary, institutions: tuple[Institution, ...] = ()) -> str:
     names = summary.bound_account_names or summary.source_accounts
     account = ", ".join(names[:2])
     if len(names) > 2:
         account += f" +{len(names) - 2} more"
-    institutions = {
-        "capital_one": "Capital One",
-        "citi": "Citi",
-        "healthequity": "HealthEquity",
-        "lendingclub": "LendingClub",
-        "usbank": "U.S. Bank",
-        "wellsfargo": "Wells Fargo",
-        "occu": "OCCU",
-        "mohela": "MOHELA",
-        "happen": "Happen",
-        "yamaha": "Yamaha",
-        "fidelity": "Fidelity",
-        "vanguard": "Vanguard",
-        "transamerica": "Transamerica",
-        "synchrony": "Synchrony",
-        "chase": "Chase",
-        "synthetic": "Synthetic example",
-    }
     if summary.institution_key:
-        family = institutions.get(summary.institution_key, summary.institution_key.replace("_", " "))
+        family = institution_label(summary.institution_key, institutions)
     else:
         families = (
             ("pdf_citicc_", "Citi card document"),

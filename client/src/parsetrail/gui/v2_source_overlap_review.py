@@ -103,12 +103,14 @@ class V2SourceOverlapReview(QDialog):
         "Source B description",
     )
 
-    def __init__(self, profile: Path, parent=None):
+    def __init__(self, profile: Path, parent=None, *, focus_row_id: str | None = None, focus_requires_review=False):
         super().__init__(parent)
         self.profile = profile
+        self.focus_row_id = focus_row_id
+        self.focus_requires_review = focus_requires_review
         self.candidates: tuple[SourceOverlapCandidate, ...] = ()
         self.repair_preview = None
-        self.setWindowTitle("2.0 repeated source rows")
+        self.setWindowTitle("Review possible repeated transactions")
         self.resize(1180, 760)
         layout = QVBoxLayout(self)
         profile_row = QHBoxLayout()
@@ -139,6 +141,7 @@ class V2SourceOverlapReview(QDialog):
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.setTabKeyNavigation(False)
         self.table.setSortingEnabled(True)
         header = self.table.horizontalHeader()
         for column, width in enumerate((140, 105, 105, 200, 105)):
@@ -178,6 +181,7 @@ class V2SourceOverlapReview(QDialog):
             side_layout.setContentsMargins(0, 0, 0, 0)
             side_layout.addWidget(QLabel(title))
             details.setReadOnly(True)
+            details.setTabChangesFocus(True)
             side_layout.addWidget(details)
             side_layout.addWidget(preview)
             splitter.addWidget(panel)
@@ -248,6 +252,31 @@ class V2SourceOverlapReview(QDialog):
             )
         if direct is not None:
             summary += " The selected saved pair is also opened directly outside the inventory list."
+        if selected_ids is None and self.focus_row_id is not None:
+            related = tuple(
+                pair
+                for pair in self.candidates
+                if self.focus_row_id
+                in {
+                    pair.left.row_id,
+                    pair.right.row_id,
+                    *pair.left_group_row_ids,
+                    *pair.right_group_row_ids,
+                }
+            )
+            focused = next(
+                (pair for pair in related if pair.state in {"pending", "stale", "posted_conflict", "supporting"}), None
+            )
+            if focused is None and not self.focus_requires_review:
+                focused = next(iter(related), None)
+            if focused is not None:
+                selected_ids = (focused.left.row_id, focused.right.row_id)
+                summary += " Opened a comparison for the transaction selected in Review or its saved repeat group."
+            else:
+                summary += (
+                    " A required comparison for the selected transaction is not shown. This does not clear its posting block. "
+                    "Review pending pairs and Refresh to reach further comparisons; saved repeat groups may span documents."
+                )
         self.summary.setText(summary)
         self._populate(selected_ids)
 

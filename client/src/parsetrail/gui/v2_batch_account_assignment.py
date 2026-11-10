@@ -36,9 +36,11 @@ from parsetrail.core.v2_batch_account_assignment import (
     plan_account_assignments,
 )
 from parsetrail.core.v2_cash_movement import cash_account_labels
+from parsetrail.core.v2_institutions import catalog_institutions, institution_label, merge_institutions
 from parsetrail.core.v2_profile_store import V2ProfileStore
 from parsetrail.gui.v2_document_browser import profile_revision
 from parsetrail.gui.v2_financial_account import V2FinancialAccountDialog
+from parsetrail.gui.v2_form_state import install_form_styles, set_field_state
 from parsetrail.gui.v2_original_document import open_original_document
 
 _JOBS: set[QThread] = set()
@@ -71,6 +73,7 @@ class _AssignmentJob(QThread):
         self.plan, self.choices, self.new_accounts = plan, choices, new_accounts
         self.cancel_event = Event()
         self.result, self.error = None, None
+        self.institutions = ()
         self.revision = profile_revision(workspace.profile_path)
 
     def cancel(self):
@@ -81,6 +84,10 @@ class _AssignmentJob(QThread):
         try:
             self.revision = profile_revision(self.workspace.profile_path)
             with V2ProfileStore.open(self.workspace.profile_path, read_only=self.plan is None) as store:
+                catalog = self.workspace.catalog_cache.load_current()
+                self.institutions = merge_institutions(
+                    store.institutions(), catalog_institutions(catalog) if catalog else ()
+                )
                 store.connection.set_progress_handler(lambda: int(self.cancel_event.is_set()), 1000)
                 if self.plan is None:
                     self.result = plan_account_assignments(
@@ -159,6 +166,7 @@ class V2BatchAccountAssignment(QDialog):
     def __init__(self, workspace, parent=None):
         super().__init__(parent)
         self.workspace = workspace
+        self.institutions = ()
         self.plan = None
         self.choices, self.new_accounts = {}, {}
         self._proposed_choices, self._choice_overrides = {}, {}
@@ -350,6 +358,7 @@ class V2BatchAccountAssignment(QDialog):
             self.counts.setText("Batch saved. Reload proposals to find any remaining unassigned sections.")
         elif job.generation == self._generation and job.error is None and job.result is not None:
             self._profile_revision = job.revision
+            self.institutions = job.institutions
             self._load_plan(job.result)
             QTimer.singleShot(0, self._refresh_changed_profile)
         elif job.error is not None and job.generation == self._generation:
@@ -405,9 +414,7 @@ class V2BatchAccountAssignment(QDialog):
         self.groups.blockSignals(True)
         self.groups.clear()
         for group in plan.groups:
-            title = (
-                f"{group.institution_key or 'Institution unknown'} · {group.source_identity or 'No printed account'}"
-            )
+            title = f"{institution_label(group.institution_key, self.institutions)} · {group.source_identity or 'No printed account'}"
             label = (
                 "Individual review"
                 if group.status == "manual"
@@ -459,7 +466,7 @@ class V2BatchAccountAssignment(QDialog):
             self._updating = False
             return
         self.group_context.setText(
-            f"Institution: {group.institution_key or 'not identified'}\n"
+            f"Institution: {institution_label(group.institution_key, self.institutions)}\n"
             f"Document account: {group.source_identity or 'not printed'} ({group.source_identity_form or 'unknown'})\n"
             f"Kind: {group.kind or 'unknown'} · tracking scope: {(group.tracking_scope or 'unknown').replace('_', ' ')}"
         )
@@ -473,7 +480,7 @@ class V2BatchAccountAssignment(QDialog):
         )
         accounts = {account.id: account for account in (*self.plan.accounts, *self.new_accounts.values())}
         compatible = tuple(account for account in accounts.values() if account_compatible(group, account))
-        labels = cash_account_labels(compatible)
+        labels = cash_account_labels(compatible, self.institutions)
         for account in compatible:
             self.account_combo.addItem(
                 labels[account.id] + (" · new, not saved" if account.id in self.new_accounts else ""), account.id
@@ -545,7 +552,9 @@ class V2BatchAccountAssignment(QDialog):
         document_index = self.documents.currentRow()
         target = group.targets[document_index] if 0 <= document_index < len(group.targets) else None
         draft = getattr(target, "draft", None) or group.draft
-        form = V2FinancialAccountDialog(self, draft=draft, staged=True, profile=self.workspace.profile_path)
+        form = V2FinancialAccountDialog(
+            self, draft=draft, staged=True, profile=self.workspace.profile_path, institutions=self.institutions
+        )
         while form.exec() == QDialog.Accepted:
             account = form.account()
             if not account_compatible(group, account):
@@ -583,12 +592,12 @@ class V2BatchAccountAssignment(QDialog):
             label = (
                 "Individual review"
                 if group.status == "manual"
-                else "Selected"
+                else "Chosen · Not saved"
                 if group.group_id in self.choices
                 else "Choose account"
             )
             self.groups.item(index).setText(
-                f"{group.institution_key or 'Institution unknown'} · {group.source_identity or 'No printed account'}\n"
+                f"{institution_label(group.institution_key, self.institutions)} · {group.source_identity or 'No printed account'}\n"
                 f"{len(group.targets)} section(s) · {label}"
             )
         selected = [group for group in groups if group.group_id in self.choices]
@@ -608,7 +617,7 @@ class V2BatchAccountAssignment(QDialog):
         accounts = {account.id: account for account in (*self.plan.accounts, *self.new_accounts.values())}
         self.summary_model.replace(
             (
-                group.institution_key or "Unknown",
+                institution_label(group.institution_key, self.institutions),
                 f"{group.source_identity or 'Not printed'}\n{group.kind or 'Unknown kind'} · "
                 f"{(group.tracking_scope or 'unknown scope').replace('_', ' ')}",
                 accounts[self.choices[group.group_id]].name if group.group_id in self.choices else "—",
@@ -652,6 +661,7 @@ class V2BatchAccountAssignment(QDialog):
         )
 
     def _update_actions(self, *_args):
+        install_form_styles(self)
         ready = self.plan is not None and not self.pending and not self._closed
         self.groups.setEnabled(ready)
         self.refresh_button.setEnabled(not self.pending and not self._closed)
@@ -662,6 +672,19 @@ class V2BatchAccountAssignment(QDialog):
         self.back_button.setVisible(self.pages.currentIndex() == 1)
         self.back_button.setEnabled(ready)
         self.pages.setEnabled(not self.pending)
+        group = self._current()
+        choice_state = (
+            "loading"
+            if self.pending
+            else "blocked"
+            if not ready or self._apply_blocked or group is None or group.status == "manual"
+            else "ready"
+            if self.account_combo.currentData() is not None
+            else "required"
+        )
+        set_field_state(self.account_combo, choice_state)
+        set_field_state(self.review_button, "ready" if self.review_button.isEnabled() else "neutral")
+        set_field_state(self.apply_button, "ready" if self.apply_button.isEnabled() else "neutral")
         self.cancel_button.setText(
             "Cancel operation" if self.pending else "Close" if self.assignment_result else "Cancel"
         )

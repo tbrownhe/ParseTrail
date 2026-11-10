@@ -72,7 +72,10 @@ def test_documents_are_recognizable_searchable_and_preserve_context(tmp_path: Pa
         wait_for_jobs(window._review_widget)
         assert window._review_widget.model.rowCount() == 1
         assert window._review_widget.embedded
-        assert "Everyday checking" in window.review_context.text()
+        assert "Everyday checking" in window.review_document_selector.currentText()
+        assert "2026-10-01" in window.review_document_selector.currentText()
+        assert window.review_document_selector.currentData() == selected
+        assert "unallocated" in window.review_context.text()
         assert window.cash_review_button.isEnabled()
     finally:
         window.close()

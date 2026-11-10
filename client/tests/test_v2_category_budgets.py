@@ -97,7 +97,7 @@ def test_category_dialog_saves_and_displays_effective_target(tmp_path: Path) -> 
         dialog.budget_month.setDate(QDate(2026, 5, 1))
         assert "300.00" in dialog.budget_current.text()
         dialog.budget_clear.click()
-        assert "No target" in dialog.budget_current.text()
+        assert "No budget" in dialog.budget_current.text()
         assert dialog.budget_history.count() == 3
     finally:
         dialog.close()

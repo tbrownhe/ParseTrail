@@ -63,15 +63,15 @@ def test_financial_dialog_chooses_kind_appropriate_scope_and_preserves_locked_sc
     try:
         assert dialog.scope.currentData() == "account_total"
         assert dialog.scope.findData("cash_component") >= 0 and dialog.scope.findData("principal_component") == -1
-        dialog.kind.setCurrentIndex(dialog.kind.findData("liability"))
+        dialog.product.setCurrentIndex(dialog.product.findData("loan"))
         assert dialog.scope.findData("cash_component") == -1 and dialog.scope.findData("principal_component") >= 0
         dialog.scope.setCurrentIndex(dialog.scope.findData("principal_component"))
         dialog.name.setText("New loan")
-        dialog.institution.setText("synthetic")
+        dialog.institution.setCurrentIndex(dialog.institution.findData(None))
         assert dialog.account().tracking_scope == "principal_component"
     finally:
         dialog.close()
-    existing = FinancialAccount("loan", "Loan", "liability", "synthetic", "11112222", "principal_component")
+    existing = FinancialAccount("loan", "Loan", "liability", None, "11112222", "principal_component")
     locked = V2FinancialAccountDialog(existing=existing, scope_locked=True)
     try:
         assert not locked.kind.isEnabled() and not locked.scope.isEnabled()

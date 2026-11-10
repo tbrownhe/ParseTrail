@@ -121,7 +121,7 @@ def test_new_account_modal_stages_without_writes_and_cancel_discards_everything(
         captured.append(form)
         assert form.source_identity.isReadOnly()
         assert form.source_identity.text() == "123456XXXXXX7890"
-        assert form.institution.isReadOnly() and form.institution.text() == "yamaha"
+        assert form.institution.isReadOnly() and form.institution.text() == "Yamaha Financial Services"
         assert form.number.text() == ""
         assert _hash(workspace) == before
         form.name.setText("New staged Yamaha account")
@@ -570,7 +570,8 @@ def test_new_account_context_uses_selected_second_document_without_another_store
         assert target.source_sha256 != dialog._current().draft.source_sha256
 
         class ContextForm:
-            def __init__(self, parent, *, draft, staged, profile):
+            def __init__(self, parent, *, draft, staged, profile, institutions):
+                assert institutions == parent.institutions
                 captured.append((parent, draft, staged, profile))
 
             def exec(self):

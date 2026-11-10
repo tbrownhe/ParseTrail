@@ -132,7 +132,7 @@ def test_unavailable_exact_context_requires_explicit_kind_and_institution(tmp_pa
     draft = suggest_account_creation(
         evidence, catalog=catalog, source_identity=section.source_identity, source_form=section.source_identity_form
     )
-    assert draft.institution_key == "" and draft.kind is None and not draft.verified_context
+    assert draft.institution_key is None and draft.kind is None and not draft.verified_context
     assert draft.full_account_number is None
     form = V2FinancialAccountDialog(draft=draft)
     try:
@@ -140,10 +140,20 @@ def test_unavailable_exact_context_requires_explicit_kind_and_institution(tmp_pa
         form.accept()
         assert form.result() == QDialog.Rejected
         assert "Choose" in form.save_error.text()
-        form.kind.setCurrentIndex(form.kind.findData("liability"))
+        form.product.setCurrentIndex(form.product.findData("credit_card"))
         assert form.scope.currentData() == "account_total"
-        assert form.institution.text() == ""
-        assert not form.institution.isReadOnly()
+        assert form.institution.currentIndex() == 0
+        assert form.institution.isEditable()
+        form.institution.setEditText("My Bank")
+        form.accept()
+        assert form.result() == QDialog.Rejected
+        assert "listed institution" in form.save_error.text()
+        assert form.institution.currentText() == "My Bank"
+        assert form.kind.currentData() == "liability"
+        assert form.scope.currentData() == "account_total"
+        form.institution.setCurrentIndex(form.institution.findData(None))
+        form.accept()
+        assert form.result() == QDialog.Accepted
     finally:
         form.close()
 
@@ -231,11 +241,11 @@ def test_cancel_and_failed_save_retain_values_without_partial_creation(tmp_path,
     original = V2ProfileStore.add_financial_account
     attempts, forms, warnings = [], [], []
 
-    def save(store, account):
+    def save(store, account, **kwargs):
         attempts.append(account)
         if len(attempts) == 1:
             raise sqlite3.OperationalError("synthetic save refusal")
-        original(store, account)
+        original(store, account, **kwargs)
 
     def accept(form):
         forms.append(form)
@@ -272,11 +282,11 @@ def test_accountless_creation_preserves_rows_and_requires_separate_assignment(tm
         captured.append(form.draft)
         assert form.number.text() == "" and form.draft.source_identity is None
         if not verified:
-            assert form.kind.currentData() is None and form.institution.text() == ""
-            form.kind.setCurrentIndex(form.kind.findData("liability"))
+            assert form.kind.currentData() is None and form.institution.currentIndex() == 0
+            form.product.setCurrentIndex(form.product.findData("loan"))
             assert form.scope.currentData() is None
             form.scope.setCurrentIndex(form.scope.findData("principal_component"))
-            form.institution.setText("mohela")
+            form.institution.setCurrentIndex(form.institution.findData("mohela"))
         form.name.setText("Owner's education loan")
         form.accept()
         return form.result()
@@ -310,14 +320,15 @@ def test_accountless_creation_preserves_rows_and_requires_separate_assignment(tm
         dialog.close()
 
 
-def test_other_accountless_family_needs_scope_even_with_signed_liability_context(tmp_path):
+def test_generic_accountless_family_requires_choices_despite_a_signed_bank_label(tmp_path):
     data = json.loads(ACCOUNTLESS_DEFINITION)
     data["parser_id"] = "synthetic_unknown_loan_export"
     definition = json.dumps(data).encode()
     evidence = build_source_evidence(ACCOUNTLESS_SOURCE, definition, suffix=".csv")
     workspace = _workspace(tmp_path, definition, evidence, institution="mohela", source=ACCOUNTLESS_SOURCE)
     draft = suggest_account_creation(evidence, catalog=workspace.catalog_cache.load_current())
-    assert draft.kind == "liability" and draft.tracking_scope is None
+    assert draft.kind is None and draft.institution_key is None and draft.tracking_scope is None
+    assert not draft.verified_context
     form = V2FinancialAccountDialog(draft=draft)
     try:
         assert form.scope.currentData() is None
@@ -353,7 +364,8 @@ def test_locked_assignment_cannot_use_creation_to_bypass_correction(tmp_path, mo
 
     def accept(form):
         form.name.setText("New choice awaiting correction")
-        form.scope.setCurrentIndex(form.scope.findData("account_total"))
+        form.product.setCurrentIndex(form.product.findData("checking"))
+        form.institution.setCurrentIndex(form.institution.findData(None))
         form.accept()
         return form.result()
 

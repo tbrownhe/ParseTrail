@@ -45,7 +45,7 @@ def _labels(combo):
     assert "Shared account" in total and "Shared account" in component
     assert "cash component" not in total and "cash component" in component
     for label in (total, component):
-        assert "synthetic" in label and "asset" in label and "ending 5678" in label
+        assert "Synthetic" in label and "asset" in label and "ending 5678" in label
         assert "12345678" not in label
     return total, component
 

@@ -12,7 +12,13 @@ from time import sleep
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from parsetrail.core.v2_data_catalog import key_id_for_public_key
-from parsetrail.core.v2_profile_store import V2ProfileStore
+from parsetrail.core.v2_import_accounts import (
+    ImportAccountChoice,
+    compatible_import_accounts,
+    import_account_profiles,
+    prepare_import_accounts,
+)
+from parsetrail.core.v2_profile_store import FinancialAccount, V2ProfileStore
 from parsetrail.core.v2_source_import import ImportCancelled
 from parsetrail.core.v2_source_pipeline import build_source_evidence
 from parsetrail.core.v2_workspace import V2Workspace
@@ -62,9 +68,46 @@ def _wait_finished(worker, app) -> None:
     timer.setSingleShot(True)
     timer.timeout.connect(lambda: (timed_out.append(True), loop.quit()))
     worker.finished.connect(loop.quit)
+    # These functional worker checks explicitly approve a compatible account and
+    # the unique interpretation. Actual account setup/input has native Qt tests.
+    preview_timer = QTimer()
+    review_parent = worker.parent()
+
+    def approve_request():
+        preview = review_parent.import_preview if review_parent is not None else None
+        request = preview.request if preview is not None else None
+        if request is None or request.decided.is_set() or len(request.recognition.candidates) != 1:
+            return
+        review = request.review
+        choices, accounts = [], []
+        for group in review.groups:
+            compatible = compatible_import_accounts(review, group.group_id)
+            if compatible:
+                account = compatible[0]
+            else:
+                profile = import_account_profiles(review, group.group_id)[0]
+                account = FinancialAccount(
+                    "test-import:" + group.group_id[:24],
+                    "Test account",
+                    profile.kind,
+                    profile.institution_key,
+                    tracking_scope=profile.tracking_scope,
+                    product_type=profile.product_type,
+                )
+                accounts.append(account)
+            choices.append(ImportAccountChoice(group.group_id, account.id))
+        request.finish(
+            prepare_import_accounts(
+                review, tuple(choices), request.recognition.candidates[0].parser_id, tuple(accounts)
+            )
+        )
+
+    preview_timer.timeout.connect(approve_request)
+    preview_timer.start(10)
     timer.start(10_000)
     if not worker.isFinished():
         loop.exec()
+    preview_timer.stop()
     app.processEvents()
     assert not timed_out
 
@@ -137,6 +180,9 @@ def test_window_batch_import_shows_per_file_report_and_retains_successes(tmp_pat
     def capture_report(dialog):
         reports.append([dialog.files.item(index).text() for index in range(dialog.files.count())])
         assert dialog.selected_path.text() == str(good)
+        dialog.files.setCurrentRow(1)
+        assert "does not match an installed statement format" in dialog.recovery_guidance.text()
+        assert "catalog_no_match" in dialog.recovery_guidance.text()
 
     monkeypatch.setattr(V2BatchImportReport, "exec", capture_report)
     window = V2WorkspaceWindow(workspace)
@@ -256,7 +302,8 @@ def test_window_cancel_reaches_worker_and_saves_nothing(tmp_path: Path, monkeypa
     workspace = _workspace(tmp_path)
     started = Event()
 
-    def wait_for_cancel(_path, *, cancelled):
+    def wait_for_cancel(_path, *, cancelled, review_import=None):
+        assert review_import is not None
         started.set()
         while not cancelled():
             sleep(0.001)
@@ -278,6 +325,9 @@ def test_window_cancel_reaches_worker_and_saves_nothing(tmp_path: Path, monkeypa
         _wait_finished(worker, app)
         assert "cancelled" in window.status.text()
         assert workspace.source_ids() == ()
+        assert window.install_catalog_button.isEnabled()
+        assert window.account_button.isEnabled()
+        assert window.import_button.isEnabled()
     finally:
         window.close()
         app.processEvents()
@@ -348,12 +398,12 @@ def test_accountless_source_opens_review_and_account_creation(tmp_path: Path, mo
     def accept_account(dialog):
         if dialog.existing is None:
             dialog.name.setText("Loan A")
-            dialog.kind.setCurrentIndex(1)
-            dialog.institution.setText("mohela")
+            dialog.product.setCurrentIndex(dialog.product.findData("loan"))
+            dialog.institution.setCurrentIndex(dialog.institution.findData("mohela"))
         else:
             assert not dialog.kind.isEnabled()
             dialog.name.setText("Updated loan")
-            dialog.institution.setText("new-lender")
+            dialog.institution.setCurrentIndex(dialog.institution.findData("citi"))
             dialog.number.setText("12345678")
         return QDialog.Accepted
 
@@ -374,7 +424,7 @@ def test_accountless_source_opens_review_and_account_creation(tmp_path: Path, mo
             assert [
                 (account.name, account.kind, account.institution_key, account.full_account_number)
                 for account in store.financial_accounts()
-            ] == [("Updated loan", "liability", "new-lender", "12345678")]
+            ] == [("Updated loan", "liability", "citi", "12345678")]
     finally:
         window.close()
         app.processEvents()

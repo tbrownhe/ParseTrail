@@ -7,6 +7,7 @@ from parsetrail.core.v2_profile_store import V2ProfileStore
 from parsetrail.gui.v2_categories import V2CategoryDialog
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
+from .ordinary_staging_helpers import review_action, stage_and_confirm
 from .test_v2_liability_register_dialog import dialog, form, profile
 from .test_v2_liability_register_dialog import source as source_fixture
 from .v2_job_wait import wait_for_jobs
@@ -44,7 +45,7 @@ def test_printed_payment_routes_to_selected_counterpart_review_without_posting(t
         view.reason.setText("Keep this draft note")
         wait_for_jobs(view)
         assert view.purpose.currentData() == "repayment"
-        assert view.action_button.isEnabled()
+        assert review_action(view).isEnabled()
         assert not view.category.isEnabled() and not view.manage_categories_button.isEnabled()
         assert "Ready for purpose review" in view.status.text()
         assert "no income or expense" in view.status.text()
@@ -79,7 +80,7 @@ def test_invalid_scope_or_unbound_payment_preserves_source_status(tmp_path, sour
         assert view.purpose.currentData() is None
         assert view.purpose.findData("repayment") == -1
         assert view._current().status in view.status.text()
-        assert not view.action_button.isEnabled()
+        assert not review_action(view).isEnabled()
     finally:
         view.close()
 
@@ -109,7 +110,7 @@ def test_manage_categories_creates_compatible_category_and_preserves_review_edit
         assert view.accounting_date.text() == previous_date
         assert view._current().row_id == evidence.payload.accounts[0].rows[0].row_id
         assert "Loan servicing costs" in view.category.currentText()
-        assert view.action_button.isEnabled()
+        assert review_action(view).isEnabled()
         with V2ProfileStore.open(path, read_only=True) as store:
             assert any(category.name == "Loan servicing costs" for category in store.category_accounts())
             assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (0,)
@@ -201,7 +202,7 @@ def test_shared_card_category_shortcut_preserves_explicit_corrected_date(tmp_pat
         assert view.accounting_date.text() == "2026-03-14"
         assert view.reason.text() == "Keep explicitly corrected card date"
         assert view.purpose.currentData() == "expense" and "Parking" in view.category.currentText()
-        assert view.action_button.isEnabled() and not workspace.preferences().allow_assumed_posting_dates
+        assert review_action(view).isEnabled() and not workspace.preferences().allow_assumed_posting_dates
         with V2ProfileStore.open(path, read_only=True) as store:
             assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (0,)
     finally:
@@ -231,7 +232,7 @@ def test_register_confirmation_keeps_reviewed_basis_when_nested_events_refresh_v
     monkeypatch.setattr(QMessageBox, "question", concurrent_refresh)
     monkeypatch.setattr(QMessageBox, "warning", lambda *_args: warnings.append(True))
     try:
-        view.action_button.click()
+        stage_and_confirm(view)
         wait_for_jobs(view)
         assert warnings
         with V2ProfileStore.open(path, read_only=True) as store:
@@ -272,7 +273,7 @@ def test_repayment_posted_elsewhere_shows_history_and_no_pending_category(tmp_pa
         assert view.purpose.currentData() == "external_history" and not view.purpose.isEnabled()
         assert not view.category.isEnabled() and not view.manage_categories_button.isEnabled()
         assert "no further categorization" in view.status.text()
-        assert view.action_button.text() == "View reviewed transfer" and view.action_button.isEnabled()
+        assert review_action(view).text() == "View reviewed transfer" and review_action(view).isEnabled()
         before = path.read_bytes()
         view.action_button.click()
         wait_for_jobs(view)

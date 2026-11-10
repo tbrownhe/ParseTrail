@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import sqlite3
+from datetime import date, timedelta
 from pathlib import Path
 from threading import Event
 
-from PySide6.QtCore import QEvent, Qt, QThread, QTimer
+from PySide6.QtCore import QEvent, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import (
+    QComboBox,
     QDialog,
     QFileDialog,
     QGroupBox,
@@ -37,10 +39,15 @@ from parsetrail.core.v2_profile_store import (
     V2ProfileStore,
 )
 from parsetrail.core.v2_source_import import ImportCancelled, SourceImportResult
-from parsetrail.core.v2_workspace import V2Workspace, folder_source_files
+from parsetrail.core.v2_workspace import ImportSkipped, V2Workspace, folder_source_files
 from parsetrail.gui.v2_account_binding_review import V2AccountBindingReview
 from parsetrail.gui.v2_batch_account_assignment import V2BatchAccountAssignment
-from parsetrail.gui.v2_batch_import import V2BatchImportReport, V2BatchImportWorker
+from parsetrail.gui.v2_batch_import import (
+    V2BatchImportReport,
+    V2BatchImportWorker,
+    import_failure_guidance,
+    review_import_accounts,
+)
 from parsetrail.gui.v2_card_purchase_review import V2CardPurchaseReview
 from parsetrail.gui.v2_cash_activity_review import V2CashActivityReview
 from parsetrail.gui.v2_cash_movement import V2CashMovementDialog
@@ -55,6 +62,8 @@ from parsetrail.gui.v2_document_browser import (
 )
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
 from parsetrail.gui.v2_financial_account import V2FinancialAccountDialog
+from parsetrail.gui.v2_form_state import install_initial_focus
+from parsetrail.gui.v2_import_account_review import V2ImportAccountReview
 from parsetrail.gui.v2_opening_review import V2OpeningReview
 from parsetrail.gui.v2_original_document import open_original_document
 from parsetrail.gui.v2_path_notice import show_data_locations, show_path_notice
@@ -71,6 +80,8 @@ from parsetrail.gui.v2_workspace_help import show_workspace_about, show_workspac
 class V2ImportWorker(QThread):
     """Keep bounded parsing off the GUI thread and expose a cancellation flag."""
 
+    import_review_requested = Signal(object)
+
     def __init__(self, workspace: V2Workspace, source_path: Path, parent=None):
         super().__init__(parent)
         self.workspace = workspace
@@ -84,7 +95,11 @@ class V2ImportWorker(QThread):
 
     def run(self) -> None:
         try:
-            self.result = self.workspace.import_file(self.source_path, cancelled=self.cancel_event.is_set)
+            self.result = self.workspace.import_file(
+                self.source_path,
+                cancelled=self.cancel_event.is_set,
+                review_import=lambda path, review: review_import_accounts(self, path, review),
+            )
         except Exception as exc:
             self.error = exc
 
@@ -94,9 +109,11 @@ class V2WorkspaceWindow(QMainWindow):
 
     def __init__(self, workspace: V2Workspace, parent=None):
         super().__init__(parent)
+        install_initial_focus()
         self.workspace = workspace
         self.import_worker: V2ImportWorker | V2BatchImportWorker | None = None
         self.progress: QProgressDialog | None = None
+        self.import_preview = None
         self._close_after_import = False
         self._inventory_worker = None
         self._inventory_generation = 0
@@ -112,6 +129,7 @@ class V2WorkspaceWindow(QMainWindow):
         self._review_source_id = None
         self._positions_view = None
         self._reports_view = None
+        self._report_review_target = None
         self._close_after_job = False
         self._profile_job_handlers = {}
         self.profile_jobs = ProfileJobs(self, workspace.profile_path)
@@ -290,6 +308,18 @@ class V2WorkspaceWindow(QMainWindow):
         review = QWidget()
         review_layout = QVBoxLayout(review)
         self.pages.addWidget(review)
+        document_switch = QHBoxLayout()
+        document_switch.addWidget(QLabel("Document:"))
+        self.review_document_selector = QComboBox()
+        self.review_document_selector.setAccessibleName("Document to review")
+        self.review_document_selector.setMinimumContentsLength(15)
+        self.review_document_selector.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.review_document_selector.currentIndexChanged.connect(self._switch_review_document)
+        document_switch.addWidget(self.review_document_selector, 1)
+        self.next_document_button = QPushButton("Next needs attention")
+        self.next_document_button.clicked.connect(self._next_document)
+        document_switch.addWidget(self.next_document_button)
+        review_layout.addLayout(document_switch)
         self.review_context = QLabel("Choose a document to review.")
         self.review_context.setWordWrap(True)
         self.review_context.setTextFormat(Qt.PlainText)
@@ -316,9 +346,27 @@ class V2WorkspaceWindow(QMainWindow):
         related.setMenu(self.related_menu)
         review_heading.addWidget(related)
         review_layout.addLayout(review_heading)
+        journey_actions = QHBoxLayout()
+        self.review_progress = QLabel()
+        self.review_progress.setWordWrap(True)
+        self.review_progress.setTextFormat(Qt.PlainText)
+        journey_actions.addWidget(self.review_progress, 1)
+        self.document_spending_button = QPushButton("View spending for document dates")
+        self.document_spending_button.setToolTip(
+            "Show reviewed spending across all profile accounts for this document's dates. "
+            "This does not filter spending to this document or its accounts."
+        )
+        self.document_spending_button.clicked.connect(self._show_document_spending)
+        journey_actions.addWidget(self.document_spending_button)
+        self.back_to_report_button = QPushButton("Back to report")
+        self.back_to_report_button.clicked.connect(self._back_to_report)
+        self.back_to_report_button.hide()
+        journey_actions.addWidget(self.back_to_report_button)
+        review_layout.addLayout(journey_actions)
         account_group = QGroupBox("Account association")
         self.account_group = account_group
         account_controls = QHBoxLayout(account_group)
+        self._account_group_margins = account_controls.contentsMargins()
         self.source_review_button = QPushButton("Confirm document accounts")
         self.source_review_button.clicked.connect(self._review_source_account)
         account_controls.addWidget(self.source_review_button)
@@ -426,9 +474,15 @@ class V2WorkspaceWindow(QMainWindow):
         )
         reports_note.setWordWrap(True)
         report_layout.addWidget(reports_note)
+        self.report_context = QLabel(
+            "All profile accounts. Choose report dates below; only reviewed entries are included."
+        )
+        self.report_context.setWordWrap(True)
+        self.report_context.setTextFormat(Qt.PlainText)
+        report_layout.addWidget(self.report_context)
         report_actions = QHBoxLayout()
         self.reports_button = QPushButton("Review pending activity")
-        self.reports_button.clicked.connect(lambda: self.navigation.setCurrentRow(1))
+        self.reports_button.clicked.connect(lambda: self._open_pending_review(3))
         report_actions.addWidget(self.reports_button)
         movement_button = QPushButton("Cash movement…")
         movement_button.clicked.connect(lambda: V2CashMovementDialog(self.workspace.profile_path, self).exec())
@@ -469,6 +523,7 @@ class V2WorkspaceWindow(QMainWindow):
             )
             setattr(self, attribute, view)
             view.review_requested.connect(lambda: self._open_pending_review(page))
+            view.source_review_requested.connect(self._review_report_source)
             if page == 3:
                 view.review_pending_button.hide()
             (self.positions_host if page == 2 else self.reports_host).addWidget(view)
@@ -479,6 +534,112 @@ class V2WorkspaceWindow(QMainWindow):
         elif view._loaded.get(view.tabs.currentIndex()) != view._key(view.tabs.currentIndex()):
             view._queue_selected_read(0)
         return view
+
+    @staticmethod
+    def _needs_attention(summary):
+        return bool(
+            summary.unassigned_source_accounts or summary.unassigned_activity_rows or summary.pending_activity_rows
+        )
+
+    def _sync_review_selector(self):
+        selected = self._selected_source()
+        self.review_document_selector.blockSignals(True)
+        self.review_document_selector.clear()
+        for summary in self._document_summaries.values():
+            self.review_document_selector.addItem(
+                f"{document_title(summary)} · {document_period(summary)}", summary.source_sha256
+            )
+        self.review_document_selector.setCurrentIndex(self.review_document_selector.findData(selected))
+        self.review_document_selector.blockSignals(False)
+
+    def _select_review_source(self, source_id):
+        if source_id not in self._document_summaries or self._write_in_progress():
+            return False
+        current = self._selected_source()
+        if current != source_id and not self._discard_review():
+            self._sync_review_selector()
+            return False
+        # A document search must not hide a route from a report or the review selector.
+        self._search_prior_source = None
+        self.document_search.blockSignals(True)
+        self.document_search.clear()
+        self.document_search.blockSignals(False)
+        for position in range(self.sources.count()):
+            item = self.sources.item(position)
+            item.setHidden(False)
+            if item.data(Qt.UserRole) == source_id:
+                self.sources.setCurrentItem(item)
+        self._sync_review_selector()
+        self._update_controls()
+        return self._selected_source() == source_id
+
+    def _switch_review_document(self, *_args):
+        source_id = self.review_document_selector.currentData()
+        if source_id is not None:
+            self._select_review_source(source_id)
+
+    def _next_document(self):
+        summaries = list(self._document_summaries.values())
+        if not summaries:
+            self.navigation.setCurrentRow(0)
+            return
+        selected = self._selected_source()
+        current = next((i for i, summary in enumerate(summaries) if summary.source_sha256 == selected), -1)
+        for offset in range(1, len(summaries) + 1):
+            summary = summaries[(current + offset) % len(summaries)]
+            if self._needs_attention(summary):
+                if summary.source_sha256 == selected:
+                    self.status.setText(
+                        "This is the only document needing attention. Pending rows may include repeats or unsupported activity."
+                    )
+                    return
+                if self._select_review_source(summary.source_sha256):
+                    self.navigation.setCurrentRow(1)
+                    self.review_document_selector.setFocus()
+                return
+
+    def _show_document_spending(self):
+        summary = self._document_summaries.get(self._selected_source())
+        if summary is None or summary.start is None or summary.end is None or summary.end == date.max:
+            return
+        if summary.start > summary.end:
+            return
+        reports = self._ensure_report_view(3)
+        reports.set_period(summary.start, summary.end + timedelta(days=1))
+        reports.tabs.setCurrentIndex(0)
+        self.report_context.setText(
+            f"All profile accounts · dates chosen from {document_title(summary)} ({document_period(summary)}). "
+            "Spending is not limited to this document or its accounts. Change report dates below as needed."
+        )
+        self.navigation.setCurrentRow(3)
+
+    def _review_report_source(self, source_id, row_id):
+        if not self._select_review_source(source_id):
+            self.status.setText(
+                "The report review was not opened. Keep your current choices, or reload documents and try again."
+            )
+            return
+        self.navigation.setCurrentRow(1)
+        self._ensure_review_view()
+        view = self._review_widget
+        if view is None:
+            return
+        view.navigation.reveal_row(row_id)
+        if view.review_pending:
+            view._selected_after_read = row_id
+        self._report_review_target = (source_id, row_id)
+        self.back_to_report_button.show()
+        self.status.setText(
+            "Opened the report's source row. Review its saved interpretation or owning payment/transfer history. "
+            "Nothing changes until you confirm. Back to report keeps its dates and tab."
+        )
+        view.table.setFocus()
+
+    def _back_to_report(self):
+        self.navigation.setCurrentRow(3)
+        view = self._reports_view
+        if view is not None:
+            view.invalidate(read=True)
 
     def _open_pending_review(self, page):
         account_id = None
@@ -508,13 +669,24 @@ class V2WorkspaceWindow(QMainWindow):
                 ),
                 related[0],
             )
-            if self.document_search.text():
-                self.document_search.clear()
-            for index in range(self.sources.count()):
-                item = self.sources.item(index)
-                if item.data(Qt.UserRole) == selected.source_sha256:
-                    self.sources.setCurrentItem(item)
-                    break
+            if not self._select_review_source(selected.source_sha256):
+                return
+        elif self._document_summaries:
+            selected = next(
+                (summary for summary in self._document_summaries.values() if self._needs_attention(summary)), None
+            )
+            if selected is None:
+                self.status.setText(
+                    "No unallocated activity or account assignments remain. Source coverage and checks are separate."
+                )
+                self.navigation.setCurrentRow(0)
+                return
+            if not self._select_review_source(selected.source_sha256):
+                return
+        else:
+            self.navigation.setCurrentRow(0)
+            self.status.setText("Import documents to start reviewing activity.")
+            return
         self.navigation.setCurrentRow(1)
 
     def _position_selected(self, *_args):
@@ -618,6 +790,11 @@ class V2WorkspaceWindow(QMainWindow):
                 view.hide()
                 view.deleteLater()
                 setattr(self, attribute, None)
+        self._report_review_target = None
+        self.back_to_report_button.hide()
+        self.report_context.setText(
+            "All profile accounts. Choose report dates below; only reviewed entries are included."
+        )
         return True
 
     def _profile_job_busy(self, busy):
@@ -668,8 +845,12 @@ class V2WorkspaceWindow(QMainWindow):
         for page, view in ((2, self._positions_view), (3, self._reports_view)):
             if view is not None:
                 view.invalidate(read=self.navigation.currentRow() == page)
-        if revision_changed and self._review_widget is not None and not self._review_has_draft():
-            self._review_widget.refresh()
+        if revision_changed and self._review_widget is not None:
+            refresh_preserving_draft = getattr(self._review_widget, "refresh_preserving_draft", None)
+            if refresh_preserving_draft is not None:
+                refresh_preserving_draft()
+            elif not self._review_has_draft():
+                self._review_widget.refresh()
         self.import_button.setEnabled(catalog is not None and self.import_worker is None)
         self.import_folder_button.setEnabled(catalog is not None and self.import_worker is None)
         for action in (
@@ -799,6 +980,7 @@ class V2WorkspaceWindow(QMainWindow):
             self.sources.setCurrentRow(0)
         self.sources.verticalScrollBar().setValue(scroll)
         self._filter_documents(self.document_search.text())
+        self._sync_review_selector()
 
     def _filter_documents(self, query: str) -> None:
         words = query.casefold().split()
@@ -897,6 +1079,19 @@ class V2WorkspaceWindow(QMainWindow):
         self.batch_accounts_action.setEnabled(batch_available)
         self.review_document_button.setEnabled(available)
         self.document_details_button.setEnabled(available)
+        self.review_document_selector.setEnabled(batch_available and bool(self._document_summaries))
+        self.review_document_selector.blockSignals(True)
+        self.review_document_selector.setCurrentIndex(self.review_document_selector.findData(source_id))
+        self.review_document_selector.blockSignals(False)
+        self.next_document_button.setEnabled(
+            batch_available and any(self._needs_attention(item) for item in self._document_summaries.values())
+        )
+        self.document_spending_button.setEnabled(
+            available
+            and summary.start is not None
+            and summary.end is not None
+            and summary.start <= summary.end < date.max
+        )
         is_card = summary is not None and summary.parser_id in CARD_STATEMENT_PARSERS
         is_register = summary is not None and summary.parser_id == REGISTER_PARSER
         self.cash_review_button.setEnabled(available and not is_card and not is_register)
@@ -907,6 +1102,7 @@ class V2WorkspaceWindow(QMainWindow):
         self.register_button.setEnabled(available and is_register)
         self.register_button.setVisible(is_register)
         self.source_review_button.setEnabled(available and summary.has_identified_accounts)
+        self.source_review_button.setVisible(bool(summary and summary.has_identified_accounts))
         self.change_document_account_action.setEnabled(available and summary.has_identified_accounts)
         self.change_row_accounts_action.setEnabled(available and summary.has_unidentified_rows)
         self.source_review_button.setText(
@@ -940,11 +1136,35 @@ class V2WorkspaceWindow(QMainWindow):
                 "Full allocation does not establish complete source capture or reconciliation."
                 + ("\nPossibly overlapping documents:\n" + "\n".join(related) if summary.overlapping_source_ids else "")
             )
-            self.review_context.setText(
-                f"{document_title(summary)} · {document_period(summary)}\n{document_status(summary)}"
+            # Document and dates remain directly above in the selector. Keep the
+            # working area for decisions and enough source rows to compare.
+            partial_assignment = bool(
+                summary.assigned_row_count and (summary.unassigned_source_accounts or summary.unassigned_activity_rows)
             )
+            self.review_context.setText(
+                f"{summary.pending_activity_rows} unallocated source row(s) · may include repeats"
+                if partial_assignment
+                else document_status(summary)
+            )
+            account_state = (
+                "No activity rows captured. Inspect source evidence and document checks before interpreting totals."
+                if not summary.row_count
+                else "Confirm the account before reviewing activity. Account assignment adds no spending."
+                if summary.unassigned_source_accounts or summary.unassigned_activity_rows
+                else "Account confirmed. Review activity to include it in reports."
+                if summary.pending_activity_rows
+                else "Activity allocated. You can inspect or correct saved review; source checks remain separate."
+            )
+            self.review_progress.setText("" if partial_assignment else account_state)
             self.account_assignment_status.setText(
-                f"{summary.unassigned_source_accounts} document account(s) need confirmation."
+                "Review confirmed rows; "
+                + (
+                    f"{summary.unassigned_source_accounts} document account(s) still need assignment."
+                    if summary.unassigned_source_accounts
+                    else f"{summary.unassigned_activity_rows} row(s) still need an account."
+                )
+                if partial_assignment
+                else f"{summary.unassigned_source_accounts} document account(s) need confirmation."
                 if summary.unassigned_source_accounts
                 else f"{summary.unassigned_activity_rows} activity row(s) still need a confirmed account."
                 if summary.unassigned_activity_rows
@@ -958,7 +1178,9 @@ class V2WorkspaceWindow(QMainWindow):
                 else "Review document"
             )
             self.review_guidance.setText(
-                "Confirm the document account first. Suggestions need your confirmation."
+                "Review confirmed rows below. Assign the remaining accounts before reviewing their activity."
+                if partial_assignment
+                else "Confirm the document account first. Suggestions need your confirmation."
                 if summary.unassigned_activity_rows or summary.unassigned_source_accounts
                 else "Review supported activity or check repeated evidence. Unallocated counts can include supporting copies; "
                 "do not post them twice. Transfers, repayments and loan splits have separate review."
@@ -966,20 +1188,41 @@ class V2WorkspaceWindow(QMainWindow):
                 else "Activity has full allocation. Statement checks, source completeness and corrections remain separate tasks."
             )
             self.account_group.setTitle(
-                "Confirm account" if summary.unassigned_source_accounts or summary.unassigned_activity_rows else ""
+                "Confirm account"
+                if not partial_assignment and (summary.unassigned_source_accounts or summary.unassigned_activity_rows)
+                else ""
             )
+            self.account_group.setFlat(partial_assignment)
+            if partial_assignment:
+                self.account_group.layout().setContentsMargins(0, 0, 0, 0)
+            else:
+                self.account_group.layout().setContentsMargins(self._account_group_margins)
             self.account_group.setVisible(bool(summary.unassigned_source_accounts or summary.unassigned_activity_rows))
             self.review_button.setVisible(summary.has_unidentified_rows)
             if self.navigation.currentRow() == 1:
                 self._ensure_review_view()
         else:
             self.selected_details.setText("Select a document to see its account, dates and next action.")
+            self.account_group.hide()
             self.document_technical_details.clear()
             self.review_context.setText("Choose a document in Documents to start or resume its review.")
             self.account_assignment_status.setText("Account status will appear when a document is selected.")
             self.review_guidance.setText(
                 "Document details are loading." if self.inventory_pending else "Choose a document first."
             )
+            self.review_progress.setText(
+                "Loading documents… Saved entries are unchanged."
+                if self.inventory_pending
+                else self.inventory_status.text()
+                if not self._document_summaries
+                else "Choose a document above to review its account and activity."
+            )
+            self.review_empty.setText(
+                "Import documents from Documents to begin. Account assignment and reviewed activity are separate steps."
+                if not self.inventory_pending and not self.sources.count()
+                else "Choose a document to see its supported activity and remaining decisions."
+            )
+            self.review_empty.setVisible(self._review_widget is None)
 
     def _assign_document_accounts(self) -> None:
         if self.import_worker is not None or self._closing:
@@ -1063,9 +1306,13 @@ class V2WorkspaceWindow(QMainWindow):
 
         def installed(release):
             self.refresh()
-            self.status.setText(
-                f"Statement formats ready. Verified catalog release {release.release_sequence} installed."
-            )
+            message = f"Statement formats ready. Verified catalog release {release.catalog.release_sequence} installed."
+            if release.institution_error_code:
+                message += (
+                    " Institution names could not be retained in this profile. Retry when the profile is available; "
+                    "account creation will also retry. Details: " + release.institution_error_code
+                )
+            self.status.setText(message)
 
         self._run_profile_job(
             "install_formats",
@@ -1274,6 +1521,7 @@ class V2WorkspaceWindow(QMainWindow):
             return
         self.import_worker = V2ImportWorker(self.workspace, source_path, self)
         self.import_worker.finished.connect(self._import_finished)
+        self.import_worker.import_review_requested.connect(self._review_import_accounts)
         self.progress = QProgressDialog("Importing source evidence…", "Cancel import", 0, 0, self)
         self.progress.setWindowTitle("ParseTrail 2.0 import")
         self.progress.setWindowModality(Qt.WindowModal)
@@ -1298,7 +1546,9 @@ class V2WorkspaceWindow(QMainWindow):
             return
         self.import_worker = V2BatchImportWorker(self.workspace, paths, self)
         self.import_worker.progressed.connect(self._batch_progress)
+        self.import_worker.outcomes_changed.connect(self._batch_outcomes)
         self.import_worker.finished.connect(self._import_finished)
+        self.import_worker.import_review_requested.connect(self._review_import_accounts)
         self.progress = QProgressDialog("Importing source evidence…", "Cancel remaining imports", 0, len(paths), self)
         self.progress.setWindowTitle("ParseTrail 2.0 batch import")
         self.progress.setWindowModality(Qt.WindowModal)
@@ -1318,16 +1568,49 @@ class V2WorkspaceWindow(QMainWindow):
         self._update_controls()
         self.import_worker.start()
 
+    def _review_import_accounts(self, request):
+        worker = self.import_worker
+        if worker is None or worker.cancel_event.is_set() or self._closing:
+            request.finish(None)
+            return
+        if self.progress is not None:
+            self.progress.hide()
+        try:
+            if self.import_preview is None:
+                self.import_preview = V2ImportAccountReview(self.workspace.institutions(), self)
+                self.import_preview.cancel_remaining.connect(
+                    lambda: self.import_worker.cancel() if self.import_worker else None
+                )
+            self.import_preview.present(request)
+        except Exception:
+            # A queued GUI failure must always release the waiting worker. It
+            # reports a preview failure, rather than claiming the user cancelled.
+            request.fail()
+
     def _batch_progress(self, count: int, filename: str) -> None:
         if self.progress is not None:
             self.progress.setLabelText(f"Processed {count} source(s); last: {filename}")
             self.progress.setValue(count)
+        if self.import_preview is not None:
+            paths = getattr(self.import_worker, "paths", ())
+            if count < len(paths):
+                self.import_preview.wait_for_next(count + 1, len(paths), paths[count])
+            else:
+                self.import_preview._waiting(f"Processed {count} file(s); last: {filename}. Finishing the queue…")
+
+    def _batch_outcomes(self, outcomes):
+        if self.import_preview is not None:
+            self.import_preview.update_queue(outcomes)
 
     def _import_finished(self) -> None:
         worker = self.import_worker
         if worker is None:
             return
         result, error = worker.result, worker.error
+        if self.import_preview is not None:
+            self.import_preview.finish_queue()
+            self.import_preview.deleteLater()
+            self.import_preview = None
         if self.progress is not None:
             self.progress.close()
             self.progress.deleteLater()
@@ -1342,6 +1625,7 @@ class V2WorkspaceWindow(QMainWindow):
             self.restore_profile_action,
         ):
             action.setEnabled(True)
+        self._update_controls()
         if self._close_after_import:
             QTimer.singleShot(0, self.close)
             return
@@ -1349,7 +1633,9 @@ class V2WorkspaceWindow(QMainWindow):
             if result is None:
                 self.refresh()
                 self.status.setText("Batch import could not start.")
-                QMessageBox.warning(self, "Batch import failed", str(error or "Unknown import error"))
+                QMessageBox.warning(
+                    self, "Batch import failed", import_failure_guidance(str(error or "Unknown import error"))
+                )
                 return
             imported = [item for item in result.files if item.status == "imported"]
             self.refresh(select_source=imported[-1].source_sha256 if imported else None)
@@ -1366,6 +1652,9 @@ class V2WorkspaceWindow(QMainWindow):
                 if result.status == "imported"
                 else "This exact source was already imported."
             )
+        elif isinstance(error, ImportSkipped):
+            self.status.setText("File skipped; no new source saved. Choose another document to continue.")
+            self._update_controls()
         elif isinstance(error, ImportCancelled):
             self.status.setText("Import cancelled; no new source saved.")
             self.import_button.setEnabled(self.workspace.catalog_cache.load_current() is not None)
@@ -1374,7 +1663,7 @@ class V2WorkspaceWindow(QMainWindow):
             self.status.setText("Import failed; no new source saved.")
             self.import_button.setEnabled(self.workspace.catalog_cache.load_current() is not None)
             self.import_folder_button.setEnabled(self.import_button.isEnabled())
-            QMessageBox.warning(self, "Import failed", str(error or "Unknown import error"))
+            QMessageBox.warning(self, "Import failed", import_failure_guidance(str(error or "Unknown import error")))
 
     def _preview(self, *_args) -> None:
         source_id = self._selected_source()
@@ -1488,11 +1777,20 @@ class V2WorkspaceWindow(QMainWindow):
             QMessageBox.warning(self, "Preference was not saved", str(exc))
 
     def _add_account(self) -> None:
-        dialog = V2FinancialAccountDialog(self)
+        try:
+            dialog = V2FinancialAccountDialog(self)
+        except (ProfileFormatError, sqlite3.Error, OSError, ValueError) as exc:
+            QMessageBox.warning(
+                self,
+                "Account choices unavailable",
+                f"Institution choices could not be read. Reload the profile and try again.\n\nDetails: {exc}",
+            )
+            return
         while dialog.exec() == QDialog.Accepted:
             try:
                 with V2ProfileStore.open(self.workspace.profile_path) as store:
-                    store.add_financial_account(dialog.account())
+                    catalog = self.workspace.catalog_cache.load_current()
+                    store.add_financial_account(dialog.account(), catalog=catalog)
             except (ProfileFormatError, sqlite3.Error, OSError) as exc:
                 QMessageBox.warning(self, "Account was not saved", str(exc))
                 continue
@@ -1528,11 +1826,20 @@ class V2WorkspaceWindow(QMainWindow):
         except (ProfileFormatError, sqlite3.Error, OSError) as exc:
             QMessageBox.warning(self, "Account details are unavailable", str(exc))
             return
-        dialog = V2FinancialAccountDialog(self, existing=account, scope_locked=scope_locked)
+        try:
+            dialog = V2FinancialAccountDialog(self, existing=account, scope_locked=scope_locked)
+        except (ProfileFormatError, sqlite3.Error, OSError, ValueError) as exc:
+            QMessageBox.warning(
+                self,
+                "Account choices unavailable",
+                f"Institution choices could not be read. Reload the profile and try again.\n\nDetails: {exc}",
+            )
+            return
         while dialog.exec() == QDialog.Accepted:
             try:
                 with V2ProfileStore.open(self.workspace.profile_path) as store:
-                    store.update_financial_account(dialog.account())
+                    catalog = self.workspace.catalog_cache.load_current()
+                    store.update_financial_account(dialog.account(), catalog=catalog)
             except (ProfileFormatError, sqlite3.Error, OSError) as exc:
                 QMessageBox.warning(self, "Account was not saved", str(exc))
                 continue
@@ -1543,6 +1850,8 @@ class V2WorkspaceWindow(QMainWindow):
     def _edit_categories(self) -> None:
         V2CategoryDialog(self.workspace.profile_path, self).exec()
         self._refresh_changed_profile()
+        if self._review_widget is not None:
+            self._review_widget.refresh()
 
     def _review_openings(self) -> None:
         V2OpeningReview(self.workspace, self).exec()

@@ -12,6 +12,7 @@ from parsetrail.core.v2_profile_store import FinancialAccount, V2ProfileStore
 from parsetrail.core.v2_source_pipeline import build_source_evidence
 from parsetrail.core.v2_workspace import V2Workspace
 
+from .ordinary_staging_helpers import review_action, stage_and_confirm
 from .test_v2_card_purchase_review import _chase_profile
 from .test_v2_cash_activity_review import DEFINITION, SOURCE
 from .test_v2_source_overlap_dialog import _profile as overlap_profile
@@ -140,14 +141,14 @@ def test_corrected_cash_withdrawal_uses_active_entry_then_reposts_fresh(tmp_path
         )
         assert dialog.model.rows[row_index].entry_key is None
         assert "withdraw" in dialog.history_details.text()
-        assert not dialog.action_button.isEnabled()
+        assert not review_action(dialog).isEnabled()
         dialog.purpose.setCurrentIndex(dialog.purpose.findData("expense" if row_index == 0 else "income"))
         wait_for_jobs(dialog)
         dialog.category.setCurrentIndex(dialog.category.findData("expense:food" if row_index == 0 else "income:pay"))
         wait_for_jobs(dialog)
         dialog.reason.setText("Freshly reviewed after withdrawal")
         wait_for_jobs(dialog)
-        dialog.action_button.click()
+        stage_and_confirm(dialog)
         wait_for_jobs(dialog)
         assert dialog.model.rows[row_index].entry_key not in {None, old_key}
         with V2ProfileStore.open(profile, read_only=True) as store:
@@ -194,7 +195,7 @@ def test_card_withdrawal_uses_recorded_corrected_date_and_category_then_reposts_
         assert "Travel: reviewed expense change -$10.00" in questions[0]
         assert "amount owed change -$10.00" in questions[0]
         assert dialog.model.rows[0].entry_key is None
-        assert not dialog.action_button.isEnabled()
+        assert not review_action(dialog).isEnabled()
         dialog.purpose.setCurrentIndex(dialog.purpose.findData("expense"))
         wait_for_jobs(dialog)
         dialog.category.setCurrentIndex(dialog.category.findData("expense:food"))
@@ -203,7 +204,7 @@ def test_card_withdrawal_uses_recorded_corrected_date_and_category_then_reposts_
         wait_for_jobs(dialog)
         dialog.reason.setText("Fresh explicit date review")
         wait_for_jobs(dialog)
-        dialog.action_button.click()
+        stage_and_confirm(dialog)
         wait_for_jobs(dialog)
         assert dialog.model.rows[0].entry_key not in {None, old_key}
         assert dialog.model.rows[0].effective_date == "2026-04-02"
@@ -245,7 +246,7 @@ def test_cancel_withdrawal_and_failed_snapshot_preserve_books_and_clear_actions(
         dialog.refresh()
         wait_for_jobs(dialog)
         assert dialog.model.rowCount() == 0 and dialog.basis is None
-        assert not dialog.withdraw_button.isEnabled() and not dialog.action_button.isEnabled()
+        assert not dialog.withdraw_button.isEnabled() and not review_action(dialog).isEnabled()
     finally:
         dialog.close()
         app.processEvents()
@@ -283,10 +284,17 @@ def test_stale_cash_context_cannot_post_correct_or_withdraw(tmp_path, app, monke
             else:
                 store.rename_category_account("expense:travel", "Concurrent renamed category")
         before = hashlib.sha256(profile.read_bytes()).hexdigest()
-        (dialog.withdraw_button if action == "withdraw" else dialog.action_button).click()
+        if action == "post":
+            stage_and_confirm(dialog)
+        else:
+            (dialog.withdraw_button if action == "withdraw" else dialog.action_button).click()
         wait_for_jobs(dialog)
         assert len(warnings) == 1
         assert "changed_since_selection" in warnings[0]
+        if action == "post":
+            assert dialog.batch.staged and "staged choices are kept" in dialog.operation_status.text()
+            dialog.refresh(selected_row_id=dialog.model.rows[0].row_id)
+            wait_for_jobs(dialog)
         assert dialog.basis != old_basis
         assert hashlib.sha256(profile.read_bytes()).hexdigest() == before
         if action == "post":
@@ -317,7 +325,7 @@ def test_single_row_review_never_withdraws_a_transfer_leg(tmp_path, app):
         wait_for_jobs(dialog)
         assert dialog.model.rows[0].entry_key is None
         assert not dialog.withdraw_button.isEnabled()
-        assert dialog.action_button.isEnabled() and dialog.action_button.text().startswith("View ")
+        assert review_action(dialog).isEnabled() and review_action(dialog).text().startswith("View ")
     finally:
         dialog.close()
         app.processEvents()
@@ -435,10 +443,10 @@ def test_card_preference_change_during_confirmation_reloads_without_posting(tmp_
         wait_for_jobs(dialog)
         dialog.reason.setText("Review from initial date preference")
         wait_for_jobs(dialog)
-        assert dialog.action_button.isEnabled()
-        dialog.action_button.click()
+        assert review_action(dialog).isEnabled()
+        stage_and_confirm(dialog)
         wait_for_jobs(dialog)
-        assert len(warnings) == 1 and "preferences changed" in warnings[0]
+        assert len(warnings) == 1 and "review_preferences_changed" in warnings[0]
         assert dialog.assumed_dates.isChecked()
         assert dialog.model.rows[0].entry_key is None
         assert dialog.review_preferences == workspace.preferences()

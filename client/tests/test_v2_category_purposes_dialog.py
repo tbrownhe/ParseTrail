@@ -17,6 +17,7 @@ from parsetrail.core.v2_workspace import V2Workspace
 from devtools.parser_engine_pilot.test_card_lines import pages
 from devtools.parser_engine_pilot.test_card_source_output import DEFINITION as CARD_DEFINITION
 
+from .ordinary_staging_helpers import review_action, stage_and_confirm
 from .test_v2_cash_activity_review import DEFINITION, SOURCE
 from .v2_institution_helpers import add_test_financial_account
 from .v2_job_wait import wait_for_jobs
@@ -111,13 +112,13 @@ def test_explicit_purpose_and_category_cancel_post_correct_class_and_exact_effec
         row = dialog.model.rows[row_index]
         assert row.purpose is None and purpose in row.allowed_purposes
         assert dialog.purpose.currentData() is None and dialog.category.currentData() is None
-        assert not dialog.action_button.isEnabled()
+        assert not review_action(dialog).isEnabled()
         _choose(dialog, purpose, f"{category_kind}:a")
-        assert dialog.action_button.isEnabled()
+        assert review_action(dialog).isEnabled()
         assert dialog.category.findData(f"{'income' if category_kind == 'expense' else 'expense'}:a") == -1
         before = hashlib.sha256(profile.read_bytes()).hexdigest()
         monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.No)
-        dialog.action_button.click()
+        stage_and_confirm(dialog)
         wait_for_jobs(dialog)
         assert hashlib.sha256(profile.read_bytes()).hexdigest() == before
         questions = []
@@ -127,13 +128,12 @@ def test_explicit_purpose_and_category_cancel_post_correct_class_and_exact_effec
             return QMessageBox.Yes
 
         monkeypatch.setattr(QMessageBox, "question", accept)
-        dialog.action_button.click()
+        stage_and_confirm(dialog)
         wait_for_jobs(dialog)
         posted = dialog.model.rows[row_index]
         assert posted.purpose == purpose and posted.entry_key is not None
-        assert "Purpose:" in questions[0] and f"reviewed {category_kind} change:" in questions[0]
-        assert "New entry effects:" in questions[0] and "Replacement entry effects" not in questions[0]
-        assert "separate review" in questions[0] or "owned liability payment" in questions[0]
+        assert "purpose:" in questions[0] and f"reviewed {category_kind} change:" in questions[0]
+        assert "Source amount:" in questions[0] and "Replacement entry effects" not in questions[0]
         assert not dialog.purpose.isEnabled() and dialog.purpose.currentData() == purpose
         if kind == "card":
             dialog.workspace.set_allow_assumed_posting_dates(False)
@@ -175,7 +175,7 @@ def test_purpose_change_requires_withdrawal_then_fresh_explicit_review(tmp_path,
         dialog.table.selectRow(1)
         wait_for_jobs(dialog)
         _choose(dialog, "expense_refund", "expense:a")
-        dialog.action_button.click()
+        stage_and_confirm(dialog)
         wait_for_jobs(dialog)
         original = dialog.model.rows[1].entry_key
         assert not dialog.purpose.isEnabled() and dialog.purpose.findData("income") == -1
@@ -186,9 +186,9 @@ def test_purpose_change_requires_withdrawal_then_fresh_explicit_review(tmp_path,
         wait_for_jobs(dialog)
         assert dialog.model.rows[1].entry_key is None
         assert dialog.purpose.currentData() is None and dialog.category.currentData() is None
-        assert not dialog.action_button.isEnabled()
+        assert not review_action(dialog).isEnabled()
         _choose(dialog, "income", "income:a")
-        dialog.action_button.click()
+        stage_and_confirm(dialog)
         wait_for_jobs(dialog)
         assert dialog.model.rows[1].purpose == "income"
         assert dialog.model.rows[1].entry_key not in {None, original}
@@ -226,14 +226,20 @@ def test_stale_purpose_form_refreshes_without_posting_and_retains_authored_choic
         _choose(dialog, "expense_refund", "expense:a")
         with V2ProfileStore.open(profile) as store:
             store.rename_category_account("expense:a", "Concurrent category rename")
-        dialog.action_button.click()
+        stage_and_confirm(dialog)
         wait_for_jobs(dialog)
         assert warnings and dialog.model.rows[1].entry_key is None
         assert dialog.purpose.currentData() == "expense_refund" and dialog.category.currentData() == "expense:a"
-        assert dialog.category.currentText() == "Concurrent category rename"
-        assert "error" in dialog.operation_status.text() and "retained" in dialog.operation_status.text()
+        assert dialog.batch.staged and "staged choices are kept" in dialog.operation_status.text()
+        assert dialog.reason.text() == "Inspected immutable source and explicitly reviewed this purpose"
         with V2ProfileStore.open(profile, read_only=True) as store:
             assert not store._active_consumed()
+        # The error belongs to the failed attempt, not every later reload.
+        dialog.refresh(selected_row_id=dialog.model.rows[1].row_id)
+        wait_for_jobs(dialog)
+        assert dialog.category.currentText() == "Concurrent category rename"
+        assert "error" not in dialog.operation_status.text()
+        assert dialog.purpose.currentData() == "expense_refund" and dialog.category.currentData() == "expense:a"
     finally:
         dialog.close()
         app.processEvents()
@@ -269,7 +275,15 @@ def test_builtin_is_explicit_fixed_and_custom_same_name_remains_distinct(tmp_pat
             if dialog.categories.item(index).data(Qt.UserRole) == "expense:custom-interest"
         )
         dialog.categories.setCurrentItem(custom)
-        assert dialog.rename_button.isEnabled() and not dialog.rename_name.isReadOnly()
+        assert not dialog.rename_button.isEnabled() and not dialog.rename_name.isReadOnly()
+        assert dialog.rename_name.text() == "Loan interest"
+        assert dialog.rename_name.property("formState") == "saved"
+        dialog.rename_name.setText("My loan interest")
+        assert dialog.rename_button.isEnabled()
+        assert dialog.rename_name.property("formState") == "ready"
+        dialog.rename_name.setText("Loan interest")
+        assert not dialog.rename_button.isEnabled()
+        assert dialog.rename_name.property("formState") == "saved"
         with V2ProfileStore.open(profile, read_only=True) as store:
             assert [(item.id, item.name, item.kind) for item in store.category_accounts()] == [
                 ("builtin:loan-interest", "Loan interest", "expense"),
@@ -299,7 +313,7 @@ def test_only_builtin_category_is_never_selected_by_default_for_ordinary_spendin
         assert "Built-in" in dialog.category.itemText(dialog.category.findData("builtin:loan-interest"))
         dialog.reason.setText("No category has been explicitly selected")
         wait_for_jobs(dialog)
-        assert not dialog.action_button.isEnabled()
+        assert not review_action(dialog).isEnabled()
         assert hashlib.sha256(profile.read_bytes()).hexdigest() == before
     finally:
         dialog.close()

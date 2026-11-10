@@ -209,6 +209,161 @@ def test_dialog_preview_reads_saved_source_and_failed_refresh_clears_stale_value
     assert profile.read_bytes() == before
 
 
+def test_correction_handoff_uses_exact_source_row_and_never_writes(tmp_path, app):
+    from parsetrail.gui.v2_report_drilldown import V2ReviewedEntryDrilldown
+
+    profile = tmp_path / "navigate.db"
+    evidence, _coffee, _tea = _profile(profile)
+    before = profile.read_bytes()
+    dialog = V2ReviewedEntryDrilldown(profile, "expense:food", start=START, end=END, review_available=True)
+    seen = []
+    dialog.source_review_requested.connect(lambda source, row: seen.append((source, row)))
+    try:
+        assert "Checking" in dialog.source.currentText()
+        assert "2026-10" in dialog.source.currentText()
+        assert dialog.review_source_button.isEnabled()
+        dialog.review_source_button.click()
+        assert seen == [(evidence.source_sha256, evidence.payload.rows[1].row_id)]
+        assert profile.read_bytes() == before
+    finally:
+        dialog.close()
+        app.processEvents()
+
+
+def test_empty_drilldown_has_no_correction_target(tmp_path, app):
+    from parsetrail.gui.v2_report_drilldown import V2ReviewedEntryDrilldown
+
+    profile = tmp_path / "empty-navigation.db"
+    _profile(profile)
+    dialog = V2ReviewedEntryDrilldown(profile, "expense:food", start=END, end=date(2026, 12, 1), review_available=True)
+    try:
+        assert not dialog.review_source_button.isEnabled()
+        assert not dialog.preview.isEnabled()
+        assert "not zero" in dialog.details.toPlainText()
+    finally:
+        dialog.close()
+        app.processEvents()
+
+
+def test_loan_interest_handoff_returns_raw_lender_row_not_derived_observation(tmp_path, app):
+    from parsetrail.gui.v2_report_drilldown import V2ReviewedEntryDrilldown
+
+    from .test_v2_loan_payments import INTEREST, _post
+    from .test_v2_loan_payments import _profile as loan_profile
+
+    profile = tmp_path / "loan-navigation.db"
+    bank, rows = loan_profile(profile)
+    with V2ProfileStore.open(profile) as store:
+        _post(store, bank, rows)
+        links = store.loan_source_links()
+    before = profile.read_bytes()
+    dialog = V2ReviewedEntryDrilldown(
+        profile, INTEREST, start=date(2026, 1, 1), end=date(2026, 2, 1), review_available=True
+    )
+    seen = []
+    dialog.source_review_requested.connect(lambda source, row: seen.append((source, row)))
+    try:
+        lender = links[0]
+        dialog.source.setCurrentIndex(dialog.source.findData(lender.source_sha256))
+        assert dialog.review_source_button.isEnabled()
+        dialog.review_source_button.click()
+        assert seen == [(lender.source_sha256, rows[0])]
+        assert seen[0][1] != lender.derived_observation_id
+        assert profile.read_bytes() == before
+    finally:
+        dialog.close()
+        app.processEvents()
+
+
+def test_report_explicit_period_handoff_and_source_route(tmp_path, app, monkeypatch):
+    from parsetrail.gui.v2_report_drilldown import V2ReviewedEntryDrilldown
+    from parsetrail.gui.v2_reviewed_reports import V2ReviewedReportsDialog
+
+    profile = tmp_path / "handoff.db"
+    evidence, _coffee, _tea = _profile(profile)
+    before = profile.read_bytes()
+    dialog = V2ReviewedReportsDialog(profile, embedded=True)
+    seen = []
+    dialog.source_review_requested.connect(lambda source, row: seen.append((source, row)))
+
+    def select_correction(inspection):
+        inspection.review_source_button.click()
+        return 0
+
+    monkeypatch.setattr(V2ReviewedEntryDrilldown, "exec", select_correction)
+    try:
+        dialog.set_period(START, END)
+        wait_for_reports(dialog)
+        assert "$7.00" in dialog.total.text()
+        assert "All accounts" in dialog.qualification.text()
+        dialog.table.selectRow(next(i for i, row in enumerate(dialog.model.rows) if row.category_id == "expense:food"))
+        dialog.inspect_button.click()
+        assert seen == [(evidence.source_sha256, evidence.payload.rows[1].row_id)]
+        assert dialog.start.date().toPython() == START
+        assert dialog.end.date().toPython() == END
+        assert profile.read_bytes() == before
+    finally:
+        dialog.close()
+        app.processEvents()
+
+
+def test_separate_wells_interest_entry_handoff_selects_its_own_raw_row(tmp_path, app):
+    from parsetrail.gui.v2_report_drilldown import V2ReviewedEntryDrilldown
+
+    from devtools.parser_engine_pilot import test_wells_loan_lines as wells
+
+    from .test_v2_loan_payments import INTEREST, _post
+    from .test_v2_loan_payments import _profile as loan_profile
+
+    evidence = wells.parse()
+    profile = tmp_path / "separate-interest.db"
+    bank, rows = loan_profile(
+        profile, amount=2100, evidence=evidence, definition=wells.DEFINITION, raw=b"%PDF-synthetic-loan"
+    )
+    with V2ProfileStore.open(profile) as store:
+        _post(store, bank, rows)
+        links = store.loan_source_links()
+    before = profile.read_bytes()
+    dialog = V2ReviewedEntryDrilldown(
+        profile, INTEREST, start=date(2026, 1, 1), end=date(2026, 2, 1), review_available=True
+    )
+    seen = []
+    dialog.source_review_requested.connect(lambda source, row: seen.append((source, row)))
+    try:
+        interest = next(link for link in links if link.interest_minor and not link.principal_minor)
+        assert dialog.drilldown.entries[0].key == interest.entry_key
+        dialog.source.setCurrentIndex(dialog.source.findData(evidence.source_sha256))
+        dialog.review_source_button.click()
+        assert seen == [(evidence.source_sha256, interest.row_id)]
+        assert profile.read_bytes() == before
+    finally:
+        dialog.close()
+        app.processEvents()
+
+
+def test_same_document_transfer_handoff_selects_the_report_account_side(tmp_path, app):
+    from parsetrail.gui.v2_report_drilldown import V2ReviewedEntryDrilldown
+
+    from .test_v2_settlements import PREFS
+    from .test_v2_settlements import profile as transfer_profile
+
+    profile = tmp_path / "same-source-transfer.db"
+    evidence, outgoing, incoming = transfer_profile(profile, receipts=(("10/01/2026", "10000"),))
+    with V2ProfileStore.open(profile) as store:
+        store.post_reviewed_transfer(outgoing, incoming[0], preferences=PREFS, reason="Reviewed same-day transfer")
+    before = profile.read_bytes()
+    dialog = V2ReviewedEntryDrilldown(profile, "savings", start=START, end=END, review_available=True)
+    seen = []
+    dialog.source_review_requested.connect(lambda source, row: seen.append((source, row)))
+    try:
+        dialog.review_source_button.click()
+        assert seen == [(evidence.source_sha256, incoming[0])]
+        assert profile.read_bytes() == before
+    finally:
+        dialog.close()
+        app.processEvents()
+
+
 def test_parent_inspection_uses_selected_category_account_and_budget_month(tmp_path, app, monkeypatch):
     from parsetrail.gui.v2_report_drilldown import V2ReviewedEntryDrilldown
     from parsetrail.gui.v2_reviewed_reports import V2ReviewedReportsDialog

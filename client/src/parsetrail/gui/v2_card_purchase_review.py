@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
+    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -35,10 +36,12 @@ from parsetrail.gui.v2_cash_activity_review import (
     _purpose_effects,
 )
 from parsetrail.gui.v2_ordinary_review import OrdinaryReviewMixin
-from parsetrail.gui.v2_review_navigation import ReviewNavigation
+from parsetrail.gui.v2_review_navigation import ReviewNavigation, StagedRowPresentation, review_status_label
 
 
 class _CardRowsModel(QAbstractTableModel):
+    set_staged = StagedRowPresentation.set_staged
+    staged_data = StagedRowPresentation.staged_data
     HEADERS = (
         "Source date",
         "Posting candidate",
@@ -46,7 +49,7 @@ class _CardRowsModel(QAbstractTableModel):
         "Amount",
         "Financial account",
         "Review status",
-        "Reviewed purpose",
+        "Review choice",
     )
 
     def __init__(self, rows: tuple[CardPurchaseReviewRow, ...], parent=None, *, register_mode=False):
@@ -58,9 +61,11 @@ class _CardRowsModel(QAbstractTableModel):
             self.HEADERS = ("Transaction date", "Source posting date", *self.HEADERS[2:])
 
     def replace(self, rows: tuple[CardPurchaseReviewRow, ...]) -> None:
+        self._resetting = True
         self.beginResetModel()
         self.rows = rows
         self.endResetModel()
+        self._resetting = False
 
     def rowCount(self, _parent: QModelIndex = QModelIndex()) -> int:
         return len(self.rows)
@@ -74,9 +79,14 @@ class _CardRowsModel(QAbstractTableModel):
         return None
 
     def data(self, index: QModelIndex, role: int = Qt.DisplayRole):
-        if not index.isValid() or role not in {Qt.DisplayRole, Qt.ToolTipRole, Qt.UserRole}:
+        if not index.isValid():
             return None
         row = self.rows[index.row()]
+        handled, value = self.staged_data(index, role, row)
+        if handled:
+            return value
+        if role not in {Qt.DisplayRole, Qt.ToolTipRole, Qt.UserRole}:
+            return None
         if role == Qt.UserRole:
             return (
                 (row.transaction_date.isoformat() if row.transaction_date else None)
@@ -110,7 +120,8 @@ class _CardRowsModel(QAbstractTableModel):
         )
         if role == Qt.ToolTipRole and self.register_mode and index.column() == 4:
             return _register_identity(row)
-        return values[index.column()]
+        value = values[index.column()]
+        return review_status_label(value) if role == Qt.DisplayRole and index.column() == 5 else value
 
 
 def _register_identity(row):
@@ -190,11 +201,17 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
         self.source_context.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.source_context.setVisible(register_mode)
         layout.addWidget(self.source_context)
+        self.decision_group = QGroupBox("Review selected transaction")
+        decision_layout = QVBoxLayout(self.decision_group)
+        decision_layout.setContentsMargins(10, 4, 10, 4)
+        decision_layout.setSpacing(4)
         form = QFormLayout()
+        form.setVerticalSpacing(4)
         self.form = form
         self.purpose = QComboBox()
         self.purpose.currentIndexChanged.connect(self._purpose_changed)
-        form.addRow("Reviewed purpose", self.purpose)
+        self.purpose.setAccessibleName("1. Purpose, required")
+        form.addRow("1. Purpose *", self.purpose)
         self.category = QComboBox()
         self.category.currentIndexChanged.connect(self._update_action)
         category_row = QHBoxLayout()
@@ -203,24 +220,27 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
         self.manage_categories_button = QPushButton("Manage categories…")
         self.manage_categories_button.clicked.connect(self._manage_categories)
         category_row.addWidget(self.manage_categories_button)
-        form.addRow("Category", category_row)
+        self.category.setAccessibleName("2. Category, required")
+        form.addRow("2. Category *", category_row)
         self.accounting_date = QLineEdit()
         self.accounting_date.setPlaceholderText("YYYY-MM-DD")
         self.accounting_date.setMaxLength(10)
         self.accounting_date.setReadOnly(register_mode)
         self.accounting_date.textChanged.connect(self._update_action)
-        form.addRow("Accounting date", self.accounting_date)
+        self.accounting_date.setAccessibleName("3. Accounting date, required")
+        form.addRow("3. Accounting date *", self.accounting_date)
         self.reason = QLineEdit()
         self.reason.setMaxLength(500)
         self.reason.setPlaceholderText("Required review or correction reason")
         self.reason.textChanged.connect(self._update_action)
-        form.addRow("Reason", self.reason)
-        layout.addLayout(form)
+        self.reason.setAccessibleName("4. Review note, required for a new decision")
+        form.addRow("4. Review note *", self.reason)
+        decision_layout.addLayout(form)
         self.assumed_dates = QCheckBox("Allow best guess posting dates when a statement does not print one")
         self.assumed_dates.setChecked(workspace.preferences().allow_assumed_posting_dates)
         self.assumed_dates.setEnabled(not register_mode)
         self.assumed_dates.toggled.connect(self._toggle_assumed_dates)
-        layout.addWidget(self.assumed_dates)
+        decision_layout.addWidget(self.assumed_dates)
         self.action_button = QPushButton("Post reviewed card expense")
         self.action_button.clicked.connect(self._act)
         self.withdraw_button = QPushButton("Withdraw active interpretation")
@@ -229,11 +249,12 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
         self.actions_layout = actions
         actions.addWidget(self.action_button)
         actions.addWidget(self.withdraw_button)
-        layout.addLayout(actions)
+        decision_layout.addLayout(actions)
         self.status = QLabel()
         self.status.setWordWrap(True)
         self.status.setTextFormat(Qt.PlainText)
-        layout.addWidget(self.status)
+        decision_layout.addWidget(self.status)
+        layout.addWidget(self.decision_group)
         self.history_details = QLabel()
         self.history_details.setWordWrap(True)
         self.history_details.setTextFormat(Qt.PlainText)
@@ -256,6 +277,8 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
         return self.navigation.current()
 
     def _selected(self, *_args) -> None:
+        if hasattr(self, "jobs") and self._handle_multi_selection():
+            return
         self._remember_row_form()
         row = self._current()
         correcting = row is not None and row.entry_key is not None
@@ -326,7 +349,7 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
         for category in self.categories:
             if category.kind == kind:
                 self.category.addItem(labels[category.id], category.id)
-        if row is not None and row.category_id is not None:
+        if row is not None and row.category_id is not None and not getattr(self, "_in_multi", False):
             index = self.category.findData(row.category_id)
             if index >= 0:
                 self.category.setCurrentIndex(index)
@@ -335,6 +358,11 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
 
     def _update_action(self, *_args) -> None:
         row = self._current()
+        external = _reviewed_elsewhere(row)
+        self.purpose.setEnabled(row is not None and row.entry_key is None and not external)
+        self.category.setEnabled(row is not None and not external and self.purpose.currentData() != "repayment")
+        self.reason.setEnabled(row is not None and not external)
+        self.accounting_date.setEnabled(row is not None and not external)
         selected_date = self.accounting_date.text().strip()
         try:
             valid_date = date.fromisoformat(selected_date).isoformat() == selected_date
@@ -441,12 +469,15 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
                     else ""
                 )
             )
+        self._update_form_cues(self.status.text())
 
     def _restore_form(self, row_id, purpose, category_id, accounting_date, reason):
         self.refresh(selected_row_id=row_id)
         self._restore_draft = (row_id, purpose, category_id, accounting_date, reason)
 
     def _manage_categories(self):
+        if self._manage_multi_categories():
+            return
         from parsetrail.gui.v2_categories import V2CategoryDialog
 
         row = self._current()
@@ -469,6 +500,8 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
         self.category.setFocus()
 
     def _review_repayment(self):
+        if not self._single_selection():
+            return
         from parsetrail.gui.v2_transfer_review import V2TransferReview
 
         row = self._current()
@@ -495,7 +528,11 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
         )
         self.review_preferences = snapshot.preferences
         self.preview_source_button.setEnabled(True)
-        rows, self.categories, overlaps = snapshot.rows, snapshot.categories, snapshot.overlapping_source_ids
+        rows, self.categories, overlaps = (
+            self._presentation_rows(snapshot),
+            snapshot.categories,
+            snapshot.overlapping_source_ids,
+        )
         self.model.owners = {owner.row_id: owner.label for owner in snapshot.owners}
         self.overlap_note.setText(
             f"Possible overlap with {len(overlaps)} saved document(s). Check repeated evidence before posting."
@@ -548,6 +585,8 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
         self.refresh(selected_row_id=selected.row_id if selected is not None else None)
 
     def _act(self) -> None:
+        if not self._single_selection():
+            return
         if _reviewed_elsewhere(self._current()) and self.action_button.isEnabled():
             self._open_reviewed_owner()
             return
@@ -556,6 +595,8 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
                 self._review_repayment()
             return
         row = self._current()
+        if row is None or row.entry_key is None:
+            return
         category_id = self.category.currentData()
         purpose = self.purpose.currentData()
         reason = self.reason.text().strip()
@@ -573,6 +614,14 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
         ):
             return
         correction = row.entry_key is not None
+        old_category = _category_labels(self.categories).get(row.category_id, row.category_id or "Unknown")
+        category_change = (
+            f"{old_category} → {self.category.currentText()}"
+            if correction and category_id != row.category_id
+            else f"{self.category.currentText()} (unchanged)"
+            if correction
+            else self.category.currentText()
+        )
         label = PURPOSE_LABELS[purpose].lower()
         effects = _purpose_effects(purpose, row.amount_minor, financial_kind="liability")
         if correction:
@@ -603,7 +652,7 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
             f"{f' ({self._date_provenance(row)})' if self._date_provenance(row) else ''}\n"
             f"Accounting date: {accounting_date.isoformat()}\n"
             f"{row.description}  {_money(row.amount_minor)}  {row.financial_account}\n"
-            f"Purpose: {PURPOSE_LABELS[purpose]}\nCategory: {self.category.currentText()}\nReason: {reason}\n"
+            f"Purpose: {PURPOSE_LABELS[purpose]}\nCategory: {category_change}\nReason: {reason}\n"
             f"{effects}\n\n"
             f"{PURPOSE_ASSERTIONS[purpose]} This is not an owned liability payment, transfer or cash advance."
         )
@@ -661,6 +710,8 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
         )
 
     def _withdraw(self) -> None:
+        if not self._single_selection():
+            return
         row, reason = self._current(), self.reason.text().strip()
         entry = self.entries.get(row.entry_key) if row else None
         if row is None or entry is None or not reason or self.basis is None:

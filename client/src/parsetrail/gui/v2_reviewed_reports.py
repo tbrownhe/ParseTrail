@@ -44,6 +44,7 @@ from parsetrail.core.v2_profile_store import (
 )
 from parsetrail.core.v2_report_export import write_reviewed_journal_workbook
 from parsetrail.gui.v2_evidence_preview import _money
+from parsetrail.gui.v2_form_state import install_form_styles, set_field_state
 from parsetrail.gui.v2_path_notice import show_path_notice
 from parsetrail.gui.v2_profile_jobs import ProfileJobs
 from parsetrail.gui.v2_report_drilldown import V2ReviewedEntryDrilldown
@@ -227,7 +228,7 @@ class _AccountMovementModel(QAbstractTableModel):
 
 
 class _MonthlyBudgetModel(QAbstractTableModel):
-    HEADERS = ("Expense category", "Monthly target", "Reviewed spending", "Remaining")
+    HEADERS = ("Expense category", "Monthly budget", "Reviewed spending", "Remaining")
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -257,12 +258,12 @@ class _MonthlyBudgetModel(QAbstractTableModel):
         row = self.rows[index.row()]
         values = (
             self.labels[row.category_id],
-            _money(row.target_minor) if row.target_minor is not None else "No target",
+            _money(row.target_minor) if row.target_minor is not None else "No budget",
             _money(row.reviewed_spending_minor),
             _money(row.remaining_minor) if row.remaining_minor is not None else "—",
         )
         if role == Qt.ToolTipRole and index.column() == 1 and row.target_effective_month is not None:
-            return f"Target effective {row.target_effective_month:%Y-%m}"
+            return f"Budget effective {row.target_effective_month:%Y-%m}"
         return values[index.column()]
 
 
@@ -422,6 +423,7 @@ class V2ReviewedReportsDialog(QDialog):
     """Show reviewed journal totals with visible source coverage limits."""
 
     review_requested = Signal()
+    source_review_requested = Signal(str, str)
 
     def __init__(self, profile: Path, parent=None, *, embedded=False, initial_tab=0, positions_only=False):
         super().__init__(parent)
@@ -447,6 +449,7 @@ class V2ReviewedReportsDialog(QDialog):
         self._read_timer = QTimer(self)
         self._read_timer.setSingleShot(True)
         self._read_timer.timeout.connect(self._start_selected_read)
+        install_form_styles(self)
         self.setWindowTitle("2.0 reviewed reports")
         self.resize(1180, 780)
         layout = QVBoxLayout(self)
@@ -460,13 +463,14 @@ class V2ReviewedReportsDialog(QDialog):
         self.start = QDateEdit(QDate(first.year, first.month, first.day))
         self.end = QDateEdit(QDate(next_month.year, next_month.month, next_month.day))
         for control in (self.start, self.end):
+            control.setDateRange(QDate(1, 1, 1), QDate(9999, 12, 31))
             control.setCalendarPopup(True)
             control.setDisplayFormat("yyyy-MM-dd")
         form.addRow("From (inclusive)", self.start)
         form.addRow("To (exclusive)", self.end)
         period_layout.addLayout(form)
         period_scope = QLabel(
-            "Date range applies to Spending, Income and Account movement. "
+            "All accounts in this profile. Date range applies to Spending, Income and Account movement. "
             "Monthly budgets and Account positions use their own dates."
             " Select a category or movement account, then Inspect entries to see its current reviewed rows."
         )
@@ -544,6 +548,7 @@ class V2ReviewedReportsDialog(QDialog):
         self.refresh_reports_button = buttons.addButton("Refresh reports", QDialogButtonBox.ActionRole)
         self.refresh_reports_button.clicked.connect(self._refresh_all_reports)
         for tab, table in enumerate((self.table, self.account_table, self.budget_table, self.income_table)):
+            table.setTabKeyNavigation(False)
             table.setSelectionBehavior(QAbstractItemView.SelectRows)
             table.setSelectionMode(QAbstractItemView.SingleSelection)
             table.doubleClicked.connect(lambda index, selected_tab=tab: self._inspect_report_row(selected_tab, index))
@@ -566,6 +571,19 @@ class V2ReviewedReportsDialog(QDialog):
         self.positions_error: str | None = None
         self._toggle_details(False)
         self._queue_selected_read(0)
+
+    def set_period(self, start: date, end: date) -> None:
+        """Explicit journey handoff; ordinary navigation retains the chosen range."""
+        self.start.blockSignals(True)
+        self.end.blockSignals(True)
+        try:
+            self.start.setDate(QDate(start.year, start.month, start.day))
+            self.end.setDate(QDate(end.year, end.month, end.day))
+        finally:
+            self.start.blockSignals(False)
+            self.end.blockSignals(False)
+        self.tabs.setCurrentIndex(0)
+        self.refresh()
 
     @property
     def reports_pending(self) -> bool:
@@ -782,9 +800,17 @@ class V2ReviewedReportsDialog(QDialog):
             account_id, expected = row.category_id, row.amount_minor
         else:
             return
-        V2ReviewedEntryDrilldown(
-            self.profile, account_id, start=start, end=end, expected_total_minor=expected, parent=self
-        ).exec()
+        dialog = V2ReviewedEntryDrilldown(
+            self.profile,
+            account_id,
+            start=start,
+            end=end,
+            expected_total_minor=expected,
+            parent=self,
+            review_available=self.embedded,
+        )
+        dialog.source_review_requested.connect(self.source_review_requested.emit)
+        dialog.exec()
 
     def _create_positions_panel(self, today: date) -> None:
         panel = QWidget()
@@ -1053,6 +1079,13 @@ class V2ReviewedReportsDialog(QDialog):
 
     def _show_selected_tab(self, *_args) -> None:
         tab = self.tabs.currentIndex()
+        interval_valid = self.start.date() < self.end.date()
+        for control in (self.start, self.end):
+            set_field_state(
+                control,
+                "neutral" if interval_valid else "invalid",
+                "Applied automatically" if interval_valid else "Choose an end date after the start date",
+            )
         self.period_controls.setVisible(tab in (0, 1, 3))
         self.export_button.setVisible(tab in (0, 1, 3))
         ready = self._loaded.get(tab) == self._key(tab)
@@ -1081,13 +1114,16 @@ class V2ReviewedReportsDialog(QDialog):
             self.positions_report,
         )[tab]
         self.qualification.setText(
-            f"Reviewed entries only. {report.activity_rows_without_full_allocation} source row(s) pending "
+            "All accounts in this profile. Reviewed entries only; internal transfers and liability repayments "
+            "do not add spending. "
+            f"{report.activity_rows_without_full_allocation} source row(s) pending "
             "across the whole profile and all dates; source coverage may be incomplete. "
             "Show details for scope and evidence limits."
         )
         if tab in (0, 3) and getattr(report, "reviewed_entry_count", None) == 0:
+            kind = "spending" if tab == 0 else "income"
             self.qualification.setText(
-                "No reviewed activity in this period. This does not establish zero total activity. "
+                f"No reviewed {kind} in this period. This does not establish zero total {kind}. "
                 + self.qualification.text()
             )
         self._update_inspect_button()
@@ -1120,19 +1156,19 @@ class V2ReviewedReportsDialog(QDialog):
                 return
             untargeted = sum(row.target_minor is None for row in budget.categories)
             if budget.total_target_minor is None:
-                target_note = f"{untargeted} expense category(s) have no target; no total target is shown."
+                target_note = f"{untargeted} expense category(s) have no budget; no total budget is shown."
             else:
-                target_note = f"Total target: {_money(budget.total_target_minor)}."
+                target_note = f"Total budget: {_money(budget.total_target_minor)}."
             self.total.setText(
                 f"{budget.month:%Y-%m}: {target_note} "
                 f"Net reviewed spending: {_money(budget.total_reviewed_spending_minor)}. "
-                "Remaining means target minus reviewed spending."
+                "Remaining means budget minus reviewed spending."
             )
             self.scope.setText(
                 f"Across the whole profile, {budget.activity_rows_without_full_allocation} activity source row(s) "
                 f"from {budget.sources_with_incomplete_activity} source(s) lack a full ledger allocation. "
                 f"{budget.excluded_unreviewed_expense_entries} unreviewed expense journal entries were excluded. "
-                "Targets apply to whole calendar months; spending includes reviewed journal entries only. "
+                "Budgets apply to whole calendar months; spending includes reviewed journal entries only. "
                 "Source rows may overlap, and this view does not establish complete spending or budget compliance."
             )
             return

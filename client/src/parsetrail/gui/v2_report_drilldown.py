@@ -6,7 +6,7 @@ import sqlite3
 from datetime import date
 from pathlib import Path
 
-from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
+from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
 from parsetrail.core.v2_builtin_categories import category_labels
 from parsetrail.core.v2_profile_store import ProfileFormatError, V2ProfileStore
 from parsetrail.core.v2_report_drilldown import ReviewedEntryDrilldown, read_reviewed_entry_drilldown
+from parsetrail.gui.v2_document_browser import document_period, document_title
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview, _money
 
 
@@ -71,13 +72,25 @@ class _EntryModel(QAbstractTableModel):
 
 
 class V2ReviewedEntryDrilldown(QDialog):
+    source_review_requested = Signal(str, str)
+
     def __init__(
-        self, profile: Path, account_id: str, *, start: date, end: date, expected_total_minor=None, parent=None
+        self,
+        profile: Path,
+        account_id: str,
+        *,
+        start: date,
+        end: date,
+        expected_total_minor=None,
+        parent=None,
+        review_available=False,
     ):
         super().__init__(parent)
         self.profile, self.account_id = profile, account_id
         self.start, self.end = start, end
         self.expected_total_minor = expected_total_minor
+        self._source_labels = {}
+        self._review_targets = {}
         self.drilldown: ReviewedEntryDrilldown | None = None
         self.setWindowTitle("Current reviewed journal entries")
         self.resize(1040, 700)
@@ -95,6 +108,7 @@ class V2ReviewedEntryDrilldown(QDialog):
         splitter = QSplitter(Qt.Vertical)
         self.model = _EntryModel(self)
         self.table = QTableView()
+        self.table.setTabKeyNavigation(False)
         self.table.setModel(self.model)
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -112,10 +126,20 @@ class V2ReviewedEntryDrilldown(QDialog):
         sources = QHBoxLayout()
         sources.addWidget(QLabel("Source evidence"))
         self.source = QComboBox()
+        self.source.setAccessibleName("Supporting source document")
+        self.source.setMinimumContentsLength(24)
+        self.source.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.source.currentIndexChanged.connect(self._update_review_target)
         sources.addWidget(self.source, 1)
         self.preview = QPushButton("Preview source")
         self.preview.clicked.connect(self._preview)
         sources.addWidget(self.preview)
+        self.review_source_button = QPushButton("Review / correct source row")
+        self.review_source_button.setEnabled(False)
+        self.review_source_button.setAccessibleName("Review or correct selected entry at its source row")
+        self.review_source_button.clicked.connect(self._review_source)
+        self.review_source_button.setVisible(review_available)
+        sources.addWidget(self.review_source_button)
         layout.addLayout(sources)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
         self.refresh_button = buttons.addButton("Refresh entries", QDialogButtonBox.ActionRole)
@@ -137,6 +161,14 @@ class V2ReviewedEntryDrilldown(QDialog):
             self._selected()
             return
         self.drilldown = result
+        try:
+            with V2ProfileStore.open(self.profile, read_only=True) as store:
+                self._source_labels = {
+                    summary.source_sha256: f"{document_title(summary)} · {document_period(summary)}"
+                    for summary in store.document_summaries()
+                }
+        except (ProfileFormatError, sqlite3.Error, OSError):
+            self._source_labels = {}
         self.model.replace(result)
         report = result.report
         labels = category_labels((account.id, account.name, account.kind) for account in report.accounts)
@@ -169,6 +201,8 @@ class V2ReviewedEntryDrilldown(QDialog):
             )
 
     def _selected(self, *_args):
+        self._review_targets = {}
+        self.review_source_button.setEnabled(False)
         self.source.clear()
         self.preview.setEnabled(False)
         self.details.clear()
@@ -195,15 +229,26 @@ class V2ReviewedEntryDrilldown(QDialog):
             for link in result.report.loan_source_links
             if link.derived_observation_id is not None
         }
+        # A multi-account document may support both sides of one transfer. Keep
+        # the selected financial account's row ahead of its counterpart.
+        source_postings = sorted(entry.postings, key=lambda posting: posting.account_id != result.account.id)
         source_ids = dict.fromkeys(
             (
                 derived_sources[a.observation_id].source_sha256
                 if a.observation_id in derived_sources
                 else source_rows[a.observation_id]
             )
-            for p in entry.postings
+            for p in source_postings
             for a in p.allocations
         )
+        for posting in source_postings:
+            for allocation in posting.allocations:
+                row_id = allocation.observation_id
+                if row_id in derived_sources:
+                    link = derived_sources[row_id]
+                    self._review_targets.setdefault(link.source_sha256, link.row_id)
+                elif row_id in source_rows:
+                    self._review_targets.setdefault(source_rows[row_id], row_id)
         loan_event = next((event for event in result.report.loan_events if event.event_id == entry.event_id), None)
         if loan_event is not None:
             source_ids[loan_event.manifest.bank.source_sha256] = None
@@ -215,6 +260,10 @@ class V2ReviewedEntryDrilldown(QDialog):
                 if link.event_id != loan_event.event_id:
                     continue
                 source_ids[link.source_sha256] = None
+                if link.entry_key == entry.key:
+                    self._review_targets[link.source_sha256] = link.row_id
+                else:
+                    self._review_targets.setdefault(link.source_sha256, link.row_id)
                 lines.append(
                     f"  Raw source row {link.row_id}: signed amount {_money(link.raw_amount_minor)}; "
                     f"principal debit {_money(link.principal_minor)}; interest expense {_money(link.interest_minor)}.\n"
@@ -229,8 +278,10 @@ class V2ReviewedEntryDrilldown(QDialog):
                     )
                 )
         for source_id in source_ids:
-            self.source.addItem(f"Source {source_id[:16]}…", source_id)
+            self.source.addItem(self._source_labels.get(source_id, f"Source {source_id[:16]}…"), source_id)
+            self.source.setItemData(self.source.count() - 1, source_id, Qt.ToolTipRole)
         self.preview.setEnabled(bool(source_ids))
+        self._update_review_target()
         corrections, retirements = result.entry_history(entry)
         lines.append("\nRelated correction/withdrawal links may be outside this report period:")
         if not corrections and not retirements:
@@ -256,6 +307,20 @@ class V2ReviewedEntryDrilldown(QDialog):
                     )
         lines.append(f"\nEntry reference: {entry.key}\nEvent reference: {entry.event_id}")
         self.details.setPlainText("\n".join(lines))
+
+    def _update_review_target(self, *_args):
+        if hasattr(self, "review_source_button"):
+            self.review_source_button.setEnabled(self.source.currentData() in self._review_targets)
+
+    def _review_source(self):
+        source_id = self.source.currentData()
+        row_id = self._review_targets.get(source_id)
+        if row_id is None:
+            return
+        # Close the inspection first; the workspace owns guarded navigation and
+        # the existing explicit correction/owning-event confirmation workflows.
+        self.accept()
+        self.source_review_requested.emit(source_id, row_id)
 
     def _preview(self):
         source_id = self.source.currentData()

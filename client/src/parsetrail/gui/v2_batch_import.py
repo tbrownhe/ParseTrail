@@ -2,17 +2,86 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from pathlib import Path
-from threading import Event
+from threading import Event, Lock
 
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QLineEdit, QListWidget, QListWidgetItem, QVBoxLayout
 
-from parsetrail.core.v2_workspace import BatchImportResult, V2Workspace
+from parsetrail.core.v2_format_recognition import ImportCancelled
+from parsetrail.core.v2_import_accounts import ImportAccountPlan, ImportAccountReview
+from parsetrail.core.v2_workspace import BatchImportResult, V2Workspace, WorkspaceError
+
+
+@dataclass
+class ImportAccountReviewRequest:
+    path: Path
+    review: ImportAccountReview
+    index: int
+    total: int
+    completed: tuple = ()
+    decided: Event = field(default_factory=Event)
+    decision: ImportAccountPlan | None = None
+    error: Exception | None = None
+    _lock: Lock = field(default_factory=Lock, repr=False)
+
+    @property
+    def recognition(self):
+        return self.review.recognition
+
+    def finish(self, decision=None):
+        with self._lock:
+            if not self.decided.is_set():
+                self.decision = decision
+                self.decided.set()
+
+    def fail(self):
+        with self._lock:
+            if not self.decided.is_set():
+                self.error = WorkspaceError("import_preview_unavailable")
+                self.decided.set()
+
+
+def review_import_accounts(worker, path, review, *, index=1, total=1):
+    """Collect an explicit account/import decision without holding a connection."""
+    request = ImportAccountReviewRequest(path, review, index, total, tuple(getattr(worker, "completed_outcomes", ())))
+    worker.import_review_requested.emit(request)
+    while not request.decided.wait(0.05):
+        if worker.cancel_event.is_set():
+            raise ImportCancelled("cancelled")
+    if worker.cancel_event.is_set():
+        raise ImportCancelled("cancelled")
+    if request.error is not None:
+        raise request.error
+    return request.decision
+
+
+def import_failure_guidance(code: str) -> str:
+    explanations = {
+        "catalog_no_match": "This document does not match an installed statement format. Check that you selected a supported original CSV or PDF, or install an updated signed statement-format package and try again.",
+        "catalog_ambiguous_match": "More than one installed format matches this document. ParseTrail cannot safely choose one. Install an updated signed statement-format package before retrying.",
+        "import_account_routing_conflict": "This file matches conflicting supported formats. No new source, account or assignment was saved. Use a supported original export or install an updated signed statement-format package before retrying.",
+        "verified_catalog_missing": "Install a signed statement-format package from Documents before importing, then try again.",
+        "source_unavailable": "The selected file could not be read. Check that it still exists and is accessible, then select it again.",
+        "unsupported_source_type": "Choose a supported CSV or PDF original. Other document types cannot be imported here.",
+        "source_changed_since_preview": "The original changed after its preview. Nothing new was imported. Select it again to review the current bytes.",
+        "catalog_selection_source_changed": "The original changed after its preview. Select it again and check a fresh preview before importing.",
+        "catalog_selection_catalog_changed": "The installed statement formats changed after the preview. Select the document again to check a fresh preview.",
+        "format_preview_unavailable": "The CSV preview could not be opened. No new source was saved. Reload the profile and try again; previously imported documents are retained.",
+        "import_preview_unavailable": "The account and import preview could not be opened. No new source, account or assignment was saved. Retry the file; previously completed imports are retained.",
+    }
+    message = explanations.get(
+        code,
+        "The document could not be imported safely. Check the selected original and installed statement formats, then retry. Keep the details below if the problem continues.",
+    )
+    return f"{message}\n\nDetails: {code}"
 
 
 class V2BatchImportWorker(QThread):
     progressed = Signal(int, str)
+    outcomes_changed = Signal(object)
+    import_review_requested = Signal(object)
 
     def __init__(self, workspace: V2Workspace, paths: tuple[Path, ...], parent=None):
         super().__init__(parent)
@@ -21,6 +90,8 @@ class V2BatchImportWorker(QThread):
         self.cancel_event = Event()
         self.result: BatchImportResult | None = None
         self.error: Exception | None = None
+        self.completed_files = 0
+        self.completed_outcomes = []
 
     def cancel(self) -> None:
         self.cancel_event.set()
@@ -30,10 +101,19 @@ class V2BatchImportWorker(QThread):
             self.result = self.workspace.import_files(
                 self.paths,
                 cancelled=self.cancel_event.is_set,
-                progress=lambda count, item: self.progressed.emit(count, item.path.name),
+                progress=self._progress,
+                review_import=lambda path, review: review_import_accounts(
+                    self, path, review, index=self.completed_files + 1, total=len(self.paths)
+                ),
             )
         except Exception as exc:
             self.error = exc
+
+    def _progress(self, count, item):
+        self.completed_files = count
+        self.completed_outcomes.append(item)
+        self.outcomes_changed.emit(tuple(self.completed_outcomes))
+        self.progressed.emit(count, item.path.name)
 
 
 class V2BatchImportReport(QDialog):
@@ -46,11 +126,11 @@ class V2BatchImportReport(QDialog):
         layout = QVBoxLayout(self)
         counts = {
             status: sum(item.status == status for item in result.files)
-            for status in ("imported", "already_imported", "failed", "cancelled", "not_attempted")
+            for status in ("imported", "already_imported", "skipped", "failed", "cancelled", "not_attempted")
         }
         summary = QLabel(
             f"{counts['imported']} imported · {counts['already_imported']} already saved · "
-            f"{counts['failed']} failed · {counts['cancelled']} cancelled · "
+            f"{counts['skipped']} skipped · {counts['failed']} failed · {counts['cancelled']} cancelled · "
             f"{counts['not_attempted']} not attempted. "
             "Completed files remain pending review; cancellation keeps those imports."
         )
@@ -60,9 +140,10 @@ class V2BatchImportReport(QDialog):
         for item in result.files:
             label = f"{item.path.name} — {item.status.replace('_', ' ')}"
             if item.error_code:
-                label += f": {item.error_code}"
+                label += " — select for recovery details"
             row = QListWidgetItem(label)
             row.setData(Qt.UserRole, str(item.path))
+            row.setData(Qt.UserRole + 1, item.error_code)
             row.setToolTip(str(item.path))
             self.files.addItem(row)
         layout.addWidget(self.files)
@@ -70,6 +151,11 @@ class V2BatchImportReport(QDialog):
         self.selected_path = QLineEdit()
         self.selected_path.setReadOnly(True)
         layout.addWidget(self.selected_path)
+        self.recovery_guidance = QLabel()
+        self.recovery_guidance.setWordWrap(True)
+        self.recovery_guidance.setTextFormat(Qt.PlainText)
+        self.recovery_guidance.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard)
+        layout.addWidget(self.recovery_guidance)
         self.files.currentItemChanged.connect(self._selected)
         if self.files.count():
             self.files.setCurrentRow(0)
@@ -80,3 +166,5 @@ class V2BatchImportReport(QDialog):
     def _selected(self, current: QListWidgetItem | None) -> None:
         self.selected_path.setText(current.data(Qt.UserRole) if current is not None else "")
         self.selected_path.setCursorPosition(0)
+        code = current.data(Qt.UserRole + 1) if current is not None else None
+        self.recovery_guidance.setText(import_failure_guidance(code) if code else "")

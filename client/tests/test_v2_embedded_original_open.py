@@ -117,7 +117,7 @@ def test_new_account_context_and_nested_original_preserve_unsaved_edits(app, pro
     form = V2FinancialAccountDialog(draft=draft, profile=path)
     form.show()
     form.name.setText("Unsaved personal label")
-    form.kind.setCurrentIndex(form.kind.findData("liability"))
+    form.product.setCurrentIndex(form.product.findData("credit_card"))
     assert form.view_original_button.isEnabled()
     form.view_original_button.click()
     _wait(app, lambda: form.original_open is not None and not form.original_open.pending)
@@ -139,7 +139,7 @@ def test_selected_context_renders_printed_values_and_qualified_unknowns(app):
     draft = _suggest(evidence, catalog=_catalog(evidence))
     form = V2FinancialAccountDialog(draft=draft)
     try:
-        assert form.name.text() == "Occu 3479"
+        assert form.name.text() == "Oregon Community Credit Union 3479"
         assert "$200.00 (printed)" in form.document_values.text()
         assert "$195.00 (printed)" in form.document_values.text()
         assert "Source page 2" in form.document_scope.text()

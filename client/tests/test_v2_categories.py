@@ -24,7 +24,7 @@ def test_category_dialog_adds_and_renames_without_posting(tmp_path: Path) -> Non
         dialog.add_name.setText("Groceries")
         dialog.add_button.click()
         assert dialog.categories.count() == 1
-        assert dialog.rename_button.isEnabled()
+        assert not dialog.rename_button.isEnabled()  # Unchanged saved name has no pending rename.
         dialog.rename_name.setText("Food")
         dialog.rename_button.click()
         assert dialog.categories.currentItem().text() == "Food (Expense)"
