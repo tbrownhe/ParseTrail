@@ -1,0 +1,62 @@
+{
+  "originals": {
+    "original_short_review_cycle.py": {
+      "copied_from": "scratch\\qt-min-repro\\test_short_review_cycle.py",
+      "sha256": "478a7d32dfa9df448f8ba1e01fbc16e9ddaae7e8169e879d0e1eb5480cbf7415"
+    },
+    "journey_snapshot.py": {
+      "copied_from": "client\\tests\\test_v2_qt_journey.py",
+      "sha256": "2f054b8e3a79da1e70a5d58bd94f3ff2a618d4f0a41e7cc5bbfc64503077fda0"
+    },
+    "qt_journey_helpers.py": {
+      "copied_from": "client\\tests\\qt_journey_helpers.py",
+      "sha256": "1546e33eb9b7c62388b865949d1ed3aace0033fb6e8b82aac2ace3242c34c862"
+    },
+    "qt_account_import_helpers.py": {
+      "copied_from": "client\\tests\\qt_account_import_helpers.py",
+      "sha256": "f32797e05950101ff8351538a9c3ec8ee281475f1374574161ce4718c0c33490"
+    },
+    "synthetic-posted-cash-definition.json": {
+      "copied_from": "devtools\\v2_fresh_slice\\synthetic-posted-cash-definition.json",
+      "sha256": "d546115a031efae3a49a08c3d23526519563f7fa971fc1c16bf044cfe17e56f4"
+    }
+  },
+  "purpose": "Owner requested preservation and suspension of active crash investigation; not a stability fix.",
+  "observed_environment": {
+    "platform": "Windows 11 x64, offscreen Qt",
+    "python": "3.13.15",
+    "pyside_qt": "6.11.2",
+    "pytest": "9.1.1",
+    "pytest_qt": "4.5.0",
+    "gc": "normal",
+    "pacing_ms": 0
+  },
+  "historical_result": {
+    "fresh_runs": 3,
+    "heap_failures": 3,
+    "completed_cycles_before_failure": 3,
+    "failure_cycle": 4,
+    "failure_wait_line": 174,
+    "windows_status": "0xc0000374",
+    "process_exit": -1073740940,
+    "single_cycle_control": "passed",
+    "three_cycle_control": "passed"
+  },
+  "snapshot_adjustments": [
+    "short_review_cycle.py changes only the original import to the archived journey_snapshot module",
+    "journey_snapshot.py changes only the definition path to the adjacent frozen synthetic declaration"
+  ],
+  "verification_limit": "Historical failure observed with original imports; archived import/path adaptation is collection-checked, not rerun to trigger a native crash. App and parser/service implementation remain repository dependencies.",
+  "archived_sha256": {
+    ".gitattributes": "a03f76f2250fa184c761ac8dca5f6a94b9eae4fbf0d284a59573eeb519ba1349",
+    "journey_snapshot.py": "97f36b70ffbcb90c50d92c3eba6b0cea690e2f34d41fd6e3ab801d5fb635eb5b",
+    "observed_failure.txt": "22a016312b868b85f68046268f7acd7a0788bd5f542d4eb2b95be508615abd4a",
+    "original_short_review_cycle.py": "478a7d32dfa9df448f8ba1e01fbc16e9ddaae7e8169e879d0e1eb5480cbf7415",
+    "qt_account_import_helpers.py": "f32797e05950101ff8351538a9c3ec8ee281475f1374574161ce4718c0c33490",
+    "qt_journey_helpers.py": "1546e33eb9b7c62388b865949d1ed3aace0033fb6e8b82aac2ace3242c34c862",
+    "README.md": "40946f84317f043817bce66b98314980c56d60dc9b7bf0d20b5930c0ef4fdb4c",
+    "ruff.toml": "c85ff7855409721bb71cc4fb999cab49318147cfa0f1bfb85622d1b0fd83b785",
+    "short_review_cycle.py": "22283f16395f085d946e6ebf019bb3a138753a17beded388d8bce071508f188f",
+    "synthetic-posted-cash-definition.json": "d546115a031efae3a49a08c3d23526519563f7fa971fc1c16bf044cfe17e56f4"
+  }
+}

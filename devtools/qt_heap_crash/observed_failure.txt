@@ -1,0 +1,179 @@
+============================= test session starts =============================
+
+platform win32 -- Python 3.13.15, pytest-9.1.1, pluggy-1.6.0 -- <REPO>\client\.venv\Scripts\python.exe
+
+PySide6 6.11.2 -- Qt runtime 6.11.2 -- Qt compiled 6.11.2
+
+rootdir: <REPO>
+
+plugins: qt-4.5.0
+
+collecting ... collected 4 items
+
+
+
+scratch/qt-min-repro/test_short_review_cycle.py::test_expense_review_correction[0] PASSED [ 25%]
+
+scratch/qt-min-repro/test_short_review_cycle.py::test_expense_review_correction[1] PASSED [ 50%]
+
+scratch/qt-min-repro/test_short_review_cycle.py::test_expense_review_correction[2] PASSED [ 75%]
+
+python.exe : Windows fatal exception: code 0xc0000374
+
+At line:3 char:1
+
++ & .\client\.venv\Scripts\python.exe -u -m pytest -p no:cacheprovider  ...
+
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    + CategoryInfo          : NotSpecified: (Windows fatal exception: code 0xc0000374:String) [], RemoteException
+
+    + FullyQualifiedErrorId : NativeCommandError
+
+
+
+
+
+Thread 0x0000763c (most recent call first):
+
+  File "<REPO>\client\src\parsetrail\core\v2_profile_store.py", line 4739 in
+
+_read_transfer_history_uncached
+
+  File "<REPO>\client\src\parsetrail\core\v2_profile_store.py", line 4680 in
+
+_read_transfer_history
+
+  File "<REPO>\client\src\parsetrail\core\v2_profile_store.py", line 4917 in
+
+_validate_transfer_history
+
+  File "<REPO>\client\src\parsetrail\core\v2_profile_store.py", line 2641 in _active_consumed
+
+  File "<REPO>\client\src\parsetrail\core\v2_profile_store.py", line 2839 in
+
+_source_overlap_index
+
+  File "<REPO>\client\src\parsetrail\core\v2_profile_store.py", line 3121 in
+
+_source_overlap_posting_blocks
+
+  File "<REPO>\client\src\parsetrail\core\v2_profile_store.py", line 3114 in
+
+source_overlap_posting_blocks
+
+  File "<REPO>\client\src\parsetrail\core\v2_profile_store.py", line 3982 in
+
+cash_activity_review_rows
+
+  File "<REPO>\client\src\parsetrail\core\v2_profile_store.py", line 3751 in
+
+source_interpretation_snapshot
+
+  File "<REPO>\client\src\parsetrail\gui\v2_ordinary_review.py", line 633 in read
+
+  File "<REPO>\client\src\parsetrail\gui\v2_profile_jobs.py", line 58 in run
+
+
+
+Thread 0x00000194 (most recent call first):
+
+  File "<REPO>\client\src\parsetrail\core\v2_profile_store.py", line 3633 in
+
+_validate_common_journal_read
+
+  File "<REPO>\client\src\parsetrail\core\v2_profile_store.py", line 2643 in _active_consumed
+
+  File "<REPO>\client\src\parsetrail\core\v2_profile_store.py", line 8553 in document_summaries
+
+  File "<REPO>\client\src\parsetrail\gui\v2_document_browser.py", line 73 in run
+
+
+
+Current thread 0x000048b8 (most recent call first):
+
+  Garbage-collecting
+
+  File "<REPO>\client\.venv\Lib\site-packages\pytestqt\qt_compat.py", line 160 in exec
+
+  File "<REPO>\client\.venv\Lib\site-packages\pytestqt\wait_signal.py", line 58 in wait
+
+  File "<REPO>\client\.venv\Lib\site-packages\pytestqt\qtbot.py", line 503 in wait
+
+  File "<REPO>\client\.venv\Lib\site-packages\pytestqt\qtbot.py", line 600 in waitUntil
+
+  File "<REPO>\scratch\qt-min-repro\test_short_review_cycle.py", line 174 in
+
+test_expense_review_correction
+
+  File "<REPO>\client\.venv\Lib\site-packages\_pytest\python.py", line 167 in pytest_pyfunc_call
+
+  File "<REPO>\client\.venv\Lib\site-packages\pluggy\_callers.py", line 121 in _multicall
+
+  File "<REPO>\client\.venv\Lib\site-packages\pluggy\_manager.py", line 120 in _hookexec
+
+  File "<REPO>\client\.venv\Lib\site-packages\pluggy\_hooks.py", line 512 in __call__
+
+  File "<REPO>\client\.venv\Lib\site-packages\_pytest\python.py", line 1707 in runtest
+
+  File "<REPO>\client\.venv\Lib\site-packages\_pytest\runner.py", line 184 in
+
+pytest_runtest_call
+
+  File "<REPO>\client\.venv\Lib\site-packages\pluggy\_callers.py", line 121 in _multicall
+
+  File "<REPO>\client\.venv\Lib\site-packages\pluggy\_manager.py", line 120 in _hookexec
+
+  File "<REPO>\client\.venv\Lib\site-packages\pluggy\_hooks.py", line 512 in __call__
+
+  File "<REPO>\client\.venv\Lib\site-packages\_pytest\runner.py", line 250 in <lambda>
+
+  File "<REPO>\client\.venv\Lib\site-packages\_pytest\runner.py", line 361 in from_call
+
+  File "<REPO>\client\.venv\Lib\site-packages\_pytest\runner.py", line 249 in call_and_report
+
+  File "<REPO>\client\.venv\Lib\site-packages\_pytest\runner.py", line 139 in runtestprotocol
+
+  File "<REPO>\client\.venv\Lib\site-packages\_pytest\runner.py", line 118 in
+
+pytest_runtest_protocol
+
+  File "<REPO>\client\.venv\Lib\site-packages\pluggy\_callers.py", line 121 in _multicall
+
+  File "<REPO>\client\.venv\Lib\site-packages\pluggy\_manager.py", line 120 in _hookexec
+
+  File "<REPO>\client\.venv\Lib\site-packages\pluggy\_hooks.py", line 512 in __call__
+
+  File "<REPO>\client\.venv\Lib\site-packages\_pytest\main.py", line 408 in pytest_runtestloop
+
+  File "<REPO>\client\.venv\Lib\site-packages\pluggy\_callers.py", line 121 in _multicall
+
+  File "<REPO>\client\.venv\Lib\site-packages\pluggy\_manager.py", line 120 in _hookexec
+
+  File "<REPO>\client\.venv\Lib\site-packages\pluggy\_hooks.py", line 512 in __call__
+
+  File "<REPO>\client\.venv\Lib\site-packages\_pytest\main.py", line 384 in _main
+
+  File "<REPO>\client\.venv\Lib\site-packages\_pytest\main.py", line 330 in wrap_session
+
+  File "<REPO>\client\.venv\Lib\site-packages\_pytest\main.py", line 377 in pytest_cmdline_main
+
+  File "<REPO>\client\.venv\Lib\site-packages\pluggy\_callers.py", line 121 in _multicall
+
+  File "<REPO>\client\.venv\Lib\site-packages\pluggy\_manager.py", line 120 in _hookexec
+
+  File "<REPO>\client\.venv\Lib\site-packages\pluggy\_hooks.py", line 512 in __call__
+
+  File "<REPO>\client\.venv\Lib\site-packages\_pytest\config\__init__.py", line 229 in _main
+
+  File "<REPO>\client\.venv\Lib\site-packages\_pytest\config\__init__.py", line 253 in
+
+_console_main
+
+  File "<REPO>\client\.venv\Lib\site-packages\pytest\__main__.py", line 9 in <module>
+
+  File "<frozen runpy>", line 88 in _run_code
+
+  File "<frozen runpy>", line 203 in _run_module_as_main
+
+scratch/qt-min-repro/test_short_review_cycle.py::test_expense_review_correction[3]

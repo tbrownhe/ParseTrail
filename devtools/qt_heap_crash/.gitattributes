@@ -1,0 +1,2 @@
+# Keep recorded frozen-source hashes stable across Windows checkouts.
+*.py -text whitespace=cr-at-eol

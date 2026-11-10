@@ -1,0 +1,3 @@
+# Frozen diagnostic snapshots: preserve bytes, line numbers and recorded hashes.
+extend = "../../ruff.toml"
+exclude = ["*.py"]

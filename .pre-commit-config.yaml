@@ -33,7 +33,8 @@ repos:
               frontend/src/client/generated/.*|
               frontend/src/routeTree\.gen\.ts|
               frontend/openapi\.json|
-              backend/app/email-templates/build/.*
+              backend/app/email-templates/build/.*|
+              devtools/qt_heap_crash/.*\.py
           )$
       - id: fix-byte-order-marker
 
