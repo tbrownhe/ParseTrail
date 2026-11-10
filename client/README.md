@@ -2,7 +2,8 @@
 
 The active client-development branch starts the fresh V2 workspace by default.
 See [Application service boundaries](#application-service-boundaries) for its
-current local workflow. Published 1.x plugin/model/archive behavior below remains
+current local workflow and [Getting started](../docs/client-v2-getting-started.md)
+for the import, account assignment, review and spending journey. Published 1.x plugin/model/archive behavior below remains
 reference for the independently retained application; V2 scope/deferrals and
 release gates belong to [ROADMAP](../ROADMAP.md).
 
@@ -65,6 +66,35 @@ Run the automated suite:
 ```bash
 uv run --frozen pytest
 ```
+
+For the V2 import-to-reviewed-spending journey, run from the repository root:
+
+```powershell
+uv run --project client --extra dev --no-env-file --frozen python -m pytest client/tests/test_v2_qt_journey.py client/tests/test_v2_qt_category_navigation.py -p no:cacheprovider -q
+```
+
+This uses pytest-qt with PySide6, disposable profiles and synthetic source bytes.
+Journey actions use widget mouse/keyboard events and real review confirmations.
+Each of the four cases in `test_v2_qt_journey.py` runs its unchanged scenario in
+a fresh Python process, with isolated settings and a bounded timeout. Child
+failure, native crash or timeout fails the parent test; no retries or GC
+suppression are used. This contains an unresolved native Qt heap failure during
+accumulated UI activity. It does not establish long-session stability. The
+deliberate [minimum crash diagnostic](../devtools/qt_heap_crash/README.md) is
+preserved separately and excluded from normal discovery.
+The default run uses offscreen Qt. For actual platform rendering and retained
+screenshots/runtime metadata:
+
+```powershell
+uv run --project client --extra dev --no-env-file --frozen python -m pytest client/tests/test_v2_qt_journey.py client/tests/test_v2_qt_category_navigation.py --journey-native --journey-artifacts scratch/qt-journey-review -p no:cacheprovider -q
+```
+
+Each test creates a unique artifact directory, leaving earlier captures available.
+Custom artifact output is restricted to the repository's ignored `scratch/` tree.
+Inspect the screenshots for readability, clipping, confirmation meaning and report
+scope at the recorded window sizes. Qt software events and rendered screenshots
+verify application behavior; human discovery, assistive technology, native file
+pickers and installed operating-system integration require separate checks.
 
 Exercise source plugins against local statement fixtures:
 
@@ -212,8 +242,16 @@ identifiers, date provenance and overlap details remain available in Show detail
 No presentation mode changes matching preferences or accounting decisions.
 
 Review embeds the selected document's supported cash/card/register activity.
-Search, status filters, exact sorting and Next pending keep the current task
-visible. Explicitly staged ordinary rows share the authored batch reason and
+Search, status filters and exact sorting keep the current task visible.
+All new ordinary reviews use Stage selected → Review staged → Confirm and post;
+there is no competing immediate-post action. Text and row cues distinguish staged
+unsaved proposals from not-staged and reviewed rows, while blockers stay visible.
+Remove selected affects only those staged proposals; later form edits require
+restaging to update them. Ctrl/Shift selects multiple ordinary rows for a shared purpose,
+category and note, with a visible selection count. Staging validates the whole
+selection and preserves prior staged work on refusal. A successful Stage captures
+the shared note; editing a later proposal does not change the earlier staged note.
+Explicitly staged ordinary rows share that captured batch reason and
 receive one exact preview and atomic confirmation; each row retains its own
 date and allowed purpose/category. Corrections remain individual or whole-event
 operations. Already-consumed rows show their owning reviewed workflow rather
@@ -236,6 +274,10 @@ Review account selectors include New account. The shared account form suggests
 the selected document section's identity and scope, with institution/kind from
 its exact verified catalog context when available. Account details are editable;
 parser-known institution and printed document identity appear read-only.
+Institution is selected from managed names, with an explicit unidentified choice;
+users never type internal institution codes. Institution identity does not imply
+support for every document from that institution. Unknown permits manual account
+assignment and review, but never automatic institution-based matching.
 Masked identifiers remain visible while unknown full numbers stay blank. Saving
 selects the new account without assigning the document or posting transactions;
 confirm the existing Use this account or Assign action separately.
@@ -245,6 +287,23 @@ reader while preserving unsaved form edits. Missing product names remain unknown
 default account names use institution plus the last four visible digits rather
 than a full account number. Existing account names and matching identities do
 not change.
+
+PDF/CSV imports validate installed signed formats, then ask for compatible existing
+accounts or Create a new account for every complete source-account group. Matching
+CSV headers never select an account. Creation keeps provisional nickname,
+institution and managed product choices; product supplies accounting class and
+supported tracking scope. Reliable identified context prepopulates what it knows.
+CSV headers must match a declared structure exactly; institution/product choices
+narrow compatible declarations automatically. Review import shows a read-only
+preview. Unresolved format conflicts refuse rather than asking users to assign
+columns. Conflicting account-group structures refuse before assignment. Import
+and assign atomically saves originals/evidence, referenced new
+accounts and assignments, with no journal/opening entry. Back keeps applicable
+choices; Skip/Cancel discards unsaved drafts and retains completed batch files.
+Source/catalog/account drift requires fresh confirmation, including changes during
+final parsing. Exact-source retries retain their saved interpretation/assignments.
+PDF keeps unique signed routing. XLSX remains excluded
+from workspace imports. See the [parsing contract](../docs/client-v2-parsing.md).
 
 Documents also offers **Assign document accounts** across all saved unassigned
 sections. It reuses exact prior document-account associations and groups repeated

@@ -1,0 +1,98 @@
+# Getting started with the V2 desktop workflow
+
+Start in **Documents**, import a supported statement or activity export, then
+check the document, account and dates shown. Statement periods and the span of an
+activity export can differ. Keep the original available when checking evidence.
+
+Import asks **which account the document came from**. Choose a compatible existing
+account, or **Create a new account…**, even if another account uses the same export
+format. For a new account, enter a nickname and only the institution/product details
+the document has not established. Product supplies asset/liability class and the
+supported amount represented. Header compatibility alone never identifies an account.
+Documents containing several accounts show each group, including groups beyond
+the preview rows; choose an account for every group.
+
+Next, **Review import** shows the automatically recognized activity, dates and
+account assignments. CSV headers must match a declared format; your institution
+and product choices narrow compatible formats without assigning columns. If more
+than one format still matches, import is blocked. Check account details, use a
+supported original export or install an updated signed catalog. Conflicting account
+group structures are also refused. PDF format routing stays automatic.
+**Back to accounts** keeps applicable choices. **Import
+and assign** saves the original, unreviewed evidence, displayed new accounts and
+assignments together. It adds no spending. Skip or cancel discards unsaved drafts;
+completed batch files stay saved. Changed inputs require a refreshed confirmation.
+Check the interpretation before saving: changing the format of an already
+imported document is not supported yet. Selecting the exact file again reuses its
+saved interpretation; you can cancel before importing if the preview is wrong.
+
+Open **Review** for the selected document to decide what its transactions mean.
+Accounts created separately on the Accounts page still need explicit document/row
+assignment. Creating or assigning an account adds no spending.
+
+Choose an institution by its name when creating an account, or deliberately choose
+**Institution not identified**. Selecting an existing account uses its saved
+institution. A compatible generic CSV does not necessarily identify its bank, and
+an institution being listed does not mean every format from it is supported.
+
+Select a transaction, choose its purpose and category, and enter a review note.
+Use **Stage selected**, then **Review staged** and inspect the exact confirmation
+before posting. One transaction and several use the same flow. Staging is an
+unsaved proposal; it adds no spending. Transfers, card repayments and loan
+principal have their own review routes because they are not additional expenses.
+
+To categorize several unreviewed transactions together, use **Ctrl-click** for
+separate rows or **Shift** for a range. The selected count and heading show the
+scope. Choose their shared purpose, category and note, then **Stage N selected**
+and **Review staged**. Nothing posts until the exact confirmation. Each row
+keeps its own date; stage date overrides individually. Successful staging captures
+the batch note; later unstaged or refused proposals do not change it. The captured
+note applies to all staged rows, including any staged before changing a filter;
+staging with a different note replaces that shared note. Already-reviewed entries
+use individual correction.
+
+The table identifies **Not staged**, **Staged · not saved**, and reviewed rows.
+The separate review status still explains blockers. Editing a staged row shows
+**Changes not staged**: stage it again to replace its proposal, or keep the earlier
+proposal for confirmation. **Remove selected** removes only those proposals;
+**Clear staged** empties the staged set. The staged count includes rows hidden by
+filters. Canceling confirmation keeps the proposals. Staging is temporary and
+closing a review asks before discarding it.
+
+If a transaction may repeat one in another document, use **Review possible
+repeated transactions…** beside the blocked choices. Compare both sources, then
+explicitly decide whether they are separate transactions or the same transaction.
+This decision posts no money. A supporting occurrence cannot post separately;
+the retained occurrence can proceed once all required comparisons are resolved.
+Closing the comparison returns to the selected row and keeps earlier staged work.
+This review is separate from recognizing the file format at import.
+
+The input colors describe your current choices:
+
+| Appearance | Meaning |
+| --- | --- |
+| Pale red | A required choice is missing or needs correction. The nearby message explains what is needed. |
+| Pale green | This choice is valid but has not been saved. Other fields or prerequisites can still need attention. |
+| Light-blue action | An available next action. Its label and confirmation explain whether it prepares, saves or posts choices. |
+| Neutral | A saved or retained choice, read-only source fact, or empty optional field. |
+| Amber message | A prerequisite needs attention before the action can proceed. |
+
+Green does not establish that an interpretation is correct, that the source is
+complete, or that the account reconciles. Read the confirmation to see what will
+be saved. Cancelling a confirmation retains the draft for further editing.
+
+Use **View spending for document dates** to see reviewed spending for those dates
+across **all accounts in the profile**. Pending activity and incomplete source
+coverage can limit the result. An empty reviewed report does not establish zero
+spending. The qualifications beside the totals explain these limits.
+
+To correct an entry, inspect the report's entries, open its source row, change the
+review and explain the correction. The original evidence and saved history remain
+available. **Back to report** returns to the report context. Source details and
+**Open original** provide supporting evidence when needed.
+
+In **Categories and budgets**, select a category and use **Monthly budget for
+selected category** to save an optional USD budget from an effective month. It
+continues until the next saved change. **Remove budget from month** ends it from
+that month; it keeps earlier history. Budgets do not post transactions. Reports
+compare them with reviewed spending, so pending activity still limits the result.

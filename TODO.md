@@ -6,13 +6,21 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None. [Guided review and responsive workspace](docs/work/2026-11-01-v2-guided-review-optimization.md)
-is implemented and independently checked. A new public synthetic preview preserves
-existing profiles/demos; native/owner/platform/release review remains separate.
+None. [One staging flow for ordinary review](docs/work/2026-11-07-v2-core-desktop-journey.md#november-8-one-staging-flow-for-ordinary-review)
+is implemented; process-isolated journey checks pass. At the owner's request,
+the unresolved native heap diagnostic is [archived](devtools/qt_heap_crash/README.md)
+and active investigation is deferred. Test containment does not fix the defect.
+Human/platform/release gates and recorded product limitations remain separate.
 
 ## Recommended next packets (unselected)
 
-1. [Broader performance and native validation](docs/work/2026-11-01-v2-guided-review-optimization.md#remaining-work):
+1. [Retained-format correction/recovery](docs/work/2026-11-07-v2-core-desktop-journey.md#november-8-managed-institutions-and-csv-recognition):
+   replacing an incorrectly selected format after import is unsupported. Preserve
+   immutable originals and unrelated reviewed work when designing that workflow.
+2. [Repeat-date policy](docs/work/2026-11-07-v2-core-desktop-journey.md#november-8-cross-document-repeat-blocker-recovery):
+   consider same-day matching for comparable posting dates separately from
+   format-specific activity/posting-date windows. Discussion only; unselected.
+3. [Broader performance and native validation](docs/work/2026-11-01-v2-guided-review-optimization.md#remaining-work):
    cold/large-original/posted-history workloads and native accessibility/platform
    checks; preserve complete source verification while assessing remaining read cost.
 
@@ -34,11 +42,15 @@ they are not selected by this closeout.
 
 ## Most recent product packet
 
-[Guided review and responsive workspace](docs/work/2026-11-01-v2-guided-review-optimization.md)
-adds filtered/staged ordinary atomic review, owning-event navigation, responsive
-operations and embedded account/report views. Its separate public synthetic
-preview is ready; existing archive-demo/runtime state is preserved. Owner
-accounting review and supported-platform/release gates remain separate.
+[Core desktop journey](docs/work/2026-11-07-v2-core-desktop-journey.md)
+connects import/account assignment, document review, qualified spending and exact
+correction/return, with account-first PDF/CSV import, managed product defaults,
+automatic declared-format routing, initial keyboard focus, clear budget labels,
+blue save actions and multi-row category staging. It extends
+the [guided workspace](docs/work/2026-11-01-v2-guided-review-optimization.md).
+Existing archive-demo/runtime state is preserved. Agent Qt verification does not
+establish direct native-input discovery or owner acceptance; platform/release
+gates remain separate.
 
 ## Decisions and gates
 

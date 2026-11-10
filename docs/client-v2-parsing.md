@@ -31,9 +31,72 @@ The [admission registry](../client/src/parsetrail/core/v2_catalog_admission.py)
 selects fixed finite operations. Definitions carry their supplied revision and
 hash through parsing rather than requiring a new hard-coded hash allowlist for
 each admitted revision. A financial-rule change still requires fixture review.
-The [source pipeline](../client/src/parsetrail/core/v2_source_pipeline.py) requires
-one matching verified CSV/PDF definition before import; ambiguous or missing
-routes and explicitly mismatched selection refuse before a source write.
+The [source pipeline](../client/src/parsetrail/core/v2_source_pipeline.py) admits
+only verified definitions. PDF requires one matching signed route; ambiguous or
+missing routes and explicitly mismatched selection refuse before a source write.
+CSV recognition fully parses installed CSV definitions, retains at most five
+typed preview rows per valid candidate, and discards full candidate outputs.
+Recognition also retains every distinct source-account group, including empty PDF
+sections and unidentified CSV rows; more than 100 groups refuses explicitly.
+CSV headers must match the declared ordered fields exactly, subject only to the
+declaration's admitted explicit header normalization. Renamed, reordered or extra
+columns are not fuzzy-matched. Header matching alone never authorizes admission;
+complete file parsing and validation remain required. Interactive import first
+asks which compatible account each group belongs to, always offering creation.
+Institution/product choices narrow valid formats through signed associations.
+The final Review import is read-only: users never assign amount, balance, date or
+account columns. Exactly one compatible declaration is required. Conflicting
+source-account group structures refuse before assignment; other unresolved overlaps
+block final import until account metadata or the supported catalog/export resolves
+them. The client does not guess or offer a parser-choice bypass. No valid candidate
+has no forced-import override. Noninteractive import still requires a unique
+valid CSV match unless an explicit validated selection is supplied.
+
+Recognition opens no profile connection and writes no evidence. A selection binds
+source SHA-256, catalog snapshot SHA-256, parser ID, revision and definition digest.
+After the GUI decision, the workspace rereads source/catalog, reparses the selected
+signed definition and independently rebuilds the complete valid candidate set to
+enforce unique account-compatible routing. It then rereads source/catalog again
+before atomic persistence; a trimmed preview cannot bypass routing checks.
+Detected drift rebuilds the preview and requires another explicit confirmation.
+Preview summaries are never treated as authoritative stored evidence. Exact
+source retries reuse already verified saved evidence without another choice.
+Batch Skip, cancellation and per-file refusal preserve completed imports and
+original files. The interactive plan atomically retains evidence, creates only
+referenced account drafts and assigns complete source groups; ledger posting
+remains a separate explicit review. Headless source-only import remains available.
+
+Institution identity comes only from reliable signed parser context or separately
+authored account metadata. Generic column compatibility does not identify a bank.
+Institution names/IDs are managed separately from the set of supported formats;
+neither choosing an institution nor accepting a candidate establishes complete
+capture, period coverage, reconciliation or accounting correctness.
+
+The shared `verified_source_account_context` policy leaves generic CSV institution
+and account class unidentified even if a signed format carries a bank label or
+the user selected that format. It preserves exact verified PDF context and the
+reviewed MOHELA CSV families only when their semantic declaration and located
+observed-component shape qualify. Merely renaming a generic parser does not
+qualify. Those same rules govern preview, account creation, automatic matching
+and cross-document proposals, so later account setup cannot upgrade a format
+choice into institution proof.
+
+Catalog entries may contain bounded signed `account_profiles` associations with
+managed institution (or wildcard), product and tracking scope. One format can
+support several products and a product can have several formats. These associations
+are compatibility, not source identification. Identifying `account_context` may
+add a product only when established; reviewed single-product family defaults are
+finite client policy. Generic CSV compatibility never upgrades those provenance
+fields. Existing asset-cash/component/card/loan scope safeguards still govern the
+supported interpretations; metadata cannot manufacture a new accounting path.
+The catalog builder accepts `account-profiles.json` alongside declarations; signed
+catalog admission validates products, scopes and managed institution identities.
+
+The saved source snapshot keeps its chosen definition. Exact retries do not
+replace that interpretation, and comparison reparsing remains read-only. The CSV
+preview discloses before Import that changing the retained format afterward is
+not yet supported. Post-import format correction remains an incomplete recovery
+capability; this does not restrict existing reviewed category/date corrections.
 
 The [workspace](../client/src/parsetrail/core/v2_workspace.py) currently accepts
 CSV and PDF sources. The bounded XLSX decoder has synthetic evidence only and

@@ -45,7 +45,7 @@ retains the earlier snapshot and proposal wording.
 | Help → Check for Updates | No V2 counterpart in the pilot shell. | Client/catalog update scope [P2-5](../ROADMAP.md#p2-5)/[DEC-2](../ROADMAP.md#dec-2); service work stays separate. |
 | Balance History dashboard tab | Account positions/history uses an inclusive as-of date, scope/origin, opening validity, separate manual/source values with withdrawal/conflict history, closure residuals, pending scope and separate live/historical/current saved reconciliation cutoffs. Total/component and unknown states stay distinct. | Consolidated [V2-UX](../ROADMAP.md#v2-ux) and platform/release acceptance; no certified current-bank-balance claim. |
 | Category Spending dashboard tab | Reviewed Spending reports exact category totals with incomplete scope. | Charts deferred; truthful drill-down scope [V2-5](../ROADMAP.md#v2-5)/[DEC-3](../ROADMAP.md#dec-3), later CF3 comparisons. |
-| Budgets dashboard tab | Monthly targets are compared with reviewed spending in a table. | Charts deferred; further variance scope [V2-5](../ROADMAP.md#v2-5)/[DEC-3](../ROADMAP.md#dec-3). |
+| Budgets dashboard tab | Monthly budgets are compared with reviewed spending in a table. | Charts deferred; further variance scope [V2-5](../ROADMAP.md#v2-5)/[DEC-3](../ROADMAP.md#dec-3). |
 
 The V2 workbook contains active reviewed non-opening entries, exact posting and
 source-allocation lines, correction links and scope for its selected date range.
@@ -69,6 +69,77 @@ Signed statement-format setup is explained before import; trust checks are
 unchanged. Background reads, backup/restore/export and source recovery retain
 their scoped progress/outcome ownership. These presentation changes do not
 reactivate any deferred capabilities listed below.
+
+Import uses Choose accounts → Review import for PDF/CSV. Compatible
+existing accounts and Create a new account are offered together; all source
+groups are represented. Managed products supply class/scope defaults, while
+unknown source provenance stays unknown. Draft creation waits for Import and
+assign, which atomically retains evidence/accounts/assignments without posting.
+Back preserves applicable choices. Exact declared CSV headers and account metadata
+route formats automatically; unresolved overlaps block import without column choices. Catalog/source/account drift requires a refreshed confirmation.
+
+Review keeps a recognizable document/account/period selector, a next-attention
+action and separate assignment versus activity guidance. An explicit document-date
+spending action uses its known inclusive source dates as the report interval
+(exclusive end is the following day). Reports still include **all profile
+accounts**, not just that document; ordinary Reports navigation retains the chosen
+dates/tab. Unknown document dates require deliberate report-date selection.
+Entry inspection offers a guarded return to the exact source row and a return to
+the retained report. Transfers, settlements and loans retain owning-event review;
+saved loan navigation opens history rather than an unconfirmed replacement draft.
+Corrections retain explicit confirmation, old/new category context and immutable
+evidence. Navigation itself posts nothing. Read-only row tables use arrows for
+rows and Tab to leave the table for the next control. Unsupported imports explain
+recovery with their diagnostic details available.
+
+Cash review provides Manage categories beside its category choice. Category setup
+retains the row, purpose, reason and staged choices and refreshes the available
+categories on return; the Accounts-page category manager also refreshes retained
+review. Account/category setup itself posts no spending. Saved-operation feedback
+remains visible after completion and clears on a later explicit row change. Import
+completion restores local format-management and other recovery actions after
+failure or cancellation.
+
+Ordinary pending review uses one flow for one or many rows: numbered transaction
+choices → Stage selected → Review staged → exact posting confirmation. The table
+shows Not staged, Staged · not saved, or reviewed choices independently of saved
+eligibility/blocker status. Selected proposals can be removed without losing other
+staged work; hidden stages are counted. Later edits are marked Changes not staged
+and do not change captured proposals until restaging. Required missing/invalid choices are pale red;
+valid unsaved choices are pale green; unchanged saved, retained source values and
+optional empty fields are neutral. Inline state/prerequisite text and keyboard
+focus supplement color. Green does not certify evidence, coverage or posting
+eligibility. Account creation, document/row/batch assignment and category budgets
+use the same distinction; saved budget cues compare the freshly read stored rate.
+Available save/stage/confirm actions use pale blue with stable label padding;
+disabled actions remain neutral. Ctrl/Shift selects multiple ordinary rows and
+shows their count. Shared purpose/category/note choices stage the whole selection
+or refuse it without changing prior stages. Exact confirmation remains separate.
+Reviewed entries require individual correction; multi-selection cannot post,
+correct or withdraw the current anchor as a single entry. Hidden staged rows are
+counted, and successful staging captures the note shared by the staged batch.
+Possible-repeat blockers show a direct comparison action instead of a purpose
+instruction. It opens a related unresolved row/group comparison in the existing
+profile-wide repeat review, retaining capped-list limitations. Return refreshes
+eligibility and preserves selection/stages; supporting evidence cannot post again.
+There are no color-legend controls in workflow screens. Help > Getting started
+explains the convention. Report filters apply automatically, so valid dates stay
+neutral rather than appearing as unsaved financial choices.
+
+Institution is a managed name selector with an explicit unidentified choice;
+internal institution codes are not editable UI fields. Reliable signed parser
+identification is read-only; matching generic CSV headers do not identify a bank.
+The registry is separate from supported formats, persists in schema-23 profiles,
+and unknown institutions allow explicit account review without automatic matches.
+
+CSV import uses a shared per-file preview for single selections and batch queues.
+Exact declared headers and compatible account details must resolve one fully
+validated format. Review import shows activity and assignments without manual column
+mapping. Conflicting group structures refuse before assignment; unresolved compatible
+formats block import. Import stores original/evidence and confirmed accounts/assignments
+without posting. Skip leaves that file untouched; Cancel remaining preserves completed imports. No match
+has no force-import override. Source/catalog changes require a fresh preview.
+PDF keeps unique signed routing; XLSX is not included in this workspace flow.
 
 The workspace Reports menu also provides cash movement by reviewed purpose for
 an explicit selection of asset accounts. It separates admitted cash categories,

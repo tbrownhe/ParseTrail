@@ -29,7 +29,7 @@ evidence belong in [packet records](work/README.md).
 
 ## Profile format and lifecycle
 
-The current pre-release profile schema is revision 22; check `SCHEMA_VERSION`
+The current pre-release profile schema is revision 24; check `SCHEMA_VERSION`
 in `v2_profile_store.py` when opening a packet. Format markers, exact table and
 foreign-key shapes, append-only triggers and SQLite integrity are checked before
 writable use. Older disposable pilots, 1.x, unknown, damaged and newer shapes
@@ -60,6 +60,70 @@ read reuses the reconciliation inventory for pending counts within its transacti
 unavailable reconciliation must not omit pending sources.
 
 ## Authored accounts and decisions
+
+Financial accounts retain nullable managed `product_type` metadata independently
+of asset/liability kind, institution and tracking scope. Products constrain class
+and allowed scopes: a loan can represent the whole liability or only principal;
+HSA/investment products can represent a whole account or a cash component. Unknown
+existing product metadata remains unknown. New interactive creation requires a
+supported product; it supplies the class and allowed scope instead of asking the
+user to coordinate conflicting choices. Product names do not alter money signs,
+source amounts, posting rules or historical entries.
+
+Interactive PDF/CSV import reviews compatible existing accounts or provisional
+new accounts for every complete source-account group before retaining the source.
+Create a new account remains available even when headers fit existing accounts.
+Only reliable source identity can supply automatic PDF matching under existing
+preferences; generic CSV compatibility never selects account identity. Signed
+format/product associations narrow the choices independently of source provenance.
+An account-column distinction is asked early only when interpretations imply
+different groups. Remaining material date/amount differences stay explicit in the
+preview. A selected bank/product does not manufacture a parser match.
+
+The final import plan binds source/catalog/declaration identity, complete group
+mappings, new-account drafts and the current account/profile basis. One atomic
+write creates referenced drafts, retains original/evidence and applies source,
+whole-file or mixed-row assignments according to their actual group scope. It
+creates no journals or openings. Cancel/failure rolls back all new state; exact
+retry retains saved evidence and assignments. Source/catalog are reread before
+and after final parsing; detected drift or changed account state rebuilds the
+review and requires another explicit confirmation. PDF signed routing is rechecked.
+Manual/headless source-only import and later guarded assignment remain separate
+supported boundaries; the combined UI does not change immutable evidence policy.
+
+`Institutions(id,name)` is a managed identity registry independent of installed
+document formats. Fresh profiles seed canonical institution names/IDs; explicit
+registration can retain additional managed identities from verified catalog
+contexts. Account writes accept only a registered non-null institution ID, or
+NULL for an unidentified institution. The registry and its references are checked
+on open and retained in backup/restore; identifiers and registered names cannot
+be overwritten. Institution selection does not establish parser support.
+Different IDs cannot share a casefolded, whitespace-normalized display name;
+unknown/required UI labels are reserved and cannot become matching identities.
+Catalog admission and profile preflight enforce these distinctions before names
+reach a selector. Catalog-aware account add/update retain registry entries and
+account changes atomically, including failure and caller-owned rollback.
+
+Unknown institution is an absence, not a shared placeholder bank. Explicit
+source/file/row assignment, reviewed posting and correction remain available.
+Unknown institutions never authorize automatic account-number matching or
+cross-document batch seeding. Manual association with a known account does not
+rewrite unidentified source provenance. The account ID remains the journal's
+identity; institution metadata does not calculate spending or move postings.
+The shared source-account-context policy distinguishes signed format association
+from source identification. Generic CSV bank/class labels never become verified
+source identity through uniqueness or user format choice. Only reviewed
+institution-identifying CSV families (currently MOHELA component exports with
+their admitted declaration/evidence shape) and exact verified PDF context can
+supply that inference. Preview, account creation, matching and batch proposals
+use the same policy; generic context can still populate managed-name choices.
+
+Catalog activation and profile registry retention have separate outcomes.
+Predictable registry identity conflicts refuse before activation. If retention
+later fails, report that formats were installed and institution names could not
+be retained; do not claim activation failed or silently roll the catalog back.
+Account creation/batch apply recheck and explicitly register current catalog
+identities within their own writes. Merely populating a selector never writes.
 
 Explicit printed-account bindings, whole-file assertions for accountless exports,
 and row assignments for mixed exports remain separate from imported facts.
@@ -105,6 +169,18 @@ An exact committed retry returns the existing keys; stale, altered, corrected or
 withdrawn previews refuse without partial posting. Ordinary corrections and
 whole-event loan/transfer/settlement corrections retain their existing workflows.
 
+The ordinary review UI accepts Ctrl/Shift multi-selection for a common purpose,
+category and note. Staging prevalidates every selected row before changing any
+in-memory staged choice, enforcing the existing 2,000-row union limit. A refused
+proposal preserves earlier stages and their captured shared reason. Each card
+row retains its own accounting date; an unstaged date override must first be
+staged individually. Missing or noncanonical individual dates cannot silently
+fall back to a source candidate. Bulk correction/withdrawal is not offered.
+Selection changes retain independent row proposals and the common proposal;
+retained edits participate in the document/profile/close discard guard. Account
+or category refresh preserves those proposals while obtaining a fresh review
+basis. Header assignment status and the review snapshot must agree.
+
 Background profile jobs retain worker connections until completion, coalesce
 superseded reads and serialize their confirmed writes per resolved profile.
 Services remain authoritative for transaction ownership and stale validation.
@@ -128,7 +204,11 @@ dates, printed endpoint values and represented scope. Missing product labels
 stay unknown. Default names use the final up to four contiguous visible digits;
 source identity/form/full number and existing names are unchanged. New account
 can inspect its selected original in a memory-only PDF/CSV reader without losing
-unsaved form edits. Unknown institution setup remains an explicit editable choice.
+unsaved form edits. Unknown institution setup uses a searchable managed-name
+selector and deliberate Institution not identified choice, rather than free-text
+codes. The UI offers built-in, retained and current verified-catalog identities;
+it has no institution editor in this slice. Exact signed identification remains
+read-only context.
 **Assign document accounts** groups saved unassigned sections by
 verified institution, class, tracking scope and exact printed identity/form.
 Current explicit associations can seed another document with that exact context,
