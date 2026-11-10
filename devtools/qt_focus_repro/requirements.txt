@@ -1,0 +1,3 @@
+# Reduction environment: CPython 3.13.15, Windows x64.
+PySide6-Essentials==6.11.2
+shiboken6==6.11.2

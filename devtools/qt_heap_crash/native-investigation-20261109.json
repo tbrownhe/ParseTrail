@@ -1,0 +1,1379 @@
+{
+  "investigation_started": "2026-11-09",
+  "outcome": "Known Windows heap reproducer passes after moving opening focus filters from QApplication to their task windows. Original native corrupting instruction remains unproven.",
+  "later_finding": "Subsequent standalone reduction confirmed GUI teardown on worker threads in the saved native stacks. Treat the focus change as a bounded mitigation; GUI lifetime correctness and a reliable standalone upstream case remain unresolved. See the current work record.",
+  "baseline_python": "3.13.15",
+  "baseline_qt": "6.11.2",
+  "normal_gc": true,
+  "source_changes": [
+    "client\\src\\parsetrail\\gui\\v2_account_anchors.py",
+    "client\\src\\parsetrail\\gui\\v2_binding_correction.py",
+    "client\\src\\parsetrail\\gui\\v2_cash_movement.py",
+    "client\\src\\parsetrail\\gui\\v2_document_viewer.py",
+    "client\\src\\parsetrail\\gui\\v2_form_state.py",
+    "client\\src\\parsetrail\\gui\\v2_loan_payment_review.py",
+    "client\\src\\parsetrail\\gui\\v2_opening_review.py",
+    "client\\src\\parsetrail\\gui\\v2_profile_startup.py",
+    "client\\src\\parsetrail\\gui\\v2_report_drilldown.py",
+    "client\\src\\parsetrail\\gui\\v2_settlement_review.py",
+    "client\\src\\parsetrail\\gui\\v2_source_overlap_review.py",
+    "client\\src\\parsetrail\\gui\\v2_statement_coverage.py",
+    "client\\src\\parsetrail\\gui\\v2_statement_source_review.py",
+    "client\\src\\parsetrail\\gui\\v2_transfer_plan.py",
+    "client\\src\\parsetrail\\gui\\v2_transfer_review.py",
+    "client\\src\\parsetrail\\gui\\v2_workspace_window.py",
+    "client\\tests\\test_v2_initial_focus.py"
+  ],
+  "original_source_manifest_sha256": "18aa96444e9acd87afa2d2fd6b06a7d34e6f76f90b69f1298ba0b0dcfad16a27",
+  "fixed_source_manifest_sha256": "7c10014a8c8e4ee93d9bb9a12eac9e819d74687fdc4b57ba090c5a01911bfaf3",
+  "human_acceptance": false,
+  "release_authorized": false,
+  "captures": [
+    {
+      "command": [
+        "<repo>\\scratch\\qt-native-debug-20261109\\tools\\windbg-x64\\cdb.exe",
+        "-o",
+        "-hd",
+        "-G",
+        "-lines",
+        "-logo",
+        "<repo>\\scratch\\qt-native-debug-20261109\\baseline-4\\native.log",
+        "-cf",
+        "<repo>\\scratch\\qt-native-debug-20261109\\baseline-4\\commands.txt",
+        "<repo>\\client\\.venv\\Scripts\\python.exe",
+        "-s",
+        "-u",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "client.tests.conftest",
+        "devtools/qt_heap_crash/short_review_cycle.py",
+        "-vv",
+        "--basetemp",
+        "<repo>\\scratch\\qt-native-debug-20261109\\baseline-4\\pytest-tmp",
+        "--journey-artifacts",
+        "<repo>\\scratch\\qt-native-debug-20261109\\baseline-4\\artifacts"
+      ],
+      "status": "captured",
+      "debugger_owned_target_only": true,
+      "debug_children": true,
+      "debug_heap": false,
+      "timeout_seconds": 240,
+      "allowlisted_environment_names": [
+        "APPDATA",
+        "COMMONPROGRAMFILES",
+        "COMMONPROGRAMFILES(X86)",
+        "COMSPEC",
+        "DBGHELP_HOMEDIR",
+        "HOME",
+        "LOCALAPPDATA",
+        "NUMBER_OF_PROCESSORS",
+        "PATH",
+        "PROCESSOR_ARCHITECTURE",
+        "PROCESSOR_IDENTIFIER",
+        "PROGRAMFILES",
+        "PROGRAMFILES(X86)",
+        "PYTHONFAULTHANDLER",
+        "PYTHONNOUSERSITE",
+        "PYTHONPATH",
+        "PYTHON_KEYRING_BACKEND",
+        "QT_QPA_PLATFORM",
+        "SYSTEMROOT",
+        "TEMP",
+        "TMP",
+        "USERPROFILE",
+        "WINDIR",
+        "_NT_SYMBOL_PATH"
+      ],
+      "cdb_sha256": "7eae4369bfbcc39fb50bc3918b8073e9509d53aba3294071c1b084fe4fcab4f2",
+      "debugger_pid": 72180,
+      "timed_out": false,
+      "debugger_returncode": 0,
+      "elapsed_seconds": 9.229,
+      "dump_bytes": 1082671105,
+      "fault_marker": true,
+      "interpretation": "Critical error c0000374 followed by internal int3 breakpoint80000003; live.ecxr failed. Debugger0 means completed capture, not application success.",
+      "dump_sha256": "c43f3e16233c3e8d2033c9b59fcbfcdcf0a636c73dccd749cd5e4798cb382d3a",
+      "raw_directory": "scratch\\qt-native-debug-20261109\\baseline-4"
+    },
+    {
+      "command": [
+        "<repo>\\scratch\\qt-native-debug-20261109\\tools\\windbg-x64\\cdb.exe",
+        "-o",
+        "-hd",
+        "-G",
+        "-lines",
+        "-logo",
+        "<repo>\\scratch\\qt-native-debug-20261109\\source-1\\native.log",
+        "-cf",
+        "<repo>\\scratch\\qt-native-debug-20261109\\source-1\\commands.txt",
+        "<repo>\\client\\.venv\\Scripts\\python.exe",
+        "-s",
+        "-u",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "client.tests.conftest",
+        "devtools/qt_heap_crash/short_review_cycle.py",
+        "-vv",
+        "--basetemp",
+        "<repo>\\scratch\\qt-native-debug-20261109\\source-1\\pytest-tmp",
+        "--journey-artifacts",
+        "<repo>\\scratch\\qt-native-debug-20261109\\source-1\\artifacts"
+      ],
+      "status": "captured",
+      "debugger_owned_target_only": true,
+      "debug_children": true,
+      "debug_heap": false,
+      "timeout_seconds": 240,
+      "allowlisted_environment_names": [
+        "APPDATA",
+        "COMMONPROGRAMFILES",
+        "COMMONPROGRAMFILES(X86)",
+        "COMSPEC",
+        "DBGHELP_HOMEDIR",
+        "HOME",
+        "LOCALAPPDATA",
+        "NUMBER_OF_PROCESSORS",
+        "PATH",
+        "PROCESSOR_ARCHITECTURE",
+        "PROCESSOR_IDENTIFIER",
+        "PROGRAMFILES",
+        "PROGRAMFILES(X86)",
+        "PYTHONFAULTHANDLER",
+        "PYTHONNOUSERSITE",
+        "PYTHONPATH",
+        "PYTHON_KEYRING_BACKEND",
+        "QT_QPA_PLATFORM",
+        "SYSTEMROOT",
+        "TEMP",
+        "TMP",
+        "USERPROFILE",
+        "WINDIR",
+        "_NT_SYMBOL_PATH"
+      ],
+      "cdb_sha256": "7eae4369bfbcc39fb50bc3918b8073e9509d53aba3294071c1b084fe4fcab4f2",
+      "debugger_pid": 235720,
+      "timed_out": false,
+      "debugger_returncode": 0,
+      "elapsed_seconds": 14.477,
+      "dump_bytes": 1087365096,
+      "fault_marker": true,
+      "interpretation": "Critical error c0000374 followed by internal int3 breakpoint80000003; live.ecxr failed. Debugger0 means completed capture, not application success.",
+      "dump_sha256": "37e442740b4f75b496e4f6e15aefd016b2f1eb81f6c612c8ceca1bdaf48e749a",
+      "raw_directory": "scratch\\qt-native-debug-20261109\\source-1"
+    }
+  ],
+  "focus_controls": [
+    {
+      "mode": "off",
+      "trial": 1,
+      "command": [
+        "<repo>\\client\\.venv\\Scripts\\python.exe",
+        "-s",
+        "-u",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "focus_probe",
+        "-p",
+        "client.tests.conftest",
+        "devtools/qt_heap_crash/short_review_cycle.py",
+        "-vv",
+        "--basetemp",
+        "<repo>\\scratch\\qt-native-debug-20261109\\focus-off-1\\pytest-tmp",
+        "--journey-artifacts",
+        "<repo>\\scratch\\qt-native-debug-20261109\\focus-off-1\\artifacts"
+      ],
+      "status": "pass",
+      "normal_gc": true,
+      "timed_out": false,
+      "returncode": 0,
+      "elapsed_seconds": 12.49
+    },
+    {
+      "mode": "off",
+      "trial": 1,
+      "kind": "1050x700",
+      "command": [
+        "<repo>\\client\\.venv\\Scripts\\python.exe",
+        "-s",
+        "-u",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "focus_probe",
+        "client/tests/qt_journey_scenarios.py::test_empty_profile_to_reviewed_spending_correction_and_recovery[1050x700]",
+        "-vv",
+        "--basetemp",
+        "<repo>\\scratch\\qt-native-debug-20261109\\focus-off-1050x700-1\\pytest-tmp",
+        "--journey-artifacts",
+        "<repo>\\scratch\\qt-native-debug-20261109\\focus-off-1050x700-1\\artifacts"
+      ],
+      "status": "pass",
+      "normal_gc": true,
+      "timed_out": false,
+      "returncode": 0,
+      "elapsed_seconds": 5.274
+    },
+    {
+      "mode": "off",
+      "trial": 1,
+      "kind": "1280x800",
+      "command": [
+        "<repo>\\client\\.venv\\Scripts\\python.exe",
+        "-s",
+        "-u",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "focus_probe",
+        "client/tests/qt_journey_scenarios.py::test_empty_profile_to_reviewed_spending_correction_and_recovery[1280x800]",
+        "-vv",
+        "--basetemp",
+        "<repo>\\scratch\\qt-native-debug-20261109\\focus-off-1280x800-1\\pytest-tmp",
+        "--journey-artifacts",
+        "<repo>\\scratch\\qt-native-debug-20261109\\focus-off-1280x800-1\\artifacts"
+      ],
+      "status": "pass",
+      "normal_gc": true,
+      "timed_out": false,
+      "returncode": 0,
+      "elapsed_seconds": 5.602
+    },
+    {
+      "mode": "off",
+      "trial": 2,
+      "command": [
+        "<repo>\\client\\.venv\\Scripts\\python.exe",
+        "-s",
+        "-u",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "focus_probe",
+        "-p",
+        "client.tests.conftest",
+        "devtools/qt_heap_crash/short_review_cycle.py",
+        "-vv",
+        "--basetemp",
+        "<repo>\\scratch\\qt-native-debug-20261109\\focus-off-2\\pytest-tmp",
+        "--journey-artifacts",
+        "<repo>\\scratch\\qt-native-debug-20261109\\focus-off-2\\artifacts"
+      ],
+      "status": "pass",
+      "normal_gc": true,
+      "timed_out": false,
+      "returncode": 0,
+      "elapsed_seconds": 12.451
+    },
+    {
+      "mode": "off",
+      "trial": 3,
+      "command": [
+        "<repo>\\client\\.venv\\Scripts\\python.exe",
+        "-s",
+        "-u",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "focus_probe",
+        "-p",
+        "client.tests.conftest",
+        "devtools/qt_heap_crash/short_review_cycle.py",
+        "-vv",
+        "--basetemp",
+        "<repo>\\scratch\\qt-native-debug-20261109\\focus-off-3\\pytest-tmp",
+        "--journey-artifacts",
+        "<repo>\\scratch\\qt-native-debug-20261109\\focus-off-3\\artifacts"
+      ],
+      "status": "pass",
+      "normal_gc": true,
+      "timed_out": false,
+      "returncode": 0,
+      "elapsed_seconds": 13.085
+    },
+    {
+      "mode": "off",
+      "trial": 4,
+      "command": [
+        "<repo>\\client\\.venv\\Scripts\\python.exe",
+        "-s",
+        "-u",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "focus_probe",
+        "-p",
+        "client.tests.conftest",
+        "devtools/qt_heap_crash/short_review_cycle.py",
+        "-vv",
+        "--basetemp",
+        "<repo>\\scratch\\qt-native-debug-20261109\\focus-off-4\\pytest-tmp",
+        "--journey-artifacts",
+        "<repo>\\scratch\\qt-native-debug-20261109\\focus-off-4\\artifacts"
+      ],
+      "status": "pass",
+      "normal_gc": true,
+      "timed_out": false,
+      "returncode": 0,
+      "elapsed_seconds": 13.688
+    },
+    {
+      "mode": "off",
+      "trial": 5,
+      "command": [
+        "<repo>\\client\\.venv\\Scripts\\python.exe",
+        "-s",
+        "-u",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "focus_probe",
+        "-p",
+        "client.tests.conftest",
+        "devtools/qt_heap_crash/short_review_cycle.py",
+        "-vv",
+        "--basetemp",
+        "<repo>\\scratch\\qt-native-debug-20261109\\focus-off-5\\pytest-tmp",
+        "--journey-artifacts",
+        "<repo>\\scratch\\qt-native-debug-20261109\\focus-off-5\\artifacts"
+      ],
+      "status": "pass",
+      "normal_gc": true,
+      "timed_out": false,
+      "returncode": 0,
+      "elapsed_seconds": 13.599
+    },
+    {
+      "mode": "on",
+      "trial": 1,
+      "command": [
+        "<repo>\\client\\.venv\\Scripts\\python.exe",
+        "-s",
+        "-u",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "focus_probe",
+        "-p",
+        "client.tests.conftest",
+        "devtools/qt_heap_crash/short_review_cycle.py",
+        "-vv",
+        "--basetemp",
+        "<repo>\\scratch\\qt-native-debug-20261109\\focus-on-1\\pytest-tmp",
+        "--journey-artifacts",
+        "<repo>\\scratch\\qt-native-debug-20261109\\focus-on-1\\artifacts"
+      ],
+      "status": "heap-failure",
+      "normal_gc": true,
+      "timed_out": false,
+      "returncode": 3221226356,
+      "elapsed_seconds": 15.515
+    },
+    {
+      "mode": "on",
+      "trial": 2,
+      "command": [
+        "<repo>\\client\\.venv\\Scripts\\python.exe",
+        "-s",
+        "-u",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "focus_probe",
+        "-p",
+        "client.tests.conftest",
+        "devtools/qt_heap_crash/short_review_cycle.py",
+        "-vv",
+        "--basetemp",
+        "<repo>\\scratch\\qt-native-debug-20261109\\focus-on-2\\pytest-tmp",
+        "--journey-artifacts",
+        "<repo>\\scratch\\qt-native-debug-20261109\\focus-on-2\\artifacts"
+      ],
+      "status": "heap-failure",
+      "normal_gc": true,
+      "timed_out": false,
+      "returncode": 3221226356,
+      "elapsed_seconds": 7.622
+    }
+  ],
+  "final_verification": [
+    {
+      "kind": "archive",
+      "mode": "native",
+      "trial": 1,
+      "bindings": "baseline",
+      "command": [
+        "<repo>\\client\\.venv\\Scripts\\python.exe",
+        "-s",
+        "-u",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "client.tests.conftest",
+        "devtools/qt_heap_crash/short_review_cycle.py",
+        "-vv",
+        "--basetemp",
+        "<repo>\\scratch\\qt-native-debug-20261109\\fixed-baseline-archive-native-1\\pytest-tmp",
+        "--journey-artifacts",
+        "<repo>\\scratch\\qt-native-debug-20261109\\fixed-baseline-archive-native-1\\artifacts",
+        "--journey-native"
+      ],
+      "status": "pass",
+      "normal_gc": true,
+      "source_manifest_sha256": "7c10014a8c8e4ee93d9bb9a12eac9e819d74687fdc4b57ba090c5a01911bfaf3",
+      "timed_out": false,
+      "returncode": 0,
+      "elapsed_seconds": 15.054,
+      "pytest_summary": "4 passed in 14.62s"
+    },
+    {
+      "kind": "archive",
+      "mode": "native",
+      "trial": 2,
+      "bindings": "baseline",
+      "command": [
+        "<repo>\\client\\.venv\\Scripts\\python.exe",
+        "-s",
+        "-u",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "client.tests.conftest",
+        "devtools/qt_heap_crash/short_review_cycle.py",
+        "-vv",
+        "--basetemp",
+        "<repo>\\scratch\\qt-native-debug-20261109\\fixed-baseline-archive-native-2\\pytest-tmp",
+        "--journey-artifacts",
+        "<repo>\\scratch\\qt-native-debug-20261109\\fixed-baseline-archive-native-2\\artifacts",
+        "--journey-native"
+      ],
+      "status": "pass",
+      "normal_gc": true,
+      "source_manifest_sha256": "7c10014a8c8e4ee93d9bb9a12eac9e819d74687fdc4b57ba090c5a01911bfaf3",
+      "timed_out": false,
+      "returncode": 0,
+      "elapsed_seconds": 14.118,
+      "pytest_summary": "4 passed in 13.69s"
+    },
+    {
+      "kind": "archive",
+      "mode": "native",
+      "trial": 3,
+      "bindings": "baseline",
+      "command": [
+        "<repo>\\client\\.venv\\Scripts\\python.exe",
+        "-s",
+        "-u",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "client.tests.conftest",
+        "devtools/qt_heap_crash/short_review_cycle.py",
+        "-vv",
+        "--basetemp",
+        "<repo>\\scratch\\qt-native-debug-20261109\\fixed-baseline-archive-native-3\\pytest-tmp",
+        "--journey-artifacts",
+        "<repo>\\scratch\\qt-native-debug-20261109\\fixed-baseline-archive-native-3\\artifacts",
+        "--journey-native"
+      ],
+      "status": "pass",
+      "normal_gc": true,
+      "source_manifest_sha256": "7c10014a8c8e4ee93d9bb9a12eac9e819d74687fdc4b57ba090c5a01911bfaf3",
+      "timed_out": false,
+      "returncode": 0,
+      "elapsed_seconds": 13.794,
+      "pytest_summary": "4 passed in 13.35s"
+    },
+    {
+      "kind": "archive",
+      "mode": "offscreen",
+      "trial": 1,
+      "bindings": "baseline",
+      "command": [
+        "<repo>\\client\\.venv\\Scripts\\python.exe",
+        "-s",
+        "-u",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "client.tests.conftest",
+        "devtools/qt_heap_crash/short_review_cycle.py",
+        "-vv",
+        "--basetemp",
+        "<repo>\\scratch\\qt-native-debug-20261109\\fixed-baseline-archive-offscreen-1\\pytest-tmp",
+        "--journey-artifacts",
+        "<repo>\\scratch\\qt-native-debug-20261109\\fixed-baseline-archive-offscreen-1\\artifacts"
+      ],
+      "status": "pass",
+      "normal_gc": true,
+      "source_manifest_sha256": "7c10014a8c8e4ee93d9bb9a12eac9e819d74687fdc4b57ba090c5a01911bfaf3",
+      "timed_out": false,
+      "returncode": 0,
+      "elapsed_seconds": 12.149,
+      "pytest_summary": "4 passed in 11.73s"
+    },
+    {
+      "kind": "archive",
+      "mode": "offscreen",
+      "trial": 2,
+      "bindings": "baseline",
+      "command": [
+        "<repo>\\client\\.venv\\Scripts\\python.exe",
+        "-s",
+        "-u",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "client.tests.conftest",
+        "devtools/qt_heap_crash/short_review_cycle.py",
+        "-vv",
+        "--basetemp",
+        "<repo>\\scratch\\qt-native-debug-20261109\\fixed-baseline-archive-offscreen-2\\pytest-tmp",
+        "--journey-artifacts",
+        "<repo>\\scratch\\qt-native-debug-20261109\\fixed-baseline-archive-offscreen-2\\artifacts"
+      ],
+      "status": "pass",
+      "normal_gc": true,
+      "source_manifest_sha256": "7c10014a8c8e4ee93d9bb9a12eac9e819d74687fdc4b57ba090c5a01911bfaf3",
+      "timed_out": false,
+      "returncode": 0,
+      "elapsed_seconds": 12.458,
+      "pytest_summary": "4 passed in 12.02s"
+    },
+    {
+      "kind": "archive",
+      "mode": "offscreen",
+      "trial": 3,
+      "bindings": "baseline",
+      "command": [
+        "<repo>\\client\\.venv\\Scripts\\python.exe",
+        "-s",
+        "-u",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "client.tests.conftest",
+        "devtools/qt_heap_crash/short_review_cycle.py",
+        "-vv",
+        "--basetemp",
+        "<repo>\\scratch\\qt-native-debug-20261109\\fixed-baseline-archive-offscreen-3\\pytest-tmp",
+        "--journey-artifacts",
+        "<repo>\\scratch\\qt-native-debug-20261109\\fixed-baseline-archive-offscreen-3\\artifacts"
+      ],
+      "status": "pass",
+      "normal_gc": true,
+      "source_manifest_sha256": "7c10014a8c8e4ee93d9bb9a12eac9e819d74687fdc4b57ba090c5a01911bfaf3",
+      "timed_out": false,
+      "returncode": 0,
+      "elapsed_seconds": 11.386,
+      "pytest_summary": "4 passed in 10.95s"
+    },
+    {
+      "kind": "archive",
+      "mode": "offscreen",
+      "trial": 4,
+      "bindings": "baseline",
+      "command": [
+        "<repo>\\client\\.venv\\Scripts\\python.exe",
+        "-s",
+        "-u",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "client.tests.conftest",
+        "devtools/qt_heap_crash/short_review_cycle.py",
+        "-vv",
+        "--basetemp",
+        "<repo>\\scratch\\qt-native-debug-20261109\\fixed-baseline-archive-offscreen-4\\pytest-tmp",
+        "--journey-artifacts",
+        "<repo>\\scratch\\qt-native-debug-20261109\\fixed-baseline-archive-offscreen-4\\artifacts"
+      ],
+      "status": "pass",
+      "normal_gc": true,
+      "source_manifest_sha256": "7c10014a8c8e4ee93d9bb9a12eac9e819d74687fdc4b57ba090c5a01911bfaf3",
+      "timed_out": false,
+      "returncode": 0,
+      "elapsed_seconds": 10.952,
+      "pytest_summary": "4 passed in 10.51s"
+    },
+    {
+      "kind": "archive",
+      "mode": "offscreen",
+      "trial": 5,
+      "bindings": "baseline",
+      "command": [
+        "<repo>\\client\\.venv\\Scripts\\python.exe",
+        "-s",
+        "-u",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "client.tests.conftest",
+        "devtools/qt_heap_crash/short_review_cycle.py",
+        "-vv",
+        "--basetemp",
+        "<repo>\\scratch\\qt-native-debug-20261109\\fixed-baseline-archive-offscreen-5\\pytest-tmp",
+        "--journey-artifacts",
+        "<repo>\\scratch\\qt-native-debug-20261109\\fixed-baseline-archive-offscreen-5\\artifacts"
+      ],
+      "status": "pass",
+      "normal_gc": true,
+      "source_manifest_sha256": "7c10014a8c8e4ee93d9bb9a12eac9e819d74687fdc4b57ba090c5a01911bfaf3",
+      "timed_out": false,
+      "returncode": 0,
+      "elapsed_seconds": 11.234,
+      "pytest_summary": "4 passed in 10.80s"
+    },
+    {
+      "kind": "focus",
+      "mode": "native",
+      "trial": 1,
+      "bindings": "baseline",
+      "command": [
+        "<repo>\\client\\.venv\\Scripts\\python.exe",
+        "-s",
+        "-u",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "client/tests/test_v2_initial_focus.py",
+        "-vv",
+        "--basetemp",
+        "<repo>\\scratch\\qt-native-debug-20261109\\fixed-baseline-focus-native-1\\pytest-tmp",
+        "--journey-artifacts",
+        "<repo>\\scratch\\qt-native-debug-20261109\\fixed-baseline-focus-native-1\\artifacts",
+        "--journey-native"
+      ],
+      "status": "pass",
+      "normal_gc": true,
+      "source_manifest_sha256": "7c10014a8c8e4ee93d9bb9a12eac9e819d74687fdc4b57ba090c5a01911bfaf3",
+      "timed_out": false,
+      "returncode": 0,
+      "elapsed_seconds": 2.618,
+      "pytest_summary": "12 passed in 2.25s"
+    },
+    {
+      "kind": "integrated",
+      "mode": "native",
+      "trial": 1,
+      "bindings": "baseline",
+      "command": [
+        "<repo>\\client\\.venv\\Scripts\\python.exe",
+        "-s",
+        "-u",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "client/tests/test_v2_core_journey.py",
+        "client/tests/test_v2_correction_notes.py",
+        "client/tests/test_v2_qt_journey.py",
+        "client/tests/test_v2_qt_category_navigation.py",
+        "-vv",
+        "--basetemp",
+        "<repo>\\scratch\\qt-native-debug-20261109\\fixed-baseline-integrated-native-1\\pytest-tmp",
+        "--journey-artifacts",
+        "<repo>\\scratch\\qt-native-debug-20261109\\fixed-baseline-integrated-native-1\\artifacts",
+        "--journey-native"
+      ],
+      "status": "pass",
+      "normal_gc": true,
+      "source_manifest_sha256": "7c10014a8c8e4ee93d9bb9a12eac9e819d74687fdc4b57ba090c5a01911bfaf3",
+      "timed_out": false,
+      "returncode": 0,
+      "elapsed_seconds": 58.5,
+      "pytest_summary": "17 passed in 58.06s",
+      "clean_child_processes": 11
+    },
+    {
+      "kind": "integrated",
+      "mode": "offscreen",
+      "trial": 1,
+      "bindings": "baseline",
+      "command": [
+        "<repo>\\client\\.venv\\Scripts\\python.exe",
+        "-s",
+        "-u",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "client/tests/test_v2_core_journey.py",
+        "client/tests/test_v2_correction_notes.py",
+        "client/tests/test_v2_qt_journey.py",
+        "client/tests/test_v2_qt_category_navigation.py",
+        "-vv",
+        "--basetemp",
+        "<repo>\\scratch\\qt-native-debug-20261109\\fixed-baseline-integrated-offscreen-1\\pytest-tmp",
+        "--journey-artifacts",
+        "<repo>\\scratch\\qt-native-debug-20261109\\fixed-baseline-integrated-offscreen-1\\artifacts"
+      ],
+      "status": "pass",
+      "normal_gc": true,
+      "source_manifest_sha256": "7c10014a8c8e4ee93d9bb9a12eac9e819d74687fdc4b57ba090c5a01911bfaf3",
+      "timed_out": false,
+      "returncode": 0,
+      "elapsed_seconds": 51.413,
+      "pytest_summary": "17 passed in 50.98s",
+      "clean_child_processes": 11
+    },
+    {
+      "kind": "lifetime",
+      "mode": "offscreen",
+      "trial": 1,
+      "bindings": "baseline",
+      "command": [
+        "<repo>\\client\\.venv\\Scripts\\python.exe",
+        "-s",
+        "-u",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "client/tests/test_v2_document_viewer.py::test_parent_rejection_or_destruction_releases_pdf_buffer_and_hidden_close_cancels",
+        "client/tests/test_v2_ordinary_review_async.py::test_destroyed_host_cancels_python_read_and_discards_late_result",
+        "-vv",
+        "--basetemp",
+        "<repo>\\scratch\\qt-native-debug-20261109\\fixed-baseline-lifetime-offscreen-1\\pytest-tmp",
+        "--journey-artifacts",
+        "<repo>\\scratch\\qt-native-debug-20261109\\fixed-baseline-lifetime-offscreen-1\\artifacts"
+      ],
+      "status": "pass",
+      "normal_gc": true,
+      "source_manifest_sha256": "7c10014a8c8e4ee93d9bb9a12eac9e819d74687fdc4b57ba090c5a01911bfaf3",
+      "timed_out": false,
+      "returncode": 0,
+      "elapsed_seconds": 2.38,
+      "pytest_summary": "2 passed in 2.00s"
+    },
+    {
+      "kind": "archive",
+      "mode": "offscreen",
+      "trial": 1,
+      "bindings": "source",
+      "command": [
+        "<repo>\\client\\.venv\\Scripts\\python.exe",
+        "-s",
+        "-u",
+        "-m",
+        "pytest",
+        "-p",
+        "no:cacheprovider",
+        "-p",
+        "client.tests.conftest",
+        "devtools/qt_heap_crash/short_review_cycle.py",
+        "-vv",
+        "--basetemp",
+        "<repo>\\scratch\\qt-native-debug-20261109\\fixed-source-archive-offscreen-1\\pytest-tmp",
+        "--journey-artifacts",
+        "<repo>\\scratch\\qt-native-debug-20261109\\fixed-source-archive-offscreen-1\\artifacts"
+      ],
+      "status": "pass",
+      "normal_gc": true,
+      "source_manifest_sha256": "7c10014a8c8e4ee93d9bb9a12eac9e819d74687fdc4b57ba090c5a01911bfaf3",
+      "timed_out": false,
+      "returncode": 0,
+      "elapsed_seconds": 10.622,
+      "pytest_summary": "4 passed in 10.20s"
+    }
+  ],
+  "source_build": {
+    "completion": {
+      "status": "ready-for-primary-native-capture",
+      "package_path": "<repo>\\scratch\\qt-native-debug-20261109\\source-build\\b\\.venva\\package_for_wheels",
+      "symbol_directories": [
+        "<repo>\\scratch\\qt-native-debug-20261109\\source-build\\b\\.venva\\build\\pyside6\\libpyside",
+        "<repo>\\scratch\\qt-native-debug-20261109\\source-build\\b\\.venva\\build\\pyside6\\PySide6",
+        "<repo>\\scratch\\qt-native-debug-20261109\\source-build\\b\\.venva\\build\\shiboken6\\libshiboken"
+      ],
+      "generated_wrapper_root": "<repo>\\scratch\\qt-native-debug-20261109\\source-build\\b\\.venva\\build\\pyside6\\PySide6",
+      "source_root": "<repo>\\scratch\\qt-native-debug-20261109\\source-build\\sources\\pyside-setup-everywhere-src-6.11.2",
+      "compiler": "MSVC 19.51.36260 x64 (toolset directory 14.51.36231)",
+      "cmake": "4.3.1-msvc1",
+      "ninja": "1.13.2",
+      "libclang": "20.1.3",
+      "qt_pyside_shiboken": "6.11.2",
+      "python": "release CPython 3.13.15 x64",
+      "attempts": [
+        {
+          "number": 1,
+          "status": "configure-failure",
+          "reason": "Windows path length in CMake compiler smoke test",
+          "log": "build-attempt-1.log"
+        },
+        {
+          "number": 2,
+          "status": "all-bindings-compiled-packaging-failure",
+          "reason": "Excluded Designer module leaves missing generated install/plugins/designer; upstream Windows packager assumes directory exists",
+          "log": "build-attempt-2.log"
+        },
+        {
+          "number": 3,
+          "status": "pass",
+          "reason": "Created empty generated install/plugins/designer then --only-package; no source changes",
+          "log": "build.log"
+        }
+      ],
+      "verification": "Imported all7requestedmodules; checked versions and package origins; hashed native binaries/PDBs in verification.json; no QApplication/app test execution",
+      "limits": [
+        "PDBs match rebuilt binaries, not existing pip-wheel dump",
+        "No QtSDKPDBs downloaded",
+        "Runtime dependency control and native capture belong to primary",
+        "Source checkout unchanged; generated Designer plugin omitted"
+      ]
+    },
+    "origins": [
+      {
+        "name": "source.tar.xz",
+        "url": "https://download.qt.io/official_releases/QtForPython/pyside6/PySide6-6.11.2-src/pyside-setup-everywhere-src-6.11.2.tar.xz",
+        "resolved_url": "https://qt.mirror.constant.com/official_releases/QtForPython/pyside6/PySide6-6.11.2-src/pyside-setup-everywhere-src-6.11.2.tar.xz",
+        "bytes": 18053248,
+        "sha256": "cba47efbaad1bedd529725cbc14e21f156c7a19366f07b3edfbb076ffd7afdf8",
+        "expected_sha256": "cba47efbaad1bedd529725cbc14e21f156c7a19366f07b3edfbb076ffd7afdf8",
+        "sha1": "28f6e46f30ef2b4218a28625a4978dd3f44cc113",
+        "official_sha1": null,
+        "elapsed_seconds": 2.114
+      },
+      {
+        "name": "qtbase.7z",
+        "url": "https://download.qt.io/online/qtsdkrepository/windows_x86/desktop/qt6_6112/qt6_6112_msvc2022_64/qt.qt6.6112.win64_msvc2022_64/6.11.2-0-202608131017qtbase-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z",
+        "resolved_url": "https://qt.mirror.constant.com/online/qtsdkrepository/windows_x86/desktop/qt6_6112/qt6_6112_msvc2022_64/qt.qt6.6112.win64_msvc2022_64/6.11.2-0-202608131017qtbase-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z",
+        "bytes": 39618573,
+        "sha256": "fd984b7264361b4dd3fd2a417702ca1258e4086268f2ee6a69b9a393d9c3f6bb",
+        "expected_sha256": "fd984b7264361b4dd3fd2a417702ca1258e4086268f2ee6a69b9a393d9c3f6bb",
+        "sha1": "1fca9483183d426c1a3a984f1382382fa51f48de",
+        "official_sha1": null,
+        "elapsed_seconds": 2.365
+      },
+      {
+        "name": "qtpdf.7z",
+        "url": "https://download.qt.io/online/qtsdkrepository/windows_x86/extensions/qtpdf/6112/msvc2022_64/extensions.qtpdf.6112.win64_msvc2022_64/6.11.2-0-202608131017qtpdf-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z",
+        "resolved_url": "https://qt.mirror.constant.com/online/qtsdkrepository/windows_x86/extensions/qtpdf/6112/msvc2022_64/extensions.qtpdf.6112.win64_msvc2022_64/6.11.2-0-202608131017qtpdf-Windows-Windows_11_24H2-MSVC2022-Windows-Windows_11_24H2-X86_64.7z",
+        "bytes": 5495688,
+        "sha256": "83306fe90cdbb2a365bdea1188be9352772ad8f1aea94ef327758f1635c86908",
+        "expected_sha256": null,
+        "sha1": "619bbefdeb26c36cf21f25cfe6e076fb92fa3646",
+        "official_sha1": "619bbefdeb26c36cf21f25cfe6e076fb92fa3646",
+        "elapsed_seconds": 2.197
+      },
+      {
+        "name": "libclang.7z",
+        "url": "https://download.qt.io/development_releases/prebuilt/libclang/libclang-release_20.1.3-based-windows-vs2019_64.7z",
+        "resolved_url": "https://qt.mirror.constant.com/development_releases/prebuilt/libclang/libclang-release_20.1.3-based-windows-vs2019_64.7z",
+        "bytes": 704521791,
+        "sha256": "979a59e3ac64f2fd2722462fdec0b404788acb8b145cc8de1d123ab50192747f",
+        "expected_sha256": "979a59e3ac64f2fd2722462fdec0b404788acb8b145cc8de1d123ab50192747f",
+        "sha1": "1ac34938d966630a2bb3ecd57afb9d01290f4951",
+        "official_sha1": null,
+        "elapsed_seconds": 14.198
+      }
+    ],
+    "native_artifacts": [
+      {
+        "path": "b\\.venva\\build\\shiboken6\\Shiboken.pdb",
+        "bytes": 1249280,
+        "sha256": "ec81146b9ebbc98e462ed383806d1cbf9413a7113aa4b448ba7ed21aa9a2e198"
+      },
+      {
+        "path": "b\\.venva\\build\\shiboken6\\Shiboken.pyd",
+        "bytes": 55296,
+        "sha256": "d364fd0f0a2f0ed4b2f7d445c0abe22eef47436911d76939190f77412523e7a6"
+      },
+      {
+        "path": "b\\.venva\\build\\shiboken6\\libshiboken\\shiboken6.abi3.dll",
+        "bytes": 1112064,
+        "sha256": "9d4ebf630508198ea4f7a5993121f7d4821405afae1a702a9312111f4397197f"
+      },
+      {
+        "path": "b\\.venva\\build\\shiboken6\\libshiboken\\shiboken6.abi3.pdb",
+        "bytes": 12775424,
+        "sha256": "12af195f081749cff9261b9a9bad359895de55ef66185e4740f7b0f91e65b8f7"
+      },
+      {
+        "path": "b\\.venva\\build\\pyside6\\libpyside\\pyside6.abi3.dll",
+        "bytes": 270336,
+        "sha256": "99ffced2ad917a4ec02fc62af74e191d438099eabc02f2c0da160725c9345576"
+      },
+      {
+        "path": "b\\.venva\\build\\pyside6\\libpyside\\pyside6.abi3.pdb",
+        "bytes": 4878336,
+        "sha256": "ac7518d62ff2a54adace8351a169589c168e99d051159597d7cdb29c3592c947"
+      },
+      {
+        "path": "b\\.venva\\build\\pyside6\\PySide6\\QtCore.pdb",
+        "bytes": 33017856,
+        "sha256": "c405d4c59a48994285979923c45b0b0b3c56bebb15ecdc58720f5c58e2509cf3"
+      },
+      {
+        "path": "b\\.venva\\build\\pyside6\\PySide6\\QtCore.pyd",
+        "bytes": 3597824,
+        "sha256": "ff9ab720a39d09e1d64e75bd22a4d6d57b9762a5251a1ab332ea5bcc04560a7c"
+      },
+      {
+        "path": "b\\.venva\\build\\pyside6\\PySide6\\QtGui.pdb",
+        "bytes": 31641600,
+        "sha256": "6ab53d2430add5123830f75ed6c35d5d3295e8db533d22e3b26d17ce5da124e4"
+      },
+      {
+        "path": "b\\.venva\\build\\pyside6\\PySide6\\QtGui.pyd",
+        "bytes": 4204032,
+        "sha256": "d701f8f85eb017e11765d24730a39d1f2aa82d8558385336c9ad53e6fd90693a"
+      },
+      {
+        "path": "b\\.venva\\build\\pyside6\\PySide6\\QtNetwork.pdb",
+        "bytes": 11112448,
+        "sha256": "8cebe01eea1c4599669cc38cb4a1f211c4f4a4aff077854dd88f95d02d29cbf1"
+      },
+      {
+        "path": "b\\.venva\\build\\pyside6\\PySide6\\QtNetwork.pyd",
+        "bytes": 1082368,
+        "sha256": "ed3f41a594c39ecf1038f7984354b9bfca11274e3a3c3f1fa4734fa89a4f8072"
+      },
+      {
+        "path": "b\\.venva\\build\\pyside6\\PySide6\\QtPdf.pdb",
+        "bytes": 5623808,
+        "sha256": "11209986faaceb41ffabd657ef20f2e3f8e2d962c594e629c4a3e21db9684c1f"
+      },
+      {
+        "path": "b\\.venva\\build\\pyside6\\PySide6\\QtPdf.pyd",
+        "bytes": 246784,
+        "sha256": "aa63881cd1cd2b2359922e28284ee39b92d152e300b6417ff720c4e0164061b6"
+      },
+      {
+        "path": "b\\.venva\\build\\pyside6\\PySide6\\QtPdfWidgets.pdb",
+        "bytes": 5476352,
+        "sha256": "feb1f84b5b23edf841e8ab46740ff6cbf01a917ffa168626ccfcc6eba094908d"
+      },
+      {
+        "path": "b\\.venva\\build\\pyside6\\PySide6\\QtPdfWidgets.pyd",
+        "bytes": 135168,
+        "sha256": "5ab9b4ee6246ec31cee176dbf2c7b47e2a45a1c03440d5f50f3f441721efdf1a"
+      },
+      {
+        "path": "b\\.venva\\build\\pyside6\\PySide6\\QtTest.pdb",
+        "bytes": 6017024,
+        "sha256": "d461f6211a2a60ec54b648af1625a308d2de3d5f9457ae678ac2e82979cdc4f7"
+      },
+      {
+        "path": "b\\.venva\\build\\pyside6\\PySide6\\QtTest.pyd",
+        "bytes": 180736,
+        "sha256": "7f0a1b6797b73dada474bab84a44cccc78764693fd419818a7830adfccbb0885"
+      },
+      {
+        "path": "b\\.venva\\build\\pyside6\\PySide6\\QtWidgets.pdb",
+        "bytes": 36130816,
+        "sha256": "c2c816f46d352b3d4b0004a510ef10b5b81ced9646b1153e00ce060d77968ac9"
+      },
+      {
+        "path": "b\\.venva\\build\\pyside6\\PySide6\\QtWidgets.pyd",
+        "bytes": 5154816,
+        "sha256": "0cb04b7887ba60cc46035972d0c51123dfc310c78547f902924ae5dcd8f842a7"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\pyside6.abi3.dll",
+        "bytes": 270336,
+        "sha256": "99ffced2ad917a4ec02fc62af74e191d438099eabc02f2c0da160725c9345576"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\Qt6Concurrent.dll",
+        "bytes": 35128,
+        "sha256": "6c5c992f05f6972b64d8ab3d1368e1ce3d9f285a2313c16425d3848b53a0993d"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\Qt6Core.dll",
+        "bytes": 10363704,
+        "sha256": "22c113a5644b875b2c85482723cd5d2e6a3a4029169778fcc78adde08ef3b6aa"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\Qt6DBus.dll",
+        "bytes": 749880,
+        "sha256": "b0421936a1a04963a8bc84dd948ea7ef748ba56c8b1741990731943cebf64582"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\Qt6Gui.dll",
+        "bytes": 9546552,
+        "sha256": "19265a4e76efc12ef5f5bcf59be6c6a5b9b59ec4c89660797738bd2da7f719cc"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\Qt6Network.dll",
+        "bytes": 1751352,
+        "sha256": "75ff0896a618f4f5b602f391eb4917a55fd738b2e751d2cf18244a0de3619184"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\Qt6OpenGL.dll",
+        "bytes": 1988408,
+        "sha256": "d1d212853c2a858c00d9560616ba67f6238c2d11ffa5549a4251fcc566d16477"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\Qt6OpenGLWidgets.dll",
+        "bytes": 65336,
+        "sha256": "60e24b49a2ab70d8b0709475b843913afefc69fbe727361495f14d7e7a5985b5"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\Qt6Pdf.dll",
+        "bytes": 4620600,
+        "sha256": "c68882fca099e0647455e8612f6e8e28f584badd58977553687ea6b9ebea86bb"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\Qt6PdfQuick.dll",
+        "bytes": 571192,
+        "sha256": "19d0f51fc7698c1191c63e03575401f68a6ed8e640642d0b98916592d31ad992"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\Qt6PdfWidgets.dll",
+        "bytes": 103736,
+        "sha256": "aa908cd0cced2fea305173863bf4292795b6f99cee11613b3917011c28012e7a"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\Qt6PrintSupport.dll",
+        "bytes": 405304,
+        "sha256": "a62d2cdfd4654d58567dc1588f7a28dae3d16bfe821258bc95d73b6869860569"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\Qt6Sql.dll",
+        "bytes": 317240,
+        "sha256": "e8e723e895236a0d6baf8b1c24079398330e50e99414b39c5af86561f58b50cd"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\Qt6Test.dll",
+        "bytes": 382264,
+        "sha256": "43601fc45d2f4e4def09c744914b864a26b82d5193418913191678ebc3a437fb"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\Qt6Widgets.dll",
+        "bytes": 6497080,
+        "sha256": "e6d0b7e2e697de6ad985b97f9ed8b381c1c2172fcae87b6ab08455b3b7330f32"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\Qt6Xml.dll",
+        "bytes": 158008,
+        "sha256": "b3c860463c7841a4a6c236872e2e7fc7fcc361705a0c6cb1f6ab95d4bcf6fda0"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\QtCore.pyd",
+        "bytes": 3597824,
+        "sha256": "ff9ab720a39d09e1d64e75bd22a4d6d57b9762a5251a1ab332ea5bcc04560a7c"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\QtGui.pyd",
+        "bytes": 4204032,
+        "sha256": "d701f8f85eb017e11765d24730a39d1f2aa82d8558385336c9ad53e6fd90693a"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\QtNetwork.pyd",
+        "bytes": 1082368,
+        "sha256": "ed3f41a594c39ecf1038f7984354b9bfca11274e3a3c3f1fa4734fa89a4f8072"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\QtPdf.pyd",
+        "bytes": 246784,
+        "sha256": "aa63881cd1cd2b2359922e28284ee39b92d152e300b6417ff720c4e0164061b6"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\QtPdfWidgets.pyd",
+        "bytes": 135168,
+        "sha256": "5ab9b4ee6246ec31cee176dbf2c7b47e2a45a1c03440d5f50f3f441721efdf1a"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\QtTest.pyd",
+        "bytes": 180736,
+        "sha256": "7f0a1b6797b73dada474bab84a44cccc78764693fd419818a7830adfccbb0885"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\QtWidgets.pyd",
+        "bytes": 5154816,
+        "sha256": "0cb04b7887ba60cc46035972d0c51123dfc310c78547f902924ae5dcd8f842a7"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\shiboken6\\Shiboken.pyd",
+        "bytes": 55296,
+        "sha256": "d364fd0f0a2f0ed4b2f7d445c0abe22eef47436911d76939190f77412523e7a6"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\shiboken6\\shiboken6.abi3.dll",
+        "bytes": 1112064,
+        "sha256": "9d4ebf630508198ea4f7a5993121f7d4821405afae1a702a9312111f4397197f"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\qml\\QtQuick\\Pdf\\pdfquickplugin.dll",
+        "bytes": 31032,
+        "sha256": "2e86f397fa857aca37ad0dea936953c91ea2a7b91db4b1c6bd9733cd5a2d107a"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\plugins\\generic\\qtuiotouchplugin.dll",
+        "bytes": 101176,
+        "sha256": "a0b971771417d60c6c2dedf66d06f6e99bd3236aa1aa6949c7e4e08d51fb69f9"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\plugins\\imageformats\\qgif.dll",
+        "bytes": 47928,
+        "sha256": "de1c1ea34cbc4156ce452023470e2145af4855128756d081d56e9a0997d0dda8"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\plugins\\imageformats\\qico.dll",
+        "bytes": 46904,
+        "sha256": "af98cacb134525fab15cf2146a4e6b90266f14493e72e4d51df89a5caadea157"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\plugins\\imageformats\\qjpeg.dll",
+        "bytes": 591672,
+        "sha256": "a8854ac38d2bb83e8018bdcbfc93420a876251b3d2a79933e1a3c9a8ed2a24cb"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\plugins\\imageformats\\qpdf.dll",
+        "bytes": 42296,
+        "sha256": "3983e4dd27ef4cedfec35212eb8e1a28a38f1b909bcadbe040776d15ca836ffc"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\plugins\\networkinformation\\qnetworklistmanager.dll",
+        "bytes": 79160,
+        "sha256": "2f7c43bb4ec05e9f23a326ac69e84a6df071cdf7cc0bf87cde98f81958ad9bae"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\plugins\\platforms\\qdirect2d.dll",
+        "bytes": 1071416,
+        "sha256": "332a48a83d8b9911175b8a2a21e2f83acefb47105c2375a6058130c239faeeac"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\plugins\\platforms\\qminimal.dll",
+        "bytes": 61752,
+        "sha256": "3a41a14b6f168db68fb441621a787f894b275e57f667d0b00e3b1e7fa6952fe9"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\plugins\\platforms\\qoffscreen.dll",
+        "bytes": 110904,
+        "sha256": "95391476bba1d0b50cc822b93d7509341024cc7c18cd615f82e471a3e3a61caa"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\plugins\\platforms\\qwindows.dll",
+        "bytes": 991032,
+        "sha256": "d94c584a18829d11fbf3aefd07e7b1e189e0cf063a0515826960037efa7465df"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\plugins\\sqldrivers\\qsqlibase.dll",
+        "bytes": 141112,
+        "sha256": "358b39ff00ec264a47c51acadb845cfd853480c358abac6fda131baf64b7dfdc"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\plugins\\sqldrivers\\qsqlite.dll",
+        "bytes": 1986872,
+        "sha256": "9399de9cc7c641c4cde6ed10dc29d5a74ec48804c3bdce4d30ab8c6d3177a991"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\plugins\\sqldrivers\\qsqlmimer.dll",
+        "bytes": 88376,
+        "sha256": "d331ce93b4d9fb94004ecc5fd07a38e40fc5e3f3aaf72cb622d0b94282c9bc74"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\plugins\\sqldrivers\\qsqloci.dll",
+        "bytes": 127800,
+        "sha256": "5f8a5dd48c76185b0281c050e1f0e53e58f54ae319ebd301db10fdf0d4774862"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\plugins\\sqldrivers\\qsqlodbc.dll",
+        "bytes": 132920,
+        "sha256": "8532f344e4c95e477ee6a3c67a4023e1158b24ed4b5d585dfa168d2fb47a13ab"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\plugins\\sqldrivers\\qsqlpsql.dll",
+        "bytes": 107320,
+        "sha256": "e29a9c3148fa68b3d67233ddf6e3def5767493c12c56051522c3f2135a18fc6a"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\plugins\\styles\\qmodernwindowsstyle.dll",
+        "bytes": 240440,
+        "sha256": "f6b88d403d7175f5b830d4958264690e5c8bbaf0148e1ccf42d52704b0480792"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\plugins\\tls\\qcertonlybackend.dll",
+        "bytes": 104760,
+        "sha256": "ff0f1a60ec60fc23ec74ff5d325ddef05c1ed68fc89466bffc1d874c7c544adb"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\plugins\\tls\\qopensslbackend.dll",
+        "bytes": 314168,
+        "sha256": "0248155d03aa5722e2c644393d1cc7ff1ada42a6ddd9808db7a0823d55f87adf"
+      },
+      {
+        "path": "b\\.venva\\package_for_wheels\\PySide6\\plugins\\tls\\qschannelbackend.dll",
+        "bytes": 247608,
+        "sha256": "761178263b47a5f05e151806bb5854d9e5c9cbc67d08187724d80f9e317471f8"
+      }
+    ]
+  },
+  "debugger_signatures": [
+    {
+      "File": "cdb.exe",
+      "Status": "Valid",
+      "Subject": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+      "Sha256": "7EAE4369BFBCC39FB50BC3918B8073E9509D53ABA3294071C1B084FE4FCAB4F2"
+    },
+    {
+      "File": "dbgeng.dll",
+      "Status": "Valid",
+      "Subject": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+      "Sha256": "DBA5A33C0B63F99E6AC871E31D247253376C4C548062C13CB7E85670A03C9B66"
+    },
+    {
+      "File": "dbghelp.dll",
+      "Status": "Valid",
+      "Subject": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+      "Sha256": "6BAC88114A904D6F41BDBF32948D205FF22C4437A4E35A8E1110B89B58C04556"
+    },
+    {
+      "File": "symsrv.dll",
+      "Status": "Valid",
+      "Subject": "CN=Microsoft Corporation, O=Microsoft Corporation, L=Redmond, S=Washington, C=US",
+      "Sha256": "0EE2C5B6C74C9FCBECC6DF52DD94C5B80BC6EBF0F37C10E34CBE4FFDD7D13844"
+    }
+  ],
+  "postfix_debugger_verification": {
+    "command": [
+      "<repo>\\scratch\\qt-native-debug-20261109\\tools\\windbg-x64\\cdb.exe",
+      "-o",
+      "-hd",
+      "-G",
+      "-lines",
+      "-logo",
+      "<repo>\\scratch\\qt-native-debug-20261109\\fixed-debugger-source-1\\native.log",
+      "-cf",
+      "<repo>\\scratch\\qt-native-debug-20261109\\fixed-debugger-source-1\\commands.txt",
+      "<repo>\\client\\.venv\\Scripts\\python.exe",
+      "-s",
+      "-u",
+      "-m",
+      "pytest",
+      "-p",
+      "no:cacheprovider",
+      "-p",
+      "client.tests.conftest",
+      "devtools/qt_heap_crash/short_review_cycle.py",
+      "-vv",
+      "--basetemp",
+      "<repo>\\scratch\\qt-native-debug-20261109\\fixed-debugger-source-1\\pytest-tmp",
+      "--journey-artifacts",
+      "<repo>\\scratch\\qt-native-debug-20261109\\fixed-debugger-source-1\\artifacts"
+    ],
+    "status": "clean-test-exit",
+    "source_state": "fixed",
+    "debugger_owned_target_only": true,
+    "debug_children": true,
+    "debug_heap": false,
+    "timeout_seconds": 240,
+    "allowlisted_environment_names": [
+      "APPDATA",
+      "COMMONPROGRAMFILES",
+      "COMMONPROGRAMFILES(X86)",
+      "COMSPEC",
+      "DBGHELP_HOMEDIR",
+      "HOME",
+      "LOCALAPPDATA",
+      "NUMBER_OF_PROCESSORS",
+      "PATH",
+      "PROCESSOR_ARCHITECTURE",
+      "PROCESSOR_IDENTIFIER",
+      "PROGRAMDATA",
+      "PROGRAMFILES",
+      "PROGRAMFILES(X86)",
+      "PYTHONFAULTHANDLER",
+      "PYTHONNOUSERSITE",
+      "PYTHONPATH",
+      "PYTHON_KEYRING_BACKEND",
+      "QT_QPA_PLATFORM",
+      "SYSTEMDRIVE",
+      "SYSTEMROOT",
+      "TEMP",
+      "TMP",
+      "USERPROFILE",
+      "WINDIR",
+      "_NT_SYMBOL_PATH"
+    ],
+    "cdb_sha256": "7eae4369bfbcc39fb50bc3918b8073e9509d53aba3294071c1b084fe4fcab4f2",
+    "debugger_pid": 206504,
+    "timed_out": false,
+    "debugger_returncode": 0,
+    "elapsed_seconds": 12.442,
+    "dump_bytes": 0,
+    "fault_marker": false
+  },
+  "retained_diagnostic_harness_sha256": {
+    "capture.py": "bde9cf71b0d073efa1133ebb5e474b82af012a84722c079a571ead1b64ca075a",
+    "verify_fix.py": "d7d52aca28048a524b997e19b2c2dc58168efa968a4e7d281c032b67c2177774",
+    "focus_probe.py": "63f2c20b1be1ae6db6adab49cc60beba984a428a6dd499c9a00fdf2b9d4f3050",
+    "run_focus_probe.py": "2f8416c78e7d552126929389238140e26e8a0897fe696d8d3fc37c4546332c25"
+  },
+  "first_focus_control_harness_hashes": {
+    "focus_probe.py": "63f2c20b1be1ae6db6adab49cc60beba984a428a6dd499c9a00fdf2b9d4f3050",
+    "run_focus_probe.py": "eb78c6344a9ec1c90ec50e5e8f385767713eff4f6d70b161bb692be1dc5f73ad"
+  },
+  "symbolized_stack_excerpt": [
+    "Child-SP          RetAddr               : Args to Child                                                           : Call Site",
+    "00000001`001e9ab0 00007ff9`88adae02     : 0000018e`b32c84a0 00007ff9`88ca20e0 00000000`00000008 0000018e`fcd40000 : ntdll!LdrResSearchResource+0x7f4",
+    "00000001`001e9ba0 00007ff9`88bf338a     : 00000000`00000008 0000018e`81ac5e80 0000018e`fcd40000 00000000`00000000 : ntdll!RtlSetProcessPreferredUILanguages+0xba2",
+    "00000001`001e9bd0 00007ff9`88af790a     : 0000018e`b5eced00 0000018e`b3a65830 00000000`00000000 00007ff8`bd110e28 : ntdll!RtlLengthCurrentClearRunForwardEx+0x41a",
+    "00000001`001e9c00 00007ff9`86662d7b     : 0000018e`fcd40000 0000018e`00000000 0000018e`b3a65840 0000018e`81ac5e80 : ntdll!RtlFreeHeap+0x67a",
+    "*** WARNING: Unable to verify checksum for <repo>\\scratch\\qt-native-debug-20261109\\source-build\\b\\.venva\\package_for_wheels\\PySide6\\pyside6.abi3.dll",
+    "00000001`001e9cf0 00007ff8`fcb24e14     : 0000018e`b5ecff80 0000018e`00000000 00000001`001ea250 00007ff8`f52f1f1b : ucrtbase!free_base+0x1b",
+    "*** WARNING: Unable to verify checksum for <repo>\\scratch\\qt-native-debug-20261109\\source-build\\b\\.venva\\package_for_wheels\\PySide6\\QtCore.pyd",
+    "00000001`001e9d20 00007ff8`f02a57b3     : 00007ff8`f04cb600 0000018e`82267cf0 0000018e`b5ecff80 0000018e`b5ecff80 : pyside6_abi3!PySide::getWrapperForQObject+0x1b4 [<repo>\\scratch\\qt-native-debug-20261109\\source-build\\sources\\pyside-setup-everywhere-src-6.11.2\\sources\\pyside6\\libpyside\\pyside.cpp @ 843]",
+    "00000001`001e9dc0 00007ff8`f0366e0d     : 00000001`001ea250 0000018e`82267cf0 0000018e`b32c84a0 00007ff9`88b01cfb : QtCore!QWinEventNotifierWrapper::sbk_o_eventFilter+0x63 [<repo>\\scratch\\qt-native-debug-20261109\\source-build\\b\\.venva\\build\\pyside6\\PySide6\\QtCore\\PySide6\\QtCore\\qwineventnotifier_wrapper.cpp @ 258]",
+    "00000001`001e9e40 00007ff8`bcdd8aff     : 00000001`00000001 00000000`00000000 0000018e`819c9900 0000018e`b41633c0 : QtCore!QObjectWrapper::eventFilter+0x9d [<repo>\\scratch\\qt-native-debug-20261109\\source-build\\b\\.venva\\build\\pyside6\\PySide6\\QtCore\\PySide6\\QtCore\\qobject_wrapper.cpp @ 278]",
+    "00000001`001e9e90 00007ff8`8bf42ef2     : 0000018e`81bdcbd0 0000018e`81f60710 00000001`001ea250 0000018e`b32c84a0 : Qt6Core!QCoreApplicationPrivate::sendThroughApplicationEventFilters+0xbf",
+    "00000001`001e9ef0 00007ff8`8bf41fde     : 0000018e`81bdcbd0 00000001`001ea020 00000000`00000000 00000000`00000000 : Qt6Widgets!QApplicationPrivate::notify_helper+0x52",
+    "*** WARNING: Unable to verify checksum for <repo>\\scratch\\qt-native-debug-20261109\\source-build\\b\\.venva\\package_for_wheels\\PySide6\\QtWidgets.pyd",
+    "00000001`001e9f20 00007ff8`8a3234f1     : 0000018e`819c9900 0000018e`b32c84a0 00000001`001ea250 00000000`00000000 : Qt6Widgets!QApplication::notify+0x161e",
+    "00000001`001ea170 00007ff8`bcdd6021     : 00000100`81a0b8b0 0000018e`81a0b8b0 00000001`001ea250 00000000`00000000 : QtWidgets!QApplicationWrapper::notify+0x71 [<repo>\\scratch\\qt-native-debug-20261109\\source-build\\b\\.venva\\build\\pyside6\\PySide6\\QtWidgets\\PySide6\\QtWidgets\\qapplication_wrapper.cpp @ 161]",
+    "00000001`001ea1c0 00007ff8`bcf7be6e     : 0000018e`819c9900 0000018e`b41633c0 0000018e`81bdcbd0 0000018e`b3182de0 : Qt6Core!QCoreApplication::notifyInternal2+0x101",
+    "00000001`001ea230 00007ff8`8bf42ff6     : 0000018e`36000003 0000018e`81bdcbd0 0000018e`81f60710 0000018e`b3d33630 : Qt6Core!QEventDispatcherWin32::event+0x7e",
+    "00000001`001ea280 00007ff8`8bf41fde     : 0000018e`81bdcbd0 00000001`001ea3b0 00000000`00000000 00000000`00000000 : Qt6Widgets!QApplicationPrivate::notify_helper+0x156",
+    "00000001`001ea2b0 00007ff8`8a3234f1     : 0000018e`819c9900 0000018e`81bdca50 0000018e`b3d33630 00000000`00000000 : Qt6Widgets!QApplication::notify+0x161e",
+    "00000001`001ea500 00007ff8`bcdd6021     : 00000100`81a0b8b0 0000018e`81a0b8b0 0000018e`b3d33630 00000000`00000000 : QtWidgets!QApplicationWrapper::notify+0x71 [<repo>\\scratch\\qt-native-debug-20261109\\source-build\\b\\.venva\\build\\pyside6\\PySide6\\QtWidgets\\PySide6\\QtWidgets\\qapplication_wrapper.cpp @ 161]"
+  ],
+  "limits": [
+    "Bounded Windows source execution only; no macOS/installed/human acceptance.",
+    "Source-build symbols match rebuilt binaries only; no forced mismatched PDB loading.",
+    "Offscreen and native original archive assertions retained; no GC suppression or assertion relaxation.",
+    "Detailed dumps/binaries remain ignored scratch artifacts, not repository payload."
+  ]
+}
