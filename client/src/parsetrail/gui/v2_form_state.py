@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from PySide6.QtCore import QEvent, QObject, Qt, QTimer
 from PySide6.QtWidgets import (
-    QApplication,
     QComboBox,
     QDialog,
     QLabel,
@@ -96,7 +95,7 @@ QGroupBox[formRole="decision"]::title {
 
 def install_form_styles(root: QWidget) -> None:
     """Scope cues to this surface, preserving any existing presentation rules."""
-    install_initial_focus()
+    install_initial_focus(root)
     if root.property("parsetrailFormStyles"):
         return
     root.setProperty("parsetrailFormStyles", True)
@@ -106,6 +105,10 @@ def install_form_styles(root: QWidget) -> None:
 class _InitialFocusPolicy(QObject):
     """Apply opening focus once, without interfering with subsequent refreshes."""
 
+    def __init__(self, root: QWidget):
+        super().__init__(root)
+        self._opening = 0
+
     def eventFilter(self, watched, event):
         if (
             isinstance(watched, (QDialog, QMainWindow))
@@ -113,19 +116,29 @@ class _InitialFocusPolicy(QObject):
             and type(watched).__module__.startswith("parsetrail.gui.v2_")
         ):
             if event.type() == QEvent.Show:
+                self._opening += 1
                 watched.setProperty("parsetrailOpeningFocus", True)
-                QTimer.singleShot(0, watched, lambda: self._focus(watched))
+                self._queue_focus(watched)
             elif event.type() == QEvent.WindowActivate and watched.property("parsetrailOpeningFocus"):
                 # Some platforms restore the previous child focus on activation,
                 # after Show. Correct that once during this opening, never when
                 # the user later switches back to an already open task.
                 watched.setProperty("parsetrailOpeningFocus", False)
-                QTimer.singleShot(0, watched, lambda: self._focus(watched))
+                self._queue_focus(watched)
+            elif event.type() in (QEvent.Hide, QEvent.WindowDeactivate):
+                # Discard work from this opening before a hide/reopen or a later
+                # activation can make an old queued callback relevant again.
+                self._opening += 1
+                watched.setProperty("parsetrailOpeningFocus", False)
         return False
+
+    def _queue_focus(self, root):
+        opening = self._opening
+        QTimer.singleShot(0, root, lambda: self._focus(root) if opening == self._opening else None)
 
     @staticmethod
     def _focus(dialog):
-        if not dialog.isVisible():
+        if not dialog.isVisible() or not dialog.isWindow():
             return
         candidate = dialog.nextInFocusChain()
         while candidate is not dialog:
@@ -148,13 +161,12 @@ class _InitialFocusPolicy(QObject):
             candidate = candidate.nextInFocusChain()
 
 
-def install_initial_focus() -> None:
-    """Give V2 task windows an immediately usable first input in tab order."""
-    app = QApplication.instance()
-    if app is not None and not hasattr(app, "_parsetrail_initial_focus"):
-        policy = _InitialFocusPolicy(app)
-        app.installEventFilter(policy)
-        app._parsetrail_initial_focus = policy
+def install_initial_focus(root: QWidget) -> None:
+    """Give this V2 task window a first input without filtering unrelated objects."""
+    if not hasattr(root, "_parsetrail_initial_focus"):
+        policy = _InitialFocusPolicy(root)
+        root._parsetrail_initial_focus = policy
+        root.installEventFilter(policy)
 
 
 def set_field_state(widget: QWidget, state: str, detail: str = "") -> None:

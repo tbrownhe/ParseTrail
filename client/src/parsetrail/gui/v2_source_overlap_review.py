@@ -34,6 +34,7 @@ from parsetrail.core.v2_profile_store import ProfileFormatError, V2ProfileStore
 from parsetrail.core.v2_source_overlap import nearby_source_reason
 from parsetrail.gui.v2_cash_activity_review import _interpretation_effects, _money
 from parsetrail.gui.v2_evidence_preview import _location, preview_saved_source
+from parsetrail.gui.v2_form_state import install_initial_focus
 
 if TYPE_CHECKING:
     from parsetrail.core.v2_profile_store import SourceOverlapCandidate, SourceOverlapRow
@@ -105,6 +106,7 @@ class V2SourceOverlapReview(QDialog):
 
     def __init__(self, profile: Path, parent=None, *, focus_row_id: str | None = None, focus_requires_review=False):
         super().__init__(parent)
+        install_initial_focus(self)
         self.profile = profile
         self.focus_row_id = focus_row_id
         self.focus_requires_review = focus_requires_review

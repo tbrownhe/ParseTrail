@@ -78,9 +78,17 @@ Journey actions use widget mouse/keyboard events and real review confirmations.
 Each of the four cases in `test_v2_qt_journey.py` runs its unchanged scenario in
 a fresh Python process, with isolated settings and a bounded timeout. Child
 failure, native crash or timeout fails the parent test; no retries or GC
-suppression are used. This contains an unresolved native Qt heap failure during
-accumulated UI activity. It does not establish long-session stability. The
-deliberate [minimum crash diagnostic](../devtools/qt_heap_crash/README.md) is
+suppression are used. A native heap failure during accumulated UI activity was
+localized to the application-wide opening-focus path. V2 task windows now own
+their focus filters; shared styled surfaces and explicit task constructors
+register their own root. Do not restore a QApplication-wide event filter or
+global widget discovery for this behavior. The unchanged diagnostic and both
+Windows journey modes pass after the scope change; this bounded verification
+does not establish universal long-session stability. Later reduction also found
+GUI teardown on worker threads in saved native stacks; GUI-thread lifetime
+correctness remains open, so treat the focus change as a mitigation. See the
+[native investigation](../docs/work/2026-11-07-v2-core-desktop-journey.md#native-heap-capture-and-window-owned-opening-focus).
+The deliberate [minimum crash diagnostic](../devtools/qt_heap_crash/README.md) is
 preserved separately and excluded from normal discovery.
 The default run uses offscreen Qt. For actual platform rendering and retained
 screenshots/runtime metadata:

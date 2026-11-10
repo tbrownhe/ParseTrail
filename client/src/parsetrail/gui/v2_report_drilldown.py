@@ -28,6 +28,7 @@ from parsetrail.core.v2_profile_store import ProfileFormatError, V2ProfileStore
 from parsetrail.core.v2_report_drilldown import ReviewedEntryDrilldown, read_reviewed_entry_drilldown
 from parsetrail.gui.v2_document_browser import document_period, document_title
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview, _money
+from parsetrail.gui.v2_form_state import install_initial_focus
 
 
 class _EntryModel(QAbstractTableModel):
@@ -86,6 +87,7 @@ class V2ReviewedEntryDrilldown(QDialog):
         review_available=False,
     ):
         super().__init__(parent)
+        install_initial_focus(self)
         self.profile, self.account_id = profile, account_id
         self.start, self.end = start, end
         self.expected_total_minor = expected_total_minor

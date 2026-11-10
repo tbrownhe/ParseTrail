@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
 from parsetrail.core.v2_profile_store import ProfileFormatError, StatementCoverageRow, V2ProfileStore
 from parsetrail.core.v2_review_dates import posting_date_candidate
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
+from parsetrail.gui.v2_form_state import install_initial_focus
 
 
 class V2StatementSourceReview(QDialog):
@@ -28,6 +29,7 @@ class V2StatementSourceReview(QDialog):
 
     def __init__(self, profile: Path, section: StatementCoverageRow, parent=None):
         super().__init__(parent)
+        install_initial_focus(self)
         self.profile = profile
         with V2ProfileStore.open(profile, read_only=True) as store:
             snapshot = store.statement_source_review_snapshot(section.account_id, section.source_sha256)

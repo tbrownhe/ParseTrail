@@ -122,7 +122,7 @@ def choose_restored_workspace(parent, directory: Path, catalog: Path, *, trusted
 class V2ProfileStartupDialog(QDialog):
     def __init__(self, catalog: Path, *, trusted_keys=None, preferences_path=None, parent=None):
         super().__init__(parent)
-        install_initial_focus()
+        install_initial_focus(self)
         self.catalog = catalog
         self.trusted_keys = trusted_keys
         self.preferences_path = preferences_path

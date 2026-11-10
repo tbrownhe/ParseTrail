@@ -35,6 +35,7 @@ from parsetrail.core.v2_profile_store import (
 from parsetrail.core.v2_workspace import V2Workspace
 from parsetrail.gui.v2_cash_activity_review import _money
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
+from parsetrail.gui.v2_form_state import install_initial_focus
 
 
 class _OpeningHistoryModel(QAbstractTableModel):
@@ -122,6 +123,7 @@ class V2OpeningReview(QDialog):
 
     def __init__(self, workspace: V2Workspace, parent=None):
         super().__init__(parent)
+        install_initial_focus(self)
         self.workspace = workspace
         self.candidate: EarliestSourceOpening | None = None
         self.reviews = {}

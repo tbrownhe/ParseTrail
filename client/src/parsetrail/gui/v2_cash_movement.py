@@ -35,6 +35,7 @@ from parsetrail.core.v2_cash_movement import MOVEMENT_LABELS, cash_account_label
 from parsetrail.core.v2_profile_store import ProfileFormatError, V2ProfileStore
 from parsetrail.gui.v2_cash_activity_review import _money
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
+from parsetrail.gui.v2_form_state import install_initial_focus
 from parsetrail.gui.v2_profile_jobs import ProfileJobs
 from parsetrail.gui.v2_report_drilldown import V2ReviewedEntryDrilldown
 
@@ -68,6 +69,7 @@ def _fill(table, rows, number_columns=()):
 class V2CashMovementDialog(QDialog):
     def __init__(self, profile: Path, parent=None):
         super().__init__(parent)
+        install_initial_focus(self)
         self.profile = profile
         self.jobs = ProfileJobs(self, profile)
         self.jobs.completed.connect(self._job_completed)

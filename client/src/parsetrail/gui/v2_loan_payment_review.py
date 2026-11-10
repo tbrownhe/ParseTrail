@@ -34,6 +34,7 @@ from parsetrail.core.v2_loan_payments import CLEARING, INTEREST
 from parsetrail.core.v2_profile_store import ProfileFormatError
 from parsetrail.gui.v2_cash_activity_review import _money
 from parsetrail.gui.v2_evidence_preview import _location, preview_saved_source
+from parsetrail.gui.v2_form_state import install_initial_focus
 from parsetrail.gui.v2_profile_jobs import ProfileJobs
 
 REASONS = {
@@ -163,6 +164,7 @@ class V2LoanPaymentReview(QDialog):
 
     def __init__(self, workspace, parent=None, *, event_id=None):
         super().__init__(parent)
+        install_initial_focus(self)
         self.workspace = workspace
         self.jobs = ProfileJobs(self, workspace.profile_path)
         self.jobs.completed.connect(self._job_completed)

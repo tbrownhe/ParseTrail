@@ -109,7 +109,7 @@ class V2WorkspaceWindow(QMainWindow):
 
     def __init__(self, workspace: V2Workspace, parent=None):
         super().__init__(parent)
-        install_initial_focus()
+        install_initial_focus(self)
         self.workspace = workspace
         self.import_worker: V2ImportWorker | V2BatchImportWorker | None = None
         self.progress: QProgressDialog | None = None

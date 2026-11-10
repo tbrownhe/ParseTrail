@@ -34,6 +34,7 @@ from parsetrail.core.v2_profile_store import ProfileFormatError, V2ProfileStore
 from parsetrail.core.v2_source_values import dated_value_conflicts
 from parsetrail.gui.v2_cash_activity_review import _money
 from parsetrail.gui.v2_evidence_preview import _location, preview_saved_source
+from parsetrail.gui.v2_form_state import install_initial_focus
 
 SOURCE_VALUE_REASONS = {
     "source_value_family_unsupported": "This source family has no admitted statement-closing rule. Running activity-export balances are not statement endpoints.",
@@ -118,6 +119,7 @@ class V2AccountAnchors(QDialog):
 
     def __init__(self, profile: Path, account_id: str | None = None, parent=None, *, initial_tab: str | None = None):
         super().__init__(parent)
+        install_initial_focus(self)
         self.profile = profile
         self.snapshot = None
         self.setWindowTitle("2.0 account openings, dated values and tracking")

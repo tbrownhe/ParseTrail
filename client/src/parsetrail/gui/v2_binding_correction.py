@@ -30,6 +30,7 @@ from parsetrail.core.source_evidence import StatementPayload
 from parsetrail.core.v2_cash_movement import cash_account_labels
 from parsetrail.core.v2_profile_store import BindingCorrectionTarget, ProfileFormatError, V2ProfileStore
 from parsetrail.gui.v2_cash_activity_review import _money
+from parsetrail.gui.v2_form_state import install_initial_focus
 
 
 def _scope(target: BindingCorrectionTarget) -> str:
@@ -90,6 +91,7 @@ class V2BindingCorrection(QDialog):
 
     def __init__(self, profile: Path, target: BindingCorrectionTarget, parent=None):
         super().__init__(parent)
+        install_initial_focus(self)
         self.profile, self.target = profile, target
         self.snapshot = None
         self.affected_items = ()

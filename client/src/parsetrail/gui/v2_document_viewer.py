@@ -42,6 +42,7 @@ from PySide6.QtWidgets import (
 )
 
 from parsetrail.core.v2_profile_store import MAX_SOURCE_BYTES, SavedImport
+from parsetrail.gui.v2_form_state import install_initial_focus
 
 try:
     from PySide6.QtPdf import QPdfDocument, QPdfSearchModel
@@ -148,6 +149,7 @@ class V2DocumentViewer(QDialog):
 
     def __init__(self, saved: SavedImport, parent=None, *, initial_page: int | None = None, context: str = ""):
         super().__init__(parent)
+        install_initial_focus(self)
         self.setWindowTitle("Original document")
         self.setWindowModality(Qt.WindowModal)
         self.resize(1024, 768)

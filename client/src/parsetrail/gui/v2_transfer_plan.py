@@ -23,6 +23,7 @@ from PySide6.QtWidgets import (
 
 from parsetrail.core.v2_transfer_planning import pair_key
 from parsetrail.gui.v2_cash_activity_review import _money
+from parsetrail.gui.v2_form_state import install_initial_focus
 from parsetrail.gui.v2_settlement_review import reviewed_identity
 
 PLAN_REASON = "Confirmed selected transfer plan"
@@ -309,6 +310,7 @@ class V2TransferManualReview(QDialog):
         self, pairs, selected_key, *, scope, explanation, date_label, pair_details, initial_note="", parent=None
     ):
         super().__init__(parent)
+        install_initial_focus(self)
         self.pairs = tuple(pairs)
         self.confirmed_pair, self.confirmed_note = None, ""
         self.setWindowTitle("Review a transfer pair manually")

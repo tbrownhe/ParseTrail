@@ -40,6 +40,7 @@ from parsetrail.core.v2_transfer_planning import (
 )
 from parsetrail.core.v2_workspace import V2Workspace
 from parsetrail.gui.v2_cash_activity_review import _money
+from parsetrail.gui.v2_form_state import install_initial_focus
 from parsetrail.gui.v2_settlement_review import (
     V2SettlementReview,
     expected_identity,
@@ -173,6 +174,7 @@ class V2TransferReview(QDialog):
 
     def __init__(self, workspace: V2Workspace, parent=None, *, focus_row_id=None):
         super().__init__(parent)
+        install_initial_focus(self)
         self.workspace = workspace
         self._focus_row_id = focus_row_id
         self._worker = None
