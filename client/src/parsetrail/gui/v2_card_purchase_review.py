@@ -203,10 +203,10 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
         layout.addWidget(self.source_context)
         self.decision_group = QGroupBox("Review selected transaction")
         decision_layout = QVBoxLayout(self.decision_group)
-        decision_layout.setContentsMargins(10, 4, 10, 4)
-        decision_layout.setSpacing(4)
+        decision_layout.setContentsMargins(10, 2, 10, 2)
+        decision_layout.setSpacing(2)
         form = QFormLayout()
-        form.setVerticalSpacing(4)
+        form.setVerticalSpacing(2)
         self.form = form
         self.purpose = QComboBox()
         self.purpose.currentIndexChanged.connect(self._purpose_changed)
@@ -471,9 +471,9 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
             )
         self._update_form_cues(self.status.text())
 
-    def _restore_form(self, row_id, purpose, category_id, accounting_date, reason):
+    def _restore_form(self, row_id, purpose, category_id, accounting_date, reason, entry_key):
         self.refresh(selected_row_id=row_id)
-        self._restore_draft = (row_id, purpose, category_id, accounting_date, reason)
+        self._restore_draft = (row_id, purpose, category_id, accounting_date, reason, entry_key)
 
     def _manage_categories(self):
         if self._manage_multi_categories():
@@ -486,6 +486,7 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
         row_id = row.row_id if row is not None else None
         purpose, category_id = self.purpose.currentData(), self.category.currentData()
         accounting_date, reason = self.accounting_date.text(), self.reason.text()
+        entry_key = self._form_entry_key
         old_ids = {category.id for category in self.categories}
         dialog = V2CategoryDialog(self.workspace.profile_path, self)
         kind = PURPOSE_KINDS.get(purpose)
@@ -494,9 +495,9 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
         dialog.exec()
         selected = dialog.categories.currentItem()
         created_id = selected.data(Qt.UserRole) if selected is not None else None
-        self._restore_form(row_id, purpose, category_id, accounting_date, reason)
+        self._restore_form(row_id, purpose, category_id, accounting_date, reason, entry_key)
         if created_id not in old_ids and created_id is not None:
-            self._restore_draft = (row_id, purpose, created_id, accounting_date, reason)
+            self._restore_draft = (row_id, purpose, created_id, accounting_date, reason, entry_key)
         self.category.setFocus()
 
     def _review_repayment(self):
@@ -513,6 +514,7 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
             self.category.currentData(),
             self.accounting_date.text(),
             self.reason.text(),
+            self._form_entry_key,
         )
         V2TransferReview(self.workspace, self, focus_row_id=row.row_id).exec()
         self._restore_form(*state)

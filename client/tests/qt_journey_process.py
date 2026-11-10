@@ -45,8 +45,11 @@ def _stop_child(process, output):
     return process.wait(timeout=15)
 
 
-def run_journey_case(node, config, tmp_path):
+def run_journey_case(node, config, tmp_path, *, scenarios=SCENARIOS):
     repo = Path(__file__).resolve().parents[2]
+    scenarios = Path(scenarios)
+    if not (repo / scenarios).resolve().is_relative_to((repo / "client/tests").resolve()):
+        raise pytest.UsageError("Journey scenarios must be beneath client/tests")
     selected = config.getoption("--journey-artifacts")
     artifact_root = Path(selected).resolve() if selected else None
     if artifact_root is not None and not artifact_root.is_relative_to((repo / "scratch").resolve()):
@@ -77,7 +80,7 @@ def run_journey_case(node, config, tmp_path):
         "pytest",
         "-p",
         "no:cacheprovider",
-        f"{SCENARIOS.as_posix()}::{node}",
+        f"{scenarios.as_posix()}::{node}",
         "--basetemp",
         str(tmp_path / "child-pytest"),
         "-vv",

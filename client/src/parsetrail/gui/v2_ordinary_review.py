@@ -8,6 +8,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QApplication,
     QCheckBox,
     QDialog,
     QDialogButtonBox,
@@ -60,6 +61,21 @@ class OrdinaryReviewMixin:
         self._form_entry_key = None
         self._form_baseline = (None, None, None)
         self._reset_form_after_write = False
+        self.saved_review_note = QPlainTextEdit()
+        self.saved_review_note.setReadOnly(True)
+        self.saved_review_note.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard)
+        self.saved_review_note.setTabChangesFocus(True)
+        self.saved_review_note.document().setDocumentMargin(2)
+        self.saved_review_note.setAccessibleName("Saved review note")
+        self.saved_review_note.setAccessibleDescription(
+            "The active entry's saved note. Select or copy it for context; it is not a new correction reason."
+        )
+        note_row, _role = self.form.getWidgetPosition(self.reason)
+        self.form.insertRow(note_row, "Saved review note", self.saved_review_note)
+        self.form.setRowVisible(self.saved_review_note, False)
+        set_field_state(self.saved_review_note, "readonly")
+        self.setTabOrder(getattr(self, "accounting_date", self.manage_categories_button), self.saved_review_note)
+        self.setTabOrder(self.saved_review_note, self.reason)
         self.jobs = ProfileJobs(self, profile)
         self.jobs.completed.connect(self._job_completed)
         self.jobs.failed.connect(self._job_failed)
@@ -169,6 +185,8 @@ class OrdinaryReviewMixin:
         return True
 
     def _multi_form_cues(self):
+        self.form.setRowVisible(self.saved_review_note, False)
+        self.batch.show()
         count = len(self.navigation.selected())
         self.decision_group.setTitle(f"Review {count} selected transactions")
         usable = not self.jobs.pending and self.basis is not None and self._profile_matches()
@@ -318,6 +336,35 @@ class OrdinaryReviewMixin:
         pending = self.jobs.pending
         correction = row is not None and row.entry_key is not None
         owner_route = reviewed_elsewhere(row) or self.purpose.currentData() in {"repayment", "external_history"}
+        saved_entry = self.entries.get(row.entry_key) if correction and not owner_route else None
+        self.form.setRowVisible(self.saved_review_note, saved_entry is not None)
+        saved_note = saved_entry.reason if saved_entry is not None else ""
+        if self.saved_review_note.toPlainText() != saved_note:
+            self.saved_review_note.setPlainText(saved_note)
+        note_width = max(300, self.saved_review_note.viewport().width())
+        note_lines = (
+            2
+            if "\n" in saved_note or self.saved_review_note.fontMetrics().horizontalAdvance(saved_note) > note_width
+            else 1
+        )
+        self.saved_review_note.setFixedHeight(
+            note_lines * self.saved_review_note.fontMetrics().lineSpacing()
+            + 2 * self.saved_review_note.frameWidth()
+            + 2 * int(self.saved_review_note.document().documentMargin())
+            + 2
+        )
+        self.saved_review_note.setToolTip(saved_note)
+        # Saved corrections need no empty batch strip. Retain any unrelated
+        # staged work and its explicit summary/preview controls.
+        self.batch.setVisible(not correction or bool(self.batch.staged))
+        self.reason.setAccessibleName(
+            "Reason for correction, required for a new decision" if correction else "Review note, required"
+        )
+        self.reason.setPlaceholderText(
+            "Enter a new reason to correct or withdraw this saved review"
+            if correction
+            else "Review note — staging applies it to every staged row"
+        )
         self.action_button.setVisible(correction or owner_route)
         if not correction and not owner_route:
             self.action_button.setEnabled(False)
@@ -433,12 +480,16 @@ class OrdinaryReviewMixin:
         note_required = not correction or changed
         note_label = self.form.labelForField(self.reason)
         note_label.setText(
-            f"{'4' if hasattr(self, 'accounting_date') else '3'}. Review note "
+            (
+                "Reason for correction "
+                if correction
+                else f"{'4' if hasattr(self, 'accounting_date') else '3'}. Review note "
+            )
             + ("— applies to all staged rows " if not correction else "")
             + ("*" if note_required else "(for changes)")
         )
         if not note and note_required:
-            missing.append("review note")
+            missing.append("reason for correction" if correction else "review note")
             set_field_state(self.reason, "required", "Explain this new review or correction before confirming.")
         else:
             set_field_state(self.reason, "ready" if note else "optional", "A new correction needs a review note.")
@@ -449,8 +500,8 @@ class OrdinaryReviewMixin:
             set_status(
                 self.status,
                 "saved",
-                f"Saved review. Change the {editable} to correct, or add a review note to withdraw."
-                + (" New note · Not saved." if note else " No changes to save."),
+                f"Saved review. Change the {editable} to correct, or enter a new reason to withdraw."
+                + (" New reason · Not saved." if note else " No changes to save."),
             )
         elif date_choice_needed:
             set_status(
@@ -467,7 +518,15 @@ class OrdinaryReviewMixin:
                 if purpose is not None and self.category.count() == 1
                 else ""
             )
-            set_status(self.status, "required", "Required: " + ", ".join(missing) + " · Not saved." + detail)
+            set_status(
+                self.status,
+                "required",
+                ("Unsaved correction · " if correction else "")
+                + "Required: "
+                + ", ".join(missing)
+                + " · Not saved."
+                + detail,
+            )
         elif not correction and row.row_id in self.batch.staged:
             dirty = self.batch.selection_changed((row,))
             set_status(
@@ -485,7 +544,12 @@ class OrdinaryReviewMixin:
             )
         elif self.action_button.isEnabled():
             set_field_state(self.action_button, "ready", "Confirmation is still required before this choice is saved.")
-            set_status(self.status, "ready", "Ready to confirm · Not saved. The confirmation shows the exact effects.")
+            set_status(
+                self.status,
+                "ready",
+                ("Unsaved correction · " if correction else "")
+                + "Ready to confirm · Not saved. The confirmation shows the exact effects.",
+            )
         else:
             set_status(self.status, "blocked", "Needs attention: " + getattr(self, "_base_review_status", row.status))
 
@@ -505,7 +569,11 @@ class OrdinaryReviewMixin:
             or self.reason.text().strip()
             or self.batch.reason.text().strip()
             or self._form_dirty()
-            or any(draft[-1] or draft[-2].strip() for draft in self._row_drafts.values())
+            or any(
+                draft[-1] or draft[-2].strip()
+                for row_id, draft in self._row_drafts.items()
+                if row_id != self._form_row_id
+            )
             or common[0] is not None
             or common[1] is not None
             or common[2].strip()
@@ -572,7 +640,12 @@ class OrdinaryReviewMixin:
             else None,
         )
         draft = self._row_drafts.get(self._form_row_id)
+        # A previous row's text is never a reason for this new decision. Restore
+        # only a draft authored against this exact active interpretation.
+        self.reason.clear()
         if row is None or draft is None or draft[0] != row.entry_key:
+            if draft is not None:
+                self._row_drafts.pop(self._form_row_id, None)
             return
         _entry, purpose, category, accounting_date, note, _dirty = draft
         self.reason.setText(note)
@@ -611,7 +684,7 @@ class OrdinaryReviewMixin:
             return
         if self.jobs.writing:
             return
-        captured = self._capture_draft()
+        captured = (*self._capture_draft(), self._form_entry_key)
         if self._reset_form_after_write:
             self._restore_draft = None
         elif captured[0] is not None or self._restore_draft is None:
@@ -671,11 +744,21 @@ class OrdinaryReviewMixin:
             completion_message = self._completion_message
             self._snapshot = result
             self._apply_snapshot(result, self._selected_after_read)
+            active_entries = {row.row_id: row.entry_key for row in result.rows}
+            self._row_drafts = {
+                row_id: draft
+                for row_id, draft in self._row_drafts.items()
+                if row_id in active_entries and draft[0] == active_entries[row_id]
+            }
             self._reset_form_after_write = False
             if self._restore_multi is not None:
                 ids, proposal, drafts = self._restore_multi
                 self._restore_multi = None
-                self._row_drafts = drafts
+                self._row_drafts = {
+                    row_id: draft
+                    for row_id, draft in drafts.items()
+                    if row_id in active_entries and draft[0] == active_entries[row_id]
+                }
                 self._multi_form = proposal
                 self._in_multi = False
                 self._form_row_id = None
@@ -683,8 +766,13 @@ class OrdinaryReviewMixin:
                 self._selected()
                 self._restore_draft = None
             draft, self._restore_draft = self._restore_draft, None
-            if draft and self._current() is not None and self._current().row_id == draft[0]:
-                _, purpose, category, accounting_date, reason = draft
+            if (
+                draft
+                and self._current() is not None
+                and self._current().row_id == draft[0]
+                and self._current().entry_key == draft[5]
+            ):
+                _, purpose, category, accounting_date, reason, _entry = draft
                 if self.purpose.findData(purpose) >= 0:
                     self.purpose.setCurrentIndex(self.purpose.findData(purpose))
                 if self.category.findData(category) >= 0:
@@ -703,6 +791,16 @@ class OrdinaryReviewMixin:
             self._completion_message = ""
             self.batch.update_summary()
             self._update_form_cues()
+            # A confirmed action may disappear or become disabled after its
+            # replacement loads. Keep keyboard review usable without stealing
+            # an existing focus or activating another window.
+            if (
+                completion_message
+                and self.isVisible()
+                and self.window().isActiveWindow()
+                and QApplication.focusWidget() is None
+            ):
+                self.table.setFocus(Qt.OtherFocusReason)
         elif key[0] == "preview_batch":
             self.batch.show_preview(result)
             if not self.jobs.pending:

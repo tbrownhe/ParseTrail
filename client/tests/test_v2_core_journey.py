@@ -140,12 +140,21 @@ def test_report_source_route_reveals_exact_reviewed_row_and_preserves_correction
         assert window.navigation.currentRow() == 1
         assert review._current().row_id == row_id and review._current().entry_key is not None
         assert review.navigation.status_filter.currentData() == "all"
+        assert review.saved_review_note.isReadOnly()
+        assert review.saved_review_note.toPlainText() == "Synthetic review"
+        assert not review.reason.text() and not review.has_unsaved_draft
+        assert not review.action_button.isEnabled() and not review.withdraw_button.isEnabled()
+        assert "unsaved" not in review.status.text().lower()
         review.category.setCurrentIndex(review.category.findData("expense:travel"))
+        assert not review.action_button.isEnabled()  # Saved context cannot authorize a new correction.
         review.reason.setText("Correct synthetic category")
         assert review.action_button.isEnabled(), review.status.text()
         review.action_button.click()
         wait_for_jobs(review)
         wait_for_inventory(window)
+        assert review.saved_review_note.toPlainText() == "Correct synthetic category"
+        assert not review.reason.text() and not review.has_unsaved_draft
+        assert not review.action_button.isEnabled() and not review.withdraw_button.isEnabled()
         with V2ProfileStore.open(workspace.profile_path, read_only=True) as store:
             assert store.connection.execute("SELECT COUNT(*) FROM JournalCorrections").fetchone() == (1,)
         window._back_to_report()

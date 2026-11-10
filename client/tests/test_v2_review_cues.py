@@ -127,6 +127,10 @@ def test_cash_required_ready_saved_correction_and_staged_are_distinct(qtbot, qap
     assert view.purpose.property("formState") == view.category.property("formState") == "saved"
     assert view.reason.property("formState") == "optional"
     assert "for changes" in view.form.labelForField(view.reason).text()
+    assert "Reason for correction" in view.form.labelForField(view.reason).text()
+    assert view.saved_review_note.isReadOnly()
+    assert view.saved_review_note.toPlainText() == "Confirm reviewed source purchase"
+    assert not view.reason.text() and not view.withdraw_button.isEnabled()
     assert view.status.property("formState") == "saved" and not view.action_button.isEnabled()
     artifacts.capture("04-saved-review-is-neutral", window)
     choose_combo(qtbot, view.category, "expense:travel")
@@ -144,6 +148,8 @@ def test_cash_required_ready_saved_correction_and_staged_are_distinct(qtbot, qap
     qtbot.waitUntil(lambda: not window.inventory_pending, timeout=15000)
     click_table_text(qtbot, view.table, "Coffee")
     assert view.category.property("formState") == "saved" and view.reason.property("formState") == "optional"
+    assert view.saved_review_note.toPlainText() == "Correct category, retain original money"
+    assert not view.reason.text() and not view.withdraw_button.isEnabled()
     with V2ProfileStore.open(workspace.profile_path, read_only=True) as store:
         assert store.load_import(source_id) == original
         assert store.connection.execute("SELECT COUNT(*) FROM JournalEntries").fetchone() == (3,)

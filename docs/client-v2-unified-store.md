@@ -181,6 +181,14 @@ retained edits participate in the document/profile/close discard guard. Account
 or category refresh preserves those proposals while obtaining a fresh review
 basis. Header assignment status and the review snapshot must agree.
 
+Saved ordinary-review notes are read-only interpretation context, distinct from
+the editable reason for a new correction or withdrawal. Selecting a saved row
+does not itself create a draft. New reasons belong to the selected row and active
+entry key; a replaced entry cannot inherit an older draft. Same-entry refresh and
+canceled confirmation retain authored changes, while a successful write refreshes
+the saved context and clears the editable reason. Existing basis/transaction
+guards, inverse/replacement history and immutable source evidence are unchanged.
+
 Background profile jobs retain worker connections until completion, coalesce
 superseded reads and serialize their confirmed writes per resolved profile.
 Services remain authoritative for transaction ownership and stale validation.

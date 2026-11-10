@@ -86,8 +86,14 @@ across **all accounts in the profile**. Pending activity and incomplete source
 coverage can limit the result. An empty reviewed report does not establish zero
 spending. The qualifications beside the totals explain these limits.
 
-To correct an entry, inspect the report's entries, open its source row, change the
-review and explain the correction. The original evidence and saved history remain
+To correct an entry, inspect the report's entries and open its source row.
+**Saved review note** shows the reason retained with the active saved review;
+it is read-only context. **Reason for correction** starts empty. Change the
+category (or a supported card accounting date), then enter why you are changing
+it. Opening the row alone does not create an unsaved correction. Cancelling the
+confirmation keeps your changes and reason; saving refreshes the saved note and
+clears the editable reason. Withdrawal also needs an explicitly entered reason
+and its own confirmation. The original evidence and prior history remain
 available. **Back to report** returns to the report context. Source details and
 **Open original** provide supporting evidence when needed.
 

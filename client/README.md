@@ -258,6 +258,15 @@ operations. Already-consumed rows show their owning reviewed workflow rather
 than requesting another ordinary posting. Related actions exposes transfers,
 loan components, fees, account reassignment and evidence checks.
 
+Ordinary corrections show the active **Saved review note** as read-only context
+and an initially empty **Reason for correction**. An unchanged saved selection
+does not count as an unsaved draft or enable correction/withdrawal. Actual category
+or supported card-date corrections require a newly entered reason; withdrawal
+also requires explicit input and confirmation. Cancelling keeps the draft;
+successful save refreshes the active saved context and clears the editable reason.
+Drafts stay with their row and active entry, so a replaced entry cannot inherit
+an older correction draft. Original evidence and prior journal history remain.
+
 Accounts embeds qualified positions and history, and Reports embeds the existing
 report tabs and entry drill-down. Selected dates and context persist when moving
 between pages. Empty selected periods are distinguished from a complete zero-

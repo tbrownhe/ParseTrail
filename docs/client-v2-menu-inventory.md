@@ -115,6 +115,10 @@ Available save/stage/confirm actions use pale blue with stable label padding;
 disabled actions remain neutral. Ctrl/Shift selects multiple ordinary rows and
 shows their count. Shared purpose/category/note choices stage the whole selection
 or refuse it without changing prior stages. Exact confirmation remains separate.
+Reviewed ordinary rows separate the read-only **Saved review note** from an empty
+**Reason for correction**. Unsaved cues reflect authored edits; correction and
+withdrawal cannot inherit authorization from a stored note. Cancel retains the
+draft; successful save updates the active note and clears the new reason.
 Reviewed entries require individual correction; multi-selection cannot post,
 correct or withdraw the current anchor as a single entry. Hidden staged rows are
 counted, and successful staging captures the note shared by the staged batch.

@@ -205,10 +205,10 @@ class V2CashActivityReview(OrdinaryReviewMixin, QDialog):
         layout.addWidget(self.source_context)
         self.decision_group = QGroupBox("Review selected transaction")
         decision_layout = QVBoxLayout(self.decision_group)
-        decision_layout.setContentsMargins(10, 4, 10, 4)
-        decision_layout.setSpacing(4)
+        decision_layout.setContentsMargins(10, 2, 10, 2)
+        decision_layout.setSpacing(2)
         form = QFormLayout()
-        form.setVerticalSpacing(4)
+        form.setVerticalSpacing(2)
         self.form = form
         self.purpose = QComboBox()
         self.purpose.currentIndexChanged.connect(self._purpose_changed)
@@ -411,6 +411,7 @@ class V2CashActivityReview(OrdinaryReviewMixin, QDialog):
         if not self.manage_categories_button.isEnabled():
             return
         row_id, purpose, category_id, _date, reason = self._capture_draft()
+        entry_key = self._form_entry_key
         old_ids = {category.id for category in self.categories}
         dialog = V2CategoryDialog(self.jobs.profile, self)
         dialog.add_kind.setCurrentIndex(dialog.add_kind.findData(PURPOSE_KINDS[purpose]))
@@ -424,6 +425,7 @@ class V2CashActivityReview(OrdinaryReviewMixin, QDialog):
             created_id if created_id is not None and created_id not in old_ids else category_id,
             None,
             reason,
+            entry_key,
         )
         self.category.setFocus()
 
