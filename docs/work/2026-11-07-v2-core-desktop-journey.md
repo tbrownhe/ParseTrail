@@ -11,6 +11,176 @@ Design verification: actual Windows Qt rendering/software-event checks passed.
 Independent review: native captures/symbol matching and focus changes were reviewed; later raw-stack review independently confirmed worker-thread GUI destruction. Earlier bounded passing checks remain valid but do not close this additional lifetime concern.
 Owner acceptance: walkthrough feedback recorded; integrated acceptance remains pending. Release authorization: not requested.
 
+## Handover: resume desktop UI development
+
+Prepared November 14, 2026 at the owner's request. The immediate task is complete:
+return to improving the V2 desktop journey from statement import through account
+setup/assignment, staged review, correction and interpretation of reviewed spending.
+No next feature has been selected. This handover supplies context and candidates;
+the next user instruction selects implementation scope.
+
+### Start here
+
+- Repository: `C:\Users\tbrow\dev\parsetrail`, branch
+  `feature/client-financial-insights`. Application baseline is `21cd5d7`; the
+  working tree was clean after the four closeout commits below. This handover
+  and its TODO/index refresh are subsequent documentation changes.
+- Read `AGENTS.md`, especially **PySide6 engineering rules**, then
+  `.agents/skills/parsetrail-workflow/SKILL.md`. Use `README.md`, `development.md`
+  and relevant current client contracts for unfamiliar areas. Read this top
+  handover and the specific linked evidence sections rather than interpreting
+  every older investigation entry as an active problem.
+- Keep one primary integrator and one work record. Continue this record for the
+  existing journey; use a new packet record only for genuinely separate selected
+  work. Do not create competing handover/acceptance logs.
+- Use disposable synthetic profiles/statements. Do not reopen old owner/demo
+  profiles or private archives by inference from historical paths. Do not load
+  root `.env`, touch the independent 1.x fallback, activate a daily profile, or
+  access production/signing/release artifacts. Inspect only explicitly relevant
+  scratch subdirectories; scratch also contains unrelated/private material.
+
+### Product decisions to preserve
+
+- Documents, assigned accounts and dates should be recognizable throughout the
+  journey. Make pending work, confirmation effects and recovery obvious, while
+  keeping exact source evidence discoverable and report limits beside totals.
+- Pale red means required/invalid input; pale green means a validated choice
+  not yet saved; blue distinguishes available save/confirmation actions. Do not
+  restore button-like color legends on every page; explain conventions in
+  getting-started guidance. Keep button text readable with adequate padding.
+- Institutions are managed categories, distinct from supported formats.
+  Recognize PDF routes and exact declared CSV header structures automatically;
+  resolve remaining ambiguity through institution/account/product context.
+  Do not present arbitrary column remapping or contrived semantic choices.
+  Existing-account selection must always allow creating a different new account.
+  Trusted parser/account-profile metadata can prepopulate kind/product/scope;
+  an unknown identity remains unknown. This session's import UX scope is PDF/CSV;
+  do not infer XLSX UI work is selected because lower layers contain XLSX code.
+- Ordinary review has one staging flow, supports multiple selected rows, and
+  distinguishes staged rows from saved review. Hidden staged rows remain part
+  of the staged confirmation. Preserve unrelated staged/edited work on cancel,
+  category management, navigation and correction.
+- Show a saved review note separately from a new reason for correction or
+  withdrawal. A saved note must not silently authorize another change.
+- Opening focus should reach the first logical editable field or decision.
+  Category creation starts with the custom-name field; budget controls use
+  recognizable budgeting terminology.
+- Imported evidence, reviewed interpretations and reports remain distinct.
+  Preserve exact amounts/dates, immutable originals, transactional writes and
+  explicit confirmations; internal transfers/repayments do not add spending.
+
+### Current implementation and relevant code
+
+Under `client/src/parsetrail/gui/`:
+
+- `v2_workspace_window.py`: Documents/Review/Accounts/Reports navigation,
+  contextual document/account/period selection, embedded views and profile jobs.
+- `v2_import_account_review.py`, `v2_batch_import.py`: reusable import queue,
+  provisional account decisions and final import confirmation.
+- `v2_ordinary_review.py`, `v2_cash_activity_review.py`,
+  `v2_card_purchase_review.py`, `v2_review_navigation.py`: staging, multi-row
+  selection, row drafts, saved notes and correction recovery.
+- `v2_reviewed_reports.py`, `v2_report_drilldown.py`, `v2_evidence_preview.py`:
+  qualified spending, report-to-source correction and source facts.
+- `v2_document_viewer.py`, `v2_original_document.py`: memory-only original
+  viewing, queued PDF UI notifications and explicit reader/viewer disposal.
+- `v2_gui_lifetime.py`, `v2_profile_jobs.py`, `v2_document_browser.py`,
+  `v2_form_state.py`: one-shot disposal, GUI handoff, inventory, state cues and
+  window-owned initial focus. Follow these patterns when adding UI.
+
+Core boundaries are `core/v2_workspace.py`, `core/v2_import_accounts.py`,
+`core/v2_format_recognition.py` and `core/v2_profile_store.py`. Read
+`docs/client-ledger-contract.md`, `docs/client-v2-parsing.md` and other affected
+contracts before changing accounting, source admission or persistence behavior.
+
+### Suggested next UI tasks, still unselected
+
+1. **Post-import format correction/recovery:** currently an incorrectly retained
+   format cannot be replaced in place. Design the discovery, impact preview,
+   cancellation and recovery journey first. Preserve immutable original bytes,
+   affected posting/history meaning and unrelated work. This crosses evidence/
+   ledger boundaries and needs their expertise plus independent integrity review.
+2. **Specialist history comprehension:** investigate transfer, settlement, loan
+   and account histories that still lead with technical event/journal/proof
+   detail. Consider concise narratives with supporting evidence behind details.
+3. **Source-evidence navigation:** exact report-to-review row navigation exists;
+   document evidence does not yet consistently highlight the originating report
+   row. Inspect current behavior and choose a coherent source-location affordance.
+4. **Practical sizes, larger workloads and accessibility:** recheck older findings
+   involving 920x640 windows and many long account names before fixing them.
+   Standard inspected sizes are 1050x700 and 1280x800. Cold loads, large originals,
+   posted-history growth, scaling and assistive technology remain useful follow-ups.
+
+The user's suggestion to use same-day repeat matching is discussion, not a
+selected accounting policy. Do not silently replace the existing matching window.
+See `TODO.md` for candidate links; its order is not implementation authorization.
+
+### Verification state and native-failure disposition
+
+- Technical changes, automated checks and agent review are complete for the
+  recorded improvement. Actual unfamiliar-human acceptance, owner accounting
+  review, macOS/installed-runtime checks and release authorization are separate.
+  The user wants UI development to resume; no known failing revised native
+  journey is currently blocking it.
+- The PDF-load exit is corrected. Its actual raw status was `0xc0000409`,
+  `FAST_FAIL_GUARD_JUMPTABLE`, not the shell's reported 1. Synchronous password
+  UI changed Windows last-error from 4 to 122 before Qt reread it. Queue both
+  status and password UI receivers and reject stale notifications. Keep the
+  memory-only buffer/document ownership and cleanup order intact.
+- The exact historical 35-case native sequence passes independently; the
+  expanded 57-case native sequence also passes in one process, including normal
+  shutdown. The archived original reproducer now passes all four cycles in one
+  process both offscreen (13.51s) and native Windows (16.59s), raw exits 0,
+  normal GC, unchanged assertions and unchanged application/archive sources.
+- The older `0xc0000374` corrupting write/free remains unidentified. There is no
+  proven upstream Qt/Shiboken defect. Do not describe the PDF fix as proof of
+  universal heap safety or reopen version/build/debugger experiments without a
+  new failure or a selected investigation. Preserve the diagnostic archive.
+- A pre-existing offscreen account-nickname focus timeout was reproduced against
+  committed baseline code. All 17 native account-import cases pass. Do not
+  silently skip that offscreen limitation or mislabel it as a new UI regression.
+
+Local evidence: `scratch/gui-pdf-exit-20261114/` holds the PDF diagnosis and raw
+35/57-process results; `scratch/qt-lifetime-recheck-20261114/` holds both archived
+rechecks; `scratch/gui-lifetime-20261114/` holds integrated journey captures and
+baseline overlays. These are synthetic diagnostics, not live profiles to activate.
+
+### How to resume
+
+Use the `ui_ux` role to establish the selected journey, states and observable
+usability criteria before dividing substantial interaction work. Give desktop
+implementation a disjoint write set; add evidence/ledger expertise where the
+selected task changes those boundaries. Have acceptance attempt the integrated
+task from a goal-only brief separately from scripted checks. Resolve significant
+discovery/comprehension findings, not merely failing tests. No routine per-screen
+design approval is required; ask only for unresolved product/accounting choices
+or actions beyond existing authorization.
+
+Use the existing `client/.venv/Scripts/python.exe` (Python 3.13.15, PySide6/Qt/
+Shiboken 6.11.2); dependencies are already installed. From repository root:
+
+```powershell
+$env:PYTHONPATH='.;client/src;client'
+& .\client\.venv\Scripts\python.exe -m pytest -p no:cacheprovider client/tests/test_v2_qt_journey.py -q --journey-native --journey-artifacts scratch/next-ui-journey
+```
+
+Select focused checks for changed behavior. Useful modules include
+`test_v2_initial_focus.py`, `test_v2_import_account_review.py`,
+`test_v2_ordinary_review_async.py`, `test_v2_correction_notes.py`,
+`test_v2_pdf_load_callbacks.py` and the `test_v2_*lifetime.py` files.
+`test_v2_qt_journey.py` contains standard process-contained complete journeys;
+the archived four-cycle diagnostic is intentionally separate. Raw nonzero exits
+must fail verification; do not add pacing, GC changes, skips or indefinite object
+retention to manufacture stability. Inspect actual populated/empty/loading/
+blocked/correction UI with readable fonts and practical sizes, and keep agent
+checks separate from human acceptance. Ordinary native checks are authorized;
+computer-use control is not required to run pytest-qt or inspect saved screenshots.
+
+Latest commits: `4b4e58d` lifetime cleanup/tests, `f21285f` queued PDF correction,
+`a66d61c` PySide6 rules, `21cd5d7` verification/current guidance. Nothing was
+pushed or released. Any future commit should preserve this evidence and the
+current financial/evidence safeguards.
+
 ## November 14 local commit closeout
 
 Owner requested committing the accumulated changes in logical hunks:

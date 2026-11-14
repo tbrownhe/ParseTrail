@@ -6,22 +6,18 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None. [Saved review notes and new correction reasons](docs/work/2026-11-07-v2-core-desktop-journey.md#november-9-separate-saved-review-notes-from-correction-reasons)
-are implemented. The [window-owned focus mitigation](docs/work/2026-11-07-v2-core-desktop-journey.md#native-heap-capture-and-window-owned-opening-focus)
-passed 40 archive cycles and the integrated/native/focus/disposal checks on Qt
-6.11.2. Subsequent [standalone reduction](docs/work/2026-11-07-v2-core-desktop-journey.md#standalone-reproducer-reduction-and-thread-lifetime-finding)
-confirmed GUI teardown on background workers in saved native stacks. GUI-thread
-lifetime correctness remains unresolved; no reliable standalone reproducer or
-proven upstream defect is ready. Crash experiments stopped after repeated
-classifier interruptions. [Diagnostic archive](devtools/qt_heap_crash/README.md),
-symbols, candidates and positive/negative evidence remain retained.
-The [November 14 lifetime cleanup](docs/work/2026-11-07-v2-core-desktop-journey.md#november-14-gui-lifetime-cleanup)
-adds explicit transient-dialog disposal, weak back-references and GUI-thread
-worker handoff cleanup. The [PDF-loading fail-fast](docs/work/2026-11-07-v2-core-desktop-journey.md#november-14-pdf-load-fail-fast-diagnosis-and-correction)
-is now diagnosed and corrected with queued status/password UI callbacks; the
-historical 35-case and expanded 57-case native sequences pass in one process.
-These changes do not close the earlier heap fault or general long-session/native
-stability.
+None. Ready to resume desktop UI work; use the
+[next-context handover](docs/work/2026-11-07-v2-core-desktop-journey.md#handover-resume-desktop-ui-development)
+for current decisions, candidate tasks, entry points and verification.
+Saved-note/correction UX, explicit GUI lifetime cleanup and queued PDF callbacks
+are implemented. The historical 35-case and expanded 57-case native sequences
+pass. The unchanged archived reproducer also passes all four cycles in one
+process in both offscreen and native Windows modes with normal GC and raw exit 0.
+No known revised native journey failure blocks UI development. The original
+earlier heap-corrupting operation remains unidentified; general long-session
+safety and an upstream Qt/Shiboken defect are not established. Preserve the
+[diagnostic archive](devtools/qt_heap_crash/README.md) and investigate recurrence
+if observed, rather than treating historical experiments as the next work queue.
 Human/platform/release gates and recorded product limitations remain separate.
 
 ## Recommended next packets (unselected)
