@@ -14,6 +14,14 @@ and `native-investigation-20261109.json` for controls, symbolized detection stac
 verification and remaining limits. The original native corrupting instruction
 is not established; historical failures and source/build inputs remain retained.
 
+After the November 14 GUI-lifetime and queued PDF-callback corrections, the
+unchanged four-case archive was rerun against current application code. All four
+cycles passed in one process both offscreen (13.51s) and native Windows (16.59s),
+with normal GC and raw child exit 0 including shutdown. Application/archive
+source hashes stayed unchanged during both runs. See the
+[recheck record](../../docs/work/2026-11-07-v2-core-desktop-journey.md#november-14-archived-reproducer-recheck-after-lifetime-corrections).
+These are bounded regression results, not a claim of universal heap safety.
+
 ## What is preserved
 
 - `original_short_review_cycle.py`: byte-for-byte copy of the smallest

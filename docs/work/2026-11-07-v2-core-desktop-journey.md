@@ -5,11 +5,471 @@ Branch: `feature/client-financial-insights`; client only.
 Authorization: user requested integrated journey implementation and verification;
 synthetic disposable profiles/statements only. No live profiles, private archives,
 production, signing, publication or release actions.
-Implementation: window-owned opening-focus filters, saved-note/correction-reason separation, staging-only ordinary review and prior account-first import/product, routing, budget and color improvements implemented.
-Automated verification: the focus-scope mitigation passed 40 archive cycles and the integrated/focus/disposal checks recorded below. Subsequent standalone reduction identified GUI teardown on background workers in the saved native traces. GUI lifetime/thread correctness therefore remains unresolved; a reliable standalone reproducer has not yet been obtained.
+Implementation: queued PDF error/password UI delivery, explicit one-shot dialog/worker handoff cleanup, window-owned opening-focus filters, saved-note/correction-reason separation, staging-only ordinary review and prior account-first import/product, routing, budget and color improvements implemented.
+Automated verification: the November 14 PDF-loading fail-fast is diagnosed and corrected; the historical 35-test native order and expanded 57-test native sequence pass in one process. The unchanged archived reproducer also now passes all four cycles against current application code in each of offscreen and native Windows runs, with normal GC and clean process exits. Targeted GUI disposal/handoff checks also pass. General long-session heap/thread correctness and the original earlier heap-corrupting operation remain unestablished.
 Design verification: actual Windows Qt rendering/software-event checks passed.
 Independent review: native captures/symbol matching and focus changes were reviewed; later raw-stack review independently confirmed worker-thread GUI destruction. Earlier bounded passing checks remain valid but do not close this additional lifetime concern.
 Owner acceptance: walkthrough feedback recorded; integrated acceptance remains pending. Release authorization: not requested.
+
+## November 14 local commit closeout
+
+Owner requested committing the accumulated changes in logical hunks:
+
+- `4b4e58d`: explicit desktop disposal, weak ownership links, GUI-thread worker
+  handoffs and focused lifetime regressions.
+- `f21285f`: queued PDF status/password UI delivery and native-load/stale-event
+  regressions, separated from the broader lifetime changes.
+- `a66d61c`: agreed PySide6 engineering rules in `AGENTS.md`.
+- This documentation commit records native failure diagnosis, the passing
+  historical/expanded sequences and archived rechecks, current runtime guidance
+  and remaining limits.
+
+Commit preparation passed Ruff check/format on all 21 changed/new Python files
+and diff checks. Their AST fingerprints remained identical through the code
+commit hooks, and the original archived reproducer SHA-256 still matches.
+Normal hooks were used without bypass. Existing completed behavioral checks
+below provide verification; no additional crash experiments were needed for
+committing. Raw logs, source/build snapshots, debugger tools and disposable
+profiles remain ignored scratch artifacts. No push, upstream report, live-profile
+activation or release action was performed. Earlier no-commit statements below
+describe their respective verification checkpoints before this owner-requested
+closeout.
+
+## November 14 archived reproducer recheck after lifetime corrections
+
+Owner requested rerunning the archived tests against the current application.
+Primary ran the complete `devtools/qt_heap_crash/short_review_cycle.py` once
+offscreen and once with native Windows Qt. Each invocation ran all four original
+cases in one QApplication/process, including process shutdown. No per-case
+process splitting, added pacing, forced/disabled GC, assertion changes,
+indefinite object retention, debugger or new application changes were used.
+
+| Mode | Pytest result | Raw child exit | Parent elapsed |
+| --- | --- | --- | --- |
+| Offscreen | 4 passed in 13.51s | 0 / `0x00000000` | 13.999s |
+| Native Windows | 4 passed in 16.59s | 0 / `0x00000000` | 17.042s |
+
+Both runs used the locked Windows CPython 3.13.15 / Qt/PySide6 6.11.2 runtime,
+disposable profiles, null keyring and the unchanged synthetic statement/catalog
+fixtures. Raw command, PID, timeout/result metadata, console logs, screenshots
+and before/after source hashes are retained in
+`scratch/qt-lifetime-recheck-20261114/{offscreen,native}/`. The original archived
+scenario SHA-256 still equals
+`478a7d32dfa9df448f8ba1e01fbc16e9ddaae7e8169e879d0e1eb5480cbf7415`.
+Application/archive source hashes remained unchanged throughout both runs.
+
+The archive preserves the scenario/support fixtures while importing current
+application code; it does not restore the older UI implementation. The current
+implementation passes this previously failing sequence in both modes. This is
+additional bounded regression evidence, not identification of the earlier
+invalid native write/free or proof of universal long-session/platform stability.
+No commit, push, live-profile activation or release action was performed.
+
+## November 14 PDF-load fail-fast diagnosis and correction
+
+Owner explicitly authorized identifying the sequence-dependent native exit,
+controlled comparisons, process-local native capture if needed, and a causal
+correction while preserving the preceding lifetime fixes. Primary owns the
+runner, comparisons, native capture, production correction and this record;
+desktop independently mapped synchronous callbacks/upstream code, and acceptance
+audited historical status reporting, source/test integrity and final native replay.
+All data are synthetic and profiles disposable. No production, signing, release,
+live-profile or private archive access was involved.
+
+### Actual termination mechanism
+
+The earlier reported `exit 1` came from the shell/tool status. Those failed
+lifetime runs had no separately retained subprocess return code or durable log;
+pytest capture could also hide diagnostics when a process died before reporting.
+The new bounded runner captures the Python child directly, stores the original
+command/order, source hashes, console output, raw return code/hex, timeout and
+elapsed time. It does not infer success from the debugger's exit code.
+
+The unchanged native 14-case original-lifetime module passes its first ten
+CSV/host cases, then exits with raw `3221226505` / `0xc0000409` during the first
+encrypted-PDF case. A portable CDB capture of that same synthetic module records
+exception parameter `0x25`, `FAST_FAIL_GUARD_JUMPTABLE`, at
+`Qt6Pdf!QPdfDocumentPrivate::updateLastError+0x1a6`, called from private
+`load+0x3a3`. The instruction is `int 29h`. This is a native fail-fast, not an
+ordinary Python exception, explicit QApplication exit, demonstrated stack-buffer
+overwrite, or the older `0xc0000374` heap-corruption report. The debugger completed
+with code 0 after capturing the exception; that is not a passing test result.
+
+The [exact Qt 6.11.2 implementation](https://raw.githubusercontent.com/qt/qtwebengine/v6.11.2/src/pdf/qpdfdocument.cpp)
+first reads PDFium's error in `tryLoadDocument()`, synchronously emits Error and
+password notifications, then reads the error again when control returns to
+private `load()`. `updateLastError()` accepts PDFium error values and uses
+`Q_UNREACHABLE()` otherwise. Upstream PDFium's Windows error helpers use Win32
+thread-local last-error state; its exact bundled source revision was not pinned
+in this review. The loaded binary's behavior was tested directly instead.
+
+Diagnostic wrappers observe the production password UI callback enter with
+Win32 last-error **4** (incorrect password) and return with **122** (insufficient
+buffer). Its enclosing Error-status callback also returns with 122. Qt then
+reaches the fail-fast on its second error read. A diagnostic-only wrapper which
+restores the incoming last-error value after the same UI work allows all 14
+cases to pass. No such OS error manipulation was introduced into production.
+This evidence supports synchronous UI work clobbering the parser's error state;
+the individual Windows API inside widget layout/focus was not identified.
+
+### Callback and ownership review
+
+For the failing password case, synchronous application calls are
+`statusChanged(Error) -> _pdf_status -> _password_required -> labels/body/password
+controls/focus -> load_finished(False) -> OriginalDocumentOpen._loaded`.
+The opener sees password-needed state, retains the viewer and publishes status
+text; it does not close or delete the viewer. The following passwordRequired
+signal enters the duplicate-state guard. The failing test has no host or external
+status observer at this stage. Native QPdfView status/layout and link-model
+receivers also run; they require Ready for rendering, while an empty search
+avoids PDF text reads. Ready handling can navigate pages and publish completion;
+external completion observers may close a viewer, which is another reason UI
+completion must occur after native loading returns.
+
+The viewer retains QPdfDocument, QBuffer, the buffer's internal QByteArray and
+the SavedImport source bytes. `setData()` uses QBuffer-owned storage, not an
+external QByteArray pointer. Live object/device/data assertions pass across
+native loading, on the GUI thread. Existing cleanup first marks closed/stops
+timers, detaches view/search documents, closes the document, then closes/clears
+the buffer/source before deferred widget deletion. No device lifetime fix is
+supported by the comparisons; that order and memory-only production viewing
+remain intact.
+
+### Controlled comparisons and preserved order
+
+Runtime remains Windows AMD64, CPython 3.13.15, PySide6/Qt/Shiboken 6.11.2,
+pytest 9.1.1 and pytest-qt 4.5.0, native windows plugin. Normal GC and original
+assertions remain enabled. Qt6Pdf.dll SHA-256 is retained in `runtime.json`.
+Logs, runners, frozen pre-fix viewer, source hashes and comparison commands are
+under `scratch/gui-pdf-exit-20261114/`.
+
+| Comparison | Observed outcome |
+| --- | --- |
+| Production callbacks, original module order | Ten pass, then raw `0xc0000409` |
+| Password cases alone, no preceding CSV/host cases | Two pass, raw 0 |
+| Original ten cases followed by plain QPdfDocument/QBuffer loading | Eleven pass; returns IncorrectPassword with live bytes/device |
+| Same prefix followed by passive status/password observers | Eleven pass; Loading, Error and password events observed |
+| Full module with application UI callbacks made passive | Native load returns; three expected UI-readiness assertions time out, eleven pass; raw pytest failure 1, no native fail-fast |
+| Full module, production callbacks, synthetic file-path loading | Same native `0xc0000409`; replacing QBuffer does not fix it |
+| Full module, callbacks restore incoming Win32 last-error (diagnostic only) | Fourteen pass, raw 0 |
+| Full module, application UI callbacks deferred (diagnostic only) | Fourteen pass, raw 0 |
+| Frozen pre-fix viewer, exact historical 35-case order | Collects 35, former failure recurs with raw `0xc0000409` |
+| Final production correction, independent exact historical order | Collects 35; 35 pass in 52.52s, raw 0 |
+| Final correction, expanded combined sequence including existing viewer suite | 57 pass in 59.74s in one process, raw 0 |
+
+The tested failure is sequence-dependent; it is not evidence that CSV bytes
+damage a PDF device. Passive/plain controls after the same prefix return safely,
+and the error-state trace explains how GUI/focus state can change the outcome.
+This is a bounded comparison, not a claim that no other ordering could fail.
+
+Two exploratory metadata details are retained transparently: the directory
+`deferred-module-1` actually ran passive callbacks because the first runner did
+not forward its diagnostic-mode variable; its LOAD_BEGIN log identifies passive
+mode. Earlier original-combined commands used an ineffective root-relative
+deselection and actually collected 36, not 35. Those are expanded-order evidence,
+not the historical-order proof. Final replay names the original seven profile
+cases explicitly (including a two-case parametrization), collects exactly 35,
+and excludes no historical assertion. A separate expanded run includes the
+later-added profile regression as well. Some exploratory variants ran concurrently;
+the definitive frozen/final order replays ran sequentially.
+
+### Minimal production correction and verification
+
+Both QPdfDocument statusChanged and passwordRequired application receivers now
+use Qt.QueuedConnection. Merely queuing passwordRequired would leave the direct
+Error-status route into the same password UI. The queued status receiver rejects
+notifications superseded by the document's current status; it does not convert
+an obsolete Loading event into duplicate Ready completion. The password receiver
+requires current Error/IncorrectPassword state, avoiding stale prompts after a
+successful retry or closure. Existing closed guards and explicit lifetime
+cleanup are preserved. No system-wide debugger/heap settings, GC suppression,
+exception suppression, indefinite retention or production disk-PDF fallback was
+used. The original lifecycle tests and ordinary viewer tests are unchanged.
+
+New focused regressions assert that password UI executes only after native load
+unwinds and on the GUI thread, document/device/backing bytes remain live through
+load, completion is emitted once, and obsolete error/password events leave a
+Ready viewer unchanged. Both pass natively and offscreen. The first test-spy
+draft accidentally used a name colliding with the viewer's password field; the
+spy now uses the actual callback method name, with its assertions preserved.
+Ruff and diff checks pass. Acceptance found no material source concern and
+independently verified the final historical 35-case process and raw successful
+exit (`acceptance-fixed-exact35/result.json`). No repeated failing test was
+split, skipped or retried into a pass.
+
+This closes the identified PDF-loading fail-fast within the recorded native
+verification. It does not identify or close the earlier heap-corrupting write,
+prove universal long-session safety, establish another platform/installed build,
+or attest actual human acceptance. No commit, push, upstream report or release
+was requested or performed.
+
+## November 14 GUI lifetime cleanup
+
+Owner authorized implementing the preceding review's recommendation. Primary
+owns integration, shared helpers, inventory/workspace cleanup and this record;
+desktop specialists own original viewing, profile jobs and audited transient
+dialog lifetimes. Acceptance independently reviews final source and bounded
+native checks. Synthetic disposable profiles and the existing locked client
+environment only; no live profiles, private archives, production or releases.
+The November 10 review below remains historical evidence, not a description of
+all current reference edges.
+
+Implementation:
+
+- Added `v2_gui_lifetime.exec_disposable()` for one-shot modal result delivery
+  with GUI-event-loop deletion in `finally`, including exceptional exit. Ordinary
+  review/workspace evidence previews and report/drilldown paths use it.
+  Evidence previews also schedule deletion on accepted close/done so other
+  existing direct callers share that policy. Reusable forms/active import
+  queues do not adopt blanket delete-on-close behavior.
+- Replaced ordinary batch-panel/review and recognized-preview/import-owner
+  strong back-references with weak references. Queue hide/show and staged drafts
+  remain reusable. Import account's deferred focus now uses a parent-owned
+  single-shot QTimer and bound slot, cancelled when its dialog is destroyed.
+- Original viewers release bytes/PDF/CSV/password state, disconnect host
+  callbacks and schedule native deletion on accepted close/done. The unused PDF
+  panel and page-text widget now have parents even on CSV/error paths. Viewer
+  control lambdas became bound methods; host callbacks use weak captures.
+  Openers release completed reader/error/viewer references, disconnect completed
+  host/viewer connections and dispose their QObject only after reads and any
+  live viewer finish. Shutdown drains stopped reads without opening new viewers.
+- Profile jobs retain operation captures until a job-owned queued GUI slot has
+  joined the worker, delivered through a weak controller reference and cleaned
+  up in `finally`. This still runs when the controller has been destroyed.
+  Finalization is claimed before delivery, preventing a reentrant shutdown
+  from releasing or deleting a worker inside its live completion callback.
+  Shutdown uses the same delivery-before-cleanup path for confirmed writes.
+  Reads remain cancellable/coalesced; confirmed writes cannot be discarded.
+- Inventory workers similarly own queued GUI cleanup independent of their
+  receiver, replacing context-free registry-release lambdas; workspace result
+  delivery precedes cleanup and no longer independently deletes the worker.
+  Workspace close/profile replacement also clears obsolete success callbacks;
+  queued close/inventory/refresh actions now have a QObject context so native
+  window deletion cancels delivery rather than invoking deleted controls.
+- Chained/grouped error tracebacks are removed at GUI handoff without changing
+  exception types, arguments or cause/context relationships. Completed profile,
+  inventory, original-read and report-read handoff references are released.
+  No production GC disabling, forced collections, GC thresholds or indefinite
+  widget retention was introduced.
+
+Focused checks
+assert actual native-object invalidation and GUI destruction-thread identity,
+not merely window invisibility. The normal process-contained four-case journey
+passed (40.78s): both 1050x700 and 1280x800 complete import/account assignment,
+staging, evidence, qualified reports, cancellation/correction, restore/reopen;
+refusal/retry and in-flight import cancellation also pass. Screenshots/runtime
+metadata are retained under `scratch/gui-lifetime-20261114/journey/`; primary
+inspected the evidence table and corrected report captures for readability and
+retained scope/qualifications. This is software-event/agent verification, not
+new human acceptance.
+
+Final combined offscreen helper/inventory/profile/workspace/original lifetime
+checks passed 27 (7.09s). Destruction observers use Qt.DirectConnection so thread
+assertions measure the actual destructor signal's emitting thread, rather than
+a receiver's queued delivery thread. Independent acceptance's final targeted
+native helper/inventory/profile/workspace run passed 13 (4.44s, exit 0).
+After adding the reentrant-delivery guard, all eight final profile-job checks
+passed natively (2.37s); acceptance reviewed the guard without further concerns.
+Changed-file Ruff check/format and `git diff --check` pass. No commit, push or
+release action was requested or performed for this follow-up.
+
+The final native Windows process-contained 1050x700 journey also passed
+(10.90s). The new queued-workspace-disposal check passed: deleting the native
+window cancels both its pending close and initial inventory actions. Workspace
+and inventory regressions passed 16 checks (104.02s). Shared helper/inventory
+checks passed five; profile-job lifecycle checks passed seven. Specialist viewer
+and original-opening checks passed 57 initially; the final expanded original
+lifetime module passed 14 offscreen. Dialog lifetime checks passed nine natively,
+and the final parent-owned import-focus timer's affected case passed again.
+The 17 existing native account-import cases passed, including Back/queue drafts,
+assignment, cancellation and source-format confirmation. Report/staging focused
+regressions passed nine; acceptance separately rechecked two staging/draft cases.
+Counts overlap and must not be added into a unique-test total.
+
+An initial combined offscreen preview/drilldown/category/import regression run
+ended with 33 passes, 12 failures and two teardown errors. The import failures
+were nickname-focus timeouts under the offscreen popup plugin. An isolated
+overlay of all changed GUI modules from committed HEAD reproduced the same
+line-121 focus timeout (10.39s), confirming that symptom predates this change;
+the overlay is retained in `scratch/gui-lifetime-20261114/baseline-gui/`.
+Native account-import verification passes. The teardown errors involved queued
+workspace close actions reaching deleted controls; QObject-context scheduling
+and the new destruction regression address that path. These failures are not
+silently relabelled as a passing combined offscreen run.
+
+Independent acceptance found no additional material source correctness issue,
+but its combined native run remains incomplete: 22 of 35 new lifetime checks
+passed before process exit 1 without a pytest diagnostic, at the first
+password-viewer case. The original-lifetime module alone similarly exited after
+its preceding ten CSV/host checks. Both password cases passed in isolation, and
+the nine dialog cases passed separately. Stage tracing places the stop during
+viewer loading, before the password-wait condition, rejection or deferred native
+deletion. Final temporary stage tracing places it specifically in the call to
+`QPdfDocument.load(self.pdf_buffer)`, including any synchronous signal handling;
+the call did not return. Tracing was removed, tests are unchanged/unskipped, and
+no application or harness fix was established for that exit. No causal
+attribution to the new disposal code is established. This
+sequence-dependent native exit remains a material verification limit; isolated
+passing cases do not establish aggregate stability. Existing viewer tests were
+not reached in that combined native invocation. No new native heap error code,
+collector frame or original corrupting instruction is established by exit 1.
+
+An existing async staging test initially failed because the second selected row
+had no explicit note after restoring its row draft. Loading the committed HEAD
+profile-job and ordinary-review modules into an isolated scratch overlay
+reproduced the same line-203 count assertion (15.19s). Its setup now authors the
+second row's required note; two-row staging, hidden-row retention and atomic
+posting assertions remain. Product staging semantics were not changed for it.
+The baseline overlay remains in `scratch/gui-lifetime-20261114/baseline/`.
+
+No archived reproducer, native debugger, new heap capture or standalone GC/crash
+experiment was run. Completion of these targeted lifetime changes must not be
+reported as proof that the original corrupting operation or upstream fault has
+been identified. macOS, installed-runtime and actual human acceptance remain
+outside this verification.
+
+## November 10 GUI reference-cycle and disposal review
+
+Owner requested inspection of Python cycles, Qt parent ownership, window-close
+disposal and the two saved worker destruction stacks. Primary integrated separate
+desktop source reviews and acceptance's independent saved-text-stack review.
+This follow-up changed this record only: no application edits, GUI launches,
+tests, forced collections, debugger/dump processing or new crash experiments.
+Inputs were current client source, the frozen synthetic journey, the two existing
+synthetic `console.log` files and official Qt/Python documentation. No live data
+or broader scratch/private archive enumeration was used.
+
+### Confirmed reference paths and ownership
+
+- Ordinary review has an unconditional Python cycle: `review.batch` points to
+  `OrdinaryBatchPanel`, whose `review` attribute points back to the dialog
+  (`v2_ordinary_review.py:90,984-985`). The panel also has the review as its Qt
+  parent. Cancellation and dialog completion stop jobs but do not break that
+  Python cycle. The workspace's embedded-disposal path does explicitly schedule
+  native deletion, so the cycle alone does not prove wrong-thread destruction.
+- Account import has another unconditional cycle: `review.preview` points to
+  `_RecognizedPreview`, whose `_decision_owner` points back to the review
+  (`v2_import_account_review.py:103,209`). `finish_queue()` hides and drops the
+  request, not this back-reference. Actual workspace import completion calls
+  `finish_queue()`, `deleteLater()` and clears `import_preview`
+  (`v2_workspace_window.py:1610-1613`), providing explicit native disposal.
+- Workspace `_profile_job_handlers` intentionally holds success callbacks,
+  including self-capturing closures and `self._switch_profile`. Those entries
+  can form a temporary Python cycle back to the workspace. Normal success,
+  failure and rejected-submission paths pop entries (`813-829`). This is not a
+  demonstrated persistent leak or part of the short review scenario's crash.
+- Stored exceptions retain tracebacks and frame locals. For example, opener
+  `self.error = exc` in `v2_original_document.py:140-143` produces
+  `opener -> exception -> traceback -> _complete_read frame -> opener`, and can
+  retain a partially constructed viewer through an exception's deeper frames.
+  Worker exception storage has the same pattern (`v2_profile_jobs.py:65-66`,
+  `v2_original_document.py:50-51`); workers have explicit finished/deleteLater
+  paths. These failure-path cycles were not established in the successful
+  synthetic review sequence.
+- Cash/card reload, report table/busy, workspace view and viewer-control lambdas
+  capture their GUI owner. Reader cleanup lambdas also capture workers/openers.
+  Captures are evident from source; a Python-GC-visible cycle through Qt signal
+  storage cannot be asserted merely because a bound method is connected. No
+  runtime referrer graph or binding-retention experiment was performed.
+- `_InitialFocusPolicy` has a Qt parent and is stored on the root, but stores
+  no explicit Python back-reference to it. Its queued lambda captures policy
+  and root temporarily; the timer has a QObject context and opening-generation
+  checks (`v2_form_state.py:137`). This differs from the context-free import
+  account focus timer (`v2_import_account_review.py:432`), which captures the
+  dialog until callback delivery without equivalent cancellation/context.
+
+### Close-time disposal: safeguards and gaps
+
+Most inspected controls created without a constructor parent are subsequently
+adopted by layouts, splitters or tabs. The source-evidence preview is parented to
+its calling review/workspace; its table models are explicitly parented to the
+preview, and its QTabWidget/table pages are adopted into its widget hierarchy.
+Thus absent constructor arguments alone do not establish missing ownership.
+The startup dialog and main window are intentionally top-level; their native
+lifetime is not managed by another widget. Inventory/profile QThread wrappers
+are deliberately unparented and globally retained until completion, not GUI
+widgets lacking an accidental parent.
+
+Current embedded review removal cancels reads, removes/hides the view, calls
+`deleteLater()` and clears the workspace reference (`v2_workspace_window.py:726-733`).
+Report removal similarly calls `shutdown()`, removes/hides/deletes and drops
+the reference (`783-792`). Both participate in workspace close handling.
+Staged-review confirmation already uses `finally: dialog.deleteLater()`
+(`v2_ordinary_review.py:1383-1389`). These are existing positive safeguards.
+
+By comparison, ordinary-review evidence opening
+(`v2_ordinary_review.py:814`), report drilldown (`v2_reviewed_reports.py:803-813`)
+and drilldown evidence opening (`v2_report_drilldown.py:337`) call parented modal
+dialogs' `exec()` without explicit post-exec deletion. Evidence preview close/done
+only cancel original opening (`v2_evidence_preview.py:232-242`). None of these
+dialogs enables WA_DeleteOnClose in the reviewed source. Closed native trees
+can therefore remain parent-owned until parent destruction; that is delayed
+Qt disposal, not proof that these individual children are Python-owned garbage.
+Repeated opens can accumulate hidden child trees.
+
+The original-document viewer releases source/PDF/CSV/password data and removes
+its global viewer retention on close (`v2_document_viewer.py:523-565`), but does
+not schedule native widget deletion. The opener also keeps `self.viewer` after
+viewer closure. Parent ownership and wrapper/callback release need separate
+consideration here. `v2_external_document.py` has similar exception/callback
+patterns, but no current client importer was found; current original viewing
+uses `v2_original_document.py`.
+
+### What the two saved stacks identify
+
+Acceptance independently reread the exact existing text captures:
+
+- `scratch/qt-native-debug-20261109/source-1/console.log:778` identifies worker
+  thread 41 as `DocumentInventoryWorker`. Lines 797-815 show Shiboken wrapper
+  deallocation through QDialogWrapper, QTabWidgetWrapper, QStackedWidget,
+  QTableViewWrapper, QHeaderView and layout/scroll-area destruction, interleaved
+  with QObject child deletion. This identifies a tabbed dialog's table hierarchy.
+  The worker is waiting for the GIL inside an application event filter during
+  that destruction (`780-796`).
+- `scratch/qt-native-debug-20261109/baseline-4/console.log:710` identifies worker
+  thread 40 as `_ProfileJob`. Lines 720-737 show the QBasicTimer::stop warning
+  path, item/table/stacked-widget child destruction and Shiboken deallocation.
+  Enclosing PySide dialog types are not resolved in this capture; the warning's
+  message text is absent. Source capture types cannot be imported into this run
+  as though they identify the same instance.
+
+`V2EvidencePreview` is a strong structural candidate: the frozen journey opens
+it at `short_review_cycle.py:134-142`, and its tab pages are direct QTableViews
+(`v2_evidence_preview.py:183-205`). `V2ReviewedReportsDialog` also matches that
+hierarchy and occurs in the journey, including in embedded mode. The entry
+drilldown itself has a table but no explicit tab widget. No captured Python
+subclass name, window title, objectName or verified this-pointer ties the native
+hierarchy uniquely to a dialog. Raw x64 Args-to-Child columns and nearby/repeated
+address values do not establish instance identity. Current source comparisons
+are not a byte-for-byte reconstruction of the captured historical runtime.
+
+Qt/Shiboken private symbols support the native destruction finding. Python313
+has only export symbols in these logs (`source-1:1469`, `baseline-4:872`); high
+offset labels such as Py_Dealloc/Py_HandlePending cannot identify an exact
+internal Python routine. Neither text stack contains a named collector frame
+or a collected-object graph. Therefore worker-thread GUI destruction is
+confirmed, while cyclic GC versus ordinary reference release, the exact dialog,
+the responsible reference edge and the original heap-corrupting instruction
+remain unproven. The main-thread fault detection and concurrent worker teardown
+are not by themselves proof of causation.
+
+Next implementation should give one-shot dialogs explicit GUI-event-loop disposal,
+break avoidable GUI back-references at final disposal, and clear completed
+callback/exception retention where safe. It must preserve deferred confirmed-write
+completion, request cancellation, evidence and staged drafts. Any later lifetime
+verification should map destroyed types/instances to their owning component and
+record actual destruction threads; this review did not restart those experiments
+or introduce GC suppression/forced collection as a production workaround.
+
+Reference basis: [Qt object ownership](https://doc.qt.io/qt-6.11/objecttrees.html),
+[QWidget close](https://doc.qt.io/qt-6.11/qwidget.html#close),
+[QObject deleteLater](https://doc.qt.io/qt-6.11/qobject.html#deleteLater),
+[Python finalization](https://docs.python.org/3.13/reference/datamodel.html#object.__del__).
+Closing generally hides a widget; deferred deletion requires its owning event
+loop to process the deletion, and calling deleteLater after the main loop has
+stopped does not delete the object. Python finalization has no creating-thread
+guarantee. These documented constraints explain why parents, Python cycles and
+final disposal must all be checked, rather than treating any one as proof.
 
 ## Local commit closeout
 

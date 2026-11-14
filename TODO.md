@@ -15,6 +15,13 @@ lifetime correctness remains unresolved; no reliable standalone reproducer or
 proven upstream defect is ready. Crash experiments stopped after repeated
 classifier interruptions. [Diagnostic archive](devtools/qt_heap_crash/README.md),
 symbols, candidates and positive/negative evidence remain retained.
+The [November 14 lifetime cleanup](docs/work/2026-11-07-v2-core-desktop-journey.md#november-14-gui-lifetime-cleanup)
+adds explicit transient-dialog disposal, weak back-references and GUI-thread
+worker handoff cleanup. The [PDF-loading fail-fast](docs/work/2026-11-07-v2-core-desktop-journey.md#november-14-pdf-load-fail-fast-diagnosis-and-correction)
+is now diagnosed and corrected with queued status/password UI callbacks; the
+historical 35-case and expanded 57-case native sequences pass in one process.
+These changes do not close the earlier heap fault or general long-session/native
+stability.
 Human/platform/release gates and recorded product limitations remain separate.
 
 ## Recommended next packets (unselected)

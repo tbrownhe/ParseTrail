@@ -90,6 +90,23 @@ correctness remains open, so treat the focus change as a mitigation. See the
 [native investigation](../docs/work/2026-11-07-v2-core-desktop-journey.md#native-heap-capture-and-window-owned-opening-focus).
 The deliberate [minimum crash diagnostic](../devtools/qt_heap_crash/README.md) is
 preserved separately and excluded from normal discovery.
+
+One-shot evidence previews, report drilldowns and original viewers now schedule
+native deletion in their GUI event loop. Reusable import queues and embedded
+reviews keep their own completion/cancellation lifecycle. Review/preview
+back-references use weak references, and profile/inventory jobs release captured
+operations, results and error tracebacks on the GUI thread after completion.
+These lifetime safeguards do not establish that the historical heap fault is
+eliminated; bounded verification and remaining limits are recorded in the
+[lifetime cleanup](../docs/work/2026-11-07-v2-core-desktop-journey.md#november-14-gui-lifetime-cleanup).
+
+PDF status/password UI handlers use queued connections: Qt/PDFium can reread
+Windows thread-local error state after emitting those signals inside `load()`;
+synchronous widget/focus work can overwrite it. Keep UI delivery outside that
+native load stack and reject stale status/password notifications after retries
+or closure. The [PDF-load diagnosis](../docs/work/2026-11-07-v2-core-desktop-journey.md#november-14-pdf-load-fail-fast-diagnosis-and-correction)
+records the native fail-fast, causal controls and passing combined sequence.
+
 The default run uses offscreen Qt. For actual platform rendering and retained
 screenshots/runtime metadata:
 
