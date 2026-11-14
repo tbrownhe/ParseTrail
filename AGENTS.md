@@ -75,6 +75,51 @@ and release authorization separately.
 This policy supersedes earlier first-functional-UI and per-feature human-review
 wording for ongoing development; historical acceptance remains evidence.
 
+## PySide6 engineering rules
+
+Apply these rules to desktop UI development. They are engineering conventions
+supported by observed failures and regression checks, not a guarantee against
+every future native failure.
+
+1. **Keep GUI creation, mutation and destruction on the GUI thread.** Arrange
+   explicit disposal rather than relying on Python collection to choose the
+   destruction thread.
+2. **Give every QObject an intentional owner and thread affinity.** Use Qt
+   parenting where appropriate. Document ownership for top-level windows,
+   parentless workers and active resources; parent objects only within
+   compatible threads.
+3. **Distinguish reusable views from disposable dialogs.** Hiding a reusable
+   view preserves its state. A completed one-shot dialog should schedule
+   GUI-thread `deleteLater()`, after its result has been consumed.
+4. **Keep worker operations outside GUI object graphs.** Pass data, paths,
+   identifiers and snapshots. Avoid widget references, GUI-bound methods and
+   closures that capture GUI owners. Create and close worker-owned database
+   connections within the worker.
+5. **Make completion and cleanup an explicit protocol.** Confirm worker
+   termination, deliver the outcome on the GUI thread, then release handoff
+   references and schedule deletion. Cleanup must survive receiver destruction
+   and reentrant shutdown. Preserve confirmed-write completion.
+6. **Minimize strong reference cycles and retained callbacks.** Prefer weak
+   back-references and named slots where appropriate. Release completed callbacks
+   and exception tracebacks; disconnect connections whose purpose has ended.
+   Bound methods alone do not guarantee cycle-free ownership.
+7. **Defer UI work across sensitive native-operation boundaries.** Keep
+   synchronous callbacks minimal when the initiating native call is still
+   active. Queue PDF status/password UI handling and similar operations that
+   could disturb native state, reenter loading or trigger disposal. This is not
+   a blanket requirement to queue every signal.
+8. **Scope filters and deferred actions to their owner.** Prefer window-local
+   event filters. Use parent-owned timers or QObject-context callbacks, and
+   revalidate current state or generation when queued work arrives.
+9. **Release resources in dependency order.** Stop producers and detach
+   consumers before closing their resources. For PDFs: detach view/search
+   consumers, close the document, then release its device and backing bytes.
+10. **Verify native lifetime and process completion alongside behavior.** Check
+    actual destruction threads, native-object invalidation, cancellation,
+    repeated workflows and significant combined orders. Record raw process
+    exits through shutdown. Preserve normal GC and existing assertions;
+    isolated passes do not replace a failing combined sequence.
+
 ## Project boundaries
 
 - Preserve exact money, typed dates, source locations and provenance. Keep
