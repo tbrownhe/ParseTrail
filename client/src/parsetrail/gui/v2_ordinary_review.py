@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import replace
 from datetime import date
 from pathlib import Path
+from weakref import ref
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -22,6 +23,7 @@ from PySide6.QtWidgets import (
 )
 
 from parsetrail.gui.v2_form_state import install_form_styles, set_field_state, set_status
+from parsetrail.gui.v2_gui_lifetime import exec_disposable
 from parsetrail.gui.v2_profile_jobs import ProfileJobs
 from parsetrail.gui.v2_review_navigation import reviewed_elsewhere
 
@@ -811,7 +813,7 @@ class OrdinaryReviewMixin:
 
             self.operation_status.setText("Saved source evidence loaded; this preview does not post entries.")
             self.operation_status.show()
-            V2EvidencePreview(result, self).exec()
+            exec_disposable(V2EvidencePreview(result, self))
         elif key[0] == "write":
             consumed = set(self.batch.staged) if key[1] == "batch" else {self._selected_after_read}
             retain_current = any(row.row_id not in consumed for row in self.navigation.selected())
@@ -982,7 +984,7 @@ class OrdinaryBatchPanel(QWidget):
 
     def __init__(self, review):
         super().__init__(review)
-        self.review = review
+        self._review_ref = ref(review)
         self.staged = {}
         self._staged_reason = ""
         layout = QVBoxLayout(self)
@@ -1027,6 +1029,15 @@ class OrdinaryBatchPanel(QWidget):
         review.navigation.proxy.rowsInserted.connect(self.update_summary)
         review.navigation.scope_changed.connect(self.update_summary)
         self.update_summary()
+
+    @property
+    def review(self):
+        # The review owns this panel in Qt and Python; keep the back-reference
+        # weak while returning the actual QObject for Qt API arguments.
+        review = self._review_ref()
+        if review is None:
+            raise ReferenceError("The owning review has been released")
+        return review
 
     def clear(self, *, clear_proposal=True):
         self.staged.clear()

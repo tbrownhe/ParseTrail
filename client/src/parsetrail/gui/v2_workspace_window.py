@@ -63,6 +63,7 @@ from parsetrail.gui.v2_document_browser import (
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
 from parsetrail.gui.v2_financial_account import V2FinancialAccountDialog
 from parsetrail.gui.v2_form_state import install_initial_focus
+from parsetrail.gui.v2_gui_lifetime import exec_disposable
 from parsetrail.gui.v2_import_account_review import V2ImportAccountReview
 from parsetrail.gui.v2_opening_review import V2OpeningReview
 from parsetrail.gui.v2_original_document import open_original_document
@@ -767,7 +768,7 @@ class V2WorkspaceWindow(QMainWindow):
     def _embedded_busy(self, busy):
         self._update_controls()
         if not busy and self._close_after_job:
-            QTimer.singleShot(0, self.close)
+            QTimer.singleShot(0, self, self.close)
 
     def _write_in_progress(self):
         return bool(
@@ -808,7 +809,7 @@ class V2WorkspaceWindow(QMainWindow):
             action.setEnabled(not busy and self.import_worker is None)
         self._update_controls()
         if not busy and self._close_after_job:
-            QTimer.singleShot(0, self.close)
+            QTimer.singleShot(0, self, self.close)
 
     def _profile_job_finished(self, key, result):
         handlers = self._profile_job_handlers.pop(key, None)
@@ -882,7 +883,7 @@ class V2WorkspaceWindow(QMainWindow):
         self.inventory_status.setText("Loading saved documents…")
         self.status.setText("Review supported activity to include it in reports. Source checks remain separate.")
         self._update_controls()
-        QTimer.singleShot(0, self._start_inventory)
+        QTimer.singleShot(0, self, self._start_inventory)
 
     @property
     def inventory_pending(self) -> bool:
@@ -903,8 +904,7 @@ class V2WorkspaceWindow(QMainWindow):
             return
         self._inventory_worker = None
         if self._closing:
-            worker.deleteLater()
-            QTimer.singleShot(0, self.close)
+            QTimer.singleShot(0, self, self.close)
             return
         if worker.generation == self._inventory_generation:
             if worker.error is not None:
@@ -937,10 +937,9 @@ class V2WorkspaceWindow(QMainWindow):
                     self._position_selected()
             self._update_controls()
             if worker.error is None:
-                QTimer.singleShot(0, self._refresh_changed_profile)
-        worker.deleteLater()
+                QTimer.singleShot(0, self, self._refresh_changed_profile)
         if self._inventory_requested:
-            QTimer.singleShot(0, self._start_inventory)
+            QTimer.singleShot(0, self, self._start_inventory)
 
     def _apply_inventory(self, summaries) -> None:
         self._document_summaries = {summary.source_sha256: summary for summary in summaries}
@@ -1352,6 +1351,7 @@ class V2WorkspaceWindow(QMainWindow):
             if not self._discard_review() or not self._reset_embedded_views():
                 return
             self.profile_jobs.close()
+            self._profile_job_handlers.clear()
             self.profile_jobs.deleteLater()
             self.profile_jobs = ProfileJobs(self, selected.profile_path)
             self.profile_jobs.completed.connect(self._profile_job_finished)
@@ -1627,7 +1627,7 @@ class V2WorkspaceWindow(QMainWindow):
             action.setEnabled(True)
         self._update_controls()
         if self._close_after_import:
-            QTimer.singleShot(0, self.close)
+            QTimer.singleShot(0, self, self.close)
             return
         if isinstance(worker, V2BatchImportWorker):
             if result is None:
@@ -1671,7 +1671,7 @@ class V2WorkspaceWindow(QMainWindow):
 
             def show(saved):
                 if self._selected_source() == source_id:
-                    V2EvidencePreview(saved, self).exec()
+                    exec_disposable(V2EvidencePreview(saved, self))
 
             self._run_profile_job(
                 "preview",
@@ -1884,6 +1884,7 @@ class V2WorkspaceWindow(QMainWindow):
         if not self._discard_review() or not self._reset_embedded_views():
             return False
         self.profile_jobs.close()
+        self._profile_job_handlers.clear()
         if not self.isVisible() and self.import_worker is None:
             # Qt may skip closeEvent for an unseen window. Do not let its
             # queued initial read start after this explicit close request.
@@ -1909,6 +1910,7 @@ class V2WorkspaceWindow(QMainWindow):
             event.ignore()
             return
         self.profile_jobs.close()
+        self._profile_job_handlers.clear()
         self._closing = True
         self._inventory_requested = False
         if self._inventory_worker is not None:

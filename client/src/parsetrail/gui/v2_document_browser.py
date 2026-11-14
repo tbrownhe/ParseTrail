@@ -6,10 +6,11 @@ import atexit
 import time
 from pathlib import Path
 
-from PySide6.QtCore import QCoreApplication, QThread
+from PySide6.QtCore import QCoreApplication, Qt, QThread, Slot
 
 from parsetrail.core.v2_institutions import Institution, institution_label
 from parsetrail.core.v2_profile_store import DocumentSummary, V2ProfileStore
+from parsetrail.gui.v2_gui_lifetime import clear_exception_tracebacks
 
 _INVENTORY_READERS: set[QThread] = set()
 
@@ -35,7 +36,7 @@ def _finish_inventory_readers() -> None:
             reader.wait(10)
             time.sleep(0.001)
         reader.wait()
-        _INVENTORY_READERS.discard(reader)
+        reader._release()
 
 
 atexit.register(_finish_inventory_readers)
@@ -54,6 +55,7 @@ class DocumentInventoryWorker(QThread):
         self.accounts = ()
         self.revision = profile_revision(profile)
         self.error: Exception | None = None
+        self._released = False
 
     def start(self) -> None:
         app = QCoreApplication.instance()
@@ -61,9 +63,21 @@ class DocumentInventoryWorker(QThread):
             app.setProperty("parsetrail_inventory_exit_hook", True)
             app.aboutToQuit.connect(_finish_inventory_readers)
         _INVENTORY_READERS.add(self)
-        self.finished.connect(lambda: _INVENTORY_READERS.discard(self))
-        self.finished.connect(self.deleteLater)
+        # Callers connect result delivery before start(). Keep cleanup queued
+        # on this object's GUI thread, even if the caller has been destroyed.
+        self.finished.connect(self._release, Qt.QueuedConnection)
         super().start()
+
+    @Slot()
+    def _release(self) -> None:
+        if self._released:
+            return
+        self.wait()
+        self._released = True
+        clear_exception_tracebacks(self.error)
+        self.result, self.accounts, self.error = (), (), None
+        _INVENTORY_READERS.discard(self)
+        self.deleteLater()
 
     def run(self) -> None:
         try:

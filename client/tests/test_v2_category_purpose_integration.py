@@ -229,8 +229,8 @@ def test_builtin_and_custom_same_name_remain_distinct_in_reports_and_selected_dr
     monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
     from parsetrail.gui import v2_reviewed_reports
     from parsetrail.gui.v2_report_drilldown import V2ReviewedEntryDrilldown
-    from PySide6.QtCore import QDate, QObject, Signal
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtCore import QDate, Signal
+    from PySide6.QtWidgets import QApplication, QDialog
 
     app = QApplication.instance() or QApplication([])
     profile = tmp_path / "same-name-reports.db"
@@ -252,11 +252,11 @@ def test_builtin_and_custom_same_name_remain_distinct_in_reports_and_selected_dr
     wait_for_reports(reports)
     inspected = []
 
-    class CaptureDrilldown(QObject):
+    class CaptureDrilldown(QDialog):
         source_review_requested = Signal(str, str)
 
         def __init__(self, _profile, account_id, **kwargs):
-            super().__init__()
+            super().__init__(kwargs["parent"])
             inspected.append((account_id, kwargs["expected_total_minor"]))
 
         def exec(self):

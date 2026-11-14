@@ -45,6 +45,7 @@ from parsetrail.core.v2_profile_store import (
 from parsetrail.core.v2_report_export import write_reviewed_journal_workbook
 from parsetrail.gui.v2_evidence_preview import _money
 from parsetrail.gui.v2_form_state import install_form_styles, set_field_state
+from parsetrail.gui.v2_gui_lifetime import clear_exception_tracebacks, exec_disposable
 from parsetrail.gui.v2_path_notice import show_path_notice
 from parsetrail.gui.v2_profile_jobs import ProfileJobs
 from parsetrail.gui.v2_report_drilldown import V2ReviewedEntryDrilldown
@@ -664,24 +665,32 @@ class V2ReviewedReportsDialog(QDialog):
     def _read_finished(self) -> None:
         reader = self._reader
         self._reader = None
-        if reader is None or self._closed:
+        if reader is None:
             return
-        if (
-            reader.generation == self._generation
-            and reader.tab == self.tabs.currentIndex()
-            and reader.key == self._key(reader.tab)
-        ):
-            if reader.error is not None:
-                self._clear_unavailable_reports(reader.error)
-            elif reader.result is not None:
-                self._apply_report(reader.tab, reader.result)
-                self._loaded[reader.tab] = reader.key
-                self._errors.pop(reader.tab, None)
-            self._show_selected_tab()
-        elif reader.tab == self.tabs.currentIndex() and reader.key != self._key(reader.tab):
-            self._read_requested = True
-        if self._read_requested:
-            self._read_timer.start(0)
+        clear_exception_tracebacks(reader.error)
+        try:
+            if self._closed:
+                return
+            if (
+                reader.generation == self._generation
+                and reader.tab == self.tabs.currentIndex()
+                and reader.key == self._key(reader.tab)
+            ):
+                if reader.error is not None:
+                    self._clear_unavailable_reports(reader.error)
+                elif reader.result is not None:
+                    self._apply_report(reader.tab, reader.result)
+                    self._loaded[reader.tab] = reader.key
+                    self._errors.pop(reader.tab, None)
+                self._show_selected_tab()
+            elif reader.tab == self.tabs.currentIndex() and reader.key != self._key(reader.tab):
+                self._read_requested = True
+            if self._read_requested:
+                self._read_timer.start(0)
+        finally:
+            # Release handoff references on the GUI thread, including obsolete
+            # and closed-view reads, after their outcome has been consumed.
+            reader.result = reader.error = None
 
     def _apply_report(self, tab: int, report) -> None:
         attributes = ("spending_report", "account_report", "budget_report", "income_report", "positions_report")
@@ -810,7 +819,7 @@ class V2ReviewedReportsDialog(QDialog):
             review_available=self.embedded,
         )
         dialog.source_review_requested.connect(self.source_review_requested.emit)
-        dialog.exec()
+        exec_disposable(dialog)
 
     def _create_positions_panel(self, today: date) -> None:
         panel = QWidget()

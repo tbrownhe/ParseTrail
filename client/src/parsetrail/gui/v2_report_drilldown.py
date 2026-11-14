@@ -29,6 +29,7 @@ from parsetrail.core.v2_report_drilldown import ReviewedEntryDrilldown, read_rev
 from parsetrail.gui.v2_document_browser import document_period, document_title
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview, _money
 from parsetrail.gui.v2_form_state import install_initial_focus
+from parsetrail.gui.v2_gui_lifetime import exec_disposable
 
 
 class _EntryModel(QAbstractTableModel):
@@ -334,4 +335,4 @@ class V2ReviewedEntryDrilldown(QDialog):
         except (ProfileFormatError, sqlite3.Error, OSError) as exc:
             QMessageBox.warning(self, "Source preview unavailable", str(exc))
             return
-        V2EvidencePreview(saved, self).exec()
+        exec_disposable(V2EvidencePreview(saved, self))

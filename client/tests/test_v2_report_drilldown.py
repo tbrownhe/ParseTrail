@@ -174,14 +174,16 @@ def app(monkeypatch):
 
 def test_dialog_preview_reads_saved_source_and_failed_refresh_clears_stale_values(tmp_path, app, monkeypatch):
     from parsetrail.gui.v2_report_drilldown import V2ReviewedEntryDrilldown
+    from PySide6.QtWidgets import QDialog
 
     profile = tmp_path / "dialog.db"
     evidence, _coffee, _tea = _profile(profile)
     before = profile.read_bytes()
     seen = []
 
-    class Preview:
-        def __init__(self, saved, _parent):
+    class Preview(QDialog):
+        def __init__(self, saved, parent):
+            super().__init__(parent)
             seen.append(saved)
 
         def exec(self):

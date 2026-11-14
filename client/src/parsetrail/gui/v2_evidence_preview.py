@@ -15,6 +15,7 @@ from PySide6.QtWidgets import (
     QTabWidget,
     QVBoxLayout,
 )
+from shiboken6 import isValid
 
 from parsetrail.core.source_evidence import ObservationEvidence, SourceDisposition, StatementPayload
 from parsetrail.core.v2_profile_store import SavedImport, V2ProfileStore
@@ -136,7 +137,7 @@ class _DispositionsModel(QAbstractTableModel):
 
 
 class V2EvidencePreview(QDialog):
-    """Inspect saved parser facts only; this view has no write or posting control."""
+    """Inspect saved facts in a one-shot view with no write or posting control."""
 
     def __init__(self, saved: SavedImport, parent=None):
         super().__init__(parent)
@@ -231,15 +232,22 @@ class V2EvidencePreview(QDialog):
 
     def close(self) -> bool:
         self._cancel_original()
-        return super().close()
+        closed = super().close()
+        if closed and isValid(self):
+            self.deleteLater()
+        return closed
 
     def closeEvent(self, event) -> None:
         self._cancel_original()
         super().closeEvent(event)
+        if event.isAccepted() and isValid(self):
+            self.deleteLater()
 
     def done(self, result: int) -> None:
         self._cancel_original()
         super().done(result)
+        if isValid(self):
+            self.deleteLater()
 
 
 def preview_saved_source(profile: Path, source_sha256: str, *, parent=None) -> V2EvidencePreview:

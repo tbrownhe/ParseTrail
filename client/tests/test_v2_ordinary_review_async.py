@@ -199,6 +199,7 @@ def test_staged_filter_keeps_hidden_rows_and_atomic_batch(cash, monkeypatch):
         view.table.selectRow(1)
         view.purpose.setCurrentIndex(view.purpose.findData("expense"))
         view.category.setCurrentIndex(view.category.findData("expense:food"))
+        view.batch.reason.setText("Reviewed selected purchases against source")
         view.batch.stage_selected()
         assert len(view.batch.staged) == 2
         view.navigation.search.setText("Deposit")

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from uuid import uuid4
+from weakref import ref
 
 from PySide6.QtCore import QEvent, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
@@ -100,16 +101,19 @@ class _RecognizedPreview(V2CsvImportPreview):
 
     def __init__(self, institutions, owner):
         super().__init__(institutions, owner)
-        self._decision_owner = owner
+        self._decision_owner = ref(owner)
 
     def reject(self):
-        self._decision_owner.reject()
+        if (owner := self._decision_owner()) is not None:
+            owner.reject()
 
     def _import(self):
-        self._decision_owner._import()
+        if (owner := self._decision_owner()) is not None:
+            owner._import()
 
     def _skip(self):
-        self._decision_owner._skip()
+        if (owner := self._decision_owner()) is not None:
+            owner._skip()
 
 
 class V2ImportAccountReview(QDialog):
@@ -188,6 +192,9 @@ class V2ImportAccountReview(QDialog):
         self.name.setMaxLength(200)
         self.name.setAccessibleName("New account nickname")
         self.name.setPlaceholderText("A name you will recognize")
+        self._draft_focus_timer = QTimer(self)
+        self._draft_focus_timer.setSingleShot(True)
+        self._draft_focus_timer.timeout.connect(self._focus_current_account_draft)
         new_form.addRow("Nickname *", self.name)
         self.institution = InstitutionChoice(institutions)
         new_form.addRow("Institution *", self.institution)
@@ -429,7 +436,11 @@ class V2ImportAccountReview(QDialog):
 
     def _focus_account_draft(self, *_args):
         if self.account_choice.choice() == _NEW:
-            QTimer.singleShot(0, lambda: self.name.setFocus(Qt.OtherFocusReason) if self.name.isVisible() else None)
+            self._draft_focus_timer.start(0)
+
+    def _focus_current_account_draft(self):
+        if self.account_choice.choice() == _NEW and self.name.isVisible():
+            self.name.setFocus(Qt.OtherFocusReason)
 
     def _identified_product(self, profile):
         products = {candidate.identifying_product_type for candidate in self.review.recognition.candidates}

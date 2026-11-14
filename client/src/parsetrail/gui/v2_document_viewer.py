@@ -7,6 +7,7 @@ import csv
 import hashlib
 import io
 import time
+import weakref
 
 from PySide6.QtCore import (
     QAbstractTableModel,
@@ -15,6 +16,7 @@ from PySide6.QtCore import (
     QCoreApplication,
     QIODevice,
     QModelIndex,
+    QObject,
     QPointF,
     Qt,
     QThread,
@@ -40,6 +42,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from shiboken6 import isValid
 
 from parsetrail.core.v2_profile_store import MAX_SOURCE_BYTES, SavedImport
 from parsetrail.gui.v2_form_state import install_initial_focus
@@ -156,6 +159,8 @@ class V2DocumentViewer(QDialog):
         self._saved: SavedImport | None = saved
         self._initial_page = initial_page
         self._closed = False
+        self._delete_pending = False
+        self._host_connections = []
         self.pending, self.ready = True, False
         self.error: str | None = None
         self.needs_password = False
@@ -181,17 +186,17 @@ class V2DocumentViewer(QDialog):
         self.page.setPrefix("Page ")
         self.page.setRange(1, 1)
         self.page.setAccessibleName("Original document page")
-        self.previous_page.clicked.connect(lambda: self.page.setValue(self.page.value() - 1))
-        self.next_page.clicked.connect(lambda: self.page.setValue(self.page.value() + 1))
+        self.previous_page.clicked.connect(self._previous_page)
+        self.next_page.clicked.connect(self._next_page)
         self.page.valueChanged.connect(self._go_to_page)
         self.zoom_out = QPushButton("−")
         self.zoom_out.setAccessibleName("Zoom out")
         self.zoom_out.setToolTip("Zoom out")
-        self.zoom_out.clicked.connect(lambda: self._zoom(1 / 1.2))
+        self.zoom_out.clicked.connect(self._zoom_out)
         self.zoom_in = QPushButton("+")
         self.zoom_in.setAccessibleName("Zoom in")
         self.zoom_in.setToolTip("Zoom in")
-        self.zoom_in.clicked.connect(lambda: self._zoom(1.2))
+        self.zoom_in.clicked.connect(self._zoom_in)
         self.fit_width = QPushButton("Fit width")
         self.fit_width.clicked.connect(self._fit_width)
         self.zoom_label = QLabel("Fit width")
@@ -218,9 +223,9 @@ class V2DocumentViewer(QDialog):
         self.find_text.setAccessibleName("Find in original document")
         self.find_previous = QPushButton("Previous match")
         self.find_next = QPushButton("Next match")
-        self.find_previous.clicked.connect(lambda: self._find_result(-1))
-        self.find_next.clicked.connect(lambda: self._find_result(1))
-        self.find_text.returnPressed.connect(lambda: self._find_result(1))
+        self.find_previous.clicked.connect(self._find_previous)
+        self.find_next.clicked.connect(self._find_next)
+        self.find_text.returnPressed.connect(self._find_next)
         self.find_count = QLabel()
         for widget in (self.find_text, self.find_previous, self.find_next, self.find_count):
             find.addWidget(widget)
@@ -228,7 +233,7 @@ class V2DocumentViewer(QDialog):
         self._search_timer = QTimer(self)
         self._search_timer.setSingleShot(True)
         self._search_timer.timeout.connect(self._search)
-        self.find_text.textChanged.connect(lambda: self._search_timer.start(200))
+        self.find_text.textChanged.connect(self._queue_search)
         self.password_controls = QWidget()
         password_layout = QHBoxLayout(self.password_controls)
         password_layout.setContentsMargins(0, 0, 0, 0)
@@ -248,8 +253,9 @@ class V2DocumentViewer(QDialog):
         self.message.setWordWrap(True)
         self.message.setAlignment(Qt.AlignCenter)
         self.body.addWidget(self.message)
-        self.pdf_panel = QSplitter(Qt.Vertical)
-        self.page_text = QPlainTextEdit()
+        self.pdf_panel = QSplitter(Qt.Vertical, self)
+        self.pdf_panel.hide()
+        self.page_text = QPlainTextEdit(self.pdf_panel)
         self.page_text.setReadOnly(True)
         self.page_text.setAccessibleName("Selectable text from the current PDF page")
         self.csv_panel = QWidget()
@@ -288,9 +294,16 @@ class V2DocumentViewer(QDialog):
         self._load_timer.start(0)
         _VIEWERS.add(self)
         if parent is not None:
-            parent.destroyed.connect(self._parent_finished)
+            viewer_ref = weakref.ref(self)
+
+            def host_finished(*_args):
+                viewer = viewer_ref()
+                if viewer is not None and isValid(viewer):
+                    viewer.close()
+
+            self._host_connections.append(parent.destroyed.connect(host_finished))
             if isinstance(parent, QDialog):
-                parent.finished.connect(self._parent_finished)
+                self._host_connections.append(parent.finished.connect(host_finished))
         app = QCoreApplication.instance()
         if app is not None and not app.property("parsetrailDocumentViewerExitHook"):
             app.setProperty("parsetrailDocumentViewerExitHook", True)
@@ -407,6 +420,28 @@ class V2DocumentViewer(QDialog):
     def _go_to_page(self, page: int) -> None:
         if self.ready and self.pdf_view is not None:
             self.pdf_view.pageNavigator().jump(page - 1, QPointF())
+
+    def _previous_page(self) -> None:
+        self.page.setValue(self.page.value() - 1)
+
+    def _next_page(self) -> None:
+        self.page.setValue(self.page.value() + 1)
+
+    def _zoom_out(self) -> None:
+        self._zoom(1 / 1.2)
+
+    def _zoom_in(self) -> None:
+        self._zoom(1.2)
+
+    def _find_previous(self) -> None:
+        self._find_result(-1)
+
+    def _find_next(self) -> None:
+        self._find_result(1)
+
+    def _queue_search(self, *_args) -> None:
+        if not self._closed:
+            self._search_timer.start(200)
 
     def _page_changed(self, index: int) -> None:
         if self._closed or self.pdf_document is None:
@@ -548,22 +583,33 @@ class V2DocumentViewer(QDialog):
         self.csv_cell.clear()
         self.password.clear()
         self.csv_model.replace()
+        for connection in self._host_connections:
+            QObject.disconnect(connection)
+        self._host_connections.clear()
         _VIEWERS.discard(self)
+
+    def _delete_when_closed(self) -> None:
+        if not self._delete_pending and isValid(self):
+            self._delete_pending = True
+            self.deleteLater()
 
     def done(self, result: int) -> None:
         self._release_memory()
         super().done(result)
-
-    def _parent_finished(self, *_args) -> None:
-        self.close()
+        self._delete_when_closed()
 
     def close(self) -> bool:
-        self._release_memory()
-        return super().close()
+        accepted = super().close()
+        if accepted:
+            self._release_memory()
+            self._delete_when_closed()
+        return accepted
 
     def closeEvent(self, event) -> None:
-        self._release_memory()
         super().closeEvent(event)
+        if event.isAccepted():
+            self._release_memory()
+            self._delete_when_closed()
 
 
 def show_saved_document(
