@@ -339,7 +339,11 @@ class V2DocumentViewer(QDialog):
         self.pdf_buffer.setData(QByteArray(saved.source))
         self.pdf_buffer.open(QIODevice.ReadOnly)
         self.pdf_document = QPdfDocument(self)
-        self.pdf_document.passwordRequired.connect(self._password_required)
+        # Qt/PDFium rereads the Windows thread's last-error value after emitting
+        # error/password signals inside load(). GUI work in a direct receiver
+        # can overwrite that value before load() returns. Deliver our UI work
+        # through this viewer's event loop after the native load has unwound.
+        self.pdf_document.passwordRequired.connect(self._password_required, Qt.QueuedConnection)
         self.pdf_view = QPdfView(self)
         self.pdf_view.setPageMode(QPdfView.PageMode.SinglePage)
         self.pdf_view.setZoomMode(QPdfView.ZoomMode.FitToWidth)
@@ -349,7 +353,7 @@ class V2DocumentViewer(QDialog):
         self.search_model.setDocument(self.pdf_document)
         self.search_model.countChanged.connect(self._search_results)
         self.pdf_view.setSearchModel(self.search_model)
-        self.pdf_document.statusChanged.connect(self._pdf_status)
+        self.pdf_document.statusChanged.connect(self._pdf_status, Qt.QueuedConnection)
         self.pdf_panel.addWidget(self.pdf_view)
         self.pdf_panel.addWidget(self.page_text)
         self.pdf_panel.setSizes([500, 180])
@@ -359,6 +363,10 @@ class V2DocumentViewer(QDialog):
 
     def _pdf_status(self, status) -> None:
         if self._closed:
+            return
+        # A retry may have superseded this queued notification. In particular,
+        # do not turn an obsolete Loading signal into a second Ready delivery.
+        if status != self.pdf_document.status():
             return
         if status == QPdfDocument.Status.Ready:
             count = self.pdf_document.pageCount()
@@ -391,6 +399,11 @@ class V2DocumentViewer(QDialog):
 
     def _password_required(self) -> None:
         if self._closed:
+            return
+        if (
+            self.pdf_document.status() != QPdfDocument.Status.Error
+            or self.pdf_document.error() != QPdfDocument.Error.IncorrectPassword
+        ):
             return
         if self.needs_password and not self.pending:
             return
