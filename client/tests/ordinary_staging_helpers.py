@@ -1,9 +1,48 @@
 """Functional checks use the real staging/preview path, stubbing only its modal."""
 
 import pytest
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QDialog, QLabel, QMessageBox, QPlainTextEdit
 
 from .v2_job_wait import wait_for_jobs
+
+
+def review_reason(view):
+    """The visible reason editor for this selected decision's scope."""
+    if not hasattr(view, "batch"):
+        return view.reason
+    row = view._current() if hasattr(view, "_current") else None
+    single_saved = (
+        row is not None
+        and (row.entry_key is not None or row.status == "Already posted to the ledger")
+        and len(view.navigation.selected()) == 1
+    )
+    if hasattr(view, "batch") and not single_saved:
+        return view.batch.reason
+    return view.reason
+
+
+def choose_review_menu(qtbot, button, menu, action):
+    """Open the actual menu button and activate its visible action with Qt input."""
+    errors = []
+    timer = QTimer(menu)
+    timer.setSingleShot(True)
+
+    def choose():
+        try:
+            assert menu.isVisible() and action.isEnabled()
+            qtbot.mouseClick(menu, Qt.LeftButton, pos=menu.actionGeometry(action).center())
+        except BaseException as error:
+            errors.append(error)
+            menu.close()
+
+    timer.timeout.connect(choose)
+    timer.start(0)
+    qtbot.mouseClick(button, Qt.LeftButton)
+    timer.deleteLater()
+    if errors:
+        raise errors[0]
+    qtbot.waitUntil(lambda: not menu.isVisible())
 
 
 def review_action(view):

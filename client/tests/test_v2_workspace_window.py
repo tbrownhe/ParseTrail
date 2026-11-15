@@ -130,7 +130,7 @@ def test_window_imports_pending_evidence_and_reuses_exact_source(tmp_path: Path,
         window.categories_button.click()
         assert category_opens == [0]
         window._open_reviewed_reports()
-        assert window.navigation.currentRow() == 3 and window._reports_view.embedded
+        assert window.navigation.currentRow() == window.REPORTS and window._reports_view.embedded
         assert window.import_button.isEnabled()
         window.start_import(source)
         _wait_finished(window.import_worker, app)

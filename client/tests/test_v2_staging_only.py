@@ -9,6 +9,7 @@ from parsetrail.core.v2_profile_store import V2ProfileStore
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QDialog, QDialogButtonBox, QPlainTextEdit
 
+from .ordinary_staging_helpers import choose_review_menu, review_reason
 from .qt_journey_helpers import JourneyArtifacts, ModalSteps, choose_combo, enter_text
 from .test_v2_multirow_review import choices, select, workspace_rows
 from .test_v2_review_cues import open_review
@@ -25,6 +26,59 @@ def journals(workspace):
 
 
 @pytest.mark.parametrize("size", [(1050, 700), (1280, 800)])
+def test_shared_review_reason_survives_selection_and_is_independent_of_correction(
+    qtbot, qapp, tmp_path, journey_artifacts, size
+):
+    workspace, evidence, _ = workspace_rows(tmp_path)
+    coffee = next(row for row in evidence.payload.rows if row.description.text == "Coffee")
+    with V2ProfileStore.open(workspace.profile_path) as store:
+        store.add_category_account("expense:travel", "Travel", "expense")
+        store.post_reviewed_cash_category(coffee.row_id, "expense:food", reason="Original Coffee note")
+    window, view = open_review(qtbot, workspace, size=size)
+    artifacts = JourneyArtifacts(journey_artifacts, qapp, size)
+    select(qtbot, view, "Tea")
+    choose_combo(qtbot, view.purpose, "expense")
+    choose_combo(qtbot, view.category, "expense:food")
+    enter_text(qtbot, view.batch.reason, "A: Shared acceptance reason")
+    qtbot.mouseClick(view.batch.stage_button, Qt.LeftButton)
+    staged = dict(view.batch.staged)
+    assert view.reason is not view.batch.reason and not view.reason.isVisible()
+    choose_combo(qtbot, view.navigation.status_filter, "all")
+    select(qtbot, view, "Coffee")
+    assert view.saved_review_note.toPlainText() == "Original Coffee note"
+    assert not view.reason.text() and view.batch.reason.text() == "A: Shared acceptance reason"
+    choose_combo(qtbot, view.category, "expense:travel")
+    enter_text(qtbot, view.reason, "B: Correct only Coffee")
+    assert view.batch.note() == "A: Shared acceptance reason" and view.batch.staged == staged
+    artifacts.capture("01-correction-reason-separate-from-shared-review-set", window)
+    select(qtbot, view, "Tea")
+    assert view.batch.reason.text() == "A: Shared acceptance reason"
+    enter_text(qtbot, view.batch.reason, "C: Unstaged new shared reason")
+    select(qtbot, view, "Coffee")
+    assert view.reason.text() == "B: Correct only Coffee"
+    assert view.batch.reason.text() == "C: Unstaged new shared reason"
+    modals = ModalSteps(qtbot)
+
+    def cancel(dialog):
+        text = dialog.findChild(QPlainTextEdit).toPlainText()
+        assert text.count("A: Shared acceptance reason") == 1
+        assert "B: Correct only Coffee" not in text and "C: Unstaged" not in text
+        assert "Tea" in text and "Coffee" not in text
+        artifacts.capture("02-shared-reason-once-in-concise-exact-preview", dialog)
+        qtbot.mouseClick(dialog.findChild(QDialogButtonBox).button(QDialogButtonBox.Cancel), Qt.LeftButton)
+
+    modals.arm((QDialog, cancel))
+    qtbot.mouseClick(view.batch.preview_button, Qt.LeftButton)
+    modals.finish()
+    qtbot.waitUntil(lambda: not view.review_pending)
+    assert view.reason.text() == "B: Correct only Coffee"
+    assert view.batch.reason.text() == "C: Unstaged new shared reason"
+    assert view.batch.note() == "A: Shared acceptance reason" and view.batch.staged == staged
+    assert journals(workspace) == 1
+    artifacts.capture("03-cancel-keeps-both-reason-scopes-and-prior-stages", window)
+
+
+@pytest.mark.parametrize("size", [(1050, 700), (1280, 800)])
 def test_single_staging_route_visible_state_edit_remove_filter_cancel_and_exact_post(
     qtbot, qapp, tmp_path, journey_artifacts, size
 ):
@@ -37,7 +91,8 @@ def test_single_staging_route_visible_state_edit_remove_filter_cancel_and_exact_
     transient_previews = []
     select(qtbot, view, "Coffee")
     choices(qtbot, view)
-    assert view.batch.reason is view.reason
+    assert view.batch.reason is not view.reason
+    assert view.batch.reason.isVisible() and not view.reason.isVisible()
     assert view.batch.stage_button.isEnabled()
     assert not view.action_button.isVisible() and not view.action_button.isEnabled()
     assert view.table.horizontalHeader().visualIndex(view.model.columnCount() - 1) == 0
@@ -58,11 +113,11 @@ def test_single_staging_route_visible_state_edit_remove_filter_cancel_and_exact_
 
     select(qtbot, view, "Tea")
     choices(qtbot, view)
-    enter_text(qtbot, view.reason, "Checked both purchases against original")
+    enter_text(qtbot, review_reason(view), "Checked both purchases against original")
     qtbot.mouseClick(view.batch.stage_button, Qt.LeftButton)
     original_tea = next(value for value in view.batch.staged.values() if value.row_id != coffee.row_id)
     choose_combo(qtbot, view.category, "expense:travel")
-    enter_text(qtbot, view.reason, "An edited note which is not staged")
+    enter_text(qtbot, review_reason(view), "An edited note which is not staged")
     assert marker(view, "Tea") == "Staged · changes not staged"
     assert "Changes not staged" in view.status.text()
     assert view.batch.staged[original_tea.row_id].category_id == "expense:food"
@@ -87,8 +142,8 @@ def test_single_staging_route_visible_state_edit_remove_filter_cancel_and_exact_
     del dismissed
     gc.collect()  # Normal collection must be safe after dismissed modal teardown.
     assert len(view.batch.staged) == 2 and journals(workspace) == 0
-    assert view.reason.text() == "An edited note which is not staged"
-    qtbot.mouseClick(view.batch.remove_button, Qt.LeftButton)
+    assert review_reason(view).text() == "An edited note which is not staged"
+    choose_review_menu(qtbot, view.batch.options_button, view.batch.options_menu, view.batch.remove_action)
     assert set(view.batch.staged) == {coffee.row_id}
     assert marker(view, "Tea") == "Not staged"
     assert view.category.currentData() == "expense:travel"
@@ -106,15 +161,15 @@ def test_single_staging_route_visible_state_edit_remove_filter_cancel_and_exact_
     # An old Food draft must not label a newly captured Travel choice as changed.
     select(qtbot, view, "Coffee")
     choose_combo(qtbot, view.category, "expense:travel")
-    enter_text(qtbot, view.reason, "Restaged chosen category")
+    enter_text(qtbot, review_reason(view), "Restaged chosen category")
     qtbot.mouseClick(view.batch.stage_button, Qt.LeftButton)
     assert marker(view, "Coffee") == "Staged · not saved"
     select(qtbot, view, "Snack")
     choices(qtbot, view)
-    note = view.reason.text()
-    qtbot.mouseClick(view.batch.clear_button, Qt.LeftButton)
+    note = review_reason(view).text()
+    choose_review_menu(qtbot, view.batch.options_button, view.batch.options_menu, view.batch.clear_action)
     assert not view.batch.staged and marker(view, "Coffee") == "Not staged"
-    assert view.reason.text() == note and view.category.currentData() == "expense:food"
+    assert review_reason(view).text() == note and view.category.currentData() == "expense:food"
     qtbot.mouseClick(view.batch.stage_button, Qt.LeftButton)
     assert len(view.batch.staged) == 1
     qtbot.mouseClick(view.navigation.next_button, Qt.LeftButton)
@@ -164,7 +219,7 @@ def test_common_staged_choices_restore_after_filter_preview_cancel_without_false
     select(qtbot, view, "Coffee")
     select(qtbot, view, "Tea", Qt.ControlModifier)
     choices(qtbot, view)
-    note = view.reason.text()
+    note = review_reason(view).text()
     qtbot.mouseClick(view.batch.stage_button, Qt.LeftButton)
     assert marker(view, "Coffee") == marker(view, "Tea") == "Staged · not saved"
     enter_text(qtbot, view.navigation.search, "Deposit")
@@ -184,18 +239,18 @@ def test_common_staged_choices_restore_after_filter_preview_cancel_without_false
     enter_text(qtbot, view.navigation.search, "Tea")
     select(qtbot, view, "Tea")
     assert view.purpose.currentData() == "expense" and view.category.currentData() == "expense:food"
-    assert view.reason.text() == note
+    assert review_reason(view).text() == note
     assert marker(view, "Coffee") == marker(view, "Tea") == "Staged · not saved"
-    qtbot.mouseClick(view.batch.remove_button, Qt.LeftButton)
+    choose_review_menu(qtbot, view.batch.options_button, view.batch.options_menu, view.batch.remove_action)
     assert marker(view, "Tea") == "Not staged" and marker(view, "Coffee") == "Staged · not saved"
     assert "2 staged" not in view.operation_status.text()
     assert journals(workspace) == 0
     artifacts.capture("06-common-stage-filter-cancel-restores-captured-proposal", window)
     enter_text(qtbot, view.navigation.search, "Coffee")
     select(qtbot, view, "Coffee")
-    assert "Staged" in view.status.text()
-    qtbot.mouseClick(view.batch.clear_button, Qt.LeftButton)
+    assert "In review set" in view.status.text()
+    choose_review_menu(qtbot, view.batch.options_button, view.batch.options_menu, view.batch.clear_action)
     assert not view.batch.staged and marker(view, "Coffee") == "Not staged"
-    assert view.status.text().startswith("Ready to stage")
+    assert view.status.text().startswith("Ready.")
     assert "2 staged" not in view.operation_status.text()
-    assert view.category.currentData() == "expense:food" and view.reason.text() == note
+    assert view.category.currentData() == "expense:food" and review_reason(view).text() == note

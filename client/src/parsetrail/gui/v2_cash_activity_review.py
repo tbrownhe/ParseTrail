@@ -30,6 +30,7 @@ from parsetrail.gui.v2_review_navigation import (
     StagedRowPresentation,
     review_status_label,
     reviewed_elsewhere,
+    tracking_scope_label,
 )
 
 PURPOSE_LABELS = {
@@ -212,13 +213,13 @@ class V2CashActivityReview(OrdinaryReviewMixin, QDialog):
         self.form = form
         self.purpose = QComboBox()
         self.purpose.currentIndexChanged.connect(self._purpose_changed)
-        self.purpose.setAccessibleName("1. Purpose, required")
-        form.addRow("1. Purpose *", self.purpose)
+        self.purpose.setAccessibleName("1. Transaction type, required")
+        form.addRow("1. Type *", self.purpose)
         self.category = QComboBox()
         self.category.currentIndexChanged.connect(self._update_withdraw)
         self.category_row = QHBoxLayout()
         self.category_row.addWidget(self.category, 1)
-        self.manage_categories_button = QPushButton("Manage categories…")
+        self.manage_categories_button = QPushButton("Add category…")
         self.manage_categories_button.clicked.connect(self._manage_categories)
         self.category_row.addWidget(self.manage_categories_button)
         self.category.setAccessibleName("2. Category, required")
@@ -278,9 +279,7 @@ class V2CashActivityReview(OrdinaryReviewMixin, QDialog):
         self.purpose.blockSignals(True)
         self.purpose.clear()
         self.purpose.addItem(
-            "Reviewed elsewhere — view the owning event"
-            if external
-            else "Choose a purpose; amount sign does not decide it",
+            "Reviewed elsewhere — view the owning event" if external else "Choose a transaction type…",
             None,
         )
         purposes = (row.purpose,) if correcting else row.allowed_purposes if row is not None else ()
@@ -304,7 +303,7 @@ class V2CashActivityReview(OrdinaryReviewMixin, QDialog):
         correcting = row is not None and row.entry_key is not None and not getattr(self, "_in_multi", False)
         self.category.blockSignals(True)
         self.category.clear()
-        self.category.addItem("Choose a category explicitly", None)
+        self.category.addItem("Choose a category…", None)
         labels = _category_labels(self.categories)
         for category in self.categories:
             if category.kind == kind:
@@ -323,7 +322,7 @@ class V2CashActivityReview(OrdinaryReviewMixin, QDialog):
         self.category.setEnabled(row is not None and not external)
         self.reason.setEnabled(row is not None and not external)
         self.source_context.setText(
-            f"Reviewed account scope: {(row.tracking_scope or 'unavailable until account assignment').replace('_', ' ')}. "
+            f"Reviewed account scope: {tracking_scope_label(row.tracking_scope)}. "
             + (
                 f"Source description: {row.description}."
                 if row.source_description_known
@@ -415,6 +414,7 @@ class V2CashActivityReview(OrdinaryReviewMixin, QDialog):
         old_ids = {category.id for category in self.categories}
         dialog = V2CategoryDialog(self.jobs.profile, self)
         dialog.add_kind.setCurrentIndex(dialog.add_kind.findData(PURPOSE_KINDS[purpose]))
+        dialog.begin_add()
         dialog.exec()
         selected = dialog.categories.currentItem()
         created_id = selected.data(Qt.UserRole) if selected is not None else None
@@ -515,7 +515,7 @@ class V2CashActivityReview(OrdinaryReviewMixin, QDialog):
         message = (
             f"{action}?\n\n{row.date or 'Unknown'}  {row.description if row.source_description_known else 'Source description unavailable / unknown'}\n"
             f"{_money(row.amount_minor)}  {row.financial_account}\n"
-            f"Account scope: {row.tracking_scope.replace('_', ' ')}. "
+            f"Account scope: {tracking_scope_label(row.tracking_scope)}. "
             + (
                 "Only this cash component is reviewed; the whole HSA and investment portfolio remain outside this review. "
                 if row.tracking_scope == "cash_component"

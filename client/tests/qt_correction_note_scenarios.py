@@ -185,7 +185,7 @@ def test_cash_save_withdraw_and_unrelated_row_draft(qtbot, qapp, tmp_path, journ
     saved_row(qtbot, view, "Snack")
     choose_combo(qtbot, view.purpose, "expense")
     choose_combo(qtbot, view.category, "expense:food")
-    enter_text(qtbot, view.reason, "Unrelated Snack draft must stay")
+    enter_text(qtbot, view.batch.reason, "Unrelated Snack draft must stay")
     click_table_text(qtbot, view.table, "Coffee")
     assert_idle(view, LONG_NOTE)
     choose_combo(qtbot, view.category, "expense:travel")
@@ -197,7 +197,7 @@ def test_cash_save_withdraw_and_unrelated_row_draft(qtbot, qapp, tmp_path, journ
     artifacts.capture("01-correction-saved-note-updated-new-reason-empty", window)
     check_source(workspace, evidence, original, entries=5, corrections=1)
     click_table_text(qtbot, view.table, "Snack")
-    assert view.reason.text() == "Unrelated Snack draft must stay"
+    assert view.batch.reason.text() == "Unrelated Snack draft must stay"
     assert view.category.currentData() == "expense:food" and not view.saved_review_note.isVisible()
     click_table_text(qtbot, view.table, "Coffee")
     assert_idle(view, "Correct Coffee category after checking source")
@@ -227,7 +227,7 @@ def test_cash_save_withdraw_and_unrelated_row_draft(qtbot, qapp, tmp_path, journ
         )
     artifacts.capture("03-withdrawn-row-pending-unrelated-saved-and-draft-retained", window)
     click_table_text(qtbot, view.table, "Snack")
-    assert view.reason.text() == "Unrelated Snack draft must stay"
+    assert view.batch.reason.text() == "Unrelated Snack draft must stay"
 
 
 def test_stale_replacement_drops_only_the_old_entry_draft(qtbot, qapp, tmp_path, journey_artifacts):
@@ -360,7 +360,7 @@ def test_pending_and_multi_selection_keep_separate_notes(qtbot, qapp, tmp_path, 
     assert not view.saved_review_note.isVisible() and view.reason.text() == ""
     choose_combo(qtbot, view.purpose, "expense")
     choose_combo(qtbot, view.category, "expense:food")
-    enter_text(qtbot, view.reason, "Independent pending review note")
+    enter_text(qtbot, view.batch.reason, "Independent pending review note")
     qtbot.mouseClick(view.batch.stage_button, Qt.LeftButton)
     staged_note = view.batch.note()
     staged_rows = dict(view.batch.staged)
@@ -370,9 +370,10 @@ def test_pending_and_multi_selection_keep_separate_notes(qtbot, qapp, tmp_path, 
     assert not view.action_button.isEnabled() and not view.withdraw_button.isEnabled()
     assert view.batch.note() == staged_note and view.batch.staged == staged_rows
     select(qtbot, view, "Snack")
-    assert view.reason.text() == "Independent pending review note"
+    assert view.batch.reason.text() == "Independent pending review note"
     select(qtbot, view, "Coffee")
     assert view.reason.text() == "Coffee-only authored explanation" and view.saved_review_note.isVisible()
+    assert view.batch.reason.text() == "Independent pending review note"
     assert view.batch.isVisible() and view.batch.note() == staged_note and view.batch.staged == staged_rows
     JourneyArtifacts(journey_artifacts, qapp, (1050, 700)).capture(
         "01-row-specific-reasons-survive-multi-return", window

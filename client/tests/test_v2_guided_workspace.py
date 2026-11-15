@@ -24,15 +24,16 @@ def test_navigation_embeds_working_views_and_keeps_report_period(tmp_path):
         wait_for_jobs(review)
         assert review.embedded and review.model.rowCount() == 1
         assert "Change" in window.source_review_button.text()
-        window.navigation.setCurrentRow(3)
+        window.navigation.setCurrentRow(window.REPORTS)
         reports = window._reports_view
         reports.start.setDate(QDate(2026, 10, 1))
         reports.end.setDate(QDate(2026, 11, 1))
         wait_for_reports(reports)
         window.navigation.setCurrentRow(2)
+        window.account_details_toggle.setChecked(True)
         wait_for_reports(window._positions_view)
         assert window._positions_view.positions_model.rowCount() == 1
-        window.navigation.setCurrentRow(3)
+        window.navigation.setCurrentRow(window.REPORTS)
         assert window._reports_view is reports
         assert reports.start.date() == QDate(2026, 10, 1)
         window.navigation.setCurrentRow(1)
@@ -57,7 +58,7 @@ def test_changing_document_preserves_draft_until_explicit_discard(tmp_path, monk
         wait_for_jobs(window._review_widget)
         source = window._selected_source()
         view = window._review_widget
-        view.reason.setText("Unapplied explicit review note")
+        view.batch.reason.setText("Unapplied explicit review note")
         monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.No)
         window.sources.setCurrentRow(1)
         assert window._selected_source() == source

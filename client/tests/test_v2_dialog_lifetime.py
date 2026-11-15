@@ -16,6 +16,7 @@ from PySide6.QtCore import QCoreApplication, QEvent, Qt, QTimer
 from PySide6.QtWidgets import QDialog, QStackedWidget, QTableView, QWidget
 from shiboken6 import isValid
 
+from .ordinary_staging_helpers import review_reason
 from .test_v2_report_drilldown import END, START, _profile
 
 
@@ -104,16 +105,16 @@ def test_ordinary_preview_disposes_without_destroying_reusable_review(profile, p
     try:
         qtbot.waitUntil(lambda: not review.review_pending, timeout=5000)
         assert review.batch.review is review
-        review.reason.setText("Draft survives preview and hide")
+        review_reason(review).setText("Draft survives preview and hide")
         review.show()
         review.hide()
         review.show()
-        assert review.reason.text() == "Draft survives preview and hide"
+        assert review_reason(review).text() == "Draft survives preview and hide"
         review._preview_evidence()
         qtbot.waitUntil(lambda: bool(observed) and not review.review_pending, timeout=5000)
         assert_disposed(observed[0])
         assert isValid(review) and review.batch.review is review
-        assert review.reason.text() == "Draft survives preview and hide"
+        assert review_reason(review).text() == "Draft survives preview and hide"
     finally:
         assert review.request_cancel()
         review.deleteLater()

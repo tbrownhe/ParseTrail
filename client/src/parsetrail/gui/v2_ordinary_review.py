@@ -13,13 +13,15 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QDialogButtonBox,
+    QGroupBox,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
+    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QVBoxLayout,
-    QWidget,
 )
 
 from parsetrail.gui.v2_form_state import install_form_styles, set_field_state, set_status
@@ -91,8 +93,8 @@ class OrdinaryReviewMixin:
         self.layout().insertWidget(2, self.cancel_read_button, alignment=Qt.AlignLeft)
         self.batch = OrdinaryBatchPanel(self)
         self.table.horizontalHeader().moveSection(self.model.columnCount() - 1, 0)
-        self.actions_layout.insertWidget(0, self.batch.stage_button)
-        self.setTabOrder(self.reason, self.batch.stage_button)
+        self.setTabOrder(self.reason, self.batch.reason)
+        self.setTabOrder(self.batch.reason, self.batch.stage_button)
         self.setTabOrder(self.batch.stage_button, self.action_button)
         self.setTabOrder(self.action_button, self.withdraw_button)
         self.repeat_review_button = QPushButton("Review possible repeated transactions…")
@@ -102,9 +104,9 @@ class OrdinaryReviewMixin:
         self.repeat_review_button.clicked.connect(self._review_possible_repeats)
         self.actions_layout.addWidget(self.repeat_review_button)
         self.repeat_review_button.hide()
-        if self.batch.reason is not self.reason:
-            self.reason.textChanged.connect(self.batch.update_summary)
+        self.batch.reason.textChanged.connect(self._update_review_actions)
         self.table.selectionModel().selectionChanged.connect(self._selection_membership_changed)
+        self.navigation.exact_row_requested.connect(self._exact_row_requested)
         self.layout().insertWidget(self.layout().count() - 1, self.batch)
         self.evidence_details_button = QPushButton("Source and interpretation details")
         self.evidence_details_button.setCheckable(True)
@@ -113,6 +115,33 @@ class OrdinaryReviewMixin:
         self.source_context.hide()
         self.history_details.hide()
         self.layout().insertWidget(self.layout().indexOf(self.source_context), self.evidence_details_button)
+        # Routine source inspection has one consistent footer action. Rare
+        # reload/rule/diagnostic controls remain keyboard-accessible in a menu.
+        self.secondary_button = QPushButton("More review options…")
+        self.secondary_menu = QMenu(self.secondary_button)
+        self.secondary_button.setMenu(self.secondary_menu)
+        for button, label in (
+            (self.review_limits_button, "Review rules and source limits"),
+            (self.evidence_details_button, "Source and review details"),
+        ):
+            self.layout().removeWidget(button)
+            button.hide()
+            action = self.secondary_menu.addAction(label)
+            action.setCheckable(True)
+            action.toggled.connect(button.setChecked)
+        self.layout().removeWidget(self.preview_source_button)
+        self.preview_source_button.setText("View statement evidence…")
+        for button_box in self.findChildren(QDialogButtonBox):
+            close = button_box.button(QDialogButtonBox.Close)
+            if close is not None and embedded:
+                close.hide()
+            for button in button_box.buttons():
+                if button.text() == "Reload saved review":
+                    self.secondary_menu.addAction("Reload saved review", self._reload_review)
+                    button_box.removeButton(button)
+                    button.deleteLater()
+            button_box.addButton(self.preview_source_button, QDialogButtonBox.ActionRole)
+            button_box.addButton(self.secondary_button, QDialogButtonBox.ActionRole)
         if embedded:
             self.layout().setContentsMargins(0, 0, 0, 0)
             self.layout().setSpacing(3)
@@ -120,28 +149,25 @@ class OrdinaryReviewMixin:
             self.overlap_note.hide()
             self.layout().removeWidget(self.cancel_read_button)
             self.navigation.layout().addWidget(self.cancel_read_button)
-            self.reason.setPlaceholderText("Review reason; Stage selected applies this reason to every staged row")
-            for button_box in self.findChildren(QDialogButtonBox):
-                button = button_box.button(QDialogButtonBox.Close)
-                if button is not None:
-                    button.hide()
-                self.layout().removeWidget(self.review_limits_button)
-                self.layout().removeWidget(self.evidence_details_button)
-                self.layout().removeWidget(self.preview_source_button)
-                self.review_limits_button.setText("Rules and limits")
-                self.evidence_details_button.setText("Details")
-                self.preview_source_button.setText("Source evidence")
-                button_box.addButton(self.review_limits_button, QDialogButtonBox.ActionRole)
-                button_box.addButton(self.evidence_details_button, QDialogButtonBox.ActionRole)
-                button_box.addButton(self.preview_source_button, QDialogButtonBox.ActionRole)
-                for action_button in button_box.buttons():
-                    if action_button.text() == "Reload saved review":
-                        action_button.setText("Reload")
 
     def _selection_membership_changed(self, *_args):
         # Qt updates selection before emitting this signal. Navigation resolves
         # a sole selected row even when currentIndex is an old/deselected anchor.
         self._refresh_selection_scope()
+
+    def _reload_review(self):
+        if not self.jobs.writing:
+            row = self._current()
+            self.refresh(selected_row_id=row.row_id if row is not None else None)
+
+    def _exact_row_requested(self, row_id):
+        if self.jobs.pending and not self.jobs.writing:
+            self._selected_after_read = row_id
+            if self._restore_multi is not None:
+                _ids, proposal, drafts = self._restore_multi
+                # A report handoff replaces the restored selection, not the
+                # unrelated common proposal or row drafts captured by refresh.
+                self._restore_multi = ((row_id,), proposal, drafts)
 
     def _refresh_selection_scope(self):
         row = self.navigation.current()
@@ -207,7 +233,8 @@ class OrdinaryReviewMixin:
             blockers.insert(
                 0, "These rows have no common review purpose. Select compatible pending rows or review individually."
             )
-        for field, name in ((self.purpose, "purpose"), (self.category, "category"), (self.reason, "review note")):
+        self.form.setRowVisible(self.reason, False)
+        for field, name in ((self.purpose, "type"), (self.category, "category")):
             self.form.setRowVisible(self.category_row if field is self.category else field, True)
             field.setEnabled(usable)
             valid = bool(field.text().strip()) if field is self.reason else field.currentData() is not None
@@ -216,9 +243,8 @@ class OrdinaryReviewMixin:
             set_field_state(
                 field, "ready" if usable and valid else "required" if usable and not blockers else "neutral"
             )
-        self.form.labelForField(self.reason).setText(
-            f"{'4' if hasattr(self, 'accounting_date') else '3'}. Review note — applies to all staged rows *"
-        )
+        if not self.batch.reason.text().strip():
+            missing.append("shared reason")
         self.manage_categories_button.setEnabled(usable and self.purpose.currentData() is not None)
         if hasattr(self, "accounting_date"):
             self.form.setRowVisible(self.accounting_date, True)
@@ -250,9 +276,8 @@ class OrdinaryReviewMixin:
                 + " Prior staged choices are kept."
             )
             if usable and blockers
-            else ("Required: " + ", ".join(missing) + ". " if missing else "Choices apply to ALL selected rows. ")
-            + f"Stage {count} selected, then Review staged for exact effects. Not saved."
-            + " Stage applies the review note to all staged rows."
+            else ("Choose " + ", ".join(missing) + ". " if missing else "")
+            + f"Stage {count} selected, then review the set before posting."
             + (
                 " Each row keeps its own date; date overrides must be staged individually."
                 if hasattr(self, "accounting_date")
@@ -275,6 +300,7 @@ class OrdinaryReviewMixin:
         old_ids = {item.id for item in self.categories}
         dialog = V2CategoryDialog(self.jobs.profile, self)
         dialog.add_kind.setCurrentIndex(dialog.add_kind.findData(PURPOSE_KINDS[purpose]))
+        dialog.begin_add()
         dialog.exec()
         selected = dialog.categories.currentItem()
         created = selected.data(Qt.UserRole) if selected is not None else None
@@ -314,6 +340,7 @@ class OrdinaryReviewMixin:
         """Describe local choices separately from saved state and posting eligibility."""
         if not hasattr(self, "jobs"):
             return
+        self.batch.update_summary()
         repeat_blocked = any(self._repeat_blocked(row) for row in self.navigation.selected())
         self.repeat_review_button.setVisible(repeat_blocked)
         self.repeat_review_button.setEnabled(
@@ -358,14 +385,15 @@ class OrdinaryReviewMixin:
         self.saved_review_note.setToolTip(saved_note)
         # Saved corrections need no empty batch strip. Retain any unrelated
         # staged work and its explicit summary/preview controls.
-        self.batch.setVisible(not correction or bool(self.batch.staged))
+        self.batch.setVisible(
+            not (correction or owner_route) or bool(self.batch.staged) or bool(self.batch.reason.text().strip())
+        )
+        self.form.setRowVisible(self.reason, correction and not owner_route)
         self.reason.setAccessibleName(
             "Reason for correction, required for a new decision" if correction else "Review note, required"
         )
         self.reason.setPlaceholderText(
-            "Enter a new reason to correct or withdraw this saved review"
-            if correction
-            else "Review note — staging applies it to every staged row"
+            "Enter a new reason to correct or withdraw this saved review" if correction else ""
         )
         self.action_button.setVisible(correction or owner_route)
         if not correction and not owner_route:
@@ -373,7 +401,7 @@ class OrdinaryReviewMixin:
         self.batch.stage_button.setVisible(not correction and not owner_route)
         self.withdraw_button.setVisible(correction)
         set_field_state(self.action_button, "neutral")
-        self.decision_group.setTitle("Correct saved review" if correction else "Review selected transaction")
+        self.decision_group.setTitle("Correct saved review" if correction else "Selected transaction")
         if pending or self.basis is None or not self._profile_matches() or row is None:
             state = "loading" if pending else "blocked" if row is not None else "neutral"
             for field in fields:
@@ -445,7 +473,7 @@ class OrdinaryReviewMixin:
             )
         missing = []
         if purpose not in {"expense", "expense_refund", "income", "income_adjustment"}:
-            missing.append("purpose")
+            missing.append("type")
             set_field_state(
                 self.purpose, "required", "Choose a purpose explicitly; the amount sign does not decide it."
             )
@@ -478,7 +506,7 @@ class OrdinaryReviewMixin:
                     "saved" if correction and not date_changed else "ready",
                     f"Source posting-date provenance: {row.date_provenance}. Source evidence is unchanged.",
                 )
-        note = self.reason.text().strip()
+        note = (self.reason if correction else self.batch.reason).text().strip()
         note_required = not correction or changed
         note_label = self.form.labelForField(self.reason)
         note_label.setText(
@@ -491,9 +519,10 @@ class OrdinaryReviewMixin:
             + ("*" if note_required else "(for changes)")
         )
         if not note and note_required:
-            missing.append("reason for correction" if correction else "review note")
-            set_field_state(self.reason, "required", "Explain this new review or correction before confirming.")
-        else:
+            missing.append("reason for correction" if correction else "shared reason")
+            if correction:
+                set_field_state(self.reason, "required", "Explain this correction before confirming.")
+        elif correction:
             set_field_state(self.reason, "ready" if note else "optional", "A new correction needs a review note.")
         if correction and not changed:
             editable = (
@@ -534,15 +563,15 @@ class OrdinaryReviewMixin:
             set_status(
                 self.status,
                 "ready",
-                "Changes not staged. Stage selected to update this proposal and the shared note for all staged rows. Review staged uses the previous staged choices."
+                "Changes not staged. Stage selected to update the review set."
                 if dirty
-                else "Staged · Not saved. Review staged to inspect exact effects and confirm. You can remove this row from staged without changing other rows.",
+                else "In review set · not posted. Review staged to check and confirm.",
             )
         elif not correction and self.batch.stage_button.isEnabled():
             set_status(
                 self.status,
                 "ready",
-                "Ready to stage · Not saved. Stage selected, then Review staged to confirm exact effects.",
+                "Ready. Stage selected, then review the set before posting.",
             )
         elif self.action_button.isEnabled():
             set_field_state(self.action_button, "ready", "Confirmation is still required before this choice is saved.")
@@ -829,7 +858,8 @@ class OrdinaryReviewMixin:
             self._reset_form_after_write = not retain_current
             self._restore_draft = None
             if key[1] == "batch":
-                self.batch.clear(clear_proposal=not retain_current)
+                clear_shared = not retain_current and self.batch.reason.text().strip() == self.batch.note()
+                self.batch.clear(clear_proposal=clear_shared)
             self._completion_message = (
                 "These reviewed entries were already saved; no duplicate entries were posted."
                 if key[1] == "batch" and getattr(result, "already_posted", False)
@@ -979,7 +1009,7 @@ class OrdinaryReviewMixin:
         self.refresh(selected_row_id=row.row_id)
 
 
-class OrdinaryBatchPanel(QWidget):
+class OrdinaryBatchPanel(QGroupBox):
     """Stage authored choices, then ask the headless service for an exact preview."""
 
     def __init__(self, review):
@@ -988,42 +1018,49 @@ class OrdinaryBatchPanel(QWidget):
         self.staged = {}
         self._staged_reason = ""
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(10, 2, 10, 2)
+        layout.setSpacing(2)
+        self.reason_label = QLabel("Shared reason for all rows in this review *")
+        self.reason = QLineEdit(self)
+        self.reason.setMaxLength(500)
+        self.reason.setAccessibleName(self.reason_label.text())
+        self.reason.setPlaceholderText("Why you are accepting these transactions")
+        self.reason_label.setBuddy(self.reason)
+        reason_row = QHBoxLayout()
+        reason_row.addWidget(self.reason_label)
+        reason_row.addWidget(self.reason, 1)
+        layout.addLayout(reason_row)
         controls = QHBoxLayout()
-        self.title = QLabel("Staged for review")
-        title_font = self.title.font()
-        title_font.setBold(True)
-        self.title.setFont(title_font)
-        controls.addWidget(self.title)
-        self.reason = review.reason
-        self.reason.setPlaceholderText("Review note — staging applies it to every staged row")
         self.stage_button = QPushButton("Stage selected rows")
         self.stage_button.clicked.connect(self.stage_selected)
         self.preview_button = QPushButton("Review staged…")
         self.preview_button.clicked.connect(self.preview)
-        self.clear_button = QPushButton("Clear staged")
+        self.clear_button = QPushButton("Clear staged", self)
         self.clear_button.clicked.connect(self.clear_from_ui)
-        self.remove_button = QPushButton("Remove selected")
+        self.remove_button = QPushButton("Remove selected", self)
         self.remove_button.setToolTip(
             "Remove selected rows from the staged set; other staged choices and saved entries are kept."
         )
         self.remove_button.clicked.connect(self.remove_selected)
+        controls.addWidget(self.stage_button)
         controls.addWidget(self.preview_button)
-        controls.addWidget(self.remove_button)
-        controls.addWidget(self.clear_button)
+        self.options_button = QPushButton("Review set options…")
+        self.options_menu = QMenu(self.options_button)
+        self.options_button.setMenu(self.options_menu)
+        self.remove_action = self.options_menu.addAction("Remove selected from review set", self.remove_button.click)
+        self.clear_action = self.options_menu.addAction("Clear review set", self.clear_button.click)
+        self.remove_button.hide()
+        self.clear_button.hide()
+        controls.addWidget(self.options_button)
         layout.addLayout(controls)
-        self.summary = QLabel("No rows staged. Select rows, choose purpose/category, and enter a review note.")
+        self.summary = QLabel()
         self.summary.setWordWrap(True)
+        self.reason_scope = self.summary
         self.stage_button.setText("Stage selected")
         self.stage_button.setToolTip(
             "Capture the selected purpose, category and date. Staging replaces only selected proposals, and applies this note to ALL staged rows. Nothing posts until exact confirmation."
         )
-        if review.embedded:
-            self.title.hide()
-            self.summary.setWordWrap(False)
-            controls.insertWidget(0, self.summary, 1)
-        else:
-            layout.addWidget(self.summary)
+        layout.addWidget(self.summary)
         self.reason.textChanged.connect(self.update_summary)
         review.navigation.proxy.rowsRemoved.connect(self.update_summary)
         review.navigation.proxy.rowsInserted.connect(self.update_summary)
@@ -1042,7 +1079,7 @@ class OrdinaryBatchPanel(QWidget):
     def clear(self, *, clear_proposal=True):
         self.staged.clear()
         self._staged_reason = ""
-        if clear_proposal or self.reason is not self.review.reason:
+        if clear_proposal:
             self.reason.clear()
         self.update_summary()
 
@@ -1123,27 +1160,41 @@ class OrdinaryBatchPanel(QWidget):
             )
         )
         set_field_state(self.preview_button, "ready" if self.preview_button.isEnabled() else "neutral")
+        set_field_state(
+            self.reason,
+            "loading"
+            if self.review.jobs.pending
+            else "blocked"
+            if self.review.basis is None
+            else "ready"
+            if self.reason.text().strip()
+            else "required"
+            if self.staged
+            or any(
+                row.entry_key is None
+                and row.status in {"Ready for purpose review", "Enable assumed dates or enter a corrected date"}
+                for row in self.review.navigation.selected()
+            )
+            else "optional",
+        )
+        self.setTitle(f"Review set — {count} row{'s' if count != 1 else ''} · not posted")
+        self.remove_action.setEnabled(self.remove_button.isEnabled())
+        self.clear_action.setEnabled(self.clear_button.isEnabled())
+        self.options_button.setVisible(bool(count))
         self.update_stage_action()
         if count:
-            text = f"{count} staged row(s); {hidden} hidden by the current filter. Not saved. Review staged includes all of them. Staging a new note replaces the note for ALL staged rows. Corrections are reviewed individually."
-            self.summary.setText(
-                f"{count} staged" + (f" · {hidden} hidden" if hidden else "") + " · Not saved"
-                if self.review.embedded
-                else text + " Not saved."
-            )
+            text = f"ALL {count} staged rows included · {hidden} hidden by filters."
+            changed_reason = self.reason.text().strip() != self._staged_reason
+            self.summary.setText(text + (" Reason changed — stage to apply it to ALL rows." if changed_reason else ""))
             self.summary.setToolTip(text + "\nShared staged note: " + self.note())
         else:
-            self.summary.setText(
-                "No rows staged"
-                if self.review.embedded
-                else "No rows staged. Select rows, choose purpose/category, and enter a review note."
-            )
+            self.summary.setText("Stage captures this reason for ALL staged rows, including hidden rows.")
 
     def update_stage_action(self):
         review = self.review
         rows = review.navigation.selected()
         purpose, category = review.purpose.currentData(), review.category.currentData()
-        note = review.reason.text() if len(rows) > 1 else self.reason.text()
+        note = self.reason.text()
         _proposed, blockers = self.propose(rows, purpose, category)
         eligible = bool(
             rows
@@ -1172,8 +1223,6 @@ class OrdinaryBatchPanel(QWidget):
             review._handle_multi_selection()
             self.summary.setText("Choose a common purpose, category and review note for all selected rows first.")
             return
-        if len(rows) > 1 and self.reason is not review.reason:
-            self.reason.setText(review.reason.text())
         purpose, category = review.purpose.currentData(), review.category.currentData()
         proposed, refused = self.propose(rows, purpose, category)
         if refused:
@@ -1192,7 +1241,6 @@ class OrdinaryBatchPanel(QWidget):
         ):
             self.summary.setText("Select rows and explicitly choose a purpose, category and shared review note first.")
             return
-        previous_note = self._staged_reason
         staged_note = self.reason.text().strip()
         self.staged.update(proposed)
         self._staged_reason = staged_note
@@ -1214,13 +1262,9 @@ class OrdinaryBatchPanel(QWidget):
                     selection.purpose,
                     selection.category_id,
                     accounting_date,
-                    staged_note,
+                    "",
                     True,
                 )
-            elif row.row_id in self.staged:
-                draft = review._row_drafts.get(row.row_id)
-                if draft is not None and draft[4].strip() == previous_note:
-                    review._row_drafts[row.row_id] = (*draft[:4], staged_note, draft[5])
         self.update_summary()
         review._update_review_actions()
 
@@ -1321,9 +1365,8 @@ class OrdinaryBatchPanel(QWidget):
         dialog.setWindowTitle("Confirm staged review")
         dialog.resize(850, 600)
         layout = QVBoxLayout(dialog)
-        title = QLabel(
-            f"{len(preview.selections)} explicitly staged row(s). All entries post together after confirmation."
-        )
+        count = len(preview.selections)
+        title = QLabel(f"Post {count} reviewed transaction{'s together' if count != 1 else ''}?")
         title.setWordWrap(True)
         layout.addWidget(title)
         details = QPlainTextEdit()
@@ -1360,24 +1403,44 @@ class OrdinaryBatchPanel(QWidget):
                 qualification += (
                     "\nWhole liability effect only; principal/interest breakdown is unavailable and is not inferred."
                 )
+            date_detail = (
+                f"\nSource date: {source_date}; posting candidate: {posting_candidate} ({provenance}); "
+                f"accounting date: {entry.posting_date} ({'explicit override' if selection.accounting_date else provenance})."
+            )
+            date_qualification = (
+                date_detail
+                if str(source_date) != str(entry.posting_date)
+                or provenance in {"assumed", "unknown"}
+                or selection.accounting_date is not None
+                else ""
+            )
             text.append(
-                f"{row.description or 'Description not printed'}\nAccount: {row.financial_account or 'Not assigned'}; scope: {getattr(row, 'tracking_scope', None) or 'account total'}\nSource date: {source_date}; posting candidate: {posting_candidate} ({provenance}); accounting date: {entry.posting_date} ({'explicit override' if selection.accounting_date else provenance})\nSource amount: {_money(row.amount_minor)}; purpose: {PURPOSE_LABELS[selection.purpose]}; category: {categories.get(selection.category_id, selection.category_id)}\nReason: {preview.reason}\n"
+                f"{row.description or 'Description not printed'} · {_money(row.amount_minor)}\n"
+                f"{row.financial_account or 'Not assigned'} · {entry.posting_date} · "
+                f"{PURPOSE_LABELS[selection.purpose]} / {categories.get(selection.category_id, selection.category_id)}\n"
                 + _purpose_effects(
                     selection.purpose,
                     row.amount_minor,
                     financial_kind="asset" if review.review_kind == "cash" else "liability",
                 )
+                + date_qualification
                 + qualification
             )
             posting_details.append(
-                f"{entry.posting_date} · {row.description or 'Description not printed'}\n"
+                f"{row.description or 'Description not printed'}\n"
+                f"Account: {row.financial_account or 'Not assigned'}; scope: {getattr(row, 'tracking_scope', None) or 'account total'}"
+                + date_detail
+                + "\n"
                 + "\n".join(
                     f"{posting.account_id}: {_money(posting.amount_minor)} debit signed" for posting in entry.postings
                 )
             )
-        details.setPlainText("\n\n".join(text))
+        details.setAccessibleName("Transactions and exact financial effects")
+        details.setPlainText(
+            f"Shared reason for all {count} row{'s' if count != 1 else ''}: {preview.reason}\n\n" + "\n\n".join(text)
+        )
         layout.addWidget(details, 1)
-        show_postings = QCheckBox("Show exact posting lines")
+        show_postings = QCheckBox("Show source and exact posting details")
         posting_text = QPlainTextEdit("\n\n".join(posting_details))
         posting_text.setReadOnly(True)
         posting_text.setAccessibleName("Exact ledger posting detail")
@@ -1386,7 +1449,10 @@ class OrdinaryBatchPanel(QWidget):
         layout.addWidget(show_postings)
         layout.addWidget(posting_text)
         buttons = QDialogButtonBox(QDialogButtonBox.Cancel)
-        confirm = buttons.addButton(f"Confirm and post {len(preview.entries)} entries", QDialogButtonBox.AcceptRole)
+        entry_count = len(preview.entries)
+        confirm = buttons.addButton(
+            f"Confirm and post {entry_count} entr{'ies' if entry_count != 1 else 'y'}", QDialogButtonBox.AcceptRole
+        )
         set_field_state(confirm, "ready")
         confirm.clicked.connect(dialog.accept)
         buttons.rejected.connect(dialog.reject)
@@ -1417,5 +1483,7 @@ class OrdinaryBatchPanel(QWidget):
             return store.post_reviewed_ordinary_batch(preview, cancelled=cancelled)
 
         review._submit_review_write(
-            post, message=f"Saved {len(preview.entries)} reviewed entries together.", batch=True
+            post,
+            message=f"Posted {entry_count} reviewed transaction{'s' if entry_count != 1 else ''}. Open Budget to see monthly impact.",
+            batch=True,
         )

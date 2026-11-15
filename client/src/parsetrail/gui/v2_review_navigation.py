@@ -11,9 +11,21 @@ def reviewed_elsewhere(row):
     return row is not None and row.entry_key is None and row.status == "Already posted to the ledger"
 
 
+def tracking_scope_label(scope):
+    return {
+        "account_total": "Whole account",
+        "cash_component": "Cash component only",
+        "principal_component": "Loan principal only",
+        None: "Not established",
+    }.get(scope, (scope or "Not established").replace("_", " ").capitalize())
+
+
 def review_status_label(status):
     """Keep table labels compact; the row status and tooltip retain full detail."""
     return {
+        "Ready for purpose review": "Ready for review",
+        "Already posted to the ledger": "Reviewed in another workflow",
+        "Enable assumed dates or enter a corrected date": "Review posting date",
         "Cross-source occurrence needs review": "Possible repeat — review needed",
         "Repeated supporting evidence; post the retained row": "Supporting — use retained row",
     }.get(status, status)
@@ -100,6 +112,7 @@ class ReviewProxy(QSortFilterProxyModel):
 
 class ReviewNavigation(QWidget):
     scope_changed = Signal()
+    exact_row_requested = Signal(str)
 
     def __init__(self, parent, model, table):
         super().__init__(parent)
@@ -184,9 +197,7 @@ class ReviewNavigation(QWidget):
 
     def update_count(self, *_args):
         selected = len(self.table.selectionModel().selectedRows())
-        self.count.setText(
-            f"{self.proxy.rowCount()} of {len(self.model.rows)} · {selected} selected · Ctrl/Shift selects"
-        )
+        self.count.setText(f"{self.proxy.rowCount()} of {len(self.model.rows)} · {selected} selected")
         self.next_button.setEnabled(
             any(
                 review_state(row) != "reviewed" and row.row_id not in getattr(self.model, "staged", {})
@@ -239,6 +250,7 @@ class ReviewNavigation(QWidget):
 
     def reveal_row(self, row_id):
         """Expose an exact report-linked row, including a reviewed or blocked owner."""
+        self.exact_row_requested.emit(row_id)
         self.search.clear()
         self.status_filter.setCurrentIndex(self.status_filter.findData("all"))
         return self.select_id(row_id)

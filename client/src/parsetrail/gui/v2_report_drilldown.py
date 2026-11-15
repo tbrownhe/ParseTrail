@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QDialog,
     QDialogButtonBox,
@@ -101,10 +102,14 @@ class V2ReviewedEntryDrilldown(QDialog):
         self.scope = QLabel()
         self.scope.setTextFormat(Qt.PlainText)
         self.scope.setWordWrap(True)
+        self.scope.setStyleSheet("font-weight: 600; font-size: 16px")
         layout.addWidget(self.scope)
         self.total = QLabel()
         self.total.setWordWrap(True)
         layout.addWidget(self.total)
+        self.qualification = QLabel()
+        self.qualification.setWordWrap(True)
+        layout.addWidget(self.qualification)
         self.stale_note = QLabel()
         self.stale_note.setWordWrap(True)
         layout.addWidget(self.stale_note)
@@ -121,11 +126,32 @@ class V2ReviewedEntryDrilldown(QDialog):
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
         self.table.selectionModel().currentRowChanged.connect(self._selected)
         splitter.addWidget(self.table)
+        self.entry_summary = QLabel()
+        self.entry_summary.setWordWrap(True)
+        self.entry_summary.setTextFormat(Qt.PlainText)
+        self.entry_summary.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard)
+        layout.addWidget(self.entry_summary)
+        self.show_details = QCheckBox("Posting and evidence details")
+        layout.addWidget(self.show_details)
+        self.report_limits = QLabel()
+        self.report_limits.setWordWrap(True)
+        layout.addWidget(self.report_limits)
+        self.report_limits.hide()
+        self.show_details.toggled.connect(self.report_limits.setVisible)
         self.details = QPlainTextEdit()
         self.details.setReadOnly(True)
         splitter.addWidget(self.details)
+        self.details.hide()
+        self.show_details.toggled.connect(self.details.setVisible)
         splitter.setSizes([320, 200])
         layout.addWidget(splitter)
+        # The transaction table leads; selected context and optional proof follow.
+        layout.removeWidget(self.entry_summary)
+        layout.removeWidget(self.show_details)
+        layout.removeWidget(self.report_limits)
+        layout.addWidget(self.entry_summary)
+        layout.addWidget(self.show_details)
+        layout.addWidget(self.report_limits)
         sources = QHBoxLayout()
         sources.addWidget(QLabel("Source evidence"))
         self.source = QComboBox()
@@ -160,6 +186,8 @@ class V2ReviewedEntryDrilldown(QDialog):
             self.scope.setText(f"Entries are unavailable: {exc}")
             self.scope.setToolTip("")
             self.total.clear()
+            self.qualification.clear()
+            self.report_limits.clear()
             self.stale_note.clear()
             self._selected()
             return
@@ -176,13 +204,20 @@ class V2ReviewedEntryDrilldown(QDialog):
         report = result.report
         labels = category_labels((account.id, account.name, account.kind) for account in report.accounts)
         self.scope.setToolTip(f"Account ID: {result.account.id}")
-        self.scope.setText(
-            f"{labels[result.account.id]}: {report.start.isoformat()} inclusive to {report.end.isoformat()} exclusive, USD. "
-            "Active reviewed non-opening entries only; corrections restate the books as they stand now. "
-            "Positive means expense, income, asset value or liability owed in the selected account's natural direction."
-        )
+        through = report.end - timedelta(days=1)
+        self.scope.setText(f"{labels[result.account.id]} · {report.start:%b %d, %Y}–{through:%b %d, %Y} · USD")
+        count = len(result.entries)
         self.total.setText(
-            f"{len(result.entries)} current entry(s); selected account effect {_money(result.total_minor)}. "
+            f"{count} reviewed {'entry' if count == 1 else 'entries'} · "
+            f"Net selected account effect {_money(result.total_minor)}"
+        )
+        self.qualification.setText(
+            f"{report.activity_rows_without_full_allocation} imported row(s) pending across all dates "
+            "(may include repeats). Source coverage may be incomplete. Opening entries excluded."
+        )
+        self.report_limits.setText(
+            "Active reviewed non-opening entries only; corrections restate the current books. "
+            "Positive follows the selected account's natural direction. "
             f"Across the whole profile and all dates, {report.activity_rows_without_full_allocation} activity source "
             f"row(s) from {report.sources_with_incomplete_activity} source(s) lack a full allocation. "
             f"Across this report period and profile, {report.excluded_unreviewed_entries} unreviewed journal "
@@ -199,6 +234,7 @@ class V2ReviewedEntryDrilldown(QDialog):
             self.table.selectRow(0)
         else:
             self._selected()
+            self.entry_summary.setText("No reviewed entries in this period. Pending evidence is not zero activity.")
             self.details.setPlainText(
                 "No active reviewed entries in this account and period. Pending evidence is not zero activity."
             )
@@ -209,11 +245,17 @@ class V2ReviewedEntryDrilldown(QDialog):
         self.source.clear()
         self.preview.setEnabled(False)
         self.details.clear()
+        self.entry_summary.clear()
         index = self.table.currentIndex()
         if self.drilldown is None or not index.isValid() or index.row() >= len(self.drilldown.entries):
             return
         result, entry = self.drilldown, self.drilldown.entries[index.row()]
         accounts = {account.id: account for account in result.report.accounts}
+        reason = entry.reason if len(entry.reason) <= 180 else entry.reason[:180] + "…"
+        self.entry_summary.setText(
+            f"{entry.description} · Accounting date {entry.posting_date}\nSaved reason: {reason}"
+        )
+        self.entry_summary.setToolTip(entry.reason)
         labels = category_labels((account.id, account.name, account.kind) for account in accounts.values())
         source_rows = dict(result.report.source_rows)
         lines = [

@@ -4,6 +4,7 @@ import pytest
 from parsetrail.core.v2_profile_store import V2ProfileStore
 from PySide6.QtCore import Qt
 
+from .ordinary_staging_helpers import review_reason
 from .qt_journey_helpers import JourneyArtifacts
 from .test_v2_multirow_review import choices, select, workspace_rows
 from .test_v2_review_cues import open_review
@@ -30,7 +31,7 @@ def test_partial_assignment_notice_preserves_four_rows_and_eligible_review(
     select(qtbot, view, "Tea", Qt.ControlModifier)
     choices(qtbot, view)
     selected_ids = {row.row_id for row in view.navigation.selected()}
-    shared_proposal = (view.purpose.currentData(), view.category.currentData(), view.reason.text())
+    shared_proposal = (view.purpose.currentData(), view.category.currentData(), review_reason(view).text())
     qtbot.mouseClick(view.batch.stage_button, Qt.LeftButton)
     staged = dict(view.batch.staged)
     staged_note = view.batch.note()
@@ -48,7 +49,7 @@ def test_partial_assignment_notice_preserves_four_rows_and_eligible_review(
     qtbot.waitUntil(lambda: not window.inventory_pending and not view.review_pending, timeout=15000)
     assert not window.account_group.isVisible()
     assert {row.row_id for row in view.navigation.selected()} == selected_ids
-    assert (view.purpose.currentData(), view.category.currentData(), view.reason.text()) == shared_proposal
+    assert (view.purpose.currentData(), view.category.currentData(), review_reason(view).text()) == shared_proposal
     assert view.batch.staged == staged and view.batch.note() == staged_note
     previously_unassigned = next(row for row in view.model.rows if row.description == "Unassigned")
     assert previously_unassigned.status == "Ready for purpose review"

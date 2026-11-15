@@ -8,6 +8,7 @@ from parsetrail.gui.v2_source_overlap_review import V2SourceOverlapReview
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QMessageBox
 
+from .ordinary_staging_helpers import review_reason
 from .qt_journey_helpers import JourneyArtifacts, ModalSteps, choose_combo, close_dialog, enter_text
 from .test_v2_multirow_review import choices, select, workspace_rows
 from .test_v2_review_cues import open_review
@@ -63,7 +64,7 @@ def test_contextual_repeat_review_cancel_then_distinct_retains_staged_work(
         if decision == "supporting":
             choice = "retain_right" if dialog._current().left.row_id == focused else "retain_left"
         choose_combo(qtbot, dialog.decision, choice)
-        enter_text(qtbot, dialog.reason, "Compared both originals and explicitly reviewed this relationship")
+        enter_text(qtbot, review_reason(dialog), "Compared both originals and explicitly reviewed this relationship")
         qtbot.mouseClick(dialog.save_button, Qt.LeftButton)
 
     def confirm(dialog):

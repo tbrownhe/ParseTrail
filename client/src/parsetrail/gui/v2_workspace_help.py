@@ -21,40 +21,35 @@ def show_workspace_help(parent=None) -> None:
     layout.addWidget(scroll)
     steps = (
         (
-            "1. Keep your profiles separate",
-            "This fresh workspace is independent of your 1.x history. Add the financial accounts and categories "
-            "you want to track here. The active profile path is always shown in the window.",
+            "1. Import a statement",
+            "In Documents, choose Import statement. If formats are missing, first use Install statement formats. "
+            "Choose an existing account or create a new one, then check the recognized dates and amounts. "
+            "Import and assign saves the original, accounts and assignments together. It posts no transactions. "
+            "Original files stay where you selected them. Changing an imported format is not supported yet, "
+            "so cancel if the preview is wrong.",
         ),
         (
-            "2. Install a signed catalog and import originals",
-            "Choose Install signed catalog, then import a CSV/PDF file or a folder. Ordinary imports and "
-            "analysis stay on your device. Original files stay where you selected them; the profile retains "
-            "a copy of every successfully imported original. Choose an existing account or Create a new account, "
-            "then review the recognized dates and amounts. CSV headers must match a declared format; account "
-            "details narrow formats automatically. Unresolved format conflicts block import without a column-mapping "
-            "choice. Import and assign saves original/evidence, new account drafts and "
-            "assignments together without posting transactions. Back keeps choices; Skip/Cancel discards unsaved "
-            "drafts and keeps completed files. PDF uses automatic signed routing.",
+            "2. Review the transactions",
+            "Open the statement in Review. Source evidence and Open original let you check what was imported. "
+            "Choose a transaction type and category. Add category opens a separate creation task. Budget opens "
+            "category and budget management. Use Ctrl-click or Shift to select several rows. Transfers, repayments "
+            "and loan principal have separate review routes because they are not additional expenses.",
         ),
         (
-            "3. Confirm accounts and repeated evidence",
-            "Import shows every account group in the document. Header compatibility does not identify your account; "
-            "Create a new account stays available beside compatible existing choices. Product supplies the "
-            "asset/liability class and permitted scope. Use Review possible repeated transactions for overlap. "
-            "Choose institutions by name or deliberately choose Institution not identified. "
-            "Generic CSV headers do not identify a bank; a listed institution does not mean every format "
-            "from it is supported. Equal amounts are suggestions to inspect, not proof of a duplicate or a transfer.",
+            "3. Build a review set, then confirm",
+            "Enter a shared reason in Review set. It applies to every staged row, including rows hidden by filters. "
+            "Stage selected captures your choices and applies that reason to the whole set. Selecting another "
+            "row does not change the reason; later unstaged edits do not change the captured reason. "
+            "Review staged shows the exact effects before you confirm and post. Cancel keeps your choices. "
+            "Review set options removes selected proposals or clears the set without changing saved entries.",
         ),
         (
-            "4. Review before posting",
-            "Review supported cash activity, card purchases and transfers explicitly. Importing and account "
-            "binding do not post money. Transfers and card repayments do not create a second expense. "
-            "Unsupported activity remains pending. Use Ctrl-click or Shift to select several unreviewed rows, "
-            "choose a shared purpose/category/note, then Stage selected and Review staged before confirming. "
-            "One transaction uses the same staging flow. The table distinguishes staged unsaved proposals from "
-            "not-staged and reviewed rows; remove selected proposals to undo staging. "
-            "Each row keeps its own date. Successful staging captures the note for every staged row; "
-            "later unstaged edits do not change it. Saved entries are corrected individually.",
+            "4. See the monthly budget impact",
+            "Open Budget, choose a month and select a category to edit its budget. The table shows budget, "
+            "reviewed spending and remaining. Remaining is budget minus reviewed spending, not an account balance. "
+            "View spending from a statement also selects its month for Budget. Multi-month statements show "
+            "which month is selected. Ordinary navigation retains your dates and month. All profile accounts "
+            "are included; pending activity and missing source coverage can limit the result.",
         ),
         (
             "Reading the choice colors",
@@ -66,17 +61,18 @@ def show_workspace_help(parent=None) -> None:
             "Read the confirmation before saving; cancelling it retains your draft.",
         ),
         (
-            "5. Establish openings and inspect reports",
-            "Use Review openings for source-backed opening positions. Statement coverage separates source "
-            "facts, live checks and saved reconciliations. Reviewed reports show spending, income, budgets "
-            "and dated account history. Unknown openings are not zero; pending activity and coverage limits "
-            "still matter when balances agree.",
+            "5. Correct a saved review",
+            "Inspect an entry from Budget or Reports, then Review / correct source row. The saved reason is "
+            "read-only; enter a new correction reason before confirming. It is separate from the shared reason "
+            "for staged rows. Back to budget or Back to report returns to your prior context. "
+            "Source evidence and saved history remain available. Accounts has optional balances and history; "
+            "an unknown opening or position is not zero.",
         ),
         (
             "6. Back up and recover",
             "Profile > Back up current profile creates a verified copy. Restore backup as new profile "
             "preserves the existing profile. Save selected source original recovers an embedded document. "
-            "Profiles, backups and recovered originals contain financial data and are not encrypted by "
+            "Ordinary financial data stays local. Profiles, backups and recovered originals contain financial data and are not encrypted by "
             "ParseTrail. The signed catalog cache and global preferences are separate from profile backups.",
         ),
     )

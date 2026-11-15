@@ -44,7 +44,8 @@ def test_document_dates_handoff_and_back_keep_report_period(tmp_path):
         assert reports.start.date() == QDate(2026, 10, 1)
         assert reports.end.date() == QDate(2026, 10, 2)
         assert "All profile accounts" in window.report_context.text()
-        assert "not limited to this document" in window.report_context.text()
+        assert "Dates from" in window.report_context.text()
+        assert reports.budget_month.date() == QDate(2026, 10, 1)
         reports.start.setDate(QDate(2026, 9, 1))
         reports.tabs.setCurrentIndex(3)
         window.navigation.setCurrentRow(1)
@@ -78,12 +79,12 @@ def test_next_attention_skips_allocated_and_selector_keeps_draft(tmp_path, monke
         wait_for_jobs(window._review_widget)
         assert window._selected_source() != first
         selected = window._selected_source()
-        window._review_widget.reason.setText("Keep this unrelated review draft")
+        window._review_widget.batch.reason.setText("Keep this unrelated review draft")
         monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.No)
         window.review_document_selector.setCurrentIndex(window.review_document_selector.findData(first))
         assert window._selected_source() == selected
         assert window.review_document_selector.currentData() == selected
-        assert window._review_widget.reason.text() == "Keep this unrelated review draft"
+        assert window._review_widget.batch.reason.text() == "Keep this unrelated review draft"
     finally:
         cleanup(window)
 
@@ -104,12 +105,12 @@ def test_report_route_decline_preserves_unrelated_document_and_saved_entries(tmp
         wait_for_jobs(review)
         current = window._selected_source()
         destination = next(source for source in window._document_summaries if source != current)
-        review.reason.setText("Keep this review in progress")
+        review.batch.reason.setText("Keep this review in progress")
         monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.No)
         window._review_report_source(destination, "report-row")
         assert window._selected_source() == current
         assert window._review_widget is review
-        assert review.reason.text() == "Keep this review in progress"
+        assert review.batch.reason.text() == "Keep this review in progress"
         assert not window._report_review_target
         with V2ProfileStore.open(workspace.profile_path, read_only=True) as store:
             assert len(store.source_ids()) == 2
@@ -139,6 +140,7 @@ def test_report_source_route_reveals_exact_reviewed_row_and_preserves_correction
         wait_for_jobs(review)
         assert window.navigation.currentRow() == 1
         assert review._current().row_id == row_id and review._current().entry_key is not None
+        assert len(review.navigation.selected()) == 1 and review.category.isEnabled()
         assert review.navigation.status_filter.currentData() == "all"
         assert review.saved_review_note.isReadOnly()
         assert review.saved_review_note.toPlainText() == "Synthetic review"

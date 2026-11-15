@@ -108,6 +108,8 @@ class V2ImportWorker(QThread):
 class V2WorkspaceWindow(QMainWindow):
     """Open only an explicitly selected fresh profile and verified catalog cache."""
 
+    DOCUMENTS, REVIEW, ACCOUNTS, BUDGET, REPORTS = range(5)
+
     def __init__(self, workspace: V2Workspace, parent=None):
         super().__init__(parent)
         install_initial_focus(self)
@@ -131,6 +133,12 @@ class V2WorkspaceWindow(QMainWindow):
         self._positions_view = None
         self._reports_view = None
         self._report_review_target = None
+        self._report_return_destination = self.REPORTS
+        self._last_report_tab = 0
+        self._document_report_context = None
+        self._budget_document_seed = None
+        self._budget_context_notice = ""
+        self._returning_to_report = False
         self._close_after_job = False
         self._profile_job_handlers = {}
         self.profile_jobs = ProfileJobs(self, workspace.profile_path)
@@ -153,6 +161,7 @@ class V2WorkspaceWindow(QMainWindow):
         self.recover_source_action = profile_menu.addAction("Save selected source original…")
         self.recover_source_action.triggered.connect(self._recover_source_original)
         settings_menu = self.menuBar().addMenu("Settings")
+        self.formats_action = settings_menu.addAction("Manage statement formats…", self._choose_catalog_release)
         self.abbreviated_matching_action = QAction("Suggest accounts using abbreviated account numbers", self)
         self.abbreviated_matching_action.setCheckable(True)
         self.abbreviated_matching_action.setChecked(workspace.preferences().allow_abbreviated_account_matching)
@@ -220,12 +229,17 @@ class V2WorkspaceWindow(QMainWindow):
         profile_details.setCheckable(True)
         profile_details.toggled.connect(self.profile_label.setVisible)
         profile_row.addWidget(profile_details)
+        profile_details.hide()
+        path_action = profile_menu.addAction("Show profile path")
+        path_action.setCheckable(True)
+        path_action.toggled.connect(self.profile_label.setVisible)
         profile_row.addStretch()
         layout.addLayout(profile_row)
         catalog_controls = QHBoxLayout()
         self.catalog_label = QLabel()
         catalog_controls.addWidget(self.catalog_label)
         self.install_catalog_button = QPushButton("Install statement formats…")
+        self.install_catalog_button.setObjectName("installFormats")
         self.install_catalog_button.setToolTip(
             "Choose the local signed statement-format package folder containing catalog.json and catalog.sig. "
             "ParseTrail verifies its signature before enabling import."
@@ -237,7 +251,7 @@ class V2WorkspaceWindow(QMainWindow):
         body = QHBoxLayout()
         self.navigation = QListWidget()
         self.navigation.setAccessibleName("Workspace navigation")
-        self.navigation.addItems(("Documents", "Review", "Accounts", "Reports"))
+        self.navigation.addItems(("Documents", "Review", "Accounts", "Budget", "Reports"))
         self.navigation.setFixedWidth(142)
         body.addWidget(self.navigation)
         self.pages = QStackedWidget()
@@ -245,9 +259,13 @@ class V2WorkspaceWindow(QMainWindow):
         layout.addLayout(body, 1)
         documents = QWidget()
         document_layout = QVBoxLayout(documents)
+        document_heading = QLabel("Statements")
+        document_heading.setStyleSheet("font-size: 16px; font-weight: 600")
+        document_layout.addWidget(document_heading)
         self.pages.addWidget(documents)
         imports = QHBoxLayout()
-        self.import_button = QPushButton("Import documents…")
+        self.import_button = QPushButton("Import statement…")
+        self.import_button.setObjectName("firstImport")
         self.import_button.clicked.connect(self._choose_import)
         imports.addWidget(self.import_button)
         self.import_folder_button = QPushButton("Import folder…")
@@ -257,8 +275,19 @@ class V2WorkspaceWindow(QMainWindow):
         self.batch_accounts_button = QPushButton("Assign document accounts…")
         self.batch_accounts_button.clicked.connect(self._assign_document_accounts)
         imports.addWidget(self.batch_accounts_button)
+        self.document_more_button = QPushButton("More…")
+        document_menu = QMenu(self.document_more_button)
+        self.document_more_button.setMenu(document_menu)
+        imports.addWidget(self.document_more_button)
+        self.import_folder_button.hide()
+        self.batch_accounts_button.hide()
+        self.folder_action = document_menu.addAction("Import folder…", self.import_folder_button.click)
+        self.document_assign_action = document_menu.addAction(
+            "Assign document accounts…", self.batch_accounts_button.click
+        )
         document_layout.addLayout(imports)
         self.document_search = QLineEdit()
+        self.document_search.setObjectName("documentSearch")
         self.document_search.setPlaceholderText("Find an account, statement period or document type")
         self.document_search.setAccessibleName("Find documents")
         self.document_search.setClearButtonEnabled(True)
@@ -271,6 +300,8 @@ class V2WorkspaceWindow(QMainWindow):
         self.retry_inventory = QPushButton("Reload documents")
         self.retry_inventory.clicked.connect(lambda: self.refresh())
         inventory_row.addWidget(self.retry_inventory)
+        self.retry_inventory.hide()
+        document_menu.addAction("Reload statements", self.retry_inventory.click)
         document_layout.addLayout(inventory_row)
         self.sources = QListWidget()
         self.sources.setAccessibleName("Saved documents")
@@ -296,6 +327,10 @@ class V2WorkspaceWindow(QMainWindow):
         self.document_details_button = QPushButton("Show details")
         self.document_details_button.setCheckable(True)
         document_actions.addWidget(self.document_details_button)
+        self.document_details_button.hide()
+        self.document_details_action = document_menu.addAction("Show statement details")
+        self.document_details_action.setCheckable(True)
+        self.document_details_action.toggled.connect(self.document_details_button.setChecked)
         document_actions.addStretch()
         document_layout.addLayout(document_actions)
         self.document_technical_details = QPlainTextEdit()
@@ -329,8 +364,10 @@ class V2WorkspaceWindow(QMainWindow):
         choose_document = QPushButton("Choose a document")
         choose_document.clicked.connect(lambda: self.navigation.setCurrentRow(0))
         review_heading.addWidget(choose_document)
+        choose_document.hide()
         related = QPushButton("Related actions…")
         self.related_menu = QMenu(related)
+        self.related_menu.addAction("Choose another statement", lambda: self.navigation.setCurrentRow(self.DOCUMENTS))
         self.related_menu.addAction(self.transfer_review_action)
         self.related_menu.addAction(self.settlement_review_action)
         self.related_menu.addAction(self.loan_payment_action)
@@ -352,17 +389,18 @@ class V2WorkspaceWindow(QMainWindow):
         self.review_progress.setWordWrap(True)
         self.review_progress.setTextFormat(Qt.PlainText)
         journey_actions.addWidget(self.review_progress, 1)
-        self.document_spending_button = QPushButton("View spending for document dates")
+        self.review_progress.hide()
+        self.document_spending_button = QPushButton("View spending")
         self.document_spending_button.setToolTip(
             "Show reviewed spending across all profile accounts for this document's dates. "
             "This does not filter spending to this document or its accounts."
         )
         self.document_spending_button.clicked.connect(self._show_document_spending)
-        journey_actions.addWidget(self.document_spending_button)
+        review_heading.addWidget(self.document_spending_button)
         self.back_to_report_button = QPushButton("Back to report")
         self.back_to_report_button.clicked.connect(self._back_to_report)
         self.back_to_report_button.hide()
-        journey_actions.addWidget(self.back_to_report_button)
+        review_heading.addWidget(self.back_to_report_button)
         review_layout.addLayout(journey_actions)
         account_group = QGroupBox("Account association")
         self.account_group = account_group
@@ -434,10 +472,8 @@ class V2WorkspaceWindow(QMainWindow):
         accounts = QWidget()
         accounts_layout = QVBoxLayout(accounts)
         self.pages.addWidget(accounts)
-        accounts_note = QLabel(
-            "Set up your accounts, then review opening balances or dated values when you have supporting information. "
-            "An unknown opening is not zero."
-        )
+        accounts_note = QLabel("Your accounts")
+        accounts_note.setStyleSheet("font-size: 16px; font-weight: 600")
         accounts_note.setWordWrap(True)
         accounts_layout.addWidget(accounts_note)
         self.accounts_list = QListWidget()
@@ -458,26 +494,31 @@ class V2WorkspaceWindow(QMainWindow):
         self.openings_button = QPushButton("Review source-backed openings…")
         self.openings_button.clicked.connect(self._review_openings)
         account_actions.addWidget(self.openings_button)
-        self.categories_button = QPushButton("Categories and budgets…")
+        self.openings_button.hide()
+        self.categories_button = QPushButton("Manage categories…")
         self.categories_button.clicked.connect(self._edit_categories)
         account_actions.addWidget(self.categories_button)
         account_actions.addStretch()
         accounts_layout.addLayout(account_actions)
-        self.positions_host = QVBoxLayout()
-        accounts_layout.addLayout(self.positions_host, 1)
+        self.account_details_toggle = QPushButton("Balances and history (optional)")
+        self.account_details_toggle.setCheckable(True)
+        accounts_layout.addWidget(self.account_details_toggle)
+        self.positions_container = QWidget()
+        self.positions_host = QVBoxLayout(self.positions_container)
+        self.positions_host.setContentsMargins(0, 0, 0, 0)
+        self.positions_container.hide()
+        accounts_layout.addWidget(self.positions_container, 2)
+        self.account_details_toggle.toggled.connect(self._toggle_account_details)
 
         reports = QWidget()
         report_layout = QVBoxLayout(reports)
         self.pages.addWidget(reports)
-        reports_note = QLabel(
-            "Reports use reviewed entries. Pending activity and missing history can limit what the totals tell you. "
-            "Each report shows its dates and account scope."
-        )
+        self.reports_heading = QLabel("Reports")
+        self.reports_heading.setStyleSheet("font-size: 16px; font-weight: 600")
+        reports_note = self.reports_heading
         reports_note.setWordWrap(True)
         report_layout.addWidget(reports_note)
-        self.report_context = QLabel(
-            "All profile accounts. Choose report dates below; only reviewed entries are included."
-        )
+        self.report_context = QLabel("All profile accounts · Reviewed entries only")
         self.report_context.setWordWrap(True)
         self.report_context.setTextFormat(Qt.PlainText)
         report_layout.addWidget(self.report_context)
@@ -488,9 +529,17 @@ class V2WorkspaceWindow(QMainWindow):
         movement_button = QPushButton("Cash movement…")
         movement_button.clicked.connect(lambda: V2CashMovementDialog(self.workspace.profile_path, self).exec())
         report_actions.addWidget(movement_button)
+        movement_button.hide()
         self.coverage_button = QPushButton("Statement coverage and checks…")
         self.coverage_button.clicked.connect(self._open_statement_coverage)
         report_actions.addWidget(self.coverage_button)
+        self.coverage_button.hide()
+        report_more = QPushButton("Other reports…")
+        report_menu = QMenu(report_more)
+        report_more.setMenu(report_menu)
+        report_menu.addAction("Cash movement…", movement_button.click)
+        report_menu.addAction("Statement coverage and checks…", self.coverage_button.click)
+        report_actions.addWidget(report_more)
         report_actions.addStretch()
         report_layout.addLayout(report_actions)
         self.reports_host = QVBoxLayout()
@@ -503,38 +552,90 @@ class V2WorkspaceWindow(QMainWindow):
         self.refresh()
 
     def _navigation_changed(self, page):
-        self.pages.setCurrentIndex(page)
-        if page == 1:
+        from_document = self.pages.currentIndex() in (self.DOCUMENTS, self.REVIEW)
+        self.pages.setCurrentIndex(3 if page in (self.BUDGET, self.REPORTS) else page)
+        if page == self.REVIEW:
             self._ensure_review_view()
-        elif page in (2, 3):
-            self._ensure_report_view(page)
+        elif page in (self.BUDGET, self.REPORTS):
+            view = self._ensure_report_view(self.REPORTS)
+            if (
+                page == self.BUDGET
+                and from_document
+                and not self._returning_to_report
+                and self._budget_document_seed != self._selected_source()
+            ):
+                if not self._seed_document_results(view):
+                    self._document_report_context = None
+                    self._budget_context_notice = "Document dates unknown · Choose a budget month"
+            view.tabs.setCurrentIndex(2 if page == self.BUDGET else self._last_report_tab)
+            self._update_report_context()
+        elif page == self.ACCOUNTS and self.account_details_toggle.isChecked():
+            self._ensure_report_view(self.ACCOUNTS)
         if hasattr(self, "status"):
             self._refresh_changed_profile()
 
     def _ensure_report_view(self, page):
-        attribute = "_positions_view" if page == 2 else "_reports_view"
+        attribute = "_positions_view" if page == self.ACCOUNTS else "_reports_view"
         view = getattr(self, attribute)
         if view is None:
             view = V2ReviewedReportsDialog(
                 self.workspace.profile_path,
                 self,
                 embedded=True,
-                initial_tab=4 if page == 2 else 0,
-                positions_only=page == 2,
+                initial_tab=4 if page == self.ACCOUNTS else 0,
+                positions_only=page == self.ACCOUNTS,
             )
             setattr(self, attribute, view)
             view.review_requested.connect(lambda: self._open_pending_review(page))
             view.source_review_requested.connect(self._review_report_source)
-            if page == 3:
+            if page != self.ACCOUNTS:
                 view.review_pending_button.hide()
-            (self.positions_host if page == 2 else self.reports_host).addWidget(view)
-            if page == 2:
-                self.accounts_list.hide()
+                view.tabs.currentChanged.connect(self._report_tab_changed)
+                view.budget_month.dateChanged.connect(self._update_report_context)
+                view.categories_changed.connect(self._categories_changed)
+            (self.positions_host if page == self.ACCOUNTS else self.reports_host).addWidget(view)
+            if page == self.ACCOUNTS:
                 view.positions_table.selectionModel().currentRowChanged.connect(self._position_selected)
             view.export_jobs.busy_changed.connect(self._embedded_busy)
         elif view._loaded.get(view.tabs.currentIndex()) != view._key(view.tabs.currentIndex()):
             view._queue_selected_read(0)
         return view
+
+    def _toggle_account_details(self, checked):
+        self.positions_container.setVisible(checked)
+        if checked:
+            self._ensure_report_view(self.ACCOUNTS)
+
+    def _report_tab_changed(self, tab):
+        if tab != 2:
+            self._last_report_tab = tab
+        if self.navigation.currentRow() in (self.BUDGET, self.REPORTS):
+            self.navigation.blockSignals(True)
+            self.navigation.setCurrentRow(self.BUDGET if tab == 2 else self.REPORTS)
+            self.navigation.blockSignals(False)
+        self._update_report_context()
+
+    def _update_report_context(self, *_args):
+        budget = self._reports_view is not None and self._reports_view.tabs.currentIndex() == 2
+        self.reports_heading.setText("Monthly budget" if budget else "Reports")
+        context = "All profile accounts · Reviewed entries only"
+        if self._document_report_context is not None:
+            title, start, end = self._document_report_context
+            if budget:
+                month = self._reports_view.budget_month.date().toString("MMM yyyy")
+                context += f" · Showing {month}"
+                if (start.year, start.month) != (end.year, end.month):
+                    context += f" · Document spans {start:%b %Y}–{end:%b %Y}"
+            else:
+                context += f" · Dates from {title}"
+        if budget and self._budget_context_notice:
+            context += f" · {self._budget_context_notice}"
+        self.report_context.setText(context)
+
+    def _categories_changed(self):
+        self._refresh_changed_profile()
+        if self._review_widget is not None:
+            self._review_widget.refresh_preserving_draft()
 
     @staticmethod
     def _needs_attention(summary):
@@ -600,21 +701,28 @@ class V2WorkspaceWindow(QMainWindow):
                 return
 
     def _show_document_spending(self):
+        reports = self._ensure_report_view(self.REPORTS)
+        if not self._seed_document_results(reports):
+            return
+        reports.tabs.setCurrentIndex(0)
+        self.navigation.setCurrentRow(self.REPORTS)
+        self._update_report_context()
+
+    def _seed_document_results(self, reports):
         summary = self._document_summaries.get(self._selected_source())
         if summary is None or summary.start is None or summary.end is None or summary.end == date.max:
-            return
+            return False
         if summary.start > summary.end:
-            return
-        reports = self._ensure_report_view(3)
+            return False
         reports.set_period(summary.start, summary.end + timedelta(days=1))
-        reports.tabs.setCurrentIndex(0)
-        self.report_context.setText(
-            f"All profile accounts · dates chosen from {document_title(summary)} ({document_period(summary)}). "
-            "Spending is not limited to this document or its accounts. Change report dates below as needed."
-        )
-        self.navigation.setCurrentRow(3)
+        reports.set_budget_month(summary.start)
+        self._document_report_context = (document_title(summary), summary.start, summary.end)
+        self._budget_document_seed = self._selected_source()
+        self._budget_context_notice = ""
+        return True
 
     def _review_report_source(self, source_id, row_id):
+        origin = self.navigation.currentRow()
         if not self._select_review_source(source_id):
             self.status.setText(
                 "The report review was not opened. Keep your current choices, or reload documents and try again."
@@ -629,6 +737,8 @@ class V2WorkspaceWindow(QMainWindow):
         if view.review_pending:
             view._selected_after_read = row_id
         self._report_review_target = (source_id, row_id)
+        self._report_return_destination = origin if origin in (self.BUDGET, self.REPORTS) else self.REPORTS
+        self.back_to_report_button.setText("Back to budget" if origin == self.BUDGET else "Back to report")
         self.back_to_report_button.show()
         self.status.setText(
             "Opened the report's source row. Review its saved interpretation or owning payment/transfer history. "
@@ -637,7 +747,11 @@ class V2WorkspaceWindow(QMainWindow):
         view.table.setFocus()
 
     def _back_to_report(self):
-        self.navigation.setCurrentRow(3)
+        self._returning_to_report = True
+        try:
+            self.navigation.setCurrentRow(self._report_return_destination)
+        finally:
+            self._returning_to_report = False
         view = self._reports_view
         if view is not None:
             view.invalidate(read=True)
@@ -792,10 +906,13 @@ class V2WorkspaceWindow(QMainWindow):
                 view.deleteLater()
                 setattr(self, attribute, None)
         self._report_review_target = None
+        self._document_report_context = None
+        self._budget_document_seed = None
+        self._budget_context_notice = ""
+        self._report_return_destination = self.REPORTS
+        self._last_report_tab = 0
         self.back_to_report_button.hide()
-        self.report_context.setText(
-            "All profile accounts. Choose report dates below; only reviewed entries are included."
-        )
+        self.report_context.setText("All profile accounts · Reviewed entries only")
         return True
 
     def _profile_job_busy(self, busy):
@@ -842,10 +959,15 @@ class V2WorkspaceWindow(QMainWindow):
             else "Install statement formats to enable import. No verified catalog installed."
         )
         self._catalog_available = catalog is not None
+        if not self._document_summaries:
+            self.setProperty("initialFocusObject", "firstImport" if catalog is not None else "installFormats")
         self.install_catalog_button.setText("Manage statement formats…" if catalog else "Install statement formats…")
+        self.catalog_label.setVisible(catalog is None)
+        self.install_catalog_button.setVisible(catalog is None)
         for page, view in ((2, self._positions_view), (3, self._reports_view)):
             if view is not None:
-                view.invalidate(read=self.navigation.currentRow() == page)
+                active = self.navigation.currentRow()
+                view.invalidate(read=active == page if page == self.ACCOUNTS else active in (self.BUDGET, self.REPORTS))
         if revision_changed and self._review_widget is not None:
             refresh_preserving_draft = getattr(self._review_widget, "refresh_preserving_draft", None)
             if refresh_preserving_draft is not None:
@@ -881,7 +1003,7 @@ class V2WorkspaceWindow(QMainWindow):
         self._inventory_requested = True
         self._document_summaries = {}
         self.inventory_status.setText("Loading saved documents…")
-        self.status.setText("Review supported activity to include it in reports. Source checks remain separate.")
+        self.status.clear()
         self._update_controls()
         QTimer.singleShot(0, self, self._start_inventory)
 
@@ -929,7 +1051,7 @@ class V2WorkspaceWindow(QMainWindow):
                     if account.id == selected_id:
                         self.accounts_list.setCurrentItem(item)
                 self.accounts_status.setText(
-                    f"{len(worker.accounts)} accounts · positions show reviewed books and their limits"
+                    f"{len(worker.accounts)} account(s)"
                     if worker.accounts
                     else "No accounts yet. Add an account to connect your documents."
                 )
@@ -943,6 +1065,11 @@ class V2WorkspaceWindow(QMainWindow):
 
     def _apply_inventory(self, summaries) -> None:
         self._document_summaries = {summary.source_sha256: summary for summary in summaries}
+        self.setProperty(
+            "initialFocusObject",
+            "documentSearch" if summaries else "firstImport" if self._catalog_available else "installFormats",
+        )
+        self.document_search.setVisible(bool(summaries))
         prior = self._inventory_selection
         scroll = self.sources.verticalScrollBar().value()
         self.sources.blockSignals(True)
@@ -1072,6 +1199,10 @@ class V2WorkspaceWindow(QMainWindow):
         ):
             action.setEnabled(batch_available)
         self.install_catalog_button.setEnabled(batch_available)
+        self.formats_action.setEnabled(batch_available)
+        self.folder_action.setEnabled(self.import_folder_button.isEnabled())
+        self.document_assign_action.setEnabled(batch_available)
+        self.document_details_action.setEnabled(available)
         for button in (self.account_button, self.edit_account_button, self.categories_button, self.openings_button):
             button.setEnabled(batch_available)
         self.batch_accounts_button.setEnabled(batch_available)
@@ -1141,18 +1272,18 @@ class V2WorkspaceWindow(QMainWindow):
                 summary.assigned_row_count and (summary.unassigned_source_accounts or summary.unassigned_activity_rows)
             )
             self.review_context.setText(
-                f"{summary.pending_activity_rows} unallocated source row(s) · may include repeats"
-                if partial_assignment
-                else document_status(summary)
+                f"{summary.pending_activity_rows} imported row(s) need review · may include repeats"
+                if summary.pending_activity_rows
+                else "No pending imported rows · source coverage still needs checking"
             )
             account_state = (
                 "No activity rows captured. Inspect source evidence and document checks before interpreting totals."
                 if not summary.row_count
                 else "Confirm the account before reviewing activity. Account assignment adds no spending."
                 if summary.unassigned_source_accounts or summary.unassigned_activity_rows
-                else "Account confirmed. Review activity to include it in reports."
+                else "Choose rows below, then add your review choices."
                 if summary.pending_activity_rows
-                else "Activity allocated. You can inspect or correct saved review; source checks remain separate."
+                else "Review saved choices or open Budget for the monthly result."
             )
             self.review_progress.setText("" if partial_assignment else account_state)
             self.account_assignment_status.setText(
@@ -1265,8 +1396,8 @@ class V2WorkspaceWindow(QMainWindow):
                 self.cash_review_button.setFocus()
 
     def _open_account_positions(self) -> None:
-        self.navigation.setCurrentRow(2)
-        self._ensure_report_view(2)
+        self.navigation.setCurrentRow(self.ACCOUNTS)
+        self.account_details_toggle.setChecked(True)
 
     def _choose_import(self) -> None:
         sources, _filter = QFileDialog.getOpenFileNames(
@@ -1377,7 +1508,7 @@ class V2WorkspaceWindow(QMainWindow):
         self.profile_label.setCursorPosition(0)
         self.profile_name.setText(selected.profile_path.stem)
         self.profile_name.setToolTip(str(selected.profile_path))
-        if self.navigation.currentRow() in (2, 3):
+        if self.navigation.currentRow() in (self.ACCOUNTS, self.BUDGET, self.REPORTS):
             self._ensure_report_view(self.navigation.currentRow())
         self.status.setText("Opened 2.0 profile. Its path is shown above.")
 
@@ -1736,8 +1867,8 @@ class V2WorkspaceWindow(QMainWindow):
         self._ensure_review_view()
 
     def _open_reviewed_reports(self) -> None:
-        self.navigation.setCurrentRow(3)
-        self._ensure_report_view(3)
+        self.navigation.setCurrentRow(self.REPORTS)
+        self._ensure_report_view(self.REPORTS)
 
     def _open_statement_coverage(self) -> None:
         V2StatementCoverageDialog(self.workspace.profile_path, self).exec()
@@ -1848,10 +1979,8 @@ class V2WorkspaceWindow(QMainWindow):
             break
 
     def _edit_categories(self) -> None:
-        V2CategoryDialog(self.workspace.profile_path, self).exec()
-        self._refresh_changed_profile()
-        if self._review_widget is not None:
-            self._review_widget.refresh()
+        exec_disposable(V2CategoryDialog(self.workspace.profile_path, self))
+        self._categories_changed()
 
     def _review_openings(self) -> None:
         V2OpeningReview(self.workspace, self).exec()

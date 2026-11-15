@@ -17,7 +17,7 @@ from parsetrail.core.v2_workspace import V2Workspace
 from devtools.parser_engine_pilot.test_card_lines import pages
 from devtools.parser_engine_pilot.test_card_source_output import DEFINITION as CARD_DEFINITION
 
-from .ordinary_staging_helpers import review_action, stage_and_confirm
+from .ordinary_staging_helpers import review_action, review_reason, stage_and_confirm
 from .test_v2_cash_activity_review import DEFINITION, SOURCE
 from .v2_institution_helpers import add_test_financial_account
 from .v2_job_wait import wait_for_jobs
@@ -90,7 +90,7 @@ def _dialog(profile, evidence, kind):
 def _choose(dialog, purpose, category):
     dialog.purpose.setCurrentIndex(dialog.purpose.findData(purpose))
     dialog.category.setCurrentIndex(dialog.category.findData(category))
-    dialog.reason.setText("Inspected immutable source and explicitly reviewed this purpose")
+    review_reason(dialog).setText("Inspected immutable source and explicitly reviewed this purpose")
 
 
 @pytest.mark.parametrize("kind", ["cash", "card"])
@@ -132,8 +132,9 @@ def test_explicit_purpose_and_category_cancel_post_correct_class_and_exact_effec
         wait_for_jobs(dialog)
         posted = dialog.model.rows[row_index]
         assert posted.purpose == purpose and posted.entry_key is not None
-        assert "purpose:" in questions[0] and f"reviewed {category_kind} change:" in questions[0]
-        assert "Source amount:" in questions[0] and "Replacement entry effects" not in questions[0]
+        assert purpose.replace("_", " ").capitalize() in questions[0]
+        assert f"reviewed {category_kind} change:" in questions[0]
+        assert "Shared reason for all 1 row:" in questions[0] and "Replacement entry effects" not in questions[0]
         assert not dialog.purpose.isEnabled() and dialog.purpose.currentData() == purpose
         if kind == "card":
             dialog.workspace.set_allow_assumed_posting_dates(False)
@@ -142,7 +143,7 @@ def test_explicit_purpose_and_category_cancel_post_correct_class_and_exact_effec
             assert not dialog.assumed_dates.isChecked()
         dialog.category.setCurrentIndex(dialog.category.findData(f"{category_kind}:b"))
         wait_for_jobs(dialog)
-        dialog.reason.setText("Correct category while retaining purpose and class")
+        review_reason(dialog).setText("Correct category while retaining purpose and class")
         wait_for_jobs(dialog)
         dialog.action_button.click()
         wait_for_jobs(dialog)
@@ -180,7 +181,7 @@ def test_purpose_change_requires_withdrawal_then_fresh_explicit_review(tmp_path,
         original = dialog.model.rows[1].entry_key
         assert not dialog.purpose.isEnabled() and dialog.purpose.findData("income") == -1
         assert dialog.category.findData("income:a") == -1
-        dialog.reason.setText("Withdraw incorrect refund interpretation before reviewing income")
+        review_reason(dialog).setText("Withdraw incorrect refund interpretation before reviewing income")
         wait_for_jobs(dialog)
         dialog.withdraw_button.click()
         wait_for_jobs(dialog)
@@ -231,7 +232,7 @@ def test_stale_purpose_form_refreshes_without_posting_and_retains_authored_choic
         assert warnings and dialog.model.rows[1].entry_key is None
         assert dialog.purpose.currentData() == "expense_refund" and dialog.category.currentData() == "expense:a"
         assert dialog.batch.staged and "staged choices are kept" in dialog.operation_status.text()
-        assert dialog.reason.text() == "Inspected immutable source and explicitly reviewed this purpose"
+        assert review_reason(dialog).text() == "Inspected immutable source and explicitly reviewed this purpose"
         with V2ProfileStore.open(profile, read_only=True) as store:
             assert not store._active_consumed()
         # The error belongs to the failed attempt, not every later reload.
@@ -259,6 +260,7 @@ def test_builtin_is_explicit_fixed_and_custom_same_name_remains_distinct(tmp_pat
         assert not dialog.add_builtin_button.isEnabled()
         assert hashlib.sha256(profile.read_bytes()).hexdigest() == before
         assert "Custom:" in dialog.categories.item(0).text()
+        dialog.begin_add()
         dialog.builtin.setCurrentIndex(dialog.builtin.findData("builtin:loan-interest"))
         assert dialog.add_builtin_button.isEnabled()
         assert hashlib.sha256(profile.read_bytes()).hexdigest() == before
@@ -267,7 +269,7 @@ def test_builtin_is_explicit_fixed_and_custom_same_name_remains_distinct(tmp_pat
         assert dialog.categories.currentItem().data(Qt.UserRole) == "builtin:loan-interest"
         assert "Built-in" in dialog.categories.currentItem().text()
         assert not dialog.rename_button.isEnabled() and dialog.rename_name.isReadOnly()
-        assert "fixed" in dialog.category_identity.text()
+        assert "fixed" in dialog.identity_details.text()
         assert not dialog.add_builtin_button.isEnabled()
         custom = next(
             dialog.categories.item(index)
@@ -311,7 +313,7 @@ def test_only_builtin_category_is_never_selected_by_default_for_ordinary_spendin
         wait_for_jobs(dialog)
         assert dialog.category.count() == 2 and dialog.category.currentData() is None
         assert "Built-in" in dialog.category.itemText(dialog.category.findData("builtin:loan-interest"))
-        dialog.reason.setText("No category has been explicitly selected")
+        review_reason(dialog).setText("No category has been explicitly selected")
         wait_for_jobs(dialog)
         assert not review_action(dialog).isEnabled()
         assert hashlib.sha256(profile.read_bytes()).hexdigest() == before

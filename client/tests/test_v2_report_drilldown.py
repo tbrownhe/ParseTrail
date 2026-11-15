@@ -297,7 +297,8 @@ def test_report_explicit_period_handoff_and_source_route(tmp_path, app, monkeypa
         dialog.set_period(START, END)
         wait_for_reports(dialog)
         assert "$7.00" in dialog.total.text()
-        assert "All accounts" in dialog.qualification.text()
+        assert "across all dates" in dialog.qualification.text()
+        assert "whole profile" in dialog.scope.text()
         dialog.table.selectRow(next(i for i, row in enumerate(dialog.model.rows) if row.category_id == "expense:food"))
         dialog.inspect_button.click()
         assert seen == [(evidence.source_sha256, evidence.payload.rows[1].row_id)]

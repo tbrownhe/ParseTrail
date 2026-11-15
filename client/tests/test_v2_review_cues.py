@@ -14,8 +14,9 @@ from parsetrail.gui.v2_card_purchase_review import V2CardPurchaseReview
 from parsetrail.gui.v2_cash_activity_review import V2CashActivityReview
 from parsetrail.gui.v2_workspace_window import V2WorkspaceWindow
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QDialog, QDialogButtonBox, QMessageBox, QPlainTextEdit, QPushButton
+from PySide6.QtWidgets import QDialog, QDialogButtonBox, QMessageBox, QPlainTextEdit
 
+from .ordinary_staging_helpers import choose_review_menu, review_reason
 from .qt_journey_helpers import (
     JourneyArtifacts,
     ModalSteps,
@@ -91,9 +92,9 @@ def test_cash_required_ready_saved_correction_and_staged_are_distinct(qtbot, qap
     window, view = open_review(qtbot, workspace, size=size)
     artifacts = JourneyArtifacts(journey_artifacts, qapp, size)
     modals = ModalSteps(qtbot)
-    assert view.decision_group.title() == "Review selected transaction"
+    assert view.decision_group.title() == "Selected transaction"
     assert not view.decision_group.isAncestorOf(view.batch)
-    assert [field.property("formState") for field in (view.purpose, view.category, view.reason)] == [
+    assert [field.property("formState") for field in (view.purpose, view.category, review_reason(view))] == [
         "required",
         "required",
         "required",
@@ -104,20 +105,20 @@ def test_cash_required_ready_saved_correction_and_staged_are_distinct(qtbot, qap
     choose_combo(qtbot, view.purpose, "expense")
     choose_combo(qtbot, view.category, "expense:food")
     assert view.purpose.property("formState") == view.category.property("formState") == "ready"
-    assert view.reason.property("formState") == "required"
-    enter_text(qtbot, view.reason, "Reviewed the original source")
+    assert review_reason(view).property("formState") == "required"
+    enter_text(qtbot, review_reason(view), "Reviewed the original source")
     assert view.status.property("formState") == "ready"
-    assert "Not saved" in view.status.text()
+    assert "before posting" in view.status.text()
     assert "not saved" in view.category.accessibleDescription()
     artifacts.capture("02-cash-valid-choices-not-saved", window)
     confirm(qtbot, modals, view, accept=False)
-    assert view.reason.text() == "Reviewed the original source"
+    assert review_reason(view).text() == "Reviewed the original source"
     assert view.status.property("formState") == "ready"
     qtbot.mouseClick(view.batch.stage_button, Qt.LeftButton)
-    assert len(view.batch.staged) == 1 and "Not saved" in view.batch.summary.text()
+    assert len(view.batch.staged) == 1 and "not posted" in view.batch.title()
     artifacts.capture("03-staged-is-separate-and-not-saved", window)
-    qtbot.mouseClick(view.batch.clear_button, Qt.LeftButton)
-    enter_text(qtbot, view.reason, "Confirm reviewed source purchase")
+    choose_review_menu(qtbot, view.batch.options_button, view.batch.options_menu, view.batch.clear_action)
+    enter_text(qtbot, review_reason(view), "Confirm reviewed source purchase")
     confirm(qtbot, modals, view)
     qtbot.waitUntil(lambda: not window.inventory_pending, timeout=15000)
     qtbot.mouseClick(view.navigation.search, Qt.LeftButton)
@@ -125,31 +126,31 @@ def test_cash_required_ready_saved_correction_and_staged_are_distinct(qtbot, qap
     click_table_text(qtbot, view.table, "Coffee")
     assert view.decision_group.title() == "Correct saved review"
     assert view.purpose.property("formState") == view.category.property("formState") == "saved"
-    assert view.reason.property("formState") == "optional"
-    assert "for changes" in view.form.labelForField(view.reason).text()
-    assert "Reason for correction" in view.form.labelForField(view.reason).text()
+    assert review_reason(view).property("formState") == "optional"
+    assert "for changes" in view.form.labelForField(review_reason(view)).text()
+    assert "Reason for correction" in view.form.labelForField(review_reason(view)).text()
     assert view.saved_review_note.isReadOnly()
     assert view.saved_review_note.toPlainText() == "Confirm reviewed source purchase"
-    assert not view.reason.text() and not view.withdraw_button.isEnabled()
+    assert not review_reason(view).text() and not view.withdraw_button.isEnabled()
     assert view.status.property("formState") == "saved" and not view.action_button.isEnabled()
     artifacts.capture("04-saved-review-is-neutral", window)
     choose_combo(qtbot, view.category, "expense:travel")
     assert view.category.property("formState") == "ready"
-    assert view.reason.property("formState") == "required"
-    assert "*" in view.form.labelForField(view.reason).text()
+    assert review_reason(view).property("formState") == "required"
+    assert "*" in view.form.labelForField(review_reason(view)).text()
     choose_combo(qtbot, view.category, "expense:food")
-    assert view.category.property("formState") == "saved" and view.reason.property("formState") == "optional"
+    assert view.category.property("formState") == "saved" and review_reason(view).property("formState") == "optional"
     assert view.status.property("formState") == "saved"
     choose_combo(qtbot, view.category, "expense:travel")
-    enter_text(qtbot, view.reason, "Correct category, retain original money")
+    enter_text(qtbot, review_reason(view), "Correct category, retain original money")
     assert view.status.property("formState") == "ready"
     artifacts.capture("05-correction-ready-still-not-saved", window)
     confirm(qtbot, modals, view)
     qtbot.waitUntil(lambda: not window.inventory_pending, timeout=15000)
     click_table_text(qtbot, view.table, "Coffee")
-    assert view.category.property("formState") == "saved" and view.reason.property("formState") == "optional"
+    assert view.category.property("formState") == "saved" and review_reason(view).property("formState") == "optional"
     assert view.saved_review_note.toPlainText() == "Correct category, retain original money"
-    assert not view.reason.text() and not view.withdraw_button.isEnabled()
+    assert not review_reason(view).text() and not view.withdraw_button.isEnabled()
     with V2ProfileStore.open(workspace.profile_path, read_only=True) as store:
         assert store.load_import(source_id) == original
         assert store.connection.execute("SELECT COUNT(*) FROM JournalEntries").fetchone() == (3,)
@@ -176,10 +177,10 @@ def test_assumed_card_date_is_required_until_decided_and_invalid_edits_are_red(
     artifacts = JourneyArtifacts(journey_artifacts, qapp, (1050, 700))
     choose_combo(qtbot, view.purpose, "expense")
     choose_combo(qtbot, view.category, "expense:food")
-    enter_text(qtbot, view.reason, "Review card purchase without accepting a guess")
+    enter_text(qtbot, review_reason(view), "Review card purchase without accepting a guess")
     assert view.accounting_date.text() == "2026-03-16"
     assert view.accounting_date.property("formState") == "required"
-    assert view.category.property("formState") == view.reason.property("formState") == "ready"
+    assert view.category.property("formState") == review_reason(view).property("formState") == "ready"
     assert view.status.property("formState") == "blocked" and "nothing can post" in view.status.text()
     assert not view.action_button.isEnabled()
     artifacts.capture("01-estimated-date-decision-blocks-posting", window)
@@ -226,7 +227,7 @@ def test_register_source_fixed_date_and_repayment_route_never_look_like_category
     artifacts = JourneyArtifacts(journey_artifacts, qapp, (1050, 700))
     choose_combo(qtbot, view.purpose, "expense")
     choose_combo(qtbot, view.category, "expense:vehicle")
-    enter_text(qtbot, view.reason, "Review whole-register charge without inventing interest")
+    enter_text(qtbot, review_reason(view), "Review whole-register charge without inventing interest")
     assert view.accounting_date.isReadOnly() and view.accounting_date.property("formState") == "readonly"
     assert view.purpose.property("formState") == view.category.property("formState") == "ready"
     assert view.batch.stage_button.isEnabled() and view.status.property("formState") == "ready"
@@ -254,7 +255,7 @@ def test_loading_cancel_and_reload_keep_draft_but_never_show_posting_ready(
     window, view = open_review(qtbot, workspace)
     choose_combo(qtbot, view.purpose, "expense")
     choose_combo(qtbot, view.category, "expense:food")
-    enter_text(qtbot, view.reason, "Retain this unsaved decision through reload cancellation")
+    enter_text(qtbot, review_reason(view), "Retain this unsaved decision through reload cancellation")
     started, release = Event(), Event()
     original = V2ProfileStore.source_interpretation_snapshot
 
@@ -268,25 +269,27 @@ def test_loading_cancel_and_reload_keep_draft_but_never_show_posting_ready(
     artifacts.manifest["instrumentation"] = (
         "Read-only snapshot worker paused with an Event to inspect pending/cancel UI."
     )
-    reload_button = next(button for button in view.findChildren(QPushButton) if button.text() == "Reload")
+    reload_action = next(action for action in view.secondary_menu.actions() if action.text() == "Reload saved review")
     try:
-        qtbot.mouseClick(reload_button, Qt.LeftButton)
+        reload_action.trigger()
         qtbot.waitUntil(started.is_set, timeout=10000)
-        assert all(field.property("formState") == "loading" for field in (view.purpose, view.category, view.reason))
-        assert not view.reason.isEnabled() and not view.action_button.isEnabled()
+        assert all(
+            field.property("formState") == "loading" for field in (view.purpose, view.category, review_reason(view))
+        )
+        assert not review_reason(view).isEnabled() and not view.action_button.isEnabled()
         assert view.status.property("formState") == "loading"
         artifacts.capture("01-loading-snapshot-keeps-draft-neutral", window)
         qtbot.mouseClick(view.cancel_read_button, Qt.LeftButton)
         release.set()
         qtbot.waitUntil(lambda: not view.review_pending, timeout=15000)
-        assert view.reason.text() == "Retain this unsaved decision through reload cancellation"
+        assert review_reason(view).text() == "Retain this unsaved decision through reload cancellation"
         assert not view.action_button.isEnabled()
         assert view.status.property("formState") == "blocked"
         artifacts.capture("02-cancelled-load-needs-reload-keeps-draft", window)
-        qtbot.mouseClick(reload_button, Qt.LeftButton)
+        reload_action.trigger()
         qtbot.waitUntil(lambda: not view.review_pending, timeout=15000)
         assert view.purpose.currentData() == "expense" and view.category.currentData() == "expense:food"
-        assert view.reason.text() == "Retain this unsaved decision through reload cancellation"
+        assert review_reason(view).text() == "Retain this unsaved decision through reload cancellation"
         assert view.batch.stage_button.isEnabled() and view.status.property("formState") == "ready"
         artifacts.capture("03-reloaded-draft-ready-but-not-saved", window)
         with V2ProfileStore.open(workspace.profile_path, read_only=True) as store:

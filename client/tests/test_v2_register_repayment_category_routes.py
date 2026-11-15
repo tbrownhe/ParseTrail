@@ -7,7 +7,7 @@ from parsetrail.core.v2_profile_store import V2ProfileStore
 from parsetrail.gui.v2_categories import V2CategoryDialog
 from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 
-from .ordinary_staging_helpers import review_action, stage_and_confirm
+from .ordinary_staging_helpers import review_action, review_reason, stage_and_confirm
 from .test_v2_liability_register_dialog import dialog, form, profile
 from .test_v2_liability_register_dialog import source as source_fixture
 from .v2_job_wait import wait_for_jobs
@@ -42,7 +42,7 @@ def test_printed_payment_routes_to_selected_counterpart_review_without_posting(t
     try:
         view.table.selectRow(1)
         wait_for_jobs(view)
-        view.reason.setText("Keep this draft note")
+        review_reason(view).setText("Keep this draft note")
         wait_for_jobs(view)
         assert view.purpose.currentData() == "repayment"
         assert review_action(view).isEnabled()
@@ -54,7 +54,7 @@ def test_printed_payment_routes_to_selected_counterpart_review_without_posting(t
         wait_for_jobs(view)
         assert opened == [(path, view, evidence.payload.accounts[0].rows[1].row_id)]
         assert path.read_bytes() == before
-        assert view.reason.text() == "Keep this draft note"
+        assert review_reason(view).text() == "Keep this draft note"
         assert view.purpose.currentData() == "repayment"
         assert view._current().row_id == evidence.payload.accounts[0].rows[1].row_id
     finally:
@@ -91,7 +91,7 @@ def test_manage_categories_creates_compatible_category_and_preserves_review_edit
     view = dialog(path, evidence.source_sha256)
     wait_for_jobs(view)
     form(view)
-    view.reason.setText("Authored interest review reason")
+    review_reason(view).setText("Authored interest review reason")
     wait_for_jobs(view)
     previous_date = view.accounting_date.text()
 
@@ -106,7 +106,7 @@ def test_manage_categories_creates_compatible_category_and_preserves_review_edit
         view.manage_categories_button.click()
         wait_for_jobs(view)
         assert view.purpose.currentData() == "expense"
-        assert view.reason.text() == "Authored interest review reason"
+        assert review_reason(view).text() == "Authored interest review reason"
         assert view.accounting_date.text() == previous_date
         assert view._current().row_id == evidence.payload.accounts[0].rows[0].row_id
         assert "Loan servicing costs" in view.category.currentText()
@@ -124,7 +124,7 @@ def test_category_cancel_does_not_change_profile_or_review_choice(tmp_path, sour
     view = dialog(path, evidence.source_sha256)
     wait_for_jobs(view)
     form(view)
-    view.reason.setText("Retain reason on category cancel")
+    review_reason(view).setText("Retain reason on category cancel")
     wait_for_jobs(view)
     old_category = view.category.currentData()
     before = path.read_bytes()
@@ -134,7 +134,7 @@ def test_category_cancel_does_not_change_profile_or_review_choice(tmp_path, sour
         wait_for_jobs(view)
         assert path.read_bytes() == before
         assert view.category.currentData() == old_category and view.purpose.currentData() == "expense"
-        assert view.reason.text() == "Retain reason on category cancel"
+        assert review_reason(view).text() == "Retain reason on category cancel"
     finally:
         view.close()
 
@@ -187,7 +187,7 @@ def test_shared_card_category_shortcut_preserves_explicit_corrected_date(tmp_pat
     wait_for_jobs(view)
     view.accounting_date.setText("2026-03-14")
     wait_for_jobs(view)
-    view.reason.setText("Keep explicitly corrected card date")
+    review_reason(view).setText("Keep explicitly corrected card date")
     wait_for_jobs(view)
 
     def add_category(manager):
@@ -200,7 +200,7 @@ def test_shared_card_category_shortcut_preserves_explicit_corrected_date(tmp_pat
         view.manage_categories_button.click()
         wait_for_jobs(view)
         assert view.accounting_date.text() == "2026-03-14"
-        assert view.reason.text() == "Keep explicitly corrected card date"
+        assert review_reason(view).text() == "Keep explicitly corrected card date"
         assert view.purpose.currentData() == "expense" and "Parking" in view.category.currentText()
         assert review_action(view).isEnabled() and not workspace.preferences().allow_assumed_posting_dates
         with V2ProfileStore.open(path, read_only=True) as store:

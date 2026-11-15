@@ -36,7 +36,12 @@ from parsetrail.gui.v2_cash_activity_review import (
     _purpose_effects,
 )
 from parsetrail.gui.v2_ordinary_review import OrdinaryReviewMixin
-from parsetrail.gui.v2_review_navigation import ReviewNavigation, StagedRowPresentation, review_status_label
+from parsetrail.gui.v2_review_navigation import (
+    ReviewNavigation,
+    StagedRowPresentation,
+    review_status_label,
+    tracking_scope_label,
+)
 
 
 class _CardRowsModel(QAbstractTableModel):
@@ -127,7 +132,7 @@ class _CardRowsModel(QAbstractTableModel):
 def _register_identity(row):
     return (
         f"{row.financial_account or 'Not assigned'} ({row.financial_account_kind or 'kind unavailable'}, "
-        f"{(row.tracking_scope or 'scope unavailable').replace('_', ' ')}, ID {row.financial_account_id or 'unassigned'})"
+        f"{tracking_scope_label(row.tracking_scope)}, ID {row.financial_account_id or 'unassigned'})"
     )
 
 
@@ -210,14 +215,14 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
         self.form = form
         self.purpose = QComboBox()
         self.purpose.currentIndexChanged.connect(self._purpose_changed)
-        self.purpose.setAccessibleName("1. Purpose, required")
-        form.addRow("1. Purpose *", self.purpose)
+        self.purpose.setAccessibleName("1. Transaction type, required")
+        form.addRow("1. Type *", self.purpose)
         self.category = QComboBox()
         self.category.currentIndexChanged.connect(self._update_action)
         category_row = QHBoxLayout()
         self.category_row = category_row
         category_row.addWidget(self.category, 1)
-        self.manage_categories_button = QPushButton("Manage categories…")
+        self.manage_categories_button = QPushButton("Add category…")
         self.manage_categories_button.clicked.connect(self._manage_categories)
         category_row.addWidget(self.manage_categories_button)
         self.category.setAccessibleName("2. Category, required")
@@ -286,9 +291,7 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
         self.purpose.clear()
         external = _reviewed_elsewhere(row)
         self.purpose.addItem(
-            "Reviewed elsewhere — inspect related history"
-            if external
-            else "Choose a purpose; a credit is not necessarily a refund",
+            "Reviewed elsewhere — inspect related history" if external else "Choose a transaction type…",
             "external_history" if external else None,
         )
         repayment_available = (
@@ -340,7 +343,7 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
             if _reviewed_elsewhere(row)
             else "Repayments use the paying account, not a category"
             if repayment
-            else "Choose a category explicitly",
+            else "Choose a category…",
             None,
         )
         self.category.setEnabled(not repayment)
@@ -492,6 +495,7 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
         kind = PURPOSE_KINDS.get(purpose)
         if kind is not None:
             dialog.add_kind.setCurrentIndex(dialog.add_kind.findData(kind))
+        dialog.begin_add()
         dialog.exec()
         selected = dialog.categories.currentItem()
         created_id = selected.data(Qt.UserRole) if selected is not None else None

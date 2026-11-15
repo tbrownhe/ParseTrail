@@ -15,6 +15,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QPalette
 from PySide6.QtWidgets import QDialog, QDialogButtonBox, QMessageBox, QPlainTextEdit
 
+from .ordinary_staging_helpers import review_reason
 from .qt_journey_helpers import JourneyArtifacts, ModalSteps, activate, choose_combo, close_dialog, enter_text
 from .test_v2_card_purchase_review import _chase_profile
 from .test_v2_ordinary_review_async import DEFINITION
@@ -62,7 +63,7 @@ def select(qtbot, view, text, modifier=Qt.NoModifier):
 def choices(qtbot, view):
     choose_combo(qtbot, view.purpose, "expense")
     choose_combo(qtbot, view.category, "expense:food")
-    enter_text(qtbot, view.reason, "Checked each selected purchase against the original")
+    enter_text(qtbot, review_reason(view), "Checked each selected purchase against the original")
 
 
 @pytest.mark.parametrize("size", [(1050, 700), (1280, 800)], ids=["1050x700", "1280x800"])
@@ -75,27 +76,27 @@ def test_nonadjacent_selection_exact_preview_cancel_then_two_posts(
     modals = ModalSteps(qtbot)
     select(qtbot, view, "Coffee")
     choices(qtbot, view)
-    single_note = view.reason.text()
+    single_note = review_reason(view).text()
     select(qtbot, view, "Coffee", Qt.ControlModifier)
     assert not view.navigation.selected() and view._current() is None
     assert not view.action_button.isEnabled() and not view.batch.stage_button.isEnabled()
     assert view.status.property("formState") == "neutral"
     artifacts.capture("00-no-selection-preserves-draft-disables-post", window)
     select(qtbot, view, "Coffee")
-    assert view.reason.text() == single_note and view.category.currentData() == "expense:food"
+    assert review_reason(view).text() == single_note and view.category.currentData() == "expense:food"
     select(qtbot, view, "Tea", Qt.ControlModifier)
     assert len(view.navigation.selected()) == 2
     assert "2 selected" in view.navigation.count.text()
     assert view.decision_group.title() == "Review 2 selected transactions"
     assert view.purpose.currentData() is None  # No inferred anchor purpose.
     choices(qtbot, view)
-    shared_note = view.reason.text()
+    shared_note = review_reason(view).text()
     select(qtbot, view, "Snack", Qt.ControlModifier)
     select(qtbot, view, "Snack", Qt.ControlModifier)
     assert len(view.navigation.selected()) == 2
-    assert view.reason.text() == shared_note and view.category.currentData() == "expense:food"
-    enter_text(qtbot, view.reason, shared_note)
-    assert not view.table.hasFocus() and view.reason.hasFocus()
+    assert review_reason(view).text() == shared_note and view.category.currentData() == "expense:food"
+    enter_text(qtbot, review_reason(view), shared_note)
+    assert not view.table.hasFocus() and review_reason(view).hasFocus()
     assert view.table.palette().color(QPalette.Inactive, QPalette.Highlight).name() == "#dcebfa"
     assert view.table.palette().color(QPalette.Inactive, QPalette.HighlightedText).name() == "#172b4d"
     assert view.table.property("reviewSelectionFocus") is False
@@ -131,7 +132,7 @@ def test_nonadjacent_selection_exact_preview_cancel_then_two_posts(
         assert store.connection.execute("SELECT COUNT(*) FROM JournalEntries").fetchone() == (0,)
     # Returning to one restores that row's independent proposal and review note.
     select(qtbot, view, "Coffee")
-    assert view.purpose.currentData() == "expense" and view.reason.text() == single_note
+    assert view.purpose.currentData() == "expense" and review_reason(view).text() == single_note
     select(qtbot, view, "Tea", Qt.ControlModifier)
     assert view.purpose.currentData() == "expense" and view.category.currentData() == "expense:food"
     modals.arm((QDialog, lambda dialog: preview(dialog, True)))
@@ -224,7 +225,7 @@ def test_card_multi_keeps_individually_staged_date_override(qtbot, qapp, tmp_pat
     choose_combo(qtbot, view.purpose, "expense")
     choose_combo(qtbot, view.category, "expense:food")
     enter_text(qtbot, view.accounting_date, "2026-03-17")
-    enter_text(qtbot, view.reason, "Explicitly checked posting date")
+    enter_text(qtbot, review_reason(view), "Explicitly checked posting date")
     enter_text(qtbot, view.batch.reason, "Reviewed selected source dates")
     qtbot.mouseClick(view.batch.stage_button, Qt.LeftButton)
     assert view.batch.staged[first.row_id].accounting_date == date(2026, 3, 17)
@@ -350,7 +351,7 @@ def test_multi_category_creation_and_cancel_keep_selection_proposal_and_staged(
     select(qtbot, view, "Tea", Qt.ControlModifier)
     selected = {row.row_id for row in view.navigation.selected()}
     choose_combo(qtbot, view.purpose, "expense")
-    enter_text(qtbot, view.reason, "Keep this shared draft through category setup")
+    enter_text(qtbot, review_reason(view), "Keep this shared draft through category setup")
     assert view.category.count() == 1 and view.manage_categories_button.isEnabled()
     modals = ModalSteps(qtbot)
 
@@ -365,7 +366,7 @@ def test_multi_category_creation_and_cancel_keep_selection_proposal_and_staged(
     qtbot.waitUntil(lambda: not view.review_pending, timeout=15000)
     assert {row.row_id for row in view.navigation.selected()} == selected
     assert view.purpose.currentData() == "expense" and "Meals" in view.category.currentText()
-    assert view.reason.text() == "Keep this shared draft through category setup"
+    assert review_reason(view).text() == "Keep this shared draft through category setup"
     qtbot.mouseClick(view.batch.stage_button, Qt.LeftButton)
     staged, category = dict(view.batch.staged), view.category.currentData()
     before = workspace.profile_path.read_bytes()
@@ -375,9 +376,9 @@ def test_multi_category_creation_and_cancel_keep_selection_proposal_and_staged(
     qtbot.waitUntil(lambda: not view.review_pending, timeout=15000)
     assert {row.row_id for row in view.navigation.selected()} == selected
     assert view.batch.staged == staged and view.category.currentData() == category
-    assert view.reason.text() == "Keep this shared draft through category setup"
+    assert review_reason(view).text() == "Keep this shared draft through category setup"
     assert workspace.profile_path.read_bytes() == before
-    assert "all staged rows" in view.status.text()
+    assert "ALL" in view.batch.reason_scope.text() and "hidden" in view.batch.reason_scope.text()
     assert view.batch.propose(
         tuple(replace(view.model.rows[0], row_id=f"synthetic-{i}") for i in range(2001)), "expense", category
     )[1]
@@ -397,13 +398,13 @@ def test_refused_proposal_keeps_prior_income_batch_note_and_zero_selection_previ
     select(qtbot, view, "Deposit")
     choose_combo(qtbot, view.purpose, "income")
     choose_combo(qtbot, view.category, "income:salary")
-    enter_text(qtbot, view.reason, "A: Reviewed the deposited income")
+    enter_text(qtbot, review_reason(view), "A: Reviewed the deposited income")
     qtbot.mouseClick(view.batch.stage_button, Qt.LeftButton)
     staged, note = dict(view.batch.staged), view.batch.note()
     select(qtbot, view, "Coffee")
     select(qtbot, view, "Tea", Qt.ControlModifier)
     choices(qtbot, view)
-    enter_text(qtbot, view.reason, "B: Unstaged expense proposal")
+    enter_text(qtbot, review_reason(view), "B: Unstaged expense proposal")
     assert view.batch.note() == note
     select(qtbot, view, "Unassigned", Qt.ControlModifier)
     monkeypatch.setattr(QMessageBox, "information", lambda *_: QMessageBox.Ok)
@@ -437,10 +438,10 @@ def test_latent_unstaged_common_proposal_guards_document_close_and_restores(qtbo
     select(qtbot, view, "Coffee")
     select(qtbot, view, "Tea", Qt.ControlModifier)
     choices(qtbot, view)
-    note = view.reason.text()
+    note = review_reason(view).text()
     select(qtbot, view, "Coffee", Qt.ControlModifier)
     select(qtbot, view, "Tea", Qt.ControlModifier)
-    assert not view.navigation.selected() and not view.reason.text() and not view.batch.staged
+    assert not view.navigation.selected() and review_reason(view).text() == note and not view.batch.staged
     assert view.has_unsaved_draft
     modals = ModalSteps(qtbot)
 
@@ -456,7 +457,7 @@ def test_latent_unstaged_common_proposal_guards_document_close_and_restores(qtbo
     assert view.has_unsaved_draft  # Unrelated single-row context cannot hide the proposal.
     select(qtbot, view, "Coffee")
     select(qtbot, view, "Tea", Qt.ControlModifier)
-    assert view.reason.text() == note and view.category.currentData() == "expense:food"
+    assert review_reason(view).text() == note and view.category.currentData() == "expense:food"
     JourneyArtifacts(journey_artifacts, qapp, (1050, 700)).capture(
         "01-latent-proposal-retained-after-cancelled-close", window
     )
@@ -482,7 +483,7 @@ def test_single_card_stage_rejects_noncanonical_dates_without_changing_prior_sta
     choose_combo(qtbot, view.purpose, "expense")
     choose_combo(qtbot, view.category, "expense:food")
     enter_text(qtbot, view.accounting_date, "2026-03-17")
-    enter_text(qtbot, view.reason, "Confirmed one source date")
+    enter_text(qtbot, review_reason(view), "Confirmed one source date")
     enter_text(qtbot, view.batch.reason, "Original staged note")
     qtbot.mouseClick(view.batch.stage_button, Qt.LeftButton)
     staged, note = dict(view.batch.staged), view.batch.note()
@@ -507,12 +508,12 @@ def test_posting_prior_batch_preserves_unrelated_current_common_proposal(qtbot, 
     select(qtbot, view, "Deposit")
     choose_combo(qtbot, view.purpose, "income")
     choose_combo(qtbot, view.category, "income:salary")
-    enter_text(qtbot, view.reason, "A: Income already staged")
+    enter_text(qtbot, review_reason(view), "A: Income already staged")
     qtbot.mouseClick(view.batch.stage_button, Qt.LeftButton)
     select(qtbot, view, "Coffee")
     select(qtbot, view, "Tea", Qt.ControlModifier)
     choices(qtbot, view)
-    enter_text(qtbot, view.reason, "B: Keep these unstaged purchases")
+    enter_text(qtbot, review_reason(view), "B: Keep these unstaged purchases")
     ids = {row.row_id for row in view.navigation.selected()}
     modals = ModalSteps(qtbot)
 
@@ -529,7 +530,7 @@ def test_posting_prior_batch_preserves_unrelated_current_common_proposal(qtbot, 
     modals.finish()
     qtbot.waitUntil(lambda: not view.review_pending and not window.inventory_pending, timeout=15000)
     assert {row.row_id for row in view.navigation.selected()} == ids
-    assert view.reason.text() == "B: Keep these unstaged purchases"
+    assert review_reason(view).text() == "B: Keep these unstaged purchases"
     assert view.purpose.currentData() == "expense" and view.category.currentData() == "expense:food"
     assert view.has_unsaved_draft and not view.batch.staged
     with V2ProfileStore.open(workspace.profile_path, read_only=True) as store:

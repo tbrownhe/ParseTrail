@@ -13,7 +13,7 @@ from devtools.parser_engine_pilot.test_table_bank_source_output import DEFINITIO
 from devtools.parser_engine_pilot.test_table_bank_source_output import SOURCE as BANK_SOURCE
 from devtools.parser_engine_pilot.test_table_bank_source_output import evidence as bank_channels
 
-from .ordinary_staging_helpers import review_action, stage_and_confirm
+from .ordinary_staging_helpers import review_action, review_reason, stage_and_confirm
 from .test_v2_ordinary_review_async import wait_for_review
 from .v2_institution_helpers import add_test_financial_account
 
@@ -72,7 +72,7 @@ def test_cash_activity_dialog_keeps_unclassified_deposit_pending(tmp_path: Path,
         dialog.table.selectRow(0)
         dialog.purpose.setCurrentIndex(dialog.purpose.findData("expense"))
         dialog.category.setCurrentIndex(dialog.category.findData("expense:food"))
-        dialog.reason.setText("Reviewed purchase")
+        review_reason(dialog).setText("Reviewed purchase")
         assert review_action(dialog).isEnabled()
         stage_and_confirm(dialog)
         wait_for_review(dialog)
@@ -89,7 +89,7 @@ def test_cash_activity_dialog_keeps_unclassified_deposit_pending(tmp_path: Path,
         assert dialog.model.rows[0].financial_account == renamed
         assert dialog.table.columnWidth(3) > dialog.table.fontMetrics().horizontalAdvance(renamed)
         dialog.category.setCurrentIndex(dialog.category.findData("expense:travel"))
-        dialog.reason.setText("Correct category")
+        review_reason(dialog).setText("Correct category")
         dialog.action_button.click()
         wait_for_review(dialog)
         assert dialog.model.rows[0].status == "Posted: Travel"
@@ -137,14 +137,14 @@ def test_cash_activity_dialog_explicitly_posts_and_corrects_income(tmp_path: Pat
         assert dialog.category.findData("expense:food") == -1
         assert review_action(dialog).text().startswith("Stage selected")
         dialog.category.setCurrentIndex(dialog.category.findData("income:pay"))
-        dialog.reason.setText("Confirmed income")
+        review_reason(dialog).setText("Confirmed income")
         stage_and_confirm(dialog)
         wait_for_review(dialog)
         assert dialog.model.rows[1].status == "Posted: Pay"
-        assert any("purpose: Income" in message and "reviewed income change:" in message for message in confirmations)
+        assert any("Income /" in message and "reviewed income change:" in message for message in confirmations)
         assert review_action(dialog).text() == "Correct income category"
         dialog.category.setCurrentIndex(dialog.category.findData("income:gift"))
-        dialog.reason.setText("Correct classification")
+        review_reason(dialog).setText("Correct classification")
         dialog.action_button.click()
         wait_for_review(dialog)
         assert dialog.model.rows[1].status == "Posted: Gift"
@@ -188,15 +188,15 @@ def test_bank_statement_rows_use_explicit_cash_review_dialog(tmp_path: Path, mon
         dialog.table.selectRow(0)
         dialog.purpose.setCurrentIndex(dialog.purpose.findData("income"))
         dialog.category.setCurrentIndex(dialog.category.findData("income:interest"))
-        dialog.reason.setText("Confirmed interest")
+        review_reason(dialog).setText("Confirmed interest")
         stage_and_confirm(dialog)
         wait_for_review(dialog)
         assert dialog.model.rows[0].status == "Posted: Interest"
-        assert any("purpose: Income" in message and "reviewed income change:" in message for message in confirmations)
+        assert any("Income /" in message and "reviewed income change:" in message for message in confirmations)
         dialog.table.selectRow(1)
         dialog.purpose.setCurrentIndex(dialog.purpose.findData("expense"))
         dialog.category.setCurrentIndex(dialog.category.findData("expense:other"))
-        dialog.reason.setText("Reviewed withdrawal")
+        review_reason(dialog).setText("Reviewed withdrawal")
         stage_and_confirm(dialog)
         wait_for_review(dialog)
         assert dialog.model.rows[1].status == "Posted: Other"

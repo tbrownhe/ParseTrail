@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QMenu,
     QMessageBox,
     QPushButton,
     QSplitter,
@@ -425,6 +426,7 @@ class V2ReviewedReportsDialog(QDialog):
 
     review_requested = Signal()
     source_review_requested = Signal(str, str)
+    categories_changed = Signal()
 
     def __init__(self, profile: Path, parent=None, *, embedded=False, initial_tab=0, positions_only=False):
         super().__init__(parent)
@@ -447,6 +449,7 @@ class V2ReviewedReportsDialog(QDialog):
         self._loaded: dict[int, tuple] = {}
         self._errors: dict[int, str] = {}
         self._selected_account_id: str | None = None
+        self._selected_budget_category_id: str | None = None
         self._read_timer = QTimer(self)
         self._read_timer.setSingleShot(True)
         self._read_timer.timeout.connect(self._start_selected_read)
@@ -470,13 +473,10 @@ class V2ReviewedReportsDialog(QDialog):
         form.addRow("From (inclusive)", self.start)
         form.addRow("To (exclusive)", self.end)
         period_layout.addLayout(form)
-        period_scope = QLabel(
-            "All accounts in this profile. Date range applies to Spending, Income and Account movement. "
-            "Monthly budgets and Account positions use their own dates."
-            " Select a category or movement account, then Inspect entries to see its current reviewed rows."
-        )
+        period_scope = QLabel("All profile accounts · Reviewed entries only")
         period_scope.setWordWrap(True)
         period_layout.addWidget(period_scope)
+        period_scope.setVisible(not embedded)
         layout.addWidget(self.period_controls)
         self.model = _CategoryModel("expense", self)
         self.table = QTableView()
@@ -503,6 +503,9 @@ class V2ReviewedReportsDialog(QDialog):
         self.budget_month.setMaximumDate(QDate(9999, 11, 1))
         budget_form.addRow("Budget month", self.budget_month)
         budget_layout.addLayout(budget_form)
+        self.edit_budget_button = QPushButton("Set up budgets / categories…")
+        self.edit_budget_button.clicked.connect(self._edit_budget)
+        budget_form.addRow(self.edit_budget_button)
         self.budget_model = _MonthlyBudgetModel(self)
         self.budget_table = QTableView()
         self.budget_table.setModel(self.budget_model)
@@ -526,6 +529,7 @@ class V2ReviewedReportsDialog(QDialog):
         layout.addWidget(self.tabs)
         self.total = QLabel()
         self.total.setWordWrap(True)
+        self.total.setStyleSheet("font-weight: 600; font-size: 13px")
         layout.addWidget(self.total)
         self.qualification = QLabel()
         self.qualification.setWordWrap(True)
@@ -533,6 +537,7 @@ class V2ReviewedReportsDialog(QDialog):
         self.show_details = QCheckBox("Show report and evidence details")
         self.show_details.toggled.connect(self._toggle_details)
         layout.addWidget(self.show_details)
+        self.show_details.hide()
         self.scope = QLabel()
         self.scope.setWordWrap(True)
         self.scope.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -556,6 +561,17 @@ class V2ReviewedReportsDialog(QDialog):
             table.selectionModel().currentRowChanged.connect(self._update_inspect_button)
         self.export_button = buttons.addButton("Export reviewed rows…", QDialogButtonBox.ActionRole)
         self.export_button.clicked.connect(self._export_reviewed_rows)
+        more = buttons.addButton("Report options…", QDialogButtonBox.ActionRole)
+        menu = QMenu(more)
+        more.setMenu(menu)
+        menu.addAction("Refresh reports", self.refresh_reports_button.click)
+        self.export_action = menu.addAction("Export reviewed rows…", self.export_button.click)
+        detail_action = menu.addAction("Report and evidence details")
+        detail_action.setCheckable(True)
+        detail_action.toggled.connect(self.show_details.setChecked)
+        menu.aboutToShow.connect(self._update_report_menu)
+        self.refresh_reports_button.hide()
+        self.export_button.hide()
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
         self.start.dateChanged.connect(self.refresh)
@@ -586,6 +602,36 @@ class V2ReviewedReportsDialog(QDialog):
         self.tabs.setCurrentIndex(0)
         self.refresh()
 
+    def set_budget_month(self, month: date) -> None:
+        """Seed a month only for an explicit document/result handoff."""
+        self.budget_month.setDate(QDate(month.year, month.month, 1))
+
+    def _update_report_menu(self):
+        self.export_action.setEnabled(self.export_button.isEnabled())
+
+    def _edit_budget(self):
+        from parsetrail.gui.v2_categories import V2CategoryDialog
+
+        if self.export_jobs.pending:
+            return
+        index = self.budget_table.currentIndex()
+        category_id = (
+            self.budget_model.rows[index.row()].category_id
+            if index.isValid() and index.row() < len(self.budget_model.rows)
+            else None
+        )
+        self._selected_budget_category_id = category_id
+        selected = self.budget_month.date()
+        dialog = V2CategoryDialog(
+            self.profile,
+            self,
+            initial_month=date(selected.year(), selected.month(), 1),
+            selected_category_id=category_id,
+        )
+        exec_disposable(dialog)
+        self.invalidate(read=True)
+        self.categories_changed.emit()
+
     @property
     def reports_pending(self) -> bool:
         """Whether this view still has a requested read or confirmed export."""
@@ -609,6 +655,10 @@ class V2ReviewedReportsDialog(QDialog):
 
     def _invalidate(self, tabs) -> None:
         tabs = tuple(tabs)
+        if 2 in tabs:
+            index = self.budget_table.currentIndex()
+            if index.isValid() and index.row() < len(self.budget_model.rows):
+                self._selected_budget_category_id = self.budget_model.rows[index.row()].category_id
         if 4 in tabs:
             selected = self.positions_table.currentIndex()
             if selected.isValid():
@@ -698,6 +748,12 @@ class V2ReviewedReportsDialog(QDialog):
         rows = report.accounts if tab in (1, 4) else report.categories
         self._models()[tab].replace(rows)
         self.report_error = self.budget_error = self.positions_error = None
+        if tab == 2 and self._selected_budget_category_id is not None:
+            selected = next(
+                (i for i, row in enumerate(rows) if row.category_id == self._selected_budget_category_id), None
+            )
+            if selected is not None:
+                self.budget_table.selectRow(selected)
         if tab == 4:
             if rows:
                 selected = next((i for i, row in enumerate(rows) if row.account_id == self._selected_account_id), 0)
@@ -780,6 +836,12 @@ class V2ReviewedReportsDialog(QDialog):
         tables = (self.table, self.account_table, self.budget_table, self.income_table)
         tab = self.tabs.currentIndex()
         self.inspect_button.setEnabled(tab < len(tables) and tables[tab].currentIndex().isValid())
+        if hasattr(self, "edit_budget_button"):
+            self.edit_budget_button.setText(
+                "Edit selected budget…"
+                if self.budget_table.currentIndex().isValid()
+                else "Set up budgets / categories…"
+            )
 
     def _inspect_current(self) -> None:
         tables = (self.table, self.account_table, self.budget_table, self.income_table)
@@ -1096,7 +1158,7 @@ class V2ReviewedReportsDialog(QDialog):
                 "Applied automatically" if interval_valid else "Choose an end date after the start date",
             )
         self.period_controls.setVisible(tab in (0, 1, 3))
-        self.export_button.setVisible(tab in (0, 1, 3))
+        self.export_button.hide()
         ready = self._loaded.get(tab) == self._key(tab)
         self.export_button.setEnabled(ready and tab in (0, 1, 3) and not self.export_jobs.pending)
         if not ready:
@@ -1122,12 +1184,14 @@ class V2ReviewedReportsDialog(QDialog):
             self.income_report,
             self.positions_report,
         )[tab]
+        count = report.activity_rows_without_full_allocation
+        pending_note = (
+            f"{count} imported row(s) pending across all dates (may include repeats)."
+            if count
+            else "No pending imported rows across all dates."
+        )
         self.qualification.setText(
-            "All accounts in this profile. Reviewed entries only; internal transfers and liability repayments "
-            "do not add spending. "
-            f"{report.activity_rows_without_full_allocation} source row(s) pending "
-            "across the whole profile and all dates; source coverage may be incomplete. "
-            "Show details for scope and evidence limits."
+            f"{pending_note} Source coverage may be incomplete. Transfers and repayments do not add spending."
         )
         if tab in (0, 3) and getattr(report, "reviewed_entry_count", None) == 0:
             kind = "spending" if tab == 0 else "income"
@@ -1142,10 +1206,11 @@ class V2ReviewedReportsDialog(QDialog):
                 self.total.setText("Account positions are unavailable. Refresh positions to retry.")
                 self.scope.setText(self.positions_error or "")
                 return
-            self.total.setText(
-                f"As of {positions.as_of.isoformat()} (inclusive), {positions.currency}. "
-                f"Transfer clearing recorded total: {_money(positions.transfer_clearing_debit_minor)}. "
-                "A nonzero clearing total can represent a transfer between source posting dates."
+            self.total.setText(f"Account positions · {positions.as_of:%b %d, %Y} (inclusive) · {positions.currency}")
+            self.qualification.setText(
+                "Unknown positions need an opening balance; unknown is not zero. "
+                f"{positions.activity_rows_without_full_allocation} imported row(s) pending across all dates; "
+                "source coverage may be incomplete."
             )
             self.scope.setText(
                 f"Across the whole profile and all dates, {positions.activity_rows_without_full_allocation} "
@@ -1155,6 +1220,8 @@ class V2ReviewedReportsDialog(QDialog):
                 "Latest source dates do not establish complete coverage or current balances. "
                 "Opening-based journal positions remain subject to pending activity, source capture and coverage limits. "
                 "These are reviewed books, not certified bank balances or complete net worth."
+                f" Transfer clearing recorded total: {_money(positions.transfer_clearing_debit_minor)}. "
+                "A nonzero clearing total can represent a transfer between source posting dates."
             )
             return
         if self.tabs.currentIndex() == 2:
@@ -1169,16 +1236,19 @@ class V2ReviewedReportsDialog(QDialog):
             else:
                 target_note = f"Total budget: {_money(budget.total_target_minor)}."
             self.total.setText(
-                f"{budget.month:%Y-%m}: {target_note} "
-                f"Net reviewed spending: {_money(budget.total_reviewed_spending_minor)}. "
-                "Remaining means budget minus reviewed spending."
+                f"{budget.month:%B %Y} · {target_note} "
+                f"Reviewed spending: {_money(budget.total_reviewed_spending_minor)}. "
+                "Remaining = budget − reviewed spending."
             )
+            if not budget.categories:
+                self.total.setText("No expense categories yet. Set up categories and monthly budgets above.")
             self.scope.setText(
                 f"Across the whole profile, {budget.activity_rows_without_full_allocation} activity source row(s) "
                 f"from {budget.sources_with_incomplete_activity} source(s) lack a full ledger allocation. "
                 f"{budget.excluded_unreviewed_expense_entries} unreviewed expense journal entries were excluded. "
                 "Budgets apply to whole calendar months; spending includes reviewed journal entries only. "
                 "Source rows may overlap, and this view does not establish complete spending or budget compliance."
+                " Internal transfers and liability repayments do not add spending."
             )
             return
         if self.tabs.currentIndex() == 3:
@@ -1187,7 +1257,7 @@ class V2ReviewedReportsDialog(QDialog):
                 self.total.setText(self.report_error or "Choose an end date after the start date.")
                 self.scope.clear()
                 return
-            self.total.setText(f"Net reviewed income from posted journal entries: {_money(income.total_minor)}")
+            self.total.setText(f"Net reviewed income: {_money(income.total_minor)}")
             self.scope.setText(
                 f"Across the whole profile, {income.activity_rows_without_full_allocation} activity source row(s) "
                 f"from {income.sources_with_incomplete_activity} source(s) lack a full ledger allocation. "
@@ -1208,7 +1278,7 @@ class V2ReviewedReportsDialog(QDialog):
                 "negative decreases it. Opening positions are shown separately."
             )
         else:
-            self.total.setText(f"Net reviewed spending from posted journal entries: {_money(report.total_minor)}")
+            self.total.setText(f"Net reviewed spending: {_money(report.total_minor)}")
         excluded = (
             self.account_report.excluded_unreviewed_financial_entries
             if self.tabs.currentIndex() == 1
@@ -1229,4 +1299,5 @@ class V2ReviewedReportsDialog(QDialog):
             f"{account_note}"
             "Source rows may overlap; this summary does not establish unique activity, statement coverage "
             "or reconciled balances."
+            " Internal transfers and liability repayments do not add spending."
         )

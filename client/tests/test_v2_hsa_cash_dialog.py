@@ -9,7 +9,7 @@ from parsetrail.core.v2_workspace import V2Workspace
 
 from devtools.parser_engine_pilot.synthetic_family_sources import family_sources
 
-from .ordinary_staging_helpers import review_action, stage_and_confirm
+from .ordinary_staging_helpers import review_action, review_reason, stage_and_confirm
 from .test_v2_settlement_review_dialog import _check
 from .test_v2_transfers import BANK_DEFINITION
 from .v2_institution_helpers import add_test_financial_account
@@ -122,12 +122,12 @@ def test_hsa_cash_purpose_explicit_unknown_source_text_and_withdrawal(
     view.table.selectRow(row_index)
     wait_for_jobs(view)
     assert view.purpose.currentData() is None and not review_action(view).isEnabled()
-    assert "cash component" in view.source_context.text()
+    assert "Cash component only" in view.source_context.text()
     view.purpose.setCurrentIndex(view.purpose.findData(purpose))
     wait_for_jobs(view)
     view.category.setCurrentIndex(view.category.findData(category))
     wait_for_jobs(view)
-    view.reason.setText("Explicit interpretation independent of source description")
+    review_reason(view).setText("Explicit interpretation independent of source description")
     wait_for_jobs(view)
     prompts = []
     monkeypatch.setattr(QMessageBox, "question", lambda _p, _t, message: prompts.append(message) or QMessageBox.Yes)
@@ -150,7 +150,7 @@ def test_hsa_cash_purpose_explicit_unknown_source_text_and_withdrawal(
         if row_index == 2:
             assert entry.description == "Reviewed HSA cash movement; source description unavailable"
         assert store.load_import(evidence.source_sha256).evidence == evidence
-    view.reason.setText("Withdraw reviewed component interpretation")
+    review_reason(view).setText("Withdraw reviewed component interpretation")
     wait_for_jobs(view)
     assert view.withdraw_button.isEnabled()
     view.withdraw_button.click()
@@ -171,7 +171,7 @@ def test_hsa_whole_account_scope_is_refused_for_cash_and_source_opening(tmp_path
     wait_for_jobs(cash)
     cash.table.selectRow(0)
     wait_for_jobs(cash)
-    cash.reason.setText("Source scope must not become whole account")
+    review_reason(cash).setText("Source scope must not become whole account")
     wait_for_jobs(cash)
     assert not review_action(cash).isEnabled()
     assert not cash.model.rows[0].allowed_purposes
@@ -199,7 +199,7 @@ def test_unbound_cash_row_has_unknown_scope_and_no_interpretation_controls(tmp_p
     wait_for_jobs(view)
     view.table.selectRow(0)
     wait_for_jobs(view)
-    assert "unavailable until account assignment" in view.source_context.text()
+    assert "Not established" in view.source_context.text()
     assert "Assign a financial account" in view.status.text()
     assert not review_action(view).isEnabled() and not view.withdraw_button.isEnabled()
     view.close()
@@ -222,7 +222,7 @@ def owned_form(view, outgoing):
     wait_for_jobs(view)
     view.expected_ack.setChecked(True)
     wait_for_jobs(view)
-    view.reason.setText("Owned outflow observed; receipt history not yet available")
+    review_reason(view).setText("Owned outflow observed; receipt history not yet available")
     wait_for_jobs(view)
 
 
@@ -256,7 +256,7 @@ def test_missing_receipt_requires_explicit_ownership_cancel_preview_post_reopen_
     assert (
         "account total" in view.expected_destination.itemText(view.expected_destination.findData("investment")).lower()
     )
-    view.reason.setText("Explicit missing receipt review")
+    review_reason(view).setText("Explicit missing receipt review")
     wait_for_jobs(view)
     view.expected_destination.setCurrentIndex(view.expected_destination.findData("investment"))
     wait_for_jobs(view)
@@ -305,7 +305,7 @@ def test_missing_receipt_requires_explicit_ownership_cancel_preview_post_reopen_
     assert "Receipt missing" in legacy.event_table.item(0, 5).text()
     assert "investment" in legacy.event_details.toPlainText() and "account total" in legacy.event_details.toPlainText()
     assert "no destination receipt" in legacy.event_details.toPlainText()
-    reopened.reason.setText("Withdraw the entire outflow awaiting receipt")
+    review_reason(reopened).setText("Withdraw the entire outflow awaiting receipt")
     wait_for_jobs(reopened)
     reopened.withdraw.click()
     wait_for_jobs(reopened)
@@ -340,7 +340,7 @@ def test_later_actual_receipt_clears_expectation_and_replaces_whole_event_then_w
     assert not view.expected_ack.isChecked() and not view.expected_reference.text()
     assert view.preview.settlement.expected_destination is None
     assert view.preview.settlement.residual_minor == 0
-    view.reason.setText("Actual receipt now reviewed under exact source date")
+    review_reason(view).setText("Actual receipt now reviewed under exact source date")
     wait_for_jobs(view)
     prompts = []
     monkeypatch.setattr(QMessageBox, "question", lambda _p, _t, message: prompts.append(message) or QMessageBox.Yes)
@@ -358,7 +358,7 @@ def test_later_actual_receipt_clears_expectation_and_replaces_whole_event_then_w
             "hsa": -10000,
             "investment": 10000,
         }
-    view.reason.setText("Withdraw whole receipt replacement")
+    review_reason(view).setText("Withdraw whole receipt replacement")
     wait_for_jobs(view)
     view.withdraw.click()
     wait_for_jobs(view)

@@ -108,6 +108,15 @@ def click_menu(qtbot, window, menu_text, action_text):
     qtbot.mouseClick(menu, Qt.LeftButton, pos=menu.actionGeometry(target).center())
 
 
+def click_button_menu(qtbot, button, action):
+    """Choose a visible action through a real button popup, including nested loops."""
+    activate(qtbot, button)
+    menu = button.menu()
+    assert action.isEnabled()
+    QTimer.singleShot(0, lambda: qtbot.mouseClick(menu, Qt.LeftButton, pos=menu.actionGeometry(action).center()))
+    qtbot.mouseClick(button, Qt.LeftButton)
+
+
 class ModalSteps:
     """Schedule real dialog events while synchronous exec() runs nested Qt loops."""
 

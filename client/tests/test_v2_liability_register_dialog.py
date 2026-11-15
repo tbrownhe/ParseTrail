@@ -10,7 +10,7 @@ from parsetrail.core.v2_workspace import V2Workspace
 
 from devtools.parser_engine_pilot.synthetic_family_sources import family_sources
 
-from .ordinary_staging_helpers import review_action, stage_and_confirm
+from .ordinary_staging_helpers import review_action, review_reason, stage_and_confirm
 from .test_v2_document_browser import wait_for_inventory
 from .test_v2_ordinary_review_async import wait_for_review, wait_until
 from .test_v2_transfer_review_async import wait_for_transfers
@@ -88,7 +88,7 @@ def form(view, *, row=0, purpose="expense", category="expense:vehicle"):
     view.table.selectRow(row)
     view.purpose.setCurrentIndex(view.purpose.findData(purpose))
     view.category.setCurrentIndex(view.category.findData(category))
-    view.reason.setText("Explicit register purpose and category; components remain unavailable")
+    review_reason(view).setText("Explicit register purpose and category; components remain unavailable")
 
 
 def test_both_actual_dates_fixed_posting_no_assumptions_cancel_post_reopen(tmp_path, source, monkeypatch):
@@ -161,7 +161,7 @@ def test_register_category_correction_preserves_class_date_and_whole_liability_t
     wait_for_review(view)
     first = view.model.rows[0].entry_key
     view.category.setCurrentIndex(view.category.findData("expense:other"))
-    view.reason.setText("Explicit category-only register correction")
+    review_reason(view).setText("Explicit category-only register correction")
     assert view.purpose.currentData() == "expense" and not view.purpose.isEnabled()
     view.accounting_date.setText("2026-02-06")
     assert not review_action(view).isEnabled()
@@ -180,7 +180,7 @@ def test_register_category_correction_preserves_class_date_and_whole_liability_t
             == 1000
         )
         assert all(entry.posting_date == date(2026, 2, 7) for entry in store._active_journal_entries())
-    view.reason.setText("Withdraw register interpretation before fresh review")
+    review_reason(view).setText("Withdraw register interpretation before fresh review")
     before = path.read_bytes()
     monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.No)
     view.withdraw_button.click()
@@ -232,14 +232,15 @@ def test_register_wrong_financial_scope_or_unbound_is_visible_and_blocked(tmp_pa
     before = path.read_bytes()
     view = dialog(path, evidence.source_sha256)
     view.table.selectRow(0)
-    view.reason.setText("Source scope must be explicitly eligible")
+    review_reason(view).setText("Source scope must be explicitly eligible")
     assert not review_action(view).isEnabled() and not view.withdraw_button.isEnabled()
     assert view.purpose.currentData() is None
     assert path.read_bytes() == before
     assert (
         "unavailable" in view.source_context.text().lower()
         if not bind
-        else scope.replace("_", " ") in view.source_context.text()
+        else {"account_total": "Whole account", "principal_component": "Loan principal only"}[scope]
+        in view.source_context.text()
     )
     view.close()
 
@@ -266,7 +267,7 @@ def test_register_stale_confirmation_and_failed_read_clear_authoring_state(tmp_p
     stage_and_confirm(view)
     wait_for_review(view)
     assert warnings and view.model.rows[0].entry_key is None
-    assert view.model.rows[0].entry_key is None and view.reason.text()
+    assert view.model.rows[0].entry_key is None and review_reason(view).text()
 
     def unavailable(*_args, **_kwargs):
         raise ProfileFormatError("source_interpretation_history_integrity")
@@ -326,7 +327,7 @@ def test_owned_register_repayment_is_neutral_whole_liability_with_separate_dates
 
     assert any("principal/interest split" in label.text() for label in full.findChildren(QLabel))
     assert "liability owed" in full.history_details.toPlainText() or "amount owed" in full.history_details.toPlainText()
-    full.reason.setText("Withdraw whole register repayment")
+    review_reason(full).setText("Withdraw whole register repayment")
     full.withdraw.click()
     wait_until(lambda: not full.jobs.pending)
     with V2ProfileStore.open(path, read_only=True) as store:
@@ -392,8 +393,8 @@ def test_register_historical_withdrawal_retry_preserves_fresh_interpretation(tmp
     oldkey = current.model.rows[0].entry_key
     stale = dialog(path, evidence.source_sha256)
     stale.table.selectRow(0)
-    stale.reason.setText("Withdraw this exact register interpretation")
-    current.reason.setText("Withdraw this exact register interpretation")
+    review_reason(stale).setText("Withdraw this exact register interpretation")
+    review_reason(current).setText("Withdraw this exact register interpretation")
     current.withdraw_button.click()
     wait_for_review(current)
     form(current)

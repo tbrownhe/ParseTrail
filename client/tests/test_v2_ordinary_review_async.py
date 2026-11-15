@@ -15,7 +15,7 @@ from parsetrail.gui.v2_profile_jobs import _JOBS, ProfileJobs
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import QApplication, QMessageBox
 
-from .ordinary_staging_helpers import review_action, stage_and_confirm
+from .ordinary_staging_helpers import review_action, review_reason, stage_and_confirm
 from .v2_institution_helpers import add_test_financial_account
 
 DEFINITION = (Path(__file__).parents[2] / "devtools/v2_fresh_slice/synthetic-posted-cash-definition.json").read_bytes()
@@ -64,10 +64,45 @@ def cash(tmp_path):
 
 
 def cleanup(view):
-    view.reason.clear()
+    review_reason(view).clear()
     view.batch.clear()
     view.request_cancel()
     view.close()
+
+
+def test_exact_reveal_during_refresh_overrides_empty_selection_restore(cash, monkeypatch):
+    path, evidence = cash
+    target = evidence.payload.rows[0].row_id
+    with V2ProfileStore.open(path) as store:
+        store.post_reviewed_cash_category(target, "expense:food", reason="Saved source review")
+    view = wait_for_review(V2CashActivityReview(path, evidence.source_sha256))
+    original = V2ProfileStore.source_interpretation_snapshot
+    started, release = threading.Event(), threading.Event()
+
+    def delayed(store, *args, **kwargs):
+        started.set()
+        assert release.wait(5)
+        return original(store, *args, **kwargs)
+
+    monkeypatch.setattr(V2ProfileStore, "source_interpretation_snapshot", delayed)
+    try:
+        view.navigation.select_ids(())
+        assert not view.navigation.selected()
+        view.refresh_preserving_draft()
+        wait_until(started.is_set)
+        assert view._restore_multi[0] == ()
+        view.navigation.reveal_row(target)
+        release.set()
+        wait_for_review(view)
+        assert len(view.navigation.selected()) == 1
+        assert view._current().row_id == target
+        assert view._current().entry_key is not None
+        assert view.category.isEnabled() and view.reason.isEnabled()
+        assert view.saved_review_note.toPlainText() == "Saved source review"
+        assert not view.action_button.isEnabled()  # A fresh correction still needs an explicit reason.
+    finally:
+        release.set()
+        cleanup(view)
 
 
 def test_cash_shell_and_search_remain_responsive_during_worker_read(cash, monkeypatch):
@@ -140,7 +175,7 @@ def test_async_write_advances_pending_and_retains_correction_history(cash, monke
         row_id = view._current().row_id
         view.purpose.setCurrentIndex(view.purpose.findData("expense"))
         view.category.setCurrentIndex(view.category.findData("expense:food"))
-        view.reason.setText("Inspected purchase")
+        review_reason(view).setText("Inspected purchase")
         assert review_action(view).isEnabled()
         stage_and_confirm(view)
         wait_for_review(view)
@@ -150,7 +185,7 @@ def test_async_write_advances_pending_and_retains_correction_history(cash, monke
         view.navigation.status_filter.setCurrentIndex(view.navigation.status_filter.findData("reviewed"))
         assert view.navigation.select_id(row_id)
         view.category.setCurrentIndex(view.category.findData("expense:travel"))
-        view.reason.setText("Corrected category")
+        review_reason(view).setText("Corrected category")
         view.action_button.click()
         wait_for_review(view)
         assert view._current().category_id == "expense:travel"
@@ -171,7 +206,7 @@ def test_confirmation_cannot_write_to_switched_workspace(cash, tmp_path, monkeyp
     try:
         view.purpose.setCurrentIndex(view.purpose.findData("expense"))
         view.category.setCurrentIndex(view.category.findData("expense:food"))
-        view.reason.setText("Reviewed")
+        review_reason(view).setText("Reviewed")
 
         def switch(*_args):
             workspace.profile_path = other
@@ -233,14 +268,14 @@ def test_unstaged_choices_survive_filtering_without_read_or_post(cash):
         view.table.selectRow(0)
         view.purpose.setCurrentIndex(view.purpose.findData("expense"))
         view.category.setCurrentIndex(view.category.findData("expense:food"))
-        view.reason.setText("Keep this explicit review draft")
+        review_reason(view).setText("Keep this explicit review draft")
         basis = view.basis
         view.navigation.search.setText("no matching source row")
         assert view.navigation.proxy.rowCount() == 0 and view.has_unsaved_draft
         view.navigation.search.clear()
         assert view.purpose.currentData() == "expense"
         assert view.category.currentData() == "expense:food"
-        assert view.reason.text() == "Keep this explicit review draft"
+        assert review_reason(view).text() == "Keep this explicit review draft"
         assert view.basis == basis and not view.review_pending
         with V2ProfileStore.open(path, read_only=True) as store:
             assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (0,)
@@ -368,7 +403,7 @@ def test_reviewed_elsewhere_uses_owning_event_and_hides_ordinary_form(tmp_path, 
         assert view.navigation.proxy.rowCount() == 0
         view.navigation.status_filter.setCurrentIndex(view.navigation.status_filter.findData("reviewed"))
         assert view._current().row_id == outgoing
-        assert view.purpose.isHidden() and view.category.isHidden() and view.reason.isHidden()
+        assert view.purpose.isHidden() and view.category.isHidden() and review_reason(view).isHidden()
         assert "View reviewed" in review_action(view).text()
         assert "Pending" not in view.model.data(view.model.index(0, 5))
         view.action_button.click()

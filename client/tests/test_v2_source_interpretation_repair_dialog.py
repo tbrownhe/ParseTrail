@@ -12,7 +12,7 @@ from parsetrail.core.v2_profile_store import FinancialAccount, V2ProfileStore
 from parsetrail.core.v2_source_pipeline import build_source_evidence
 from parsetrail.core.v2_workspace import V2Workspace
 
-from .ordinary_staging_helpers import review_action, stage_and_confirm
+from .ordinary_staging_helpers import review_action, review_reason, stage_and_confirm
 from .test_v2_card_purchase_review import _chase_profile
 from .test_v2_cash_activity_review import DEFINITION, SOURCE
 from .test_v2_source_overlap_dialog import _profile as overlap_profile
@@ -127,7 +127,7 @@ def test_corrected_cash_withdrawal_uses_active_entry_then_reposts_fresh(tmp_path
         dialog.table.selectRow(row_index)
         wait_for_jobs(dialog)
         assert not dialog.withdraw_button.isEnabled()
-        dialog.reason.setText("Withdraw the corrected interpretation")
+        review_reason(dialog).setText("Withdraw the corrected interpretation")
         wait_for_jobs(dialog)
         assert dialog.withdraw_button.isEnabled()
         dialog.withdraw_button.click()
@@ -146,7 +146,7 @@ def test_corrected_cash_withdrawal_uses_active_entry_then_reposts_fresh(tmp_path
         wait_for_jobs(dialog)
         dialog.category.setCurrentIndex(dialog.category.findData("expense:food" if row_index == 0 else "income:pay"))
         wait_for_jobs(dialog)
-        dialog.reason.setText("Freshly reviewed after withdrawal")
+        review_reason(dialog).setText("Freshly reviewed after withdrawal")
         wait_for_jobs(dialog)
         stage_and_confirm(dialog)
         wait_for_jobs(dialog)
@@ -185,7 +185,7 @@ def test_card_withdrawal_uses_recorded_corrected_date_and_category_then_reposts_
         wait_for_jobs(dialog)
         dialog.category.setCurrentIndex(dialog.category.findData("expense:food"))
         wait_for_jobs(dialog)
-        dialog.reason.setText("Withdraw active corrected expense")
+        review_reason(dialog).setText("Withdraw active corrected expense")
         wait_for_jobs(dialog)
         assert dialog.withdraw_button.isEnabled()
         dialog.withdraw_button.click()
@@ -202,7 +202,7 @@ def test_card_withdrawal_uses_recorded_corrected_date_and_category_then_reposts_
         wait_for_jobs(dialog)
         dialog.accounting_date.setText("2026-04-02")
         wait_for_jobs(dialog)
-        dialog.reason.setText("Fresh explicit date review")
+        review_reason(dialog).setText("Fresh explicit date review")
         wait_for_jobs(dialog)
         stage_and_confirm(dialog)
         wait_for_jobs(dialog)
@@ -233,7 +233,7 @@ def test_cancel_withdrawal_and_failed_snapshot_preserve_books_and_clear_actions(
     try:
         dialog.table.selectRow(0)
         wait_for_jobs(dialog)
-        dialog.reason.setText("Considered withdrawal")
+        review_reason(dialog).setText("Considered withdrawal")
         wait_for_jobs(dialog)
         dialog.withdraw_button.click()
         wait_for_jobs(dialog)
@@ -274,7 +274,7 @@ def test_stale_cash_context_cannot_post_correct_or_withdraw(tmp_path, app, monke
         wait_for_jobs(dialog)
         dialog.category.setCurrentIndex(dialog.category.findData("expense:travel"))
         wait_for_jobs(dialog)
-        dialog.reason.setText("From loaded review frame")
+        review_reason(dialog).setText("From loaded review frame")
         wait_for_jobs(dialog)
         old_basis = dialog.basis
         with V2ProfileStore.open(profile) as store:
@@ -321,7 +321,7 @@ def test_single_row_review_never_withdraws_a_transfer_leg(tmp_path, app):
     try:
         dialog.table.selectRow(0)
         wait_for_jobs(dialog)
-        dialog.reason.setText("Cannot cancel one transfer leg")
+        review_reason(dialog).setText("Cannot cancel one transfer leg")
         wait_for_jobs(dialog)
         assert dialog.model.rows[0].entry_key is None
         assert not dialog.withdraw_button.isEnabled()
@@ -355,7 +355,7 @@ def test_posted_repeat_repair_retains_one_corrected_interpretation_and_reopen_ne
         pair = dialog._current()
         choice = "retain_left" if pair.left.row_id == retained_id else "retain_right"
         dialog.decision.setCurrentIndex(dialog.decision.findData(choice))
-        dialog.reason.setText("Compared both originals; one coffee movement")
+        review_reason(dialog).setText("Compared both originals; one coffee movement")
         assert not dialog.save_button.isEnabled()
         assert dialog.repair_button.isEnabled()
         dialog.repair_button.click()
@@ -373,7 +373,7 @@ def test_posted_repeat_repair_retains_one_corrected_interpretation_and_reopen_ne
         monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.Yes)
         for decision in ("distinct", "pending"):
             dialog.decision.setCurrentIndex(dialog.decision.findData(decision))
-            dialog.reason.setText("Explicit subsequent evidence review")
+            review_reason(dialog).setText("Explicit subsequent evidence review")
             assert dialog.save_button.isEnabled()
             dialog.save_button.click()
             with V2ProfileStore.open(profile, read_only=True) as store:
@@ -395,7 +395,7 @@ def test_posted_repeat_repair_stale_preview_refuses_without_book_changes(tmp_pat
     try:
         dialog.table.selectRow(0)
         dialog.decision.setCurrentIndex(dialog.decision.findData("retain_left"))
-        dialog.reason.setText("Loaded repeat preview")
+        review_reason(dialog).setText("Loaded repeat preview")
         assert dialog.repair_button.isEnabled()
         with V2ProfileStore.open(profile) as store:
             store.rename_category_account("expense:travel", "Changed after preview")
@@ -441,7 +441,7 @@ def test_card_preference_change_during_confirmation_reloads_without_posting(tmp_
         wait_for_jobs(dialog)
         dialog.accounting_date.setText("2026-03-17")
         wait_for_jobs(dialog)
-        dialog.reason.setText("Review from initial date preference")
+        review_reason(dialog).setText("Review from initial date preference")
         wait_for_jobs(dialog)
         assert review_action(dialog).isEnabled()
         stage_and_confirm(dialog)
@@ -490,7 +490,7 @@ def test_validated_repair_can_reconfirm_repeat_after_later_evidence_review_witho
         assert supporting.repeat_support_history_validated
         choice = "retain_left" if pair.left.row_id == retained_id else "retain_right"
         dialog.decision.setCurrentIndex(dialog.decision.findData(choice))
-        dialog.reason.setText("Reconfirmed same movement from validated repair history")
+        review_reason(dialog).setText("Reconfirmed same movement from validated repair history")
         assert dialog.save_button.isEnabled()
         assert not dialog.repair_button.isEnabled()
         dialog.save_button.click()
@@ -527,7 +527,7 @@ def test_unproven_inactive_journal_history_cannot_be_excluded_by_ordinary_repeat
         assert not supporting.repeat_support_history_validated
         choice = "retain_left" if pair.left.row_id == retained_id else "retain_right"
         dialog.decision.setCurrentIndex(dialog.decision.findData(choice))
-        dialog.reason.setText("An unproven history must still be refused")
+        review_reason(dialog).setText("An unproven history must still be refused")
         assert not dialog.save_button.isEnabled()
         assert not dialog.repair_button.isEnabled()
     finally:
@@ -555,7 +555,7 @@ def test_prior_withdrawal_retry_after_fresh_repost_reports_current_state_truthfu
         dialog.table.selectRow(0)
         wait_for_jobs(dialog)
         reason = "Same selected-entry withdrawal request"
-        dialog.reason.setText(reason)
+        review_reason(dialog).setText(reason)
         wait_for_jobs(dialog)
         with V2ProfileStore.open(profile) as store:
             store.withdraw_reviewed_interpretation(old_key, expected_basis_sha256=dialog.basis, reason=reason)
@@ -603,7 +603,7 @@ def test_prior_repair_retry_after_retained_withdrawal_does_not_claim_one_active_
         choice = "retain_left" if pair.left.row_id == retained_id else "retain_right"
         dialog.decision.setCurrentIndex(dialog.decision.findData(choice))
         reason = "Same selected-pair repair request"
-        dialog.reason.setText(reason)
+        review_reason(dialog).setText(reason)
         assert dialog.repair_button.isEnabled()
         with V2ProfileStore.open(profile) as store:
             store.repair_posted_repeat(

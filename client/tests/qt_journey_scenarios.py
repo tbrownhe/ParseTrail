@@ -39,6 +39,7 @@ from .qt_journey_helpers import (
     JourneyArtifacts,
     ModalSteps,
     choose_combo,
+    click_button_menu,
     click_menu,
     click_table_text,
     close_dialog,
@@ -173,11 +174,13 @@ def test_empty_profile_to_reviewed_spending_correction_and_recovery(
 
     click_table_text(qtbot, review.table, "Coffee")
     choose_combo(qtbot, review.purpose, "expense")
-    enter_text(qtbot, review.reason, "Draft retained while managing categories")
+    enter_text(qtbot, review.batch.reason, "Draft retained while managing categories")
     assert review.manage_categories_button.isEnabled()
 
     def author_categories(dialog):
         for name, kind in (("Food", "expense"), ("Travel", "expense"), ("Salary", "income")):
+            if not dialog.add_panel.isVisible():
+                qtbot.mouseClick(dialog.new_category_button, Qt.LeftButton)
             enter_text(qtbot, dialog.add_name, name)
             choose_combo(qtbot, dialog.add_kind, kind)
             qtbot.mouseClick(dialog.add_button, Qt.LeftButton)
@@ -191,7 +194,7 @@ def test_empty_profile_to_reviewed_spending_correction_and_recovery(
     with V2ProfileStore.open(workspace.profile_path, read_only=True) as store:
         category_ids = {category.name: category.id for category in store.category_accounts()}
     review = review_ready(qtbot, window)
-    assert review.reason.text() == "Draft retained while managing categories"
+    assert review.batch.reason.text() == "Draft retained while managing categories"
     assert review.purpose.currentData() == "expense"
     artifacts.capture("06-ready-for-review", window)
     choose_combo(qtbot, review.category, category_ids["Food"])
@@ -203,11 +206,11 @@ def test_empty_profile_to_reviewed_spending_correction_and_recovery(
     modals.finish()
     qtbot.waitUntil(lambda: not review.review_pending, timeout=15000)
     assert review.batch.staged == staged
-    assert review.reason.text() == "Draft retained while managing categories"
+    assert review.batch.reason.text() == "Draft retained while managing categories"
     assert review.category.currentData() == category_ids["Food"]
     assert_books(workspace.profile_path, entries=0)
     artifacts.capture("06-category-manager-cancel-keeps-staged-choices", window)
-    qtbot.mouseClick(review.batch.clear_button, Qt.LeftButton)
+    click_button_menu(qtbot, review.batch.options_button, review.batch.clear_action)
 
     def confirm(expected, *, accept=True, screenshot=None):
         def interact(dialog):
@@ -237,7 +240,7 @@ def test_empty_profile_to_reviewed_spending_correction_and_recovery(
         click_table_text(qtbot, review.table, description)
         choose_combo(qtbot, review.purpose, purpose)
         choose_combo(qtbot, review.category, category_ids[category])
-        enter_text(qtbot, review.reason, f"Reviewed {description} from original statement")
+        enter_text(qtbot, review.batch.reason, f"Reviewed {description} from original statement")
         assert review.batch.stage_button.isEnabled()
         assert not review.action_button.isVisible()
         if purpose == "expense":
@@ -249,8 +252,8 @@ def test_empty_profile_to_reviewed_spending_correction_and_recovery(
             qtbot.keyClick(review.category, Qt.Key_Tab)
             assert qapp.focusWidget() is review.manage_categories_button
             qtbot.keyClick(review.manage_categories_button, Qt.Key_Tab)
-            assert qapp.focusWidget() is review.reason
-            qtbot.keyClick(review.reason, Qt.Key_Tab)
+            assert qapp.focusWidget() is review.batch.reason
+            qtbot.keyClick(review.batch.reason, Qt.Key_Tab)
             assert qapp.focusWidget() is review.batch.stage_button
         if purpose == "expense":
             qtbot.keyClick(review.batch.stage_button, Qt.Key_Space)
@@ -272,7 +275,7 @@ def test_empty_profile_to_reviewed_spending_correction_and_recovery(
         modals.finish()
         qtbot.waitUntil(lambda: not review.review_pending, timeout=15000)
         ready(qtbot, window)
-        assert "Saved 1 reviewed entries together" in review.operation_status.text()
+        assert "Posted 1" in review.operation_status.text()
     assert_books(workspace.profile_path, entries=2, pending=1)
     artifacts.capture("08-two-reviewed-one-pending", window)
 

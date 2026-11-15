@@ -7,6 +7,7 @@ from parsetrail.gui.v2_workspace_window import V2WorkspaceWindow
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QMessageBox
 
+from .ordinary_staging_helpers import review_reason
 from .qt_journey_helpers import JourneyArtifacts, ModalSteps, choose_combo, click_list_row, close_dialog, enter_text
 from .test_v2_document_browser import _populated_workspace
 
@@ -27,7 +28,7 @@ def test_accounts_category_setup_refreshes_review_without_reload_and_cancel_keep
         assert review is not None
         qtbot.waitUntil(lambda: not review.review_pending, timeout=15000)
         choose_combo(qtbot, review.purpose, "expense")
-        enter_text(qtbot, review.reason, "Keep my review reason while setting up categories")
+        enter_text(qtbot, review_reason(review), "Keep my review reason while setting up categories")
         assert review.category.count() == 1
         assert review.manage_categories_button.isEnabled()
         row_id = review.navigation.current().row_id
@@ -45,7 +46,7 @@ def test_accounts_category_setup_refreshes_review_without_reload_and_cancel_keep
         click_list_row(qtbot, window.navigation, 1)
         qtbot.waitUntil(lambda: not review.review_pending, timeout=15000)
         assert review.category.findText("Meals") >= 0
-        assert review.reason.text() == "Keep my review reason while setting up categories"
+        assert review_reason(review).text() == "Keep my review reason while setting up categories"
         artifacts.capture("accounts-category-refreshed-draft", window)
         assert review.navigation.current().row_id == row_id
         assert review.purpose.currentData() == "expense"
@@ -67,7 +68,7 @@ def test_accounts_category_setup_refreshes_review_without_reload_and_cancel_keep
         assert review.navigation.current().row_id == row_id
         assert review.category.currentData() == category_id
         assert review.purpose.currentData() == "expense"
-        assert review.reason.text() == "Keep my review reason while setting up categories"
+        assert review_reason(review).text() == "Keep my review reason while setting up categories"
         artifacts.capture("category-cancel-preserved-draft", window)
     finally:
         # Teardown alone approves draft discard; journey interactions above use
