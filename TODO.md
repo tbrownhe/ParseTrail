@@ -6,7 +6,13 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None. Ready to resume desktop UI work; use the
+None. [All six first-use clarity refinements](docs/work/2026-11-07-v2-core-desktop-journey.md#november-14-implement-first-use-clarity-refinements)
+are implemented and verified in Windows development: separate shared/correction
+reasons, retained budget month/return context, category Add/Edit modes, connected
+Budget setup/results, clearer primary actions and concise diagnostic disclosure.
+Native integrated checks, agent design review, fresh assisted task/recheck and
+independent integrity review passed within the recorded scope. Human acceptance
+and other platform/release gates remain separate. Use the
 [next-context handover](docs/work/2026-11-07-v2-core-desktop-journey.md#handover-resume-desktop-ui-development)
 for current decisions, candidate tasks, entry points and verification.
 Saved-note/correction UX, explicit GUI lifetime cleanup and queued PDF callbacks

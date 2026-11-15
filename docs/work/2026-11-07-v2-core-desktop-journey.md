@@ -5,11 +5,376 @@ Branch: `feature/client-financial-insights`; client only.
 Authorization: user requested integrated journey implementation and verification;
 synthetic disposable profiles/statements only. No live profiles, private archives,
 production, signing, publication or release actions.
-Implementation: queued PDF error/password UI delivery, explicit one-shot dialog/worker handoff cleanup, window-owned opening-focus filters, saved-note/correction-reason separation, staging-only ordinary review and prior account-first import/product, routing, budget and color improvements implemented.
+Implementation: first-use refinements implemented: independent shared/correction reasons, connected Budget navigation/editing, retained month/return context, category Add/Edit modes and concise task/detail presentation. Earlier queued PDF callbacks, explicit lifetime cleanup and account-first/staged review improvements remain.
 Automated verification: the November 14 PDF-loading fail-fast is diagnosed and corrected; the historical 35-test native order and expanded 57-test native sequence pass in one process. The unchanged archived reproducer also now passes all four cycles against current application code in each of offscreen and native Windows runs, with normal GC and clean process exits. Targeted GUI disposal/handoff checks also pass. General long-session heap/thread correctness and the original earlier heap-corrupting operation remain unestablished.
 Design verification: actual Windows Qt rendering/software-event checks passed.
 Independent review: native captures/symbol matching and focus changes were reviewed; later raw-stack review independently confirmed worker-thread GUI destruction. Earlier bounded passing checks remain valid but do not close this additional lifetime concern.
 Owner acceptance: walkthrough feedback recorded; integrated acceptance remains pending. Release authorization: not requested.
+
+## November 14: implement first-use clarity refinements
+
+Owner authorized addressing all six findings from the first-use investigation:
+shared-reason scope, budget-month continuity, category task separation, connected
+budget setup/results, primary-action hierarchy and concise diagnostic disclosure.
+Implementation is complete within the reviewed Windows development scope. No accounting/schema/parser-policy changes were made.
+Only fresh synthetic disposable profiles and fixture catalogs are permitted; prior
+owner/demo/live profiles, private archives, root `.env`, production and release
+artifacts remain outside scope. Existing uncommitted investigation notes remain.
+
+ui_ux established the integrated model before assignments: Documents / Review /
+Accounts / Budget / Reports, with Budget and Reports sharing one report instance.
+Document handoffs seed period and budget month; ordinary navigation retains choices,
+and source corrections return to the exact originating destination. Selected-row
+type/category/date and a distinct shared batch reason have separate ownership from
+saved-row correction reasons. Category Add mode is separate from selected-category
+editing. Required choices, unknown/estimated dates, active blockers, confirmation
+effects and report limitations remain visible; utilities/IDs/proof are secondary.
+
+Write ownership: primary workspace/reports/shared initial-focus helper, integrated
+journey tests/docs; desktop `screen_inventory` ordinary review/adapters/navigation
+and its disjoint tests; desktop `category_evidence_refinement` category/import/
+evidence/account forms and its disjoint tests. ui_ux owns design and actual-render
+recheck; fresh acceptance and independent integrity review follow integration.
+No specialist delegates or commits. Native focus slots are serialized.
+
+Observable criteria: no unrelated Add error after category/budget save; batch reason
+persists across selection/filter/correction, with all/hidden staged scope explicit;
+refused/cancelled stages preserve captured reason/proposals; saved correction never
+changes batch reason; October handoff reaches October budget in a November session;
+budget edit opens matching month/category and refreshes result without losing review
+drafts; repeat/assumed-date/account blockers remain discoverable; original evidence
+and exact posting/provenance details remain available; practical 1050×700 and
+1280×800 views have readable controls, clear next actions and keyboard focus.
+Functional/scripted checks, design review, fresh goal-derived agent evidence and
+actual human/platform/release gates remain distinct.
+
+### Result and finding disposition
+
+| Original finding | Implemented result |
+| --- | --- |
+| Shared note unexpectedly changes earlier rows | A dedicated Review set reason persists across selection/filter/category setup and is distinct from the selected saved row's correction reason. All/hidden staged scope and captured-versus-edited reason are explicit. Confirmation shows the captured common reason once. Successful staging retains the same headless shared-reason policy; refused/cancelled operations retain prior proposals. |
+| Document month lost at Budget | Explicit document handoffs seed both report period and budget month. Ordinary navigation retains the chosen month/dates/non-budget tab. Multi-month context identifies the month shown; unknown dates do not become invented source dates. Source correction returns to the exact origin, including across different source periods. |
+| Category success appears invalid | Existing category/budget editing opens separately from Add, with no unrelated red new-name error. Add is explicit, starts on name, clears stale success text and preserves existing budget drafts; empty profiles lead with a compact first-category form. Stable identity, rename/removal/history are secondary. Income categories explain their exclusion from expense budgets. |
+| Budget setup/result disconnected | Visible Budget destination and Reports share a single report instance. The selected category/month opens directly in the existing editor; saved budgets refresh that result and keep context. Accounts leads with ordinary account management and optionally exposes balances/history. |
+| Routine decisions compete with utilities | Review shell is compact; selected-row type/category/date, the Review set and source access lead. Statement/review/report utilities use named menus. Catalog management/profile path move to menus after setup; the missing-catalog prerequisite remains visible. Opening focus can target the empty-state import/install decision using the window-owned policy. |
+| Technical text dominates | Import instructions follow the current step; evidence leads with account/date/source facts and capture limits. Report/drilldown headings show period/effect/reason and nearby pending/coverage limits. Parser/hash/IDs/exact postings remain discoverable through details. Human-readable scope labels replace enum spellings in confirmations. Getting started and current client documentation match the journey. |
+
+Integrated review found and resolved two additional recovery failures within scope:
+
+- **Confirmed async source-landing bug:** a pending refresh restored an empty
+  selection after report navigation revealed the exact row. A gated regression
+  first failed with zero selected rows. Explicit navigation now replaces only that
+  pending selection restoration, preserving unrelated drafts/proposals. The
+  regression passes, and fresh-process native recheck automatically selects the
+  correct row with correction fields enabled.
+- **Independent cross-source return finding:** returning from another source's
+  month reseeded the existing Budget and report dates. The integrity reproduction
+  changed October to September before the fix. Explicit Back now bypasses seeding;
+  its regression and independent reproduction preserve month/dates/report instance.
+
+Other resolved integration findings: insufficient table height with retained staged
+work plus correction (now four complete cash rows at 1050×700); an unretained hidden
+Reload callback (now a named owner slot); export control reappearing outside its
+menu; stale Add success text; and default report-drilldown diagnostic density.
+Correction confirmations retain the existing Yes/No dialog API with human-readable
+scope and explicit effects in the question. No change to confirmation ownership or
+financial policy was introduced.
+
+Application writes span the workspace/reports/drilldown/help/focus helper, ordinary
+review/adapters/navigation, category/evidence/import/account forms. New focused
+regressions are `test_v2_first_use_budget_workflow.py` and
+`test_v2_first_use_category_evidence.py`; existing tests/helpers now address the
+explicit batch/correction widgets, Add mode and utility menus. Primary took final
+category empty-state/copy integration after its specialist finished. No core,
+schema, service, signed-format policy or profile-lifecycle migration changed.
+
+### Verification and actual UI inspection
+
+Platform: Windows 11 AMD64 build 26300, Python 3.13.15, PySide6/Qt 6.11.2,
+pytest 9.1.1, pytest-qt 4.5.0. Scripted native renders use Segoe UI 9 at 96 DPI/DPR 1;
+the fresh attempt uses Segoe UI 10. All data are synthetic, home/keyring isolated,
+catalog signing fixtures ephemeral and profiles disposable. Normal GC/assertions
+remain; process-contained tests preserve raw child failures and shutdown outcomes.
+
+Overlapping results, not additive unique-test totals:
+
+- Final integrated **9 passed in 34.18s**, process exit 0: complete native journey
+  at both sizes, refusal/retry, cancellation, Budget edit/refresh, month/return and
+  cross-source return, empty-category first use and category keyboard/budget setup.
+  Four journey child `process.json` records also retain raw return code 0.
+- Final empty-category top-alignment cosmetic polish then **2 native checks passed
+  in 3.65s**, exit 0, covering empty/Add and saved budget/edit; primary inspected it.
+- Primary workspace/report/context/form integration **27 passed in 35.13s** before
+  later targeted fixes; final month/core/report group **11 passed in 45.22s**.
+- Ordinary review: final native combined retained-set/correction **2 passed in
+  7.05s**, exit 0; post-navigation-fix async/source-repair **34 passed in 57.69s**;
+  scope-label recheck **8 passed in 18.42s**; final exact-source regression **1 passed
+  in 1.90s**. Earlier native reason/staging/card-date group **5 passed in 10.65s**.
+- Category/evidence/account focused group **30 passed** offscreen; native new/evidence
+  group **9 passed** and additional native states **5 passed** before primary polish.
+- Independent integrity: initial **42 passed / 1 obsolete wording assertion failed**;
+  corrected-assertion/cancel/stale/refusal/correction **10 passed**; final exact-row
+  and cross-source regressions **2 passed**, plus the independent cross-month probe.
+  No remaining actionable financial/evidence/persistence finding in reviewed scope.
+- Changed-file Ruff check and format check pass for **42 Python files**, including
+  the two new test modules; `git diff --check` passes. Test expectations changed for
+  intentional copy/navigation/scope presentation; financial/source assertions remain.
+
+Intermediate failures are retained accurately: the early primary 22-case run had
+four old wording/navigation expectations (18 passed); they were adapted, then the
+27-case group passed. The ordinary broad command had **113 passed / 7 obsolete
+scope-text failures** in 369.32s, predating the final navigation fix; all seven are
+covered by the eight-case recheck. A primary drilldown/focus/category run had
+32 passed / 2 old wording assertions; both were corrected and independently/locally
+rechecked. Some early concurrently failing test teardown printed a ProfileJobs
+missing-`_timer` callback exception; it did not recur in bounded passing lifecycle,
+correction or final integrated processes. No ProfileJobs production workaround,
+test skip, GC modification or assertion suppression was added. Do not call an
+earlier interrupted/failed broad command an unchanged final all-pass run.
+
+Final scripted native command from repository root:
+
+```powershell
+$env:PYTHONPATH='.;client/src;client'
+Remove-Item Env:QT_QPA_PLATFORM -ErrorAction SilentlyContinue
+& .\client\.venv\Scripts\python.exe -m pytest -p no:cacheprovider client/tests/test_v2_qt_journey.py client/tests/test_v2_first_use_budget_workflow.py client/tests/test_v2_first_use_category_evidence.py::test_category_creation_is_first_task_only_for_empty_profile client/tests/test_v2_initial_focus.py::test_categories_open_at_first_choice_and_budget_is_discoverable -q --journey-native --journey-artifacts scratch/first-use-refinement-20261114/final-integrated
+```
+
+Actual render evidence under `scratch/first-use-refinement-20261114/`: `integrated`,
+`final-integrated`, `category-evidence-final`, `category-polish`, `acceptance` and
+`integrity`. Ordinary native final combined states are under
+`scratch/first-use-audit-20261114/ordinary-native-final/`. ui_ux and primary inspected
+1050×700 and 1280×800 pending/correction/confirmation/evidence/reports/Budget, category
+empty/Add/saved states and the actual concise/expanded drilldown. No significant
+unresolved UX finding remains in those states. The final optional category empty
+whitespace improvement was inspected by primary after two passing native checks.
+
+### Separate fresh task attempt and informed recheck
+
+A fresh acceptance agent received outcome and isolated fixture setup only. It
+imported independently chosen October rows, created checking/categories/budgets,
+posted four transactions, inspected evidence, corrected Cafe to Dining and returned
+to the same October budget. No product-control walkthrough or earlier findings/new
+tests were read first. Read-only audit verified exact original bytes/hash, balanced
+entries, expense **12995 minor**, income **250000 minor**, net asset movement
+**237005 minor** and a linked reversal/replacement correction. Dining showed
+1250 spending / 2000 budget / 750 remaining; Essentials 11745 / 10000 / -1745.
+Total spending remained unchanged by category correction. SQLite integrity passed.
+Normal raw Qt/process exits were 0. The attempt's recoverable zero-selection
+observation led to the reproduced async fix described above.
+
+The **informed new-process recheck** on that same synthetic profile automatically
+selected River Cafe on first arrival, enabled correction inputs, retained the saved
+reason and returned to October/Dining. Concise and expanded drilldown were inspected.
+Database bytes stayed unchanged; raw Qt/process exits 0. Evidence:
+`acceptance/result.txt`, `persistence.txt`, `recheck-result.txt` and recheck captures.
+
+Limitations: setup supplied an empty profile and fixture catalog; incidental older
+neighboring test lines were encountered while locating the setup factory. Native
+file-picker transport used a Qt adapter; widget introspection/software events aided
+operation. This is assisted agent discovery and informed recheck, not unfamiliar
+human or direct OS-input acceptance. Startup catalog acquisition, native pickers,
+display scaling, assistive technology, installed/offline/Mac behavior and broad
+cold/large-archive profiling remain unverified here. Earlier native/heap-history
+limits remain separate, and bounded passing checks do not prove general heap safety.
+No live/private data, owner profile activation, commit, signing, push or release
+was performed for this implementation. Human/platform/release gates remain open.
+
+### Owner fresh private-input walkthrough prepared
+
+Owner requested a disposable fresh test to execute personally with real statements.
+Prepared a new empty workspace at
+`scratch/v2-owner-fresh-20261114-6f0c3d9a/`, with
+`Open-workflow-test.cmd` and `START-HERE.txt`. It opens the refined application as
+**ParseTrail - DISPOSABLE WORKFLOW TEST**, with no seeded documents, observations,
+accounts, categories, budgets or journal entries. Existing daily/demo profiles and
+private archives were not selected. The owner will select inputs manually; this
+preparation did not read/import any private statement.
+
+The local development catalog includes 23 current public pilot definitions and
+their account contexts, signed by a new ephemeral test key. Only its public trust
+and signature remain, scoped to this test; production signing/global trust are
+unchanged. Profile schema 24, explicit preferences, null keyring and app-home are
+isolated in that directory. A 299-file public runtime snapshot plus SHA-256 manifest
+pins the launcher and bounded workers to the refined source. Startup verifies those
+runtime hashes. Preparation reuses the existing runtime-pinning/public-catalog ACL
+handoff helpers; no source/runtime dependency install or live-profile activation.
+
+Verified the actual pinned entry point with native Windows Qt rendering suppressed
+from display: ready, imports enabled, Documents/Review/Accounts/Budget/Reports,
+zero documents, profile SHA-256 unchanged, normal raw Qt/process exit 0. Preparation
+also checked zero Sources/SourceObservations/Accounts/CategoryBudgetRates/
+JournalEntries and SQLite integrity. Inspected the empty workspace screenshot.
+The app remains closed so the owner can execute the launcher. This is preparation/
+startup verification only; owner results and acceptance are pending.
+
+**Privacy boundary after handoff:** this folder will contain private financial data
+once the owner imports real statements. Do not enumerate/read its profile, logs,
+originals or captures after this preparation by inference from this record. Further
+agent inspection requires task-specific owner authorization. Closing keeps the test
+available; its launcher reopens the same profile. No automatic deletion/reset exists.
+
+## November 14: first-use clarity evidence gathering
+
+Owner selected investigation of the new-user basics: import a statement, inspect
+evidence, create accounts/categories, review activity and understand its monthly
+budget impact. Reported problems are busy panels, verbose/indirect QLabel text and
+unclear next actions. Rarely used controls may move to menus or explicitly secondary
+groups. This selects evidence gathering and a subsequent roadmap discussion, not
+UI implementation or a changed accounting policy. No additional owner walkthrough
+feedback was supplied; development remains active.
+
+The pre-existing documentation diff was committed as `e0d1412` with normal hooks.
+Primary owns this record and integrated findings. Fresh ui_ux reviews information
+hierarchy/copy and actual screenshots; desktop gathers current native Qt screen/
+control inventories; fresh acceptance attempts the end-to-end goal without a
+control walkthrough. Specialists own separate ignored subdirectories of
+`scratch/first-use-audit-20261114/`, with no application-code write assignments.
+Native focus slots are serialized. Only fresh disposable synthetic profiles and
+fixture catalogs are permitted; no old demo/live profiles, private archives,
+root `.env`, production, signing, activation or release actions.
+
+Investigation criteria: identify a clear next action in each state; distinguish
+original evidence, unsaved choices and saved reviewed activity; discover account,
+category and monthly-budget setup in context; understand reviewed spending versus
+budget, month/account scope and pending/coverage limitations; find secondary detail
+and recovery without giving rare actions equal prominence. Check concise direct
+copy, readable hierarchy, practical window sizes and keyboard access. Keep scripted
+checks, goal-derived agent attempts and human acceptance separate.
+
+### Initial screenshot findings
+
+Current baseline: `e0d1412` (documentation-only change on application baseline
+`21cd5d7`). Findings below describe the current rendered application, not proposed
+implementation. Prior successful functional checks do not establish first-use
+clarity. Screenshot paths are beneath the ignored investigation directory above.
+
+| Priority | Screen/state and observed issue | Refinement to discuss |
+| --- | --- | --- |
+| High | Categories and budgets: after saving a budget, the red **Required · Enter a name to add a category** prompt remains above the budget editor. The selected category UUID and built-in identity caveat take primary space. | Separate adding a category from editing an existing category/budget; show required cues for the active task, and put stable identity in details. Keep explicit category identity and saved/draft semantics. |
+| High | Review: document navigation, search/filter/navigation, purpose/category/reason, staging controls and Reload/Rules/Details/Source evidence share a dense working area. **Unallocated source row(s)**, **Ready for purpose review** and **Not staged** require learning the implementation model before acting. | Lead with selected account/period, imported rows needing attention and one coherent decision/confirmation area. Use direct task language; retain staging, required note and explicit final confirmation. Conservative row counts must not be renamed unique transaction counts. |
+| High | Budget setup is reached through **Accounts → Categories and budgets**, while results live in **Reports → Monthly budgets**. The post-review shortcut names spending only. | Connect category creation, budget editing and the month's reviewed result in an obvious journey; assess a visible budget destination rather than relying on users to infer Accounts is the entry point. |
+| High, observed task misunderstanding | Staging an income row after two expenses replaced their captured batch note with the income-specific reason. The fresh reviewer caught this in confirmation, cancelled, authored a shared reason and restaged before posting. | Make the shared reason's entire staged scope unmistakable at edit/stage time, including hidden rows. Evaluate a clearly separate batch-note control or explicit scope feedback; do not silently change current note semantics. |
+| High, observed context mismatch | Following the October document's spending shortcut into Monthly budgets initially showed November's $0 reviewed spending and $100 remaining. The reviewer changed Budget month to October to see the intended result. | Add an explicit handoff to the relevant budget month, with month selection for multi-month activity and visible context. Keep independently chosen report scopes/dates and all-profile-account semantics deliberate. |
+| Medium | Empty Documents: catalog management, folder import, account assignment, search and reload surround the initial import; initial focus is in search despite no documents. | Make importing a first statement the dominant empty-state action. Keep catalog installation prominent when it is required; make ready-catalog management and unrelated empty-state actions secondary. |
+| Medium | Import step 2 retains the account-selection instruction from step 1 and stacks recognition, provenance, limitations, assignment summary and readiness text around the table. | Use state-specific heading/instruction and a compact account/date/row/confirmation summary. Keep the inability to replace retained formats visible before import, and keep genuine missing/unknown source facts next to affected decisions. |
+| Medium | Source evidence leads with assumed-date settings, parser/definition/source identifiers and capture diagnostics, without a strong account/file heading. | Lead with recognizable document/account/date context and extracted rows; keep material capture/date limitations visible, move diagnostic IDs behind details and keep original/source locations easy to reach. |
+| Medium | Spending report has repeated outer/inner all-account/date/reviewed-entry explanations and several advanced actions around a small financial table. | Lead with period, scope, reviewed total and relevant pending/coverage qualification once; disclose fuller explanations and less frequent export/diagnostic actions without hiding active blockers. |
+| Medium | Accounts immediately leads with opening-based journal positions, review of source values and clearing explanations. A newly created valid account appears with **Unknown / Not established**, while ordinary account/category management shares the same area. | Lead with recognizable account identity and routine management; explain missing opening/position only beside that value. Put opening/value/history workflows in secondary groups while retaining truthful unknown balances. |
+
+Representative evidence: `inventory/baseline/test_category_and_optional_budget_drafts_become_saved/b2f17a65/02-budget-saved-neutral.png`;
+`inventory/baseline/test_empty_profile_to_reviewed_spending_correction_and_recovery_1050x700_/30cbd2f8/01-empty-profile.png`,
+`06-ready-for-review.png`, `09-source-evidence.png` and
+`10-reviewed-spending-with-pending-limit.png`;
+`inventory/import/test_all_groups_account_first_back_preserves_drafts_final_import_assigns_without_posting_1050x700_/6260ce7c/03-single-interpretation-exact-assignment-confirmation.png`.
+Primary inspected these actual renders; ui_ux independently inspected both practical
+sizes and additional confirmation/correction states. These are agent visual findings.
+
+Corrected supplemental evidence: `inventory/supplemental-corrected/03-populated-accounts.png`,
+`06-monthly-budget-1050.png`, `07-monthly-budget-1280.png` and
+`08-monthly-budget-1600.png`. Primary inspected loaded Accounts and the actual
+1050-wide Monthly budgets tab: October Groceries budget $10, reviewed spending $4,
+remaining $6, with two all-date pending source rows. The budget table's arithmetic
+and column labels are understandable; date-range controls correctly disappear on
+this tab. The main gap is reaching/editing the budget and connecting review to
+this result, plus summary prominence and repeated qualifications. Do not infer a
+monthly-date-controls defect from static construction code.
+
+Primary/secondary hierarchy to discuss: keep file/account/period, selected-row
+description/date/amount, material unknown/estimated-date/capture limits, active
+blockers, required type/category/reason, staged scope and explicit posting effect
+visible. Keep source/original one consistent action away. Disclose profile path,
+ready catalog management, parser/definition/hash/category IDs, detailed journal
+proof, reload/rules, export, opening/history and rare specialist routes secondarily.
+Bring repeat/date/account checks forward when relevant, rather than burying active
+recovery. Preserve the card screenshot's adjacent assumed/different-date warning.
+
+Candidate design directions for the roadmap discussion (unselected): a Documents
+library with a dominant first-import action; a coherent selected-document review
+workspace with compact context and consistent source access; a recognizable
+category/budget destination joining editing to the monthly result; and a posted/
+pending outcome with an explicit handoff to the relevant month. Copy changes should
+follow that interaction model rather than independently shortening every label.
+Examples to evaluate are **Transaction type**, **3 imported rows need review**,
+**Review and post N…**, and **Applies to all N staged rows** beside the reason.
+These are wording proposals, not changed controls or changed review-note policy.
+
+### Investigation verification
+
+Native screenshot batch: five existing core-journey/refusal/cancel/category-budget
+checks passed in 20.37s; three account-first/import/account-form checks passed in
+5.41s. The four complete-journey children retain their raw exit 0 in `process.json`.
+Runtime: Windows AMD64, Python 3.13.15, Qt/PySide6 6.11.2, pytest 9.1.1,
+pytest-qt 4.5.0, native `windows` plugin, Segoe UI 9, 96 logical DPI/DPR 1.
+These are scripted captures, separate from the fresh goal-derived attempt below.
+
+The supplemental fixture-seeded native run returned 0 in 5.37s, capturing chooser,
+no-catalog Documents, empty/loaded Accounts, account/category forms, spending,
+monthly budgets at 1050/1280/1600 widths and a standalone card review. Visible
+QLabel/button/group text inventories accompany those captures. Its first 5.16s run
+selected the hidden Accounts report instead of the visible Reports view; the
+mislabelled budget images and still-loading Accounts image in `supplemental/` are
+rejected as budget/loaded-account evidence. The corrected harness selects the
+visible view, waits for report readiness and asserts the expected table values
+before capture. This was a harness error, not an application defect. Standalone
+card review is separate from the embedded workspace and its missing workspace
+context is not a finding.
+
+### Fresh goal-derived attempt and outcome
+
+Fresh acceptance received only the outcome, synthetic-input/setup boundaries and
+tooling/isolation guidance, not a control walkthrough or the new design findings.
+It started with an empty disposable profile and a fixture-installed CSV catalog.
+It imported October checking activity, created Everyday checking, inspected source
+evidence, created Food and drink / Other income categories, configured a $100
+October expense budget, staged and posted three rows, then inspected spending and
+Monthly budgets. Product controls needed no route coaching. Its final actual
+October screenshot shows $100 budget, $7 reviewed spending and $93 remaining.
+
+Observed misunderstandings/recovery are the shared-note and budget-month findings
+above. The exact confirmation exposed the income-specific note on expense rows;
+the reviewer cancelled and explicitly restaged with a common reason before any
+posting. The October-to-November transition showed a valid but contextually
+unexpected $0 reviewed-spending result; selecting October recovered the intended
+comparison. The reviewer also understood staging/import/account/category setup
+did not post money and that zero pending rows does not establish complete source
+coverage. These are an agent's reported comprehension, not human acceptance.
+
+Evidence: `acceptance/29-confirm-posting-QDialog.png` (initial shared note),
+`31-corrected-post-preview-QDialog.png`, `35-budget-loaded-november-V2WorkspaceWindow.png`,
+and `37-final-budget-V2WorkspaceWindow.png`. Primary inspected the confirmation,
+November and final October renders. `acceptance/read-only-results.json` records a
+SQLite `mode=ro` verification: one source, three observations, one financial account,
+two categories, three reviewed entries, expense 700 minor, income 1000 minor,
+financial movement +300 minor, October budget 10000 minor and remaining 9300 minor.
+The saved entries share the deliberately corrected common reason. GUI raw exit and
+parent process exit were both 0, with normal close and no new native failure.
+
+Assistance/limits: setup bypassed startup chooser/catalog installation, and a native
+OS file picker needed a synthetic path-return substitution. Qt combo popup timing
+needed explicit selection/activation; a harness Escape cancelled the first import
+and a retry preserved empty state before succeeding. Visible-widget introspection
+and Qt software events assisted operation. This is a fresh goal-derived **assisted
+agent attempt**, not unfamiliar-human/native-input discovery. Screenshot 34 is a
+loading state; settled November/October evidence is identified above. The initial
+native inventory separately covers chooser/no-catalog states without claiming an
+end-to-end starter-package installation attempt.
+
+Reproduction commands for the scripted capture selections, from repository root
+with `$env:PYTHONPATH='.;client/src;client'`:
+
+```powershell
+& .\client\.venv\Scripts\python.exe -m pytest -p no:cacheprovider client/tests/test_v2_qt_journey.py client/tests/test_v2_form_cues.py::test_category_and_optional_budget_drafts_become_saved --journey-native --journey-artifacts scratch/first-use-audit-20261114/inventory/baseline -q
+& .\client\.venv\Scripts\python.exe -m pytest -p no:cacheprovider client/tests/test_v2_import_account_review.py::test_all_groups_account_first_back_preserves_drafts_final_import_assigns_without_posting client/tests/test_v2_form_cues.py::test_account_draft_invalid_choice_and_saved_edit --journey-native --journey-artifacts scratch/first-use-audit-20261114/inventory/import -q
+```
+
+Initial evidence gathering is complete. No application or test source changed.
+Current findings remain unresolved implementation work for roadmap discussion;
+passing functional checks do not close them. Longer lists/labels, scaling,
+screen-reader/high-contrast/keyboard-only use, a new full PDF/card first-use journey,
+macOS, installed runtime, starter-package acquisition and human task performance
+were not established by this run. Historical platform/accounting/release gates
+remain separate; no UI implementation, owner acceptance or release is claimed.
 
 ## Handover: resume desktop UI development
 

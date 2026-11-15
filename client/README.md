@@ -259,11 +259,11 @@ and coverage remain separate. V2 source imports use the finite
 [signed parser catalog](../docs/client-v2-parsing.md), not the 1.x bytecode loader.
 These implemented slices do not establish 2.0 release readiness.
 
-The V2 workspace uses Documents, Review, Accounts and Reports navigation.
+The V2 workspace uses Documents, Review, Accounts, Budget and Reports navigation.
 Documents are searchable by saved account/source labels and qualified dates;
 their primary action opens the relevant account confirmation or activity review.
 Account suggestions remain pending until explicitly confirmed. Full source
-identifiers, date provenance and overlap details remain available in Show details.
+identifiers, date provenance and overlap details remain available in Statement options.
 No presentation mode changes matching preferences or accounting decisions.
 
 Review embeds the selected document's supported cash/card/register activity.
@@ -271,11 +271,13 @@ Search, status filters and exact sorting keep the current task visible.
 All new ordinary reviews use Stage selected → Review staged → Confirm and post;
 there is no competing immediate-post action. Text and row cues distinguish staged
 unsaved proposals from not-staged and reviewed rows, while blockers stay visible.
-Remove selected affects only those staged proposals; later form edits require
+Review set options removes selected proposals or clears the set; later form edits require
 restaging to update them. Ctrl/Shift selects multiple ordinary rows for a shared purpose,
 category and note, with a visible selection count. Staging validates the whole
 selection and preserves prior staged work on refusal. A successful Stage captures
-the shared note; editing a later proposal does not change the earlier staged note.
+the shared reason for the whole set, including filtered-out rows; later unstaged
+edits do not change it. The Review set reason persists across selection and is
+independent of the selected saved row's correction reason.
 Explicitly staged ordinary rows share that captured batch reason and
 receive one exact preview and atomic confirmation; each row retains its own
 date and allowed purpose/category. Corrections remain individual or whole-event
@@ -292,8 +294,13 @@ successful save refreshes the active saved context and clears the editable reaso
 Drafts stay with their row and active entry, so a replaced entry cannot inherit
 an older correction draft. Original evidence and prior journal history remain.
 
-Accounts embeds qualified positions and history, and Reports embeds the existing
-report tabs and entry drill-down. Selected dates and context persist when moving
+Accounts leads with routine management and optional balances/history. Budget and
+Reports share one embedded report instance. Budget editing opens the selected
+category/month; document handoffs seed spending dates and budget month, identifying
+the month shown for multi-month activity. Ordinary navigation retains the chosen
+month/dates and last non-budget report tab. Source correction returns to its exact
+Budget/Reports origin. Entry drill-down leads with account/date/effect/reason;
+full posting lines and identifiers remain available under details. Context persists when moving
 between pages. Empty selected periods are distinguished from a complete zero-
 activity claim. Statement-format setup explains the signed local package needed
 before imports; signature verification is unchanged.

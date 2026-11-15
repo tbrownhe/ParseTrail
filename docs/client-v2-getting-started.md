@@ -35,7 +35,10 @@ Choose an institution by its name when creating an account, or deliberately choo
 institution. A compatible generic CSV does not necessarily identify its bank, and
 an institution being listed does not mean every format from it is supported.
 
-Select a transaction, choose its purpose and category, and enter a review note.
+Select a transaction and choose its type and category. In **Review set**, enter a
+**shared reason** for all the rows you plan to post. It persists as you change
+rows and stays separate from saved-entry correction reasons.
+Use **Add category…** beside the category choice to create a category in context.
 Use **Stage selected**, then **Review staged** and inspect the exact confirmation
 before posting. One transaction and several use the same flow. Staging is an
 unsaved proposal; it adds no spending. Transfers, card repayments and loan
@@ -54,8 +57,8 @@ use individual correction.
 The table identifies **Not staged**, **Staged · not saved**, and reviewed rows.
 The separate review status still explains blockers. Editing a staged row shows
 **Changes not staged**: stage it again to replace its proposal, or keep the earlier
-proposal for confirmation. **Remove selected** removes only those proposals;
-**Clear staged** empties the staged set. The staged count includes rows hidden by
+proposal for confirmation. **Remove selected from review set** removes only those proposals;
+**Clear review set**, under **Review set options**, empties the staged set. The staged count includes rows hidden by
 filters. Canceling confirmation keeps the proposals. Staging is temporary and
 closing a review asks before discarding it.
 
@@ -81,7 +84,7 @@ Green does not establish that an interpretation is correct, that the source is
 complete, or that the account reconciles. Read the confirmation to see what will
 be saved. Cancelling a confirmation retains the draft for further editing.
 
-Use **View spending for document dates** to see reviewed spending for those dates
+Use **View spending** to see reviewed spending for the document dates
 across **all accounts in the profile**. Pending activity and incomplete source
 coverage can limit the result. An empty reviewed report does not establish zero
 spending. The qualifications beside the totals explain these limits.
@@ -97,8 +100,16 @@ and its own confirmation. The original evidence and prior history remain
 available. **Back to report** returns to the report context. Source details and
 **Open original** provide supporting evidence when needed.
 
-In **Categories and budgets**, select a category and use **Monthly budget for
-selected category** to save an optional USD budget from an effective month. It
+Open **Budget** to see monthly budget, reviewed spending and remaining across all
+profile accounts. Select a category and choose **Edit selected budget…**, or use
+**Set up budgets / categories…**. The editor opens in the same month and category;
+use **Add category…** for a new category. Existing-category editing shows no
+unrelated new-name validation. **View spending** from a document also selects its
+first month for Budget; a multi-month document labels which month is shown.
+Ordinary Budget/Reports navigation preserves your chosen month and report dates.
+
+In **Categories and budgets**, use **Save monthly budget** to save an optional USD
+budget from an effective month. It
 continues until the next saved change. **Remove budget from month** ends it from
 that month; it keeps earlier history. Budgets do not post transactions. Reports
 compare them with reviewed spending, so pending activity still limits the result.
