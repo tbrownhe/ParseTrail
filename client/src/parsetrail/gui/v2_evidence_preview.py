@@ -11,6 +11,8 @@ from PySide6.QtWidgets import (
     QDialogButtonBox,
     QHeaderView,
     QLabel,
+    QPlainTextEdit,
+    QPushButton,
     QTableView,
     QTabWidget,
     QVBoxLayout,
@@ -149,12 +151,31 @@ class V2EvidencePreview(QDialog):
             if isinstance(payload, StatementPayload)
             else payload.rows
         )
-        self.setWindowTitle("2.0 source evidence preview")
+        self.setWindowTitle("Source evidence")
         self.resize(1100, 700)
         layout = QVBoxLayout(self)
+        heading = QLabel("Statement evidence" if isinstance(payload, StatementPayload) else "Activity export evidence")
+        heading.setStyleSheet("font-size: 16px; font-weight: 600")
+        layout.addWidget(heading)
+        accounts = tuple(dict.fromkeys(row.source_account for row in rows if row.source_account))
+        source_account = (
+            ", ".join(value if len(value) <= 80 else value[:77] + "…" for value in accounts[:3])
+            + (f" · {len(accounts) - 3} more accounts" if len(accounts) > 3 else "")
+            if accounts
+            else "Account not identified by the source"
+        )
+        start = payload.start if isinstance(payload, StatementPayload) else payload.activity_start
+        end = payload.end if isinstance(payload, StatementPayload) else payload.activity_end
+
+        def display_date(value):
+            return (value.iso or "Unknown") + (f" ({value.provenance})" if value.provenance != "observed" else "")
+
+        context = QLabel(f"{source_account} · {display_date(start)} to {display_date(end)} · {len(rows)} source rows")
+        context.setTextFormat(Qt.PlainText)
+        context.setWordWrap(True)
+        layout.addWidget(context)
         introduction = QLabel(
-            "This preview shows saved source evidence. Assumed posting dates are parser guesses; "
-            "Settings controls whether a review workflow may use them. This preview never posts entries."
+            "Saved source evidence · Inspect the rows or open the original. No entries are posted here."
         )
         introduction.setWordWrap(True)
         layout.addWidget(introduction)
@@ -174,13 +195,32 @@ class V2EvidencePreview(QDialog):
             else "Activity export has no statement balance check"
         )
         summary = QLabel(
-            f"Parser: {evidence.parser_id} · Definition: {evidence.definition_revision} · "
-            f"Source: {evidence.source_sha256[:12]}… · Rows: {len(rows)} · Other source lines: {len(payload.dispositions)}"
-            f"{unclassified_note}\n"
-            f"{'Source capture checked' if coverage else 'Source capture needs review'} · {balance}"
+            f"{'Source capture checked' if coverage else 'Source capture needs review'} · {balance}{unclassified_note}"
         )
         summary.setWordWrap(True)
         layout.addWidget(summary)
+        assumed = sum(
+            posting_date_candidate(row) is not None and posting_date_candidate(row).provenance == "assumed"
+            for row in rows
+        )
+        if assumed:
+            date_warning = QLabel(f"{assumed} posting date(s) are estimated. Review their dates before posting.")
+            date_warning.setWordWrap(True)
+            layout.addWidget(date_warning)
+        self.details_button = QPushButton("Evidence details")
+        self.details_button.setCheckable(True)
+        self.details = QPlainTextEdit(
+            f"Parser: {evidence.parser_id} · Definition: {evidence.definition_revision}\n"
+            f"Source SHA-256: {evidence.source_sha256}\n"
+            f"Source accounts: {', '.join(accounts) if accounts else 'Not identified'}\n"
+            f"Other source lines: {len(payload.dispositions)}. Assumed posting dates are parser guesses; "
+            "Settings controls whether review may use them. Source dates and original bytes stay unchanged."
+        )
+        self.details.setReadOnly(True)
+        self.details.setTabChangesFocus(True)
+        self.details.setMaximumHeight(120)
+        self.details.hide()
+        self.details_button.toggled.connect(self.details.setVisible)
         tabs = QTabWidget()
         self.rows_model = _RowsModel(rows, self)
         self.dispositions_model = _DispositionsModel(payload.dispositions, self)
@@ -205,12 +245,14 @@ class V2EvidencePreview(QDialog):
             tabs.addTab(view, title)
         layout.addWidget(tabs)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
+        buttons.addButton(self.details_button, QDialogButtonBox.ActionRole)
         self.original_button = buttons.addButton("Open original…", QDialogButtonBox.ActionRole)
         self.original_button.setToolTip(
             "Read the saved original in ParseTrail's built-in viewer without creating a temporary file."
         )
         self.original_button.clicked.connect(self._open_original)
         buttons.rejected.connect(self.reject)
+        layout.addWidget(self.details)
         layout.addWidget(buttons)
         self.original_status = QLabel()
         self.original_status.setWordWrap(True)

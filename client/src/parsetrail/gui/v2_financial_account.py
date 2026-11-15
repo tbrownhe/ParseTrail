@@ -202,24 +202,22 @@ class V2FinancialAccountDialog(QDialog):
             self.view_original_button = QPushButton("View original document…")
             self.view_original_button.setEnabled(profile is not None and draft.source_sha256 is not None)
             self.view_original_button.clicked.connect(self._view_original)
-            context_form.addRow(self.view_original_button)
+            form.addRow(self.view_original_button)
             self.original_status = QLabel()
             self.original_status.setWordWrap(True)
-            context_form.addRow(self.original_status)
+            form.addRow(self.original_status)
+            self.document_details_button = QPushButton("Document details")
+            self.document_details_button.setCheckable(True)
+            self.document_details_button.toggled.connect(self.source_context.setVisible)
+            form.addRow(self.document_details_button)
             form.addRow(self.source_context)
+            self.source_context.hide()
             context_note = QLabel(
-                "These account details will be saved together with the selected document assignments when you apply the batch."
+                "The account saves with your assignments when you apply the batch. No transactions are posted."
                 if staged
-                else "Review these editable suggestions before creating the account. "
-                "Creating an account does not change this document’s assignment or add transactions. "
-                "Confirm the assignment separately in Review."
+                else "Create the account, then confirm its document assignment in Review. No transactions are posted."
                 + (
-                    " The full account number is unknown; abbreviated or masked text is kept above."
-                    if draft.source_identity is not None and draft.full_account_number is None
-                    else ""
-                )
-                + (
-                    " Enter the institution and account type because this document does not supply verified suggestions."
+                    " Choose institution and product; the document did not identify them."
                     if not draft.verified_context
                     else ""
                 )
@@ -232,7 +230,7 @@ class V2FinancialAccountDialog(QDialog):
             self.name.setText(existing.name)
         elif draft is not None:
             self.name.setText(draft.name)
-        form.addRow("1. Account name *", self.name)
+        form.addRow("Account name *", self.name)
         self.product = QComboBox()
         self.product.setAccessibleName("Account product")
         if existing is None or existing.product_type is None:
@@ -264,6 +262,9 @@ class V2FinancialAccountDialog(QDialog):
         self.product.setCurrentIndex(max(0, self.product.findData(product_type)))
         self.product.setEnabled(not (draft is not None and draft.verified_context and product_type is not None))
         form.addRow("Account product" + (" *" if existing is None else ""), self.product)
+        self.product_summary = QLabel()
+        self.product_summary.setWordWrap(True)
+        form.addRow(self.product_summary)
         self.kind = QComboBox()
         if draft is not None:
             self.kind.addItem("Choose an account type…", None)
@@ -287,7 +288,7 @@ class V2FinancialAccountDialog(QDialog):
         self.scope.setEnabled(not scope_locked)
         self._scope_locked = scope_locked
         form.addRow("3. What this account tracks *", self.scope)
-        scope_note = QLabel(
+        scope_note = self.scope_note = QLabel(
             "Scope specifies the amount represented by this account. Account totals, loan principal and cash "
             "components are different values. Scope becomes fixed when reviewed history is saved."
             + (" This account's scope is fixed by its history." if scope_locked else "")
@@ -313,12 +314,11 @@ class V2FinancialAccountDialog(QDialog):
                 selected=existing.institution_key if existing else (draft.institution_key or None) if draft else None,
                 established=existing is not None,
             )
-        form.addRow("Institution (from document)" if known_institution else "4. Institution *", self.institution)
+        form.addRow("Institution (from document)" if known_institution else "Institution *", self.institution)
         institution_help = QLabel(
-            "Identified automatically from this document's parser."
+            "Identified by the document."
             if known_institution
-            else "Search the managed list by name, or choose Institution not identified. "
-            "This account choice does not add support for a statement format."
+            else "Choose a name from the list, or Institution not identified."
         )
         institution_help.setWordWrap(True)
         form.addRow(institution_help)
@@ -329,6 +329,10 @@ class V2FinancialAccountDialog(QDialog):
             self.number.setText(existing.full_account_number or "")
         elif draft is not None:
             self.number.setText(draft.full_account_number or "")
+        self.account_details_button = QPushButton("More account details")
+        self.account_details_button.setCheckable(True)
+        self.account_details_button.toggled.connect(self._show_account_details)
+        form.addRow(self.account_details_button)
         form.addRow("Full account number (optional)", self.number)
         self.save_error = QLabel()
         self.save_error.setWordWrap(True)
@@ -348,8 +352,27 @@ class V2FinancialAccountDialog(QDialog):
         self.kind.currentIndexChanged.connect(self._update_form_cues)
         self.scope.currentIndexChanged.connect(self._update_form_cues)
         self.product.currentIndexChanged.connect(self._product_changed)
+        self.scope.currentIndexChanged.connect(self._show_account_details)
         self._product_changed()
         self._update_form_cues()
+
+    def _show_account_details(self, *_args):
+        show = self.account_details_button.isChecked()
+        known = self.product.currentData() is not None or self.existing is not None
+        self.form.setRowVisible(self.kind, show and known)
+        self.form.setRowVisible(self.scope, known and (show or self.scope.isEnabled()))
+        self.form.setRowVisible(self.scope_note, show and known)
+        self.form.setRowVisible(self.number, show)
+        if self.product.currentData() is not None:
+            product = account_product(self.product.currentData())
+            scope = self.scope.currentText()
+            self.product_summary.setText(
+                f"{'Money you own' if product.kind == 'asset' else 'Money you owe'} · Tracks {scope.lower()}."
+            )
+        elif self.existing is not None:
+            self.product_summary.setText(f"Saved account · Tracks {self.scope.currentText().lower()}.")
+        else:
+            self.product_summary.setText("Choose a product to see what this account tracks.")
 
     def _product_changed(self, *_args):
         product_type = self.product.currentData()
@@ -360,6 +383,7 @@ class V2FinancialAccountDialog(QDialog):
                 "Accounting class (from product)" if self.existing is None else "Accounting class (saved)"
             )
             self._update_form_cues()
+            self._show_account_details()
             return
         product = account_product(product_type)
         selected = self.scope.currentData()
@@ -372,6 +396,7 @@ class V2FinancialAccountDialog(QDialog):
             "Amount represented (from product)" if not self.scope.isEnabled() else "Amount represented *"
         )
         self._update_form_cues()
+        self._show_account_details()
 
     def _institution_key(self):
         return self.draft.institution_key if self._known_institution else self.institution.selected_key()

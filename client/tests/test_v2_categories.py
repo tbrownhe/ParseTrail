@@ -28,6 +28,7 @@ def test_category_dialog_adds_and_renames_without_posting(tmp_path: Path) -> Non
         dialog.rename_name.setText("Food")
         dialog.rename_button.click()
         assert dialog.categories.currentItem().text() == "Food (Expense)"
+        dialog.begin_add()
         dialog.add_name.setText("Wages")
         dialog.add_kind.setCurrentIndex(1)
         dialog.add_button.click()

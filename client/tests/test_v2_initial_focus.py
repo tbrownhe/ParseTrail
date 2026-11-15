@@ -67,8 +67,8 @@ def test_categories_open_at_first_choice_and_budget_is_discoverable(qtbot, qapp,
     dialog.show()
     dialog.activateWindow()
     qtbot.waitUntil(lambda: qapp.focusWidget() is dialog.add_name)
-    assert any(group.title() == "Monthly budget for selected category" for group in dialog.findChildren(QGroupBox))
-    assert dialog.budget_save.text() == "Save budget from month"
+    assert any(group.title() == "Monthly budget" for group in dialog.findChildren(QGroupBox))
+    assert dialog.budget_save.text() == "Save monthly budget"
     assert dialog.budget_clear.text() == "Remove budget from month"
     assert "monthly budget" in dialog.budget_current.text()
     artifacts = JourneyArtifacts(journey_artifacts, qapp, (700, 800))
@@ -79,10 +79,11 @@ def test_categories_open_at_first_choice_and_budget_is_discoverable(qtbot, qapp,
     dialog.budget_amount.setFocus()
     qtbot.keyClicks(qapp.focusWidget(), "250.00")
     qtbot.mouseClick(dialog.budget_save, Qt.LeftButton)
-    assert "Monthly budget saved" in dialog.status.text()
+    assert "Budget saved" in dialog.status.text()
     artifacts.capture("02-budget-saved", dialog)
+    qtbot.mouseClick(dialog.options_button, Qt.LeftButton)
     qtbot.mouseClick(dialog.budget_clear, Qt.LeftButton)
-    assert "Monthly budget removed" in dialog.status.text()
+    assert "Budget removed" in dialog.status.text()
     assert "No budget" in dialog.budget_current.text()
 
 

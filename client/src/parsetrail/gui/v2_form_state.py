@@ -140,6 +140,11 @@ class _InitialFocusPolicy(QObject):
     def _focus(dialog):
         if not dialog.isVisible() or not dialog.isWindow():
             return
+        preferred_name = dialog.property("initialFocusObject")
+        preferred = dialog.findChild(QWidget, preferred_name) if preferred_name else None
+        if preferred is not None and preferred.isVisibleTo(dialog) and preferred.isEnabled():
+            preferred.setFocus(Qt.OtherFocusReason)
+            return
         candidate = dialog.nextInFocusChain()
         while candidate is not dialog:
             # Editable combos own their line edit; never focus that implementation

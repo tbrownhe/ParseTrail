@@ -25,6 +25,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QVBoxLayout,
+    QWidget,
 )
 
 from parsetrail.core.v2_builtin_categories import BUILTIN_CATEGORIES, builtin_category
@@ -36,21 +37,37 @@ from parsetrail.gui.v2_form_state import install_form_styles, set_field_state, s
 class V2CategoryDialog(QDialog):
     """Author categories and effective-month budget targets in a fresh profile."""
 
-    def __init__(self, profile: Path, parent=None):
+    def __init__(
+        self, profile: Path, parent=None, *, initial_month: date | None = None, selected_category_id: str | None = None
+    ):
         super().__init__(parent)
         install_form_styles(self)
         self.profile = profile
         self.setWindowTitle("Categories and budgets")
-        self.resize(600, 650)
+        self.resize(600, 570)
+        self._adding = False
         layout = QVBoxLayout(self)
-        layout.addWidget(QLabel("Categories are saved in this profile. No transactions are categorized automatically."))
+        heading = QLabel("Categories and monthly budgets")
+        heading.setStyleSheet("font-size: 16px; font-weight: 600")
+        layout.addWidget(heading)
+        self.task_hint = QLabel()
+        self.task_hint.setWordWrap(True)
+        layout.addWidget(self.task_hint)
         self.categories = QListWidget()
         self.categories.currentItemChanged.connect(self._selected)
         layout.addWidget(self.categories)
+        self.new_category_button = QPushButton("Add category…")
+        self.new_category_button.clicked.connect(self.begin_add)
+        layout.addWidget(self.new_category_button, alignment=Qt.AlignLeft)
         self.category_identity = QLabel()
         self.category_identity.setWordWrap(True)
         self.category_identity.setTextInteractionFlags(Qt.TextSelectableByMouse)
         layout.addWidget(self.category_identity)
+        self.category_note = QLabel("Income categories do not appear in the monthly expense budget.")
+        self.category_note.setWordWrap(True)
+        layout.addWidget(self.category_note)
+        self.add_panel = QGroupBox("Add a category")
+        add_layout = QVBoxLayout(self.add_panel)
         builtin_row = QHBoxLayout()
         self.builtin = QComboBox()
         self.builtin.addItem("Choose an optional built-in category", None)
@@ -64,19 +81,33 @@ class V2CategoryDialog(QDialog):
         add_form = QFormLayout()
         self.add_name = QLineEdit()
         self.add_name.setMaxLength(200)
-        add_form.addRow("1. New category name *", self.add_name)
+        add_form.addRow("Category name *", self.add_name)
         self.add_kind = QComboBox()
         self.add_kind.addItem("Expense", "expense")
         self.add_kind.addItem("Income", "income")
-        add_form.addRow("2. Category kind *", self.add_kind)
-        layout.addLayout(add_form)
+        add_form.addRow("Type *", self.add_kind)
+        add_layout.addLayout(add_form)
         self.add_choice_status = QLabel()
         self.add_choice_status.setWordWrap(True)
-        layout.addWidget(self.add_choice_status)
-        self.add_button = QPushButton("Add custom category")
+        add_layout.addWidget(self.add_choice_status)
+        self.add_button = QPushButton("Add category")
         self.add_button.clicked.connect(self._add)
-        layout.addWidget(self.add_button)
-        layout.addLayout(builtin_row)
+        add_actions = QHBoxLayout()
+        add_actions.addWidget(self.add_button)
+        self.cancel_add_button = QPushButton("Cancel")
+        self.cancel_add_button.clicked.connect(self._cancel_add)
+        add_actions.addWidget(self.cancel_add_button)
+        add_layout.addLayout(add_actions)
+        add_layout.addLayout(builtin_row)
+        layout.addWidget(self.add_panel)
+        self.options_button = QPushButton("Category details and other options")
+        self.options_button.setCheckable(True)
+        self.options = QGroupBox("Other category options")
+        options_layout = QVBoxLayout(self.options)
+        self.identity_details = QLabel()
+        self.identity_details.setWordWrap(True)
+        self.identity_details.setTextInteractionFlags(Qt.TextSelectableByMouse | Qt.TextSelectableByKeyboard)
+        options_layout.addWidget(self.identity_details)
         rename_row = QHBoxLayout()
         self.rename_name = QLineEdit()
         self.rename_name.setMaxLength(200)
@@ -85,41 +116,43 @@ class V2CategoryDialog(QDialog):
         self.rename_button = QPushButton("Rename selected")
         self.rename_button.clicked.connect(self._rename)
         rename_row.addWidget(self.rename_button)
-        layout.addLayout(rename_row)
-        budget_box = QGroupBox("Monthly budget for selected category")
+        options_layout.addLayout(rename_row)
+        budget_box = self.budget_box = QGroupBox("Monthly budget")
         budget_layout = QVBoxLayout(budget_box)
         budget_form = QFormLayout()
         self.budget_month = QDateEdit()
         self.budget_month.setCalendarPopup(True)
         self.budget_month.setDisplayFormat("yyyy-MM")
-        today = QDate.currentDate()
-        self.budget_month.setDate(QDate(today.year(), today.month(), 1))
+        chosen_month = initial_month or date.today()
+        self.budget_month.setDate(QDate(chosen_month.year, chosen_month.month, 1))
         self.budget_month.dateChanged.connect(self._refresh_budget)
         budget_form.addRow("Effective month", self.budget_month)
         self.budget_amount = QLineEdit()
         self.budget_amount.setPlaceholderText("USD, for example 250.00")
-        budget_form.addRow("Monthly budget (USD, optional)", self.budget_amount)
+        budget_form.addRow("Budget (USD)", self.budget_amount)
         budget_layout.addLayout(budget_form)
         budget_row = QHBoxLayout()
-        self.budget_save = QPushButton("Save budget from month")
+        self.budget_save = QPushButton("Save monthly budget")
         self.budget_save.clicked.connect(self._save_budget)
         budget_row.addWidget(self.budget_save)
         self.budget_clear = QPushButton("Remove budget from month")
         self.budget_clear.clicked.connect(lambda: self._save_budget(clear=True))
-        budget_row.addWidget(self.budget_clear)
+        options_layout.addWidget(self.budget_clear)
         budget_layout.addLayout(budget_row)
         self.budget_current = QLabel()
         budget_layout.addWidget(self.budget_current)
-        budget_layout.addWidget(
-            QLabel(
-                "A budget applies from the effective month until the next saved change. It does not post transactions."
-            )
-        )
-        budget_layout.addWidget(QLabel("Budget history"))
+        budget_layout.addWidget(QLabel("Applies from this month until your next budget change. Spending is unchanged."))
+        options_layout.addWidget(QLabel("Budget history"))
         self.budget_history = QListWidget()
         self.budget_history.setMaximumHeight(100)
-        budget_layout.addWidget(self.budget_history)
+        options_layout.addWidget(self.budget_history)
         layout.addWidget(budget_box)
+        self.options_button.toggled.connect(self.options.setVisible)
+        self.options.hide()
+        layout.addWidget(self.options_button, alignment=Qt.AlignLeft)
+        layout.addWidget(self.options)
+        self.empty_space = QWidget(self)
+        layout.addWidget(self.empty_space, 1)
         self.status = QLabel()
         layout.addWidget(self.status)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
@@ -136,23 +169,74 @@ class V2CategoryDialog(QDialog):
         self.setTabOrder(self.builtin, self.add_builtin_button)
         self.setTabOrder(self.add_builtin_button, self.rename_name)
         self._saved_budget_draft = None
-        self.refresh()
+        self._budget_drafts = {}
+        self._selected_category_id = None
+        self.refresh(selected_id=selected_category_id)
+        if self.categories.count() and self.categories.currentItem() is None and selected_category_id is None:
+            self.categories.setCurrentRow(0)
+        self._set_adding(self.categories.count() == 0)
+
+    def begin_add(self) -> None:
+        """Start a distinct add task; editing a saved category needs no new name."""
+        self.status.clear()
+        self._set_adding(True)
+        self.add_name.setFocus()
+
+    def _cancel_add(self) -> None:
+        self.add_name.clear()
+        self._set_adding(False)
+
+    def _set_adding(self, adding: bool) -> None:
+        self._adding = adding
+        self.empty_space.setVisible(self.categories.count() == 0)
+        self.categories.setVisible(self.categories.count() > 0)
+        self.task_hint.setText(
+            "Create your first category to review income or spending."
+            if self.categories.count() == 0
+            else "Name the new category and choose its type."
+            if adding
+            else "Select a category to edit its monthly budget."
+        )
+        self.add_panel.setVisible(adding)
+        self.new_category_button.setVisible(not adding)
+        self.cancel_add_button.setVisible(self.categories.count() > 0)
+        self.category_identity.setVisible(not adding)
+        current = self.categories.currentItem()
+        account = next(
+            (
+                category
+                for category in getattr(self, "_category_accounts", ())
+                if current is not None and category.id == current.data(Qt.UserRole)
+            ),
+            None,
+        )
+        self.budget_box.setVisible(not adding and account is not None and account.kind == "expense")
+        self.category_note.setVisible(not adding and account is not None and account.kind == "income")
+        self.options_button.setVisible(not adding and self.categories.currentItem() is not None)
+        self.options.setVisible(not adding and self.options_button.isChecked())
+        self._update_cues()
 
     def _update_cues(self, *_args) -> None:
         if not hasattr(self, "budget_clear"):
             return
         readable = getattr(self, "_readable", False)
         name = self.add_name.text().strip()
-        set_field_state(self.add_name, "ready" if name and readable else "required" if readable else "blocked")
-        set_field_state(self.add_kind, "ready" if readable else "blocked")
-        self.add_button.setEnabled(readable and bool(name))
+        adding = self._adding
+        set_field_state(
+            self.add_name,
+            "neutral" if not adding else "ready" if name and readable else "required" if readable else "blocked",
+        )
+        set_field_state(self.add_kind, "neutral" if not adding else "ready" if readable else "blocked")
+        self.add_button.setEnabled(readable and bool(name) and adding)
         set_field_state(self.add_button, "ready" if self.add_button.isEnabled() else "neutral")
         set_status(
             self.add_choice_status,
-            "ready" if name and readable else "required" if readable else "blocked",
-            "Valid choice · Not saved. Add custom category saves this name and kind; no activity is categorized."
+            "neutral" if not adding else "ready" if name and readable else "required" if readable else "blocked",
+            ""
+            if not adding
+            else "Ready to add · Not saved. Transactions are unchanged."
             if name and readable
-            else "Required · Enter a name to add a category."
+            else "Enter a category name."
             if readable
             else "Category state unavailable. Reopen this dialog to retry.",
         )
@@ -193,16 +277,31 @@ class V2CategoryDialog(QDialog):
 
     def _selected(self, current: QListWidgetItem | None, _previous: QListWidgetItem | None = None) -> None:
         category_id = current.data(Qt.UserRole) if current is not None else None
+        if self._selected_category_id is not None:
+            self._budget_drafts[self._selected_category_id] = self.budget_amount.text()
+        self._selected_category_id = category_id
+        self.budget_amount.setText(self._budget_drafts.get(category_id, ""))
         builtin = builtin_category(category_id) if category_id else None
         self.rename_button.setEnabled(current is not None and builtin is None)
         self.rename_name.setReadOnly(builtin is not None)
         self.rename_name.setText(current.data(Qt.UserRole + 1) if current is not None else "")
+        account = next(
+            (category for category in getattr(self, "_category_accounts", ()) if category.id == category_id), None
+        )
         self.category_identity.setText(
-            f"Built-in category: {category_id}. Its name and expense/income class are fixed."
-            if builtin is not None
-            else f"Custom category: {category_id}. A matching name does not establish built-in identity."
+            f"{account.name} · {account.kind.title()} · {'Standard category' if builtin else 'Custom category'}"
+            if account
+            else "Select a category to edit its budget."
+        )
+        self.identity_details.setText(
+            f"Category ID: {category_id}\n"
+            + (
+                "Standard category: its name and type are fixed."
+                if builtin
+                else "Custom category: matching a standard name does not give it standard identity."
+            )
             if category_id
-            else "Select a category to inspect its identity. Built-ins are added only by explicit choice."
+            else ""
         )
         self.budget_month.setEnabled(current is not None)
         self.budget_amount.setEnabled(current is not None)
@@ -210,6 +309,8 @@ class V2CategoryDialog(QDialog):
         self.budget_clear.setEnabled(current is not None)
         self._refresh_budget()
         self._update_cues()
+        if hasattr(self, "options_button"):
+            self._set_adding(self._adding)
 
     @staticmethod
     def _money(minor: int) -> str:
@@ -266,7 +367,7 @@ class V2CategoryDialog(QDialog):
             amount = "No budget" if rate.amount_minor is None else self._money(rate.amount_minor)
             self.budget_history.addItem(f"{rate.effective_month:%Y-%m}: {amount}")
         if target.effective_month is None:
-            self.budget_current.setText(f"{self._month():%Y-%m}: No budget established")
+            self.budget_current.setText(f"No budget set for {self._month():%B %Y}")
         else:
             amount = "No budget" if target.amount_minor is None else self._money(target.amount_minor)
             self.budget_current.setText(f"{self._month():%Y-%m}: {amount} (effective {target.effective_month:%Y-%m})")
@@ -295,7 +396,7 @@ class V2CategoryDialog(QDialog):
                 self.budget_amount.clear()
             self._update_cues()
             action = "removed" if clear else "saved"
-            self.status.setText(f"Monthly budget {action} from {self._month():%Y-%m}. No ledger entry was posted.")
+            self.status.setText(f"Budget {action} from {self._month():%B %Y}. Transactions are unchanged.")
 
     def refresh(self, selected_id: str | None = None) -> None:
         self._readable = True
@@ -317,7 +418,7 @@ class V2CategoryDialog(QDialog):
             if account.id == selected_id:
                 self.categories.setCurrentItem(item)
         self.status.setText(
-            f"{len(accounts)} category account(s). No ledger entry was posted."
+            f"{len(accounts)} categories · Transactions are unchanged."
             if self._readable
             else "Category state unavailable. Reopen this dialog after checking the profile."
         )
@@ -361,6 +462,7 @@ class V2CategoryDialog(QDialog):
             self.refresh()
             return
         self.refresh(selected_id=account_id)
+        self._set_adding(False)
 
     def _add(self) -> None:
         try:
@@ -372,6 +474,12 @@ class V2CategoryDialog(QDialog):
             return
         self.add_name.clear()
         self.refresh(selected_id=account_id)
+        self._set_adding(False)
+        self.status.setText(
+            "Category added. You can now set its monthly budget."
+            if self.add_kind.currentData() == "expense"
+            else "Income category added. Ready to use in income reviews."
+        )
 
     def _rename(self) -> None:
         item = self.categories.currentItem()

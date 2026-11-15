@@ -647,6 +647,11 @@ class V2ImportAccountReview(QDialog):
 
     def _set_step(self, index):
         self.step_label.setText("1 of 2 · Choose accounts" if index == 0 else "2 of 2 · Review import")
+        self.scope.setText(
+            "Choose an account for each group. You can create a new account here."
+            if index == 0
+            else "Check the dates, amounts and accounts. Import saves the original and assignments; it adds no spending."
+        )
         self.back_button.setVisible(index == 1)
         self.next_button.setVisible(index == 0)
         self.import_button.setVisible(index == 1)
@@ -693,7 +698,7 @@ class V2ImportAccountReview(QDialog):
             set_status(
                 self.status,
                 "ready" if valid else "blocked",
-                "Ready to import and assign · Not saved. New accounts and assignments are saved together; no transactions are posted."
+                "Ready to import · Not saved. No spending is posted."
                 if valid
                 else "This file matches more than one supported format for these accounts. Nothing has been imported. Back keeps your drafts; check the institution and product, or skip this file and use another supported export.",
             )

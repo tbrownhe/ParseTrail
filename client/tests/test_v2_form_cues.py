@@ -89,6 +89,9 @@ def test_category_and_optional_budget_drafts_become_saved(qtbot, qapp, tmp_path,
     assert dialog.rename_name.property("formState") == "saved"
     assert not dialog.rename_button.isEnabled()
     assert dialog.budget_amount.property("formState") == "optional"
+    assert not dialog.add_panel.isVisible()
+    assert dialog.add_name.property("formState") == "neutral"
+    qtbot.mouseClick(dialog.options_button, Qt.LeftButton)
     enter_text(qtbot, dialog.rename_name, "Groceries")
     assert dialog.rename_name.property("formState") == "ready"
     qtbot.mouseClick(dialog.rename_button, Qt.LeftButton)
