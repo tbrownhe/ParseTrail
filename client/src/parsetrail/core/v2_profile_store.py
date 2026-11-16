@@ -82,6 +82,9 @@ from parsetrail.core.v2_loan_payments import (
 )
 from parsetrail.core.v2_pending_transfers import PendingTransferReview, PendingTransferState
 from parsetrail.core.v2_preferences import V2Preferences
+from parsetrail.core.v2_resolution_schema import FOREIGN_KEYS as RESOLUTION_FOREIGN_KEYS
+from parsetrail.core.v2_resolution_schema import SQL as RESOLUTION_SQL
+from parsetrail.core.v2_resolution_schema import TABLES as RESOLUTION_TABLES
 from parsetrail.core.v2_review_dates import permitted_posting_date, posting_date_candidate
 from parsetrail.core.v2_settlements import (
     MAX_SETTLEMENT_PAYLOAD,
@@ -118,7 +121,7 @@ from parsetrail.core.v2_source_values import (
 )
 
 APPLICATION_ID = 0x50543230  # PT20
-SCHEMA_VERSION = 25
+SCHEMA_VERSION = 26
 TRACKING_SCOPES = {"account_total", "principal_component", "cash_component"}
 CategoryPurpose = Literal["expense", "expense_refund", "income", "income_adjustment"]
 CATEGORY_PURPOSE_KINDS = {
@@ -585,6 +588,10 @@ IMMUTABLE_TABLES = (
     "SourceInterpretationActions",
     "PostedRepeatRepairs",
 )
+
+TABLE_COLUMNS.update(RESOLUTION_TABLES)
+FOREIGN_KEYS.update(RESOLUTION_FOREIGN_KEYS)
+IMMUTABLE_TABLES += tuple(RESOLUTION_TABLES)
 
 _INACTIVE_JOURNAL_SQL = (
     "SELECT original_key FROM JournalCorrections UNION SELECT reversal_key FROM JournalCorrections "
@@ -1206,12 +1213,13 @@ class SourceInterpretationSnapshot:
     pending_transfers: tuple[PendingTransferState, ...] = ()
     pending_transfer_history: tuple[PendingTransferReview, ...] = ()
     transfer_eligible_row_ids: tuple[str, ...] = ()
+    zero_reviews: tuple = ()
 
 
 @dataclass(frozen=True)
 class SourceInterpretationOwner:
     row_id: str
-    owner_kind: Literal["transfer", "settlement", "loan", "other"]
+    owner_kind: Literal["transfer", "settlement", "loan", "other", "resolution", "origination"]
     event_id: str
     label: str
 
@@ -1234,6 +1242,7 @@ class ReviewedCategorySummary:
     sources_with_incomplete_activity: int
     excluded_unreviewed_entries: int
     reviewed_entry_count: int | None = None
+    unresolved_transfer_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -1255,6 +1264,7 @@ class MonthlyBudgetSummary:
     activity_rows_without_full_allocation: int
     sources_with_incomplete_activity: int
     excluded_unreviewed_expense_entries: int
+    unresolved_transfer_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -1274,6 +1284,7 @@ class FinancialJournalSummary:
     activity_rows_without_full_allocation: int
     sources_with_incomplete_activity: int
     excluded_unreviewed_financial_entries: int
+    unresolved_transfer_count: int = 0
 
 
 @dataclass(frozen=True)
@@ -1333,6 +1344,8 @@ class AccountPositionsSummary:
     activity_rows_without_full_allocation: int
     sources_with_incomplete_activity: int
     transfer_clearing_debit_minor: int
+    unresolved_transfer_count: int = 0
+    unresolved_transfer_items: tuple = ()
 
 
 @dataclass(frozen=True)
@@ -1390,6 +1403,11 @@ class ReviewedJournalExport:
     loan_events: tuple[LoanEvent, ...] = ()
     loan_actions: tuple[LoanEventAction, ...] = ()
     loan_source_links: tuple[LoanSourceLink, ...] = ()
+    resolution_items: tuple = ()
+    resolution_links: tuple = ()
+    origination_events: tuple = ()
+    zero_reviews: tuple = ()
+    tangible_asset_value_history: tuple = ()
 
 
 BANK_CASH_STATEMENT_PARSERS = frozenset(
@@ -1738,6 +1756,7 @@ class V2ProfileStore:
         self.read_only = read_only
         self._transfer_mutating = False
         self._loan_mutating = False
+        self._origination_mutating = False
         self._source_interpretation_mutating = False
         self._account_anchors_mutating = False
         self._transfer_verified_sources = None
@@ -1865,7 +1884,7 @@ class V2ProfileStore:
                     purpose TEXT NOT NULL CHECK(purpose IN ('normal','clearing','opening_equity','suspense')),
                     institution_key TEXT REFERENCES Institutions(id), full_account_number TEXT,
                     tracking_scope TEXT NOT NULL DEFAULT 'account_total' CHECK(tracking_scope IN ('account_total','principal_component','cash_component')),
-                    product_type TEXT CHECK(product_type IN ('checking','savings','credit_card','loan','hsa','investment','cash')),
+                    product_type TEXT CHECK(product_type IN ('checking','savings','credit_card','loan','hsa','investment','cash','vehicle')),
                     CHECK(
                         (role='financial' AND kind IN ('asset','liability') AND purpose='normal')
                         OR (role='category' AND kind IN ('income','expense') AND purpose='normal'
@@ -2097,6 +2116,7 @@ class V2ProfileStore:
                 );
                 COMMIT;
             """)
+            connection.executescript(RESOLUTION_SQL)
             connection.executemany(
                 "INSERT INTO Institutions VALUES (?,?)", ((item.id, item.name) for item in BUILTIN_INSTITUTIONS)
             )
@@ -2357,6 +2377,12 @@ class V2ProfileStore:
             raise ProfileFormatError("account_anchor_requires_committed_snapshot")
         self.connection.execute("BEGIN IMMEDIATE")
         try:
+            lock = self.account_identity_lock(account.id)
+            if lock is not None and (account.institution_key, account.product_type) != (
+                lock.institution_key,
+                lock.product_type,
+            ):
+                raise ProfileFormatError("financial_account_import_identity_locked")
             if catalog is not None:
                 self.register_catalog_institutions(catalog)
             self._require_registered_institution(institution_key)
@@ -2370,6 +2396,13 @@ class V2ProfileStore:
             if current[1] != account.tracking_scope and self.financial_account_scope_locked(account.id):
                 raise ProfileFormatError("financial_account_scope_locked")
             product_type = account.product_type if account.product_type is not None else current[2]
+            if (product_type == "vehicle") != (current[2] == "vehicle"):
+                assigned = self.connection.execute(
+                    "SELECT 1 FROM SourceAccountBindings WHERE ledger_account_id=? UNION SELECT 1 FROM FileAccountAssertions WHERE ledger_account_id=? UNION SELECT 1 FROM RowAccountAssignments WHERE ledger_account_id=? LIMIT 1",
+                    (account.id, account.id, account.id),
+                ).fetchone()
+                if assigned or self.financial_account_scope_locked(account.id):
+                    raise ProfileFormatError("financial_account_product_history_locked")
             try:
                 validate_product_type(product_type, account.kind, account.tracking_scope)
             except ValueError as exc:
@@ -2393,6 +2426,135 @@ class V2ProfileStore:
             )
         )
 
+    def account_identity_lock(self, account_id):
+        from parsetrail.core.v2_review_decisions import identity_locks
+
+        return next((lock for lock in identity_locks(self) if lock.account_id == account_id), None)
+
+    def create_tangible_asset(self, account, *, value_date, amount_minor, annual_rate_basis_points=None, reason):
+        from parsetrail.core.v2_origination import create_asset
+
+        return create_asset(
+            self,
+            account,
+            value_date=value_date,
+            amount_minor=amount_minor,
+            annual_rate_basis_points=annual_rate_basis_points,
+            reason=reason,
+        )
+
+    def origination_snapshot(self, source_sha256=None):
+        from parsetrail.core.v2_origination import snapshot
+
+        if self.connection.in_transaction:
+            raise ProfileFormatError("origination_requires_committed_snapshot")
+        self.connection.execute("BEGIN")
+        try:
+            return snapshot(self, source_sha256)
+        finally:
+            self.connection.execute("ROLLBACK")
+
+    def preview_loan_origination(
+        self,
+        row_id,
+        *,
+        destination_account_id,
+        acquisition_value_minor,
+        acquisition_date,
+        bank_downpayment_row_id=None,
+        preferences,
+        expected_basis_sha256,
+        reason,
+    ):
+        from parsetrail.core.v2_origination import build_preview
+
+        if self.connection.in_transaction:
+            raise ProfileFormatError("origination_requires_committed_snapshot")
+        self.connection.execute("BEGIN")
+        try:
+            return build_preview(
+                self,
+                row_id,
+                destination_account_id=destination_account_id,
+                acquisition_value_minor=acquisition_value_minor,
+                acquisition_date=acquisition_date,
+                bank_downpayment_row_id=bank_downpayment_row_id,
+                preferences=preferences,
+                expected_basis_sha256=expected_basis_sha256,
+                reason=reason,
+            )
+        finally:
+            self.connection.execute("ROLLBACK")
+
+    def post_loan_origination(self, preview):
+        from parsetrail.core.v2_origination import post
+
+        return post(self, preview)
+
+    def withdraw_loan_origination(self, event_id, *, expected_version, reason):
+        from parsetrail.core.v2_origination import withdraw
+
+        return withdraw(self, event_id, expected_version=expected_version, reason=reason)
+
+    def set_tangible_asset_value(
+        self, account_id, *, value_date, amount_minor, annual_rate_basis_points=None, reason, expected_basis_sha256=None
+    ):
+        from parsetrail.core.v2_origination import set_value
+
+        return set_value(
+            self,
+            account_id,
+            value_date=value_date,
+            amount_minor=amount_minor,
+            annual_rate_basis_points=annual_rate_basis_points,
+            reason=reason,
+            expected_basis_sha256=expected_basis_sha256,
+        )
+
+    def tangible_asset_values(self, *, as_of=None):
+        from parsetrail.core.v2_origination import values
+
+        return values(self, as_of=as_of)
+
+    def lock_pdf_import_account(self, account_id, source_sha256):
+        from parsetrail.core.v2_review_decisions import lock_pdf_account
+
+        return lock_pdf_account(self, account_id, source_sha256)
+
+    def zero_amount_review_history(self, row_id=None):
+        from parsetrail.core.v2_review_decisions import zero_history
+
+        return zero_history(self, row_id)
+
+    def review_zero_amount(
+        self, row_id, category_id, purpose, *, reason, expected_basis_sha256, expected_revision_id=None
+    ):
+        from parsetrail.core.v2_review_decisions import write_zero
+
+        return write_zero(
+            self,
+            row_id,
+            category_id,
+            purpose,
+            reason=reason,
+            expected_basis_sha256=expected_basis_sha256,
+            expected_revision_id=expected_revision_id,
+        )
+
+    def withdraw_zero_amount_review(self, row_id, *, reason, expected_basis_sha256, expected_revision_id):
+        from parsetrail.core.v2_review_decisions import write_zero
+
+        return write_zero(
+            self,
+            row_id,
+            None,
+            None,
+            reason=reason,
+            expected_basis_sha256=expected_basis_sha256,
+            expected_revision_id=expected_revision_id,
+            action="withdrawn",
+        )
+
     def financial_account_scope_locked(self, account_id: str) -> bool:
         """One policy for metadata editing and interpretation-history scope locks."""
         self._require_financial_account(account_id)
@@ -2407,6 +2569,8 @@ class V2ProfileStore:
             "AccountDatedValues",
             "AccountLifecycleDecisions",
             "PendingTransferReviews",
+            "TangibleAssetValues",
+            "ZeroAmountReviews",
         ):
             if self.connection.execute(f"SELECT 1 FROM {table} WHERE account_id=? LIMIT 1", (account_id,)).fetchone():
                 return True
@@ -2444,6 +2608,13 @@ class V2ProfileStore:
             is None
         ):
             raise ProfileFormatError("financial_account_missing")
+
+    def _require_statement_account(self, account_id: str) -> None:
+        self._require_financial_account(account_id)
+        if self.connection.execute("SELECT product_type FROM Accounts WHERE id=?", (account_id,)).fetchone() == (
+            "vehicle",
+        ):
+            raise ProfileFormatError("tangible_asset_cannot_bind_statement")
 
     def add_category_account(self, account_id: str, name: str, kind: Literal["expense", "income"]) -> None:
         """Create a fresh authored ledger category without source interpretation."""
@@ -2703,6 +2874,11 @@ class V2ProfileStore:
             loan_query += " AND entry_key<>?"
         for row_id, amount in self.connection.execute(loan_query + " GROUP BY row_id", parameters):
             result[row_id] = result.get(row_id, 0) + amount
+        origination_query = f"SELECT row_id,SUM(amount_minor) FROM LoanOriginationSourceUses WHERE entry_key NOT IN ({_INACTIVE_JOURNAL_SQL})"
+        if excluding is not None:
+            origination_query += " AND entry_key<>?"
+        for row_id, amount in self.connection.execute(origination_query + " GROUP BY row_id", parameters):
+            result[row_id] = result.get(row_id, 0) + amount
         return result
 
     def _inactive_journal_keys(self) -> frozenset[str]:
@@ -2804,6 +2980,11 @@ class V2ProfileStore:
 
     def _require_unposted_rows(self, row_ids: tuple[str, ...]) -> None:
         from parsetrail.core.v2_pending_transfers import read_history
+        from parsetrail.core.v2_review_decisions import zero_history
+
+        zero_latest = {review.row_id: review for review in zero_history(self)}
+        if any(row in zero_latest and zero_latest[row].action == "reviewed" for row in row_ids):
+            raise ProfileFormatError("account_binding_has_zero_review")
 
         latest = {r.row_id: r for r in read_history(self)}
         if any(row in latest and latest[row].action == "pending" for row in row_ids):
@@ -2812,8 +2993,8 @@ class V2ProfileStore:
             batch = row_ids[offset : offset + 500]
             placeholders = ",".join("?" for _ in batch)
             if self.connection.execute(
-                f"SELECT 1 FROM JournalAllocations WHERE row_id IN ({placeholders}) UNION SELECT 1 FROM LoanSourceUses WHERE row_id IN ({placeholders}) LIMIT 1",
-                (*batch, *batch),
+                f"SELECT 1 FROM JournalAllocations WHERE row_id IN ({placeholders}) UNION SELECT 1 FROM LoanSourceUses WHERE row_id IN ({placeholders}) UNION SELECT 1 FROM LoanOriginationSourceUses WHERE row_id IN ({placeholders}) LIMIT 1",
+                (*batch, *batch, *batch),
             ).fetchone():
                 raise ProfileFormatError("account_binding_has_journal_history")
             if self.connection.execute(
@@ -3059,6 +3240,7 @@ class V2ProfileStore:
             "SourceOverlapReviews",
             "BindingCorrections",
             "PendingTransferReviews",
+            *RESOLUTION_TABLES,
         ):
             digest.update(table.encode())
             columns = "source_sha256,definition_sha256,size,sha256" if table == "EvidenceSnapshots" else "*"
@@ -3663,6 +3845,37 @@ class V2ProfileStore:
         self._read_binding_corrections()
         self._validate_loan_history()
         payloads = dict(self.connection.execute("SELECT key,payload FROM JournalEntries"))
+        if not self._loan_mutating:
+            from parsetrail.core.v2_resolution import validate_history
+
+            validate_history(self)
+        from parsetrail.core.v2_review_decisions import zero_history
+
+        zero_history(self)
+        from parsetrail.core.v2_origination import history as origination_history
+
+        if not self._origination_mutating:
+            origination_history(self)
+        active_usage = {}
+        for table in ("JournalAllocations", "LoanSourceUses", "LoanOriginationSourceUses"):
+            for row_id, amount in self.connection.execute(
+                f"SELECT row_id,SUM(amount_minor) FROM {table} WHERE entry_key NOT IN ({_INACTIVE_JOURNAL_SQL}) GROUP BY row_id"
+            ):
+                active_usage[row_id] = active_usage.get(row_id, 0) + amount
+        for row_id, used in active_usage.items():
+            observed = self.connection.execute(
+                "SELECT amount_minor FROM SourceObservations WHERE row_id=?", (row_id,)
+            ).fetchone()
+            if observed is None or (
+                used
+                and (
+                    type(observed[0]) is not int
+                    or observed[0] == 0
+                    or (used > 0) != (observed[0] > 0)
+                    or abs(used) > abs(observed[0])
+                )
+            ):
+                raise ProfileFormatError("financial_source_overallocated")
         if not payloads:
             return
         entries = {key: _decode_journal(payload) for key, payload in payloads.items()}
@@ -3810,6 +4023,28 @@ class V2ProfileStore:
                     if kind == "register"
                     else self.card_purchase_review_rows(source_sha256, preferences=preferences)
                 )
+                from parsetrail.core.v2_review_decisions import zero_history, zero_source
+
+                zero_latest = {review.row_id: review for review in zero_history(self)}
+                qualified_rows = []
+                for row in rows:
+                    if row.amount_minor == 0:
+                        try:
+                            zero_source(self, row.row_id)
+                        except ProfileFormatError:
+                            pass
+                        else:
+                            decision = zero_latest.get(row.row_id)
+                            active_zero = decision is not None and decision.action == "reviewed"
+                            row = replace(
+                                row,
+                                status="Reviewed zero amount" if active_zero else "Ready for purpose review",
+                                allowed_purposes=tuple(CATEGORY_PURPOSE_KINDS),
+                                category_id=decision.category_id if active_zero else None,
+                                purpose=decision.purpose if active_zero else None,
+                            )
+                    qualified_rows.append(row)
+                rows = tuple(qualified_rows)
                 keys = tuple(dict.fromkeys(row.entry_key for row in rows if row.entry_key is not None))
                 entries = tuple(self._ordinary_category_entry(key)[0] for key in keys)
                 row_ids = {row.row_id for row in _rows(saved.evidence)}
@@ -3847,6 +4082,7 @@ class V2ProfileStore:
                     pending,
                     tuple(r for r in read_history(self) if r.source_sha256 == source_sha256),
                     eligible_transfers,
+                    tuple(review for review in zero_latest.values() if review.source_sha256 == source_sha256),
                 )
         finally:
             self.connection.execute("ROLLBACK")
@@ -3854,6 +4090,32 @@ class V2ProfileStore:
     def _source_interpretation_owners(self, row_ids: set[str]) -> tuple[SourceInterpretationOwner, ...]:
         """Link active consumed evidence to its verified whole-event workflow."""
         owners = {}
+        from parsetrail.core.v2_origination import history as origination_history
+
+        for event in origination_history(self):
+            if event.status == "active":
+                for row_id in {event.row_id, event.bank_downpayment_row_id} & row_ids:
+                    owners[row_id] = SourceInterpretationOwner(
+                        row_id, "origination", event.event_id, "Reviewed loan origination"
+                    )
+        from parsetrail.core.v2_resolution import validate_history
+
+        resolution_items, resolution_links = validate_history(self)
+        matched_ids = {
+            identity
+            for link in resolution_links
+            if link.status == "active"
+            for identity in (link.outgoing_id, link.incoming_id)
+        }
+        for item in resolution_items:
+            if item.status != "withdrawn":
+                for row_id in set(item.row_ids) & row_ids:
+                    owners[row_id] = SourceInterpretationOwner(
+                        row_id,
+                        "resolution",
+                        item.id,
+                        "Posted transfer · matched" if item.id in matched_ids else "Posted transfer · awaiting match",
+                    )
         for event in self._read_transfer_history()[0]:
             if event.status != "active":
                 continue
@@ -3863,7 +4125,10 @@ class V2ProfileStore:
         for event in self._read_loan_history()[0]:
             if event.status == "active":
                 for row_id in set(event.manifest.row_ids) & row_ids:
-                    owners[row_id] = SourceInterpretationOwner(row_id, "loan", event.event_id, "Reviewed loan payment")
+                    if row_id not in owners:
+                        owners[row_id] = SourceInterpretationOwner(
+                            row_id, "loan", event.event_id, "Reviewed loan payment"
+                        )
         for row_id, entries in self._active_reviewed_entries_for_rows(row_ids).items():
             if row_id not in owners:
                 owners[row_id] = SourceInterpretationOwner(
@@ -4335,6 +4600,47 @@ class V2ProfileStore:
             self.connection.execute("ROLLBACK")
             raise
 
+    def resolution_snapshot(self, *, preferences: V2Preferences, max_day_gap: int = 7):
+        from parsetrail.core.v2_resolution import snapshot
+
+        if self.connection.in_transaction:
+            raise ProfileFormatError("resolution_requires_committed_snapshot")
+        self.connection.execute("BEGIN")
+        try:
+            return snapshot(self, preferences=preferences, max_day_gap=max_day_gap)
+        finally:
+            self.connection.execute("ROLLBACK")
+
+    def post_unresolved_transfer(self, row_id, *, preferences, expected_basis_sha256, reason):
+        from parsetrail.core.v2_resolution import post_leg
+
+        return post_leg(
+            self, row_id, preferences=preferences, expected_basis_sha256=expected_basis_sha256, reason=reason
+        )
+
+    def resolve_transfer(self, outgoing_id, incoming_id, *, preferences, expected_basis_sha256, reason, max_day_gap=7):
+        from parsetrail.core.v2_resolution import resolve
+
+        return resolve(
+            self,
+            outgoing_id,
+            incoming_id,
+            preferences=preferences,
+            expected_basis_sha256=expected_basis_sha256,
+            reason=reason,
+            max_day_gap=max_day_gap,
+        )
+
+    def withdraw_transfer_resolution(self, link_id, *, expected_version, reason):
+        from parsetrail.core.v2_resolution import withdraw_link
+
+        return withdraw_link(self, link_id, expected_version=expected_version, reason=reason)
+
+    def withdraw_unresolved_transfer(self, event_id, *, expected_version, reason):
+        from parsetrail.core.v2_resolution import withdraw_leg
+
+        return withdraw_leg(self, event_id, expected_version=expected_version, reason=reason)
+
     def pending_transfer_match_snapshot(self, *, preferences: V2Preferences, max_day_gap: int = 7):
         return self.transfer_review_snapshot(
             preferences=preferences, max_day_gap=max_day_gap, require_pending_intents=True
@@ -4366,6 +4672,7 @@ class V2ProfileStore:
                 amount = row.amount.minor
                 if (
                     account is None
+                    or account.product_type == "vehicle"
                     or row.row_role != "activity"
                     or row.components
                     or type(amount) is not int
@@ -5965,7 +6272,8 @@ class V2ProfileStore:
             self._read_loan_history()
 
     def _loan_validate_source(self, manifest: LoanPaymentManifest, *, active: bool) -> None:
-        self._validate_transfer_movements_source((manifest.bank,))
+        if manifest.bank is not None:
+            self._validate_transfer_movements_source((manifest.bank,))
         for proof in manifest.components:
             saved = self.load_import(proof.source_sha256)
             row = next((r for r in _rows(saved.evidence) if r.row_id == proof.row_id), None)
@@ -5985,7 +6293,11 @@ class V2ProfileStore:
                 raise ProfileFormatError("loan_history_integrity")
         if active:
             for source_id, row_id, account_id in (
-                (manifest.bank.source_sha256, manifest.bank.row_id, manifest.bank.account_id),
+                *(
+                    ((manifest.bank.source_sha256, manifest.bank.row_id, manifest.bank.account_id),)
+                    if manifest.bank
+                    else ()
+                ),
                 *((p.source_sha256, p.row_id, p.account_id) for p in manifest.components),
             ):
                 if {b.row_id: b.ledger_account_id for b in self.account_bindings(source_id)}.get(row_id) != account_id:
@@ -6041,21 +6353,25 @@ class V2ProfileStore:
                 actual_versions = json.dumps(
                     [[e.key, _digest(_journal_payload(e).encode())] for e in entries], separators=(",", ":")
                 )
-                if versions != actual_versions or not manifest.bank.date_allowed:
+                if versions != actual_versions or (manifest.bank is not None and not manifest.bank.date_allowed):
                     raise ValueError
                 action = action_records.get(event_id)
                 if action is not None and action[2] != checksum:
                     raise ValueError
                 active = action is None
                 self._loan_validate_source(manifest, active=active)
-                observations = {
-                    manifest.bank.row_id: Observation(
-                        manifest.bank.row_id,
-                        manifest.bank.account_id,
-                        manifest.bank.amount_minor,
-                        date.fromisoformat(manifest.bank.posting_date),
-                    )
-                }
+                observations = (
+                    {
+                        manifest.bank.row_id: Observation(
+                            manifest.bank.row_id,
+                            manifest.bank.account_id,
+                            manifest.bank.amount_minor,
+                            date.fromisoformat(manifest.bank.posting_date),
+                        )
+                    }
+                    if manifest.bank
+                    else {}
+                )
                 for proof in manifest.components:
                     key = event_id + ":loan:" + proof.row_id
                     expected_uses.add((event_id, key, proof.row_id, proof.raw_amount_minor))
@@ -6081,14 +6397,17 @@ class V2ProfileStore:
                     indexed = self.connection.execute(
                         "SELECT row_id,amount_minor FROM JournalAllocations WHERE entry_key=?", (entry.key,)
                     ).fetchall()
-                    if indexed != ([(manifest.bank.row_id, manifest.bank.amount_minor)] if index == 0 else []):
+                    bank_entry = manifest.bank is not None and index == 0
+                    if indexed != ([(manifest.bank.row_id, manifest.bank.amount_minor)] if bank_entry else []):
                         raise ValueError
                     validate_entry(
                         entry,
                         accounts,
                         observations,
                         {},
-                        component_proofs=() if index == 0 else (manifest.components[index - 1],),
+                        component_proofs=()
+                        if bank_entry
+                        else (manifest.components[index - (1 if manifest.bank else 0)],),
                     )
                     if action is not None and self.connection.execute(
                         "SELECT reason FROM JournalRetirements WHERE original_key=?", (entry.key,)
@@ -6096,7 +6415,7 @@ class V2ProfileStore:
                         raise ValueError
                 if active:
                     for rid, amount in (
-                        (manifest.bank.row_id, manifest.bank.amount_minor),
+                        *(((manifest.bank.row_id, manifest.bank.amount_minor),) if manifest.bank else ()),
                         *((p.row_id, p.raw_amount_minor) for p in manifest.components),
                     ):
                         if rid in active_uses:
@@ -6154,7 +6473,9 @@ class V2ProfileStore:
                     (rid,),
                 ).fetchall()
                 expected_bank = [
-                    e.entry_keys[0] for e in events if e.status == "active" and e.manifest.bank.row_id == rid
+                    e.entry_keys[0]
+                    for e in events
+                    if e.status == "active" and e.manifest.bank is not None and e.manifest.bank.row_id == rid
                 ]
                 if rows != [(key,) for key in expected_bank]:
                     raise ValueError
@@ -6294,9 +6615,9 @@ class V2ProfileStore:
             self.connection.execute("ROLLBACK")
 
     @staticmethod
-    def _loan_request(bank_row_id: str, loan_row_ids: tuple[str, ...]) -> tuple[str, tuple[str, ...]]:
+    def _loan_request(bank_row_id: str | None, loan_row_ids: tuple[str, ...]) -> tuple[str | None, tuple[str, ...]]:
         if (
-            type(bank_row_id) is not str
+            (bank_row_id is not None and type(bank_row_id) is not str)
             or type(loan_row_ids) is not tuple
             or not 1 <= len(loan_row_ids) <= 32
             or any(type(r) is not str for r in loan_row_ids)
@@ -6314,9 +6635,13 @@ class V2ProfileStore:
             if m.account_kind == "asset" and m.amount_minor < 0
         }
         try:
-            if any(not rows[rid].eligible for rid in row_ids) or not bank[bank_id].date_allowed:
+            if any(not rows[rid].eligible for rid in row_ids) or (
+                bank_id is not None and not bank[bank_id].date_allowed
+            ):
                 raise ProfileFormatError("loan_selection_unavailable_or_date_disabled")
-            manifest = LoanPaymentManifest(bank[bank_id], tuple(rows[rid].proof for rid in row_ids))
+            manifest = LoanPaymentManifest(
+                bank[bank_id] if bank_id is not None else None, tuple(rows[rid].proof for rid in row_ids)
+            )
             validate_manifest(manifest)
             manifest_payload(manifest)
             self._loan_validate_source(manifest, active=True)
@@ -6341,14 +6666,18 @@ class V2ProfileStore:
         return accounts
 
     def _loan_validate_entries(self, manifest, entries, accounts) -> None:
-        observations = {
-            manifest.bank.row_id: Observation(
-                manifest.bank.row_id,
-                manifest.bank.account_id,
-                manifest.bank.amount_minor,
-                date.fromisoformat(manifest.bank.posting_date),
-            )
-        }
+        observations = (
+            {
+                manifest.bank.row_id: Observation(
+                    manifest.bank.row_id,
+                    manifest.bank.account_id,
+                    manifest.bank.amount_minor,
+                    date.fromisoformat(manifest.bank.posting_date),
+                )
+            }
+            if manifest.bank
+            else {}
+        )
         for proof in manifest.components:
             if proof.principal_minor:
                 oid = principal_id(entries[0].event_id, proof.row_id)
@@ -6361,12 +6690,14 @@ class V2ProfileStore:
                 accounts,
                 observations,
                 {},
-                component_proofs=() if index == 0 else (manifest.components[index - 1],),
+                component_proofs=()
+                if manifest.bank is not None and index == 0
+                else (manifest.components[index - (1 if manifest.bank else 0)],),
             )
 
     def loan_payment_preview(
         self,
-        bank_row_id: str,
+        bank_row_id: str | None,
         loan_row_ids: tuple[str, ...],
         *,
         preferences: V2Preferences,
@@ -6433,13 +6764,13 @@ class V2ProfileStore:
             self.connection.execute(
                 "INSERT INTO JournalEntries(key,payload) VALUES (?,?)", (entry.key, _journal_payload(entry))
             )
-            if index == 0:
+            if manifest.bank is not None and index == 0:
                 self.connection.execute(
                     "INSERT INTO JournalAllocations VALUES (?,?,?)",
                     (entry.key, manifest.bank.row_id, manifest.bank.amount_minor),
                 )
                 continue
-            proof = manifest.components[index - 1]
+            proof = manifest.components[index - (1 if manifest.bank else 0)]
             self.connection.execute(
                 "INSERT INTO LoanSourceUses VALUES (?,?,?,?)",
                 (event_id, entry.key, proof.row_id, proof.raw_amount_minor),
@@ -6457,7 +6788,7 @@ class V2ProfileStore:
 
     def post_reviewed_loan_payment(
         self,
-        bank_row_id: str,
+        bank_row_id: str | None,
         loan_row_ids: tuple[str, ...],
         *,
         expected_basis_sha256: str,
@@ -6474,7 +6805,11 @@ class V2ProfileStore:
                 ).fetchone()[0]
                 if (
                     prior_basis == expected_basis_sha256
-                    and (event.manifest.bank.row_id, tuple(p.row_id for p in event.manifest.components)) == request
+                    and (
+                        event.manifest.bank.row_id if event.manifest.bank else None,
+                        tuple(p.row_id for p in event.manifest.components),
+                    )
+                    == request
                     and event.reason == reason
                     and event.reference == reference.strip()
                 ):
@@ -6526,6 +6861,9 @@ class V2ProfileStore:
             event = next((e for e in events if e.event_id == event_id), None)
             if event is None or event.status != "active" or event.version != expected_event_version:
                 raise ProfileFormatError("loan_event_changed_since_selection")
+            from parsetrail.core.v2_resolution import require_unmatched
+
+            require_unmatched(self, event_id)
             basis = self._source_overlap_basis()
             self._loan_mutating = True
             for key in event.entry_keys:
@@ -6549,7 +6887,7 @@ class V2ProfileStore:
     def replace_reviewed_loan(
         self,
         event_id: str,
-        bank_row_id: str,
+        bank_row_id: str | None,
         loan_row_ids: tuple[str, ...],
         *,
         expected_event_version: str,
@@ -6579,7 +6917,11 @@ class V2ProfileStore:
                     "SELECT request_basis FROM LoanEventActions WHERE action_id=?", (receipt.action_id,)
                 ).fetchone()[0]
                 if (
-                    (result.manifest.bank.row_id, tuple(p.row_id for p in result.manifest.components)) == request
+                    (
+                        result.manifest.bank.row_id if result.manifest.bank else None,
+                        tuple(p.row_id for p in result.manifest.components),
+                    )
+                    == request
                     and result.reference == reference.strip()
                     and expected_basis_sha256 == basis
                 ):
@@ -6588,6 +6930,9 @@ class V2ProfileStore:
             event = next((e for e in events if e.event_id == event_id), None)
             if event is None or event.status != "active" or event.version != expected_event_version:
                 raise ProfileFormatError("loan_event_changed_since_selection")
+            from parsetrail.core.v2_resolution import require_unmatched
+
+            require_unmatched(self, event_id)
             self._loan_require_basis(expected_basis_sha256)
             manifest = self._loan_build(request, preferences, event.entry_keys)
             self._loan_mutating = True
@@ -6656,6 +7001,8 @@ class V2ProfileStore:
                 if posting.account_id in totals:
                     totals[posting.account_id] += direction * posting.amount_minor
         unresolved_rows, unresolved_sources = self._unallocated_activity_counts()
+        from parsetrail.core.v2_resolution import unmatched_items
+
         return ReviewedCategorySummary(
             start,
             end,
@@ -6669,6 +7016,7 @@ class V2ProfileStore:
             unresolved_sources,
             excluded_unreviewed,
             reviewed_entry_count,
+            len(unmatched_items(self, start=start, end=end)),
         )
 
     def monthly_budget_summary(self, month: date) -> MonthlyBudgetSummary:
@@ -6704,6 +7052,7 @@ class V2ProfileStore:
             spending.activity_rows_without_full_allocation,
             spending.sources_with_incomplete_activity,
             spending.excluded_unreviewed_entries,
+            spending.unresolved_transfer_count,
         )
 
     def financial_journal_summary(self, *, start: date, end: date) -> FinancialJournalSummary:
@@ -6725,6 +7074,8 @@ class V2ProfileStore:
                 if entry.key in opening_keys:
                     opening_seen.add(posting.account_id)
         unresolved_rows, unresolved_sources = self._unallocated_activity_counts()
+        from parsetrail.core.v2_resolution import unmatched_items
+
         return FinancialJournalSummary(
             start,
             end,
@@ -6741,6 +7092,7 @@ class V2ProfileStore:
             unresolved_rows,
             unresolved_sources,
             excluded_unreviewed,
+            len(unmatched_items(self, start=start, end=end)),
         )
 
     def account_positions(self, *, as_of: date) -> AccountPositionsSummary:
@@ -6973,8 +7325,19 @@ class V2ProfileStore:
             for posting in entry.postings
             if posting.account_id == "internal:transfer-clearing:USD"
         )
+        from parsetrail.core.v2_resolution import unmatched_items
+
+        unmatched = unmatched_items(self, as_of=as_of)
         return AccountPositionsSummary(
-            as_of, "USD", tuple(result), unbound, unresolved_rows, unresolved_sources, clearing
+            as_of,
+            "USD",
+            tuple(result),
+            unbound,
+            unresolved_rows,
+            unresolved_sources,
+            clearing,
+            len(unmatched),
+            unmatched,
         )
 
     def reviewed_journal_export(self, *, start: date, end: date) -> ReviewedJournalExport:
@@ -7051,6 +7414,21 @@ class V2ProfileStore:
         ):
             raise ProfileFormatError("journal_export_source_row_missing")
         unresolved_rows, unresolved_sources = self._unallocated_activity_counts()
+        from parsetrail.core.v2_origination import history as origination_history
+        from parsetrail.core.v2_origination import value_history
+        from parsetrail.core.v2_resolution import validate_history as resolution_history
+        from parsetrail.core.v2_review_decisions import zero_history
+
+        resolution_items, resolution_links = resolution_history(self)
+        matched_ids = {
+            identity
+            for link in resolution_links
+            if link.status == "active"
+            for identity in (link.outgoing_id, link.incoming_id)
+        }
+        resolution_items = tuple(
+            replace(item, status="matched") if item.id in matched_ids else item for item in resolution_items
+        )
         return ReviewedJournalExport(
             start,
             end,
@@ -7072,6 +7450,11 @@ class V2ProfileStore:
             self._read_loan_history()[0],
             self._read_loan_history()[1],
             self.loan_source_links(),
+            resolution_items,
+            resolution_links,
+            origination_history(self),
+            zero_history(self),
+            value_history(self),
         )
 
     def _insert_reviewed_category(
@@ -7193,6 +7576,10 @@ class V2ProfileStore:
             ).fetchone()
             if source != (source_sha256,):
                 raise ProfileFormatError("ordinary_batch_row_outside_source")
+            if self.connection.execute(
+                "SELECT amount_minor FROM SourceObservations WHERE row_id=?", (item.row_id,)
+            ).fetchone() == (0,):
+                continue
             category = self.connection.execute(
                 "SELECT kind,role FROM Accounts WHERE id=?", (item.category_id,)
             ).fetchone()
@@ -7314,6 +7701,65 @@ class V2ProfileStore:
                 raise ProfileFormatError("pending_transfer_withdrawal_required")
         return tuple(pending), tuple(withdrawals)
 
+    def _ordinary_zero_effects(self, source_sha256, selections, *, retry=False):
+        from parsetrail.core.v2_ordinary_batch import OrdinaryCategorySelection
+        from parsetrail.core.v2_review_decisions import ZeroReviewDraft, zero_draft, zero_history
+
+        result = []
+        latest = {r.row_id: r for r in zero_history(self)}
+        for selected in selections:
+            if type(selected) is not OrdinaryCategorySelection:
+                continue
+            if self.connection.execute(
+                "SELECT amount_minor FROM SourceObservations WHERE row_id=? AND source_sha256=?",
+                (selected.row_id, source_sha256),
+            ).fetchone() != (0,):
+                continue
+            if retry and selected.row_id in latest:
+                saved = latest[selected.row_id]
+                result.append(
+                    ZeroReviewDraft(
+                        saved.row_id,
+                        saved.source_sha256,
+                        saved.account_id,
+                        selected.category_id,
+                        selected.purpose,
+                        saved.prior_revision_id,
+                    )
+                )
+            else:
+                result.append(zero_draft(self, selected.row_id, selected.category_id, selected.purpose))
+        return tuple(result)
+
+    def _ordinary_transfer_entries(self, pending, *, preferences, reason, basis, retry=False):
+        from parsetrail.core.v2_loan_payments import digest
+        from parsetrail.core.v2_resolution import canonical, leg_entry, transfer_legs
+
+        preferences = preferences or V2Preferences()
+        if retry:
+            saved = {item.row_ids[0]: item for item in transfer_legs(self)}
+            entries = []
+            for draft in pending:
+                payload = canonical(asdict(draft.movement))
+                identity = "review:unresolved:" + digest([payload, basis, reason])
+                item = saved.get(draft.row_id)
+                if item is None or item.id != identity or item.status == "withdrawn":
+                    raise ProfileFormatError("ordinary_batch_transfer_changed")
+                entries.append(leg_entry(draft.movement, identity, reason))
+            return tuple(entries)
+        available = {m.row_id: m for m in self._transfer_movements(preferences)}
+        entries = []
+        for draft in pending:
+            movement = available.get(draft.row_id)
+            if movement is None or not movement.date_allowed:
+                raise ProfileFormatError("resolution_date_permission_required")
+            if movement != draft.movement:
+                raise ProfileFormatError("ordinary_batch_transfer_changed")
+            payload = canonical(asdict(movement))
+            identity = "review:unresolved:" + digest([payload, basis, reason])
+            entries.append(leg_entry(movement, identity, reason))
+        return tuple(entries)
+
     def preview_reviewed_ordinary_batch(
         self,
         source_sha256: str,
@@ -7340,6 +7786,10 @@ class V2ProfileStore:
                     source_sha256, kind, selections, reason.strip(), preferences, cancelled
                 )
                 pending, withdrawals = self._ordinary_pending_effects(source_sha256, kind, selections, reason.strip())
+                transfers = self._ordinary_transfer_entries(
+                    pending, preferences=preferences, reason=reason.strip(), basis=expected_basis_sha256
+                )
+                zeros = self._ordinary_zero_effects(source_sha256, selections)
                 preview = OrdinaryBatchPreview(
                     source_sha256,
                     kind,
@@ -7352,6 +7802,8 @@ class V2ProfileStore:
                     "",
                     pending,
                     withdrawals,
+                    transfers,
+                    zeros,
                 )
                 return replace(preview, preview_sha256=preview_digest(preview))
         except LedgerError:
@@ -7376,7 +7828,9 @@ class V2ProfileStore:
             or type(preview.entries) is not tuple
             or type(preview.pending_transfers) is not tuple
             or type(preview.pending_transfer_withdrawals) is not tuple
-            or not (preview.entries or preview.pending_transfers)
+            or type(preview.transfer_entries) is not tuple
+            or type(preview.zero_reviews) is not tuple
+            or not (preview.entries or preview.pending_transfers or preview.zero_reviews)
             or any(type(entry) is not JournalEntry for entry in preview.entries)
             or preview.preview_sha256 != preview_digest(preview)
         ):
@@ -7392,6 +7846,8 @@ class V2ProfileStore:
             with self._verified_source_operation(cancelled):
                 from parsetrail.core.v2_ordinary_batch import OrdinaryCategorySelection
                 from parsetrail.core.v2_pending_transfers import insert_draft, read_history
+                from parsetrail.core.v2_resolution import insert_leg
+                from parsetrail.core.v2_review_decisions import insert_zero, zero_history
 
                 check_cancelled(cancelled)
                 if preview.profile_sha256 != profile_identity(self):
@@ -7402,6 +7858,7 @@ class V2ProfileStore:
                 )
                 pending_effects = preview.pending_transfers + preview.pending_transfer_withdrawals
                 latest = {r.row_id: r for r in read_history(self)}
+                latest_zeros = {r.row_id: r for r in zero_history(self)}
 
                 def saved_effect(item):
                     saved = latest.get(item.row_id)
@@ -7415,7 +7872,32 @@ class V2ProfileStore:
                         and saved.reason == preview.reason
                     )
 
-                retry = all(item is not None for item in prior) and all(saved_effect(item) for item in pending_effects)
+                def saved_zero(item):
+                    saved = latest_zeros.get(item.row_id)
+                    return (
+                        saved is not None
+                        and saved.action == "reviewed"
+                        and (
+                            saved.category_id,
+                            saved.purpose,
+                            saved.prior_revision_id,
+                            saved.request_basis,
+                            saved.reason,
+                        )
+                        == (
+                            item.category_id,
+                            item.purpose,
+                            item.prior_revision_id,
+                            preview.basis_sha256,
+                            preview.reason,
+                        )
+                    )
+
+                retry = (
+                    all(item is not None for item in prior)
+                    and all(saved_effect(item) for item in pending_effects)
+                    and all(saved_zero(item) for item in preview.zero_reviews)
+                )
                 if not retry:
                     self._require_source_interpretation_basis(preview.basis_sha256, required=True)
                     pending, withdrawals = self._ordinary_pending_effects(
@@ -7423,6 +7905,16 @@ class V2ProfileStore:
                     )
                     if pending != preview.pending_transfers or withdrawals != preview.pending_transfer_withdrawals:
                         raise ProfileFormatError("ordinary_batch_preview_changed")
+                transfers = self._ordinary_transfer_entries(
+                    preview.pending_transfers,
+                    preferences=preview.preferences,
+                    reason=preview.reason,
+                    basis=preview.basis_sha256,
+                    retry=retry,
+                )
+                zeros = self._ordinary_zero_effects(preview.source_sha256, preview.selections, retry=retry)
+                if transfers != preview.transfer_entries or zeros != preview.zero_reviews:
+                    raise ProfileFormatError("ordinary_batch_preview_changed")
                 entries = self._ordinary_batch_entries(
                     preview.source_sha256,
                     preview.kind,
@@ -7435,7 +7927,12 @@ class V2ProfileStore:
                 if entries != preview.entries:
                     raise ProfileFormatError("ordinary_batch_preview_changed")
                 if not retry:
-                    category_selections = tuple(i for i in preview.selections if type(i) is OrdinaryCategorySelection)
+                    zero_ids = {item.row_id for item in zeros}
+                    category_selections = tuple(
+                        i
+                        for i in preview.selections
+                        if type(i) is OrdinaryCategorySelection and i.row_id not in zero_ids
+                    )
                     for category_id in dict.fromkeys(item.category_id for item in category_selections):
                         self._category_for_posting(category_id)
                     for entry, item in zip(entries, category_selections, strict=True):
@@ -7451,11 +7948,26 @@ class V2ProfileStore:
                     for item in pending_effects:
                         check_cancelled(cancelled)
                         revision_ids.append(insert_draft(self, item, basis=preview.basis_sha256, reason=preview.reason))
+                    resolution_ids = [
+                        insert_leg(self, item.movement, reason=preview.reason, basis=preview.basis_sha256)
+                        for item in preview.pending_transfers
+                    ]
+                    zero_ids = [
+                        insert_zero(self, item, reason=preview.reason, basis=preview.basis_sha256) for item in zeros
+                    ]
                 else:
                     revision_ids = [latest[item.row_id].revision_id for item in pending_effects]
+                    resolution_ids = [entry.event_id for entry in transfers]
+                    zero_ids = [latest_zeros[item.row_id].revision_id for item in zeros]
                 check_cancelled(cancelled)
                 self.connection.execute("COMMIT")
-                return OrdinaryBatchResult(tuple(entry.key for entry in entries), retry, tuple(revision_ids))
+                return OrdinaryBatchResult(
+                    tuple(entry.key for entry in (*entries, *transfers)),
+                    retry,
+                    tuple(revision_ids),
+                    tuple(resolution_ids),
+                    tuple(zero_ids),
+                )
         except BaseException as exc:
             self.connection.execute("ROLLBACK")
             if isinstance(exc, LedgerError):
@@ -8174,7 +8686,7 @@ class V2ProfileStore:
         if destination_account_id is not None and type(destination_account_id) is not str:
             raise ProfileFormatError("binding_correction_invalid")
         if destination_account_id is not None:
-            self._require_financial_account(destination_account_id)
+            self._require_statement_account(destination_account_id)
         accounts = self._binding_scope_accounts(target)
         bindings = tuple(b for b in self.account_bindings(target.source_sha256) if b.row_id in set(rows))
         bindings = tuple(sorted(bindings, key=lambda b: b.row_id))
@@ -8485,7 +8997,7 @@ class V2ProfileStore:
             for binding in self.source_account_bindings(source_sha256)
         }:
             raise ProfileFormatError("source_account_missing")
-        self._require_financial_account(account_id)
+        self._require_statement_account(account_id)
         with self._atomic_write("bind_source_account"):
             prior = self.connection.execute(
                 "SELECT ledger_account_id FROM SourceAccountBindings "
@@ -8531,7 +9043,7 @@ class V2ProfileStore:
     def assert_file_account(self, source_sha256: str, account_id: str) -> None:
         """Assert that every accountless row belongs to one financial account."""
         self._require_writable()
-        self._require_financial_account(account_id)
+        self._require_statement_account(account_id)
         evidence = self.load_import(source_sha256).evidence
         payload = evidence.payload
         if (
@@ -8585,7 +9097,7 @@ class V2ProfileStore:
     def assign_rows_account(self, source_sha256: str, row_ids: tuple[str, ...], account_id: str) -> None:
         """Atomically assign selected rows in a mixed, accountless export."""
         self._require_writable()
-        self._require_financial_account(account_id)
+        self._require_statement_account(account_id)
         evidence = self.load_import(source_sha256).evidence
         payload = evidence.payload
         if (
@@ -8853,6 +9365,11 @@ class V2ProfileStore:
         try:
             accounts = {account.id: account for account in self.financial_accounts()}
             consumed = self._active_consumed()
+            from parsetrail.core.v2_review_decisions import zero_history
+
+            reviewed_zeros = {
+                r.row_id for r in {r.row_id: r for r in zero_history(self)}.values() if r.action == "reviewed"
+            }
             source_accounts = {}
             for source_id, identity, form, account_id in self.connection.execute(
                 "SELECT source_sha256,source_identity,source_identity_form,ledger_account_id FROM SourceAccountBindings"
@@ -8929,7 +9446,11 @@ class V2ProfileStore:
                     start.provenance,
                     end.provenance,
                     len(rows),
-                    sum(row.row_id not in consumed or consumed[row.row_id] != row.amount.minor for row in activity),
+                    sum(
+                        (row.row_id not in consumed or consumed[row.row_id] != row.amount.minor)
+                        and row.row_id not in reviewed_zeros
+                        for row in activity
+                    ),
                     sum(assigned.get(row.row_id) is None for row in activity),
                     any(row.source_account is None for row in activity),
                     isinstance(payload, StatementPayload) or any(row.source_account is not None for row in rows),
@@ -10586,6 +11107,16 @@ class V2ProfileStore:
     def _validate_account_metadata(self) -> None:
         self._validate_builtin_categories()
         self._validate_transfer_clearing()
+        from parsetrail.core.v2_review_decisions import identity_locks
+
+        identity_locks(self)
+        from parsetrail.core.v2_origination import value_history
+
+        value_history(self)
+        if self.connection.execute(
+            "SELECT 1 FROM Accounts a JOIN (SELECT ledger_account_id FROM SourceAccountBindings UNION SELECT ledger_account_id FROM FileAccountAssertions UNION SELECT ledger_account_id FROM RowAccountAssignments) b ON a.id=b.ledger_account_id WHERE a.product_type='vehicle' LIMIT 1"
+        ).fetchone():
+            raise ProfileFormatError("tangible_asset_cannot_bind_statement")
         for (account_id,) in self.connection.execute("SELECT DISTINCT account_id FROM StatementSourceReviews"):
             self.statement_source_review_history(account_id)
         if not self._account_anchors_mutating:

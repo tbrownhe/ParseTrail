@@ -94,14 +94,14 @@ def _loan_metadata(workbook: Workbook, report: ReviewedJournalExport, derived_al
             (
                 event.event_id,
                 event.status,
-                event.manifest.bank.account_id,
-                event.manifest.bank.row_id,
-                event.manifest.bank.source_sha256,
-                event.manifest.bank.posting_date,
+                event.manifest.bank.account_id if event.manifest.bank else "Bank leg stored separately / see Transfers",
+                event.manifest.bank.row_id if event.manifest.bank else None,
+                event.manifest.bank.source_sha256 if event.manifest.bank else None,
+                event.manifest.bank.posting_date if event.manifest.bank else None,
                 event.manifest.components[0].account_id,
                 event.manifest.components[0].account_name,
                 event.manifest.components[0].tracking_scope,
-                str(-event.manifest.bank.amount_minor),
+                str(sum(p.gross_minor for p in event.manifest.components)),
                 str(event.manifest.principal_minor),
                 str(event.manifest.interest_minor),
                 event.reference,
@@ -351,6 +351,182 @@ def _value_metadata(workbook: Workbook, report: ReviewedJournalExport, accounts:
             ],
         )
         names.extend(("Source Value Proofs", "Value Source Locations"))
+    return names
+
+
+def _resolution_metadata(workbook: Workbook, report: ReviewedJournalExport) -> list[str]:
+    names = []
+    if not (
+        report.resolution_items
+        or report.origination_events
+        or report.zero_reviews
+        or report.tangible_asset_value_history
+    ):
+        return names
+    workbook["Scope"].append(
+        (
+            "Resolution and acquisition history",
+            "Full-profile decision history, independent of the selected journal period. Matching state is current, not an inferred historical resolution date. "
+            "Each posted source leg retains its own date; links add no money. Zero reviews and asset value estimates create no journal entries. "
+            "Acquisition movements do not establish an unknown prior opening. Asset acquisition values and subsequent valuations are distinct.",
+        )
+    )
+    if report.resolution_items:
+        _sheet(
+            workbook,
+            "Resolution Legs",
+            (
+                "Event ID",
+                "Kind",
+                "Source rows",
+                "Source SHA-256",
+                "Account",
+                "Captured account name",
+                "Accounting date",
+                "Accounting date provenance",
+                "All component accounting dates / provenance",
+                "Gross minor units",
+                "Direction",
+                "Current status",
+                "Reason",
+                "Entry keys",
+                "Version",
+            ),
+            [
+                (
+                    item.id,
+                    item.kind,
+                    "\n".join(item.row_ids),
+                    item.source_sha256,
+                    item.account_id,
+                    item.account_name,
+                    item.posting_date,
+                    item.date_provenance,
+                    "\n".join(f"{day} ({provenance})" for day, provenance in item.source_dates),
+                    str(item.gross_minor),
+                    item.direction,
+                    item.status,
+                    item.reason,
+                    "\n".join(item.entry_keys),
+                    item.version,
+                )
+                for item in report.resolution_items
+            ],
+        )
+        names.append("Resolution Legs")
+    if report.resolution_links:
+        _sheet(
+            workbook,
+            "Resolution Links",
+            ("Link ID", "Outgoing event", "Incoming event", "Current status", "Reason", "Created at", "Version"),
+            [
+                (
+                    link.link_id,
+                    link.outgoing_id,
+                    link.incoming_id,
+                    link.status,
+                    link.reason,
+                    link.created_at,
+                    link.version,
+                )
+                for link in report.resolution_links
+            ],
+        )
+        names.append("Resolution Links")
+    if report.origination_events:
+        _sheet(
+            workbook,
+            "Loan Originations",
+            (
+                "Event ID",
+                "Source row",
+                "Source SHA-256",
+                "Loan account",
+                "Vehicle account",
+                "Authored acquisition date",
+                "Acquisition minor units",
+                "Printed financed principal minor units",
+                "Bank down payment row",
+                "Status",
+                "Reason",
+                "Entry keys",
+                "Version",
+            ),
+            [
+                (
+                    event.event_id,
+                    event.row_id,
+                    event.source_sha256,
+                    event.account_id,
+                    event.destination_account_id,
+                    event.acquisition_date.isoformat(),
+                    str(event.acquisition_value_minor),
+                    str(event.principal_minor),
+                    event.bank_downpayment_row_id,
+                    event.status,
+                    event.reason,
+                    "\n".join(event.entry_keys),
+                    event.version,
+                )
+                for event in report.origination_events
+            ],
+        )
+        names.append("Loan Originations")
+    if report.zero_reviews:
+        _sheet(
+            workbook,
+            "Zero Amount Reviews",
+            (
+                "Revision",
+                "Source row",
+                "Source SHA-256",
+                "Account",
+                "Category",
+                "Purpose",
+                "Action",
+                "Prior revision",
+                "Reason",
+                "Created at",
+                "Version",
+            ),
+            [
+                (
+                    review.revision_id,
+                    review.row_id,
+                    review.source_sha256,
+                    review.account_id,
+                    review.category_id,
+                    review.purpose,
+                    review.action,
+                    review.prior_revision_id,
+                    review.reason,
+                    review.created_at,
+                    review.version,
+                )
+                for review in report.zero_reviews
+            ],
+        )
+        names.append("Zero Amount Reviews")
+    if report.tangible_asset_value_history:
+        _sheet(
+            workbook,
+            "Asset Value History",
+            (
+                "Revision",
+                "Account",
+                "Value date",
+                "Authored value minor units",
+                "Estimated annual decline basis points",
+                "Reason",
+                "Version",
+                "Created at",
+            ),
+            [
+                (number, account, day, str(amount), rate, reason, version, created)
+                for number, account, day, amount, rate, reason, version, created in report.tangible_asset_value_history
+            ],
+        )
+        names.append("Asset Value History")
     return names
 
 
@@ -746,6 +922,7 @@ def write_reviewed_journal_workbook(report: ReviewedJournalExport, destination_p
         expected_sheets.extend(("Settlement Events", "Settlement Legs", "Settlement Fees"))
     expected_sheets.extend(_loan_metadata(workbook, report, derived_allocations))
     expected_sheets.extend(_value_metadata(workbook, report, accounts))
+    expected_sheets.extend(_resolution_metadata(workbook, report))
     descriptor, partial_name = tempfile.mkstemp(
         prefix=f".{destination.name}.partial.", suffix=".xlsx", dir=destination.parent
     )

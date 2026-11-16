@@ -22,6 +22,7 @@ ACCOUNT_PRODUCTS = (
     AccountProduct("hsa", "Health savings account", "asset", ("account_total", "cash_component")),
     AccountProduct("investment", "Investment account", "asset", ("account_total", "cash_component")),
     AccountProduct("cash", "Other cash account", "asset", ("account_total",)),
+    AccountProduct("vehicle", "Vehicle / tangible asset", "asset", ("account_total",)),
 )
 _PRODUCTS = {product.id: product for product in ACCOUNT_PRODUCTS}
 

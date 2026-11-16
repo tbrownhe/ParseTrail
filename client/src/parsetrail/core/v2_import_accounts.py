@@ -229,6 +229,8 @@ def build_import_account_review(store, recognition, catalog, preferences=None):
 
 
 def _compatible(candidate, section, account):
+    if account.product_type == "vehicle":
+        return False
     return any(
         account.kind == profile.kind
         and account.tracking_scope == profile.tracking_scope
@@ -495,5 +497,8 @@ def commit_import_accounts(
                     store.assert_file_account(plan.selection.source_sha256, choice.account_id)
                 else:
                     store.assign_rows_account(plan.selection.source_sha256, row_ids, choice.account_id)
+        if prepared.suffix == ".pdf":
+            for account in plan.new_accounts:
+                store.lock_pdf_import_account(account.id, plan.selection.source_sha256)
         check_cancelled()
         return SourceImportResult("imported", plan.selection.source_sha256, prepared.evidence)

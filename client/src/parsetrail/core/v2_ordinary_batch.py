@@ -12,6 +12,7 @@ from parsetrail.core.ledger import JournalEntry
 from parsetrail.core.v2_pending_transfers import PendingTransferDraft
 from parsetrail.core.v2_preferences import V2Preferences
 from parsetrail.core.v2_profile_store import CategoryPurpose, ProfileFormatError
+from parsetrail.core.v2_review_decisions import ZeroReviewDraft
 from parsetrail.core.v2_settlements import TransferMovement
 
 
@@ -47,6 +48,8 @@ class OrdinaryBatchPreview:
     preview_sha256: str
     pending_transfers: tuple[PendingTransferDraft, ...] = ()
     pending_transfer_withdrawals: tuple[PendingTransferDraft, ...] = ()
+    transfer_entries: tuple[JournalEntry, ...] = ()
+    zero_reviews: tuple[ZeroReviewDraft, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -54,6 +57,8 @@ class OrdinaryBatchResult:
     entry_keys: tuple[str, ...]
     already_posted: bool = False
     pending_transfer_revision_ids: tuple[int, ...] = ()
+    resolution_event_ids: tuple[str, ...] = ()
+    zero_review_revision_ids: tuple[int, ...] = ()
 
 
 def preview_digest(preview: OrdinaryBatchPreview) -> str:
@@ -76,8 +81,9 @@ def validate_effect_correspondence(preview: OrdinaryBatchPreview) -> None:
     transfers = tuple(i for i in preview.selections if type(i) is OrdinaryTransferSelection)
     withdrawals = tuple(i for i in categories if i.pending_transfer_revision_id is not None)
     valid = (
-        len(preview.entries) == len(categories)
+        len(preview.entries) + len(preview.zero_reviews) == len(categories)
         and len(preview.pending_transfers) == len(transfers)
+        and len(preview.transfer_entries) == len(transfers)
         and len(preview.pending_transfer_withdrawals) == len(withdrawals)
     )
     if valid:
@@ -95,6 +101,18 @@ def validate_effect_correspondence(preview: OrdinaryBatchPreview) -> None:
                     and item.prior_revision_id == getattr(selected, revision_field)
                 )
     if not valid:
+        raise ProfileFormatError("ordinary_batch_effect_selection_mismatch")
+    zero_ids = {item.row_id for item in preview.zero_reviews}
+    if (
+        len(zero_ids) != len(preview.zero_reviews)
+        or not zero_ids <= {item.row_id for item in categories}
+        or any(type(item) is not ZeroReviewDraft for item in preview.zero_reviews)
+        or any(
+            (item.category_id, item.purpose)
+            != next((s.category_id, s.purpose) for s in categories if s.row_id == item.row_id)
+            for item in preview.zero_reviews
+        )
+    ):
         raise ProfileFormatError("ordinary_batch_effect_selection_mismatch")
 
 

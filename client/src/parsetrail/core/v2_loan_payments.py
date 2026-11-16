@@ -222,12 +222,12 @@ def validate_component_postings(
 
 @dataclass(frozen=True)
 class LoanPaymentManifest:
-    bank: TransferMovement
+    bank: TransferMovement | None
     components: tuple[LoanComponentProof, ...]
 
     @property
     def row_ids(self) -> tuple[str, ...]:
-        return (self.bank.row_id, *(p.row_id for p in self.components))
+        return (*((self.bank.row_id,) if self.bank is not None else ()), *(p.row_id for p in self.components))
 
     @property
     def principal_minor(self) -> int:
@@ -245,18 +245,24 @@ def validate_manifest(manifest: LoanPaymentManifest) -> None:
         or not 1 <= len(manifest.components) <= 32
     ):
         raise ValueError("loan_manifest_invalid")
-    validate_movement(manifest.bank)
+    if manifest.bank is not None:
+        validate_movement(manifest.bank)
     for proof in manifest.components:
         validate_component(proof)
     if (
-        manifest.bank.account_kind != "asset"
-        or manifest.bank.amount_minor >= 0
-        or manifest.bank.tracking_scope not in {"account_total", "cash_component"}
-        or len(set(manifest.row_ids)) != len(manifest.row_ids)
+        len(set(manifest.row_ids)) != len(manifest.row_ids)
         or tuple(sorted(manifest.components, key=lambda p: p.row_id)) != manifest.components
         or len({(p.account_id, p.source_sha256, p.parser_id) for p in manifest.components}) != 1
-        or manifest.bank.account_id == manifest.components[0].account_id
-        or sum(p.gross_minor for p in manifest.components) != -manifest.bank.amount_minor
+        or (
+            manifest.bank is not None
+            and (
+                manifest.bank.account_kind != "asset"
+                or manifest.bank.amount_minor >= 0
+                or manifest.bank.tracking_scope not in {"account_total", "cash_component"}
+                or manifest.bank.account_id == manifest.components[0].account_id
+                or sum(p.gross_minor for p in manifest.components) != -manifest.bank.amount_minor
+            )
+        )
     ):
         raise ValueError("loan_manifest_invalid")
     if len(manifest.components) > 1 and manifest.components[0].parser_id != "pdf_wfloanper_202306":
@@ -285,7 +291,8 @@ def decode_manifest(payload: str) -> LoanPaymentManifest:
         ):
             raise ValueError
         result = LoanPaymentManifest(
-            TransferMovement(**data["bank"]), tuple(LoanComponentProof(**p) for p in data["components"])
+            TransferMovement(**data["bank"]) if data["bank"] is not None else None,
+            tuple(LoanComponentProof(**p) for p in data["components"]),
         )
         validate_manifest(result)
         return result
@@ -296,6 +303,8 @@ def decode_manifest(payload: str) -> LoanPaymentManifest:
 def payment_entries(manifest: LoanPaymentManifest, event_id: str, reason: str) -> tuple[JournalEntry, ...]:
     validate_manifest(manifest)
     bank = manifest.bank
+    if bank is None:
+        return tuple(component_entry(p, event_id, reason) for p in manifest.components)
     return (
         JournalEntry(
             event_id + ":bank",

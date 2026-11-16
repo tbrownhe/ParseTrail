@@ -196,7 +196,7 @@ def test_binding_requires_withdrawal_and_preserves_history(tmp_path):
         assert current.account_id == "other" and len(store.pending_transfer_snapshot().history) == 3
 
 
-def test_mixed_batch_exact_no_money_preview_and_atomic_reclassification(tmp_path):
+def test_mixed_batch_posts_unresolved_transfer_then_requires_withdrawal_for_reclassification(tmp_path):
     path = tmp_path / "mixed.db"
     evidence = ordinary_profile(path)
     first, second = evidence.payload.rows[:2]
@@ -209,11 +209,19 @@ def test_mixed_batch_exact_no_money_preview_and_atomic_reclassification(tmp_path
         assert len(preview.entries) == len(preview.pending_transfers) == 1 and counts(store) == (0, 0, 0)
         assert preview.pending_transfers[0].movement.amount_minor == -401
         result = store.post_reviewed_ordinary_batch(preview)
-        assert counts(store) == (1, 1, 1) and len(result.pending_transfer_revision_ids) == 1
+        assert counts(store) == (2, 2, 1) and len(result.pending_transfer_revision_ids) == 1
         assert store.post_reviewed_ordinary_batch(preview).already_posted
         saved = store.pending_transfer_snapshot().rows[0]
         frame = store.source_interpretation_snapshot(evidence.source_sha256, kind="cash")
-        assert frame.pending_transfers == (saved,) and first.row_id in frame.transfer_eligible_row_ids
+        assert frame.pending_transfers == (saved,) and first.row_id not in frame.transfer_eligible_row_ids
+        assert saved.status == "consumed" and frame.owners[0].owner_kind == "resolution"
+        leg = next(
+            item
+            for item in store.resolution_snapshot(preferences=V2Preferences()).items
+            if item.id in result.resolution_event_ids
+        )
+        store.withdraw_unresolved_transfer(leg.id, expected_version=leg.version, reason="Actually a purchase")
+        frame = store.source_interpretation_snapshot(evidence.source_sha256, kind="cash")
         correction = store.preview_reviewed_ordinary_batch(
             evidence.source_sha256,
             kind="cash",
@@ -228,7 +236,7 @@ def test_mixed_batch_exact_no_money_preview_and_atomic_reclassification(tmp_path
         assert len(correction.pending_transfer_withdrawals) == 1
         store.post_reviewed_ordinary_batch(correction)
         assert store.post_reviewed_ordinary_batch(correction).already_posted
-        assert store.pending_transfer_snapshot().rows[0].status == "withdrawn" and counts(store) == (2, 2, 2)
+        assert store.pending_transfer_snapshot().rows[0].status == "withdrawn" and counts(store) == (4, 3, 2)
         with pytest.raises(ProfileFormatError, match="unavailable_or_overlap"):
             designate(store, first.row_id, "Cannot silently turn posted expense into transfer")
 
@@ -259,11 +267,12 @@ def test_mixed_batch_rolls_back_intents_and_journal_on_cancel_or_failure(tmp_pat
         assert counts(store) == (0, 0, 0) and not store.connection.in_transaction
 
 
-def test_older_schema_is_refused_without_mutating_profile(tmp_path):
+@pytest.mark.parametrize("old_schema", [24, 25])
+def test_older_schema_is_refused_without_mutating_profile(tmp_path, old_schema):
     path = tmp_path / "old.db"
     ordinary_profile(path)
     with sqlite3.connect(path) as connection:
-        connection.execute("PRAGMA user_version=24")
+        connection.execute(f"PRAGMA user_version={old_schema}")
     before = path.read_bytes()
     with pytest.raises(ProfileFormatError, match="unsupported_profile_format"):
         V2ProfileStore.open(path)
