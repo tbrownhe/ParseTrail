@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import re
 from datetime import date
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt, Signal
@@ -160,9 +159,9 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
         self.resize(1200, 650)
         layout = QVBoxLayout(self)
         self.review_intro = QLabel(
-            "Review whole-liability charges. Repayments use transfer review; principal and interest are not inferred."
+            "Review whole-liability activity. Save repayments here before matching; principal and interest are not inferred."
             if register_mode
-            else "Choose a transaction's purpose and category, then confirm it. Card payments use transfer review."
+            else "Review card activity. Save transfer/card-repayment designations here; review a match only when you choose."
         )
         self.review_intro.setWordWrap(True)
         layout.addWidget(self.review_intro)
@@ -294,18 +293,7 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
             "Reviewed elsewhere — inspect related history" if external else "Choose a transaction type…",
             "external_history" if external else None,
         )
-        repayment_available = (
-            self.register_mode
-            and row is not None
-            and (row.amount_minor or 0) > 0
-            and not correcting
-            and row.financial_account_kind == "liability"
-            and row.tracking_scope == "account_total"
-            and bool(row.allowed_purposes)
-        )
-        if repayment_available:
-            self.purpose.addItem("Repayment / transfer — review both accounts", "repayment")
-        purposes = (row.purpose,) if correcting else row.allowed_purposes if row is not None else ()
+        purposes = self._offered_purposes(row)
         for purpose in purposes:
             if purpose in PURPOSE_LABELS:
                 self.purpose.addItem(PURPOSE_LABELS[purpose], purpose)
@@ -316,14 +304,8 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
             self.form.setRowVisible(field, not external)
         if correcting:
             self.purpose.setCurrentIndex(max(0, self.purpose.findData(row.purpose)))
-        elif (
-            repayment_available
-            and row.status == "Ready for purpose review"
-            and re.search(r"\b(?:payment|pmt|repayment)\b", row.description or "", re.IGNORECASE)
-        ):
-            # A printed payment label suggests a navigation route, not an
-            # accounting interpretation or a principal component assertion.
-            self.purpose.setCurrentIndex(self.purpose.findData("repayment"))
+        elif self._pending_transfer(row) is not None:
+            self.purpose.setCurrentIndex(max(0, self.purpose.findData("transfer")))
         self.purpose.blockSignals(False)
         self._purpose_changed()
         self.accounting_date.blockSignals(True)
@@ -468,7 +450,7 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
                     else "; choose purpose explicitly; owned card and loan-register repayments use transfer review"
                     if purpose is None
                     else f"; use Manage categories to add an {PURPOSE_KINDS[purpose]} category"
-                    if self.category.count() == 1
+                    if self.category.count() == 1 and purpose in PURPOSE_KINDS
                     else ""
                 )
             )
@@ -591,6 +573,8 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
         self.refresh(selected_row_id=selected.row_id if selected is not None else None)
 
     def _act(self) -> None:
+        if self._act_pending_transfer():
+            return
         if not self._single_selection():
             return
         if _reviewed_elsewhere(self._current()) and self.action_button.isEnabled():
@@ -716,6 +700,8 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
         )
 
     def _withdraw(self) -> None:
+        if self._withdraw_pending_transfer():
+            return
         if not self._single_selection():
             return
         row, reason = self._current(), self.reason.text().strip()

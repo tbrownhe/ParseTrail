@@ -172,11 +172,12 @@ class V2TransferReview(QDialog):
 
     HEADERS = ("Type", "Sent", "From", "Received", "To", "Amount", "Other matches", "Source descriptions")
 
-    def __init__(self, workspace: V2Workspace, parent=None, *, focus_row_id=None):
+    def __init__(self, workspace: V2Workspace, parent=None, *, focus_row_id=None, require_pending_intents=False):
         super().__init__(parent)
         install_initial_focus(self)
         self.workspace = workspace
         self._focus_row_id = focus_row_id
+        self.require_pending_intents = require_pending_intents
         self._worker = None
         self._generation = 0
         self._closed = False
@@ -209,7 +210,12 @@ class V2TransferReview(QDialog):
         profile_row.addWidget(self.profile_path)
         layout.addLayout(profile_row)
         note = QLabel(
-            "Review both sources before confirming a transfer. No income or spending is created. "
+            (
+                "Only saved transfer/card-repayment designations on both sides are matched here. "
+                if require_pending_intents
+                else ""
+            )
+            + "Review both sources before confirming a transfer. No income or spending is created. "
             "Liability repayments do not establish a principal/interest split. Different source dates retain transfer clearing."
         )
         note.setWordWrap(True)
@@ -280,6 +286,11 @@ class V2TransferReview(QDialog):
         self.full_settlement.clicked.connect(self._new_settlement)
         layout.addWidget(self.full_settlement)
         self._build_history_tabs()
+        if require_pending_intents:
+            self.tabs.setTabVisible(self.tabs.indexOf(self.events_page), False)
+            self.tabs.setTabVisible(self.tabs.indexOf(self.reviews_page), False)
+            self.full_settlement.hide()
+            self.dismiss.hide()
         self.tabs.currentChanged.connect(
             lambda: self.plan_page.review.setDefault(self.tabs.currentWidget() is self.plan_page)
         )
@@ -454,12 +465,17 @@ class V2TransferReview(QDialog):
             return
         self._requested = False
         preferences, gap = self.workspace.preferences(), self.gap.value()
+        require_pending = self.require_pending_intents
         self.assumed_dates.blockSignals(True)
         self.assumed_dates.setChecked(preferences.allow_assumed_posting_dates)
         self.assumed_dates.blockSignals(False)
 
         def read(store, job):
-            snapshot = store.transfer_review_snapshot(preferences=preferences, max_day_gap=gap)
+            snapshot = store.transfer_review_snapshot(
+                preferences=preferences,
+                max_day_gap=gap,
+                **({"require_pending_intents": True} if require_pending else {}),
+            )
             plan = plan_transfers(snapshot, cancelled=job.isInterruptionRequested)
             note_limit = 200
             if plan.selectable_pairs:
@@ -654,6 +670,8 @@ class V2TransferReview(QDialog):
             self.event_status.setText(self._completion_message)
 
     def _load_replacements(self):
+        if self.require_pending_intents:
+            return
         event = self.selected_event
         if event is None or event.status != "active" or self._worker is not None:
             return
@@ -665,7 +683,11 @@ class V2TransferReview(QDialog):
             "replacement",
             lambda store, _job: (
                 event_id,
-                store.transfer_review_snapshot(preferences=preferences, max_day_gap=gap, replacing_event_id=event_id),
+                store.transfer_review_snapshot(
+                    preferences=preferences,
+                    max_day_gap=gap,
+                    replacing_event_id=event_id,
+                ),
             ),
         )
 
@@ -874,6 +896,7 @@ class V2TransferReview(QDialog):
             return
         preferences, profile, _generation = context
         basis = self.basis
+        require_pending = self.require_pending_intents
         reason = "Confirmed owned-account transfer"
         if self.note.text().strip():
             reason += ": " + self.note.text().strip()
@@ -890,7 +913,12 @@ class V2TransferReview(QDialog):
             "Transfer was not posted",
             "Transfer pair posted; both source movements are allocated.",
             lambda store, _job: store.post_reviewed_transfer(
-                outgoing.row_id, incoming.row_id, preferences=preferences, reason=reason, expected_basis_sha256=basis
+                outgoing.row_id,
+                incoming.row_id,
+                preferences=preferences,
+                reason=reason,
+                expected_basis_sha256=basis,
+                **({"require_pending_intents": True} if require_pending else {}),
             ),
             profile=profile,
         )
@@ -916,6 +944,8 @@ class V2TransferReview(QDialog):
         self.refresh()
 
     def _dismiss(self):
+        if self.require_pending_intents:
+            return
         pair, reason = self._current(), self.note.text().strip()
         if pair is None or not reason or self.basis is None:
             return
@@ -944,6 +974,8 @@ class V2TransferReview(QDialog):
         )
 
     def _reopen(self):
+        if self.require_pending_intents:
+            return
         index, reason = self.review_table.currentRow(), self.reopen_reason.text().strip()
         if not self.reopen.isEnabled() or not 0 <= index < len(self.pair_reviews) or not reason:
             return
@@ -969,6 +1001,8 @@ class V2TransferReview(QDialog):
         )
 
     def _withdraw(self):
+        if self.require_pending_intents:
+            return
         event, reason = self.selected_event, self.correction_reason.text().strip()
         if event is None or event.status != "active" or not reason or self.event_basis is None:
             return
@@ -1003,6 +1037,8 @@ class V2TransferReview(QDialog):
         )
 
     def _replace(self):
+        if self.require_pending_intents:
+            return
         event, index, reason = (
             self.selected_event,
             self.replacement.currentData(),
@@ -1132,6 +1168,7 @@ class V2TransferReview(QDialog):
             return
         preferences, profile, _generation = context
         basis = self.basis
+        require_pending = self.require_pending_intents
         group = tuple(row.component.pairs)
         reviewed = {pair_key(p): p for p in group}
         initial_note = self.plan_page.note.text()
@@ -1161,7 +1198,11 @@ class V2TransferReview(QDialog):
             "Transfer was not posted",
             "Transfer pair posted; both source movements are allocated.",
             lambda store, _job: store.post_reviewed_transfer(
-                *pair_key(chosen), preferences=preferences, reason=reason, expected_basis_sha256=basis
+                *pair_key(chosen),
+                preferences=preferences,
+                reason=reason,
+                expected_basis_sha256=basis,
+                **({"require_pending_intents": True} if require_pending else {}),
             ),
             profile=profile,
         )

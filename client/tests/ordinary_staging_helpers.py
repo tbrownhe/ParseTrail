@@ -14,7 +14,11 @@ def review_reason(view):
     row = view._current() if hasattr(view, "_current") else None
     single_saved = (
         row is not None
-        and (row.entry_key is not None or row.status == "Already posted to the ledger")
+        and (
+            row.entry_key is not None
+            or row.status == "Already posted to the ledger"
+            or view._pending_transfer(row) is not None
+        )
         and len(view.navigation.selected()) == 1
     )
     if hasattr(view, "batch") and not single_saved:
@@ -51,6 +55,7 @@ def review_action(view):
     if row is not None and (
         row.entry_key is not None
         or row.status == "Already posted to the ledger"
+        or view._pending_transfer(row) is not None
         or view.purpose.currentData() in {"repayment", "external_history"}
     ):
         return view.action_button

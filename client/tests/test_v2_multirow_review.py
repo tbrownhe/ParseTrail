@@ -182,7 +182,9 @@ def test_shift_mixed_blocked_scope_is_all_or_none_and_filter_selects_visible_onl
     prior = dict(view.batch.staged)
     select(qtbot, view, "Coffee")
     qtbot.keyClick(view.table, Qt.Key_Down, Qt.ShiftModifier)
-    assert len(view.navigation.selected()) == 2 and view.status.property("formState") == "blocked"
+    assert len(view.navigation.selected()) == 2 and view.status.property("formState") == "required"
+    assert view.purpose.findData("transfer") >= 0 and view.purpose.currentData() is None
+    assert not view.batch.stage_button.isEnabled()  # A common transfer choice is available, never inferred.
     select(qtbot, view, "Coffee")
     select(qtbot, view, "Unassigned", Qt.ShiftModifier)
     assert len(view.navigation.selected()) == 4

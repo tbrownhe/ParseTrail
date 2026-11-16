@@ -22,7 +22,7 @@ def app(monkeypatch):
     return QApplication.instance() or QApplication([])
 
 
-def test_printed_payment_routes_to_selected_counterpart_review_without_posting(tmp_path, source, monkeypatch):
+def test_printed_payment_requires_explicit_designation_and_defers_matching(tmp_path, source, monkeypatch):
     from parsetrail.gui import v2_transfer_review
 
     path = tmp_path / "payment.db"
@@ -44,19 +44,22 @@ def test_printed_payment_routes_to_selected_counterpart_review_without_posting(t
         wait_for_jobs(view)
         review_reason(view).setText("Keep this draft note")
         wait_for_jobs(view)
-        assert view.purpose.currentData() == "repayment"
-        assert review_action(view).isEnabled()
-        assert not view.category.isEnabled() and not view.manage_categories_button.isEnabled()
-        assert "Ready for purpose review" in view.status.text()
-        assert "no income or expense" in view.status.text()
-        before = path.read_bytes()
-        view.action_button.click()
+        assert view.purpose.currentData() is None
+        view.purpose.setCurrentIndex(view.purpose.findData("transfer"))
         wait_for_jobs(view)
-        assert opened == [(path, view, evidence.payload.accounts[0].rows[1].row_id)]
-        assert path.read_bytes() == before
-        assert review_reason(view).text() == "Keep this draft note"
-        assert view.purpose.currentData() == "repayment"
+        assert view.purpose.currentData() == "transfer"
+        assert review_action(view).isEnabled()
+        assert not view.category.isVisible() and not view.manage_categories_button.isEnabled()
+        assert "without posting money" in view.status.text()
+        stage_and_confirm(view)
+        wait_for_jobs(view)
+        assert opened == []
+        assert not view.reason.text()
+        assert view.purpose.currentData() == "transfer"
         assert view._current().row_id == evidence.payload.accounts[0].rows[1].row_id
+        with V2ProfileStore.open(path, read_only=True) as store:
+            assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (0,)
+            assert store.pending_transfer_snapshot().rows[0].reason == "Keep this draft note"
     finally:
         view.close()
 

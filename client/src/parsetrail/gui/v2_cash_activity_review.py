@@ -34,6 +34,7 @@ from parsetrail.gui.v2_review_navigation import (
 )
 
 PURPOSE_LABELS = {
+    "transfer": "Transfer / card repayment",
     "expense": "Expense",
     "expense_refund": "Expense refund",
     "income": "Income",
@@ -282,7 +283,7 @@ class V2CashActivityReview(OrdinaryReviewMixin, QDialog):
             "Reviewed elsewhere — view the owning event" if external else "Choose a transaction type…",
             None,
         )
-        purposes = (row.purpose,) if correcting else row.allowed_purposes if row is not None else ()
+        purposes = self._offered_purposes(row)
         for purpose in purposes:
             if purpose in PURPOSE_LABELS:
                 self.purpose.addItem(PURPOSE_LABELS[purpose], purpose)
@@ -293,6 +294,8 @@ class V2CashActivityReview(OrdinaryReviewMixin, QDialog):
             self.form.setRowVisible(field, not external)
         if correcting:
             self.purpose.setCurrentIndex(max(0, self.purpose.findData(row.purpose)))
+        elif self._pending_transfer(row) is not None:
+            self.purpose.setCurrentIndex(max(0, self.purpose.findData("transfer")))
         self.purpose.blockSignals(False)
         self._purpose_changed()
         self._restore_row_form(row)
@@ -374,7 +377,7 @@ class V2CashActivityReview(OrdinaryReviewMixin, QDialog):
                 else "; choose a purpose explicitly; transfers use their own review"
                 if purpose is None
                 else f"; add an {PURPOSE_KINDS[purpose]} category first using Manage categories…"
-                if self.category.count() == 1
+                if self.category.count() == 1 and purpose in PURPOSE_KINDS
                 else ""
             )
             if row
@@ -448,12 +451,12 @@ class V2CashActivityReview(OrdinaryReviewMixin, QDialog):
         self.review_intro.setText(
             "Review this account's cash component only; this does not cover the whole HSA or investments. "
             if any(row.tracking_scope == "cash_component" for row in rows)
-            else "Choose a transaction, its purpose and category, then confirm the entry. "
+            else "Review transactions and confirm their separate effects: category posting or transfer designation. "
         )
         self.overlap_note.setText(
             f"Possible overlap with {len(overlaps)} saved document(s). Check repeated evidence before posting."
             if overlaps
-            else "Transfers and repayments use separate review; do not count them as another expense."
+            else "Transfer/card-repayment designations post no money. Matching needs a separate confirmation."
         )
         self.note.setText(
             "Select a row assigned to an asset account with a source posting date. "
@@ -471,6 +474,8 @@ class V2CashActivityReview(OrdinaryReviewMixin, QDialog):
         self._selected()
 
     def _act(self) -> None:
+        if self._act_pending_transfer():
+            return
         if not self._single_selection():
             return
         row = self._current()
@@ -552,6 +557,8 @@ class V2CashActivityReview(OrdinaryReviewMixin, QDialog):
         )
 
     def _withdraw(self) -> None:
+        if self._withdraw_pending_transfer():
+            return
         if not self._single_selection():
             return
         row, reason = self._current(), self.reason.text().strip()

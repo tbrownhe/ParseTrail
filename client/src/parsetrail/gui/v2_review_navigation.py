@@ -57,6 +57,31 @@ class StagedRowPresentation:
     def staged_data(self, index, role, row):
         staged = row.row_id in getattr(self, "staged", {})
         choice_column = index.column() == self.columnCount() - 1
+        if (
+            staged
+            and index.column() == self.columnCount() - 2
+            and role in {Qt.DisplayRole, Qt.AccessibleTextRole, Qt.UserRole}
+        ):
+            from parsetrail.core.v2_ordinary_batch import OrdinaryTransferSelection
+
+            if isinstance(self.staged[row.row_id], OrdinaryTransferSelection):
+                return True, "Transfer designation · not posted"
+        intent = getattr(self, "pending_transfers", {}).get(row.row_id)
+        if not staged and intent is not None and intent.review.action == "pending" and intent.status != "consumed":
+            label = {
+                "waiting": "Transfer saved · waiting",
+                "match_available": "Transfer saved · match available",
+                "stale": "Transfer saved · needs review",
+                "blocked": "Transfer saved · prerequisites blocked",
+            }.get(intent.status, "Transfer designation saved")
+            if (choice_column or index.column() == self.columnCount() - 2) and role in {
+                Qt.DisplayRole,
+                Qt.AccessibleTextRole,
+                Qt.UserRole,
+            }:
+                return True, label
+            if role == Qt.ToolTipRole:
+                return True, f"{label}. No money posted.\nSaved reason: {intent.reason}"
         if staged and role == Qt.BackgroundRole:
             return True, QColor("#EDF7EF")
         if staged and role == Qt.FontRole and choice_column:
