@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
 )
 from shiboken6 import isValid
 
+from parsetrail.core.v2_import_warnings import ImportWarning
 from parsetrail.core.v2_institutions import institution_label
 from parsetrail.gui.v2_evidence_preview import _location, _money
 from parsetrail.gui.v2_form_state import install_form_styles, set_field_state, set_status
@@ -255,18 +256,27 @@ class V2CsvImportPreview(QDialog):
             return
         self.details_toggle.show()
         self.retained_format_notice.show()
-        attention_codes = getattr(candidate, "attention_codes", ())
-        attention_labels = {
-            "no_activity_captured": "No activity rows were captured",
-            "source_period_unknown": "The source period is unknown",
-            "source_period_assumed": "The source period is estimated",
-            "source_activity_date_assumed": "Some source activity dates are estimated",
-        }
-        reasons = tuple(
-            dict.fromkeys(attention_labels.get(code, "Some source content needs review") for code in attention_codes)
+        warnings = getattr(candidate, "warnings", ())
+        # Older hand-built callers may supply codes only. Keep them visible and
+        # specific without promoting them into authoritative evidence.
+        represented = {warning.code for warning in warnings}
+        warnings = (
+            *warnings,
+            *(
+                ImportWarning(code, "requires_review", code.replace("_", " "))
+                for code in candidate.attention_codes
+                if code not in represented
+            ),
         )
-        self.attention_notice.setText("Review before importing: " + "; ".join(reasons) + "." if reasons else "")
-        self.attention_notice.setVisible(bool(reasons))
+        warning_sections = []
+        for classification, label in (("requires_review", "Requires review"), ("informational", "Informational")):
+            reasons = tuple(
+                dict.fromkeys(warning.message for warning in warnings if warning.classification == classification)
+            )
+            if reasons:
+                warning_sections.append(label + ": " + "; ".join(reasons) + ".")
+        self.attention_notice.setText("\n".join(warning_sections))
+        self.attention_notice.setVisible(bool(warning_sections))
         statement = self.request.recognition.suffix == ".pdf"
         self.retained_format_notice.setText(
             "Check statement dates and amounts against your original. This import keeps the recognized statement format; "
@@ -332,6 +342,17 @@ class V2CsvImportPreview(QDialog):
             f"Source SHA-256: {self.request.recognition.source_sha256}\n"
             + (f"Header: {', '.join(candidate.header)}\n" if not statement else "")
             + f"Engine: {candidate.engine_version}; extractor: {candidate.extractor_version}\n\n"
+            + "\n".join(
+                f"{'Requires review' if warning.classification == 'requires_review' else 'Informational'} [{warning.code}]: {warning.message}"
+                + ("; " + "; ".join(_location(location) for location in warning.locations) if warning.locations else "")
+                + (
+                    f"; {warning.occurrence_count} occurrences (showing up to 16 source locations)"
+                    if warning.occurrence_count > 1
+                    else ""
+                )
+                for warning in warnings
+            )
+            + ("\n\n" if warnings else "")
             + "\n".join(
                 f"Row {index + 1}: raw date {row.date.raw!r} → {row.date.iso or 'Unknown'} ({row.date.provenance}); "
                 f"raw amount {row.amount.raw!r} → {_money(row.amount.minor)} ({row.amount.provenance}); "

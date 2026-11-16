@@ -122,7 +122,43 @@ def test_attention_projection_checks_all_rows_and_parser_warning_suffixes(known_
     item = next(item for item in catalog.definitions if item.identity.parser_id == evidence.parser_id)
     candidate = candidate_from_evidence(item, evidence.model_copy(update={"payload": payload}), catalog)
     assert len(candidate.preview_rows) == 5
-    assert set(codes) | {"source_activity_date_assumed"} <= set(candidate.attention_codes)
+    assert set(codes) <= set(candidate.attention_codes)
+    assert "source_posting_date_assumed" not in candidate.attention_codes
+    assert any(
+        warning.code == "source_posting_date_assumed" and warning.classification == "informational"
+        for warning in candidate.warnings
+    )
+
+
+def test_date_estimates_and_unverified_capture_do_not_alone_require_import_preview(known_pdf):
+    workspace, source = known_pdf
+    workspace.set_allow_abbreviated_account_matching(True)
+    workspace.set_import_preview_mode("when_needed")
+    review = review_for(workspace, source)
+    candidate = review.recognition.candidates[0]
+    with V2ProfileStore.open(workspace.profile_path, read_only=True) as store:
+        evidence = store.load_import(store.source_ids()[0]).evidence
+    account = evidence.payload.accounts[0]
+    estimated = account.rows[0].date.model_copy(update={"raw": None, "provenance": "assumed"})
+    payload = evidence.payload.model_copy(
+        update={
+            "accounts": (
+                account.model_copy(update={"rows": (account.rows[0].model_copy(update={"date": estimated}),)}),
+            )
+        }
+    )
+    catalog = workspace.catalog_cache.load_current()
+    item = next(item for item in catalog.definitions if item.identity.parser_id == evidence.parser_id)
+    candidate = candidate_from_evidence(item, evidence.model_copy(update={"payload": payload}), catalog)
+    assert {warning.code for warning in candidate.warnings} >= {
+        "source_posting_date_assumed",
+        "source_capture_unverified",
+    }
+    assert not candidate.attention_codes
+    assert (
+        automatic_import_plan(replace(review, recognition=replace(review.recognition, candidates=(candidate,))))
+        is not None
+    )
 
 
 def test_current_suffix_match_conflicting_with_confirmed_association_requires_choice(known_pdf):

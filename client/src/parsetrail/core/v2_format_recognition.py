@@ -23,6 +23,7 @@ from parsetrail.core.source_evidence import (
 )
 from parsetrail.core.v2_account_products import AccountProductProfile
 from parsetrail.core.v2_data_catalog import VerifiedCatalog, VerifiedDefinition
+from parsetrail.core.v2_import_warnings import ImportWarning, evidence_import_warnings
 from parsetrail.core.v2_parser_engine import load_definition
 from parsetrail.core.v2_pdf_routing import PDFRoutingError, select_pdf_definition
 from parsetrail.core.v2_source_account_context import source_account_profiles, verified_source_account_context
@@ -99,6 +100,7 @@ class FormatCandidate:
     account_profiles: tuple[AccountProductProfile, ...] = ()
     identifying_product_type: str | None = None
     attention_codes: tuple[str, ...] = ()
+    warnings: tuple[ImportWarning, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -260,19 +262,9 @@ def candidate_from_evidence(
         date_format, date_role, money_format = declaration.date_format, declaration.date_role, declaration.money_format
     context = verified_source_account_context(evidence, catalog)
     profiles = source_account_profiles(evidence, catalog)
-    attention = []
-    if not row_count:
-        attention.append("no_activity_captured")
-    if start.iso is None or end.iso is None:
-        attention.append("source_period_unknown")
-    if start.provenance == "assumed" or end.provenance == "assumed":
-        attention.append("source_period_assumed")
-    if any(row.date.provenance == "assumed" for row in rows):
-        attention.append("source_activity_date_assumed")
-    attention.extend(
-        item.code
-        for item in payload.dispositions
-        if any(token in item.code for token in ("unclassified", "unsupported", "unresolved", "mismatch"))
+    warnings = evidence_import_warnings(evidence)
+    attention = tuple(
+        dict.fromkeys(warning.code for warning in warnings if warning.classification == "requires_review")
     )
     return FormatCandidate(
         item.identity.parser_id,
@@ -294,7 +286,8 @@ def candidate_from_evidence(
         _source_accounts(evidence, profiles),
         profiles,
         context.product_type if context is not None else None,
-        tuple(dict.fromkeys(attention)),
+        attention,
+        warnings,
     )
 
 
