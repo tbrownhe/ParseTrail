@@ -61,6 +61,7 @@ class TransferWindowPlan:
     estimated_date_pairs: tuple[TransferCandidate, ...]
     components: tuple[TransferPlanningComponent, ...]
     confirmation_sha256: str
+    require_pending_intents: bool = False
 
     @property
     def candidate_count(self):
@@ -149,6 +150,7 @@ def _validated_candidates(snapshot):
     if (
         type(snapshot) is not TransferReviewSnapshot
         or snapshot.replacing_event_id is not None
+        or type(snapshot.require_pending_intents) is not bool
         or type(snapshot.candidates) is not tuple
         or type(snapshot.preferences) is not V2Preferences
         or type(snapshot.preferences.allow_assumed_posting_dates) is not bool
@@ -293,8 +295,8 @@ def plan_transfers(snapshot: TransferReviewSnapshot, *, cancelled=None) -> Trans
         tuple(sorted(estimated, key=pair_key)),
         tuple(sorted(components, key=lambda c: c.component_id)),
     )
-    unsigned = TransferWindowPlan(*values, "")
-    return TransferWindowPlan(*values, _digest([RULE, asdict(unsigned)]))
+    unsigned = TransferWindowPlan(*values, "", snapshot.require_pending_intents)
+    return TransferWindowPlan(*values, _digest([RULE, asdict(unsigned)]), snapshot.require_pending_intents)
 
 
 def validate_window_plan(plan, *, cancelled=None):
@@ -302,7 +304,14 @@ def validate_window_plan(plan, *, cancelled=None):
         raise ProfileFormatError("transfer_planning_plan_invalid")
     rebuilt = plan_transfers(
         TransferReviewSnapshot(
-            plan.candidates, (), (), plan.basis_sha256, plan.preferences, plan.max_day_gap, plan.profile_sha256
+            plan.candidates,
+            (),
+            (),
+            plan.basis_sha256,
+            plan.preferences,
+            plan.max_day_gap,
+            plan.profile_sha256,
+            require_pending_intents=plan.require_pending_intents,
         ),
         cancelled=cancelled,
     )

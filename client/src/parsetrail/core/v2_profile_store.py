@@ -80,6 +80,7 @@ from parsetrail.core.v2_loan_payments import (
 from parsetrail.core.v2_loan_payments import (
     digest as loan_digest,
 )
+from parsetrail.core.v2_pending_transfers import PendingTransferReview, PendingTransferState
 from parsetrail.core.v2_preferences import V2Preferences
 from parsetrail.core.v2_review_dates import permitted_posting_date, posting_date_candidate
 from parsetrail.core.v2_settlements import (
@@ -117,7 +118,7 @@ from parsetrail.core.v2_source_values import (
 )
 
 APPLICATION_ID = 0x50543230  # PT20
-SCHEMA_VERSION = 24
+SCHEMA_VERSION = 25
 TRACKING_SCOPES = {"account_total", "principal_component", "cash_component"}
 CategoryPurpose = Literal["expense", "expense_refund", "income", "income_adjustment"]
 CATEGORY_PURPOSE_KINDS = {
@@ -142,6 +143,20 @@ MAX_SOURCE_BYTES = 16 * 1024 * 1024
 MAX_DEFINITION_BYTES = 64 * 1024
 MAX_EVIDENCE_BYTES = 32 * 1024 * 1024
 TABLE_COLUMNS = {
+    "PendingTransferReviews": (
+        ("revision_id", "INTEGER", 0, 1),
+        ("row_id", "TEXT", 1, 0),
+        ("source_sha256", "TEXT", 1, 0),
+        ("account_id", "TEXT", 1, 0),
+        ("movement_payload", "TEXT", 1, 0),
+        ("context_sha256", "TEXT", 1, 0),
+        ("prior_revision_id", "INTEGER", 0, 0),
+        ("action", "TEXT", 1, 0),
+        ("request_basis", "TEXT", 1, 0),
+        ("reason", "TEXT", 1, 0),
+        ("record_sha256", "TEXT", 1, 0),
+        ("created_at", "TEXT", 1, 0),
+    ),
     "Institutions": (("id", "TEXT", 0, 1), ("name", "TEXT", 1, 0)),
     "BindingCorrections": (
         ("correction_id", "INTEGER", 0, 1),
@@ -445,6 +460,12 @@ TABLE_COLUMNS.update(
     }
 )
 FOREIGN_KEYS = {
+    "PendingTransferReviews": (
+        ("prior_revision_id", "PendingTransferReviews", "revision_id"),
+        ("account_id", "Accounts", "id"),
+        ("source_sha256", "Sources", "sha256"),
+        ("row_id", "SourceObservations", "row_id"),
+    ),
     "DatedValueWithdrawals": (("value_id", "AccountDatedValues", "value_id"),),
     "AccountDatedValues": (("corrects_value_id", "AccountDatedValues", "value_id"), ("account_id", "Accounts", "id")),
     "AccountLifecycleDecisions": (("account_id", "Accounts", "id"),),
@@ -534,6 +555,7 @@ FOREIGN_KEYS.update(
 )
 
 IMMUTABLE_TABLES = (
+    "PendingTransferReviews",
     "Institutions",
     "LoanEvents",
     "LoanEventActions",
@@ -570,6 +592,7 @@ _INACTIVE_JOURNAL_SQL = (
 )
 _UNSET_REVIEW_REVISION = object()
 _ORDINARY_BINDING_BLOCKER_ORDER = (
+    "account_binding_has_pending_transfer",
     "account_binding_has_journal_history",
     "account_binding_has_overlap_review_history",
     "account_binding_has_transfer_review_history",
@@ -1129,6 +1152,7 @@ class TransferReviewSnapshot:
     max_day_gap: int = 7
     profile_sha256: str = ""
     replacing_event_id: str | None = None
+    require_pending_intents: bool = False
 
 
 @dataclass(frozen=True)
@@ -1179,6 +1203,9 @@ class SourceInterpretationSnapshot:
     statement: bool
     overlapping_source_ids: tuple[str, ...]
     owners: tuple[SourceInterpretationOwner, ...] = ()
+    pending_transfers: tuple[PendingTransferState, ...] = ()
+    pending_transfer_history: tuple[PendingTransferReview, ...] = ()
+    transfer_eligible_row_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -2057,6 +2084,17 @@ class V2ProfileStore:
                     reason TEXT NOT NULL, record_sha256 TEXT NOT NULL,
                     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ','now'))
                 );
+                CREATE TABLE PendingTransferReviews (
+                    revision_id INTEGER PRIMARY KEY,
+                    row_id TEXT NOT NULL REFERENCES SourceObservations(row_id),
+                    source_sha256 TEXT NOT NULL REFERENCES Sources(sha256),
+                    account_id TEXT NOT NULL REFERENCES Accounts(id),
+                    movement_payload TEXT NOT NULL, context_sha256 TEXT NOT NULL,
+                    prior_revision_id INTEGER REFERENCES PendingTransferReviews(revision_id),
+                    action TEXT NOT NULL CHECK(action IN ('pending','withdrawn')),
+                    request_basis TEXT NOT NULL, reason TEXT NOT NULL, record_sha256 TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
                 COMMIT;
             """)
             connection.executemany(
@@ -2135,6 +2173,9 @@ class V2ProfileStore:
                     verified._validate_transfer_history()
                     verified._validate_source_interpretation_history()
                     verified._read_binding_corrections()
+                    from parsetrail.core.v2_pending_transfers import read_history
+
+                    read_history(verified)
                     verified._validate_common_journal_read()
                     verified._source_overlap_index()
                     verified._reconciliation_history(None)
@@ -2360,7 +2401,13 @@ class V2ProfileStore:
             for (payload,) in self.connection.execute("SELECT payload FROM JournalEntries")
         ):
             return True
-        for table in ("OpeningDecisions", "StatementSourceReviews", "AccountDatedValues", "AccountLifecycleDecisions"):
+        for table in (
+            "OpeningDecisions",
+            "StatementSourceReviews",
+            "AccountDatedValues",
+            "AccountLifecycleDecisions",
+            "PendingTransferReviews",
+        ):
             if self.connection.execute(f"SELECT 1 FROM {table} WHERE account_id=? LIMIT 1", (account_id,)).fetchone():
                 return True
         if any(
@@ -2756,6 +2803,11 @@ class V2ProfileStore:
         )
 
     def _require_unposted_rows(self, row_ids: tuple[str, ...]) -> None:
+        from parsetrail.core.v2_pending_transfers import read_history
+
+        latest = {r.row_id: r for r in read_history(self)}
+        if any(row in latest and latest[row].action == "pending" for row in row_ids):
+            raise ProfileFormatError("account_binding_has_pending_transfer")
         for offset in range(0, len(row_ids), 500):
             batch = row_ids[offset : offset + 500]
             placeholders = ",".join("?" for _ in batch)
@@ -2968,6 +3020,9 @@ class V2ProfileStore:
         return groups
 
     def _source_overlap_basis(self) -> str:
+        from parsetrail.core.v2_pending_transfers import read_history
+
+        read_history(self)
         self._validate_account_metadata()
         self._read_binding_corrections()
         self._validate_loan_history()
@@ -3003,6 +3058,7 @@ class V2ProfileStore:
             "PostedRepeatRepairs",
             "SourceOverlapReviews",
             "BindingCorrections",
+            "PendingTransferReviews",
         ):
             digest.update(table.encode())
             columns = "source_sha256,definition_sha256,size,sha256" if table == "EvidenceSnapshots" else "*"
@@ -3759,6 +3815,23 @@ class V2ProfileStore:
                 row_ids = {row.row_id for row in _rows(saved.evidence)}
                 statement = isinstance(saved.evidence.payload, StatementPayload)
                 owners = self._source_interpretation_owners(row_ids - {r.row_id for r in rows if r.entry_key})
+                from parsetrail.core.v2_pending_transfers import read_history, states
+
+                pending = states(self, source_sha256=source_sha256)
+                # Reuse this source's already verified eligibility result. A
+                # second archive-wide movement scan would reread unrelated
+                # imports solely to populate a no-money editor choice.
+                transfer_bindings = {b.row_id: b.ledger_account_id for b in self.account_bindings(source_sha256)}
+                account_scopes = {a.id: a.tracking_scope for a in self.financial_accounts()}
+                eligible_transfers = tuple(
+                    row.row_id
+                    for row in rows
+                    if (row.allowed_purposes or row.status == "Description needs review")
+                    and row.entry_key is None
+                    and row.amount_minor
+                    and (kind == "cash" or row.amount_minor > 0)
+                    and account_scopes.get(transfer_bindings.get(row.row_id)) == "account_total"
+                )
                 return SourceInterpretationSnapshot(
                     source_sha256,
                     kind,
@@ -3771,6 +3844,9 @@ class V2ProfileStore:
                     statement,
                     self.overlapping_statement_sources(source_sha256) if statement else (),
                     owners,
+                    pending,
+                    tuple(r for r in read_history(self) if r.source_sha256 == source_sha256),
+                    eligible_transfers,
                 )
         finally:
             self.connection.execute("ROLLBACK")
@@ -4189,6 +4265,81 @@ class V2ProfileStore:
             )
         return tuple(result)
 
+    def pending_transfer_snapshot(self, source_sha256: str | None = None):
+        from parsetrail.core.v2_pending_transfers import PendingTransferSnapshot, read_history, states
+
+        if self.connection.in_transaction:
+            raise ProfileFormatError("pending_transfer_requires_committed_snapshot")
+        self.connection.execute("BEGIN")
+        try:
+            with self._verified_source_operation():
+                return PendingTransferSnapshot(
+                    states(self, source_sha256=source_sha256),
+                    tuple(r for r in read_history(self) if source_sha256 is None or r.source_sha256 == source_sha256),
+                    self._source_overlap_basis(),
+                )
+        finally:
+            self.connection.execute("ROLLBACK")
+
+    def set_pending_transfer(
+        self, row_id: str, *, expected_basis_sha256: str, expected_revision_id: int | None = None, reason: str
+    ):
+        return self._write_pending_transfer(
+            row_id,
+            expected_basis_sha256=expected_basis_sha256,
+            expected_revision_id=expected_revision_id,
+            reason=reason,
+            action="pending",
+        )
+
+    def withdraw_pending_transfer(
+        self, row_id: str, *, expected_basis_sha256: str, expected_revision_id: int, reason: str
+    ):
+        return self._write_pending_transfer(
+            row_id,
+            expected_basis_sha256=expected_basis_sha256,
+            expected_revision_id=expected_revision_id,
+            reason=reason,
+            action="withdrawn",
+        )
+
+    def _write_pending_transfer(self, row_id, *, expected_basis_sha256, expected_revision_id, reason, action):
+        from parsetrail.core.v2_pending_transfers import draft, insert_draft, read_history
+
+        self._require_writable()
+        if type(reason) is not str or not 0 < len(reason.strip()) <= 500:
+            raise ProfileFormatError("pending_transfer_reason_required")
+        if self.connection.in_transaction:
+            raise ProfileFormatError("pending_transfer_requires_committed_snapshot")
+        self.connection.execute("BEGIN IMMEDIATE")
+        try:
+            with self._verified_source_operation():
+                history = read_history(self)
+                latest = next((r for r in reversed(history) if r.row_id == row_id), None)
+                if (
+                    latest is not None
+                    and latest.action == action
+                    and latest.request_basis == expected_basis_sha256
+                    and latest.prior_revision_id == expected_revision_id
+                    and latest.reason == reason.strip()
+                ):
+                    self.connection.execute("COMMIT")
+                    return latest
+                self._require_source_interpretation_basis(expected_basis_sha256, required=True)
+                selected = draft(self, row_id, expected_revision_id=expected_revision_id, reason=reason, action=action)
+                insert_draft(self, selected, basis=expected_basis_sha256, reason=reason)
+                result = read_history(self)[-1]
+                self.connection.execute("COMMIT")
+                return result
+        except BaseException:
+            self.connection.execute("ROLLBACK")
+            raise
+
+    def pending_transfer_match_snapshot(self, *, preferences: V2Preferences, max_day_gap: int = 7):
+        return self.transfer_review_snapshot(
+            preferences=preferences, max_day_gap=max_day_gap, require_pending_intents=True
+        )
+
     def _transfer_movements(
         self, preferences: V2Preferences, releasing_entry_keys: tuple[str, ...] = (), *, _overlap_blocks_out=None
     ) -> tuple[TransferMovement, ...]:
@@ -4290,11 +4441,21 @@ class V2ProfileStore:
         releasing_entry_keys: tuple[str, ...] = (),
         include_dismissed: bool = False,
         _overlap_blocks_out=None,
+        require_pending_intents: bool = False,
     ) -> tuple[TransferCandidate, ...]:
         """Suggest equal, opposite owned-account movements; never infer a link."""
         if type(max_day_gap) is not int or not 0 <= max_day_gap <= 31:
             raise ProfileFormatError("transfer_window_invalid")
         movements = self._transfer_movements(preferences, releasing_entry_keys, _overlap_blocks_out=_overlap_blocks_out)
+        if require_pending_intents:
+            from parsetrail.core.v2_pending_transfers import states
+
+            active_intents = {
+                s.row_id
+                for s in states(self, include_matches=False, releasing_entry_keys=releasing_entry_keys)
+                if s.active
+            }
+            movements = tuple(m for m in movements if m.row_id in active_intents)
         invalidated = {
             revision
             for record in self._read_binding_corrections()
@@ -4920,9 +5081,17 @@ class V2ProfileStore:
         return _transfer_record_digest("v2-transfer-review-1", self._source_overlap_basis())
 
     def transfer_review_snapshot(
-        self, *, preferences: V2Preferences, max_day_gap: int = 7, replacing_event_id: str | None = None
+        self,
+        *,
+        preferences: V2Preferences,
+        max_day_gap: int = 7,
+        replacing_event_id: str | None = None,
+        require_pending_intents: bool = False,
     ) -> TransferReviewSnapshot:
         from parsetrail.core.v2_transfer_batch import profile_identity
+
+        if type(require_pending_intents) is not bool or (require_pending_intents and replacing_event_id is not None):
+            raise ProfileFormatError("pending_transfer_match_scope_invalid")
 
         if self.connection.in_transaction:
             raise ProfileFormatError("transfer_requires_committed_snapshot")
@@ -4940,7 +5109,10 @@ class V2ProfileStore:
                     releasing = selected.entry_keys
                 return TransferReviewSnapshot(
                     self._transfer_candidates(
-                        preferences=preferences, max_day_gap=max_day_gap, releasing_entry_keys=releasing
+                        preferences=preferences,
+                        max_day_gap=max_day_gap,
+                        releasing_entry_keys=releasing,
+                        require_pending_intents=require_pending_intents,
                     ),
                     events,
                     reviews,
@@ -4949,6 +5121,7 @@ class V2ProfileStore:
                     max_day_gap,
                     profile_identity(self),
                     replacing_event_id,
+                    require_pending_intents,
                 )
         finally:
             self.connection.execute("ROLLBACK")
@@ -5416,13 +5589,18 @@ class V2ProfileStore:
                     return TransferBatchResult(tuple(event.event_id for event in existing), 0, len(existing))
                 basis = self._require_transfer_basis(plan.basis_sha256, required=True)
                 current = TransferReviewSnapshot(
-                    self._transfer_candidates(preferences=preferences, max_day_gap=plan.max_day_gap),
+                    self._transfer_candidates(
+                        preferences=preferences,
+                        max_day_gap=plan.max_day_gap,
+                        require_pending_intents=plan.require_pending_intents,
+                    ),
                     events,
                     reviews,
                     basis,
                     preferences,
                     plan.max_day_gap,
                     plan.profile_sha256,
+                    require_pending_intents=plan.require_pending_intents,
                 )
                 if plan_unique_transfers(current) != plan:
                     raise ProfileFormatError("transfer_batch_graph_changed")
@@ -5502,7 +5680,10 @@ class V2ProfileStore:
                     basis = self._require_transfer_basis(plan.basis_sha256, required=True)
                 current = TransferReviewSnapshot(
                     self._transfer_candidates(
-                        preferences=preferences, max_day_gap=plan.max_day_gap, releasing_entry_keys=releasing
+                        preferences=preferences,
+                        max_day_gap=plan.max_day_gap,
+                        releasing_entry_keys=releasing,
+                        require_pending_intents=plan.require_pending_intents,
                     ),
                     events,
                     reviews,
@@ -5510,6 +5691,7 @@ class V2ProfileStore:
                     preferences,
                     plan.max_day_gap,
                     plan.profile_sha256,
+                    require_pending_intents=plan.require_pending_intents,
                 )
                 rebuilt = plan_transfers(current, cancelled=cancelled)
                 if (
@@ -5556,7 +5738,10 @@ class V2ProfileStore:
         preferences: V2Preferences,
         reason: str,
         expected_basis_sha256: str | None = None,
+        require_pending_intents: bool = False,
     ) -> str:
+        if type(require_pending_intents) is not bool:
+            raise ProfileFormatError("pending_transfer_match_scope_invalid")
         reason = self._transfer_write_start(reason)
         try:
             with self._verified_transfer_operation():
@@ -5583,6 +5768,19 @@ class V2ProfileStore:
                     self.connection.execute("COMMIT")
                     return active.event_id
                 basis = self._require_transfer_basis(expected_basis_sha256)
+                if require_pending_intents:
+                    pair = next(
+                        (
+                            p
+                            for p in self._transfer_candidates(
+                                preferences=preferences, max_day_gap=31, require_pending_intents=True
+                            )
+                            if p.outgoing.row_id == outgoing_row_id and p.incoming.row_id == incoming_row_id
+                        ),
+                        None,
+                    )
+                    if pair is None:
+                        raise ProfileFormatError("pending_transfer_both_designations_required")
                 self._transfer_mutating = True
                 event_id = self._record_transfer_event(outgoing_row_id, incoming_row_id, preferences, reason, basis)
                 self._transfer_mutating = False
@@ -6916,6 +7114,7 @@ class V2ProfileStore:
                     raise ProfileFormatError(f"{refusal_prefix}_conflicts_with_prior_entry")
                 return entry.key
         self._require_source_interpretation_basis(expected_basis_sha256)
+        self._require_no_pending_transfer(row_id)
         self._require_source_overlap_postable((row_id,))
         validate_entry(
             entry,
@@ -6929,7 +7128,7 @@ class V2ProfileStore:
 
     @staticmethod
     def _ordinary_batch_request(source_sha256, kind, selections, reason, preferences):
-        from parsetrail.core.v2_ordinary_batch import OrdinaryCategorySelection
+        from parsetrail.core.v2_ordinary_batch import OrdinaryCategorySelection, OrdinaryTransferSelection
 
         if (
             type(source_sha256) is not str
@@ -6939,14 +7138,31 @@ class V2ProfileStore:
             or type(selections) is not tuple
             or not 1 <= len(selections) <= 2000
             or any(
-                type(item) is not OrdinaryCategorySelection
+                type(item) not in {OrdinaryCategorySelection, OrdinaryTransferSelection}
                 or type(item.row_id) is not str
                 or not item.row_id
-                or type(item.category_id) is not str
-                or not item.category_id
-                or type(item.purpose) is not str
-                or item.purpose not in CATEGORY_PURPOSE_KINDS
-                or (item.accounting_date is not None and type(item.accounting_date) is not date)
+                or (
+                    type(item) is OrdinaryCategorySelection
+                    and (
+                        type(item.category_id) is not str
+                        or not item.category_id
+                        or type(item.purpose) is not str
+                        or item.purpose not in CATEGORY_PURPOSE_KINDS
+                        or (item.accounting_date is not None and type(item.accounting_date) is not date)
+                        or (
+                            item.pending_transfer_revision_id is not None
+                            and (
+                                type(item.pending_transfer_revision_id) is not int
+                                or item.pending_transfer_revision_id <= 0
+                            )
+                        )
+                    )
+                )
+                or (
+                    type(item) is OrdinaryTransferSelection
+                    and item.expected_revision_id is not None
+                    and (type(item.expected_revision_id) is not int or item.expected_revision_id <= 0)
+                )
                 for item in selections
             )
             or len({item.row_id for item in selections}) != len(selections)
@@ -6961,7 +7177,7 @@ class V2ProfileStore:
             raise ProfileFormatError("ordinary_batch_preferences_invalid")
 
     def _ordinary_batch_entries(self, source_sha256, kind, selections, reason, preferences, cancelled, *, retry=False):
-        from parsetrail.core.v2_ordinary_batch import check_cancelled
+        from parsetrail.core.v2_ordinary_batch import OrdinaryTransferSelection, check_cancelled
 
         check_cancelled(cancelled)
         consumed = self._active_consumed()
@@ -6970,6 +7186,8 @@ class V2ProfileStore:
         entries = []
         for item in selections:
             check_cancelled(cancelled)
+            if type(item) is OrdinaryTransferSelection:
+                continue
             source = self.connection.execute(
                 "SELECT source_sha256 FROM SourceObservations WHERE row_id=?", (item.row_id,)
             ).fetchone()
@@ -7055,6 +7273,47 @@ class V2ProfileStore:
         check_cancelled(cancelled)
         return tuple(entries)
 
+    def _require_no_pending_transfer(self, row_id):
+        from parsetrail.core.v2_pending_transfers import read_history
+
+        prior = next((r for r in reversed(read_history(self)) if r.row_id == row_id), None)
+        if prior is not None and prior.action == "pending":
+            raise ProfileFormatError("pending_transfer_withdrawal_required")
+
+    def _ordinary_pending_effects(self, source_sha256, kind, selections, reason):
+        from parsetrail.core.v2_ordinary_batch import OrdinaryTransferSelection
+        from parsetrail.core.v2_pending_transfers import draft, read_history
+
+        latest = {r.row_id: r for r in read_history(self)}
+        pending, withdrawals = [], []
+        evidence = self.load_import(source_sha256).evidence
+        scopes = (
+            _cash_review_scopes(evidence)
+            if kind == "cash"
+            else register_review_scopes(evidence)
+            if kind == "register"
+            else _card_review_scopes(evidence)
+        )
+        for item in selections:
+            prior = latest.get(item.row_id)
+            if type(item) is OrdinaryTransferSelection:
+                if not scopes.get(item.row_id, False):
+                    raise ProfileFormatError("ordinary_batch_row_outside_source")
+                pending.append(draft(self, item.row_id, expected_revision_id=item.expected_revision_id, reason=reason))
+            elif item.pending_transfer_revision_id is not None:
+                withdrawals.append(
+                    draft(
+                        self,
+                        item.row_id,
+                        expected_revision_id=item.pending_transfer_revision_id,
+                        reason=reason,
+                        action="withdrawn",
+                    )
+                )
+            elif prior is not None and prior.action == "pending":
+                raise ProfileFormatError("pending_transfer_withdrawal_required")
+        return tuple(pending), tuple(withdrawals)
+
     def preview_reviewed_ordinary_batch(
         self,
         source_sha256: str,
@@ -7080,6 +7339,7 @@ class V2ProfileStore:
                 entries = self._ordinary_batch_entries(
                     source_sha256, kind, selections, reason.strip(), preferences, cancelled
                 )
+                pending, withdrawals = self._ordinary_pending_effects(source_sha256, kind, selections, reason.strip())
                 preview = OrdinaryBatchPreview(
                     source_sha256,
                     kind,
@@ -7090,6 +7350,8 @@ class V2ProfileStore:
                     preferences,
                     reason.strip(),
                     "",
+                    pending,
+                    withdrawals,
                 )
                 return replace(preview, preview_sha256=preview_digest(preview))
         except LedgerError:
@@ -7104,6 +7366,7 @@ class V2ProfileStore:
             OrdinaryBatchResult,
             check_cancelled,
             preview_digest,
+            validate_effect_correspondence,
         )
         from parsetrail.core.v2_transfer_batch import profile_identity
 
@@ -7111,7 +7374,9 @@ class V2ProfileStore:
         if (
             type(preview) is not OrdinaryBatchPreview
             or type(preview.entries) is not tuple
-            or not preview.entries
+            or type(preview.pending_transfers) is not tuple
+            or type(preview.pending_transfer_withdrawals) is not tuple
+            or not (preview.entries or preview.pending_transfers)
             or any(type(entry) is not JournalEntry for entry in preview.entries)
             or preview.preview_sha256 != preview_digest(preview)
         ):
@@ -7119,11 +7384,15 @@ class V2ProfileStore:
         self._ordinary_batch_request(
             preview.source_sha256, preview.kind, preview.selections, preview.reason, preview.preferences
         )
+        validate_effect_correspondence(preview)
         if self.connection.in_transaction:
             raise ProfileFormatError("source_interpretation_requires_committed_snapshot")
         self.connection.execute("BEGIN IMMEDIATE")
         try:
             with self._verified_source_operation(cancelled):
+                from parsetrail.core.v2_ordinary_batch import OrdinaryCategorySelection
+                from parsetrail.core.v2_pending_transfers import insert_draft, read_history
+
                 check_cancelled(cancelled)
                 if preview.profile_sha256 != profile_identity(self):
                     raise ProfileFormatError("ordinary_batch_profile_changed")
@@ -7131,9 +7400,29 @@ class V2ProfileStore:
                     self.connection.execute("SELECT payload FROM JournalEntries WHERE key=?", (entry.key,)).fetchone()
                     for entry in preview.entries
                 )
-                retry = bool(prior) and all(item is not None for item in prior)
+                pending_effects = preview.pending_transfers + preview.pending_transfer_withdrawals
+                latest = {r.row_id: r for r in read_history(self)}
+
+                def saved_effect(item):
+                    saved = latest.get(item.row_id)
+                    return (
+                        saved is not None
+                        and saved.action == item.action
+                        and saved.movement == item.movement
+                        and saved.context_sha256 == item.context_sha256
+                        and saved.prior_revision_id == item.prior_revision_id
+                        and saved.request_basis == preview.basis_sha256
+                        and saved.reason == preview.reason
+                    )
+
+                retry = all(item is not None for item in prior) and all(saved_effect(item) for item in pending_effects)
                 if not retry:
                     self._require_source_interpretation_basis(preview.basis_sha256, required=True)
+                    pending, withdrawals = self._ordinary_pending_effects(
+                        preview.source_sha256, preview.kind, preview.selections, preview.reason
+                    )
+                    if pending != preview.pending_transfers or withdrawals != preview.pending_transfer_withdrawals:
+                        raise ProfileFormatError("ordinary_batch_preview_changed")
                 entries = self._ordinary_batch_entries(
                     preview.source_sha256,
                     preview.kind,
@@ -7146,9 +7435,10 @@ class V2ProfileStore:
                 if entries != preview.entries:
                     raise ProfileFormatError("ordinary_batch_preview_changed")
                 if not retry:
-                    for category_id in dict.fromkeys(item.category_id for item in preview.selections):
+                    category_selections = tuple(i for i in preview.selections if type(i) is OrdinaryCategorySelection)
+                    for category_id in dict.fromkeys(item.category_id for item in category_selections):
                         self._category_for_posting(category_id)
-                    for entry, item in zip(entries, preview.selections, strict=True):
+                    for entry, item in zip(entries, category_selections, strict=True):
                         check_cancelled(cancelled)
                         self.connection.execute(
                             "INSERT INTO JournalEntries(key,payload) VALUES (?,?)", (entry.key, _journal_payload(entry))
@@ -7157,9 +7447,15 @@ class V2ProfileStore:
                             "INSERT INTO JournalAllocations VALUES (?,?,?)",
                             (entry.key, item.row_id, entry.postings[0].amount_minor),
                         )
+                    revision_ids = []
+                    for item in pending_effects:
+                        check_cancelled(cancelled)
+                        revision_ids.append(insert_draft(self, item, basis=preview.basis_sha256, reason=preview.reason))
+                else:
+                    revision_ids = [latest[item.row_id].revision_id for item in pending_effects]
                 check_cancelled(cancelled)
                 self.connection.execute("COMMIT")
-                return OrdinaryBatchResult(tuple(entry.key for entry in entries), retry)
+                return OrdinaryBatchResult(tuple(entry.key for entry in entries), retry, tuple(revision_ids))
         except BaseException as exc:
             self.connection.execute("ROLLBACK")
             if isinstance(exc, LedgerError):
@@ -7909,6 +8205,11 @@ class V2ProfileStore:
         }
         if set(rows).intersection(active_rows) or any(consumed.get(row, 0) for row in rows):
             blockers.append("active_source_consumption")
+        from parsetrail.core.v2_pending_transfers import read_history
+
+        pending_latest = {r.row_id: r for r in read_history(self)}
+        if any(row in pending_latest and pending_latest[row].action == "pending" for row in rows):
+            blockers.append("pending_transfer_requires_withdrawal")
         anchors = self._binding_opening_anchors(target, accounts)
         if anchors:
             blockers.append("source_backed_opening_anchor")
@@ -7920,6 +8221,7 @@ class V2ProfileStore:
             self._require_ordinary_binding_change(target)
         except ProfileFormatError as exc:
             if str(exc) not in {
+                "account_binding_has_pending_transfer",
                 "account_binding_has_journal_history",
                 "account_binding_has_overlap_review_history",
                 "account_binding_has_transfer_review_history",

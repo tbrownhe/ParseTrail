@@ -9,8 +9,10 @@ from datetime import date
 from typing import Literal
 
 from parsetrail.core.ledger import JournalEntry
+from parsetrail.core.v2_pending_transfers import PendingTransferDraft
 from parsetrail.core.v2_preferences import V2Preferences
 from parsetrail.core.v2_profile_store import CategoryPurpose, ProfileFormatError
+from parsetrail.core.v2_settlements import TransferMovement
 
 
 class OrdinaryBatchCancelled(ProfileFormatError):
@@ -23,25 +25,35 @@ class OrdinaryCategorySelection:
     category_id: str
     purpose: CategoryPurpose
     accounting_date: date | None = None
+    pending_transfer_revision_id: int | None = None
+
+
+@dataclass(frozen=True)
+class OrdinaryTransferSelection:
+    row_id: str
+    expected_revision_id: int | None = None
 
 
 @dataclass(frozen=True)
 class OrdinaryBatchPreview:
     source_sha256: str
     kind: Literal["cash", "card", "register"]
-    selections: tuple[OrdinaryCategorySelection, ...]
+    selections: tuple[OrdinaryCategorySelection | OrdinaryTransferSelection, ...]
     entries: tuple[JournalEntry, ...]
     basis_sha256: str
     profile_sha256: str
     preferences: V2Preferences | None
     reason: str
     preview_sha256: str
+    pending_transfers: tuple[PendingTransferDraft, ...] = ()
+    pending_transfer_withdrawals: tuple[PendingTransferDraft, ...] = ()
 
 
 @dataclass(frozen=True)
 class OrdinaryBatchResult:
     entry_keys: tuple[str, ...]
     already_posted: bool = False
+    pending_transfer_revision_ids: tuple[int, ...] = ()
 
 
 def preview_digest(preview: OrdinaryBatchPreview) -> str:
@@ -51,6 +63,39 @@ def preview_digest(preview: OrdinaryBatchPreview) -> str:
     return hashlib.sha256(
         json.dumps(["ordinary-category-batch-1", fields], sort_keys=True, separators=(",", ":"), default=str).encode()
     ).hexdigest()
+
+
+def validate_effect_correspondence(preview: OrdinaryBatchPreview) -> None:
+    """Bind every selected action to exactly one effect, including saved retries.
+
+    Recomputed preview hashes are consistency checks, not authority. In
+    particular, an existing category entry must never make an unrepresented
+    transfer selection appear to have been successfully saved.
+    """
+    categories = tuple(i for i in preview.selections if type(i) is OrdinaryCategorySelection)
+    transfers = tuple(i for i in preview.selections if type(i) is OrdinaryTransferSelection)
+    withdrawals = tuple(i for i in categories if i.pending_transfer_revision_id is not None)
+    valid = (
+        len(preview.entries) == len(categories)
+        and len(preview.pending_transfers) == len(transfers)
+        and len(preview.pending_transfer_withdrawals) == len(withdrawals)
+    )
+    if valid:
+        for drafts, selections, action, revision_field in (
+            (preview.pending_transfers, transfers, "pending", "expected_revision_id"),
+            (preview.pending_transfer_withdrawals, withdrawals, "withdrawn", "pending_transfer_revision_id"),
+        ):
+            for item, selected in zip(drafts, selections, strict=True):
+                valid = valid and (
+                    type(item) is PendingTransferDraft
+                    and type(item.movement) is TransferMovement
+                    and item.row_id == selected.row_id == item.movement.row_id
+                    and item.movement.source_sha256 == preview.source_sha256
+                    and item.action == action
+                    and item.prior_revision_id == getattr(selected, revision_field)
+                )
+    if not valid:
+        raise ProfileFormatError("ordinary_batch_effect_selection_mismatch")
 
 
 def check_cancelled(cancelled) -> None:

@@ -31,6 +31,7 @@ class TransferBatchPlan:
     ambiguous_pair_count: int
     date_blocked_pair_count: int
     confirmation_sha256: str
+    require_pending_intents: bool = False
 
     @property
     def excluded_pair_count(self):
@@ -63,7 +64,9 @@ def profile_identity(store):
     return _digest([os.path.normcase(str(path)), stat.st_dev, stat.st_ino])
 
 
-def _confirmation(basis, profile, preferences, gap, pairs, candidates, ambiguous, disabled):
+def _confirmation(
+    basis, profile, preferences, gap, pairs, candidates, ambiguous, disabled, require_pending_intents=False
+):
     return _digest(
         [
             RULE,
@@ -75,6 +78,7 @@ def _confirmation(basis, profile, preferences, gap, pairs, candidates, ambiguous
             candidates,
             ambiguous,
             disabled,
+            require_pending_intents,
         ]
     )
 
@@ -109,6 +113,7 @@ def plan_unique_transfers(snapshot: TransferReviewSnapshot) -> TransferBatchPlan
         len(snapshot.candidates),
         ambiguous,
         disabled,
+        snapshot.require_pending_intents,
     )
     return TransferBatchPlan(
         snapshot.basis_sha256,
@@ -120,6 +125,7 @@ def plan_unique_transfers(snapshot: TransferReviewSnapshot) -> TransferBatchPlan
         ambiguous,
         disabled,
         token,
+        snapshot.require_pending_intents,
     )
 
 
@@ -130,6 +136,7 @@ def validate_plan(plan):
         or not plan.pairs
         or any(type(pair) is not TransferCandidate for pair in plan.pairs)
         or type(plan.preferences) is not V2Preferences
+        or type(plan.require_pending_intents) is not bool
         or type(plan.preferences.allow_assumed_posting_dates) is not bool
         or type(plan.preferences.allow_abbreviated_account_matching) is not bool
         or type(plan.max_day_gap) is not int
@@ -153,6 +160,7 @@ def validate_plan(plan):
             plan.candidate_count,
             plan.ambiguous_pair_count,
             plan.date_blocked_pair_count,
+            plan.require_pending_intents,
         )
     ):
         raise ProfileFormatError("transfer_batch_plan_invalid")
