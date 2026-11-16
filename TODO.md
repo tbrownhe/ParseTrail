@@ -6,7 +6,13 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None. [Loan origination and separate transfer resolution](docs/work/2026-11-16-origination-transfer-resolution.md)
+None. [Flexible financing destinations and tangible assets](docs/work/2026-11-16-flexible-origination-assets.md)
+is implemented and agent-verified: independent financing/valuation, general asset
+destinations, signed liability transfers, precise Citi warnings, seeded Loan
+interest and faster review flow. Schema 27 fresh candidate prepared; existing
+private candidates stay untouched. Human/platform/release gates remain separate.
+
+[Loan origination and separate transfer resolution](docs/work/2026-11-16-origination-transfer-resolution.md)
 is implemented and agent-verified: separate Transfers workspace, posted unresolved
 payments, finite vehicle acquisition/valuation, warning severity, zero reviews,
 metadata locking and staging readiness. Independent integrity, design and fresh

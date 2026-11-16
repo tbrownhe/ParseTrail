@@ -161,20 +161,32 @@ postings and zero-amount classifications. Zero rows retain reviewed purpose/cate
 reason and revision history without zero journals, allocations or budget movement.
 No broad sign-rule or zero-posting exception is introduced.
 
-The finite Capital origination workflow treats Amount Financed as financing, not
-a payment. A vehicle destination and independently authored acquisition value/date
-are required for posting. Equal financing/value is supported; a larger acquisition
-requires one exact actual bank downpayment for the difference. Separate financing,
-acquisition and bank dates retain clearing between them. Trade-ins, financed extras
-and other unresolved funding shapes cannot be balanced with invented cash, income,
-expense, equity or openings. Import may remain pending. Exact source proof and
-physical profile identity bind confirmation; withdrawal preserves history/inverses.
+The finite Capital origination workflow treats Amount Financed as financing,
+separate from repayment, full acquisition cost and estimated value. Exact principal
+may post against clearing with destination unknown. An eligible financial destination
+is an expectation until an actual counterpart is confirmed separately in Transfers;
+no cash receipt is invented. Either liability sign may participate in that resolution,
+including debt-to-debt transfers, refinancing and liability-to-asset funding. Exact
+opposing movements retain their own dates. Legacy settlement limits and separately
+reviewed fees remain unchanged.
 
-Vehicle dated values and optional annual decline are separately authored estimates.
-They do not post depreciation expense or establish cash movement, acquisition cost
-or previously unknown book openings. Missing annual rate leaves a later estimated
-value unknown; explicit zero permits a flat projection. PDF-import-created account
-institution/product metadata is locked independently of editable account names.
+An explicitly confirmed tangible destination may receive only the exact financed
+portion on its authored allocation date without a bank or purchase counterpart.
+Full acquisition cost remains unknown. A value above financing never implies a
+downpayment or balancing money. The separate finite full-acquisition API still
+supports independently authored exact cost plus an actual bank downpayment when
+that complete funding shape is available. Exact source proof and physical profile
+identity bind confirmation; withdrawal preserves history/inverses and requires
+unlinking any matched funding first. Unknown source formats remain unsupported.
+
+Tangible assets use general managed classification and descriptive nicknames.
+Dated values and optional signed annual value changes are nonposting estimates;
+they create no depreciation expense, cash movement, acquisition cost or previously
+unknown book opening. Missing annual rate leaves a later estimate unknown; explicit
+zero permits a flat projection. Positive rates appreciate and negative rates decline.
+The protected Loan interest category is present from fresh initialization.
+PDF-import-created account institution/product metadata is locked independently
+of editable account names.
 
 Reviewed settlements can retain one complete asset outflow and multiple owned
 receipts, including explicit fee allocations with an exact amount, expense

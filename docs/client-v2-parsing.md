@@ -212,6 +212,17 @@ summary/disclosure/detail lines to financial movements. A source-check failure
 refuses admission with bounded diagnostics; never fabricate a balancing row or
 endpoint to make the source agree.
 
+The legacy Citi line engine separately recognizes finite anchored account/payment
+summary, credit-term, bounded repayment-example, interest-detail and APR-table
+shapes as informational source dispositions. It preserves values and locations
+and creates no additional activity.
+Extra monetary tokens (including truncated dollar amounts) on otherwise recognized
+closing/total lines remain unresolved. Unlabelled coupon/disclosure amounts do not
+become benign merely through proximity or an equal amount. Engine identity records
+the policy revision; declarations and retained snapshots remain unchanged. Exact
+source retry still reuses its original evidence. No complete-capture or missing
+transfer claim follows from reclassifying known non-activity text.
+
 The evidence envelope excludes categories, verification flags, journals and
 postings. Endpoint scopes are explicit: `account_total`, `cash_component` or
 `principal_component`. Row roles are `activity`, `period_summary` or

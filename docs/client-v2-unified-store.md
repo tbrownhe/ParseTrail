@@ -29,7 +29,7 @@ evidence belong in [packet records](work/README.md).
 
 ## Profile format and lifecycle
 
-The current pre-release profile schema is revision 26; check `SCHEMA_VERSION`
+The current pre-release profile schema is revision 27; check `SCHEMA_VERSION`
 in `v2_profile_store.py` when opening a packet. Format markers, exact table and
 foreign-key shapes, append-only triggers and SQLite integrity are checked before
 writable use. Older disposable pilots, 1.x, unknown, damaged and newer shapes
@@ -499,9 +499,9 @@ without selecting a counterpart or checking a component automatically. Saved eve
 remain whole-event history/correction actions. Observed activity dates, separately
 assumed accounting dates, principal-only scope and unknown openings stay explicit.
 
-## Separate transfer resolution and vehicle origination
+## Separate transfer resolution and loan funding
 
-Schema 26 adds immutable `UnresolvedTransferLegs`/actions and explicit
+The profile retains immutable `UnresolvedTransferLegs`/actions and explicit
 `TransferResolutionLinks`/actions. Review posts an evidenced generic source side or
 lender-only loan event; Transfers is the profile-wide relationship workflow.
 Two posted sides link without journals. A deliberately selected unposted counterpart
@@ -521,22 +521,37 @@ exact inverses. Whole lender-payment correction remains with its owning loan his
 
 `LoanOriginationEvents`/actions/source uses admit the finite Capital Amount Financed
 shape separately from repayment. The positive observed principal, absent interest,
-source activity date and locations remain intact. An explicitly selected vehicle
-receives an independently entered acquisition value/date. Financing equal to value
-is admitted; a larger acquisition requires one exact actual bank downpayment for
-the difference. Financing, acquisition and downpayment each keep their own dates
-against clearing. Trade-ins, financed extras and other funding shapes stay pending;
-no difference becomes fabricated cash, income, expense, equity or an opening.
-Physical profile identity and exact proof bind origination previews before retry.
-Withdrawal preserves inverses/source history and allows fresh review.
+source activity date and locations remain intact. Financing posts the exact principal
+increase against transfer clearing using the explicitly permitted assumed accounting
+date. Destination may remain unknown, or a selected eligible financial account may
+constrain later receipt matching without receiving an invented posting. Transfers
+shows this borrowing as outgoing funding, retaining its source proof and qualification.
+Either sign of liability movement is eligible for separate resolution, including
+card-to-card transfers and liability-to-asset funding; legacy settlement rules remain
+separate. Fees are never inferred from unmatched amounts.
 
-Vehicle classification is managed asset metadata and is fixed by valuation/acquisition
-history. `TangibleAssetValues` records separately authored dated values and optional
-annual decline in integer basis points. Decimal projection uses 365.2425 days per
-year and cent rounding; it posts no journals or budget expense. A missing rate leaves
-a later estimate unknown; explicit zero permits a flat estimate. Entered values remain
-available on their own dates. Vehicle valuation is not automatically acquisition cost
-or an established book position. Prior openings stay unknown until separately reviewed.
+Selecting a tangible asset requires explicit confirmation that this financing funded
+the asset and a separately authored allocation date. Only the exact financed portion
+is allocated to the asset against clearing. Full acquisition cost remains unknown;
+estimated value never supplies a downpayment, bank movement or balancing entry.
+The separate finite full-acquisition API still admits an exact independently authored
+cost and evidenced bank downpayment, with each own date, when that complete shape is
+available. Physical profile identity and exact proof bind previews before retry.
+Withdrawal preserves inverses/source history; matched funding must first be unlinked.
+Other origination source shapes, including unestablished Wells formats, remain unsupported.
+
+The managed `tangible_asset` product describes vehicles, precious metals, property,
+jewelry or equipment through an authored nickname. Creation requires no valuation.
+Classification is fixed by valuation/funding history. `TangibleAssetValues` records
+separately authored dated estimates and optional signed annual value change in integer
+basis points (-10000 through +100000). Negative rates decline and positive rates
+appreciate. Decimal projection uses 365.2425 days per year and cent rounding; it posts
+no journals or budget expense. A missing rate leaves a later estimate unknown;
+explicit zero permits a flat estimate. Entered values remain available on their own
+dates. Origination-created estimates default to the source activity date, separately
+editable; standalone estimates default to today. Values do not establish acquisition
+cost or previously unknown book openings. Fresh schema27 profiles include the protected
+Loan interest category through explicit initialization, without writes on read.
 
 The sidebar order is Documents, Accounts, Review, Transfers, Budget, Reports. Loan
 posting never forces matching. Explicit Transfers handoff closes the payment modal,
@@ -545,6 +560,12 @@ dates, note and evidence; confirmation identifies exact existing and new effects
 Current report/workbook views retain monetary qualifications and full-profile decision
 history separately from the selected journal period. No owner/release acceptance is
 established by the development implementation.
+
+Successful initial review posting may advance to the next incomplete statement only
+after fresh saved summaries show the current document complete. Posted unmatched sides
+belong to Transfers. Generic refreshes, failures, cancellations, corrections and
+report/Transfers source-return contexts do not advance. A completion notice and route
+back preserve context; drafts and outstanding operations prevent navigation.
 
 `StatementSourceReviews` is one append-only assertion history for bound statement
 sections. Opening/closing origin, inclusive-period timing, posting-date certainty,
