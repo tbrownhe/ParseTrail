@@ -259,7 +259,7 @@ and coverage remain separate. V2 source imports use the finite
 [signed parser catalog](../docs/client-v2-parsing.md), not the 1.x bytecode loader.
 These implemented slices do not establish 2.0 release readiness.
 
-The V2 workspace uses Documents, Review, Accounts, Budget and Reports navigation.
+The V2 workspace uses Documents, Accounts, Review, Transfers, Budget and Reports navigation.
 Documents are searchable by saved account/source labels and qualified dates;
 their primary action opens the relevant account confirmation or activity review.
 New or ambiguous account suggestions require confirmation. Full source
@@ -272,6 +272,10 @@ Import preferences also appear in Settings: abbreviated-number matching is opt-i
 preview for routine, uniquely matched existing accounts. New/ambiguous accounts,
 material parser warnings and changed inputs still pause for review. These settings
 apply to subsequent files. Automatic import retains evidence; it posts no spending.
+Estimated dates are Informational. Unverified monetary balances or possible money
+defects Require review with specific reasons and source detail. A known account can
+skip account setup while still showing a necessary content preview. Institution and
+product are locked for newly created PDF-import accounts; the nickname stays editable.
 
 Review embeds the selected document's supported cash/card/register activity.
 Search, status filters and exact sorting keep the current task visible.
@@ -294,13 +298,24 @@ operations. Already-consumed rows show their owning reviewed workflow rather
 than requesting another ordinary posting. Related actions exposes transfers,
 loan components, fees, account reassignment and evidence checks.
 
-Choose **Transfer / card repayment** and stage it in the same review set to save a
-designation without choosing a category or posting money. It stays in Review while
-waiting for the other statement. Once both sides are explicitly designated,
-**Review match** offers an optional proposal; only final confirmation posts the
-transfer. Changing a saved designation or withdrawing it requires a fresh reason.
+Choose **Transfer / card repayment** and stage it in the same review set to post
+the evidenced source side against unresolved clearing. Matching is a separate task
+in **Transfers**, available when the other statement arrives. Two posted sides link
+without another journal; explicitly selecting an unposted counterpart adds only that
+side. Proposals distinguish reviewed transfers from manual unreviewed alternatives.
+Source dates and their assumptions remain visible. Corrections require fresh reasons.
 Supported loan statements instead show payment total, principal and interest with
-an explicit loan-payment review action and missing-evidence/date prerequisites.
+an explicit loan-payment action. Bank evidence is optional: principal and printed
+interest can post while the gross payment waits in Transfers. A zero-value fee can
+be reviewed and categorized without a journal or budget effect. Stage is disabled
+when the selected staged choices and shared reason are unchanged.
+
+Amount Financed opens **Review loan origination**, separately from repayment. Choose
+or create a Vehicle asset and enter its acquisition value/date independently. A value
+above financing needs one exact bank downpayment; unsupported funding differences
+stay pending. **Vehicle assets** in Accounts also retains dated values and optional
+estimated annual decline without posting depreciation or budget expense. Unknown
+prior openings remain unknown; valuation and established book positions are distinct.
 
 Ordinary corrections show the active **Saved review note** as read-only context
 and an initially empty **Reason for correction**. An unchanged saved selection

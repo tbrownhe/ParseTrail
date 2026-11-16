@@ -6,12 +6,19 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None. [Import convenience and pending payment review](docs/work/2026-11-15-import-payment-refinement.md)
+None. [Loan origination and separate transfer resolution](docs/work/2026-11-16-origination-transfer-resolution.md)
+is implemented and agent-verified: separate Transfers workspace, posted unresolved
+payments, finite vehicle acquisition/valuation, warning severity, zero reviews,
+metadata locking and staging readiness. Independent integrity, design and fresh
+synthetic task checks passed. Human/platform/release gates remain separate.
+Current schema 26 needs a fresh profile; earlier private candidates stay pinned.
+
+[Import convenience and pending payment review](docs/work/2026-11-15-import-payment-refinement.md)
 is implemented and agent-verified in Windows development: original access, guarded
 matching/preview preferences, Capital loan routing, whole-control dropdowns,
 durable transfer designation and initial reasons. Human/native discovery and
-broader platform/release acceptance remain separate. Schema 25 needs a fresh profile;
-the earlier private owner-test candidate remains unchanged.
+broader platform/release acceptance remain separate. That schema-25 private test
+candidate remains unchanged; current behavior is recorded in the packet above.
 
 [All six first-use clarity refinements](docs/work/2026-11-07-v2-core-desktop-journey.md#november-14-implement-first-use-clarity-refinements)
 are implemented and verified in Windows development: separate shared/correction

@@ -143,13 +143,38 @@ event: checking to transfer clearing, then clearing to the card. Clearing retain
 the amount in transit at intermediate cutoffs. No forced common posting date.
 Transfers within owned assets and card repayments create no second expense.
 
-A pending Transfer/card-repayment designation records user intent without posting
-money or inferring an owned destination. It may wait for missing evidence. Both
-legs require current explicit designations for proposals launched from ordinary
-review; a proposal still needs final confirmation. Designation changes/withdrawal
-retain revision history and an explicit reason. Mixed ordinary review sets save
-category postings and no-money designations atomically, with separate confirmation
-totals. Source facts remain unchanged.
+Current Transfer/card-repayment review posts the observed side against transfer
+clearing while its counterpart remains unresolved. A complete lender payment may
+likewise post principal reduction and printed interest against gross clearing
+without bank evidence. No missing bank amount/date/account is invented. Transfer
+resolution is a separate explicit workflow: linking two posted sides creates no
+journals; attaching unposted evidence adds only that side. Automatic proposals
+require explicit transfer/loan designation; unreviewed alternatives require separate
+manual choice and ownership confirmation. Each unresolved item stays visible even
+when aggregate clearing cancels. All actual qualified dates survive matching and
+constrain its date window. Withdrawing a relationship leaves both posted sides;
+correction of a posted side first requires unlinking and retains exact inverses.
+The headless pending-designation boundary remains no-money authored intent.
+
+Ordinary mixed review sets atomically save category postings, unresolved transfer
+postings and zero-amount classifications. Zero rows retain reviewed purpose/category,
+reason and revision history without zero journals, allocations or budget movement.
+No broad sign-rule or zero-posting exception is introduced.
+
+The finite Capital origination workflow treats Amount Financed as financing, not
+a payment. A vehicle destination and independently authored acquisition value/date
+are required for posting. Equal financing/value is supported; a larger acquisition
+requires one exact actual bank downpayment for the difference. Separate financing,
+acquisition and bank dates retain clearing between them. Trade-ins, financed extras
+and other unresolved funding shapes cannot be balanced with invented cash, income,
+expense, equity or openings. Import may remain pending. Exact source proof and
+physical profile identity bind confirmation; withdrawal preserves history/inverses.
+
+Vehicle dated values and optional annual decline are separately authored estimates.
+They do not post depreciation expense or establish cash movement, acquisition cost
+or previously unknown book openings. Missing annual rate leaves a later estimated
+value unknown; explicit zero permits a flat projection. PDF-import-created account
+institution/product metadata is locked independently of editable account names.
 
 Reviewed settlements can retain one complete asset outflow and multiple owned
 receipts, including explicit fee allocations with an exact amount, expense

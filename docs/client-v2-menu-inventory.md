@@ -58,9 +58,17 @@ presentation choices rather than missing export implementation.
 
 ## Approved initial-release deferrals
 
+The current workspace order is Documents / Accounts / Review / Transfers / Budget /
+Reports. Review can post evidenced transfer and lender-payment sides with unresolved
+counterparts; Transfers resolves relationships separately, without another principal
+or interest posting. Origination has a distinct finite vehicle acquisition route.
+Accounts exposes vehicle dated values/optional nonposting annual decline estimates.
+These [owner-requested refinements](work/2026-11-16-origination-transfer-resolution.md)
+retain the remaining initial-release deferrals and owner/platform/release gates.
+
 The guided workspace now embeds ordinary document activity review, qualified
-account positions/history and existing report tabs in Documents / Review /
-Accounts / Reports. Related document actions retain transfer, component-payment,
+account positions/history and existing report tabs across Documents / Accounts /
+Review / Transfers / Budget / Reports. Related document actions retain transfer, component-payment,
 fee and evidence-check workflows. Ordinary review supports search/status filters,
 exact sorting, next-pending navigation and explicitly staged atomic category
 batches; correction/withdrawal remains separate. Reviewed-elsewhere activity

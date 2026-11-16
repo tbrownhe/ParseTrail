@@ -29,7 +29,7 @@ evidence belong in [packet records](work/README.md).
 
 ## Profile format and lifecycle
 
-The current pre-release profile schema is revision 25; check `SCHEMA_VERSION`
+The current pre-release profile schema is revision 26; check `SCHEMA_VERSION`
 in `v2_profile_store.py` when opening a packet. Format markers, exact table and
 foreign-key shapes, append-only triggers and SQLite integrity are checked before
 writable use. Older disposable pilots, 1.x, unknown, damaged and newer shapes
@@ -93,13 +93,28 @@ supported boundaries; the combined UI does not change immutable evidence policy.
 
 Import previews default to Always. The global Only when attention is needed mode
 skips display only for one recognized interpretation whose complete account groups
-uniquely match existing accounts, without recovery notices or material parser/date
+uniquely match existing accounts, without recovery notices or material monetary
 warnings. It retains unreviewed evidence and creates no financial entries. The final
 write rechecks live preferences, source, catalog and account state; changed inputs
 return to review. Confirmed partial-identifier associations remain partial, require
 the abbreviated-matching preference and cannot override a conflicting current match.
 Unknown, new or ambiguous assignments require confirmation. Pre-import originals
 are bounded, digest-checked, read-only in-memory views, separate from saved evidence.
+
+Warnings have two classes. Estimated dates and generic unverified full-page capture
+are Informational. Unverified statement monetary balances, actual balance mismatch,
+unknown amounts and unexplained amount-bearing content Require review. Missing
+verification is not presented as failed arithmetic; checks respect principal/cash/
+account-total scope and exports do not manufacture missing statement checks. Full
+codes and source locations remain discoverable. Posting-date permission is separate.
+A uniquely confirmed account can skip account setup even when monetary content
+requires the transaction preview. No source-defect repair override is introduced.
+
+New PDF-import accounts retain an immutable source-linked institution/product lock,
+created after account binding inside the atomic import. Values chosen during import
+remain distinct from parser-established facts. Names remain editable. Read validation,
+updates and backup enforce the same lock. Vehicle assets cannot bind statement cash
+activity or enter cash transfer candidates merely because their ledger class is asset.
 
 `Institutions(id,name)` is a managed identity registry independent of installed
 document formats. Fresh profiles seed canonical institution names/IDs; explicit
@@ -199,7 +214,8 @@ canceled confirmation retain authored changes, while a successful write refreshe
 the saved context and clears the editable reason. Existing basis/transaction
 guards, inverse/replacement history and immutable source evidence are unchanged.
 
-Schema 25 adds append-only pending-transfer revisions. Transfer/card-repayment
+Append-only pending-transfer revisions retain the headless no-money designation
+boundary. Transfer/card-repayment
 designation is an authored interpretation, with no journal, allocation, clearing
 or inferred counterpart. It survives restart, preserves its source/account context
 and reason, and may wait for another statement. Current state is derived against
@@ -208,12 +224,23 @@ Corrections and withdrawal require an explicitly entered reason and revision che
 Reclassification to an ordinary category atomically withdraws the current designation
 and posts the independently validated category entry.
 
-An ordinary review set may contain category postings and no-money designations.
+Current ordinary review stages category postings, posted unresolved transfer sides
+and zero-amount nonposting reviews in one immutable batch. A transfer financial
+posting uses its qualified source accounting date and the existing date permission.
+The captured exact effects, zero-review revisions and source uses commit together
+or all roll back. Exact retries cannot overwrite a later correction. Legacy
+no-money designations remain separate from the current financial Type selection.
+
+An ordinary review set may therefore contain different posting/nonposting effects.
 Its immutable preview and final write validate the exact selections and pending
 revisions together in one transaction. Confirmation separates both effects. Initial
 shared reasons default to `Initial Review`; edits persist with the review set.
 Saved decisions have separate blank correction/withdrawal fields. The default alone
 does not count as an unsaved draft or authorize a correction.
+When the complete selected proposals and captured reason already match the staged
+set, Stage is disabled; new or changed choices re-enable it. Zero rows can retain
+purpose/category/reason and correction/withdrawal history without zero journals,
+allocations or budget movement. Their review state clears ordinary pending counts.
 
 Background profile jobs retain worker connections until completion, coalesce
 superseded reads and serialize their confirmed writes per resolved profile.
@@ -436,10 +463,11 @@ completeness. See the [register packet](work/2026-10-26-v2-liability-register.md
 
 Schema 21 retains bounded reviewed loan payments in `LoanEvents`,
 `LoanEventActions`, `LoanSourceUses`, `DerivedFinancialObservations` and
-`JournalDerivedAllocations`. An explicitly selected observed asset outflow must
-exactly equal one printed Capital/MOHELA principal/interest payment or selected
-Wells component rows from one source/loan account. Nonzero fees, incomplete/mixed
-components, disbursements, capitalization and missing bank counterparts stay
+`JournalDerivedAllocations`. A complete printed Capital/MOHELA payment or selected
+Wells component rows from one source/loan account may post its lender side without
+a bank leg: principal reduces debt, printed interest is expense and gross offsets
+transfer clearing. If a bank outflow is selected it must match the complete gross.
+Nonzero fees, incomplete/mixed components, disbursements and capitalization stay
 pending. These are principal-component liability interpretations; Yamaha's
 account-total register is a separate shape.
 
@@ -470,6 +498,53 @@ proof and prerequisites, and hands the selected source/row to whole-payment revi
 without selecting a counterpart or checking a component automatically. Saved events
 remain whole-event history/correction actions. Observed activity dates, separately
 assumed accounting dates, principal-only scope and unknown openings stay explicit.
+
+## Separate transfer resolution and vehicle origination
+
+Schema 26 adds immutable `UnresolvedTransferLegs`/actions and explicit
+`TransferResolutionLinks`/actions. Review posts an evidenced generic source side or
+lender-only loan event; Transfers is the profile-wide relationship workflow.
+Two posted sides link without journals. A deliberately selected unposted counterpart
+creates only its missing side against clearing, retaining existing lender principal
+and interest. Automatic proposals require explicit transfer/loan designation; raw
+sources are separately labelled manual alternatives with ownership confirmation.
+Every amount/date/source/basis is rebuilt at commit. Exact missing-leg retries,
+withdrawn-link refusal and wider-window replay retain their original identities.
+
+Each unresolved side stays individually visible even when aggregate clearing is
+zero. Reports count sides using their actual posting dates and current matching
+state; this does not infer historical match dates. Multi-date component bundles
+retain all qualified dates, require all dates inside a matching window and count
+once if any actual leg satisfies the report's complete period bounds. Link withdrawal
+retains the posted sides; posted-side withdrawal requires unlinking first and retains
+exact inverses. Whole lender-payment correction remains with its owning loan history.
+
+`LoanOriginationEvents`/actions/source uses admit the finite Capital Amount Financed
+shape separately from repayment. The positive observed principal, absent interest,
+source activity date and locations remain intact. An explicitly selected vehicle
+receives an independently entered acquisition value/date. Financing equal to value
+is admitted; a larger acquisition requires one exact actual bank downpayment for
+the difference. Financing, acquisition and downpayment each keep their own dates
+against clearing. Trade-ins, financed extras and other funding shapes stay pending;
+no difference becomes fabricated cash, income, expense, equity or an opening.
+Physical profile identity and exact proof bind origination previews before retry.
+Withdrawal preserves inverses/source history and allows fresh review.
+
+Vehicle classification is managed asset metadata and is fixed by valuation/acquisition
+history. `TangibleAssetValues` records separately authored dated values and optional
+annual decline in integer basis points. Decimal projection uses 365.2425 days per
+year and cent rounding; it posts no journals or budget expense. A missing rate leaves
+a later estimate unknown; explicit zero permits a flat estimate. Entered values remain
+available on their own dates. Vehicle valuation is not automatically acquisition cost
+or an established book position. Prior openings stay unknown until separately reviewed.
+
+The sidebar order is Documents, Accounts, Review, Transfers, Budget, Reports. Loan
+posting never forces matching. Explicit Transfers handoff closes the payment modal,
+focuses its row and preserves return context. Saved match inspection names both sides,
+dates, note and evidence; confirmation identifies exact existing and new effects.
+Current report/workbook views retain monetary qualifications and full-profile decision
+history separately from the selected journal period. No owner/release acceptance is
+established by the development implementation.
 
 `StatementSourceReviews` is one append-only assertion history for bound statement
 sections. Opening/closing origin, inclusive-period timing, posting-date certainty,

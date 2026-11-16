@@ -194,6 +194,16 @@ certify coverage. The owner-approved incomplete-capture presentation keeps
 `capture_verified` false where complete capture is unverified; it does not add a
 blanket balance-reconciliation blocker.
 
+The import convenience decision uses two warning classes. Estimated dates and
+generic unverified capture are Informational; unverified monetary statement balances,
+actual mismatch, unknown monetary fields and unexplained amount-bearing content
+Require review. Check equations use the declared account/component scope, including
+principal separately from gross loan payments. Unavailable endpoints are described
+as unverified rather than failed arithmetic, and activity exports do not invent
+statement balance checks. Warnings consider all rows, preserve bounded locations
+and occurrence counts, and leave original complete dispositions unchanged. Requiring
+preview does not create a source-repair override or modify posting-date permission.
+
 Account for candidate rows in declared activity sections as parsed, explicitly
 ignored with a reason, or unresolved. Preserve unexpected dated/amount rows,
 continuations, non-activity detail and unclassified page text visibly. Recent
