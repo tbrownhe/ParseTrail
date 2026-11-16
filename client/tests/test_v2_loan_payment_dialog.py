@@ -203,8 +203,7 @@ def test_explicit_complete_source_shapes_and_zero_components(tmp_path, variant):
         assert any(posting.account_id == INTEREST for entry in entries for posting in entry.postings) == bool(
             expected[1]
         )
-        if not expected[1]:
-            assert all(category.id != INTEREST for category in store.category_accounts())
+        assert any(category.id == INTEREST for category in store.category_accounts())
         if not expected[0]:
             assert store.connection.execute("SELECT count(*) FROM JournalDerivedAllocations").fetchone() == (0,)
     view.close()

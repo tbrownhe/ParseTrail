@@ -143,6 +143,7 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
     """Keep card classification and date decisions explicit before journal writes."""
 
     changed = Signal()
+    initial_posted = Signal(str)
     transfers_requested = Signal(str)
 
     def __init__(self, workspace: V2Workspace, source_sha256: str, parent=None, *, register_mode=False, embedded=False):

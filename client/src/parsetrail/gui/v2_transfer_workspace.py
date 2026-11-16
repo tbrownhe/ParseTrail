@@ -49,6 +49,7 @@ class V2TransferWorkspace(QWidget):
         self._rendering = False
         self._draft_identity = None
         self._manual_candidates = False
+        self._account_names = {}
         self.jobs = ProfileJobs(self, workspace.profile_path)
         self.jobs.completed.connect(self._completed)
         self.jobs.failed.connect(self._failed)
@@ -79,7 +80,7 @@ class V2TransferWorkspace(QWidget):
         toolbar.addWidget(manual)
         layout.addLayout(toolbar)
         self.table = QTableWidget(0, 5)
-        self.table.setHorizontalHeaderLabels(("Account", "Date", "Payment", "Direction", "State"))
+        self.table.setHorizontalHeaderLabels(("Account", "Date", "Amount", "Direction", "State"))
         self.table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -148,7 +149,13 @@ class V2TransferWorkspace(QWidget):
         if current is not None and not self._focus_row:
             self._focus_row = current.row_ids[0]
         preferences = self.workspace.preferences()
-        self.jobs.submit("snapshot", lambda store, _cancelled: store.resolution_snapshot(preferences=preferences))
+
+        def read(store, _cancelled):
+            return store.resolution_snapshot(preferences=preferences), {
+                account.id: account.name for account in store.financial_accounts()
+            }
+
+        self.jobs.submit("snapshot", read)
 
     def focus_row(self, row_id):
         self._focus_row = row_id
@@ -161,14 +168,18 @@ class V2TransferWorkspace(QWidget):
             if target is not None and current_filter not in {"all", target.status}:
                 self.filter.setCurrentIndex(max(0, self.filter.findData(target.status)))
             self._render()
+            # Navigation may already have started a fresh snapshot. Rendering
+            # the retained state must not consume that read's return target.
+            if self.jobs.pending:
+                self._focus_row = row_id
 
     def shutdown(self):
         return self.jobs.close()
 
     def _completed(self, key, result):
         if key == "snapshot":
-            self.snapshot = result
-            self._items = {item.id: item for item in result.items}
+            self.snapshot, self._account_names = result
+            self._items = {item.id: item for item in self.snapshot.items}
             self._render()
         else:
             self.correction_reason.clear()
@@ -272,6 +283,12 @@ class V2TransferWorkspace(QWidget):
                 self._candidates[other_id] = candidate
                 self.counterpart.addItem(text, other_id)
             self.saved_context.setText(f"{item.account_name} · saved note: {item.reason}")
+            if item.kind == "origination":
+                destination = self._account_names.get(item.expected_destination_account_id, "Not established")
+                self.saved_context.setText(
+                    f"Loan financing · {_money(item.gross_minor)} · Expected destination: {destination}. "
+                    "Receipt remains unresolved. Full acquisition cost is unknown. Saved note: " + item.reason
+                )
             link = self._link(item)
             if link is not None:
                 other = self._items.get(link.incoming_id if item.id == link.outgoing_id else link.outgoing_id)
@@ -317,14 +334,19 @@ class V2TransferWorkspace(QWidget):
         self.withdraw_button.setEnabled(bool(usable and self._link(item) and self.correction_reason.text().strip()))
         self.withdraw_posting_button.setEnabled(
             bool(
-                usable and item.status == "unmatched" and item.kind != "loan" and self.correction_reason.text().strip()
+                usable
+                and item.status == "unmatched"
+                and item.kind not in {"loan", "origination"}
+                and self.correction_reason.text().strip()
             )
         )
         correcting = self.corrections.isChecked()
         self.correction_reason.setVisible(correcting)
         self.form.labelForField(self.correction_reason).setVisible(correcting)
         self.withdraw_button.setVisible(correcting)
-        self.withdraw_posting_button.setVisible(correcting and item is not None and item.kind != "loan")
+        self.withdraw_posting_button.setVisible(
+            correcting and item is not None and item.kind not in {"loan", "origination"}
+        )
         if self.jobs.pending:
             self.status.setText("Saving confirmed changes…" if self.jobs.writing else "Loading transfer relationships…")
         elif item is None:
@@ -456,8 +478,8 @@ class V2TransferWorkspace(QWidget):
         ):
             return
         event_id, version, kind = item.id, item.version, item.kind
-        if kind == "loan":
-            self.status.setText("Withdraw a loan payment through its whole-payment history. Review source to open it.")
+        if kind in {"loan", "origination"}:
+            self.status.setText("Review the source to withdraw its whole loan posting.")
             return
         self.jobs.submit(
             "withdraw_posting",

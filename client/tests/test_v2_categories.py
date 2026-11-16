@@ -19,11 +19,13 @@ def test_category_dialog_adds_and_renames_without_posting(tmp_path: Path) -> Non
         pass
     dialog = V2CategoryDialog(profile)
     try:
-        assert dialog.categories.count() == 0
+        assert dialog.categories.count() == 1
+        assert "Loan interest" in dialog.categories.item(0).text()
         assert not dialog.rename_button.isEnabled()
+        dialog.begin_add()
         dialog.add_name.setText("Groceries")
         dialog.add_button.click()
-        assert dialog.categories.count() == 1
+        assert dialog.categories.count() == 2
         assert not dialog.rename_button.isEnabled()  # Unchanged saved name has no pending rename.
         dialog.rename_name.setText("Food")
         dialog.rename_button.click()
@@ -32,13 +34,14 @@ def test_category_dialog_adds_and_renames_without_posting(tmp_path: Path) -> Non
         dialog.add_name.setText("Wages")
         dialog.add_kind.setCurrentIndex(1)
         dialog.add_button.click()
-        assert dialog.categories.count() == 2
+        assert dialog.categories.count() == 3
     finally:
         dialog.close()
         app.processEvents()
     with V2ProfileStore.open(profile, read_only=True) as store:
         assert [(category.name, category.kind) for category in store.category_accounts()] == [
             ("Food", "expense"),
+            ("Loan interest", "expense"),
             ("Wages", "income"),
         ]
         assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (0,)

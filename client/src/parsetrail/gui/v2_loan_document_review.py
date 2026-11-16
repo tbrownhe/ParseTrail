@@ -45,6 +45,7 @@ class V2LoanDocumentReview(QWidget):
     """A reusable, read-only source landing with an explicit whole-payment action."""
 
     changed = Signal()
+    initial_posted = Signal(str)
     transfers_requested = Signal(str)
 
     def __init__(self, workspace, source_sha256, parent=None):
@@ -172,7 +173,7 @@ class V2LoanDocumentReview(QWidget):
                 _money(parts["interest"].minor) if "interest" in parts else "Not printed separately",
                 "Posted origination"
                 if self._is_origination(row) and row.row_id in self.origination_events
-                else "Origination · review destination"
+                else "Origination · ready to review"
                 if self._is_origination(row)
                 else "Posted · counterpart unresolved"
                 if self._event(row) is not None and self._event_unresolved(self._event(row))
@@ -241,16 +242,33 @@ class V2LoanDocumentReview(QWidget):
             if event:
                 destination = next(
                     (account.name for account in self.snapshot.accounts if account.id == event.destination_account_id),
-                    "the retained vehicle asset",
+                    "Unknown",
                 )
+                allocated = event.acquisition_date is not None
+                self.transfers_button.setVisible(not allocated)
+                self.transfers_button.setEnabled(not self.jobs.pending)
+                matched = self.resolution_states.get(event.event_id) == "matched"
+                self.transfers_button.setText("View in Transfers…" if matched else "Resolve in Transfers…")
                 self.status.setText(
-                    f"Posted origination · acquisition to {destination}. The financing and independently entered acquisition value are retained with their funding details and history."
+                    f"Posted financing · destination: {destination}. "
+                    + (
+                        f"Financed principal allocated on {event.acquisition_date}. "
+                        if allocated
+                        else "Counterpart matched in Transfers. "
+                        if matched
+                        else "Counterpart unresolved in Transfers. "
+                    )
+                    + (
+                        f"Reviewed acquisition cost {_money(event.acquisition_value_minor)}; valuation estimates stay independent."
+                        if event.mode == "acquisition"
+                        else "Full acquisition cost remains unknown; valuation estimates stay independent."
+                    )
                 )
             elif row.account_id is None:
                 self.status.setText("Assign the source to a loan-principal account before reviewing its origination.")
             else:
                 self.status.setText(
-                    "Review where the financing went. Vehicle value is entered independently; the financed amount does not establish the full asset value."
+                    "Review the financed principal now. Destination is optional; full acquisition cost remains unknown and asset estimates are independent."
                 )
             return
         if proof is not None:
@@ -295,9 +313,15 @@ class V2LoanDocumentReview(QWidget):
             dialog = V2LoanOriginationReview(
                 self.workspace, self, source_sha256=self.source_sha256, focus_row_id=row.row_id
             )
-            exec_disposable(dialog)
+            try:
+                dialog.exec()
+                posted = dialog.initial_posting_succeeded
+            finally:
+                dialog.deleteLater()
             self.refresh()
             self.changed.emit()
+            if posted:
+                self.initial_posted.emit(self.source_sha256)
             return
         dialog = V2LoanPaymentReview(
             self.workspace,
@@ -307,9 +331,15 @@ class V2LoanDocumentReview(QWidget):
             focus_row_id=row.row_id,
         )
         dialog.transfers_requested.connect(self.transfers_requested)
-        exec_disposable(dialog)
+        try:
+            dialog.exec()
+            posted = dialog.initial_posting_succeeded
+        finally:
+            dialog.deleteLater()
         self.refresh()
         self.changed.emit()
+        if posted:
+            self.initial_posted.emit(self.source_sha256)
 
     def _resolve_transfer(self):
         row = self._current()

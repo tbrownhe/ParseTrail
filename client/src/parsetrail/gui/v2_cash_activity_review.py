@@ -156,6 +156,7 @@ class V2CashActivityReview(OrdinaryReviewMixin, QDialog):
     """Post or recategorize a selected, source-supported asset movement."""
 
     changed = Signal()
+    initial_posted = Signal(str)
     transfers_requested = Signal(str)
 
     def __init__(self, profile: Path, source_sha256: str, parent=None, *, workspace=None, embedded=False):

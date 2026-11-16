@@ -430,6 +430,10 @@ class V2CategoryDialog(QDialog):
     def _update_builtin(self, *_args) -> None:
         if not hasattr(self, "add_builtin_button"):
             return
+        included = {category.id for category in getattr(self, "_category_accounts", ())}
+        available = any(item.account_id not in included for item in BUILTIN_CATEGORIES)
+        self.builtin.setVisible(available)
+        self.add_builtin_button.setVisible(available)
         account_id = self.builtin.currentData()
         self.add_builtin_button.setEnabled(
             bool(

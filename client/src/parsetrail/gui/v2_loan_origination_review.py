@@ -1,4 +1,4 @@
-"""Explicit source-backed financing acquisition, separate from repayment review."""
+"""Source-backed principal financing with optional destination and asset allocation."""
 
 from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import (
@@ -14,9 +14,11 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPushButton,
     QVBoxLayout,
+    QWidget,
 )
 
-from parsetrail.gui.v2_account_anchors import _typed_minor
+from parsetrail.core.v2_account_products import account_product
+from parsetrail.gui.v2_details_disclosure import DetailsDisclosure
 from parsetrail.gui.v2_evidence_preview import _money, preview_saved_source
 from parsetrail.gui.v2_form_state import install_form_styles
 from parsetrail.gui.v2_gui_lifetime import exec_disposable
@@ -31,31 +33,36 @@ class V2LoanOriginationReview(QDialog):
         self.workspace = workspace
         self._source, self._focus_row = source_sha256, focus_row_id
         self.snapshot = self.preview = None
-        self.rows = {}
+        self.rows, self._accounts, self._resolution_states = {}, {}, {}
         self._rendering = False
         self._preferred_destination = None
+        self._initial_pending_rows = None
+        self.initial_posting_succeeded = False
         self.jobs = ProfileJobs(self, workspace.profile_path)
         self.jobs.completed.connect(self._completed)
         self.jobs.failed.connect(self._failed)
         self.jobs.busy_changed.connect(self._busy)
         self.setWindowTitle("Review loan origination")
-        self.resize(960, 650)
+        self.resize(960, 540)
         layout = QVBoxLayout(self)
-        title = QLabel("Loan origination")
+        title = QLabel("Review loan origination")
         title.setStyleSheet("font-size: 16px; font-weight: 600")
         layout.addWidget(title)
         explanation = QLabel(
-            "Review where the financing went. The lender's amount financed is separate from the vehicle's acquisition value. Import can remain pending until destination and funding are established."
+            "Record the exact financed principal now. You can identify its destination now or resolve it later in Transfers."
         )
         explanation.setWordWrap(True)
         layout.addWidget(explanation)
         self.source_row = QComboBox()
         self.source_row.setAccessibleName("Loan origination source")
+        self.source_row.setMinimumContentsLength(25)
+        self.source_row.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.source_row.currentIndexChanged.connect(self._source_selected)
         layout.addWidget(self.source_row)
         self.facts = QLabel()
         self.facts.setWordWrap(True)
         self.facts.setTextFormat(Qt.PlainText)
+        self.facts.setTextInteractionFlags(Qt.TextSelectableByMouse)
         layout.addWidget(self.facts)
         self.assumed_dates = QCheckBox("Allow the loan activity date as an assumed accounting date")
         self.assumed_dates.setChecked(workspace.preferences().allow_assumed_posting_dates)
@@ -64,59 +71,65 @@ class V2LoanOriginationReview(QDialog):
         form = self.form = QFormLayout()
         destination_row = QHBoxLayout()
         self.destination = QComboBox()
-        self.destination.setAccessibleName("Vehicle receiving the financing")
-        self.destination.currentIndexChanged.connect(self._draft_changed)
+        self.destination.setAccessibleName("Financing destination, optional")
+        self.destination.setMinimumContentsLength(25)
+        self.destination.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.destination.currentIndexChanged.connect(self._destination_changed)
         destination_row.addWidget(self.destination, 1)
-        create = QPushButton("Create vehicle asset…")
-        create.clicked.connect(self._create_vehicle)
-        destination_row.addWidget(create)
-        form.addRow("Financing used for", destination_row)
-        self.acquisition_value = QLineEdit()
-        self.acquisition_value.setPlaceholderText("Enter the acquisition value independently of financing")
-        self.acquisition_value.textChanged.connect(self._draft_changed)
-        form.addRow("Acquisition value (USD)", self.acquisition_value)
-        self.acquisition_date = QDateEdit(QDate.currentDate())
-        self.acquisition_date.setDisplayFormat("yyyy-MM-dd")
-        self.acquisition_date.setCalendarPopup(True)
-        self.acquisition_date.dateChanged.connect(self._draft_changed)
-        form.addRow("Acquisition date", self.acquisition_date)
-        self.downpayment = QComboBox()
-        self.downpayment.setAccessibleName("Actual bank downpayment")
-        self.downpayment.currentIndexChanged.connect(self._draft_changed)
-        form.addRow("Bank downpayment, if needed", self.downpayment)
+        self.create_asset = QPushButton("Create tangible asset…")
+        self.create_asset.clicked.connect(self._create_asset)
+        destination_row.addWidget(self.create_asset)
+        form.addRow("Destination (optional)", destination_row)
+        self.asset_link = QCheckBox("This financing funded this asset")
+        self.asset_link.toggled.connect(self._draft_changed)
+        form.addRow(self.asset_link)
+        self.allocation_date = QDateEdit(QDate.currentDate())
+        self.allocation_date.setDisplayFormat("yyyy-MM-dd")
+        self.allocation_date.setCalendarPopup(True)
+        self.allocation_date.dateChanged.connect(self._draft_changed)
+        form.addRow("Financed allocation date", self.allocation_date)
         self.reason = QLineEdit("Initial Review")
         self.reason.setMaxLength(500)
         self.reason.textChanged.connect(self._draft_changed)
         form.addRow("Review note", self.reason)
-        self.correction_reason = QLineEdit()
-        self.correction_reason.setMaxLength(500)
-        self.correction_reason.setPlaceholderText("Enter a fresh reason to withdraw this origination")
-        self.correction_reason.textChanged.connect(self._update_saved_actions)
-        form.addRow("Reason for withdrawal", self.correction_reason)
         layout.addLayout(form)
-        limits = QLabel(
-            "A value above the financing requires the exact bank downpayment. Trade-ins, financed extras, fees and other funding shapes need further review; no difference is filled automatically. The acquisition date is your explicit accounting decision, separately retained from the source activity date. Unknown prior openings and incomplete book positions remain qualified."
+        self.limits = QLabel(
+            "Full acquisition cost remains unknown. Asset estimates are independent of financing and do not establish a downpayment or spending."
         )
-        limits.setWordWrap(True)
-        layout.addWidget(limits)
+        self.limits.setWordWrap(True)
+        self.limits.hide()
         self.effects = QLabel()
         self.effects.setWordWrap(True)
         self.effects.setTextFormat(Qt.PlainText)
-        layout.addWidget(self.effects, 1)
+        self.effects.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        layout.addWidget(self.effects)
+        layout.addStretch(1)
         self.status = QLabel("Loading origination evidence…")
         self.status.setWordWrap(True)
         self.status.setTextFormat(Qt.PlainText)
         layout.addWidget(self.status)
+        correction = QWidget()
+        correction_form = QFormLayout(correction)
+        correction_form.setContentsMargins(0, 0, 0, 0)
+        self.correction_reason = QLineEdit()
+        self.correction_reason.setMaxLength(500)
+        self.correction_reason.setPlaceholderText("Enter a fresh reason to withdraw this origination")
+        self.correction_reason.textChanged.connect(self._update_saved_actions)
+        correction_form.addRow("Reason for withdrawal", self.correction_reason)
+        self.withdraw = QPushButton("Withdraw origination…")
+        self.withdraw.clicked.connect(self._withdraw)
+        correction_form.addRow(self.withdraw)
+        self.correction = DetailsDisclosure(correction, self, subject="origination correction")
+        self.correction.toggled.connect(self._correction_expanded)
+        self._correction_expanded(False)
+        layout.addWidget(self.correction)
         actions = QHBoxLayout()
-        self.confirm = QPushButton("Review acquisition posting…")
+        self.confirm = QPushButton("Review financing posting…")
         self.confirm.clicked.connect(self._confirm)
         actions.addWidget(self.confirm)
         self.original = QPushButton("View source evidence…")
         self.original.clicked.connect(self._open_source)
         actions.addWidget(self.original)
-        self.withdraw = QPushButton("Withdraw origination…")
-        self.withdraw.clicked.connect(self._withdraw)
-        actions.addWidget(self.withdraw)
         actions.addStretch()
         layout.addLayout(actions)
         buttons = QDialogButtonBox(QDialogButtonBox.Close)
@@ -125,123 +138,176 @@ class V2LoanOriginationReview(QDialog):
         self.refresh()
 
     def refresh(self):
-        source = self._source
+        source, preferences = self._source, self.workspace.preferences()
 
         def read(store, _cancelled):
-            snapshot = store.origination_snapshot(source_sha256=source)
-            accounts = tuple(account for account in store.financial_accounts() if account.product_type == "vehicle")
-            return snapshot, accounts
+            accounts = tuple(
+                a
+                for a in store.financial_accounts()
+                if a.kind in {"asset", "liability"}
+                and (
+                    a.tracking_scope in {"account_total", "cash_component"}
+                    or a.kind == "liability"
+                    and a.tracking_scope == "principal_component"
+                )
+            )
+            return (
+                store.origination_snapshot(source_sha256=source),
+                accounts,
+                {item.id: item.status for item in store.resolution_snapshot(preferences=preferences).items},
+            )
 
         self.jobs.submit("snapshot", read)
 
     def _completed(self, key, result):
         if key == "snapshot":
-            self.snapshot, accounts = result
+            self.snapshot, accounts, self._resolution_states = result
             self._accounts = {account.id: account for account in accounts}
             self.rows = {row.row_id: row for row in self.snapshot.rows}
+            if self._initial_pending_rows is None:
+                self._initial_pending_rows = {row.row_id for row in self.snapshot.rows if row.event_id is None}
             current = self.source_row.currentData() or self._focus_row
             destination = self._preferred_destination or self.destination.currentData()
+            self._preferred_destination = None
             self._rendering = True
             self.source_row.clear()
             for row in self.snapshot.rows:
                 self.source_row.addItem(
-                    f"{row.account_name or 'Unassigned loan'} · {row.activity_date} · financed {_money(row.principal_minor)}",
+                    f"{row.account_name or 'Unassigned loan'} · {row.activity_date}",
                     row.row_id,
                 )
             self.source_row.setCurrentIndex(max(0, self.source_row.findData(current)))
+            row = self.rows.get(self.source_row.currentData())
             self.destination.clear()
-            self.destination.addItem("Choose a vehicle or create one…", None)
+            self.destination.addItem("Destination not established — resolve later in Transfers", None)
             for account in accounts:
-                self.destination.addItem(account.name, account.id)
+                if row is None or account.id != row.account_id:
+                    product = (
+                        account_product(account.product_type).label if account.product_type else account.kind.title()
+                    )
+                    scope = " · principal only" if account.tracking_scope == "principal_component" else ""
+                    self.destination.addItem(f"{account.name} · {product}{scope}", account.id)
+                    self.destination.setItemData(
+                        self.destination.count() - 1, f"{account.name} · {product}{scope}", Qt.ToolTipRole
+                    )
             self.destination.setCurrentIndex(max(0, self.destination.findData(destination)))
-            self.downpayment.clear()
-            self.downpayment.addItem("No bank downpayment selected", None)
-            for bank in self.snapshot.bank_movements:
-                self.downpayment.addItem(
-                    f"{bank.account_name} · {bank.posting_date} · {_money(-bank.amount_minor)}", bank.row_id
-                )
             self._rendering = False
             self._source_selected()
         elif key == "preview":
             self.preview = result
-            row = self.rows.get(self.source_row.currentData())
-            amount = _typed_minor(self.acquisition_value.text())
-            self.effects.setText(
-                f"Vehicle acquisition {_money(amount)} · financed principal {_money(row.principal_minor)} · bank downpayment {_money(amount - row.principal_minor)}. The preview records only the explicitly supported funding and preserves each source's date. No interest expense is invented. Prior openings remain separately reviewed."
-            )
-            self.status.setText("Ready to review the acquisition posting. Nothing has been posted yet.")
+            self.effects.setText(self._summary(result))
+            self.status.setText("Ready to review the financing posting. Nothing has been posted yet.")
             self.confirm.setEnabled(not self.jobs.pending)
         else:
+            if key == "post" and result.row_id in (self._initial_pending_rows or set()):
+                self.initial_posting_succeeded = True
             self.preview = None
             self.correction_reason.clear()
-            self.status.setText(
-                "Origination saved. Its acquisition and funding are retained separately from repayments and valuation estimates."
-            )
+            self.correction.button.setChecked(False)
             self.refresh()
 
+    def _summary(self, event):
+        destination = self._accounts.get(event.destination_account_id)
+        day = getattr(event, "effective_date", None) or self.rows[event.row_id].activity_date
+        text = f"Financed principal {_money(event.principal_minor)} on {day} (assumed accounting date). "
+        if event.mode == "acquisition":
+            return (
+                text
+                + f"Reviewed acquisition cost {_money(event.acquisition_value_minor)} to {destination.name if destination else 'the retained asset'} on {event.acquisition_date}. The saved funding details remain in history. Valuation estimates stay independent. Unknown opening remains unknown."
+            )
+        matched = self._resolution_states.get(getattr(event, "event_id", None)) == "matched"
+        counterpart = "counterpart matched in Transfers" if matched else "counterpart unresolved in Transfers"
+        if destination is None:
+            text += f"No destination specified; {counterpart}. "
+        elif destination.product_type == "tangible_asset":
+            if event.acquisition_date is not None:
+                text += f"Financed allocation {_money(event.principal_minor)} to {destination.name} on {event.acquisition_date}. "
+            else:
+                text += f"Destination: {destination.name}; no asset allocation confirmed. Counterpart unresolved in Transfers. "
+        else:
+            text += f"Expected destination: {destination.name}. No transaction is posted there by this financing event; {counterpart}. "
+        return (
+            text
+            + "Full acquisition cost remains unknown. Estimates create no downpayment or spending. Unknown opening remains unknown."
+        )
+
     def _source_selected(self, *_args):
+        if self._rendering:
+            return
         row = self.rows.get(self.source_row.currentData())
+        event = self._event()
+        self._rendering = True
         if row is not None:
             self.facts.setText(
-                f"Source: amount financed {_money(row.principal_minor)} · observed activity date {row.activity_date}. This is new financing, not a repayment; absence of interest is retained."
+                f"Source: financed principal {_money(row.principal_minor)} · observed activity date {row.activity_date}. This is new financing; no repayment or interest expense is inferred."
             )
-            self._rendering = True
-            parsed = QDate.fromString(row.activity_date, Qt.ISODate)
-            if parsed.isValid() and not self.acquisition_value.text():
-                self.acquisition_date.setDate(parsed)
-            self._rendering = False
-            event = self._event()
-            if event is not None:
-                destination = self._accounts.get(event.destination_account_id)
-                self._rendering = True
-                self.destination.setCurrentIndex(max(0, self.destination.findData(event.destination_account_id)))
-                self.acquisition_value.setText(_money(event.acquisition_value_minor))
-                self.acquisition_date.setDate(
+            parsed = QDate.fromString(row.activity_date or "", Qt.ISODate)
+            if parsed.isValid():
+                self.allocation_date.setDate(parsed)
+        self.limits.setText(
+            "Full acquisition cost remains unknown. Asset estimates are independent of financing and do not establish a downpayment or spending."
+        )
+        if event is not None:
+            self.destination.setCurrentIndex(max(0, self.destination.findData(event.destination_account_id)))
+            self.asset_link.setChecked(event.acquisition_date is not None)
+            if event.acquisition_date is not None:
+                self.allocation_date.setDate(
                     QDate(event.acquisition_date.year, event.acquisition_date.month, event.acquisition_date.day)
                 )
-                self.reason.setText(event.reason)
-                self._rendering = False
-                self.effects.setText(
-                    f"Saved acquisition: {_money(event.acquisition_value_minor)} to {destination.name if destination else 'the retained vehicle account'} "
-                    f"on {event.acquisition_date}. Financed principal {_money(event.principal_minor)}; "
-                    f"bank downpayment {_money(event.acquisition_value_minor - event.principal_minor)}. "
-                    "These are reviewed movements; prior openings remain separately qualified."
-                )
-        self._draft_changed()
+            self.reason.setText(event.reason)
+            self.effects.setText("Saved · " + self._summary(event))
+            self.limits.setText(
+                "Valuation estimates stay independent of the reviewed acquisition cost."
+                if event.mode == "acquisition"
+                else "Full acquisition cost remains unknown. Asset estimates are independent of financing and do not establish a downpayment or spending."
+            )
+        self._rendering = False
+        self._destination_changed()
         self._update_saved_actions()
+
+    def _destination_changed(self, *_args):
+        if self._rendering:
+            return
+        account = self._accounts.get(self.destination.currentData())
+        tangible = account is not None and account.product_type == "tangible_asset"
+        if not tangible:
+            self.asset_link.setChecked(False)
+        self.form.setRowVisible(self.asset_link, tangible)
+        self.form.setRowVisible(self.allocation_date, tangible and self.asset_link.isChecked())
+        self._draft_changed()
 
     def _draft_changed(self, *_args):
         if self._rendering or self.jobs.writing:
             return
+        account = self._accounts.get(self.destination.currentData())
+        self.form.setRowVisible(
+            self.allocation_date,
+            account is not None and account.product_type == "tangible_asset" and self.asset_link.isChecked(),
+        )
         self.jobs.cancel_reads()
         self.preview = None
         self.confirm.setEnabled(False)
         row = self.rows.get(self.source_row.currentData())
         if row is None or self.snapshot is None:
             self.status.setText("No supported origination evidence is available.")
+            self.effects.clear()
             return
         if self._event() is not None:
-            self.status.setText(
-                "This origination already has a saved accounting event. Its source remains available for inspection."
-            )
-            return
-        if self.destination.currentData() is None:
-            self.status.setText(
-                "Destination needed. Choose or create the vehicle; the imported evidence is already retained."
-            )
-            return
-        try:
-            value = _typed_minor(self.acquisition_value.text())
-            if value <= 0:
-                raise ValueError
-        except ValueError:
-            self.status.setText("Enter the vehicle's acquisition value before preparing the posting.")
+            self.status.setText("Saved financing. Inspect source evidence or expand correction details to withdraw it.")
             return
         if not self.reason.text().strip():
             self.status.setText("Enter a review note.")
             return
+        account = self._accounts.get(self.destination.currentData())
+        if account is not None and account.product_type == "tangible_asset" and not self.asset_link.isChecked():
+            self.effects.clear()
+            self.status.setText(
+                f"Confirm this financing funded {account.name}, or leave the destination not established."
+            )
+            return
         row_id, destination = row.row_id, self.destination.currentData()
-        acquired, bank = self.acquisition_date.date().toPython(), self.downpayment.currentData()
+        linked = self.asset_link.isChecked()
+        allocated = self.allocation_date.date().toPython() if linked else None
         preferences, basis, reason = (
             self.workspace.preferences(),
             self.snapshot.basis_sha256,
@@ -249,41 +315,39 @@ class V2LoanOriginationReview(QDialog):
         )
         self.jobs.submit(
             "preview",
-            lambda store, _cancelled: store.preview_loan_origination(
+            lambda store, _cancelled: store.preview_loan_funding(
                 row_id,
                 destination_account_id=destination,
-                acquisition_value_minor=value,
-                acquisition_date=acquired,
-                bank_downpayment_row_id=bank,
+                tangible_allocation_date=allocated,
+                confirm_tangible_allocation=linked,
                 preferences=preferences,
                 expected_basis_sha256=basis,
                 reason=reason,
             ),
             delay=100,
         )
-        self.status.setText("Checking the exact acquisition and funding…")
+        self.status.setText("Checking the exact financing…")
 
     def _event(self):
         row = self.rows.get(self.source_row.currentData())
-        if row is None or self.snapshot is None:
-            return None
-        return next(
-            (event for event in self.snapshot.events if event.event_id == row.event_id and event.status == "active"),
-            None,
+        return (
+            next((e for e in self.snapshot.events if e.event_id == row.event_id and e.status == "active"), None)
+            if row is not None and self.snapshot is not None
+            else None
         )
 
     def _update_saved_actions(self, *_args):
-        if not hasattr(self, "withdraw"):
-            return
         active = self._event() is not None
-        self.withdraw.setVisible(active)
+        has_source = self.source_row.currentData() in self.rows
+        self.correction.setVisible(active)
         self.withdraw.setEnabled(bool(active and self.correction_reason.text().strip() and not self.jobs.pending))
         self.correction_reason.setEnabled(active and not self.jobs.writing)
-        self.correction_reason.setVisible(active)
-        self.form.labelForField(self.correction_reason).setVisible(active)
         self.confirm.setVisible(not active)
-        for widget in (self.destination, self.acquisition_value, self.acquisition_date, self.downpayment, self.reason):
-            widget.setEnabled(not self.jobs.writing and not active)
+        for widget in (self.destination, self.asset_link, self.allocation_date, self.reason, self.create_asset):
+            widget.setEnabled(has_source and not self.jobs.writing and not active)
+
+    def _correction_expanded(self, expanded):
+        self.correction.button.setText("Hide correction" if expanded else "Correct saved origination…")
 
     def _withdraw(self):
         event = self._event()
@@ -294,7 +358,7 @@ class V2LoanOriginationReview(QDialog):
             QMessageBox.question(
                 self,
                 "Withdraw loan origination",
-                "Reverse this origination's exact saved acquisition and funding entries? Evidence, valuation points and history remain.\n\nReason: "
+                "Reverse this origination's exact saved financing and any financed allocation? Evidence, valuation points and history remain.\n\nReason: "
                 + reason,
             )
             != QMessageBox.Yes
@@ -309,10 +373,10 @@ class V2LoanOriginationReview(QDialog):
             write=True,
         )
 
-    def _create_vehicle(self):
+    def _create_asset(self):
         if self.jobs.writing:
             return
-        dialog = V2TangibleAssets(self.workspace, self)
+        dialog = V2TangibleAssets(self.workspace, self, value_date=self.allocation_date.date().toPython())
         try:
             dialog.exec()
             self._preferred_destination = dialog.selected_account_id
@@ -324,22 +388,17 @@ class V2LoanOriginationReview(QDialog):
         if self.preview is None or not self.confirm.isEnabled():
             return
         preview = self.preview
-        preferences = preview.preferences
-        if preferences != self.workspace.preferences():
-            self.status.setText("Posting-date preferences changed. Inspect a fresh preview.")
+        if preview.preferences != self.workspace.preferences():
             self._draft_changed()
             return
         if (
             QMessageBox.question(
-                self,
-                "Confirm loan origination",
-                self.effects.text() + "\n\nPost this explicitly reviewed acquisition and financing?",
+                self, "Confirm financing posting", self.effects.text() + "\n\nPost this reviewed financing?"
             )
             != QMessageBox.Yes
         ):
             return
-        if preferences != self.workspace.preferences():
-            self.status.setText("Preferences changed during confirmation. Inspect a fresh preview.")
+        if preview.preferences != self.workspace.preferences():
             self._draft_changed()
             return
         self.jobs.submit("post", lambda store, _cancelled: store.post_loan_origination(preview), write=True)
@@ -361,16 +420,9 @@ class V2LoanOriginationReview(QDialog):
             exec_disposable(preview_saved_source(self.workspace.profile_path, row.source_sha256, parent=self))
 
     def _busy(self, busy):
-        for widget in (
-            self.source_row,
-            self.destination,
-            self.acquisition_value,
-            self.acquisition_date,
-            self.downpayment,
-            self.reason,
-            self.assumed_dates,
-        ):
-            widget.setEnabled(not self.jobs.writing)
+        self.source_row.setEnabled(not self.jobs.writing)
+        self.assumed_dates.setEnabled(not self.jobs.writing and self.source_row.currentData() in self.rows)
+        self.original.setEnabled(not busy and self.source_row.currentData() in self.rows)
         self.confirm.setEnabled(bool(not busy and self.preview is not None))
         self._update_saved_actions()
 
@@ -378,11 +430,10 @@ class V2LoanOriginationReview(QDialog):
         self.preview = None
         self.confirm.setEnabled(False)
         messages = {
-            "origination_exact_downpayment_evidence_required": "Funding is incomplete. This review supports financing equal to acquisition value, or one exact bank downpayment for the difference. Fees, trade-ins and other funding differences remain pending.",
-            "origination_vehicle_destination_required": "Choose a vehicle asset as the destination.",
             "origination_assumed_date_permission_required": "Allow the observed loan activity date as an assumed accounting date before posting. The source date is not a printed posting date.",
+            "origination_tangible_confirmation_required": "Confirm this financing funded the selected asset, or leave the destination not established.",
         }
-        self.status.setText(messages.get(str(error), "This acquisition needs review before posting. " + str(error)))
+        self.status.setText(messages.get(str(error), "This financing needs review before posting. " + str(error)))
         if key == "snapshot":
             self.rows = {}
 

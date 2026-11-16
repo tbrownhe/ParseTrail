@@ -178,6 +178,8 @@ class V2LoanPaymentReview(QDialog):
         self.jobs.failed.connect(self._job_failed)
         self.jobs.busy_changed.connect(self._busy_changed)
         self.snapshot = self.preview = self.selected_event = None
+        self.initial_posting_succeeded = False
+        self._initially_pending = event_id is None
         self._requested_event_id = event_id
         self._source_sha256 = source_sha256
         self._focus_row_id = focus_row_id
@@ -913,7 +915,7 @@ class V2LoanPaymentReview(QDialog):
                 **kwargs,
             )
 
-        self.jobs.submit(("post",), write, write=True)
+        self.jobs.submit(("post", event is None), write, write=True)
         self.status.setText("Recording the confirmed whole payment. Wait for the saved result...")
 
     def _withdraw(self):
@@ -948,6 +950,8 @@ class V2LoanPaymentReview(QDialog):
                 "Recorded. Refreshed history shows current state; original evidence and actions remain inspectable."
             )
             if key[0] == "post":
+                if self._initially_pending and key[1]:
+                    self.initial_posting_succeeded = True
                 self._notice = (
                     "Posted · paying-account counterpart unresolved. Resolve it later in Transfers."
                     if result.manifest.bank is None

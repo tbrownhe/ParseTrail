@@ -165,7 +165,7 @@ def test_report_source_route_reveals_exact_reviewed_row_and_preserves_correction
         assert window._reports_view.end.date().toPython() == date(2026, 10, 2)
         assert window._reports_view.spending_report.total_minor == 400
         totals = {row.category_id: row.amount_minor for row in window._reports_view.model.rows}
-        assert totals == {"expense:food": 0, "expense:travel": 400}
+        assert totals == {"builtin:loan-interest": 0, "expense:food": 0, "expense:travel": 400}
         with V2ProfileStore.open(workspace.profile_path, read_only=True) as store:
             assert store.connection.execute("SELECT COUNT(*) FROM JournalCorrections").fetchone() == (1,)
             assert len(store.source_ids()) == 1

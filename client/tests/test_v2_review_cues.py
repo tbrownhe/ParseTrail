@@ -97,7 +97,7 @@ def test_cash_required_ready_saved_correction_and_staged_are_distinct(qtbot, qap
     assert [field.property("formState") for field in (view.purpose, view.category, review_reason(view))] == [
         "required",
         "required",
-        "required",
+        "ready",
     ]
     assert "Required:" in view.status.text() and not view.action_button.isEnabled()
     assert view.table.viewport().height() >= 4 * view.table.verticalHeader().defaultSectionSize()
@@ -105,7 +105,8 @@ def test_cash_required_ready_saved_correction_and_staged_are_distinct(qtbot, qap
     choose_combo(qtbot, view.purpose, "expense")
     choose_combo(qtbot, view.category, "expense:food")
     assert view.purpose.property("formState") == view.category.property("formState") == "ready"
-    assert review_reason(view).property("formState") == "required"
+    assert review_reason(view).property("formState") == "ready"
+    assert review_reason(view).text() == "Initial Review"
     enter_text(qtbot, review_reason(view), "Reviewed the original source")
     assert view.status.property("formState") == "ready"
     assert "before posting" in view.status.text()
@@ -235,12 +236,11 @@ def test_register_source_fixed_date_and_repayment_route_never_look_like_category
     rows = evidence.payload.accounts[0].rows
     repayment = next(row for row in rows if row.amount.minor > 0)
     click_table_text(qtbot, view.table, repayment.description.text)
-    choose_combo(qtbot, view.purpose, "repayment")
-    assert view.action_button.isEnabled() and "repayment" in view.action_button.text().lower()
-    assert view.action_button.property("formState") == "neutral"
-    assert view.status.property("formState") == "neutral"
-    assert all(field.property("formState") == "readonly" for field in (view.purpose, view.category, view.reason))
-    artifacts.capture("02-repayment-navigation-is-not-category-readiness", window)
+    choose_combo(qtbot, view.purpose, "transfer")
+    assert view.batch.stage_button.isEnabled()
+    assert not view.category.isVisible() and not view.action_button.isVisible()
+    assert "Transfers" in view.status.text() and "clearing" in view.status.text()
+    artifacts.capture("02-repayment-staging-defers-matching", window)
     with V2ProfileStore.open(path, read_only=True) as store:
         assert store.connection.execute("SELECT COUNT(*) FROM JournalEntries").fetchone() == (0,)
         assert store.load_import(evidence.source_sha256).evidence == evidence

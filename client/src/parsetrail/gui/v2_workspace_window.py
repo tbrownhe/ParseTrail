@@ -131,6 +131,8 @@ class V2WorkspaceWindow(QMainWindow):
         self._search_prior_source = None
         self._review_widget = None
         self._review_source_id = None
+        self._initial_post_pending = None
+        self._previous_completed_source = None
         self._positions_view = None
         self._reports_view = None
         self._transfers_view = None
@@ -416,6 +418,17 @@ class V2WorkspaceWindow(QMainWindow):
         self.back_to_report_button.hide()
         review_heading.addWidget(self.back_to_report_button)
         review_layout.addLayout(journey_actions)
+        completion_row = QHBoxLayout()
+        self.review_completion = QLabel()
+        self.review_completion.setWordWrap(True)
+        self.review_completion.setTextFormat(Qt.PlainText)
+        self.review_completion.hide()
+        completion_row.addWidget(self.review_completion, 1)
+        self.previous_document_button = QPushButton("Back to completed statement")
+        self.previous_document_button.clicked.connect(self._back_to_completed_statement)
+        self.previous_document_button.hide()
+        completion_row.addWidget(self.previous_document_button)
+        review_layout.addLayout(completion_row)
         account_group = QGroupBox("Account association")
         self.account_group = account_group
         account_controls = QHBoxLayout(account_group)
@@ -502,7 +515,7 @@ class V2WorkspaceWindow(QMainWindow):
         self.account_button = QPushButton("Add account…")
         self.account_button.clicked.connect(self._add_account)
         account_actions.addWidget(self.account_button)
-        self.tangible_button = QPushButton("Vehicle assets…")
+        self.tangible_button = QPushButton("Tangible assets…")
         self.tangible_button.clicked.connect(self._review_tangible_assets)
         account_actions.addWidget(self.tangible_button)
         self.edit_account_button = QPushButton("Edit account…")
@@ -722,6 +735,10 @@ class V2WorkspaceWindow(QMainWindow):
         if current != source_id and not self._discard_review():
             self._sync_review_selector()
             return False
+        if current != source_id:
+            self._previous_completed_source = None
+            self.previous_document_button.hide()
+            self.review_completion.hide()
         # A document search must not hide a route from a report or the review selector.
         self._search_prior_source = None
         self.document_search.blockSignals(True)
@@ -760,6 +777,71 @@ class V2WorkspaceWindow(QMainWindow):
                     self.navigation.setCurrentRow(self.REVIEW)
                     self.review_document_selector.setFocus()
                 return
+
+    def _initial_review_posted(self, source_id):
+        # This signal is delivered after a successful initial write, separately
+        # from ordinary refresh/correction notifications and disposable modals.
+        if (
+            self._closing
+            or self.navigation.currentRow() != self.REVIEW
+            or self._selected_source() != source_id
+            or self._review_source_id != source_id
+            or self._report_review_target is not None
+            or self._transfer_return_row is not None
+        ):
+            return
+        self._initial_post_pending = (self.workspace.profile_path, source_id)
+        self.refresh(select_source=source_id)
+
+    def _advance_after_initial_post(self):
+        pending = self._initial_post_pending
+        if pending is None or self._closing:
+            return
+        profile, source_id = pending
+        if (
+            profile != self.workspace.profile_path
+            or self.navigation.currentRow() != self.REVIEW
+            or self._selected_source() != source_id
+            or self._review_source_id != source_id
+            or self._report_review_target is not None
+            or self._transfer_return_row is not None
+        ):
+            self._initial_post_pending = None
+            return
+        if self.inventory_pending or self._write_in_progress() or self._review_widget.jobs.pending:
+            return
+        self._initial_post_pending = None
+        summary = self._document_summaries.get(source_id)
+        if summary is None or self._needs_attention(summary) or self._review_has_draft():
+            return
+        self._previous_completed_source = None
+        self.previous_document_button.hide()
+        self.review_completion.setText(
+            f"Initial review complete: {document_title(summary)} · {document_period(summary)}. "
+            "Resolve any unmatched counterparts in Transfers."
+        )
+        summaries = list(self._document_summaries.values())
+        current = next(i for i, item in enumerate(summaries) if item.source_sha256 == source_id)
+        for offset in range(1, len(summaries)):
+            other = summaries[(current + offset) % len(summaries)]
+            if self._needs_attention(other):
+                if self._select_review_source(other.source_sha256):
+                    self._previous_completed_source = source_id
+                    self.review_completion.setText(
+                        f"Initial review complete: {document_title(summary)} · {document_period(summary)}. "
+                        f"Now reviewing {document_title(other)} · {document_period(other)}."
+                    )
+                    self.previous_document_button.show()
+                    self.review_document_selector.setFocus()
+                break
+        self.review_completion.show()
+
+    def _back_to_completed_statement(self):
+        source_id = self._previous_completed_source
+        if source_id is not None and self._select_review_source(source_id):
+            self._previous_completed_source = None
+            self.previous_document_button.hide()
+            self.review_completion.hide()
 
     def _show_document_spending(self):
         reports = self._ensure_report_view(self.REPORTS)
@@ -960,6 +1042,9 @@ class V2WorkspaceWindow(QMainWindow):
         changed = getattr(view, "changed", None)
         if changed is not None:
             changed.connect(lambda: self.refresh(select_source=self._review_source_id))
+        initial_posted = getattr(view, "initial_posted", None)
+        if initial_posted is not None:
+            initial_posted.connect(self._initial_review_posted, Qt.QueuedConnection)
         transfers_requested = getattr(view, "transfers_requested", None)
         if transfers_requested is not None:
             transfers_requested.connect(self._open_transfers, Qt.QueuedConnection)
@@ -967,6 +1052,8 @@ class V2WorkspaceWindow(QMainWindow):
 
     def _embedded_busy(self, busy):
         self._update_controls()
+        if not busy and self._initial_post_pending is not None:
+            QTimer.singleShot(0, self, self._advance_after_initial_post)
         if not busy and self._close_after_job:
             QTimer.singleShot(0, self, self.close)
 
@@ -1001,6 +1088,10 @@ class V2WorkspaceWindow(QMainWindow):
                 setattr(self, attribute, None)
         self._report_review_target = None
         self._transfer_return_row = None
+        self._initial_post_pending = None
+        self._previous_completed_source = None
+        self.review_completion.hide()
+        self.previous_document_button.hide()
         self._document_report_context = None
         self._budget_document_seed = None
         self._budget_context_notice = ""
@@ -1128,6 +1219,7 @@ class V2WorkspaceWindow(QMainWindow):
             return
         if worker.generation == self._inventory_generation:
             if worker.error is not None:
+                self._initial_post_pending = None
                 self.sources.clear()
                 self._document_summaries = {}
                 self.inventory_status.setText("Documents are unavailable. Reload to retry; saved data has not changed.")
@@ -1158,6 +1250,8 @@ class V2WorkspaceWindow(QMainWindow):
             self._update_controls()
             if worker.error is None:
                 QTimer.singleShot(0, self, self._refresh_changed_profile)
+                if self._initial_post_pending is not None:
+                    QTimer.singleShot(0, self, self._advance_after_initial_post)
         if self._inventory_requested:
             QTimer.singleShot(0, self, self._start_inventory)
 

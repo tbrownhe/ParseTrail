@@ -270,9 +270,9 @@ class V2FinancialAccountDialog(QDialog):
                 continue
             self.product.addItem(product.label, product.id)
         product_type = getattr(existing if existing else draft, "product_type", None)
-        self._tangible_product_locked = existing is not None and product_type == "vehicle"
+        self._tangible_product_locked = existing is not None and product_type == "tangible_asset"
         if self._tangible_product_locked:
-            self.product.setToolTip("Tangible asset classification is fixed by its value/acquisition history.")
+            self.product.setToolTip("Tangible asset classification is fixed.")
         self.product.setCurrentIndex(max(0, self.product.findData(product_type)))
         self.product.setEnabled(
             self.identity_lock is None
@@ -351,7 +351,7 @@ class V2FinancialAccountDialog(QDialog):
             else "Institution *",
             self.institution,
         )
-        institution_help = QLabel(
+        institution_help = self.institution_help = QLabel(
             "Institution and product are locked after statement-import account creation. The account name remains editable."
             if self.identity_lock is not None
             else "Identified by the document."
@@ -400,17 +400,16 @@ class V2FinancialAccountDialog(QDialog):
         self.form.setRowVisible(self.kind, show and known)
         self.form.setRowVisible(self.scope, known and (show or self.scope.isEnabled()))
         self.form.setRowVisible(self.scope_note, show and known)
-        self.form.setRowVisible(self.number, show)
+        tangible = self.product.currentData() == "tangible_asset"
+        self.form.setRowVisible(self.number, show and not tangible)
+        self.form.setRowVisible(self.institution, not tangible)
+        self.institution_help.setVisible(not tangible)
         if self.product.currentData() is not None:
             product = account_product(self.product.currentData())
             scope = self.scope.currentText()
             self.product_summary.setText(
                 f"{'Money you own' if product.kind == 'asset' else 'Money you owe'} · Tracks {scope.lower()}."
-                + (
-                    " Tangible asset classification is fixed by its value/acquisition history."
-                    if self._tangible_product_locked
-                    else ""
-                )
+                + (" Tangible asset classification is fixed." if self._tangible_product_locked else "")
             )
         elif self.existing is not None:
             self.product_summary.setText(f"Saved account · Tracks {self.scope.currentText().lower()}.")
@@ -442,9 +441,13 @@ class V2FinancialAccountDialog(QDialog):
         self._show_account_details()
 
     def _institution_key(self):
+        if self.product.currentData() == "tangible_asset":
+            return None
         return self._fixed_institution_key if self._known_institution else self.institution.selected_key()
 
     def _institution_valid(self):
+        if self.product.currentData() == "tangible_asset":
+            return True
         return self._known_institution or self.institution.valid_selection()
 
     def _institution_choice_value(self):
@@ -504,7 +507,7 @@ class V2FinancialAccountDialog(QDialog):
                     "readonly",
                     "Product set during statement import and locked."
                     if self.identity_lock is not None
-                    else "Tangible asset classification is fixed by its value/acquisition history."
+                    else "Tangible asset classification is fixed."
                     if self._tangible_product_locked
                     else "Product identified from verified source context.",
                 )
@@ -612,7 +615,9 @@ class V2FinancialAccountDialog(QDialog):
             name=self.name.text().strip(),
             kind=self.kind.currentData(),
             institution_key=self._institution_key(),
-            full_account_number=self.number.text().strip() or None,
+            full_account_number=None
+            if self.product.currentData() == "tangible_asset"
+            else self.number.text().strip() or None,
             tracking_scope=self.scope.currentData(),
             product_type=self.product.currentData(),
         )

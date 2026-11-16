@@ -1290,6 +1290,8 @@ class OrdinaryReviewMixin:
                 self.refresh_preserving_draft()
             else:
                 self.refresh(selected_row_id=self._selected_after_read)
+            if len(key) > 3 and key[3] and not getattr(result, "already_posted", False):
+                self.initial_posted.emit(self.source_sha256)
 
     def _job_failed(self, key, exc):
         self.operation_status.show()
@@ -1319,7 +1321,7 @@ class OrdinaryReviewMixin:
                 )
                 self.refresh(selected_row_id=self._selected_after_read)
 
-    def _submit_review_write(self, operation, *, message, row_id=None, batch=False):
+    def _submit_review_write(self, operation, *, message, row_id=None, batch=False, initial=False):
         if not self._profile_matches() or self.jobs.pending:
             QMessageBox.warning(
                 self,
@@ -1343,7 +1345,7 @@ class OrdinaryReviewMixin:
         self.basis = None
         self.operation_status.setText("Saving confirmed review… Please wait for the saved result.")
         self.operation_status.show()
-        self.jobs.submit(("write", "batch" if batch else "single", message), guarded, write=True)
+        self.jobs.submit(("write", "batch" if batch else "single", message, initial), guarded, write=True)
 
     def _preview_evidence(self):
         if self.jobs.pending or self.basis is None or not self._profile_matches():
@@ -2033,4 +2035,12 @@ class OrdinaryBatchPanel(QGroupBox):
             ),
             batch=correction_row_id is None,
             row_id=correction_row_id,
+            initial=(
+                correction_row_id is None
+                and all(
+                    review._row_review_key(row) is None and not reviewed_elsewhere(row)
+                    for row in review.model.rows
+                    if row.row_id in {selection.row_id for selection in preview.selections}
+                )
+            ),
         )
