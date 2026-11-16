@@ -29,7 +29,7 @@ evidence belong in [packet records](work/README.md).
 
 ## Profile format and lifecycle
 
-The current pre-release profile schema is revision 24; check `SCHEMA_VERSION`
+The current pre-release profile schema is revision 25; check `SCHEMA_VERSION`
 in `v2_profile_store.py` when opening a packet. Format markers, exact table and
 foreign-key shapes, append-only triggers and SQLite integrity are checked before
 writable use. Older disposable pilots, 1.x, unknown, damaged and newer shapes
@@ -90,6 +90,16 @@ and after final parsing; detected drift or changed account state rebuilds the
 review and requires another explicit confirmation. PDF signed routing is rechecked.
 Manual/headless source-only import and later guarded assignment remain separate
 supported boundaries; the combined UI does not change immutable evidence policy.
+
+Import previews default to Always. The global Only when attention is needed mode
+skips display only for one recognized interpretation whose complete account groups
+uniquely match existing accounts, without recovery notices or material parser/date
+warnings. It retains unreviewed evidence and creates no financial entries. The final
+write rechecks live preferences, source, catalog and account state; changed inputs
+return to review. Confirmed partial-identifier associations remain partial, require
+the abbreviated-matching preference and cannot override a conflicting current match.
+Unknown, new or ambiguous assignments require confirmation. Pre-import originals
+are bounded, digest-checked, read-only in-memory views, separate from saved evidence.
 
 `Institutions(id,name)` is a managed identity registry independent of installed
 document formats. Fresh profiles seed canonical institution names/IDs; explicit
@@ -188,6 +198,22 @@ entry key; a replaced entry cannot inherit an older draft. Same-entry refresh an
 canceled confirmation retain authored changes, while a successful write refreshes
 the saved context and clears the editable reason. Existing basis/transaction
 guards, inverse/replacement history and immutable source evidence are unchanged.
+
+Schema 25 adds append-only pending-transfer revisions. Transfer/card-repayment
+designation is an authored interpretation, with no journal, allocation, clearing
+or inferred counterpart. It survives restart, preserves its source/account context
+and reason, and may wait for another statement. Current state is derived against
+verified source facts, active uses and revisions; changed context becomes stale.
+Corrections and withdrawal require an explicitly entered reason and revision check.
+Reclassification to an ordinary category atomically withdraws the current designation
+and posts the independently validated category entry.
+
+An ordinary review set may contain category postings and no-money designations.
+Its immutable preview and final write validate the exact selections and pending
+revisions together in one transaction. Confirmation separates both effects. Initial
+shared reasons default to `Initial Review`; edits persist with the review set.
+Saved decisions have separate blank correction/withdrawal fields. The default alone
+does not count as an unsaved draft or authorize a correction.
 
 Background profile jobs retain worker connections until completion, coalesce
 superseded reads and serialize their confirmed writes per resolved profile.
@@ -292,6 +318,13 @@ validation. Stale, failed or cooperatively cancelled batches roll back every new
 journal/allocation/event/clearing row. Exact retries report already-posted events;
 withdrawal or changed context cannot silently restore a prior batch. Both source
 dates and dated clearing remain exact; repayments create no second spending.
+
+Ordinary-review match proposals require current explicit transfer designations
+on both legs. The designation mode is captured in planning/confirmation identity
+and revalidated at write time. Both-leg designation makes a row eligible, never
+confirms ownership or a match. The separate manual transfer workflow retains its
+explicit source selection without this prerequisite. Retiring a confirmed event
+does not revive old designations as current decisions.
 
 Full-window transfer planning additionally groups the complete selected-horizon
 graph into connected components. Non-estimated both-leg-unique pairs are Ready;
@@ -430,6 +463,13 @@ atomically, and preserves retry receipts without reviving retired money. Binding
 and scope history include interest-only proof even without a loan financial line.
 Ordinary single-entry correction/repeat repair refuses loan-event legs.
 See the [loan-payment packet](work/2026-10-26-v2-loan-payments.md).
+
+Supported loan documents open a source-focused component view rather than ordinary
+cash categorization. It displays source total, principal and interest, component
+proof and prerequisites, and hands the selected source/row to whole-payment review
+without selecting a counterpart or checking a component automatically. Saved events
+remain whole-event history/correction actions. Observed activity dates, separately
+assumed accounting dates, principal-only scope and unknown openings stay explicit.
 
 `StatementSourceReviews` is one append-only assertion history for bound statement
 sections. Opening/closing origin, inclusive-period timing, posting-date certainty,

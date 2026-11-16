@@ -262,9 +262,16 @@ These implemented slices do not establish 2.0 release readiness.
 The V2 workspace uses Documents, Review, Accounts, Budget and Reports navigation.
 Documents are searchable by saved account/source labels and qualified dates;
 their primary action opens the relevant account confirmation or activity review.
-Account suggestions remain pending until explicitly confirmed. Full source
+New or ambiguous account suggestions require confirmation. Full source
 identifiers, date provenance and overlap details remain available in Statement options.
 No presentation mode changes matching preferences or accounting decisions.
+
+During import, **View original document** helps name accounts without losing drafts.
+Import preferences also appear in Settings: abbreviated-number matching is opt-in;
+**Import previews** defaults to Always. **Only when attention is needed** skips the
+preview for routine, uniquely matched existing accounts. New/ambiguous accounts,
+material parser warnings and changed inputs still pause for review. These settings
+apply to subsequent files. Automatic import retains evidence; it posts no spending.
 
 Review embeds the selected document's supported cash/card/register activity.
 Search, status filters and exact sorting keep the current task visible.
@@ -278,12 +285,22 @@ selection and preserves prior staged work on refusal. A successful Stage capture
 the shared reason for the whole set, including filtered-out rows; later unstaged
 edits do not change it. The Review set reason persists across selection and is
 independent of the selected saved row's correction reason.
+It starts with **Initial Review**, which can be edited and is retained until the
+set is posted or discarded. The prefilled text alone is not an unsaved draft.
 Explicitly staged ordinary rows share that captured batch reason and
 receive one exact preview and atomic confirmation; each row retains its own
 date and allowed purpose/category. Corrections remain individual or whole-event
 operations. Already-consumed rows show their owning reviewed workflow rather
 than requesting another ordinary posting. Related actions exposes transfers,
 loan components, fees, account reassignment and evidence checks.
+
+Choose **Transfer / card repayment** and stage it in the same review set to save a
+designation without choosing a category or posting money. It stays in Review while
+waiting for the other statement. Once both sides are explicitly designated,
+**Review match** offers an optional proposal; only final confirmation posts the
+transfer. Changing a saved designation or withdrawing it requires a fresh reason.
+Supported loan statements instead show payment total, principal and interest with
+an explicit loan-payment review action and missing-evidence/date prerequisites.
 
 Ordinary corrections show the active **Saved review note** as read-only context
 and an initially empty **Reason for correction**. An unchanged saved selection

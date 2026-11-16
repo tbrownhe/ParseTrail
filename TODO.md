@@ -6,7 +6,14 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None. [All six first-use clarity refinements](docs/work/2026-11-07-v2-core-desktop-journey.md#november-14-implement-first-use-clarity-refinements)
+None. [Import convenience and pending payment review](docs/work/2026-11-15-import-payment-refinement.md)
+is implemented and agent-verified in Windows development: original access, guarded
+matching/preview preferences, Capital loan routing, whole-control dropdowns,
+durable transfer designation and initial reasons. Human/native discovery and
+broader platform/release acceptance remain separate. Schema 25 needs a fresh profile;
+the earlier private owner-test candidate remains unchanged.
+
+[All six first-use clarity refinements](docs/work/2026-11-07-v2-core-desktop-journey.md#november-14-implement-first-use-clarity-refinements)
 are implemented and verified in Windows development: separate shared/correction
 reasons, retained budget month/return context, category Add/Edit modes, connected
 Budget setup/results, clearer primary actions and concise diagnostic disclosure.

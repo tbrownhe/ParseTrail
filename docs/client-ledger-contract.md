@@ -143,6 +143,14 @@ event: checking to transfer clearing, then clearing to the card. Clearing retain
 the amount in transit at intermediate cutoffs. No forced common posting date.
 Transfers within owned assets and card repayments create no second expense.
 
+A pending Transfer/card-repayment designation records user intent without posting
+money or inferring an owned destination. It may wait for missing evidence. Both
+legs require current explicit designations for proposals launched from ordinary
+review; a proposal still needs final confirmation. Designation changes/withdrawal
+retain revision history and an explicit reason. Mixed ordinary review sets save
+category postings and no-money designations atomically, with separate confirmation
+totals. Source facts remain unchanged.
+
 Reviewed settlements can retain one complete asset outflow and multiple owned
 receipts, including explicit fee allocations with an exact amount, expense
 category, source leg, reference and reason. No difference is automatically a fee.
