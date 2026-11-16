@@ -156,6 +156,7 @@ class V2CashActivityReview(OrdinaryReviewMixin, QDialog):
     """Post or recategorize a selected, source-supported asset movement."""
 
     changed = Signal()
+    transfers_requested = Signal(str)
 
     def __init__(self, profile: Path, source_sha256: str, parent=None, *, workspace=None, embedded=False):
         super().__init__(parent)
@@ -275,7 +276,11 @@ class V2CashActivityReview(OrdinaryReviewMixin, QDialog):
             return
         self._remember_row_form()
         row = self._current()
-        correcting = row is not None and row.entry_key is not None and not getattr(self, "_in_multi", False)
+        correcting = (
+            row is not None
+            and (row.entry_key is not None or self._zero_review(row) is not None)
+            and not getattr(self, "_in_multi", False)
+        )
         external = reviewed_elsewhere(row)
         self.purpose.blockSignals(True)
         self.purpose.clear()
@@ -303,7 +308,11 @@ class V2CashActivityReview(OrdinaryReviewMixin, QDialog):
     def _purpose_changed(self, *_args) -> None:
         row = self._current()
         kind = PURPOSE_KINDS.get(self.purpose.currentData())
-        correcting = row is not None and row.entry_key is not None and not getattr(self, "_in_multi", False)
+        correcting = (
+            row is not None
+            and (row.entry_key is not None or self._zero_review(row) is not None)
+            and not getattr(self, "_in_multi", False)
+        )
         self.category.blockSignals(True)
         self.category.clear()
         self.category.addItem("Choose a category…", None)
@@ -451,12 +460,12 @@ class V2CashActivityReview(OrdinaryReviewMixin, QDialog):
         self.review_intro.setText(
             "Review this account's cash component only; this does not cover the whole HSA or investments. "
             if any(row.tracking_scope == "cash_component" for row in rows)
-            else "Review transactions and confirm their separate effects: category posting or transfer designation. "
+            else "Review transactions and post their separate category or transfer effects. "
         )
         self.overlap_note.setText(
             f"Possible overlap with {len(overlaps)} saved document(s). Check repeated evidence before posting."
             if overlaps
-            else "Transfer/card-repayment designations post no money. Matching needs a separate confirmation."
+            else "Transfer source sides post against clearing. Resolve counterpart relationships separately in Transfers."
         )
         self.note.setText(
             "Select a row assigned to an asset account with a source posting date. "
@@ -474,6 +483,8 @@ class V2CashActivityReview(OrdinaryReviewMixin, QDialog):
         self._selected()
 
     def _act(self) -> None:
+        if self._act_zero_review():
+            return
         if self._act_pending_transfer():
             return
         if not self._single_selection():
@@ -557,6 +568,8 @@ class V2CashActivityReview(OrdinaryReviewMixin, QDialog):
         )
 
     def _withdraw(self) -> None:
+        if self._withdraw_zero_review():
+            return
         if self._withdraw_pending_transfer():
             return
         if not self._single_selection():

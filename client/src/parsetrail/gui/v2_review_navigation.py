@@ -28,11 +28,12 @@ def review_status_label(status):
         "Enable assumed dates or enter a corrected date": "Review posting date",
         "Cross-source occurrence needs review": "Possible repeat — review needed",
         "Repeated supporting evidence; post the retained row": "Supporting — use retained row",
+        "Reviewed zero amount": "$0.00 reviewed · no posting",
     }.get(status, status)
 
 
 def review_state(row):
-    if row.entry_key is not None or reviewed_elsewhere(row):
+    if row.entry_key is not None or reviewed_elsewhere(row) or row.status == "Reviewed zero amount":
         return "reviewed"
     return "ready" if row.status == "Ready for purpose review" else "blocked"
 
@@ -65,7 +66,7 @@ class StagedRowPresentation:
             from parsetrail.core.v2_ordinary_batch import OrdinaryTransferSelection
 
             if isinstance(self.staged[row.row_id], OrdinaryTransferSelection):
-                return True, "Transfer designation · not posted"
+                return True, "Transfer staged · not posted"
         intent = getattr(self, "pending_transfers", {}).get(row.row_id)
         if not staged and intent is not None and intent.review.action == "pending" and intent.status != "consumed":
             label = {
@@ -99,7 +100,7 @@ class StagedRowPresentation:
                 else "Reviewed elsewhere"
                 if reviewed_elsewhere(row)
                 else "Reviewed · " + (row.purpose or "").replace("_", " ").title()
-                if row.entry_key is not None
+                if row.entry_key is not None or row.status == "Reviewed zero amount"
                 else "Not staged"
             )
             return True, value

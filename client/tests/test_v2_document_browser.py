@@ -66,7 +66,7 @@ def test_documents_are_recognizable_searchable_and_preserve_context(tmp_path: Pa
         assert not window.sources.item(0).isHidden()
         window.review_document_button.click()
         wait_for_inventory(window)
-        assert window.navigation.currentRow() == 1
+        assert window.navigation.currentRow() == window.REVIEW
         from .v2_job_wait import wait_for_jobs
 
         wait_for_jobs(window._review_widget)
@@ -75,7 +75,7 @@ def test_documents_are_recognizable_searchable_and_preserve_context(tmp_path: Pa
         assert "Everyday checking" in window.review_document_selector.currentText()
         assert "2026-10-01" in window.review_document_selector.currentText()
         assert window.review_document_selector.currentData() == selected
-        assert "unallocated" in window.review_context.text()
+        assert "not posted" in window.review_context.text()
         assert window.cash_review_button.isEnabled()
     finally:
         window.close()

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QCheckBox,
@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFormLayout,
-    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -33,8 +32,10 @@ from parsetrail.core.v2_cash_movement import cash_account_labels
 from parsetrail.core.v2_loan_payments import CLEARING, INTEREST
 from parsetrail.core.v2_profile_store import ProfileFormatError
 from parsetrail.gui.v2_cash_activity_review import _money
+from parsetrail.gui.v2_details_disclosure import DetailsDisclosure
 from parsetrail.gui.v2_evidence_preview import _location, preview_saved_source
 from parsetrail.gui.v2_form_state import install_initial_focus
+from parsetrail.gui.v2_gui_lifetime import exec_disposable
 from parsetrail.gui.v2_profile_jobs import ProfileJobs
 
 REASONS = {
@@ -135,12 +136,18 @@ def pending_component_details(row):
 def manifest_details(manifest, *, inverse=False):
     sign = -1 if inverse else 1
     bank = manifest.bank
-    result = [
-        f"{'Inverse original' if inverse else 'Reviewed'} bank source: "
-        f"{_identity(bank.account_id, bank.account_name, bank.account_kind, bank.tracking_scope)}; "
-        f"asset value change {_money(sign * bank.amount_minor)} on {bank.posting_date} ({bank.date_provenance}).\n"
-        f"Source {bank.source_sha256}; full raw row {bank.row_id}."
-    ]
+    result = (
+        [
+            f"{'Inverse original' if inverse else 'Reviewed'} bank source: "
+            f"{_identity(bank.account_id, bank.account_name, bank.account_kind, bank.tracking_scope)}; "
+            f"asset value change {_money(sign * bank.amount_minor)} on {bank.posting_date} ({bank.date_provenance}).\n"
+            f"Source {bank.source_sha256}; full raw row {bank.row_id}."
+        ]
+        if bank is not None
+        else [
+            "This lender-only manifest contains no bank leg. Its current bank relationship is tracked in Transfers; no bank transaction is invented by this record."
+        ]
+    )
     for proof in manifest.components:
         result.append(
             f"{'Inverse original' if inverse else 'Reviewed'} loan leg: "
@@ -176,20 +183,24 @@ class V2LoanPaymentReview(QDialog):
         self._focus_row_id = focus_row_id
         self._open_saved_history = event_id is not None
         self.labels, self.banks, self.rows = {}, {}, ()
+        self.resolution_states = {}
         self.review_preferences = workspace.preferences()
         self.setWindowTitle("2.0 evidenced loan payments")
-        self.resize(1100, 720)
+        self.resize(1050, 700)
+        self._reference_selection = None
+        self._source_context = "All loan statements · principal-component scope"
         layout = QVBoxLayout(self)
-        path = QHBoxLayout()
-        path.addWidget(_label("Profile:"))
+        header = QHBoxLayout()
+        self.context = _label("Loan statements · principal-component scope")
+        self.context.setStyleSheet("font-weight: 600")
+        header.addWidget(self.context, 1)
         self.profile_path = QLineEdit(str(workspace.profile_path))
         self.profile_path.setReadOnly(True)
         self.profile_path.setCursorPosition(0)
-        path.addWidget(self.profile_path, 1)
         self.reload = QPushButton("Reload saved state / reset draft")
         self.reload.clicked.connect(self.refresh)
-        path.addWidget(self.reload)
-        layout.addLayout(path)
+        header.addWidget(self.reload)
+        layout.addLayout(header)
         self.mode = QComboBox()
         self.mode.setMinimumContentsLength(35)
         self.mode.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
@@ -199,20 +210,19 @@ class V2LoanPaymentReview(QDialog):
         self.assumed_dates.setChecked(self.review_preferences.allow_assumed_posting_dates)
         self.assumed_dates.toggled.connect(self._toggle_dates)
         layout.addWidget(self.assumed_dates)
-        rules = QGroupBox("Review rules and date qualifications")
-        rules.setCheckable(True)
-        rules.setChecked(False)
-        rules_layout = QVBoxLayout(rules)
-        rules_layout.setContentsMargins(8, 0, 8, 0)
         rules_text = _label(
-            "Select the actual bank outflow and complete printed loan components explicitly. No payment group or counterpart is inferred. "
+            "Review complete printed loan components. The paying account can be resolved later in Transfers. "
             "Loan dates are observed activity dates; accounting dates require the explicit assumed-date choice. "
             "Nonzero fees, incomplete components and unsupported source/account scopes stay pending. Unknown opening stays unknown."
         )
-        rules_text.hide()
-        rules.toggled.connect(rules_text.setVisible)
+        rules_content = QWidget()
+        rules_layout = QVBoxLayout(rules_content)
+        rules_layout.setContentsMargins(0, 0, 0, 0)
         rules_layout.addWidget(rules_text)
-        layout.addWidget(rules)
+        rules_layout.addWidget(_label("Profile path"))
+        rules_layout.addWidget(self.profile_path)
+        self.rules = DetailsDisclosure(rules_content, self, subject="review rules and date qualifications")
+        layout.addWidget(self.rules)
         self.tabs = QTabWidget()
         layout.addWidget(self.tabs, 1)
         self._build_sources()
@@ -223,13 +233,19 @@ class V2LoanPaymentReview(QDialog):
         self.entry_table = _table(
             ("Accounting date / role", "Ledger account", "Debit (+) / credit (-)", "Financial allocation")
         )
-        for column, width in enumerate((210, 360, 160, 410)):
-            self.entry_table.setColumnWidth(column, width)
+        self.entry_table.setColumnHidden(3, True)
+        self.entry_table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)
+        self.entry_table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.entry_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)
+        self.entry_table.setMinimumHeight(0)
         preview_splitter = QSplitter(Qt.Vertical)
         preview_splitter.addWidget(self.entry_table)
         self.preview_details = QPlainTextEdit()
         self.preview_details.setReadOnly(True)
-        preview_splitter.addWidget(self.preview_details)
+        self.preview_details.setMinimumHeight(0)
+        self.preview_details.setMaximumHeight(150)
+        self.preview_disclosure = DetailsDisclosure(self.preview_details, self, subject="journal source details")
+        preview_splitter.addWidget(self.preview_disclosure)
         preview_splitter.setSizes([270, 110])
         preview_layout.addWidget(preview_splitter, 1)
         self.tabs.addTab(preview_panel, "Exact journal preview")
@@ -237,6 +253,7 @@ class V2LoanPaymentReview(QDialog):
         history_layout = QVBoxLayout(history_panel)
         self.history_details = QPlainTextEdit()
         self.history_details.setReadOnly(True)
+        self.history_details.setMinimumHeight(0)
         history_layout.addWidget(self.history_details)
         history_sources = QHBoxLayout()
         self.history_source = QComboBox()
@@ -251,7 +268,7 @@ class V2LoanPaymentReview(QDialog):
         form = QFormLayout()
         self.reference = QLineEdit()
         self.reference.setMaxLength(500)
-        self.reference.setPlaceholderText("Required reference for inspected bank and printed loan components")
+        self.reference.setPlaceholderText("Reference to the statement evidence; edit if useful")
         form.addRow("Review reference", self.reference)
         self.reason = QLineEdit()
         self.reason.setMaxLength(500)
@@ -267,6 +284,10 @@ class V2LoanPaymentReview(QDialog):
         self.withdraw.clicked.connect(self._withdraw)
         actions.addWidget(self.confirm)
         actions.addWidget(self.withdraw)
+        self.resolve_button = QPushButton("Resolve in Transfers…")
+        self.resolve_button.clicked.connect(self._resolve_transfer)
+        self.resolve_button.hide()
+        actions.addWidget(self.resolve_button)
         layout.addLayout(actions)
         self.status = _label()
         layout.addWidget(self.status)
@@ -279,7 +300,7 @@ class V2LoanPaymentReview(QDialog):
         panel = QWidget()
         layout = QVBoxLayout(panel)
         bank_row = QHBoxLayout()
-        bank_row.addWidget(_label("Complete bank outflow"))
+        bank_row.addWidget(_label("Paying account"))
         self.bank = QComboBox()
         self.bank.setMinimumContentsLength(30)
         self.bank.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
@@ -291,24 +312,29 @@ class V2LoanPaymentReview(QDialog):
         layout.addLayout(bank_row)
         layout.addWidget(
             _label(
-                "Check one Capital/MOHELA payment, or explicit Wells rows from one source and principal account. No loan row is selected automatically."
+                "Select the payment components to post. Match a paying-account transaction now, or resolve it later in Transfers."
             )
         )
         self.components = _table(
             (
                 "Use",
-                "Source activity date",
-                "Assumed accounting date",
-                "Loan / scope",
-                "Raw gross",
-                "Principal debit",
-                "Interest expense",
-                "Eligibility",
+                "Activity date",
+                "Accounting date",
+                "Loan account",
+                "Source total",
+                "Principal",
+                "Interest",
+                "Status",
                 "Source",
             )
         )
-        for column, width in enumerate((45, 115, 135, 200, 85, 95, 95, 180, 150)):
+        for column, width in enumerate((40, 105, 120, 180, 95, 85, 85, 170, 150)):
             self.components.setColumnWidth(column, width)
+        for column in (0, 1, 2, 4, 5, 6):
+            self.components.horizontalHeader().setSectionResizeMode(column, QHeaderView.ResizeToContents)
+        for column in (3, 7):
+            self.components.horizontalHeader().setSectionResizeMode(column, QHeaderView.Stretch)
+        self.components.setMinimumHeight(0)
         self.components.setColumnHidden(8, True)
         self.components.itemChanged.connect(self._draft_changed)
         self.components.itemSelectionChanged.connect(self._component_selected)
@@ -316,9 +342,14 @@ class V2LoanPaymentReview(QDialog):
         self.source_splitter.addWidget(self.components)
         self.source_details = QPlainTextEdit()
         self.source_details.setReadOnly(True)
-        self.source_splitter.addWidget(self.source_details)
-        self.source_details.hide()
-        self.source_splitter.setSizes([300, 100])
+        self.source_details.setMinimumHeight(0)
+        self.source_details.setMaximumHeight(140)
+        self.source_disclosure = DetailsDisclosure(self.source_details, self, subject="selected source evidence")
+        self.source_splitter.addWidget(self.source_disclosure)
+        self.source_splitter.setStretchFactor(0, 1)
+        self.source_splitter.setStretchFactor(1, 0)
+        self.source_disclosure.toggled.connect(self._resize_source_details)
+        self.source_splitter.setSizes([500, 28])
         layout.addWidget(self.source_splitter, 1)
         self.open_component = QPushButton("Open selected loan source evidence")
         self.open_component.clicked.connect(self._preview_component)
@@ -335,7 +366,7 @@ class V2LoanPaymentReview(QDialog):
         )
 
     def _bank_caption(self, movement):
-        return f"{self.labels.get(movement.account_id, _identity(movement.account_id, movement.account_name, movement.account_kind, movement.tracking_scope))}; {movement.posting_date} ({movement.date_provenance}); {_money(movement.amount_minor)}; {movement.row_id[:12]}"
+        return f"{self.labels.get(movement.account_id, movement.account_name)} · {movement.posting_date} ({movement.date_provenance}) · {_money(movement.amount_minor)}"
 
     def refresh(self, *_args):
         if self.jobs.writing:
@@ -365,12 +396,24 @@ class V2LoanPaymentReview(QDialog):
                     preferences, source_sha256=source, replacing_event_id=event.event_id
                 )
                 event = next(item for item in snapshot.history if item.event_id == selected_id)
-            return snapshot, event
+            resolution = store.resolution_snapshot(preferences=preferences)
+            context = "All loan statements · principal-component scope"
+            if source is not None:
+                payload = store.load_import(source).evidence.payload
+                start = getattr(payload, "start", None) or getattr(payload, "activity_start", None)
+                end = getattr(payload, "end", None) or getattr(payload, "activity_end", None)
+                names = tuple(dict.fromkeys(row.account_name or "Account not assigned" for row in snapshot.components))
+                context = " / ".join(names) + " · principal component · "
+                context += f"{start.iso if start and start.iso else 'Unknown start'} to {end.iso if end and end.iso else 'unknown end'}"
+            return snapshot, event, {item.id: item.status for item in resolution.items}, context
 
         self.jobs.submit(("snapshot", selected_id), read)
 
-    def _apply_snapshot(self, snapshot, event):
+    def _apply_snapshot(self, snapshot, event, resolution_states=None, context=None):
         self.snapshot, self.selected_event = snapshot, event
+        self.resolution_states = resolution_states or {}
+        self.context.setText(context or "All loan statements · principal-component scope")
+        self._source_context = self.context.text()
         self.labels = cash_account_labels(snapshot.accounts)
         self.banks = {bank.row_id: bank for bank in snapshot.bank_movements}
         self.rows = snapshot.components
@@ -383,9 +426,10 @@ class V2LoanPaymentReview(QDialog):
             ):
                 continue
             self.mode.addItem(
-                f"{item.status.title()}; {item.manifest.bank.posting_date}; principal {_money(item.manifest.principal_minor)}, interest {_money(item.manifest.interest_minor)}; {item.event_id}",
+                f"{item.status.title()} · {item.manifest.components[0].activity_date} · principal {_money(item.manifest.principal_minor)} · interest {_money(item.manifest.interest_minor)}",
                 item.event_id,
             )
+            self.mode.setItemData(self.mode.count() - 1, item.event_id, Qt.ToolTipRole)
         if event is not None:
             self.mode.setCurrentIndex(self.mode.findData(event.event_id))
         self.mode.blockSignals(False)
@@ -396,7 +440,7 @@ class V2LoanPaymentReview(QDialog):
         if event is None:
             self.reason.setText("Initial Review")
         self.bank.blockSignals(True)
-        self.bank.addItem("Choose the actual complete bank outflow", None)
+        self.bank.addItem("Resolve paying account later in Transfers", None)
         for bank in snapshot.bank_movements:
             self.bank.addItem(self._bank_caption(bank), bank.row_id)
             self.bank.setItemData(
@@ -404,7 +448,7 @@ class V2LoanPaymentReview(QDialog):
                 f"{self._bank_caption(bank)}\nSource {bank.source_sha256}; row {bank.row_id}",
                 Qt.ToolTipRole,
             )
-        if event is not None:
+        if event is not None and event.manifest.bank is not None:
             self.bank.setCurrentIndex(self.bank.findData(event.manifest.bank.row_id))
         self.bank.blockSignals(False)
         selected_rows = {proof.row_id for proof in event.manifest.components} if event else set()
@@ -417,17 +461,25 @@ class V2LoanPaymentReview(QDialog):
                 "",
                 f"{row.activity_date or 'Unknown'} (activity)",
                 f"{proof.effective_date} (assumed)" if proof else "Unavailable",
-                _identity(row.account_id, row.account_name, account_kinds.get(row.account_id), row.tracking_scope),
+                row.account_name or "Account not assigned",
                 _money(row.amount_minor),
                 _money(proof.principal_minor) if proof else "Unavailable",
                 _money(proof.interest_minor) if proof else "Unavailable",
-                "Eligible for explicit review"
+                "Posted · matched"
+                if event is not None
+                and row.row_id in selected_rows
+                and (event.manifest.bank is not None or self.resolution_states.get(event.event_id) == "matched")
+                else "Posted · counterpart unresolved"
+                if event is not None and row.row_id in selected_rows
+                else "Eligible for explicit review"
                 if row.eligible
                 else "; ".join(
                     {
                         "loan_account_assignment_required": "Assign financial account",
                         "loan_principal_scope_required": "Requires principal component",
-                        "loan_component_unsupported": "Unsupported printed components",
+                        "loan_component_unsupported": "Loan origination — review from statement"
+                        if (row.description or "").casefold() == "amount financed"
+                        else "Components need review",
                         "loan_source_already_used": "Already reviewed",
                         "loan_assumed_date_disabled": "Assumed date disabled (default-off)",
                         "source_overlap_review_required": "Repeated source needs review",
@@ -442,8 +494,14 @@ class V2LoanPaymentReview(QDialog):
                 item.setToolTip(
                     " ".join(REASONS.get(code, code) for code in row.blockers)
                     if column == 7 and row.blockers
+                    else _identity(
+                        row.account_id, row.account_name, account_kinds.get(row.account_id), row.tracking_scope
+                    )
+                    if column == 3
                     else str(value)
                 )
+                if column in (4, 5, 6):
+                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
                 if column == 0:
                     item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
                     if not row.eligible:
@@ -473,9 +531,10 @@ class V2LoanPaymentReview(QDialog):
                 + "\n\n"
                 + "\n\n".join(component_details(proof) for proof in event.manifest.components)
             )
-            self.history_source.addItem(
-                f"Bank source {event.manifest.bank.source_sha256}", event.manifest.bank.source_sha256
-            )
+            if event.manifest.bank is not None:
+                self.history_source.addItem(
+                    f"Bank source {event.manifest.bank.source_sha256}", event.manifest.bank.source_sha256
+                )
             for source in dict.fromkeys(proof.source_sha256 for proof in event.manifest.components):
                 self.history_source.addItem(f"Loan component source {source}", source)
             self.open_history_source.setEnabled(True)
@@ -498,6 +557,7 @@ class V2LoanPaymentReview(QDialog):
 
     def _clear_draft(self):
         self.reference.clear()
+        self._reference_selection = None
         self.reason.clear()
         self.bank.blockSignals(True)
         self.bank.clear()
@@ -514,14 +574,22 @@ class V2LoanPaymentReview(QDialog):
         self.open_bank.setEnabled(False)
         self.open_component.setEnabled(False)
         self.summary.setText(
-            "Explicitly choose one bank outflow and complete printed loan components. No counterpart or grouping is inferred."
+            "Select the complete printed payment components. The paying account can be resolved later."
         )
         self._update_actions()
 
     def _component_selected(self):
         index = self.components.currentRow()
         row = self.rows[index] if 0 <= index < len(self.rows) else None
-        self.source_details.setVisible(row is not None)
+        if row is None:
+            checked = self._component_ids()
+            if len(checked) == 1:
+                row = next((item for item in self.rows if item.row_id == checked[0]), None)
+        if self._source_sha256 is None:
+            self.context.setText(
+                self._source_context + (f" · {row.account_name}" if row is not None and row.account_name else "")
+            )
+        self.source_disclosure.button.setEnabled(row is not None)
         self.open_component.setEnabled(row is not None)
         self.source_details.setPlainText(
             component_details(row.proof)
@@ -543,6 +611,10 @@ class V2LoanPaymentReview(QDialog):
                 )
             )
 
+    def _resize_source_details(self, expanded):
+        height = 175 if expanded else 28
+        self.source_splitter.setSizes([max(120, self.source_splitter.height() - height), height])
+
     def _draft_changed(self, *_args):
         if self.jobs.writing:
             return
@@ -552,9 +624,9 @@ class V2LoanPaymentReview(QDialog):
         self._component_selected()
         _fill(self.entry_table, ())
         self.preview_details.clear()
-        if self.snapshot is None or self.bank.currentData() is None or not self._component_ids():
+        if self.snapshot is None or not self._component_ids():
             self.summary.setText(
-                "Choose one actual bank outflow and explicitly check supported complete loan rows. No automatic grouping or matching is used."
+                "Select the complete printed payment components. Matching a paying-account transaction is optional."
             )
             self._update_actions()
             return
@@ -569,6 +641,16 @@ class V2LoanPaymentReview(QDialog):
             )
             return
         bank_id, component_ids = self.bank.currentData(), self._component_ids()
+        selection = (bank_id, component_ids)
+        if selection != self._reference_selection:
+            self._reference_selection = selection
+            selected = [row for row in self.rows if row.row_id in component_ids]
+            self.reference.setText(
+                "; ".join(
+                    f"{row.account_name or 'Loan'} · {row.activity_date or 'date unknown'} · {row.description or 'printed payment'}"
+                    for row in selected
+                )[:500]
+            )
         preferences, basis = self.review_preferences, self.snapshot.basis_sha256
         replacing = self.selected_event.event_id if self.selected_event else None
 
@@ -613,10 +695,19 @@ class V2LoanPaymentReview(QDialog):
     def _apply_preview(self, preview):
         self.preview = preview
         manifest = preview.manifest
+        gross = sum(proof.gross_minor for proof in manifest.components)
         self.summary.setText(
-            f"Full bank outflow {_money(-manifest.bank.amount_minor)} = principal {_money(manifest.principal_minor)} + printed interest {_money(manifest.interest_minor)}. "
-            "Loan activity dates remain observed; accounting dates are assumed, never reported posting dates. Separate dates retain clearing. "
-            "Raw gross use and derived principal allocations remain distinct. Unknown opening stays unknown."
+            f"Payment {_money(gross)} · principal reduction {_money(manifest.principal_minor)} · interest expense {_money(manifest.interest_minor)}. "
+            + (
+                "This lender posting is matched in Transfers. "
+                if manifest.bank is None
+                and self.selected_event is not None
+                and self.resolution_states.get(self.selected_event.event_id) == "matched"
+                else "Paying account unresolved; the gross payment remains in transfer clearing. "
+                if manifest.bank is None
+                else "Selected bank evidence will be linked at its own source date. "
+            )
+            + "Loan accounting dates are assumed from observed activity dates. Unknown opening stays unknown."
         )
         names = {
             **self.labels,
@@ -627,7 +718,7 @@ class V2LoanPaymentReview(QDialog):
             self.entry_table,
             tuple(
                 (
-                    f"{entry.posting_date.isoformat()} ({'bank source date' if index == 0 else 'assumed loan accounting date'})",
+                    f"{entry.posting_date.isoformat()} ({'source' if manifest.bank is not None and index == 0 else 'assumed'})",
                     names.get(posting.account_id, posting.account_id),
                     _money(posting.amount_minor),
                     "; ".join(
@@ -652,7 +743,8 @@ class V2LoanPaymentReview(QDialog):
         event = self.selected_event
         active = event is not None and event.status == "active"
         changed = self.preview is not None and (event is None or self.preview.manifest != event.manifest)
-        self.confirm.setText("Confirm whole payment replacement" if event else "Confirm evidenced loan payment")
+        linked = active and self.resolution_states.get(event.event_id) == "matched"
+        self.confirm.setText("Confirm whole payment replacement" if event else "Post loan payment")
         self.confirm.setEnabled(
             bool(
                 self.snapshot
@@ -660,22 +752,41 @@ class V2LoanPaymentReview(QDialog):
                 and changed
                 and not self.jobs.writing
                 and (event is None or active)
+                and not linked
                 and self.reference.text().strip()
                 and self.reason.text().strip()
             )
         )
         self.withdraw.setEnabled(
-            bool(self.snapshot and active and self.reason.text().strip() and not self.jobs.writing)
+            bool(self.snapshot and active and not linked and self.reason.text().strip() and not self.jobs.writing)
         )
+        unresolved = active and event.manifest.bank is None and not linked
+        self.resolve_button.setVisible(bool(active and event.manifest.bank is None))
+        self.resolve_button.setText("View in Transfers…" if linked else "Resolve in Transfers…")
+        self.resolve_button.setEnabled(bool(active and event.manifest.bank is None and not self.jobs.writing))
         if self.snapshot is None:
             self.status.setText("Reload verified state before reviewing another payment.")
         elif event is not None and not active:
             self.status.setText(
                 "Historical event; all original entries, source uses and action reasons remain inspectable."
             )
+        elif linked:
+            self.status.setText(
+                "Posted · transfer matched. Unlink it in Transfers before changing or withdrawing the lender posting."
+            )
+        elif active and not changed:
+            self.status.setText(
+                "Posted · paying-account counterpart unresolved. Resolve it in Transfers when more evidence is available."
+                if unresolved
+                else "Posted payment · inspect its retained source evidence and history."
+            )
+        elif self.preview and not self.reference.text().strip():
+            self.status.setText("Enter a reference to the reviewed statement evidence before posting.")
+        elif self.preview and not self.reason.text().strip():
+            self.status.setText("Enter a reason for this payment review before posting.")
         else:
             self.status.setText(
-                "Draft only. Inspect the exact journal preview and all date assumptions before confirming. Interest is the only expense; no balance is inferred."
+                "Ready to post. Principal reduces the loan; interest is expense. Review the posting and date assumptions before confirming."
                 if self.preview
                 else self.summary.text()
             )
@@ -692,7 +803,7 @@ class V2LoanPaymentReview(QDialog):
 
     def _open_source(self, source_sha256):
         try:
-            preview_saved_source(self.workspace.profile_path, source_sha256, parent=self).exec()
+            exec_disposable(preview_saved_source(self.workspace.profile_path, source_sha256, parent=self))
         except (ProfileFormatError, sqlite3.Error, OSError):
             self.refresh()
             self.status.setText(
@@ -706,8 +817,48 @@ class V2LoanPaymentReview(QDialog):
 
     def _preview_component(self):
         index = self.components.currentRow()
+        if not 0 <= index < len(self.rows):
+            checked = self._component_ids()
+            if len(checked) == 1:
+                index = next((i for i, row in enumerate(self.rows) if row.row_id == checked[0]), -1)
         if 0 <= index < len(self.rows):
             self._open_source(self.rows[index].source_sha256)
+
+    def _resolve_transfer(self):
+        event = self.selected_event
+        if event is not None and event.status == "active" and event.manifest.bank is None:
+            row_id = event.manifest.components[0].row_id
+            if self.jobs.close():
+                self.accept()
+                self.transfers_requested.emit(row_id)
+
+    @staticmethod
+    def _payment_summary(manifest, *, inverse=False):
+        sign = -1 if inverse else 1
+        gross = sum(proof.gross_minor for proof in manifest.components)
+        lines = [
+            f"{'Reverse' if inverse else 'Record'} payment {_money(gross)}:",
+            f"Principal {'increase' if inverse else 'reduction'} {_money(manifest.principal_minor)}; "
+            f"interest {'reversal' if inverse else 'expense'} {_money(manifest.interest_minor)}.",
+        ]
+        for proof in manifest.components:
+            lines.append(
+                f"{proof.account_name} · {proof.effective_date} (assumed accounting date from observed activity; not a reported posting date)."
+            )
+        if manifest.bank is None:
+            lines.append(
+                f"Transfer clearing {_money(-sign * gross)} · no bank posting. The bank relationship is tracked in Transfers."
+            )
+        else:
+            lines.append(
+                f"Paying account {manifest.bank.account_name} · {_money(sign * manifest.bank.amount_minor)} "
+                f"on {manifest.bank.posting_date} ({manifest.bank.date_provenance})."
+            )
+            lines.append("The separate source dates are retained; clearing remains between those dates.")
+        lines.append(
+            "Only printed interest is expense; the gross payment is not a second expense. Unknown opening remains unknown. Full source details are available in the posting preview."
+        )
+        return "\n".join(lines)
 
     def _post(self):
         if not self.confirm.isEnabled() or self.preview is None or self.snapshot is None:
@@ -717,12 +868,12 @@ class V2LoanPaymentReview(QDialog):
         message = (
             (
                 "Replace the WHOLE saved payment?\n\nInverse original entries at their original dates:\n"
-                + manifest_details(event.manifest, inverse=True)
+                + self._payment_summary(event.manifest, inverse=True)
                 + "\n\nReplacement entry effects only; the original bank and all loan legs are reversed first:\n"
                 if event
                 else "Post this explicitly reviewed payment?\n\nNew entry effects:\n"
             )
-            + manifest_details(preview.manifest)
+            + self._payment_summary(preview.manifest)
             + f"\n\nReference: {reference}\nReason: {reason}\n\nFailure preserves the original event and all source use."
         )
         if (
@@ -751,13 +902,13 @@ class V2LoanPaymentReview(QDialog):
             if event:
                 return store.replace_reviewed_loan(
                     event.event_id,
-                    preview.manifest.bank.row_id,
+                    preview.manifest.bank.row_id if preview.manifest.bank is not None else None,
                     tuple(proof.row_id for proof in preview.manifest.components),
                     expected_event_version=event.version,
                     **kwargs,
                 )
             return store.post_reviewed_loan_payment(
-                preview.manifest.bank.row_id,
+                preview.manifest.bank.row_id if preview.manifest.bank is not None else None,
                 tuple(proof.row_id for proof in preview.manifest.components),
                 **kwargs,
             )
@@ -793,8 +944,15 @@ class V2LoanPaymentReview(QDialog):
             else:
                 self._apply_preview(result)
         else:
-            self._notice = "Recorded. Refreshed history shows current state; original source facts, date provenance and whole-event actions remain inspectable."
+            self._notice = (
+                "Recorded. Refreshed history shows current state; original evidence and actions remain inspectable."
+            )
             if key[0] == "post":
+                self._notice = (
+                    "Posted · paying-account counterpart unresolved. Resolve it later in Transfers."
+                    if result.manifest.bank is None
+                    else "Posted loan payment with the selected paying-account evidence."
+                )
                 self._requested_event_id = result.event_id
                 self.mode.blockSignals(True)
                 self.mode.setCurrentIndex(0)
@@ -837,3 +995,5 @@ class V2LoanPaymentReview(QDialog):
         else:
             event.ignore()
             self.status.setText("The confirmed write is still running. Wait for its saved outcome before closing.")
+
+    transfers_requested = Signal(str)

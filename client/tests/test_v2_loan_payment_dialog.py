@@ -119,7 +119,9 @@ def test_capital_date_preference_exact_preview_source_inspection_cancel_post_and
     monkeypatch.setattr(
         module,
         "preview_saved_source",
-        lambda *args, **kwargs: previews.append(args[1]) or SimpleNamespace(exec=lambda: None),
+        lambda *args, **kwargs: (
+            previews.append(args[1]) or SimpleNamespace(exec=lambda: None, deleteLater=lambda: None)
+        ),
     )
     view.open_bank.click()
     wait_for_jobs(view)
@@ -137,7 +139,7 @@ def test_capital_date_preference_exact_preview_source_inspection_cancel_post_and
     wait_for_jobs(view)
     event = view.selected_event
     assert event is not None and event.status == "active"
-    assert "NOT reported posting" in prompts[0] and "gross payment is not a second expense" in prompts[0]
+    assert "not a reported posting date" in prompts[0] and "gross payment is not a second expense" in prompts[0]
     assert not view.confirm.isEnabled()
     with V2ProfileStore.open(path, read_only=True) as store:
         positions = store.account_positions(as_of=date(2026, 1, 14))

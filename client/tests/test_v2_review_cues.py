@@ -37,7 +37,7 @@ def open_review(qtbot, workspace, *, size=(1050, 700)):
     window.resize(*size)
     window.show()
     qtbot.waitUntil(lambda: not window.inventory_pending, timeout=15000)
-    click_list_row(qtbot, window.navigation, 1)
+    click_list_row(qtbot, window.navigation, window.REVIEW)
     qtbot.waitUntil(
         lambda: (
             window.findChild(V2CashActivityReview) is not None or window.findChild(V2CardPurchaseReview) is not None

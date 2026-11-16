@@ -36,7 +36,7 @@ def test_document_dates_handoff_and_back_keep_report_period(tmp_path):
     window = V2WorkspaceWindow(_populated_workspace(tmp_path))
     try:
         wait_for_inventory(window)
-        window.navigation.setCurrentRow(1)
+        window.navigation.setCurrentRow(window.REVIEW)
         wait_for_jobs(window._review_widget)
         window.document_spending_button.click()
         reports = window._reports_view
@@ -48,7 +48,7 @@ def test_document_dates_handoff_and_back_keep_report_period(tmp_path):
         assert reports.budget_month.date() == QDate(2026, 10, 1)
         reports.start.setDate(QDate(2026, 9, 1))
         reports.tabs.setCurrentIndex(3)
-        window.navigation.setCurrentRow(1)
+        window.navigation.setCurrentRow(window.REVIEW)
         window._back_to_report()
         wait_for_reports(reports)
         assert reports.start.date() == QDate(2026, 9, 1)
@@ -100,7 +100,7 @@ def test_report_route_decline_preserves_unrelated_document_and_saved_entries(tmp
     window = V2WorkspaceWindow(workspace)
     try:
         wait_for_inventory(window)
-        window.navigation.setCurrentRow(1)
+        window.navigation.setCurrentRow(window.REVIEW)
         review = window._review_widget
         wait_for_jobs(review)
         current = window._selected_source()
@@ -138,7 +138,7 @@ def test_report_source_route_reveals_exact_reviewed_row_and_preserves_correction
         window._reports_view.source_review_requested.emit(evidence.source_sha256, row_id)
         review = window._review_widget
         wait_for_jobs(review)
-        assert window.navigation.currentRow() == 1
+        assert window.navigation.currentRow() == window.REVIEW
         assert review._current().row_id == row_id and review._current().entry_key is not None
         assert len(review.navigation.selected()) == 1 and review.category.isEnabled()
         assert review.navigation.status_filter.currentData() == "all"
@@ -196,8 +196,8 @@ def test_report_lender_route_opens_the_exact_owning_loan_event(tmp_path, monkeyp
         wait_for_jobs(dialog)
         seen.append(dialog.selected_event.event_id)
         assert dialog.tabs.tabText(dialog.tabs.currentIndex()) == "Saved event / history"
-        assert "Saved reviewed payment" in dialog.status.text()
-        assert "do not invalidate" in dialog.status.text()
+        assert "Posted payment" in dialog.status.text()
+        assert dialog.selected_event.status == "active"
         assert not dialog.assumed_dates.isChecked()
         assert not dialog.confirm.isEnabled()
         assert dialog.preview is None

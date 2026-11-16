@@ -32,19 +32,27 @@ def show_workspace_help(parent=None) -> None:
             "2. Review the transactions",
             "Open the statement in Review. Source evidence and Open original let you check what was imported. "
             "Choose a transaction type and category. Add category opens a separate creation task. Budget opens "
-            "category and budget management. Use Ctrl-click or Shift to select several rows. Transfers, repayments "
-            "and loan principal have separate review routes because they are not additional expenses.",
+            "category and budget management. Use Ctrl-click or Shift to select several rows. Mark an owned "
+            "payment Transfer / card repayment; its source side can post while the counterpart remains unresolved. "
+            "Loan review preserves the printed principal and interest split. Origination is a separate acquisition task.",
         ),
         (
             "3. Build a review set, then confirm",
-            "Enter a shared reason in Review set. It applies to every staged row, including rows hidden by filters. "
+            "Initial Review is the editable shared note. It applies to every staged row, including rows hidden by filters. "
             "Stage selected captures your choices and applies that reason to the whole set. Selecting another "
             "row does not change the reason; later unstaged edits do not change the captured reason. "
             "Review staged shows the exact effects before you confirm and post. Cancel keeps your choices. "
             "Review set options removes selected proposals or clears the set without changing saved entries.",
         ),
         (
-            "4. See the monthly budget impact",
+            "4. Resolve transfers when the other statement arrives",
+            "Open Transfers to see posted sides awaiting a counterpart across all profile accounts. "
+            "Import and review the other statement when available, then inspect and confirm the relationship. "
+            "Two already-posted sides are linked without another payment. An unposted side needs explicit "
+            "review before it is added. Unresolved items remain visible even when their totals happen to cancel.",
+        ),
+        (
+            "5. See the monthly budget impact",
             "Open Budget, choose a month and select a category to edit its budget. The table shows budget, "
             "reviewed spending and remaining. Remaining is budget minus reviewed spending, not an account balance. "
             "View spending from a statement also selects its month for Budget. Multi-month statements show "
@@ -61,7 +69,7 @@ def show_workspace_help(parent=None) -> None:
             "Read the confirmation before saving; cancelling it retains your draft.",
         ),
         (
-            "5. Correct a saved review",
+            "6. Correct a saved review",
             "Inspect an entry from Budget or Reports, then Review / correct source row. The saved reason is "
             "read-only; enter a new correction reason before confirming. It is separate from the shared reason "
             "for staged rows. Back to budget or Back to report returns to your prior context. "
@@ -69,7 +77,7 @@ def show_workspace_help(parent=None) -> None:
             "an unknown opening or position is not zero.",
         ),
         (
-            "6. Back up and recover",
+            "7. Back up and recover",
             "Profile > Back up current profile creates a verified copy. Restore backup as new profile "
             "preserves the existing profile. Save selected source original recovers an embedded document. "
             "Ordinary financial data stays local. Profiles, backups and recovered originals contain financial data and are not encrypted by "

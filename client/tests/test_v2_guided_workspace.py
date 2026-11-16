@@ -19,7 +19,7 @@ def test_navigation_embeds_working_views_and_keeps_report_period(tmp_path):
     window = V2WorkspaceWindow(_populated_workspace(tmp_path))
     try:
         wait_for_inventory(window)
-        window.navigation.setCurrentRow(1)
+        window.navigation.setCurrentRow(window.REVIEW)
         review = window._review_widget
         wait_for_jobs(review)
         assert review.embedded and review.model.rowCount() == 1
@@ -29,14 +29,14 @@ def test_navigation_embeds_working_views_and_keeps_report_period(tmp_path):
         reports.start.setDate(QDate(2026, 10, 1))
         reports.end.setDate(QDate(2026, 11, 1))
         wait_for_reports(reports)
-        window.navigation.setCurrentRow(2)
+        window.navigation.setCurrentRow(window.ACCOUNTS)
         window.account_details_toggle.setChecked(True)
         wait_for_reports(window._positions_view)
         assert window._positions_view.positions_model.rowCount() == 1
         window.navigation.setCurrentRow(window.REPORTS)
         assert window._reports_view is reports
         assert reports.start.date() == QDate(2026, 10, 1)
-        window.navigation.setCurrentRow(1)
+        window.navigation.setCurrentRow(window.REVIEW)
         assert window._review_widget is review
     finally:
         window.close()
@@ -54,7 +54,7 @@ def test_changing_document_preserves_draft_until_explicit_discard(tmp_path, monk
     window = V2WorkspaceWindow(workspace)
     try:
         wait_for_inventory(window)
-        window.navigation.setCurrentRow(1)
+        window.navigation.setCurrentRow(window.REVIEW)
         wait_for_jobs(window._review_widget)
         source = window._selected_source()
         view = window._review_widget

@@ -23,7 +23,7 @@ def test_accounts_category_setup_refreshes_review_without_reload_and_cancel_keep
     modals = ModalSteps(qtbot)
     try:
         qtbot.waitUntil(lambda: not window.inventory_pending, timeout=15000)
-        click_list_row(qtbot, window.navigation, 1)
+        click_list_row(qtbot, window.navigation, window.REVIEW)
         review = window.findChild(V2CashActivityReview)
         assert review is not None
         qtbot.waitUntil(lambda: not review.review_pending, timeout=15000)
@@ -32,7 +32,7 @@ def test_accounts_category_setup_refreshes_review_without_reload_and_cancel_keep
         assert review.category.count() == 1
         assert review.manage_categories_button.isEnabled()
         row_id = review.navigation.current().row_id
-        click_list_row(qtbot, window.navigation, 2)
+        click_list_row(qtbot, window.navigation, window.ACCOUNTS)
 
         def add_category(dialog):
             choose_combo(qtbot, dialog.add_kind, "expense")
@@ -43,7 +43,7 @@ def test_accounts_category_setup_refreshes_review_without_reload_and_cancel_keep
         modals.arm((V2CategoryDialog, add_category))
         qtbot.mouseClick(window.categories_button, Qt.LeftButton)
         modals.finish()
-        click_list_row(qtbot, window.navigation, 1)
+        click_list_row(qtbot, window.navigation, window.REVIEW)
         qtbot.waitUntil(lambda: not review.review_pending, timeout=15000)
         assert review.category.findText("Meals") >= 0
         assert review_reason(review).text() == "Keep my review reason while setting up categories"

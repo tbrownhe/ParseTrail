@@ -143,6 +143,7 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
     """Keep card classification and date decisions explicit before journal writes."""
 
     changed = Signal()
+    transfers_requested = Signal(str)
 
     def __init__(self, workspace: V2Workspace, source_sha256: str, parent=None, *, register_mode=False, embedded=False):
         super().__init__(parent)
@@ -161,7 +162,7 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
         self.review_intro = QLabel(
             "Review whole-liability activity. Save repayments here before matching; principal and interest are not inferred."
             if register_mode
-            else "Review card activity. Save transfer/card-repayment designations here; review a match only when you choose."
+            else "Review card activity and post its category or transfer effects. Resolve counterpart relationships separately in Transfers."
         )
         self.review_intro.setWordWrap(True)
         layout.addWidget(self.review_intro)
@@ -285,7 +286,7 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
             return
         self._remember_row_form()
         row = self._current()
-        correcting = row is not None and row.entry_key is not None
+        correcting = row is not None and (row.entry_key is not None or self._zero_review(row) is not None)
         self.purpose.blockSignals(True)
         self.purpose.clear()
         external = _reviewed_elsewhere(row)
@@ -573,6 +574,8 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
         self.refresh(selected_row_id=selected.row_id if selected is not None else None)
 
     def _act(self) -> None:
+        if self._act_zero_review():
+            return
         if self._act_pending_transfer():
             return
         if not self._single_selection():
@@ -700,6 +703,8 @@ class V2CardPurchaseReview(OrdinaryReviewMixin, QDialog):
         )
 
     def _withdraw(self) -> None:
+        if self._withdraw_zero_review():
+            return
         if self._withdraw_pending_transfer():
             return
         if not self._single_selection():

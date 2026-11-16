@@ -1190,8 +1190,14 @@ class V2ReviewedReportsDialog(QDialog):
             if count
             else "No pending imported rows across all dates."
         )
+        unresolved_note = (
+            f"Profile-wide: {report.unresolved_transfer_count} posted transfer side(s) in this period await matching in Transfers. "
+            if report.unresolved_transfer_count
+            else ""
+        )
         self.qualification.setText(
-            f"{pending_note} Source coverage may be incomplete. Transfers and repayments do not add spending."
+            f"{pending_note} {unresolved_note}"
+            "Source coverage may be incomplete. Transfers and repayments do not add spending."
         )
         if tab in (0, 3) and getattr(report, "reviewed_entry_count", None) == 0:
             kind = "spending" if tab == 0 else "income"
@@ -1210,7 +1216,12 @@ class V2ReviewedReportsDialog(QDialog):
             self.qualification.setText(
                 "Unknown positions need an opening balance; unknown is not zero. "
                 f"{positions.activity_rows_without_full_allocation} imported row(s) pending across all dates; "
-                "source coverage may be incomplete."
+                + (
+                    f"{positions.unresolved_transfer_count} posted transfer side(s) through this date await matching in Transfers. "
+                    if positions.unresolved_transfer_count
+                    else ""
+                )
+                + "Source coverage may be incomplete."
             )
             self.scope.setText(
                 f"Across the whole profile and all dates, {positions.activity_rows_without_full_allocation} "
@@ -1221,7 +1232,9 @@ class V2ReviewedReportsDialog(QDialog):
                 "Opening-based journal positions remain subject to pending activity, source capture and coverage limits. "
                 "These are reviewed books, not certified bank balances or complete net worth."
                 f" Transfer clearing recorded total: {_money(positions.transfer_clearing_debit_minor)}. "
-                "A nonzero clearing total can represent a transfer between source posting dates."
+                f"{positions.unresolved_transfer_count} posted side(s) remain unmatched under current relationship decisions; "
+                "a zero clearing total does not resolve those individual items. A nonzero clearing total can also "
+                "represent a matched transfer between source posting dates."
             )
             return
         if self.tabs.currentIndex() == 2:

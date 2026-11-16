@@ -296,9 +296,15 @@ class V2ReviewedEntryDrilldown(QDialog):
                     self._review_targets.setdefault(source_rows[row_id], row_id)
         loan_event = next((event for event in result.report.loan_events if event.event_id == entry.event_id), None)
         if loan_event is not None:
-            source_ids[loan_event.manifest.bank.source_sha256] = None
+            if loan_event.manifest.bank is not None:
+                source_ids[loan_event.manifest.bank.source_sha256] = None
             lines.append(
-                "\nReviewed whole loan payment; these component facts are provenance, not additional money. "
+                (
+                    "\nReviewed whole loan payment; "
+                    if loan_event.manifest.bank is not None
+                    else "\nReviewed lender-side payment; paying-account resolution is tracked separately in Transfers. "
+                )
+                + "These component facts are provenance, not additional money. "
                 f"Reference: {loan_event.reference}; event state: {loan_event.status}."
             )
             for link in result.report.loan_source_links:

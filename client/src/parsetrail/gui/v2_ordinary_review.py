@@ -56,6 +56,7 @@ class OrdinaryReviewMixin:
             self.setWindowFlags(Qt.Widget)
         self._snapshot = None
         self.pending_transfers = {}
+        self.zero_reviews = {}
         self.transfer_eligible_row_ids = frozenset()
         self._restore_draft = None
         self._completion_message = ""
@@ -96,6 +97,10 @@ class OrdinaryReviewMixin:
         self.cancel_read_button.clicked.connect(self._cancel_loading)
         self.layout().insertWidget(2, self.cancel_read_button, alignment=Qt.AlignLeft)
         self.batch = OrdinaryBatchPanel(self)
+        self.transfer_source_date_button = QPushButton("Use statement date for transfer")
+        self.transfer_source_date_button.clicked.connect(self._use_transfer_source_date)
+        self.form.addRow(self.transfer_source_date_button)
+        self.transfer_source_date_button.hide()
         self.table.horizontalHeader().moveSection(self.model.columnCount() - 1, 0)
         self.setTabOrder(self.reason, self.batch.reason)
         self.setTabOrder(self.batch.reason, self.batch.stage_button)
@@ -193,7 +198,124 @@ class OrdinaryReviewMixin:
         if row is None:
             return None
         state = self._pending_transfer(row)
+        zero = self._zero_review(row)
+        if zero is not None:
+            return f"zero-review:{zero.revision_id}"
         return f"pending-transfer:{state.revision_id}" if state is not None else row.entry_key
+
+    def _zero_review(self, row):
+        review = self.zero_reviews.get(row.row_id) if row is not None else None
+        return review if review is not None and review.action == "reviewed" else None
+
+    def _zero_review_form_cues(self, row):
+        if row is None or row.amount_minor != 0:
+            return False
+        saved = self._zero_review(row)
+        if saved is None and row.status != "Ready for purpose review":
+            return False
+        usable = not self.jobs.pending and self.basis is not None and self._profile_matches()
+        self.match_transfer_button.hide()
+        if hasattr(self, "accounting_date"):
+            self.form.setRowVisible(self.accounting_date, False)
+        if hasattr(self, "assumed_dates"):
+            self.assumed_dates.hide()
+        self.purpose.setEnabled(usable)
+        self.category.setEnabled(usable)
+        self.form.setRowVisible(self.category_row, True)
+        self.form.setRowVisible(self.reason, saved is not None)
+        self.form.setRowVisible(self.saved_review_note, saved is not None)
+        self.batch.setVisible(saved is None or bool(self.batch.staged) or self.batch.reason_is_dirty)
+        self.batch.stage_button.setVisible(saved is None)
+        self.action_button.setVisible(saved is not None)
+        self.withdraw_button.setVisible(saved is not None)
+        self.manage_categories_button.setEnabled(usable and self.purpose.currentData() is not None)
+        if saved is None:
+            self.decision_group.setTitle("Review zero-value transaction")
+            self.batch.update_stage_action()
+            set_status(
+                self.status,
+                "ready" if usable else "loading",
+                "$0.00 source row. Review its purpose and category; no journal entry or spending is created.",
+            )
+            return True
+        self.decision_group.setTitle("Correct zero-value review")
+        self.saved_review_note.setPlainText(saved.reason)
+        self.saved_review_note.setFixedHeight(2 * self.saved_review_note.fontMetrics().lineSpacing() + 10)
+        self.reason.setEnabled(usable)
+        self.reason.setPlaceholderText("Enter a new reason to change or withdraw this review")
+        self.form.labelForField(self.reason).setText("Reason for correction *")
+        changed = (self.purpose.currentData(), self.category.currentData()) != (saved.purpose, saved.category_id)
+        reason = bool(self.reason.text().strip())
+        self.action_button.setText("Save zero-value review correction")
+        self.action_button.setEnabled(
+            usable
+            and changed
+            and reason
+            and self.purpose.currentData() in row.allowed_purposes
+            and self.category.currentData() is not None
+        )
+        self.withdraw_button.setText("Withdraw zero-value review")
+        self.withdraw_button.setEnabled(usable and reason)
+        set_status(
+            self.status,
+            "ready" if changed and reason else "saved",
+            "$0.00 reviewed · no journal entry. Enter a new reason to change or withdraw this decision.",
+        )
+        return True
+
+    def _act_zero_review(self):
+        row = self._current()
+        saved = self._zero_review(row)
+        if saved is None:
+            return False
+        if not self._single_selection() or not self.action_button.isEnabled():
+            return True
+        reason, basis = self.reason.text().strip(), self.basis
+        row_id, revision = row.row_id, saved.revision_id
+        category, purpose = self.category.currentData(), self.purpose.currentData()
+        if (
+            QMessageBox.question(
+                self,
+                "Correct zero-value review",
+                f"Save the changed purpose/category for this $0.00 source row?\n\n{row.description}\nReason: {reason}\n\nNo journal entry or spending is created.",
+            )
+            != QMessageBox.Yes
+        ):
+            return True
+        self._submit_review_write(
+            lambda store, _cancelled: store.review_zero_amount(
+                row_id, category, purpose, reason=reason, expected_basis_sha256=basis, expected_revision_id=revision
+            ),
+            message="$0.00 review corrected. No money posted.",
+            row_id=row_id,
+        )
+        return True
+
+    def _withdraw_zero_review(self):
+        row = self._current()
+        saved = self._zero_review(row)
+        if saved is None:
+            return False
+        if not self._single_selection() or not self.withdraw_button.isEnabled():
+            return True
+        reason, basis, row_id, revision = self.reason.text().strip(), self.basis, row.row_id, saved.revision_id
+        if (
+            QMessageBox.question(
+                self,
+                "Withdraw zero-value review",
+                f"Return this $0.00 source row to review?\n\n{row.description}\nReason: {reason}\n\nNo money is posted or reversed.",
+            )
+            != QMessageBox.Yes
+        ):
+            return True
+        self._submit_review_write(
+            lambda store, _cancelled: store.withdraw_zero_amount_review(
+                row_id, reason=reason, expected_basis_sha256=basis, expected_revision_id=revision
+            ),
+            message="$0.00 review withdrawn. No money posted.",
+            row_id=row_id,
+        )
+        return True
 
     def _offered_purposes(self, row):
         if row is None or reviewed_elsewhere(row):
@@ -224,6 +346,8 @@ class OrdinaryReviewMixin:
         state = self._pending_transfer(row)
         transfer = self.purpose.currentData() == "transfer"
         if state is None and not transfer:
+            if hasattr(self, "accounting_date"):
+                self.accounting_date.setReadOnly(self.register_mode)
             self.match_transfer_button.hide()
             return False
         usable = row is not None and not self.jobs.pending and self.basis is not None and self._profile_matches()
@@ -236,9 +360,16 @@ class OrdinaryReviewMixin:
             usable and self.purpose.currentData() in {"expense", "expense_refund", "income", "income_adjustment"}
         )
         if hasattr(self, "accounting_date"):
-            self.form.setRowVisible(self.accounting_date, not transfer)
+            self.form.setRowVisible(self.accounting_date, not correcting or not transfer)
+            self.accounting_date.setReadOnly(transfer or self.register_mode)
+            if transfer:
+                self.form.labelForField(self.accounting_date).setText("Accounting date (from statement)")
+            date_issue = self._transfer_date_issue(row) if transfer else None
+            self.transfer_source_date_button.setVisible(bool(date_issue and "Use statement date" in date_issue))
+            self.transfer_source_date_button.setEnabled(usable)
         if hasattr(self, "assumed_dates"):
-            self.assumed_dates.setVisible(not transfer and not self.register_mode)
+            self.assumed_dates.setVisible(not self.register_mode and (not correcting or not transfer))
+            self.assumed_dates.setEnabled(usable and not self.register_mode)
         self.form.setRowVisible(self.reason, correcting)
         self.form.setRowVisible(self.saved_review_note, correcting)
         self.action_button.setVisible(correcting)
@@ -317,10 +448,40 @@ class OrdinaryReviewMixin:
             set_status(
                 self.status,
                 "ready" if usable else "loading",
-                "Stage this transfer/card-repayment designation. Confirmation saves your choice without posting money; matching comes later.",
+                self._transfer_date_issue(row)
+                or "Stage this transfer/card repayment. Confirmation posts this source side against clearing; resolve its counterpart later in Transfers.",
             )
         self.batch.update_stage_action()
         return True
+
+    def _transfer_date_issue(self, row, *, multiple=False):
+        if row is None or self.review_kind != "card" or self.register_mode:
+            return None
+        candidate = self._posting_candidate(row)
+        draft = self._row_drafts.get(row.row_id)
+        previous = self.batch.staged.get(row.row_id)
+        value = (
+            (
+                draft[3]
+                if draft is not None and draft[3]
+                else str(previous.accounting_date)
+                if getattr(previous, "accounting_date", None) is not None
+                else candidate
+            )
+            if multiple
+            else self.accounting_date.text().strip()
+        )
+        if value != candidate:
+            return "Transfer posting uses the statement date. Use statement date for transfer to replace the category-date override, or return to category review to keep it."
+        if row.date_provenance == "assumed" and not self.review_preferences.allow_assumed_posting_dates:
+            return "Enable best guess posting dates before posting this transfer, or leave it for later."
+        return None
+
+    def _use_transfer_source_date(self):
+        row = self._current()
+        if row is not None and not self.jobs.pending and hasattr(self, "accounting_date"):
+            self.accounting_date.setText(self._posting_candidate(row) or "")
+            self._update_review_actions()
 
     def _act_pending_transfer(self):
         from parsetrail.gui.v2_cash_activity_review import _money
@@ -447,7 +608,8 @@ class OrdinaryReviewMixin:
         self.match_transfer_button.hide()
         self.form.setRowVisible(self.saved_review_note, False)
         self.batch.show()
-        count = len(self.navigation.selected())
+        rows = self.navigation.selected()
+        count = len(rows)
         self.decision_group.setTitle(f"Review {count} selected transactions")
         usable = not self.jobs.pending and self.basis is not None and self._profile_matches()
         self.action_button.setText("Review one transaction individually")
@@ -493,8 +655,10 @@ class OrdinaryReviewMixin:
             set_field_state(
                 self.accounting_date, "readonly", "Each row keeps its own date; stage date overrides individually."
             )
-        self.batch.stage_button.setText(f"Stage {count} selected")
-        self.batch.stage_button.setEnabled(usable and not missing and not blockers)
+        changed = self.batch.selection_changed(rows)
+        all_staged = all(row.row_id in self.batch.staged for row in rows)
+        self.batch.stage_button.setText(f"Update {count} staged" if all_staged else f"Stage {count} selected")
+        self.batch.stage_button.setEnabled(usable and not missing and not blockers and changed)
         set_field_state(self.batch.stage_button, "ready" if self.batch.stage_button.isEnabled() else "neutral")
         set_status(
             self.status,
@@ -576,6 +740,7 @@ class OrdinaryReviewMixin:
         """Describe local choices separately from saved state and posting eligibility."""
         if not hasattr(self, "jobs"):
             return
+        self.transfer_source_date_button.hide()
         self.batch.update_summary()
         repeat_blocked = any(self._repeat_blocked(row) for row in self.navigation.selected())
         self.repeat_review_button.setVisible(repeat_blocked)
@@ -590,6 +755,8 @@ class OrdinaryReviewMixin:
         if base_status is not None:
             self._base_review_status = base_status
         row = self._current()
+        if self._zero_review_form_cues(row):
+            return
         if self._pending_transfer_form_cues(row):
             return
         self.withdraw_button.setText("Withdraw active interpretation")
@@ -994,7 +1161,11 @@ class OrdinaryReviewMixin:
             self.withdraw_button.setVisible(
                 self._single_selection()
                 and row is not None
-                and (row.entry_key is not None or self._pending_transfer(row) is not None)
+                and (
+                    row.entry_key is not None
+                    or self._pending_transfer(row) is not None
+                    or self._zero_review(row) is not None
+                )
             )
 
     def _cancel_loading(self):
@@ -1018,6 +1189,7 @@ class OrdinaryReviewMixin:
             completion_message = self._completion_message
             self._snapshot = result
             self.pending_transfers = {state.row_id: state for state in result.pending_transfers}
+            self.zero_reviews = {review.row_id: review for review in result.zero_reviews}
             self.transfer_eligible_row_ids = frozenset(result.transfer_eligible_row_ids)
             self.model.pending_transfers = self.pending_transfers
             self._apply_snapshot(result, self._selected_after_read)
@@ -1235,6 +1407,9 @@ class OrdinaryReviewMixin:
             return
         owner = next((owner for owner in getattr(self._snapshot, "owners", ()) if owner.row_id == row.row_id), None)
         workspace = getattr(self, "workspace", None)
+        if owner is not None and owner.owner_kind == "resolution" and workspace is not None:
+            self.transfers_requested.emit(row.row_id)
+            return
         if owner is None or workspace is None or owner.owner_kind not in {"loan", "settlement", "transfer"}:
             QMessageBox.information(
                 self,
@@ -1245,7 +1420,9 @@ class OrdinaryReviewMixin:
         if owner.owner_kind == "loan":
             from parsetrail.gui.v2_loan_payment_review import V2LoanPaymentReview
 
-            V2LoanPaymentReview(workspace, self, event_id=owner.event_id).exec()
+            dialog = V2LoanPaymentReview(workspace, self, event_id=owner.event_id)
+            dialog.transfers_requested.connect(self.transfers_requested)
+            exec_disposable(dialog)
         elif owner.owner_kind == "settlement":
             from parsetrail.gui.v2_settlement_review import V2SettlementReview
 
@@ -1449,7 +1626,10 @@ class OrdinaryBatchPanel(QGroupBox):
         rows = review.navigation.selected()
         purpose, category = review.purpose.currentData(), review.category.currentData()
         note = self.reason.text()
-        _proposed, blockers = self.propose(rows, purpose, category)
+        proposed, blockers = self.propose(rows, purpose, category)
+        all_staged = bool(rows) and all(row.row_id in self.staged for row in rows)
+        changed = any(self.staged.get(row.row_id) != proposed.get(row.row_id) for row in rows)
+        changed = changed or self.reason.text().strip() != self._staged_reason
         eligible = bool(
             rows
             and not review.jobs.pending
@@ -1459,7 +1639,9 @@ class OrdinaryBatchPanel(QGroupBox):
             and (category is not None or purpose == "transfer")
             and note.strip()
             and not blockers
+            and changed
         )
+        self.stage_button.setText("Update staged" if all_staged else "Stage selected")
         self.stage_button.setEnabled(eligible)
         set_field_state(self.stage_button, "ready" if eligible else "neutral")
         self.remove_button.setEnabled(bool(not review.jobs.pending and any(row.row_id in self.staged for row in rows)))
@@ -1537,6 +1719,10 @@ class OrdinaryBatchPanel(QGroupBox):
                 )
                 continue
             if purpose == "transfer":
+                date_issue = review._transfer_date_issue(row, multiple=len(rows) > 1)
+                if date_issue:
+                    refused.append(f"{row.description or 'Source row'}: {date_issue}")
+                    continue
                 if (
                     row.row_id not in review.transfer_eligible_row_ids
                     or row.entry_key is not None
@@ -1553,7 +1739,7 @@ class OrdinaryBatchPanel(QGroupBox):
                 continue
             ready = row.status == "Ready for purpose review"
             accounting_date = None
-            if review.review_kind == "card":
+            if review.review_kind == "card" and row.amount_minor != 0:
                 candidate = row.posting_candidate
                 edited = review.accounting_date.text().strip()
                 if len(rows) == 1:
@@ -1641,24 +1827,35 @@ class OrdinaryBatchPanel(QGroupBox):
         dialog.resize(850, 600)
         layout = QVBoxLayout(dialog)
         count = len(preview.selections)
-        transfer_count = len(preview.pending_transfers)
-        entry_count = len(preview.entries)
+        transfer_count = len(preview.transfer_entries)
+        zero_count = len(preview.zero_reviews)
+        entry_count = len(preview.entries) + transfer_count
         title = QLabel(
-            f"Save {transfer_count} transfer/card-repayment designation{'s' if transfer_count != 1 else ''} without posting money?"
-            if transfer_count and not entry_count
-            else f"Post {entry_count} reviewed transaction{'s' if entry_count != 1 else ''} and save {transfer_count} transfer designation{'s' if transfer_count != 1 else ''}?"
-            if transfer_count
-            else f"Replace the transfer designation and post {entry_count} reviewed transaction{'s' if entry_count != 1 else ''}?"
-            if preview.pending_transfer_withdrawals
-            else f"Post {count} reviewed transaction{'s together' if count != 1 else ''}?"
+            f"Post {entry_count} financial transaction{'s' if entry_count != 1 else ''} and review {zero_count} zero-value row{'s' if zero_count != 1 else ''}?"
+            if entry_count and zero_count
+            else f"Review {zero_count} zero-value row{'s' if zero_count != 1 else ''} without posting money?"
+            if zero_count
+            else f"Post {entry_count} reviewed transaction{'s together' if entry_count != 1 else ''}?"
         )
         title.setWordWrap(True)
         layout.addWidget(title)
         details = QPlainTextEdit()
         details.setReadOnly(True)
         text, posting_details = [], []
-        category_selections = tuple(item for item in preview.selections if isinstance(item, OrdinaryCategorySelection))
+        category_selections = tuple(
+            item
+            for item in preview.selections
+            if isinstance(item, OrdinaryCategorySelection) and rows[item.row_id].amount_minor != 0
+        )
         entries = dict(zip((item.row_id for item in category_selections), preview.entries, strict=True))
+        transfer_entries = dict(
+            zip(
+                (item.row_id for item in preview.selections if isinstance(item, OrdinaryTransferSelection)),
+                preview.transfer_entries,
+                strict=True,
+            )
+        )
+        zero_reviews = {item.row_id: item for item in preview.zero_reviews}
         transfer_drafts = {item.row_id: item for item in preview.pending_transfers}
         for selection in preview.selections:
             row = rows[selection.row_id]
@@ -1667,13 +1864,27 @@ class OrdinaryBatchPanel(QGroupBox):
                 text.append(
                     f"{row.description or 'Description not printed'} · {_money(row.amount_minor)}\n"
                     f"{row.financial_account or 'Not assigned'} · Transfer / card repayment\n"
-                    "Save designation only. No journal entry, income or spending is created. "
-                    "Both sides must be designated before ordinary matching; posting requires a separate confirmation."
+                    "Post this source side against transfer clearing. The counterpart remains unresolved. "
+                    "No income or spending is created; resolve the relationship separately in Transfers."
                 )
                 posting_details.append(
                     f"{row.description or 'Description not printed'}\nSource: {draft.movement.source_sha256}\n"
                     f"Source row: {draft.row_id}; source posting candidate: {draft.movement.posting_date} "
-                    f"({draft.movement.date_provenance}). No accounting entry is created."
+                    f"({draft.movement.date_provenance}).\n"
+                    + "\n".join(
+                        f"{posting.account_id}: {_money(posting.amount_minor)} debit signed"
+                        for posting in transfer_entries[selection.row_id].postings
+                    )
+                )
+                continue
+            if selection.row_id in zero_reviews:
+                text.append(
+                    f"{row.description or 'Description not printed'} · $0.00\n"
+                    f"{row.financial_account or 'Not assigned'} · {PURPOSE_LABELS[selection.purpose]} / {categories.get(selection.category_id, selection.category_id)}\n"
+                    "Save the reviewed classification only. No journal entry, money movement or budget spending is created."
+                )
+                posting_details.append(
+                    f"Source row: {selection.row_id}\nOriginal date/provenance retained. Zero-value review creates no posting."
                 )
                 continue
             entry = entries[selection.row_id]
@@ -1761,7 +1972,7 @@ class OrdinaryBatchPanel(QGroupBox):
         buttons = QDialogButtonBox(QDialogButtonBox.Cancel)
         confirm = buttons.addButton(
             f"Confirm and save {count} choice{'s' if count != 1 else ''}"
-            if transfer_count
+            if transfer_count or zero_count
             else f"Confirm and post {entry_count} entr{'ies' if entry_count != 1 else 'y'}",
             QDialogButtonBox.AcceptRole,
         )
@@ -1811,11 +2022,14 @@ class OrdinaryBatchPanel(QGroupBox):
         review._submit_review_write(
             post,
             message=(
-                f"Posted {entry_count} reviewed transaction{'s' if entry_count != 1 else ''} and saved {transfer_count} transfer designation{'s' if transfer_count != 1 else ''}. Open Budget to see monthly impact."
-                if entry_count and transfer_count
-                else f"Saved {transfer_count} transfer designation{'s' if transfer_count != 1 else ''}. No money posted. Review match is optional."
-                if transfer_count
-                else f"Posted {entry_count} reviewed transaction{'s' if entry_count != 1 else ''}. Open Budget to see monthly impact."
+                f"Posted {entry_count} financial transaction{'s' if entry_count != 1 else ''}; reviewed {zero_count} zero-value row{'s' if zero_count != 1 else ''}. "
+                + (
+                    f"{transfer_count} transfer side{'s' if transfer_count != 1 else ''} await resolution in Transfers. "
+                    if transfer_count
+                    else ""
+                )
+                + ("Zero-value reviews post no money. " if zero_count else "")
+                + ("Open Budget to see category impact." if entry_count > transfer_count else "")
             ),
             batch=correction_row_id is None,
             row_id=correction_row_id,

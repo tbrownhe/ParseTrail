@@ -45,6 +45,7 @@ class V2LoanDocumentReview(QWidget):
     """A reusable, read-only source landing with an explicit whole-payment action."""
 
     changed = Signal()
+    transfers_requested = Signal(str)
 
     def __init__(self, workspace, source_sha256, parent=None):
         super().__init__(parent)
@@ -52,6 +53,9 @@ class V2LoanDocumentReview(QWidget):
         self.workspace, self.source_sha256 = workspace, source_sha256
         self.rows, self.snapshot = (), None
         self._events = {}
+        self.resolution_states = {}
+        self.origination_rows = {}
+        self.origination_events = {}
         self._selected_after_read = None
         self.navigation = _LoanNavigation(self)
         self.jobs = ProfileJobs(self, workspace.profile_path)
@@ -60,11 +64,11 @@ class V2LoanDocumentReview(QWidget):
         self.jobs.busy_changed.connect(self._busy)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        title = QLabel("Loan payments")
+        title = QLabel("Loan activity")
         title.setStyleSheet("font-weight: 600; font-size: 16px")
         layout.addWidget(title)
         self.explanation = QLabel(
-            "Review the payment with its paying-account evidence. Principal reduces the loan; only evidenced interest is expense."
+            "Review origination or payment evidence. Payments can post now and be matched to the paying account later in Transfers."
         )
         self.explanation.setWordWrap(True)
         layout.addWidget(self.explanation)
@@ -101,6 +105,10 @@ class V2LoanDocumentReview(QWidget):
         self.source_button = QPushButton("View statement evidence…")
         self.source_button.clicked.connect(self._open_source)
         actions.addWidget(self.source_button)
+        self.transfers_button = QPushButton("Resolve in Transfers…")
+        self.transfers_button.clicked.connect(self._resolve_transfer)
+        self.transfers_button.hide()
+        actions.addWidget(self.transfers_button)
         reload_button = QPushButton("Reload")
         reload_button.clicked.connect(self.refresh)
         actions.addWidget(reload_button)
@@ -131,13 +139,19 @@ class V2LoanDocumentReview(QWidget):
         def read(store, cancelled):
             if cancelled():
                 return None
-            return store.loan_review_snapshot(preferences, source_sha256=source)
+            snapshot = store.loan_review_snapshot(preferences, source_sha256=source)
+            resolution = store.resolution_snapshot(preferences=preferences)
+            origination = store.origination_snapshot(source_sha256=source)
+            return snapshot, {item.id: item.status for item in resolution.items}, origination
 
         self.jobs.submit("loan_document", read)
 
-    def _loaded(self, _key, snapshot):
-        if snapshot is None:
+    def _loaded(self, _key, result):
+        if result is None:
             return
+        snapshot, self.resolution_states, origination = result
+        self.origination_rows = {row.row_id: row for row in origination.rows}
+        self.origination_events = {event.row_id: event for event in origination.events if event.status == "active"}
         self.snapshot, self.rows = snapshot, snapshot.components
         self._events = {
             proof.row_id: event
@@ -156,15 +170,25 @@ class V2LoanDocumentReview(QWidget):
                 _money(row.amount_minor),
                 _money(parts["principal"].minor) if "principal" in parts else "Not printed separately",
                 _money(parts["interest"].minor) if "interest" in parts else "Not printed separately",
-                "Reviewed payment"
+                "Posted origination"
+                if self._is_origination(row) and row.row_id in self.origination_events
+                else "Origination · review destination"
+                if self._is_origination(row)
+                else "Posted · counterpart unresolved"
+                if self._event(row) is not None and self._event_unresolved(self._event(row))
+                else "Posted · matched"
                 if self._event(row) is not None
                 else "Ready for payment review"
                 if row.eligible
+                else "Review accounting date"
+                if set(row.blockers) == {"loan_assumed_date_disabled"}
                 else "Needs attention",
             )
             for column, value in enumerate(values):
                 item = QTableWidgetItem(value)
                 item.setToolTip(value)
+                if column in (2, 3, 4):
+                    item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
                 self.table.setItem(index, column, item)
         self.table.blockSignals(False)
         if not self._select_row(self._selected_after_read) and self.rows:
@@ -188,6 +212,13 @@ class V2LoanDocumentReview(QWidget):
     def _event(self, row):
         return self._events.get(row.row_id)
 
+    def _event_unresolved(self, event):
+        return event.manifest.bank is None and self.resolution_states.get(event.event_id) != "matched"
+
+    @staticmethod
+    def _is_origination(row):
+        return (row.description or "").strip().casefold() == "amount financed"
+
     def _selected(self):
         row = self._current()
         self.action_button.setEnabled(row is not None and row.account_id is not None and not self.jobs.pending)
@@ -200,6 +231,28 @@ class V2LoanDocumentReview(QWidget):
             )
             return
         proof = row.proof
+        self.transfers_button.setVisible(False)
+        if self._is_origination(row):
+            self.components.setText(
+                f"Loan origination · amount financed {_money(row.amount_minor)}. This is not a repayment."
+            )
+            event = self.origination_events.get(row.row_id)
+            self.action_button.setText("View loan origination" if event else "Review loan origination…")
+            if event:
+                destination = next(
+                    (account.name for account in self.snapshot.accounts if account.id == event.destination_account_id),
+                    "the retained vehicle asset",
+                )
+                self.status.setText(
+                    f"Posted origination · acquisition to {destination}. The financing and independently entered acquisition value are retained with their funding details and history."
+                )
+            elif row.account_id is None:
+                self.status.setText("Assign the source to a loan-principal account before reviewing its origination.")
+            else:
+                self.status.setText(
+                    "Review where the financing went. Vehicle value is entered independently; the financed amount does not establish the full asset value."
+                )
+            return
         if proof is not None:
             self.components.setText(
                 f"Payment total {_money(proof.gross_minor)} · principal {_money(proof.principal_minor)} · interest {_money(proof.interest_minor)} · Components match total"
@@ -211,20 +264,23 @@ class V2LoanDocumentReview(QWidget):
         event = self._event(row)
         self.action_button.setText("View reviewed loan payment" if event else "Review loan payment…")
         if event:
-            self.status.setText("This whole payment is saved. Inspect its retained evidence or history.")
+            unresolved = self._event_unresolved(event)
+            self.transfers_button.setVisible(event.manifest.bank is None)
+            self.transfers_button.setText("Resolve in Transfers…" if unresolved else "View in Transfers…")
+            self.transfers_button.setEnabled(not self.jobs.pending)
+            self.status.setText(
+                "Posted · paying-account counterpart unresolved. Resolve it later in Transfers."
+                if unresolved
+                else "Posted · matched payment. Inspect its retained evidence or history."
+            )
         else:
             messages = [
                 REASONS.get(code, "This payment needs further review.")
                 for code in row.blockers
                 if code != "loan_assumed_date_disabled"
             ]
-            if proof and not any(bank.amount_minor == -proof.gross_minor for bank in self.snapshot.bank_movements):
-                messages.insert(
-                    0,
-                    "Waiting for matching paying-account evidence. Import its statement when available, or inspect existing reviews.",
-                )
             messages.append(
-                "Activity dates are observed. In Review loan payment, decide whether to use them as assumed accounting dates before posting."
+                "Review the printed payment and its assumed accounting date. The paying account can be resolved later."
             )
             self.status.setText(" ".join(messages))
 
@@ -233,6 +289,16 @@ class V2LoanDocumentReview(QWidget):
         if row is None or self.jobs.pending:
             return
         event = self._event(row)
+        if self._is_origination(row):
+            from parsetrail.gui.v2_loan_origination_review import V2LoanOriginationReview
+
+            dialog = V2LoanOriginationReview(
+                self.workspace, self, source_sha256=self.source_sha256, focus_row_id=row.row_id
+            )
+            exec_disposable(dialog)
+            self.refresh()
+            self.changed.emit()
+            return
         dialog = V2LoanPaymentReview(
             self.workspace,
             self,
@@ -240,9 +306,15 @@ class V2LoanDocumentReview(QWidget):
             source_sha256=self.source_sha256,
             focus_row_id=row.row_id,
         )
+        dialog.transfers_requested.connect(self.transfers_requested)
         exec_disposable(dialog)
         self.refresh()
         self.changed.emit()
+
+    def _resolve_transfer(self):
+        row = self._current()
+        if row is not None and not self.jobs.pending:
+            self.transfers_requested.emit(row.row_id)
 
     def _open_source(self):
         try:

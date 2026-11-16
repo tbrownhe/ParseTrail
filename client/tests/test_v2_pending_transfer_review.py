@@ -1,6 +1,6 @@
 """Transfer designation is a saved no-money choice; matching remains explicit."""
 
-from datetime import date
+from datetime import date, timedelta
 
 import pytest
 from parsetrail.core.v2_profile_store import FinancialAccount, V2ProfileStore
@@ -8,7 +8,7 @@ from parsetrail.core.v2_source_pipeline import build_source_evidence
 from parsetrail.core.v2_workspace import V2Workspace
 from parsetrail.gui.v2_card_purchase_review import V2CardPurchaseReview
 from parsetrail.gui.v2_transfer_review import V2TransferReview
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QPoint, Qt
 from PySide6.QtWidgets import QDialog, QDialogButtonBox, QMessageBox, QPlainTextEdit
 
 from .qt_journey_helpers import JourneyArtifacts, ModalSteps, choose_combo, enter_text
@@ -80,7 +80,7 @@ def mark(store, row_id, reason="Initial Review"):
 
 
 @pytest.mark.parametrize("size", [(1050, 700), (1280, 800)])
-def test_mixed_review_set_saves_intent_without_opening_match_and_resets_initial_reason(
+def test_mixed_review_set_posts_unresolved_side_without_opening_match_and_resets_initial_reason(
     qtbot, qapp, transfer_workspace, journey_artifacts, monkeypatch, size
 ):
     workspace, evidence, ids = transfer_workspace
@@ -106,7 +106,7 @@ def test_mixed_review_set_saves_intent_without_opening_match_and_resets_initial_
     def inspect(dialog):
         text = dialog.findChild(QPlainTextEdit).toPlainText()
         assert text.count("Reviewed groceries and the separate transfer designation") == 1
-        assert "No journal entry" in text and "reviewed expense change: $4.00" in text
+        assert "against transfer clearing" in text and "reviewed expense change: $4.00" in text
         artifacts.capture("02-explicit-mixed-effects-before-saving", dialog)
 
     confirm_set(qtbot, view, accept=False, inspect=inspect)
@@ -119,8 +119,10 @@ def test_mixed_review_set_saves_intent_without_opening_match_and_resets_initial_
     assert view.batch.reason.text() == "Initial Review" and not view.batch.staged and not opened
     with V2ProfileStore.open(workspace.profile_path, read_only=True) as store:
         states = store.pending_transfer_snapshot().rows
-        assert len(states) == 1 and states[0].row_id == ids["Move to savings"] and states[0].status == "waiting"
-        assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (1,)
+        assert len(states) == 1 and states[0].row_id == ids["Move to savings"] and states[0].status == "consumed"
+        assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (2,)
+        resolution = store.resolution_snapshot(preferences=workspace.preferences())
+        assert len([item for item in resolution.items if item.kind != "source" and item.status == "unmatched"]) == 1
         assert (
             store.reviewed_category_summary(kind="expense", start=date(2026, 10, 1), end=date(2026, 11, 1)).total_minor
             == 400
@@ -131,17 +133,21 @@ def test_mixed_review_set_saves_intent_without_opening_match_and_resets_initial_
     qtbot.mouseClick(view.batch.stage_button, Qt.LeftButton)
     confirm_set(qtbot, view)
     settle(qtbot, window, view)
+    choose_combo(qtbot, view.navigation.status_filter, "all")
     select(qtbot, view, "Move to savings")
-    assert view.purpose.currentData() == "transfer" and view.saved_review_note.isVisible()
-    assert not view.reason.text() and not view.action_button.isEnabled() and not view.withdraw_button.isEnabled()
-    assert view.match_transfer_button.isEnabled() and not opened
-    artifacts.capture("03-saved-transfer-match-is-optional-and-reason-is-blank", window)
-    qtbot.mouseClick(view.match_transfer_button, Qt.LeftButton)
-    settle(qtbot, window, view)
-    assert opened == [True]
+    assert view._current().status == "Already posted to the ledger"
+    assert not view.reason.text() and view.action_button.isEnabled() and not view.withdraw_button.isEnabled()
+    assert not view.batch.stage_button.isVisible() and not opened
+    artifacts.capture("03-posted-transfer-resolution-is-separate", window)
+    qtbot.mouseClick(view.action_button, Qt.LeftButton)
+    qtbot.waitUntil(lambda: window.navigation.currentRow() == window.TRANSFERS, timeout=15000)
+    assert not opened
     with V2ProfileStore.open(workspace.profile_path, read_only=True) as store:
-        assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (1,)
-        assert all(state.status == "match_available" for state in store.pending_transfer_snapshot().rows)
+        assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (3,)
+        assert all(state.status == "consumed" for state in store.pending_transfer_snapshot().rows)
+        resolution = store.resolution_snapshot(preferences=workspace.preferences())
+        assert len([item for item in resolution.items if item.kind != "source" and item.status == "unmatched"]) == 2
+        assert len([candidate for candidate in resolution.candidates if candidate.automatic]) == 1
 
 
 def test_saved_intent_reclassification_uses_fresh_reason_and_keeps_unrelated_stages(
@@ -260,7 +266,7 @@ def test_stale_intent_correction_refuses_then_reloads_with_blank_reason(
         assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (0,)
 
 
-def test_card_intent_needs_no_assumed_date_permission(qtbot, qapp, tmp_path, journey_artifacts):
+def test_card_transfer_post_requires_visible_assumed_date_permission(qtbot, qapp, tmp_path, journey_artifacts):
     path = tmp_path / "card.db"
     evidence = _chase_profile(path)
     with V2ProfileStore.open(path) as store:
@@ -274,22 +280,51 @@ def test_card_intent_needs_no_assumed_date_permission(qtbot, qapp, tmp_path, jou
     qtbot.waitUntil(lambda: not view.review_pending, timeout=20000)
     select(qtbot, view, "PAYMENT")
     choose_combo(qtbot, view.purpose, "transfer")
-    assert not view.accounting_date.isVisible() and not view.category.isVisible()
-    assert view.batch.stage_button.isEnabled() and not workspace.preferences().allow_assumed_posting_dates
+    assert view.accounting_date.isVisible() and view.accounting_date.isReadOnly() and not view.category.isVisible()
+    assert not view.batch.stage_button.isEnabled() and not workspace.preferences().allow_assumed_posting_dates
+    assert "best guess posting dates" in view.status.text()
+    qtbot.mouseClick(view.assumed_dates, Qt.LeftButton, pos=QPoint(8, view.assumed_dates.height() // 2))
+    assert view.assumed_dates.isChecked()
+    qtbot.waitUntil(lambda: not view.review_pending, timeout=20000)
+    assert view.purpose.currentData() == "transfer" and view.batch.stage_button.isEnabled(), (
+        view.status.text(),
+        view.accounting_date.text(),
+        view._posting_candidate(view._current()),
+        view._transfer_date_issue(view._current()),
+        view._current().row_id in view.transfer_eligible_row_ids,
+        view.batch.propose(view.navigation.selected(), "transfer", None),
+    )
+    choose_combo(qtbot, view.purpose, "expense_refund")
+    overridden = (date.fromisoformat(view._posting_candidate(view._current())) + timedelta(days=1)).isoformat()
+    view.accounting_date.setText(overridden)
+    choose_combo(qtbot, view.purpose, "transfer")
+    assert not view.batch.stage_button.isEnabled() and view.transfer_source_date_button.isVisible()
+    assert view.accounting_date.text() == overridden  # A category-date override is never silently ignored.
+    qtbot.mouseClick(view.transfer_source_date_button, Qt.LeftButton)
+    assert view.accounting_date.text() == view._posting_candidate(view._current())
+    assert view.batch.stage_button.isEnabled()
     qtbot.mouseClick(view.batch.stage_button, Qt.LeftButton)
     payment = view._current()
     number = next(index for index, row in enumerate(view.model.rows) if row.row_id == payment.row_id)
-    assert (
-        view.model.data(view.model.index(number, view.model.columnCount() - 2)) == "Transfer designation · not posted"
-    )
+    assert "not posted" in view.model.data(view.model.index(number, view.model.columnCount() - 2))
     JourneyArtifacts(journey_artifacts, qapp, (1050, 700)).capture(
         "01-card-payment-designation-without-posting-date-permission", view
     )
     confirm_set(qtbot, view)
     with V2ProfileStore.open(path, read_only=True) as store:
         assert len(store.pending_transfer_snapshot().rows) == 1
-        assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (0,)
-    assert not workspace.preferences().allow_assumed_posting_dates
+        assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (1,)
+        assert (
+            len(
+                [
+                    item
+                    for item in store.resolution_snapshot(preferences=workspace.preferences()).items
+                    if item.kind != "source" and item.status == "unmatched"
+                ]
+            )
+            == 1
+        )
+    assert workspace.preferences().allow_assumed_posting_dates
 
 
 def test_marked_only_matching_waits_for_both_sides_and_explicit_post(

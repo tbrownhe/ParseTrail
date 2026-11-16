@@ -109,7 +109,7 @@ class V2ImportWorker(QThread):
 class V2WorkspaceWindow(QMainWindow):
     """Open only an explicitly selected fresh profile and verified catalog cache."""
 
-    DOCUMENTS, REVIEW, ACCOUNTS, BUDGET, REPORTS = range(5)
+    DOCUMENTS, ACCOUNTS, REVIEW, TRANSFERS, BUDGET, REPORTS = range(6)
 
     def __init__(self, workspace: V2Workspace, parent=None):
         super().__init__(parent)
@@ -133,6 +133,8 @@ class V2WorkspaceWindow(QMainWindow):
         self._review_source_id = None
         self._positions_view = None
         self._reports_view = None
+        self._transfers_view = None
+        self._transfer_return_row = None
         self._report_review_target = None
         self._report_return_destination = self.REPORTS
         self._last_report_tab = 0
@@ -263,7 +265,7 @@ class V2WorkspaceWindow(QMainWindow):
         body = QHBoxLayout()
         self.navigation = QListWidget()
         self.navigation.setAccessibleName("Workspace navigation")
-        self.navigation.addItems(("Documents", "Review", "Accounts", "Budget", "Reports"))
+        self.navigation.addItems(("Documents", "Accounts", "Review", "Transfers", "Budget", "Reports"))
         self.navigation.setFixedWidth(142)
         body.addWidget(self.navigation)
         self.pages = QStackedWidget()
@@ -374,7 +376,7 @@ class V2WorkspaceWindow(QMainWindow):
         review_heading = QHBoxLayout()
         review_heading.addWidget(self.review_context, 1)
         choose_document = QPushButton("Choose a document")
-        choose_document.clicked.connect(lambda: self.navigation.setCurrentRow(0))
+        choose_document.clicked.connect(lambda: self.navigation.setCurrentRow(self.DOCUMENTS))
         review_heading.addWidget(choose_document)
         choose_document.hide()
         related = QPushButton("Related actions…")
@@ -500,6 +502,9 @@ class V2WorkspaceWindow(QMainWindow):
         self.account_button = QPushButton("Add account…")
         self.account_button.clicked.connect(self._add_account)
         account_actions.addWidget(self.account_button)
+        self.tangible_button = QPushButton("Vehicle assets…")
+        self.tangible_button.clicked.connect(self._review_tangible_assets)
+        account_actions.addWidget(self.tangible_button)
         self.edit_account_button = QPushButton("Edit account…")
         self.edit_account_button.clicked.connect(self._edit_account)
         account_actions.addWidget(self.edit_account_button)
@@ -536,7 +541,7 @@ class V2WorkspaceWindow(QMainWindow):
         report_layout.addWidget(self.report_context)
         report_actions = QHBoxLayout()
         self.reports_button = QPushButton("Review pending activity")
-        self.reports_button.clicked.connect(lambda: self._open_pending_review(3))
+        self.reports_button.clicked.connect(lambda: self._open_pending_review(self.REPORTS))
         report_actions.addWidget(self.reports_button)
         movement_button = QPushButton("Cash movement…")
         movement_button.clicked.connect(lambda: V2CashMovementDialog(self.workspace.profile_path, self).exec())
@@ -556,16 +561,32 @@ class V2WorkspaceWindow(QMainWindow):
         report_layout.addLayout(report_actions)
         self.reports_host = QVBoxLayout()
         report_layout.addLayout(self.reports_host, 1)
+        transfers = QWidget()
+        self.transfers_host = QVBoxLayout(transfers)
+        self.pages.addWidget(transfers)
+        self._page_widgets = {
+            self.DOCUMENTS: documents,
+            self.ACCOUNTS: accounts,
+            self.REVIEW: review,
+            self.TRANSFERS: transfers,
+            self.BUDGET: reports,
+            self.REPORTS: reports,
+        }
         self.navigation.currentRowChanged.connect(self._navigation_changed)
-        self.navigation.setCurrentRow(0)
+        self.navigation.setCurrentRow(self.DOCUMENTS)
         self.status = QLabel()
         self.status.setWordWrap(True)
         layout.addWidget(self.status)
         self.refresh()
 
     def _navigation_changed(self, page):
-        from_document = self.pages.currentIndex() in (self.DOCUMENTS, self.REVIEW)
-        self.pages.setCurrentIndex(3 if page in (self.BUDGET, self.REPORTS) else page)
+        from_document = self.pages.currentWidget() in (
+            self._page_widgets[self.DOCUMENTS],
+            self._page_widgets[self.REVIEW],
+        )
+        if page not in self._page_widgets:
+            return
+        self.pages.setCurrentWidget(self._page_widgets[page])
         if page == self.REVIEW:
             self._ensure_review_view()
         elif page in (self.BUDGET, self.REPORTS):
@@ -583,6 +604,8 @@ class V2WorkspaceWindow(QMainWindow):
             self._update_report_context()
         elif page == self.ACCOUNTS and self.account_details_toggle.isChecked():
             self._ensure_report_view(self.ACCOUNTS)
+        elif page == self.TRANSFERS:
+            self._ensure_transfers_view().refresh()
         if hasattr(self, "status"):
             self._refresh_changed_profile()
 
@@ -612,6 +635,32 @@ class V2WorkspaceWindow(QMainWindow):
         elif view._loaded.get(view.tabs.currentIndex()) != view._key(view.tabs.currentIndex()):
             view._queue_selected_read(0)
         return view
+
+    def _ensure_transfers_view(self):
+        if self._transfers_view is None:
+            from parsetrail.gui.v2_transfer_workspace import V2TransferWorkspace
+
+            view = self._transfers_view = V2TransferWorkspace(self.workspace, self)
+            self.transfers_host.addWidget(view)
+            view.changed.connect(lambda: self.refresh(select_source=self._selected_source()))
+            view.source_requested.connect(self._review_report_source)
+            view.manual_requested.connect(self._review_manual_transfers)
+            view.jobs.busy_changed.connect(self._embedded_busy)
+        return self._transfers_view
+
+    def _open_transfers(self, row_id=""):
+        self.navigation.setCurrentRow(self.TRANSFERS)
+        view = self._ensure_transfers_view()
+        if row_id:
+            view.focus_row(row_id)
+
+    def _review_tangible_assets(self):
+        if self._write_in_progress():
+            return
+        from parsetrail.gui.v2_tangible_assets import V2TangibleAssets
+
+        exec_disposable(V2TangibleAssets(self.workspace, self))
+        self.refresh()
 
     def _toggle_account_details(self, checked):
         self.positions_container.setVisible(checked)
@@ -695,7 +744,7 @@ class V2WorkspaceWindow(QMainWindow):
     def _next_document(self):
         summaries = list(self._document_summaries.values())
         if not summaries:
-            self.navigation.setCurrentRow(0)
+            self.navigation.setCurrentRow(self.DOCUMENTS)
             return
         selected = self._selected_source()
         current = next((i for i, summary in enumerate(summaries) if summary.source_sha256 == selected), -1)
@@ -708,7 +757,7 @@ class V2WorkspaceWindow(QMainWindow):
                     )
                     return
                 if self._select_review_source(summary.source_sha256):
-                    self.navigation.setCurrentRow(1)
+                    self.navigation.setCurrentRow(self.REVIEW)
                     self.review_document_selector.setFocus()
                 return
 
@@ -735,12 +784,15 @@ class V2WorkspaceWindow(QMainWindow):
 
     def _review_report_source(self, source_id, row_id):
         origin = self.navigation.currentRow()
+        if origin == self.TRANSFERS and self._transfers_view is not None:
+            current = self._transfers_view._current()
+            self._transfer_return_row = current.row_ids[0] if current is not None else row_id
         if not self._select_review_source(source_id):
             self.status.setText(
-                "The report review was not opened. Keep your current choices, or reload documents and try again."
+                "The source review was not opened. Keep your current choices, or reload documents and try again."
             )
             return
-        self.navigation.setCurrentRow(1)
+        self.navigation.setCurrentRow(self.REVIEW)
         self._ensure_review_view()
         view = self._review_widget
         if view is None:
@@ -749,16 +801,31 @@ class V2WorkspaceWindow(QMainWindow):
         if view.review_pending:
             view._selected_after_read = row_id
         self._report_review_target = (source_id, row_id)
-        self._report_return_destination = origin if origin in (self.BUDGET, self.REPORTS) else self.REPORTS
-        self.back_to_report_button.setText("Back to budget" if origin == self.BUDGET else "Back to report")
+        self._report_return_destination = (
+            origin if origin in (self.BUDGET, self.REPORTS, self.TRANSFERS) else self.REPORTS
+        )
+        self.back_to_report_button.setText(
+            "Back to transfers"
+            if origin == self.TRANSFERS
+            else "Back to budget"
+            if origin == self.BUDGET
+            else "Back to report"
+        )
         self.back_to_report_button.show()
         self.status.setText(
-            "Opened the report's source row. Review its saved interpretation or owning payment/transfer history. "
+            "Opened the transfer's source row. Nothing changes until you confirm a review. Back to transfers returns to the selected relationship."
+            if origin == self.TRANSFERS
+            else "Opened the report's source row. Review its saved interpretation or owning payment/transfer history. "
             "Nothing changes until you confirm. Back to report keeps its dates and tab."
         )
         view.table.setFocus()
 
     def _back_to_report(self):
+        if self._report_return_destination == self.TRANSFERS:
+            self._open_transfers(
+                self._transfer_return_row or (self._report_review_target[1] if self._report_review_target else "")
+            )
+            return
         self._returning_to_report = True
         try:
             self.navigation.setCurrentRow(self._report_return_destination)
@@ -770,7 +837,7 @@ class V2WorkspaceWindow(QMainWindow):
 
     def _open_pending_review(self, page):
         account_id = None
-        view = self._positions_view if page == 2 else self._reports_view
+        view = self._positions_view if page == self.ACCOUNTS else self._reports_view
         if view is not None and view.tabs.currentIndex() in (1, 4):
             table = view.account_table if view.tabs.currentIndex() == 1 else view.positions_table
             model = view.account_model if view.tabs.currentIndex() == 1 else view.positions_model
@@ -806,15 +873,15 @@ class V2WorkspaceWindow(QMainWindow):
                 self.status.setText(
                     "No unallocated activity or account assignments remain. Source coverage and checks are separate."
                 )
-                self.navigation.setCurrentRow(0)
+                self.navigation.setCurrentRow(self.DOCUMENTS)
                 return
             if not self._select_review_source(selected.source_sha256):
                 return
         else:
-            self.navigation.setCurrentRow(0)
+            self.navigation.setCurrentRow(self.DOCUMENTS)
             self.status.setText("Import documents to start reviewing activity.")
             return
-        self.navigation.setCurrentRow(1)
+        self.navigation.setCurrentRow(self.REVIEW)
 
     def _position_selected(self, *_args):
         view = self._positions_view
@@ -893,6 +960,9 @@ class V2WorkspaceWindow(QMainWindow):
         changed = getattr(view, "changed", None)
         if changed is not None:
             changed.connect(lambda: self.refresh(select_source=self._review_source_id))
+        transfers_requested = getattr(view, "transfers_requested", None)
+        if transfers_requested is not None:
+            transfers_requested.connect(self._open_transfers, Qt.QueuedConnection)
         view.jobs.busy_changed.connect(self._embedded_busy)
 
     def _embedded_busy(self, busy):
@@ -906,12 +976,20 @@ class V2WorkspaceWindow(QMainWindow):
             or self.profile_jobs.writing
             or self._reports_writing()
             or getattr(getattr(self._review_widget, "jobs", None), "writing", False)
+            or getattr(getattr(self._transfers_view, "jobs", None), "writing", False)
         )
 
     def _reports_writing(self):
         return any(view is not None and view.export_jobs.writing for view in (self._positions_view, self._reports_view))
 
     def _reset_embedded_views(self):
+        if self._transfers_view is not None:
+            if not self._transfers_view.shutdown():
+                return False
+            self.transfers_host.removeWidget(self._transfers_view)
+            self._transfers_view.hide()
+            self._transfers_view.deleteLater()
+            self._transfers_view = None
         for attribute, host in (("_positions_view", self.positions_host), ("_reports_view", self.reports_host)):
             view = getattr(self, attribute)
             if view is not None:
@@ -922,6 +1000,7 @@ class V2WorkspaceWindow(QMainWindow):
                 view.deleteLater()
                 setattr(self, attribute, None)
         self._report_review_target = None
+        self._transfer_return_row = None
         self._document_report_context = None
         self._budget_document_seed = None
         self._budget_context_notice = ""
@@ -966,6 +1045,7 @@ class V2WorkspaceWindow(QMainWindow):
         return True
 
     def refresh(self, select_source: str | None = None) -> None:
+        self._sync_preference_controls()
         revision_changed = profile_revision(self.workspace.profile_path) != self._inventory_revision
         self._inventory_revision = profile_revision(self.workspace.profile_path)
         catalog = self.workspace.catalog_cache.load_current()
@@ -980,10 +1060,12 @@ class V2WorkspaceWindow(QMainWindow):
         self.install_catalog_button.setText("Manage statement formats…" if catalog else "Install statement formats…")
         self.catalog_label.setVisible(catalog is None)
         self.install_catalog_button.setVisible(catalog is None)
-        for page, view in ((2, self._positions_view), (3, self._reports_view)):
+        for page, view in ((self.ACCOUNTS, self._positions_view), (self.REPORTS, self._reports_view)):
             if view is not None:
                 active = self.navigation.currentRow()
                 view.invalidate(read=active == page if page == self.ACCOUNTS else active in (self.BUDGET, self.REPORTS))
+        if revision_changed and self._transfers_view is not None and self.navigation.currentRow() == self.TRANSFERS:
+            self._transfers_view.refresh()
         if revision_changed and self._review_widget is not None:
             refresh_preserving_draft = getattr(self._review_widget, "refresh_preserving_draft", None)
             if refresh_preserving_draft is not None:
@@ -1345,7 +1427,7 @@ class V2WorkspaceWindow(QMainWindow):
                 self.account_group.layout().setContentsMargins(self._account_group_margins)
             self.account_group.setVisible(bool(summary.unassigned_source_accounts or summary.unassigned_activity_rows))
             self.review_button.setVisible(summary.has_unidentified_rows)
-            if self.navigation.currentRow() == 1:
+            if self.navigation.currentRow() == self.REVIEW:
                 self._ensure_review_view()
         else:
             self.selected_details.setText("Select a document to see its account, dates and next action.")
@@ -1391,7 +1473,7 @@ class V2WorkspaceWindow(QMainWindow):
         summary = self._document_summaries.get(self._selected_source())
         if summary is None or self.import_worker is not None:
             return
-        self.navigation.setCurrentRow(1)
+        self.navigation.setCurrentRow(self.REVIEW)
         if summary.unassigned_source_accounts:
             self._review_source_account()
         elif summary.unassigned_activity_rows:
@@ -1834,19 +1916,24 @@ class V2WorkspaceWindow(QMainWindow):
     def _review_cash_activity(self) -> None:
         source_id = self._selected_source()
         if source_id is not None:
-            self.navigation.setCurrentRow(1)
+            self.navigation.setCurrentRow(self.REVIEW)
             self._ensure_review_view()
 
     def _review_card_purchases(self) -> None:
         source_id = self._selected_source()
         if source_id is not None:
-            self.navigation.setCurrentRow(1)
+            self.navigation.setCurrentRow(self.REVIEW)
             self._ensure_review_view()
 
     def _review_transfers(self) -> None:
         if self.import_worker is not None:
             return
-        V2TransferReview(self.workspace, self).exec()
+        self._open_transfers()
+
+    def _review_manual_transfers(self) -> None:
+        if self._write_in_progress():
+            return
+        exec_disposable(V2TransferReview(self.workspace, self))
         self.assumed_posting_action.blockSignals(True)
         self.assumed_posting_action.setChecked(self.workspace.preferences().allow_assumed_posting_dates)
         self.assumed_posting_action.blockSignals(False)
@@ -1881,7 +1968,7 @@ class V2WorkspaceWindow(QMainWindow):
         summary = self._document_summaries.get(source_id)
         if summary is None or summary.parser_id != REGISTER_PARSER:
             return
-        self.navigation.setCurrentRow(1)
+        self.navigation.setCurrentRow(self.REVIEW)
         self._ensure_review_view()
 
     def _open_reviewed_reports(self) -> None:
@@ -1937,6 +2024,9 @@ class V2WorkspaceWindow(QMainWindow):
         self.abbreviated_matching_action.blockSignals(True)
         self.abbreviated_matching_action.setChecked(preferences.allow_abbreviated_account_matching)
         self.abbreviated_matching_action.blockSignals(False)
+        self.assumed_posting_action.blockSignals(True)
+        self.assumed_posting_action.setChecked(preferences.allow_assumed_posting_dates)
+        self.assumed_posting_action.blockSignals(False)
         for key, action in self.preview_mode_actions.items():
             action.setChecked(key == preferences.import_preview_mode)
         if self.import_preview is not None:

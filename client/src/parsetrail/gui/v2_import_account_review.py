@@ -326,7 +326,7 @@ class V2ImportAccountReview(QDialog):
             group.group_id: old.get(
                 group.group_id,
                 {
-                    "choice": None,
+                    "choice": group.suggested_account_id if group.automatic else None,
                     "name": old_names.get(group.group_id, ""),
                     "institution": "",
                     "institution_text": "",
@@ -360,6 +360,19 @@ class V2ImportAccountReview(QDialog):
         self._changed()
         self.show()
         self.account_choice.setFocus()
+        if (
+            not notice
+            and len(self.review.recognition.candidates) == 1
+            and self.review.groups
+            and all(group.automatic and group.suggested_account_id for group in self.review.groups)
+            and not self._drafts
+            and all(
+                self._states[group.group_id]["choice"] == group.suggested_account_id for group in self.review.groups
+            )
+        ):
+            # A content warning can require preview without reopening an already
+            # unique account assignment. The final Import remains explicit.
+            self._next()
 
     def _render_groups(self):
         self._active_group = None

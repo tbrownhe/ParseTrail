@@ -93,7 +93,7 @@ def test_missing_equal_bank_outflow_explains_waiting_without_hiding_components(q
     view = V2LoanDocumentReview(workspace, source)
     qtbot.addWidget(view)
     wait_for_jobs(view)
-    assert "Waiting for matching paying-account evidence" in view.status.text()
+    assert "paying account can be resolved later" in view.status.text()
     assert "Components match total" in view.components.text()
     with V2ProfileStore.open(path, read_only=True) as store:
         assert store.loan_history() == () and store._active_journal_entries() == ()

@@ -139,7 +139,18 @@ class V2FinancialAccountDialog(QDialog):
         self.existing = existing
         self.draft = draft
         self._staged = staged
+        current = parent
+        while profile is None and current is not None:
+            workspace = getattr(current, "workspace", None)
+            if workspace is not None:
+                profile = workspace.profile_path
+                break
+            current = current.parent() if hasattr(current, "parent") else None
         self.profile = profile
+        self.identity_lock = None
+        if existing is not None and profile is not None:
+            with V2ProfileStore.open(profile, read_only=True) as store:
+                self.identity_lock = store.account_identity_lock(existing.id)
         self.original_open = None
         self._account_id = existing.id if existing is not None else uuid4().hex
         self.setWindowTitle(
@@ -259,8 +270,15 @@ class V2FinancialAccountDialog(QDialog):
                 continue
             self.product.addItem(product.label, product.id)
         product_type = getattr(existing if existing else draft, "product_type", None)
+        self._tangible_product_locked = existing is not None and product_type == "vehicle"
+        if self._tangible_product_locked:
+            self.product.setToolTip("Tangible asset classification is fixed by its value/acquisition history.")
         self.product.setCurrentIndex(max(0, self.product.findData(product_type)))
-        self.product.setEnabled(not (draft is not None and draft.verified_context and product_type is not None))
+        self.product.setEnabled(
+            self.identity_lock is None
+            and not self._tangible_product_locked
+            and not (draft is not None and draft.verified_context and product_type is not None)
+        )
         form.addRow("Account product" + (" *" if existing is None else ""), self.product)
         self.product_summary = QLabel()
         self.product_summary.setWordWrap(True)
@@ -268,7 +286,7 @@ class V2FinancialAccountDialog(QDialog):
         self.kind = QComboBox()
         if draft is not None:
             self.kind.addItem("Choose an account type…", None)
-        self.kind.addItem("Asset — money you own (cash or investment)", "asset")
+        self.kind.addItem("Asset — value you own", "asset")
         self.kind.addItem("Liability — money you owe (card or loan)", "liability")
         if existing is not None:
             self.kind.setCurrentIndex(self.kind.findData(existing.kind))
@@ -296,17 +314,28 @@ class V2FinancialAccountDialog(QDialog):
         scope_note.setWordWrap(True)
         form.addRow(scope_note)
         self.institutions = institutions if institutions is not None else account_institutions(parent, profile)
-        self._known_institution = draft is not None and draft.verified_context and bool(draft.institution_key)
+        self._known_institution = self.identity_lock is not None or (
+            draft is not None and draft.verified_context and bool(draft.institution_key)
+        )
+        self._fixed_institution_key = (
+            self.identity_lock.institution_key
+            if self.identity_lock is not None
+            else draft.institution_key
+            if draft is not None
+            else None
+        )
         known_institution = self._known_institution
         if known_institution:
-            self.institution = QLineEdit(institution_label(draft.institution_key, self.institutions))
+            self.institution = QLineEdit(institution_label(self._fixed_institution_key, self.institutions))
             self.institution.setReadOnly(True)
             self.institution.setFrame(False)
             institution_palette = self.institution.palette()
             institution_palette.setColor(QPalette.Base, institution_palette.color(QPalette.Window))
             self.institution.setPalette(institution_palette)
             self.institution.setAccessibleDescription(
-                "Read-only institution identified by the document's verified parser."
+                "Read-only institution set during statement import."
+                if self.identity_lock is not None
+                else "Read-only institution identified by the document's verified parser."
             )
         else:
             self.institution = InstitutionChoice(
@@ -314,9 +343,18 @@ class V2FinancialAccountDialog(QDialog):
                 selected=existing.institution_key if existing else (draft.institution_key or None) if draft else None,
                 established=existing is not None,
             )
-        form.addRow("Institution (from document)" if known_institution else "Institution *", self.institution)
+        form.addRow(
+            "Institution (set during import)"
+            if self.identity_lock is not None
+            else "Institution (from document)"
+            if known_institution
+            else "Institution *",
+            self.institution,
+        )
         institution_help = QLabel(
-            "Identified by the document."
+            "Institution and product are locked after statement-import account creation. The account name remains editable."
+            if self.identity_lock is not None
+            else "Identified by the document."
             if known_institution
             else "Choose a name from the list, or Institution not identified."
         )
@@ -368,6 +406,11 @@ class V2FinancialAccountDialog(QDialog):
             scope = self.scope.currentText()
             self.product_summary.setText(
                 f"{'Money you own' if product.kind == 'asset' else 'Money you owe'} · Tracks {scope.lower()}."
+                + (
+                    " Tangible asset classification is fixed by its value/acquisition history."
+                    if self._tangible_product_locked
+                    else ""
+                )
             )
         elif self.existing is not None:
             self.product_summary.setText(f"Saved account · Tracks {self.scope.currentText().lower()}.")
@@ -399,7 +442,7 @@ class V2FinancialAccountDialog(QDialog):
         self._show_account_details()
 
     def _institution_key(self):
-        return self.draft.institution_key if self._known_institution else self.institution.selected_key()
+        return self._fixed_institution_key if self._known_institution else self.institution.selected_key()
 
     def _institution_valid(self):
         return self._known_institution or self.institution.valid_selection()
@@ -456,7 +499,15 @@ class V2FinancialAccountDialog(QDialog):
             elif field is self.kind or field is self.scope and not self.scope.isEnabled():
                 set_field_state(field, "readonly", "Derived from the selected product or fixed saved scope.")
             elif field is self.product and not self.product.isEnabled():
-                set_field_state(field, "readonly", "Product identified from verified source context.")
+                set_field_state(
+                    field,
+                    "readonly",
+                    "Product set during statement import and locked."
+                    if self.identity_lock is not None
+                    else "Tangible asset classification is fixed by its value/acquisition history."
+                    if self._tangible_product_locked
+                    else "Product identified from verified source context.",
+                )
             elif field is self.institution and self._known_institution:
                 set_field_state(field, "readonly", "Institution supplied by this document")
             elif not valid:
