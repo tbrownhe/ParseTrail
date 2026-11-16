@@ -44,6 +44,7 @@ from PySide6.QtWidgets import (
 )
 from shiboken6 import isValid
 
+from parsetrail.core.v2_original_document import OriginalDocumentBytes
 from parsetrail.core.v2_profile_store import MAX_SOURCE_BYTES, SavedImport
 from parsetrail.gui.v2_form_state import install_initial_focus
 
@@ -150,13 +151,20 @@ class V2DocumentViewer(QDialog):
 
     load_finished = Signal(bool)
 
-    def __init__(self, saved: SavedImport, parent=None, *, initial_page: int | None = None, context: str = ""):
+    def __init__(
+        self,
+        saved: SavedImport | OriginalDocumentBytes,
+        parent=None,
+        *,
+        initial_page: int | None = None,
+        context: str = "",
+    ):
         super().__init__(parent)
         install_initial_focus(self)
         self.setWindowTitle("Original document")
         self.setWindowModality(Qt.WindowModal)
         self.resize(1024, 768)
-        self._saved: SavedImport | None = saved
+        self._saved: SavedImport | OriginalDocumentBytes | None = saved
         self._initial_page = initial_page
         self._closed = False
         self._delete_pending = False
@@ -314,12 +322,16 @@ class V2DocumentViewer(QDialog):
             return
         saved = self._saved
         if (
-            not isinstance(saved, SavedImport)
+            not isinstance(saved, (SavedImport, OriginalDocumentBytes))
             or saved.suffix not in (".pdf", ".csv")
             or type(saved.source) is not bytes
             or not 0 < len(saved.source) <= MAX_SOURCE_BYTES
-            or hashlib.sha256(saved.source).hexdigest() != saved.evidence.source_sha256
-            or hashlib.sha256(saved.definition).hexdigest() != saved.evidence.definition_sha256
+            or hashlib.sha256(saved.source).hexdigest()
+            != (saved.evidence.source_sha256 if isinstance(saved, SavedImport) else saved.source_sha256)
+            or (
+                isinstance(saved, SavedImport)
+                and hashlib.sha256(saved.definition).hexdigest() != saved.evidence.definition_sha256
+            )
         ):
             self._fail("The retained original failed its integrity or size check. Reopen it to retry.")
             return
@@ -626,7 +638,7 @@ class V2DocumentViewer(QDialog):
 
 
 def show_saved_document(
-    saved: SavedImport, parent=None, *, initial_page: int | None = None, context: str = ""
+    saved: SavedImport | OriginalDocumentBytes, parent=None, *, initial_page: int | None = None, context: str = ""
 ) -> V2DocumentViewer:
     """Show a retained window-modal viewer without entering another blocking event loop."""
     viewer = V2DocumentViewer(saved, parent, initial_page=initial_page, context=context)

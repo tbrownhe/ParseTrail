@@ -162,7 +162,7 @@ def manifest_details(manifest, *, inverse=False):
 class V2LoanPaymentReview(QDialog):
     """The store owns source admission, exact proofs, stale checks and transactions."""
 
-    def __init__(self, workspace, parent=None, *, event_id=None):
+    def __init__(self, workspace, parent=None, *, event_id=None, source_sha256=None, focus_row_id=None):
         super().__init__(parent)
         install_initial_focus(self)
         self.workspace = workspace
@@ -172,6 +172,8 @@ class V2LoanPaymentReview(QDialog):
         self.jobs.busy_changed.connect(self._busy_changed)
         self.snapshot = self.preview = self.selected_event = None
         self._requested_event_id = event_id
+        self._source_sha256 = source_sha256
+        self._focus_row_id = focus_row_id
         self._open_saved_history = event_id is not None
         self.labels, self.banks, self.rows = {}, {}, ()
         self.review_preferences = workspace.preferences()
@@ -345,12 +347,23 @@ class V2LoanPaymentReview(QDialog):
         self._clear_draft()
         self.status.setText("Loading verified loan sources and saved history...")
         preferences = self.review_preferences
+        source = self._source_sha256
 
         def read(store, cancelled):
-            snapshot = store.loan_review_snapshot(preferences)
-            event = next((item for item in snapshot.history if item.event_id == selected_id), None)
+            snapshot = store.loan_review_snapshot(preferences, source_sha256=source)
+            event = next(
+                (
+                    item
+                    for item in snapshot.history
+                    if item.event_id == selected_id
+                    and (source is None or any(proof.source_sha256 == source for proof in item.manifest.components))
+                ),
+                None,
+            )
             if event is not None and event.status == "active" and not cancelled():
-                snapshot = store.loan_review_snapshot(preferences, replacing_event_id=event.event_id)
+                snapshot = store.loan_review_snapshot(
+                    preferences, source_sha256=source, replacing_event_id=event.event_id
+                )
                 event = next(item for item in snapshot.history if item.event_id == selected_id)
             return snapshot, event
 
@@ -365,6 +378,10 @@ class V2LoanPaymentReview(QDialog):
         self.mode.clear()
         self.mode.addItem("New evidenced loan payment — draft", None)
         for item in snapshot.history:
+            if self._source_sha256 is not None and not any(
+                proof.source_sha256 == self._source_sha256 for proof in item.manifest.components
+            ):
+                continue
             self.mode.addItem(
                 f"{item.status.title()}; {item.manifest.bank.posting_date}; principal {_money(item.manifest.principal_minor)}, interest {_money(item.manifest.interest_minor)}; {item.event_id}",
                 item.event_id,
@@ -376,6 +393,8 @@ class V2LoanPaymentReview(QDialog):
         self.assumed_dates.setChecked(self.review_preferences.allow_assumed_posting_dates)
         self.assumed_dates.blockSignals(False)
         self._clear_draft()
+        if event is None:
+            self.reason.setText("Initial Review")
         self.bank.blockSignals(True)
         self.bank.addItem("Choose the actual complete bank outflow", None)
         for bank in snapshot.bank_movements:
@@ -433,6 +452,12 @@ class V2LoanPaymentReview(QDialog):
                 self.components.setItem(index, column, item)
         self.components.blockSignals(False)
         self.components.resizeRowsToContents()
+        if self._focus_row_id is not None:
+            for index, row in enumerate(self.rows):
+                if row.row_id == self._focus_row_id:
+                    self.components.selectRow(index)
+                    self.components.scrollToItem(self.components.item(index, 0))
+                    break
         if event is not None:
             actions = tuple(action for action in snapshot.actions if action.event_id == event.event_id)
             self.history_details.setPlainText(

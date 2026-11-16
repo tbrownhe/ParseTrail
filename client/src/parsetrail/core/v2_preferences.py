@@ -14,6 +14,7 @@ from pathlib import Path
 class V2Preferences:
     allow_abbreviated_account_matching: bool = False
     allow_assumed_posting_dates: bool = False
+    import_preview_mode: str = "always"
 
 
 def default_preferences_path() -> Path:
@@ -38,12 +39,18 @@ def load_preferences(path: Path) -> V2Preferences:
     if (
         type(raw) is not dict
         or "allow_abbreviated_account_matching" not in raw
-        or set(raw) - {"allow_abbreviated_account_matching", "allow_assumed_posting_dates"}
+        or set(raw) - {"allow_abbreviated_account_matching", "allow_assumed_posting_dates", "import_preview_mode"}
         or type(raw["allow_abbreviated_account_matching"]) is not bool
         or type(raw.get("allow_assumed_posting_dates", False)) is not bool
+        or type(raw.get("import_preview_mode", "always")) is not str
+        or raw.get("import_preview_mode", "always") not in {"always", "when_needed"}
     ):
         raise ValueError("v2_preferences_shape")
-    return V2Preferences(raw["allow_abbreviated_account_matching"], raw.get("allow_assumed_posting_dates", False))
+    return V2Preferences(
+        raw["allow_abbreviated_account_matching"],
+        raw.get("allow_assumed_posting_dates", False),
+        raw.get("import_preview_mode", "always"),
+    )
 
 
 def save_preferences(path: Path, preferences: V2Preferences) -> None:
@@ -51,6 +58,8 @@ def save_preferences(path: Path, preferences: V2Preferences) -> None:
         not isinstance(preferences, V2Preferences)
         or type(preferences.allow_abbreviated_account_matching) is not bool
         or type(preferences.allow_assumed_posting_dates) is not bool
+        or type(preferences.import_preview_mode) is not str
+        or preferences.import_preview_mode not in {"always", "when_needed"}
     ):
         raise ValueError("v2_preferences_shape")
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -63,6 +72,7 @@ def save_preferences(path: Path, preferences: V2Preferences) -> None:
                 {
                     "allow_abbreviated_account_matching": preferences.allow_abbreviated_account_matching,
                     "allow_assumed_posting_dates": preferences.allow_assumed_posting_dates,
+                    "import_preview_mode": preferences.import_preview_mode,
                 },
                 stream,
             )

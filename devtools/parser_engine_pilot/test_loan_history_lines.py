@@ -13,6 +13,9 @@ from parsetrail.core.v2_loan_history_lines import (
     parse_loan_history,
 )
 from parsetrail.core.v2_pdf_lines import page_lines
+from parsetrail.core.v2_source_pipeline import SourcePipelineError, build_source_evidence
+
+from devtools.parser_engine_pilot.synthetic_family_sources import pdf_document, text_page
 
 DEFINITION = Path(__file__).with_name("capital-one-loan-pilot-definition.json").read_bytes()
 
@@ -53,6 +56,46 @@ def test_printed_component_row_and_unknown_opening() -> None:
         ("interest", -2000),
     ]
     assert row.date.provenance == "observed"
+    assert row.amount.raw == "-$220.00"
+    assert [part.amount.raw for part in row.components] == ["-$200.00", "-$20.00"]
+    assert all(part.amount.provenance == "observed" for part in row.components)
+    assert all(part.amount.locations == row.amount.locations == row.date.locations for part in row.components)
+    assert row.fragments[0].location == row.amount.locations[0]
+    assert row.fragments[0].raw_values == (lines().lines[4].raw,)
+    assert (row.amount.locations[0].page, row.amount.locations[0].line) == (1, 5)
+
+
+def test_repeated_printed_payments_remain_distinct_located_occurrences() -> None:
+    duplicate = lines().lines[4].raw
+    source = lines(changes={5: duplicate})
+    output = parse_loan_history(DEFINITION, source)
+    rows = output.payload.accounts[0].rows
+    assert [row.occurrence for row in rows] == [0, 1]
+    assert len({row.row_id for row in rows}) == 2
+    assert [row.amount.locations[0].line for row in rows] == [5, 6]
+    assert all(row.fragments[0].raw_values == (duplicate,) for row in rows)
+    assert [row.components for row in rows] != [rows[0].components] * 2
+    assert parse_loan_history(DEFINITION, source) == output
+
+
+def test_bounded_pdf_pipeline_retains_single_line_split_across_two_pages() -> None:
+    source = pdf_document(
+        (
+            text_page("Capital One Auto Finance", *(line.raw for line in lines().lines)),
+            text_page("Additional statement information"),
+        )
+    )
+    output = build_source_evidence(source, DEFINITION, suffix=".pdf")
+    account = output.payload.accounts[0]
+    row = account.rows[0]
+    assert (row.amount.minor, tuple(part.amount.minor for part in row.components)) == (-22000, (-20000, -2000))
+    assert row.fragments[0].raw_values == (lines().lines[4].raw,)
+    assert all(part.amount.locations == row.amount.locations == row.date.locations for part in row.components)
+    assert (row.amount.locations[0].page, row.amount.locations[0].line) == (1, 6)
+    assert account.opening is None and account.closing.provenance == "observed"
+    assert output.payload.capture_verified is False and output.payload.independent_balance_verified is False
+    with pytest.raises(SourcePipelineError, match="^cancelled$"):
+        build_source_evidence(source, DEFINITION, suffix=".pdf", cancelled=lambda: True)
 
 
 def test_no_interest_header_keeps_one_principal_component() -> None:
@@ -69,6 +112,21 @@ def test_component_mismatch_or_unrecognized_history_refuses_source() -> None:
         parse_loan_history(DEFINITION, lines(changes={4: "01/15/2026 Unknown activity"}))
     with pytest.raises(LoanHistoryError, match="missing_history_end"):
         parse_loan_history(DEFINITION, lines(changes={6: "Other text"}))
+
+
+@pytest.mark.parametrize(
+    ("changes", "error"),
+    [
+        ({4: "01/15/2026 Payment Received -$200.00 = -$220.00"}, "unresolved_history_row"),
+        ({4: "01/15/2026 Payment Received -$200.00 -$20.00 ="}, "unresolved_history_row"),
+        ({4: "02/01/2026 Payment Received -$200.00 -$20.00 = -$220.00"}, "history_row_outside_period"),
+        ({7: "Account Number: 9876543210987"}, "missing_or_ambiguous_account"),
+        ({7: "Principal Balance: $9,500.00"}, "missing_or_ambiguous_history_fields"),
+    ],
+)
+def test_incomplete_or_ambiguous_printed_facts_refuse(changes, error) -> None:
+    with pytest.raises(LoanHistoryError, match=f"^{error}$"):
+        parse_loan_history(DEFINITION, lines(changes=changes))
 
 
 def test_finite_definition_schema_and_unknown_field() -> None:

@@ -11,7 +11,7 @@ from PySide6.QtCore import QCoreApplication, QEvent, QObject, QThread, Signal
 from PySide6.QtWidgets import QDialog, QMessageBox
 from shiboken6 import isValid
 
-from parsetrail.core.v2_original_document import read_saved_original
+from parsetrail.core.v2_original_document import read_saved_original, read_selected_original
 from parsetrail.gui.v2_document_viewer import show_saved_document
 from parsetrail.gui.v2_gui_lifetime import clear_exception_tracebacks
 
@@ -43,16 +43,22 @@ atexit.register(_finish_original_readers)
 
 
 class _OriginalReader(QThread):
-    def __init__(self, *, profile, source_sha256, saved):
+    def __init__(self, *, profile, source_sha256, saved, selected_path=None):
         super().__init__()
         self.profile, self.source_sha256, self.saved = profile, source_sha256, saved
+        self.selected_path = selected_path
         self.result, self.error = None, None
 
     def run(self):
         try:
             if not self.isInterruptionRequested():
-                self.result = self.saved or read_saved_original(
-                    self.profile, self.source_sha256, cancelled=self.isInterruptionRequested
+                self.result = (
+                    read_selected_original(
+                        self.selected_path, self.source_sha256, cancelled=self.isInterruptionRequested
+                    )
+                    if self.selected_path is not None
+                    else self.saved
+                    or read_saved_original(self.profile, self.source_sha256, cancelled=self.isInterruptionRequested)
                 )
         except Exception as exc:
             self.error = exc
@@ -64,16 +70,21 @@ class OriginalDocumentOpen(QObject):
     finished = Signal(bool)
     status_changed = Signal(str)
 
-    def __init__(self, *, profile=None, source_sha256, saved=None, parent=None, initial_page=None, context=""):
+    def __init__(
+        self, *, profile=None, source_sha256, saved=None, selected_path=None, parent=None, initial_page=None, context=""
+    ):
         super().__init__()
         self._parent = weakref.ref(parent) if parent is not None else lambda: None
         self.pending, self._cancelled, self._finished, self._read_pending = True, False, False, True
-        self.status = "Loading saved original…"
+        self._selected = selected_path is not None
+        self.status = "Loading selected original…" if self._selected else "Loading saved original…"
         self.error, self.viewer = None, None
         self._host_connections = []
         self._delete_pending = False
         self.initial_page, self.context = initial_page, context
-        self._reader = _OriginalReader(profile=profile, source_sha256=source_sha256, saved=saved)
+        self._reader = _OriginalReader(
+            profile=profile, source_sha256=source_sha256, saved=saved, selected_path=selected_path
+        )
         if parent is not None:
             operation_ref = weakref.ref(self)
 
@@ -158,10 +169,14 @@ class OriginalDocumentOpen(QObject):
             return
         self.error = error
         if self.error is not None or saved is None:
-            self.status = "Saved original could not be read. Retry or save a recovery copy from Profile."
+            self.status = (
+                "The selected original changed or could not be read. Select it again to refresh the import."
+                if self._selected
+                else "Saved original could not be read. Retry or save a recovery copy from Profile."
+            )
             self._finish(False)
             QMessageBox.warning(
-                self._parent_widget(), "Saved original could not be read", f"{self.status}\n\nDetails: {self.error}"
+                self._parent_widget(), "Original could not be read", f"{self.status}\n\nDetails: {self.error}"
             )
             return
         try:
@@ -222,4 +237,14 @@ def open_saved_original(saved, parent=None, *, initial_page=None, context=""):
         parent=parent,
         initial_page=initial_page,
         context=context,
+    )
+
+
+def open_selected_original(path: Path, expected_sha256: str, parent=None):
+    """Open verified pre-import bytes without creating any saved-import claim."""
+    return OriginalDocumentOpen(
+        selected_path=Path(path),
+        source_sha256=expected_sha256,
+        parent=parent,
+        context=f"Selected original: {Path(path).name} · Not imported yet. Viewing changes no accounts or assignments.",
     )

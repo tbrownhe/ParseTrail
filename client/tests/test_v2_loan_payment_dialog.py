@@ -249,7 +249,8 @@ def test_confirmation_changed_context_or_failure_clears_stale_controls(tmp_path,
     view.confirm.click()
     wait_for_jobs(view)
     assert not view.confirm.isEnabled() and view.preview is None and view.bank.currentData() is None
-    assert not view.reference.text() and not view.reason.text()
+    assert not view.reference.text()
+    assert view.reason.text() == ("" if mutation == "read_failure" else "Initial Review")
     with V2ProfileStore.open(path, read_only=True) as store:
         assert store.loan_history() == () and store._active_consumed() == {}
     if mutation == "preference":
@@ -396,7 +397,7 @@ def test_context_change_before_preview_resets_cached_selection_and_reference(tmp
         )
     check(view, rows[0])
     assert view.preview is None and view.bank.currentData() is None
-    assert not view.reference.text() and not view.reason.text() and not view.confirm.isEnabled()
+    assert not view.reference.text() and view.reason.text() == "Initial Review" and not view.confirm.isEnabled()
     assert "draft was reset" in view.status.text()
     with V2ProfileStore.open(path, read_only=True) as store:
         assert store.loan_history() == ()

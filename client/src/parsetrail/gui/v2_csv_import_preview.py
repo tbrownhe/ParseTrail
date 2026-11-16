@@ -16,10 +16,12 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QVBoxLayout,
 )
+from shiboken6 import isValid
 
 from parsetrail.core.v2_institutions import institution_label
 from parsetrail.gui.v2_evidence_preview import _location, _money
 from parsetrail.gui.v2_form_state import install_form_styles, set_field_state, set_status
+from parsetrail.gui.v2_original_document import open_selected_original
 
 
 def _date(value, *, statement=False):
@@ -98,6 +100,7 @@ class V2CsvImportPreview(QDialog):
         self.institutions = institutions
         self.request = None
         self._finished = False
+        self._original_open = None
         self.setWindowTitle("Review CSV import")
         self.setWindowModality(Qt.WindowModal)
         self.resize(1050, 700)
@@ -133,6 +136,10 @@ class V2CsvImportPreview(QDialog):
         self.interpretation.setTextFormat(Qt.PlainText)
         self.interpretation.setWordWrap(True)
         layout.addWidget(self.interpretation)
+        self.attention_notice = QLabel()
+        self.attention_notice.setWordWrap(True)
+        self.attention_notice.hide()
+        layout.addWidget(self.attention_notice)
         self.rows = QTableWidget(0, 6)
         self.rows.setAccessibleName("Recognized source activity preview")
         self.rows.setHorizontalHeaderLabels(
@@ -171,6 +178,8 @@ class V2CsvImportPreview(QDialog):
         self.retained_format_notice.setTextFormat(Qt.PlainText)
         layout.addWidget(self.retained_format_notice)
         actions = QHBoxLayout()
+        self.original_button = _ExplicitDecisionButton("View original…")
+        self.original_button.clicked.connect(self._view_original)
         self.import_button = _ExplicitDecisionButton("Import document")
         self.import_button.setAccessibleName("Import original and evidence locally without posting transactions")
         self.import_button.clicked.connect(self._import)
@@ -178,6 +187,7 @@ class V2CsvImportPreview(QDialog):
         self.skip_button.clicked.connect(self._skip)
         self.cancel_button = _ExplicitDecisionButton("Cancel remaining imports")
         self.cancel_button.clicked.connect(self.reject)
+        actions.addWidget(self.original_button)
         actions.addWidget(self.import_button)
         actions.addWidget(self.skip_button)
         actions.addStretch()
@@ -185,6 +195,8 @@ class V2CsvImportPreview(QDialog):
         layout.addLayout(actions)
 
     def present(self, request):
+        if self._original_open is not None and isValid(self._original_open):
+            self._original_open.cancel()
         self.request = request
         self._finished = False
         self.file_context.setText(f"File {request.index} of {request.total}: {request.path.name}")
@@ -199,11 +211,22 @@ class V2CsvImportPreview(QDialog):
         self.format_selector.setCurrentIndex(0)
         self.format_selector.blockSignals(False)
         self.skip_button.setEnabled(True)
+        self.original_button.setEnabled(True)
         self.cancel_button.setEnabled(True)
         self.details_toggle.setChecked(False)
         self._selected()
         self.show()
         (self.import_button if self.import_button.isEnabled() else self.skip_button).setFocus()
+
+    def _view_original(self):
+        if self.request is None:
+            return
+        self._original_open = open_selected_original(self.request.path, self.request.recognition.source_sha256, self)
+
+    def _cancel_original(self):
+        if self._original_open is not None and isValid(self._original_open):
+            self._original_open.cancel()
+        self._original_open = None
 
     def _selected(self, *_args):
         if self.request is None:
@@ -214,6 +237,7 @@ class V2CsvImportPreview(QDialog):
         self.import_button.setEnabled(candidate is not None and not self.request.decided.is_set())
         set_field_state(self.import_button, "ready" if self.import_button.isEnabled() else "neutral")
         if candidate is None:
+            self.attention_notice.hide()
             self.format_label.setText("Supported format could not be resolved automatically.")
             self.interpretation.setText(
                 "This file matches more than one supported format for the chosen accounts. Nothing has been imported. "
@@ -231,6 +255,18 @@ class V2CsvImportPreview(QDialog):
             return
         self.details_toggle.show()
         self.retained_format_notice.show()
+        attention_codes = getattr(candidate, "attention_codes", ())
+        attention_labels = {
+            "no_activity_captured": "No activity rows were captured",
+            "source_period_unknown": "The source period is unknown",
+            "source_period_assumed": "The source period is estimated",
+            "source_activity_date_assumed": "Some source activity dates are estimated",
+        }
+        reasons = tuple(
+            dict.fromkeys(attention_labels.get(code, "Some source content needs review") for code in attention_codes)
+        )
+        self.attention_notice.setText("Review before importing: " + "; ".join(reasons) + "." if reasons else "")
+        self.attention_notice.setVisible(bool(reasons))
         statement = self.request.recognition.suffix == ".pdf"
         self.retained_format_notice.setText(
             "Check statement dates and amounts against your original. This import keeps the recognized statement format; "
@@ -342,6 +378,8 @@ class V2CsvImportPreview(QDialog):
         self._waiting("File skipped. Waiting for the next document…")
 
     def _waiting(self, text):
+        self._cancel_original()
+        self.original_button.setEnabled(False)
         self.import_button.setEnabled(False)
         set_field_state(self.import_button, "neutral")
         self.skip_button.setEnabled(False)
@@ -358,6 +396,7 @@ class V2CsvImportPreview(QDialog):
         self._waiting("Checking the next document… Cancel retains completed imports.")
 
     def finish_queue(self):
+        self._cancel_original()
         self._finished = True
         self.request = None
         self.hide()

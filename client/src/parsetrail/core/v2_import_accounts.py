@@ -9,7 +9,7 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
-from parsetrail.core.v2_account_creation import AccountCreationDraft
+from parsetrail.core.v2_account_creation import AccountCreationDraft, suggest_account_creation
 from parsetrail.core.v2_account_matching import LedgerAccountCandidate, match_source_account
 from parsetrail.core.v2_format_recognition import (
     FormatCandidate,
@@ -38,6 +38,8 @@ class ImportAccountGroup:
     locations: tuple
     suggested_account_id: str | None = None
     automatic: bool = False
+    offer_enable_abbreviated_matching: bool = False
+    matching_ambiguous: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +51,8 @@ class ImportAccountReview:
     basis_sha256: str
     profile_sha256: str
     recovery_notice: str = ""
+    allow_abbreviated_account_matching: bool = False
+    import_preview_mode: str = "always"
 
 
 @dataclass(frozen=True, slots=True)
@@ -102,6 +106,38 @@ def _basis(store):
     return _digest(values)
 
 
+def _remembered_accounts(store, catalog, identity, form, eligible, candidate, section):
+    """Reuse explicit associations in exact trusted institution/class/scope context.
+
+    A partial/opaque source identifier remains partial/opaque. Generic CSV account
+    text cannot acquire institution authority through a previous authored choice.
+    """
+    from parsetrail.core.source_evidence import StatementPayload
+
+    account_ids = {account.id for account in eligible}
+    expected = (candidate.institution_key, candidate.account_kind, section.source_scope)
+    found = set()
+    for source, account_id in store.connection.execute(
+        "SELECT source_sha256,ledger_account_id FROM SourceAccountBindings WHERE source_identity=? AND source_identity_form=?",
+        (identity, form),
+    ):
+        if account_id not in account_ids or account_id in found:
+            continue
+        saved = store.load_import(source)
+        draft = suggest_account_creation(saved.evidence, catalog=catalog, source_identity=identity, source_form=form)
+        if not draft.verified_context or (draft.institution_key, draft.kind, draft.tracking_scope) != expected:
+            continue
+        payload = saved.evidence.payload
+        if isinstance(payload, StatementPayload) and any(
+            item.source_identity == identity
+            and item.source_identity_form == form
+            and item.balance_scope == section.source_scope
+            for item in payload.accounts
+        ):
+            found.add(account_id)
+    return tuple(sorted(found))
+
+
 def build_import_account_review(store, recognition, catalog, preferences=None):
     """Capture current choices without holding a connection during user review."""
     if not isinstance(recognition, FormatRecognition) or not recognition.candidates:
@@ -124,7 +160,7 @@ def build_import_account_review(store, recognition, catalog, preferences=None):
         groups = []
         for (identity, form), occurrences in grouped.items():
             source_scopes = {section.source_scope for _candidate, section in occurrences}
-            suggested, automatic = None, False
+            suggested, automatic, offer_abbreviated, ambiguous = None, False, False, False
             # Only authenticated PDF source facts can infer an existing account.
             # CSV headers/profile options never establish the user's identity.
             if recognition.suffix == ".pdf" and len(recognition.candidates) == 1:
@@ -146,6 +182,19 @@ def build_import_account_review(store, recognition, catalog, preferences=None):
                         match.suggestions[0] if len(match.suggestions) == 1 else None
                     )
                     automatic = match.status == "automatic"
+                    offer_abbreviated = match.offer_enable_abbreviated_matching or (
+                        form == "last_four" and match.status == "automatic"
+                    )
+                    remembered = _remembered_accounts(store, catalog, identity, form, eligible, candidate, _section)
+                    possibilities = set(match.suggestions) | set(remembered)
+                    if len(possibilities) > 1:
+                        suggested, automatic, offer_abbreviated, ambiguous = None, False, False, True
+                    elif len(possibilities) == 1:
+                        suggested = next(iter(possibilities))
+                        automatic = match.status == "automatic" or (
+                            bool(remembered) and (form != "last_four" or preferences.allow_abbreviated_account_matching)
+                        )
+                        offer_abbreviated = form == "last_four"
             first = occurrences[0][1]
             groups.append(
                 ImportAccountGroup(
@@ -158,12 +207,21 @@ def build_import_account_review(store, recognition, catalog, preferences=None):
                     first.locations,
                     suggested,
                     automatic,
+                    offer_abbreviated,
+                    ambiguous,
                 )
             )
         if not groups:
             raise ProfileFormatError("import_account_source_groups_missing")
         return ImportAccountReview(
-            recognition, accounts, institutions, tuple(groups), _basis(store), _profile_identity(store)
+            recognition,
+            accounts,
+            institutions,
+            tuple(groups),
+            _basis(store),
+            _profile_identity(store),
+            allow_abbreviated_account_matching=preferences.allow_abbreviated_account_matching,
+            import_preview_mode=preferences.import_preview_mode,
         )
     finally:
         if owns:
@@ -231,6 +289,23 @@ def resolve_import_candidate(review, choices=(), new_accounts=()):
     if len(candidates) != 1:
         raise ProfileFormatError("import_account_routing_conflict")
     return candidates[0]
+
+
+def automatic_import_plan(review):
+    """Only an explicit opt-in and an entirely routine known-account file can skip UI."""
+    if (
+        review.import_preview_mode != "when_needed"
+        or review.recovery_notice
+        or len(review.recognition.candidates) != 1
+        or not review.groups
+        or any(not group.automatic or group.suggested_account_id is None for group in review.groups)
+    ):
+        return None
+    candidate = review.recognition.candidates[0]
+    if candidate.attention_codes:
+        return None
+    choices = tuple(ImportAccountChoice(group.group_id, group.suggested_account_id) for group in review.groups)
+    return prepare_import_accounts(review, choices, candidate.parser_id)
 
 
 def compatible_import_accounts(review, group_id, parser_id=None, *, new_accounts=()):
@@ -332,7 +407,15 @@ def prepare_import_accounts(review, choices, parser_id, new_accounts=()):
 
 
 def commit_import_accounts(
-    store, prepared, catalog, plan, cancelled=None, *, parse=build_source_evidence, before_write=None
+    store,
+    prepared,
+    catalog,
+    plan,
+    cancelled=None,
+    *,
+    parse=build_source_evidence,
+    before_write=None,
+    automatic_preferences=None,
 ):
     """Create accounts, retain source and assign all groups together; post nothing."""
 
@@ -376,7 +459,12 @@ def commit_import_accounts(
             store,
             recognition,
             catalog,
+            preferences=automatic_preferences() if automatic_preferences is not None else None,
         )
+        if automatic_preferences is not None:
+            routine = automatic_import_plan(review)
+            if routine is None or routine.choices != plan.choices or routine.selection != plan.selection:
+                raise ProfileFormatError("import_automatic_review_required")
         verified = prepare_import_accounts(review, plan.choices, candidate.parser_id, plan.new_accounts)
         if verified.selection != plan.selection:
             raise ProfileFormatError("import_account_format_changed")

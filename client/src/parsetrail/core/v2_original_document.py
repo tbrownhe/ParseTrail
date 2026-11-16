@@ -9,6 +9,7 @@ import stat
 import tempfile
 import threading
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from uuid import uuid4
 
@@ -24,6 +25,60 @@ _LEASE_CONTENT = b"ParseTrail local originals v1\n"
 
 class OriginalDocumentError(ValueError):
     """An original cannot be safely prepared or cleaned up."""
+
+
+@dataclass(frozen=True, slots=True)
+class OriginalDocumentBytes:
+    """Verified selected bytes, without claiming a saved import or parsed evidence."""
+
+    source: bytes
+    suffix: str
+    source_sha256: str
+
+
+def read_selected_original(path: Path, expected_sha256: str, *, cancelled=lambda: False) -> OriginalDocumentBytes:
+    """Read a selected PDF/CSV without writes, bounded by the import source limit."""
+    path = Path(path)
+    suffix = path.suffix.lower()
+    if suffix not in {".pdf", ".csv"} or re.fullmatch(r"[0-9a-f]{64}", expected_sha256) is None:
+        raise OriginalDocumentError("selected_original_identity_invalid")
+    if cancelled():
+        raise OriginalDocumentError("original_open_cancelled")
+    _plain(path)
+    descriptor = os.open(
+        path, os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    )
+    with os.fdopen(descriptor, "rb") as stream:
+        before = os.fstat(stream.fileno())
+        if not stat.S_ISREG(before.st_mode) or not 0 < before.st_size <= MAX_SOURCE_BYTES:
+            raise OriginalDocumentError("selected_original_size_invalid")
+        parts, size = [], 0
+        while True:
+            if cancelled():
+                raise OriginalDocumentError("original_open_cancelled")
+            part = stream.read(min(1024 * 1024, MAX_SOURCE_BYTES + 1 - size))
+            if not part:
+                break
+            parts.append(part)
+            size += len(part)
+            if size > MAX_SOURCE_BYTES:
+                raise OriginalDocumentError("selected_original_size_invalid")
+        after = os.fstat(stream.fileno())
+    current = _plain(path)
+
+    def identity(info):
+        return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns
+
+    source = b"".join(parts)
+    if (
+        identity(before) != identity(after)
+        or identity(after) != identity(current)
+        or hashlib.sha256(source).hexdigest() != expected_sha256
+    ):
+        raise OriginalDocumentError("selected_original_changed")
+    if cancelled():
+        raise OriginalDocumentError("original_open_cancelled")
+    return OriginalDocumentBytes(source, suffix, expected_sha256)
 
 
 def _plain(path: Path, *, directory: bool = False):

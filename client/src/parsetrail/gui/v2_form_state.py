@@ -15,6 +15,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from parsetrail.gui.v2_dropdowns import install_dropdown_opening
+
 REQUIRED_FILL = "#FFF0F0"
 READY_FILL = "#EDF7EF"
 ACTION_FILL = "#E8F2FF"
@@ -168,6 +170,7 @@ class _InitialFocusPolicy(QObject):
 
 def install_initial_focus(root: QWidget) -> None:
     """Give this V2 task window a first input without filtering unrelated objects."""
+    install_dropdown_opening(root)
     if not hasattr(root, "_parsetrail_initial_focus"):
         policy = _InitialFocusPolicy(root)
         root._parsetrail_initial_focus = policy

@@ -98,6 +98,7 @@ class FormatCandidate:
     source_accounts: tuple[FormatSourceAccount, ...] = ()
     account_profiles: tuple[AccountProductProfile, ...] = ()
     identifying_product_type: str | None = None
+    attention_codes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -226,11 +227,11 @@ def candidate_from_evidence(
     payload = evidence.payload
     if isinstance(payload, StatementPayload):
         row_count = sum(len(account.rows) for account in payload.accounts)
-        rows = (row for account in payload.accounts for row in account.rows)
+        rows = tuple(row for account in payload.accounts for row in account.rows)
         start, end = payload.start, payload.end
     else:
         row_count = len(payload.rows)
-        rows = iter(payload.rows)
+        rows = payload.rows
         start, end = payload.activity_start, payload.activity_end
     preview = []
     for row in rows:
@@ -259,6 +260,20 @@ def candidate_from_evidence(
         date_format, date_role, money_format = declaration.date_format, declaration.date_role, declaration.money_format
     context = verified_source_account_context(evidence, catalog)
     profiles = source_account_profiles(evidence, catalog)
+    attention = []
+    if not row_count:
+        attention.append("no_activity_captured")
+    if start.iso is None or end.iso is None:
+        attention.append("source_period_unknown")
+    if start.provenance == "assumed" or end.provenance == "assumed":
+        attention.append("source_period_assumed")
+    if any(row.date.provenance == "assumed" for row in rows):
+        attention.append("source_activity_date_assumed")
+    attention.extend(
+        item.code
+        for item in payload.dispositions
+        if any(token in item.code for token in ("unclassified", "unsupported", "unresolved", "mismatch"))
+    )
     return FormatCandidate(
         item.identity.parser_id,
         item.identity.revision,
@@ -279,6 +294,7 @@ def candidate_from_evidence(
         _source_accounts(evidence, profiles),
         profiles,
         context.product_type if context is not None else None,
+        tuple(dict.fromkeys(attention)),
     )
 
 

@@ -8,7 +8,7 @@ from pathlib import Path
 from threading import Event
 
 from PySide6.QtCore import QEvent, Qt, QThread, QTimer, Signal
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QActionGroup
 from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
@@ -33,6 +33,7 @@ from PySide6.QtWidgets import (
 
 from parsetrail.core.v2_cash_movement import cash_account_labels
 from parsetrail.core.v2_liability_register import REGISTER_PARSER
+from parsetrail.core.v2_loan_payments import LOAN_PARSERS
 from parsetrail.core.v2_profile_store import (
     CARD_STATEMENT_PARSERS,
     ProfileFormatError,
@@ -162,6 +163,17 @@ class V2WorkspaceWindow(QMainWindow):
         self.recover_source_action.triggered.connect(self._recover_source_original)
         settings_menu = self.menuBar().addMenu("Settings")
         self.formats_action = settings_menu.addAction("Manage statement formats…", self._choose_catalog_release)
+        preview_menu = settings_menu.addMenu("Import previews")
+        self.preview_mode_group = QActionGroup(self)
+        self.preview_mode_actions = {}
+        for mode, label in (("always", "Always"), ("when_needed", "Only when attention is needed")):
+            action = preview_menu.addAction(label)
+            action.setCheckable(True)
+            action.setData(mode)
+            action.setChecked(workspace.preferences().import_preview_mode == mode)
+            self.preview_mode_group.addAction(action)
+            self.preview_mode_actions[mode] = action
+        self.preview_mode_group.triggered.connect(self._preview_mode_selected)
         self.abbreviated_matching_action = QAction("Suggest accounts using abbreviated account numbers", self)
         self.abbreviated_matching_action.setCheckable(True)
         self.abbreviated_matching_action.setChecked(workspace.preferences().allow_abbreviated_account_matching)
@@ -861,6 +873,10 @@ class V2WorkspaceWindow(QMainWindow):
             from parsetrail.gui.v2_liability_register_review import V2LiabilityRegisterReview
 
             view = V2LiabilityRegisterReview(self.workspace, source_id, self, embedded=True)
+        elif summary.parser_id in LOAN_PARSERS:
+            from parsetrail.gui.v2_loan_document_review import V2LoanDocumentReview
+
+            view = V2LoanDocumentReview(self.workspace, source_id, self)
         elif summary.parser_id in CARD_STATEMENT_PARSERS:
             view = V2CardPurchaseReview(self.workspace, source_id, self, embedded=True)
         else:
@@ -1272,7 +1288,7 @@ class V2WorkspaceWindow(QMainWindow):
                 summary.assigned_row_count and (summary.unassigned_source_accounts or summary.unassigned_activity_rows)
             )
             self.review_context.setText(
-                f"{summary.pending_activity_rows} imported row(s) need review · may include repeats"
+                f"{summary.pending_activity_rows} imported rows not posted · may include repeats or pending transfers"
                 if summary.pending_activity_rows
                 else "No pending imported rows · source coverage still needs checking"
             )
@@ -1709,6 +1725,8 @@ class V2WorkspaceWindow(QMainWindow):
         try:
             if self.import_preview is None:
                 self.import_preview = V2ImportAccountReview(self.workspace.institutions(), self)
+                self.import_preview.abbreviated_matching_changed.connect(self._set_abbreviated_matching)
+                self.import_preview.import_preview_mode_changed.connect(self._set_import_preview_mode)
                 self.import_preview.cancel_remaining.connect(
                     lambda: self.import_worker.cancel() if self.import_worker else None
                 )
@@ -1890,13 +1908,41 @@ class V2WorkspaceWindow(QMainWindow):
         self.refresh()
 
     def _set_abbreviated_matching(self, enabled: bool) -> None:
+        error = ""
         try:
             self.workspace.set_allow_abbreviated_account_matching(enabled)
         except (OSError, ValueError) as exc:
-            self.abbreviated_matching_action.blockSignals(True)
-            self.abbreviated_matching_action.setChecked(not enabled)
-            self.abbreviated_matching_action.blockSignals(False)
+            error = str(exc)
             QMessageBox.warning(self, "Preference was not saved", str(exc))
+        self._sync_preference_controls(error)
+
+    def _preview_mode_selected(self, action):
+        self._set_import_preview_mode(action.data())
+
+    def _set_import_preview_mode(self, mode):
+        error = ""
+        try:
+            self.workspace.set_import_preview_mode(mode)
+        except (OSError, ValueError) as exc:
+            error = str(exc)
+            QMessageBox.warning(self, "Preference was not saved", str(exc))
+        self._sync_preference_controls(error)
+
+    def _sync_preference_controls(self, error=""):
+        try:
+            preferences = self.workspace.preferences()
+        except (OSError, ValueError):
+            self.status.setText("Preferences unavailable. Imports require valid settings; reopen after checking them.")
+            return
+        self.abbreviated_matching_action.blockSignals(True)
+        self.abbreviated_matching_action.setChecked(preferences.allow_abbreviated_account_matching)
+        self.abbreviated_matching_action.blockSignals(False)
+        for key, action in self.preview_mode_actions.items():
+            action.setChecked(key == preferences.import_preview_mode)
+        if self.import_preview is not None:
+            self.import_preview.sync_preferences(
+                preferences.allow_abbreviated_account_matching, preferences.import_preview_mode, error
+            )
 
     def _set_assumed_posting_dates(self, enabled: bool) -> None:
         try:

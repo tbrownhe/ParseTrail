@@ -9,6 +9,7 @@ from weakref import ref
 from PySide6.QtCore import QEvent, Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QCompleter,
     QDialog,
@@ -25,6 +26,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
+from shiboken6 import isValid
 
 from parsetrail.core.v2_account_products import account_product
 from parsetrail.core.v2_cash_movement import cash_account_labels
@@ -41,6 +43,7 @@ from parsetrail.core.v2_profile_store import FinancialAccount
 from parsetrail.gui.v2_csv_import_preview import V2CsvImportPreview, _ExplicitDecisionButton, _FormatChoice
 from parsetrail.gui.v2_financial_account import InstitutionChoice
 from parsetrail.gui.v2_form_state import install_form_styles, set_field_state, set_status
+from parsetrail.gui.v2_original_document import open_selected_original
 
 _NEW = "__create_new_account__"
 _SCOPES = {
@@ -115,11 +118,17 @@ class _RecognizedPreview(V2CsvImportPreview):
         if (owner := self._decision_owner()) is not None:
             owner._skip()
 
+    def _view_original(self):
+        if (owner := self._decision_owner()) is not None:
+            owner._view_original()
+
 
 class V2ImportAccountReview(QDialog):
     """One reusable two-step surface for every PDF/CSV and queue request."""
 
     cancel_remaining = Signal()
+    abbreviated_matching_changed = Signal(bool)
+    import_preview_mode_changed = Signal(str)
 
     def __init__(self, institutions=(), parent=None):
         super().__init__(parent)
@@ -131,6 +140,7 @@ class V2ImportAccountReview(QDialog):
         self._editing_draft_id = None
         self._active_group = None
         self._rendering = False
+        self._original_open = None
         self.setWindowTitle("Import document and choose accounts")
         self.setWindowModality(Qt.WindowModal)
         self.resize(1050, 700)
@@ -226,10 +236,33 @@ class V2ImportAccountReview(QDialog):
             self.preview.import_button,
             self.preview.skip_button,
             self.preview.cancel_button,
+            self.preview.original_button,
         ):
             widget.hide()
         self.preview.format_selector.currentIndexChanged.connect(self._preview_changed)
         self.pages.addWidget(self.preview)
+        preference_row = QHBoxLayout()
+        self.abbreviated_matching = QCheckBox("Automatically match abbreviated account numbers")
+        self.abbreviated_matching.setToolTip("Saved for future imports. Your current account choices will not change.")
+        self.abbreviated_matching.toggled.connect(self._matching_preference_changed)
+        preference_row.addWidget(self.abbreviated_matching)
+        preference_row.addStretch()
+        preference_row.addWidget(QLabel("Show import preview"))
+        self.preview_mode = QComboBox()
+        self.preview_mode.addItem("Always", "always")
+        self.preview_mode.addItem("Only when attention is needed", "when_needed")
+        self.preview_mode.setAccessibleName("Show import preview")
+        self.preview_mode.setToolTip(
+            "Saved for future imports. New accounts, unknown accounts and warnings still need your review."
+        )
+        self.preview_mode.currentIndexChanged.connect(self._preview_preference_changed)
+        preference_row.addWidget(self.preview_mode)
+        layout.addLayout(preference_row)
+        self.preference_notice = QLabel(
+            "Import preferences are saved for future files. Current choices stay unchanged."
+        )
+        self.preference_notice.setWordWrap(True)
+        layout.addWidget(self.preference_notice)
         self.assignment_summary = QPlainTextEdit()
         self.assignment_summary.setReadOnly(True)
         self.assignment_summary.setTabChangesFocus(True)
@@ -249,6 +282,9 @@ class V2ImportAccountReview(QDialog):
         self.skip_button.clicked.connect(self._skip)
         self.cancel_button = _ExplicitDecisionButton("Cancel remaining imports")
         self.cancel_button.clicked.connect(self.reject)
+        self.original_button = _ExplicitDecisionButton("View original…")
+        self.original_button.clicked.connect(self._view_original)
+        actions.addWidget(self.original_button)
         for button in (self.back_button, self.next_button, self.import_button, self.skip_button):
             actions.addWidget(button)
         actions.addStretch()
@@ -256,6 +292,8 @@ class V2ImportAccountReview(QDialog):
         layout.addLayout(actions)
 
     def present(self, request):
+        if self._original_open is not None and isValid(self._original_open):
+            self._original_open.cancel()
         previous = self.request
         same_file = previous is not None and previous.path == request.path
         same_bytes = same_file and previous.recognition.source_sha256 == request.recognition.source_sha256
@@ -273,6 +311,10 @@ class V2ImportAccountReview(QDialog):
         self.review = request.review
         self.institutions = request.review.institutions
         self._rendering = True
+        self.sync_preferences(
+            getattr(request.review, "allow_abbreviated_account_matching", False),
+            getattr(request.review, "import_preview_mode", "always"),
+        )
         self.institution.clear()
         self.institution.addItem("Choose an institution…", "")
         self.institution.addItem("Institution not identified", None)
@@ -307,6 +349,9 @@ class V2ImportAccountReview(QDialog):
         self._render_groups()
         self.accounts_page.setEnabled(True)
         self.preview.setEnabled(True)
+        self.original_button.setEnabled(True)
+        self.preview_mode.setEnabled(True)
+        self.abbreviated_matching.setEnabled(True)
         self.back_button.setEnabled(True)
         self.skip_button.setEnabled(True)
         self.cancel_button.setEnabled(True)
@@ -341,6 +386,9 @@ class V2ImportAccountReview(QDialog):
             return
         self._save_active()
         group = self.review.groups[row]
+        self.abbreviated_matching.setVisible(
+            getattr(group, "offer_enable_abbreviated_matching", False) or group.source_form == "last_four"
+        )
         self._active_group = group.group_id
         state = self._states[group.group_id]
         selected_draft_id = state["new_id"] if state["choice"] == _NEW else state["choice"]
@@ -356,7 +404,12 @@ class V2ImportAccountReview(QDialog):
                 if group.source_scope in _SCOPES
                 else "Amount scope depends on the account and supported format. "
             )
-            + "Only accounts and products compatible with this document’s installed formats are listed. Printed names do not establish account ownership."
+            + (
+                "Multiple accounts match this identifier; choose the correct account. "
+                if group.matching_ambiguous
+                else ""
+            )
+            + "Only compatible accounts and products are listed. Printed names do not establish ownership."
         )
         self.account_choice.clear()
         self.account_choice.addItem("Choose an existing account or create a new one…", None)
@@ -657,6 +710,43 @@ class V2ImportAccountReview(QDialog):
         self.import_button.setVisible(index == 1)
         self.assignment_summary.setVisible(index == 1)
 
+    def _matching_preference_changed(self, enabled):
+        if not self._rendering and self.request is not None:
+            self.abbreviated_matching_changed.emit(enabled)
+
+    def sync_preferences(self, allow_abbreviated: bool, preview_mode: str, error: str = ""):
+        """Acknowledge global persistence without touching any current account draft."""
+        self.abbreviated_matching.blockSignals(True)
+        self.preview_mode.blockSignals(True)
+        try:
+            self.abbreviated_matching.setChecked(allow_abbreviated)
+            self.preview_mode.setCurrentIndex(max(0, self.preview_mode.findData(preview_mode)))
+        finally:
+            self.abbreviated_matching.blockSignals(False)
+            self.preview_mode.blockSignals(False)
+        set_status(
+            self.preference_notice,
+            "blocked" if error else "neutral",
+            f"Preferences were not saved. {error}"
+            if error
+            else "Import preferences apply to future files. Current choices stay unchanged.",
+        )
+
+    def _preview_preference_changed(self, *_args):
+        if not self._rendering and self.request is not None:
+            self.import_preview_mode_changed.emit(self.preview_mode.currentData())
+
+    def _cancel_original(self):
+        if self._original_open is not None and isValid(self._original_open):
+            self._original_open.cancel()
+        self._original_open = None
+
+    def _view_original(self):
+        if self.request is None or self.request.decided.is_set():
+            return
+        self._cancel_original()
+        self._original_open = open_selected_original(self.request.path, self.request.recognition.source_sha256, self)
+
     def _next(self):
         self._changed()
         if not self.next_button.isEnabled():
@@ -673,6 +763,7 @@ class V2ImportAccountReview(QDialog):
             self.preview.import_button,
             self.preview.skip_button,
             self.preview.cancel_button,
+            self.preview.original_button,
         ):
             widget.hide()
         self.pages.setCurrentIndex(1)
@@ -695,10 +786,23 @@ class V2ImportAccountReview(QDialog):
         self.import_button.setEnabled(valid)
         set_field_state(self.import_button, "ready" if valid else "neutral")
         if self.pages.currentIndex() == 1:
+            preview_reason = ""
+            if self.review.import_preview_mode == "when_needed":
+                new_count = len(self._draft_accounts())
+                if new_count:
+                    preview_reason = f"Preview required: {new_count} new {'account needs' if new_count == 1 else 'accounts need'} confirmation. "
+                elif any(group.matching_ambiguous for group in self.review.groups):
+                    preview_reason = "Preview required: an account match is ambiguous. "
+                elif self.review.recovery_notice:
+                    preview_reason = "Preview required: import inputs changed or need attention. "
+                elif any(candidate.attention_codes for candidate in self.review.recognition.candidates):
+                    preview_reason = "Preview required: source interpretation warnings need checking. "
+                else:
+                    preview_reason = "Preview required: account choices need confirmation. "
             set_status(
                 self.status,
                 "ready" if valid else "blocked",
-                "Ready to import · Not saved. No spending is posted."
+                preview_reason + "Ready to import · Not saved. No spending is posted."
                 if valid
                 else "This file matches more than one supported format for these accounts. Nothing has been imported. Back keeps your drafts; check the institution and product, or skip this file and use another supported export.",
             )
@@ -730,8 +834,12 @@ class V2ImportAccountReview(QDialog):
             self._waiting("File skipped. Provisional accounts were not saved. Waiting for the next file…")
 
     def _waiting(self, text):
+        self._cancel_original()
         self.accounts_page.setEnabled(False)
         self.preview.setEnabled(False)
+        self.original_button.setEnabled(False)
+        self.preview_mode.setEnabled(False)
+        self.abbreviated_matching.setEnabled(False)
         for button in (self.next_button, self.back_button, self.import_button, self.skip_button):
             button.setEnabled(False)
             set_field_state(button, "neutral")
@@ -754,6 +862,7 @@ class V2ImportAccountReview(QDialog):
         )
 
     def finish_queue(self):
+        self._cancel_original()
         self._finished = True
         self.request = None
         self.hide()

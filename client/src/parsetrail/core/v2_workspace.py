@@ -17,6 +17,7 @@ from parsetrail.core.v2_format_recognition import FormatRecognition, FormatSelec
 from parsetrail.core.v2_import_accounts import (
     ImportAccountPlan,
     ImportAccountReview,
+    automatic_import_plan,
     build_import_account_review,
     commit_import_accounts,
 )
@@ -206,6 +207,11 @@ class V2Workspace:
             raise ValueError("invalid_assumed_posting_date_preference")
         save_preferences(self.preferences_path, replace(self.preferences(), allow_assumed_posting_dates=enabled))
 
+    def set_import_preview_mode(self, mode: str) -> None:
+        if type(mode) is not str or mode not in {"always", "when_needed"}:
+            raise ValueError("invalid_import_preview_preference")
+        save_preferences(self.preferences_path, replace(self.preferences(), import_preview_mode=mode))
+
     def account_bindings(self, source_sha256: str) -> tuple[AccountBinding, ...]:
         """Resolve automatic suggestions at read time; explicit decisions win."""
         catalog = self.catalog_cache.load_current()
@@ -357,7 +363,10 @@ class V2Workspace:
                 review = build_import_account_review(store, recognition, catalog, preferences=self.preferences())
             if notice:
                 review = replace(review, recovery_notice=notice)
-            decision = review_import(source_path, review)
+            decision = automatic_import_plan(review)
+            automatic = decision is not None
+            if not automatic:
+                decision = review_import(source_path, review)
             if cancelled is not None and cancelled():
                 raise ImportCancelled("cancelled")
             if decision is None:
@@ -413,9 +422,11 @@ class V2Workspace:
                         decision,
                         cancelled=cancelled,
                         before_write=check_current_inputs,
+                        automatic_preferences=self.preferences if automatic else None,
                     )
             except (ProfileFormatError, WorkspaceError) as exc:
                 notices = {
+                    "import_automatic_review_required": "Automatic import needs attention. Review the current accounts, format and warnings before importing. Nothing was saved.",
                     "import_account_review_stale": "Accounts or saved document assignments changed after the preview. Check the refreshed choices and confirm again. Nothing from the earlier preview was saved.",
                     "import_source_changed_during_validation": "The file changed while its supported formats were being checked. Review the refreshed document before confirming again. Nothing from the earlier preview was saved.",
                     "import_catalog_changed_during_validation": "Statement formats changed while the import was being checked. Review the refreshed document before confirming again. Nothing from the earlier preview was saved.",

@@ -17,7 +17,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import QApplication, QFileDialog, QMessageBox
 from scripts.v2_catalog_release import signed_catalog_bytes
 
-from .qt_journey_helpers import JourneyArtifacts, ModalSteps, choose_combo, enter_text, select_file
+from .qt_journey_helpers import JourneyArtifacts, ModalSteps, activate, choose_combo, enter_text, select_file
 from .qt_journey_scenarios import prepare_close
 
 
@@ -114,11 +114,21 @@ def open_import(qtbot, workspace, source, size=(1050, 700)):
     return window, preview
 
 
+def assert_task_focus(qtbot, view, target):
+    qtbot.waitUntil(lambda: view.focusWidget() is target)
+    if QApplication.platformName() == "offscreen":
+        # This plugin can leave the already-hidden popup QFrame as activeWindow
+        # after delivering the correct logical focus. Restore only the task's
+        # activation, then retain the actual focus and typing assertions below.
+        activate(qtbot, view)
+    qtbot.waitUntil(target.hasFocus)
+
+
 def create(qtbot, view, name, product="checking", institution=None):
     choose_combo(
         qtbot, view.account_choice, view.account_choice.itemData(view.account_choice.findText("Create a new account…"))
     )
-    qtbot.waitUntil(view.name.hasFocus)
+    assert_task_focus(qtbot, view, view.name)
     qtbot.keyClick(view.name, Qt.Key_A, Qt.ControlModifier)
     qtbot.keyClicks(view.name, name)
     choose_combo(qtbot, view.institution, institution)
@@ -142,7 +152,7 @@ def test_all_groups_account_first_back_preserves_drafts_final_import_assigns_wit
     model, source = workspace(tmp_path)
     window, view = open_import(qtbot, model, source, size)
     artifacts = JourneyArtifacts(journey_artifacts, qapp, size)
-    qtbot.waitUntil(view.account_choice.hasFocus)
+    assert_task_focus(qtbot, view, view.account_choice)
     assert view.groups.rowCount() == 2  # Savings appears only after the five-row preview.
     assert view.groups.item(1, 0).text() == "Savings B"
     assert view.account_choice.choice() is None and not view.next_button.isEnabled()
@@ -157,7 +167,7 @@ def test_all_groups_account_first_back_preserves_drafts_final_import_assigns_wit
     artifacts.capture("02-two-new-accounts-are-only-drafts", view)
     qtbot.mouseClick(view.next_button, Qt.LeftButton)
     assert view.pages.currentIndex() == 1 and not view.preview.format_selector.isVisible()
-    assert view.import_button.hasFocus()
+    assert_task_focus(qtbot, view, view.import_button)
     assert "Review import" in view.step_label.text()
     assert view.preview.rows.rowCount() == 5 and view.preview.rows.item(0, 3).text() == "-$4.00"
     assert "7 activity rows" in view.preview.interpretation.text()
@@ -211,12 +221,13 @@ def test_unresolved_same_header_formats_are_blocked_without_column_choices_and_k
     assert view.preview.format_selector.count() == 0 and view.preview.rows.rowCount() == 0
     assert "more than one supported format" in view.status.text()
     assert "Nothing has been imported" in view.preview.interpretation.text()
-    assert view.back_button.hasFocus()
+    assert_task_focus(qtbot, view, view.back_button)
     JourneyArtifacts(journey_artifacts, qapp, (1050, 700)).capture(
         "01-conflicting-declarations-blocked-no-column-choice", view
     )
     qtbot.mouseClick(view.back_button, Qt.LeftButton)
-    assert view.name.text() == "My cash account" and view.account_choice.hasFocus()
+    assert view.name.text() == "My cash account"
+    assert_task_focus(qtbot, view, view.account_choice)
     qtbot.mouseClick(view.next_button, Qt.LeftButton)
     assert not view.import_button.isEnabled() and not view.preview.format_selector.isVisible()
     qtbot.mouseClick(view.cancel_button, Qt.LeftButton)
@@ -233,7 +244,8 @@ def test_account_institution_routes_same_header_declared_formats_without_a_forma
     assert len(view.review.recognition.candidates) == 2
     create(qtbot, view, "My checking", institution="chase")
     qtbot.mouseClick(view.next_button, Qt.LeftButton)
-    assert view.import_button.isEnabled() and view.import_button.hasFocus()
+    assert view.import_button.isEnabled()
+    assert_task_focus(qtbot, view, view.import_button)
     assert not view.preview.format_selector.isVisible()
     assert view.preview.format_selector.currentData() == "synthetic_posted_cash_csv"
     assert view.preview.rows.item(0, 3).text() == "-$4.00"
@@ -354,11 +366,12 @@ def test_long_existing_account_is_searchable_without_expanding_dialog(qtbot, qap
     assert view.pages.currentIndex() == 0 and not view.request.decided.is_set()
     group(qtbot, view, 1)
     choose_combo(qtbot, view.account_choice, "long")
+    assert_task_focus(qtbot, view, view.account_choice)
     for _ in range(30):
         if view.next_button.hasFocus():
             break
         qtbot.keyClick(QApplication.focusWidget(), Qt.Key_Tab)
-    assert view.next_button.hasFocus()
+    assert_task_focus(qtbot, view, view.next_button)
     qtbot.keyClick(view.next_button, Qt.Key_Return)
     assert name in view.assignment_summary.toPlainText() and view.width() == 1050
     JourneyArtifacts(journey_artifacts, qapp, (1050, 700)).capture(
@@ -539,7 +552,7 @@ def test_escape_from_embedded_interpretation_cancels_owner_and_releases_worker_w
     assert not view.preview.format_selector.view().isVisible()
     index = view.preview.rows.model().index(0, 0)
     qtbot.mouseClick(view.preview.rows.viewport(), Qt.LeftButton, pos=view.preview.rows.visualRect(index).center())
-    assert view.preview.rows.hasFocus()
+    assert_task_focus(qtbot, view, view.preview.rows)
     qtbot.keyClick(view.preview.rows, Qt.Key_Escape)
     qtbot.waitUntil(lambda: window.import_worker is None and not window.inventory_pending, timeout=15000)
     assert window.import_preview is None and window.import_button.isEnabled()

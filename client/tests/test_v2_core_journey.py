@@ -19,7 +19,7 @@ pytestmark = pytest.mark.usefixtures("qapp")
 
 
 def cleanup(window):
-    if window._review_widget is not None:
+    if window._review_widget is not None and hasattr(window._review_widget, "batch"):
         window._review_widget.reason.clear()
         window._review_widget.batch.clear()
     window.close()
