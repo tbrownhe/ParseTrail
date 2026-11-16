@@ -129,7 +129,7 @@ def zero_source(store, row_id, *, active=True):
             if cash.get(row_id, False)
             else ("liability", "financial", "account_total")
         )
-        if financial is None or financial[:3] != expected or financial[3] == "vehicle":
+        if financial is None or financial[:3] != expected or financial[3] == "tangible_asset":
             raise error("zero_review_account_scope_unsupported")
     return source[0], row, account
 

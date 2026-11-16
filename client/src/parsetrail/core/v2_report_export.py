@@ -391,6 +391,7 @@ def _resolution_metadata(workbook: Workbook, report: ReviewedJournalExport) -> l
                 "Reason",
                 "Entry keys",
                 "Version",
+                "Expected receipt account",
             ),
             [
                 (
@@ -409,6 +410,7 @@ def _resolution_metadata(workbook: Workbook, report: ReviewedJournalExport) -> l
                     item.reason,
                     "\n".join(item.entry_keys),
                     item.version,
+                    item.expected_destination_account_id,
                 )
                 for item in report.resolution_items
             ],
@@ -442,15 +444,18 @@ def _resolution_metadata(workbook: Workbook, report: ReviewedJournalExport) -> l
                 "Source row",
                 "Source SHA-256",
                 "Loan account",
-                "Vehicle account",
-                "Authored acquisition date",
-                "Acquisition minor units",
+                "Destination account (expectation unless allocated)",
+                "Authored asset allocation / acquisition date",
+                "Known total acquisition cost minor units",
                 "Printed financed principal minor units",
                 "Bank down payment row",
                 "Status",
                 "Reason",
                 "Entry keys",
                 "Version",
+                "Mode",
+                "Borrowing accounting date",
+                "Borrowing date provenance",
             ),
             [
                 (
@@ -459,14 +464,17 @@ def _resolution_metadata(workbook: Workbook, report: ReviewedJournalExport) -> l
                     event.source_sha256,
                     event.account_id,
                     event.destination_account_id,
-                    event.acquisition_date.isoformat(),
-                    str(event.acquisition_value_minor),
+                    event.acquisition_date.isoformat() if event.acquisition_date is not None else None,
+                    str(event.total_acquisition_cost_minor) if event.total_acquisition_cost_minor is not None else None,
                     str(event.principal_minor),
                     event.bank_downpayment_row_id,
                     event.status,
                     event.reason,
                     "\n".join(event.entry_keys),
                     event.version,
+                    event.mode,
+                    event.effective_date.isoformat(),
+                    event.date_provenance,
                 )
                 for event in report.origination_events
             ],
@@ -516,7 +524,7 @@ def _resolution_metadata(workbook: Workbook, report: ReviewedJournalExport) -> l
                 "Account",
                 "Value date",
                 "Authored value minor units",
-                "Estimated annual decline basis points",
+                "Annual value change basis points",
                 "Reason",
                 "Version",
                 "Created at",

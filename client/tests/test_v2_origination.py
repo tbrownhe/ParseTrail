@@ -13,18 +13,25 @@ from devtools.parser_engine_pilot import test_loan_history_lines as capital
 from .test_v2_loan_payments import PREFERENCES, _profile
 
 
-def origination_profile(path, *, downpayment=500000):
+def origination_profile(path, *, downpayment=500000, principal=1000000):
+    printed = f"${principal // 100:,}.{principal % 100:02d}"
     evidence = parse_loan_history(
         capital.DEFINITION,
-        capital.lines(interest=False, changes={1: "Current Payment Due: $300.00 Principal Balance: $10,000.00"}),
+        capital.lines(
+            interest=False,
+            changes={
+                1: f"Current Payment Due: $300.00 Principal Balance: {printed}",
+                4: f"01/15/2026 Amount Financed {printed} = {printed}",
+            },
+        ),
     )
     bank, rows = _profile(path, amount=downpayment, evidence=evidence)
     with V2ProfileStore.open(path) as store:
         store.create_tangible_asset(
-            FinancialAccount("vehicle", "My vehicle", "asset", None, product_type="vehicle"),
+            FinancialAccount("vehicle", "My vehicle", "asset", None, product_type="tangible_asset"),
             value_date=date(2026, 1, 16),
             amount_minor=1500000,
-            annual_rate_basis_points=1000,
+            annual_rate_basis_points=-1000,
             reason="Owner estimated purchase value",
         )
     return bank, rows[0]
@@ -119,7 +126,7 @@ def test_asset_value_is_nonposting_estimate_and_same_date_a_b_a_can_be_corrected
             "vehicle",
             value_date=first.value_date,
             amount_minor=1500000,
-            annual_rate_basis_points=1000,
+            annual_rate_basis_points=-1000,
             reason=first.reason,
         )
         assert restored.amount_minor == 1500000 and restored.revision_id > first.revision_id
@@ -144,7 +151,7 @@ def test_origination_date_and_vehicle_guards_refuse_without_writes(tmp_path):
                 expected_basis_sha256=basis,
                 reason="Initial Review",
             )
-        with pytest.raises(ProfileFormatError, match="vehicle_destination"):
+        with pytest.raises(ProfileFormatError, match="tangible_destination"):
             store.preview_loan_origination(
                 row,
                 destination_account_id="bank",
@@ -177,7 +184,7 @@ def test_optional_asset_decline_rate_keeps_future_value_unknown_until_explicitly
     path = tmp_path / "unknown-estimate.db"
     with V2ProfileStore.create(path) as store:
         store.create_tangible_asset(
-            FinancialAccount("vehicle", "Vehicle", "asset", None, product_type="vehicle"),
+            FinancialAccount("vehicle", "Vehicle", "asset", None, product_type="tangible_asset"),
             value_date=date(2026, 1, 16),
             amount_minor=1500000,
             reason="Owner entered value; decline unknown",

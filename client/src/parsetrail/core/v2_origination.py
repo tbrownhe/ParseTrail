@@ -1,4 +1,4 @@
-"""Finite reviewed vehicle acquisition and separate nonposting asset value estimates."""
+"""Exact borrowing, optional financed asset allocation and independent value estimates."""
 
 from __future__ import annotations
 
@@ -54,9 +54,9 @@ class OriginationPreview:
     row_id: str
     source_sha256: str
     account_id: str
-    destination_account_id: str
-    acquisition_value_minor: int
-    acquisition_date: date
+    destination_account_id: str | None
+    acquisition_value_minor: int | None
+    acquisition_date: date | None
     bank_downpayment_row_id: str | None
     principal_minor: int
     entries: tuple[JournalEntry, ...]
@@ -66,6 +66,7 @@ class OriginationPreview:
     proof: str
     preview_sha256: str
     profile_sha256: str
+    mode: str = "acquisition"
 
 
 @dataclass(frozen=True)
@@ -74,36 +75,110 @@ class OriginationEvent:
     row_id: str
     source_sha256: str
     account_id: str
-    destination_account_id: str
-    acquisition_value_minor: int
-    acquisition_date: date
+    destination_account_id: str | None
+    acquisition_value_minor: int | None
+    acquisition_date: date | None
     principal_minor: int
     entry_keys: tuple[str, ...]
     reason: str
     version: str
     status: str
     bank_downpayment_row_id: str | None = None
+    mode: str = "acquisition"
+    effective_date: date | None = None
+    date_provenance: str = "assumed"
+
+    @property
+    def tangible_allocation_date(self):
+        return self.acquisition_date if self.mode == "funding" else None
+
+    @property
+    def total_acquisition_cost_minor(self):
+        return self.acquisition_value_minor if self.mode == "acquisition" else None
 
 
-def _vehicle(store, account_id):
+def _tangible(store, account_id):
+    if type(account_id) is not str:
+        raise error("origination_tangible_destination_required")
     account = store.connection.execute(
         "SELECT name,kind,role,tracking_scope,product_type FROM Accounts WHERE id=?", (account_id,)
     ).fetchone()
-    if account is None or account[1:] != ("asset", "financial", "account_total", "vehicle"):
-        raise error("origination_vehicle_destination_required")
+    if account is None or account[1:] != ("asset", "financial", "account_total", "tangible_asset"):
+        raise error("origination_tangible_destination_required")
     return account[0]
+
+
+def _destination(store, account_id, source_account_id):
+    if account_id is None:
+        return None
+    if type(account_id) is not str:
+        raise error("origination_destination_unsupported")
+    account = store.connection.execute(
+        "SELECT kind,role,tracking_scope,product_type FROM Accounts WHERE id=?", (account_id,)
+    ).fetchone()
+    if (
+        account is None
+        or account_id == source_account_id
+        or account[1] != "financial"
+        or account[0] not in {"asset", "liability"}
+        or (
+            account[2] not in {"account_total", "cash_component"}
+            and not (account[0] == "liability" and account[2] == "principal_component")
+        )
+    ):
+        raise error("origination_destination_unsupported")
+    return account
+
+
+def _validate_manifest(store, data, principal):
+    if type(data) is not dict or set(data) != {
+        "proof",
+        "destination_account_id",
+        "acquisition_value_minor",
+        "acquisition_date",
+        "bank",
+        "mode",
+    }:
+        raise ValueError("origination_manifest_shape")
+    if type(data["proof"]) is not dict or type(data["proof"].get("account_id")) is not str:
+        raise ValueError("origination_manifest_proof")
+    destination = _destination(store, data["destination_account_id"], data["proof"]["account_id"])
+    if data["mode"] == "funding":
+        if data["acquisition_value_minor"] is not None or data["bank"] is not None:
+            raise ValueError("origination_funding_has_acquisition")
+        if destination is not None and destination[3] == "tangible_asset":
+            _tangible(store, data["destination_account_id"])
+            if date.fromisoformat(data["acquisition_date"]).isoformat() != data["acquisition_date"]:
+                raise ValueError("origination_allocation_date_invalid")
+        elif data["acquisition_date"] is not None:
+            raise ValueError("origination_unconfirmed_allocation")
+        return
+    if data["mode"] != "acquisition":
+        raise ValueError("origination_mode_invalid")
+    _tangible(store, data["destination_account_id"])
+    value = data["acquisition_value_minor"]
+    bank = TransferMovement(**data["bank"]) if data["bank"] is not None else None
+    if (
+        type(value) is not int
+        or not principal <= value < 2**63
+        or (value == principal and bank is not None)
+        or (value > principal and (bank is None or bank.amount_minor != principal - value))
+        or (bank is not None and (bank.account_kind != "asset" or not bank.date_allowed))
+        or date.fromisoformat(data["acquisition_date"]).isoformat() != data["acquisition_date"]
+    ):
+        raise ValueError("origination_acquisition_invalid")
 
 
 def _value_request(store, account_id, value_date, amount_minor, annual_rate_basis_points, reason):
     reason = reason_text(reason)
-    _vehicle(store, account_id)
+    _tangible(store, account_id)
     if (
         type(value_date) is not date
         or type(amount_minor) is not int
         or not 0 <= amount_minor < 2**63
         or (
             annual_rate_basis_points is not None
-            and (type(annual_rate_basis_points) is not int or not 0 <= annual_rate_basis_points <= 10000)
+            and (type(annual_rate_basis_points) is not int or not -10000 <= annual_rate_basis_points <= 100000)
         )
     ):
         raise error("tangible_asset_value_invalid")
@@ -144,12 +219,13 @@ def values(store, *, as_of=None):
         if rate is not None and target > point_date:
             with localcontext() as ctx:
                 ctx.prec = 40
-                fraction = Decimal(10000 - rate) / Decimal(10000)
+                fraction = Decimal(10000 + rate) / Decimal(10000)
                 elapsed = Decimal((target - point_date).days) / Decimal("365.2425")
-                projected = int((Decimal(amount) * (fraction**elapsed)).quantize(Decimal(1), rounding=ROUND_HALF_UP))
+                estimate = Decimal(amount) * (fraction**elapsed)
+                projected = int(estimate.quantize(Decimal(1), rounding=ROUND_HALF_UP)) if estimate < 2**63 else None
         result.append(
             TangibleAssetValue(
-                number, account, _vehicle(store, account), point_date, amount, projected, target, rate, reason, version
+                number, account, _tangible(store, account), point_date, amount, projected, target, rate, reason, version
             )
         )
     return tuple(sorted(result, key=lambda item: (item.account_name, item.account_id)))
@@ -186,8 +262,8 @@ def set_value(
 
 def create_asset(store, account, *, value_date, amount_minor, annual_rate_basis_points=None, reason):
     store._require_writable()
-    if account.product_type != "vehicle" or account.kind != "asset" or account.tracking_scope != "account_total":
-        raise error("origination_vehicle_destination_required")
+    if account.product_type != "tangible_asset" or account.kind != "asset" or account.tracking_scope != "account_total":
+        raise error("origination_tangible_destination_required")
     with store._atomic_write("create_tangible_asset"):
         store.add_financial_account(account)
         return set_value(
@@ -258,17 +334,25 @@ def _entries(data, event_id, reason):
             reviewed=True,
             reason=reason,
         ),
-        JournalEntry(
-            event_id + ":asset",
-            event_id,
-            date.fromisoformat(data["acquisition_date"]),
-            "Reviewed vehicle acquisition",
-            (Posting(data["destination_account_id"], value), Posting(CLEARING, -value)),
-            origin="manual",
-            reviewed=True,
-            reason=reason,
-        ),
     ]
+    if data["mode"] == "acquisition" or data["acquisition_date"] is not None:
+        result.append(
+            JournalEntry(
+                event_id + ":asset",
+                event_id,
+                date.fromisoformat(data["acquisition_date"]),
+                "Reviewed asset acquisition"
+                if data["mode"] == "acquisition"
+                else "Confirmed financed asset allocation",
+                (
+                    Posting(data["destination_account_id"], value if value is not None else principal),
+                    Posting(CLEARING, -(value if value is not None else principal)),
+                ),
+                origin="manual",
+                reviewed=True,
+                reason=reason,
+            )
+        )
     if data["bank"] is not None:
         bank = TransferMovement(**data["bank"])
         result.append(
@@ -321,22 +405,14 @@ def history(store):
         ) = saved
         try:
             data = json.loads(manifest)
-            if set(data) != {"proof", "destination_account_id", "acquisition_value_minor", "acquisition_date", "bank"}:
-                raise ValueError
             active = event_id not in actions
             proof, row = _source_proof(store, row_id, account_id=account, active=active)
-            _vehicle(store, destination)
+            _validate_manifest(store, data, row.amount.minor)
             bank = TransferMovement(**data["bank"]) if data["bank"] is not None else None
-            delta = data["acquisition_value_minor"] - row.amount.minor
             if (
                 proof != data["proof"]
                 or destination != data["destination_account_id"]
                 or source != proof["source_sha256"]
-                or type(data["acquisition_value_minor"]) is not int
-                or delta < 0
-                or data["acquisition_value_minor"] >= 2**63
-                or (delta == 0 and bank is not None)
-                or (delta > 0 and (bank is None or bank.amount_minor != -delta))
                 or bank_row != (bank.row_id if bank else None)
                 or (
                     bank is not None
@@ -413,13 +489,16 @@ def history(store):
                     account,
                     destination,
                     data["acquisition_value_minor"],
-                    date.fromisoformat(data["acquisition_date"]),
+                    date.fromisoformat(data["acquisition_date"]) if data["acquisition_date"] else None,
                     row.amount.minor,
                     tuple(entry.key for entry in entries),
                     reason,
                     version,
                     "active" if active else "withdrawn",
                     bank_row,
+                    data["mode"],
+                    date.fromisoformat(row.date.iso),
+                    "assumed",
                 )
             )
         except (ValueError, TypeError, KeyError):
@@ -473,7 +552,7 @@ def snapshot(store, source_sha256=None):
                     account_name[0] if account_name else None,
                     row.date.iso,
                     row.amount.minor,
-                    "Reviewed origination" if event else "Choose destination and acquisition funding",
+                    "Reviewed origination" if event else "Review borrowing and optional destination",
                     tuple(blockers),
                     event.event_id if event else None,
                 )
@@ -508,7 +587,7 @@ def build_preview(
     ):
         raise error("origination_acquisition_value_required")
     store._require_source_interpretation_basis(expected_basis_sha256, required=True)
-    _vehicle(store, destination_account_id)
+    _tangible(store, destination_account_id)
     proof, row = _source_proof(store, row_id)
     if store._active_consumed().get(row_id, 0):
         raise error("origination_source_already_used")
@@ -529,6 +608,7 @@ def build_preview(
         raise error("origination_exact_downpayment_evidence_required")
     store._require_source_overlap_postable((row_id, *((bank.row_id,) if bank else ())))
     data = {
+        "mode": "acquisition",
         "proof": proof,
         "destination_account_id": destination_account_id,
         "acquisition_value_minor": acquisition_value_minor,
@@ -574,6 +654,74 @@ def build_preview(
     )
 
 
+def build_funding_preview(
+    store,
+    row_id,
+    *,
+    destination_account_id=None,
+    tangible_allocation_date=None,
+    confirm_tangible_allocation=False,
+    preferences,
+    expected_basis_sha256,
+    reason,
+):
+    """Review exactly evidenced borrowing; a destination alone never posts a receipt."""
+    from parsetrail.core.v2_transfer_batch import profile_identity
+
+    reason = reason_text(reason)
+    if type(preferences) is not V2Preferences or not preferences.allow_assumed_posting_dates:
+        raise error("origination_assumed_date_permission_required")
+    if type(confirm_tangible_allocation) is not bool:
+        raise error("origination_tangible_confirmation_required")
+    store._require_source_interpretation_basis(expected_basis_sha256, required=True)
+    proof, row = _source_proof(store, row_id)
+    destination = _destination(store, destination_account_id, proof["account_id"])
+    is_tangible = destination is not None and destination[3] == "tangible_asset"
+    if is_tangible:
+        if not confirm_tangible_allocation or type(tangible_allocation_date) is not date:
+            raise error("origination_tangible_confirmation_required")
+    elif confirm_tangible_allocation or tangible_allocation_date is not None:
+        raise error("origination_tangible_confirmation_without_asset")
+    if store._active_consumed().get(row_id, 0):
+        raise error("origination_source_already_used")
+    store._require_source_overlap_postable((row_id,))
+    data = {
+        "mode": "funding",
+        "proof": proof,
+        "destination_account_id": destination_account_id,
+        "acquisition_value_minor": None,
+        "acquisition_date": tangible_allocation_date.isoformat() if is_tangible else None,
+        "bank": None,
+    }
+    _validate_manifest(store, data, row.amount.minor)
+    encoded = json.dumps(data, sort_keys=True, separators=(",", ":"))
+    identity = "review:origination:" + digest([encoded, expected_basis_sha256, reason])
+    entries = _entries(data, identity, reason)
+    accounts = store._loan_accounts(interest=False, materialize=False)
+    for entry in entries:
+        validate_entry(entry, accounts, {}, store._active_consumed())
+    profile = profile_identity(store)
+    checksum = digest([encoded, expected_basis_sha256, reason, profile, asdict(preferences)])
+    return OriginationPreview(
+        row_id,
+        proof["source_sha256"],
+        proof["account_id"],
+        destination_account_id,
+        None,
+        tangible_allocation_date,
+        None,
+        row.amount.minor,
+        entries,
+        reason,
+        expected_basis_sha256,
+        preferences,
+        encoded,
+        checksum,
+        profile,
+        "funding",
+    )
+
+
 def post(store, preview):
     from parsetrail.core.v2_profile_store import _journal_payload
 
@@ -602,8 +750,13 @@ def post(store, preview):
             )
             or (preview.row_id, preview.source_sha256, preview.account_id, preview.principal_minor)
             != (row.row_id, data["proof"]["source_sha256"], data["proof"]["account_id"], row.amount.minor)
-            or (preview.destination_account_id, preview.acquisition_value_minor, preview.acquisition_date.isoformat())
+            or (
+                preview.destination_account_id,
+                preview.acquisition_value_minor,
+                preview.acquisition_date.isoformat() if preview.acquisition_date is not None else None,
+            )
             != (data["destination_account_id"], data["acquisition_value_minor"], data["acquisition_date"])
+            or preview.mode != data["mode"]
             or preview.bank_downpayment_row_id != (data["bank"]["row_id"] if data["bank"] else None)
             or preview.entries != _entries(data, identity, preview.reason)
         ):
@@ -624,13 +777,24 @@ def post(store, preview):
                     raise error("origination_event_retired")
                 store.connection.execute("COMMIT")
                 return event
-        fresh = build_preview(
+        preview_builder = build_funding_preview if preview.mode == "funding" else build_preview
+        selection = (
+            {
+                "tangible_allocation_date": preview.acquisition_date,
+                "confirm_tangible_allocation": preview.acquisition_date is not None,
+            }
+            if preview.mode == "funding"
+            else {
+                "acquisition_value_minor": preview.acquisition_value_minor,
+                "acquisition_date": preview.acquisition_date,
+                "bank_downpayment_row_id": preview.bank_downpayment_row_id,
+            }
+        )
+        fresh = preview_builder(
             store,
             preview.row_id,
             destination_account_id=preview.destination_account_id,
-            acquisition_value_minor=preview.acquisition_value_minor,
-            acquisition_date=preview.acquisition_date,
-            bank_downpayment_row_id=preview.bank_downpayment_row_id,
+            **selection,
             preferences=preview.preferences,
             expected_basis_sha256=preview.basis_sha256,
             reason=preview.reason,
@@ -700,6 +864,9 @@ def withdraw(store, event_id, *, expected_version, reason):
             if prior != (reason,):
                 raise error("origination_event_changed")
         else:
+            from parsetrail.core.v2_resolution import require_unmatched
+
+            require_unmatched(store, event_id)
             basis = store._source_overlap_basis()
             store._origination_mutating = True
             for key in event.entry_keys:

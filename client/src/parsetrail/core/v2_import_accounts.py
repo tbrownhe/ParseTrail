@@ -229,7 +229,7 @@ def build_import_account_review(store, recognition, catalog, preferences=None):
 
 
 def _compatible(candidate, section, account):
-    if account.product_type == "vehicle":
+    if account.product_type == "tangible_asset":
         return False
     return any(
         account.kind == profile.kind

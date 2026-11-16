@@ -127,7 +127,7 @@ def read_history(store):
             # exact row amount, source description, date/provenance and admitted
             # account scope. Historical account labels need not equal today's
             # label, and historic assignment decisions are not rewritten.
-            store._validate_transfer_movements_source((movement,), _context=source_context)
+            store._validate_transfer_movements_source((movement,), _context=source_context, _resolution=True)
             review = PendingTransferReview(
                 number, row_id, source, account, movement, context, prior, action, basis, reason, version, created
             )
@@ -183,7 +183,9 @@ def _all_movements(store, releasing_entry_keys=()):
     # Date permission governs posting; a no-money designation itself needs none.
     return {
         m.row_id: m
-        for m in store._transfer_movements(V2Preferences(allow_assumed_posting_dates=True), releasing_entry_keys)
+        for m in store._transfer_movements(
+            V2Preferences(allow_assumed_posting_dates=True), releasing_entry_keys, _resolution=True
+        )
         if m.tracking_scope == "account_total"
     }
 

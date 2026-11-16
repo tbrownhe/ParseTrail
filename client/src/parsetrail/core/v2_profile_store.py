@@ -41,7 +41,7 @@ from parsetrail.core.source_evidence import (
     StatementPayload,
 )
 from parsetrail.core.v2_account_products import validate_product_type
-from parsetrail.core.v2_builtin_categories import builtin_category, is_builtin_id_reserved
+from parsetrail.core.v2_builtin_categories import BUILTIN_CATEGORIES, builtin_category, is_builtin_id_reserved
 from parsetrail.core.v2_cash_source_policy import (
     HSA_CASH_PARSER,
     admitted_statement_scope,
@@ -121,7 +121,7 @@ from parsetrail.core.v2_source_values import (
 )
 
 APPLICATION_ID = 0x50543230  # PT20
-SCHEMA_VERSION = 26
+SCHEMA_VERSION = 27
 TRACKING_SCOPES = {"account_total", "principal_component", "cash_component"}
 CategoryPurpose = Literal["expense", "expense_refund", "income", "income_adjustment"]
 CATEGORY_PURPOSE_KINDS = {
@@ -1735,13 +1735,15 @@ def _check_format(connection: sqlite3.Connection) -> None:
         if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
             raise ProfileFormatError("profile_integrity")
         _validate_institution_records(connection)
-        for kind, role, scope, product_type in connection.execute(
-            "SELECT kind,role,tracking_scope,product_type FROM Accounts"
+        for kind, role, scope, product_type, institution, number in connection.execute(
+            "SELECT kind,role,tracking_scope,product_type,institution_key,full_account_number FROM Accounts"
         ):
             try:
                 if role != "financial" and product_type is not None:
                     raise ValueError
                 validate_product_type(product_type, kind, scope)
+                if product_type == "tangible_asset" and (institution is not None or number is not None):
+                    raise ValueError
             except ValueError:
                 raise ProfileFormatError("account_product_integrity") from None
     except sqlite3.DatabaseError:
@@ -1884,7 +1886,7 @@ class V2ProfileStore:
                     purpose TEXT NOT NULL CHECK(purpose IN ('normal','clearing','opening_equity','suspense')),
                     institution_key TEXT REFERENCES Institutions(id), full_account_number TEXT,
                     tracking_scope TEXT NOT NULL DEFAULT 'account_total' CHECK(tracking_scope IN ('account_total','principal_component','cash_component')),
-                    product_type TEXT CHECK(product_type IN ('checking','savings','credit_card','loan','hsa','investment','cash','vehicle')),
+                    product_type TEXT CHECK(product_type IN ('checking','savings','credit_card','loan','hsa','investment','cash','tangible_asset')),
                     CHECK(
                         (role='financial' AND kind IN ('asset','liability') AND purpose='normal')
                         OR (role='category' AND kind IN ('income','expense') AND purpose='normal'
@@ -2120,6 +2122,10 @@ class V2ProfileStore:
             connection.executemany(
                 "INSERT INTO Institutions VALUES (?,?)", ((item.id, item.name) for item in BUILTIN_INSTITUTIONS)
             )
+            connection.executemany(
+                "INSERT INTO Accounts VALUES (?,?,?,'USD','category','normal',NULL,NULL,'account_total',NULL)",
+                ((category.account_id, category.name, category.kind) for category in BUILTIN_CATEGORIES),
+            )
             for table in IMMUTABLE_TABLES:
                 for action in ("UPDATE", "DELETE"):
                     connection.execute(
@@ -2344,6 +2350,10 @@ class V2ProfileStore:
             or type(account.tracking_scope) is not str
             or account.tracking_scope not in TRACKING_SCOPES
             or (
+                account.product_type == "tangible_asset"
+                and (account.institution_key is not None or account.full_account_number is not None)
+            )
+            or (
                 account.institution_key is not None
                 and (
                     type(account.institution_key) is not str
@@ -2396,7 +2406,9 @@ class V2ProfileStore:
             if current[1] != account.tracking_scope and self.financial_account_scope_locked(account.id):
                 raise ProfileFormatError("financial_account_scope_locked")
             product_type = account.product_type if account.product_type is not None else current[2]
-            if (product_type == "vehicle") != (current[2] == "vehicle"):
+            if product_type == "tangible_asset" and (institution_key is not None or full_number is not None):
+                raise ProfileFormatError("tangible_asset_has_no_bank_identity")
+            if (product_type == "tangible_asset") != (current[2] == "tangible_asset"):
                 assigned = self.connection.execute(
                     "SELECT 1 FROM SourceAccountBindings WHERE ledger_account_id=? UNION SELECT 1 FROM FileAccountAssertions WHERE ledger_account_id=? UNION SELECT 1 FROM RowAccountAssignments WHERE ledger_account_id=? LIMIT 1",
                     (account.id, account.id, account.id),
@@ -2491,6 +2503,36 @@ class V2ProfileStore:
 
         return post(self, preview)
 
+    def preview_loan_funding(
+        self,
+        row_id,
+        *,
+        destination_account_id=None,
+        tangible_allocation_date=None,
+        confirm_tangible_allocation=False,
+        preferences,
+        expected_basis_sha256,
+        reason,
+    ):
+        from parsetrail.core.v2_origination import build_funding_preview
+
+        if self.connection.in_transaction:
+            raise ProfileFormatError("origination_requires_committed_snapshot")
+        self.connection.execute("BEGIN")
+        try:
+            return build_funding_preview(
+                self,
+                row_id,
+                destination_account_id=destination_account_id,
+                tangible_allocation_date=tangible_allocation_date,
+                confirm_tangible_allocation=confirm_tangible_allocation,
+                preferences=preferences,
+                expected_basis_sha256=expected_basis_sha256,
+                reason=reason,
+            )
+        finally:
+            self.connection.execute("ROLLBACK")
+
     def withdraw_loan_origination(self, event_id, *, expected_version, reason):
         from parsetrail.core.v2_origination import withdraw
 
@@ -2574,6 +2616,10 @@ class V2ProfileStore:
         ):
             if self.connection.execute(f"SELECT 1 FROM {table} WHERE account_id=? LIMIT 1", (account_id,)).fetchone():
                 return True
+        if self.connection.execute(
+            "SELECT 1 FROM LoanOriginationEvents WHERE destination_account_id=? LIMIT 1", (account_id,)
+        ).fetchone():
+            return True
         if any(
             account_id in record.prior_account_ids or account_id in record.new_account_ids
             for record in self._read_binding_corrections()
@@ -2612,7 +2658,7 @@ class V2ProfileStore:
     def _require_statement_account(self, account_id: str) -> None:
         self._require_financial_account(account_id)
         if self.connection.execute("SELECT product_type FROM Accounts WHERE id=?", (account_id,)).fetchone() == (
-            "vehicle",
+            "tangible_asset",
         ):
             raise ProfileFormatError("tangible_asset_cannot_bind_statement")
 
@@ -2659,6 +2705,7 @@ class V2ProfileStore:
         return CategoryAccount(category.account_id, category.name, category.kind)
 
     def _validate_builtin_categories(self) -> None:
+        present = set()
         for row in self.connection.execute("SELECT * FROM Accounts"):
             if type(row[0]) is not str:
                 raise ProfileFormatError("account_identity_integrity")
@@ -2678,6 +2725,9 @@ class V2ProfileStore:
                 None,
             ):
                 raise ProfileFormatError("builtin_category_integrity")
+            present.add(row[0])
+        if present != {category.account_id for category in BUILTIN_CATEGORIES}:
+            raise ProfileFormatError("builtin_category_integrity")
 
     def rename_category_account(self, account_id: str, name: str) -> None:
         """Change only a category's display name; journal references use its ID."""
@@ -3845,7 +3895,7 @@ class V2ProfileStore:
         self._read_binding_corrections()
         self._validate_loan_history()
         payloads = dict(self.connection.execute("SELECT key,payload FROM JournalEntries"))
-        if not self._loan_mutating:
+        if not self._loan_mutating and not self._origination_mutating:
             from parsetrail.core.v2_resolution import validate_history
 
             validate_history(self)
@@ -4064,7 +4114,6 @@ class V2ProfileStore:
                     if (row.allowed_purposes or row.status == "Description needs review")
                     and row.entry_key is None
                     and row.amount_minor
-                    and (kind == "cash" or row.amount_minor > 0)
                     and account_scopes.get(transfer_bindings.get(row.row_id)) == "account_total"
                 )
                 return SourceInterpretationSnapshot(
@@ -4108,7 +4157,7 @@ class V2ProfileStore:
             for identity in (link.outgoing_id, link.incoming_id)
         }
         for item in resolution_items:
-            if item.status != "withdrawn":
+            if item.status != "withdrawn" and item.kind != "origination":
                 for row_id in set(item.row_ids) & row_ids:
                     owners[row_id] = SourceInterpretationOwner(
                         row_id,
@@ -4647,7 +4696,12 @@ class V2ProfileStore:
         )
 
     def _transfer_movements(
-        self, preferences: V2Preferences, releasing_entry_keys: tuple[str, ...] = (), *, _overlap_blocks_out=None
+        self,
+        preferences: V2Preferences,
+        releasing_entry_keys: tuple[str, ...] = (),
+        *,
+        _overlap_blocks_out=None,
+        _resolution=False,
     ) -> tuple[TransferMovement, ...]:
         if type(preferences) is not V2Preferences or type(preferences.allow_assumed_posting_dates) is not bool:
             raise ProfileFormatError("transfer_preferences_invalid")
@@ -4672,7 +4726,7 @@ class V2ProfileStore:
                 amount = row.amount.minor
                 if (
                     account is None
-                    or account.product_type == "vehicle"
+                    or account.product_type == "tangible_asset"
                     or row.row_role != "activity"
                     or row.components
                     or type(amount) is not int
@@ -4692,7 +4746,7 @@ class V2ProfileStore:
                 elif (
                     account.kind == "liability"
                     and account.tracking_scope == "account_total"
-                    and amount > 0
+                    and (_resolution or amount > 0)
                     and card_scope.get(row.row_id, False)
                 ):
                     candidate = (
@@ -5036,7 +5090,13 @@ class V2ProfileStore:
             }
         return source["bindings"]
 
-    def _validate_transfer_movements_source(self, movements: tuple[TransferMovement, ...], *, _context=None) -> None:
+    def _validate_transfer_movements_source(
+        self,
+        movements: tuple[TransferMovement, ...],
+        *,
+        _context=None,
+        _resolution=False,
+    ) -> None:
         for movement in movements:
             if _context is None:
                 evidence = self.load_import(movement.source_sha256).evidence
@@ -5087,7 +5147,7 @@ class V2ProfileStore:
                     ).fetchone()
                 )
                 != (movement.source_sha256, row.row_role, row.date_role, row.date.iso, row.amount.minor)
-                or (movement.account_kind == "liability" and movement.amount_minor <= 0)
+                or (movement.account_kind == "liability" and movement.amount_minor <= 0 and not _resolution)
             ):
                 raise ProfileFormatError("transfer_history_integrity")
 
@@ -7747,7 +7807,7 @@ class V2ProfileStore:
                     raise ProfileFormatError("ordinary_batch_transfer_changed")
                 entries.append(leg_entry(draft.movement, identity, reason))
             return tuple(entries)
-        available = {m.row_id: m for m in self._transfer_movements(preferences)}
+        available = {m.row_id: m for m in self._transfer_movements(preferences, _resolution=True)}
         entries = []
         for draft in pending:
             movement = available.get(draft.row_id)
@@ -11114,7 +11174,11 @@ class V2ProfileStore:
 
         value_history(self)
         if self.connection.execute(
-            "SELECT 1 FROM Accounts a JOIN (SELECT ledger_account_id FROM SourceAccountBindings UNION SELECT ledger_account_id FROM FileAccountAssertions UNION SELECT ledger_account_id FROM RowAccountAssignments) b ON a.id=b.ledger_account_id WHERE a.product_type='vehicle' LIMIT 1"
+            "SELECT 1 FROM Accounts WHERE product_type='tangible_asset' AND (institution_key IS NOT NULL OR full_account_number IS NOT NULL) LIMIT 1"
+        ).fetchone():
+            raise ProfileFormatError("tangible_asset_has_no_bank_identity")
+        if self.connection.execute(
+            "SELECT 1 FROM Accounts a JOIN (SELECT ledger_account_id FROM SourceAccountBindings UNION SELECT ledger_account_id FROM FileAccountAssertions UNION SELECT ledger_account_id FROM RowAccountAssignments) b ON a.id=b.ledger_account_id WHERE a.product_type='tangible_asset' LIMIT 1"
         ).fetchone():
             raise ProfileFormatError("tangible_asset_cannot_bind_statement")
         for (account_id,) in self.connection.execute("SELECT DISTINCT account_id FROM StatementSourceReviews"):

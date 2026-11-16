@@ -287,13 +287,15 @@ def test_batch_preview_cannot_be_applied_to_restored_profile_identity(tmp_path):
         assert len(store.post_reviewed_ordinary_batch(reviewed_here).entry_keys) == 3
 
 
-def test_builtin_category_is_virtual_in_preview_and_atomic_in_post(tmp_path):
+def test_builtin_category_is_seeded_and_reused_atomically_in_post(tmp_path):
     path = tmp_path / "builtin.db"
     evidence = _profile(path)
     item = OrdinaryCategorySelection(evidence.payload.rows[0].row_id, "builtin:loan-interest", "expense")
     with V2ProfileStore.open(path) as store:
         preview = _preview(store, evidence, selections=(item,))
-        assert store.connection.execute("SELECT 1 FROM Accounts WHERE id=?", (item.category_id,)).fetchone() is None
+        assert store.connection.execute("SELECT name FROM Accounts WHERE id=?", (item.category_id,)).fetchone() == (
+            "Loan interest",
+        )
         result = store.post_reviewed_ordinary_batch(preview)
         assert len(result.entry_keys) == 1
         assert store.connection.execute("SELECT name FROM Accounts WHERE id=?", (item.category_id,)).fetchone() == (

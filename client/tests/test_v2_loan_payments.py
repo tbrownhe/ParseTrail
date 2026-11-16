@@ -305,9 +305,7 @@ def test_mohela_identity_modes_zero_interest_and_unknown_balance(tmp_path, defin
         interest = 2000 if selected_index == 0 else 0
         assert event.manifest.interest_minor == interest
         assert event.manifest.principal_minor == amount - interest
-        assert store.connection.execute("SELECT COUNT(*) FROM Accounts WHERE id=?", (INTEREST,)).fetchone() == (
-            (1,) if interest else (0,)
-        )
+        assert store.connection.execute("SELECT COUNT(*) FROM Accounts WHERE id=?", (INTEREST,)).fetchone() == (1,)
         assert store.loan_source_links()[0].proof.raw_fee_minor == 0
         assert store.statement_coverage() == ()
         assert store._unallocated_activity_counts()[0] == len(rows) - 1
@@ -384,7 +382,7 @@ def test_initial_payment_failpoints_roll_back_every_fact_and_category(tmp_path, 
         assert store._active_consumed() == {} and store.loan_history() == ()
         assert store.connection.execute(
             "SELECT COUNT(*) FROM Accounts WHERE id IN (?,?)", (INTEREST, CLEARING)
-        ).fetchone() == (0,)
+        ).fetchone() == (1,)
         assert store.connection.execute("SELECT COUNT(*) FROM JournalEntries").fetchone() == (0,)
         assert not store.connection.in_transaction
         assert store.loan_review_snapshot(PREFERENCES).basis_sha256 == basis

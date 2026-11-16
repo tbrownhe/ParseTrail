@@ -34,6 +34,7 @@ class ResolutionItem:
     # Effective accounting dates for all evidenced legs, not rewritten raw
     # activity dates. A loan proof keeps its observed activity date separately.
     source_dates: tuple[tuple[str, str], ...] = ()
+    expected_destination_account_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -135,7 +136,7 @@ def transfer_legs(store):
             validate_movement(movement)
             if context is None:
                 context = store._transfer_source_validation_context()
-            store._validate_transfer_movements_source((movement,), _context=context)
+            store._validate_transfer_movements_source((movement,), _context=context, _resolution=True)
             entry = leg_entry(movement, event, reason)
             active = event not in actions
             if (
@@ -270,6 +271,10 @@ def links(store, items):
             or outgoing.account_id == incoming.account_id
             or outgoing.gross_minor != incoming.gross_minor
             or (
+                outgoing.expected_destination_account_id is not None
+                and outgoing.expected_destination_account_id != incoming.account_id
+            )
+            or (
                 active
                 and (
                     outgoing.status == "withdrawn" or incoming.status == "withdrawn" or out_id in used or in_id in used
@@ -288,8 +293,41 @@ def links(store, items):
     return tuple(result)
 
 
+def origination_items(store):
+    from parsetrail.core.v2_origination import history
+
+    result = []
+    for event in history(store):
+        if event.mode != "funding" or event.tangible_allocation_date is not None:
+            continue
+        name = store.connection.execute("SELECT name FROM Accounts WHERE id=?", (event.account_id,)).fetchone()[0]
+        result.append(
+            ResolutionItem(
+                event.event_id,
+                "origination",
+                (event.row_id,),
+                event.source_sha256,
+                event.account_id,
+                name,
+                event.effective_date.isoformat(),
+                event.principal_minor,
+                "outgoing",
+                "unmatched" if event.status == "active" else "withdrawn",
+                event.reason,
+                event.version,
+                "Loan proceeds: receipt not yet matched",
+                event.entry_keys,
+                True,
+                event.date_provenance,
+                ((event.effective_date.isoformat(), event.date_provenance),),
+                event.destination_account_id,
+            )
+        )
+    return tuple(result)
+
+
 def validate_history(store):
-    items = transfer_legs(store) + loan_items(store)
+    items = transfer_legs(store) + loan_items(store) + origination_items(store)
     return items, links(store, items)
 
 
@@ -330,7 +368,7 @@ def snapshot(store, *, preferences, max_day_gap=7):
     from parsetrail.core.v2_pending_transfers import read_history
 
     pending = {r.row_id for r in read_history(store) if r.action == "pending"}
-    movements = store._transfer_movements(preferences)
+    movements = store._transfer_movements(preferences, _resolution=True)
     raw = tuple(
         ResolutionItem(
             "row:" + m.row_id,
@@ -375,6 +413,10 @@ def snapshot(store, *, preferences, max_day_gap=7):
                 outgoing.kind == incoming.kind == "source"
                 or outgoing.account_id == incoming.account_id
                 or outgoing.gross_minor != incoming.gross_minor
+                or (
+                    outgoing.expected_destination_account_id is not None
+                    and outgoing.expected_destination_account_id != incoming.account_id
+                )
                 or gap > max_day_gap
             ):
                 continue
@@ -433,7 +475,9 @@ def post_leg(store, row_id, *, preferences, expected_basis_sha256, reason):
                 store.connection.execute("COMMIT")
                 return item
         store._require_source_interpretation_basis(expected_basis_sha256, required=True)
-        movement = next((m for m in store._transfer_movements(preferences) if m.row_id == row_id), None)
+        movement = next(
+            (m for m in store._transfer_movements(preferences, _resolution=True) if m.row_id == row_id), None
+        )
         if movement is None:
             raise error("resolution_source_unavailable")
         event_id = insert_leg(store, movement, reason=reason, basis=expected_basis_sha256)
@@ -482,11 +526,13 @@ def resolve(store, outgoing_id, incoming_id, *, preferences, expected_basis_sha2
         for index, identity in enumerate(ids):
             if identity.startswith("row:"):
                 row_id = identity[4:]
-                movement = next((m for m in store._transfer_movements(preferences) if m.row_id == row_id), None)
+                movement = next(
+                    (m for m in store._transfer_movements(preferences, _resolution=True) if m.row_id == row_id), None
+                )
                 if movement is None:
                     raise error("resolution_source_unavailable")
                 ids[index] = insert_leg(store, movement, reason=reason, basis=expected_basis_sha256)
-        by_id = {item.id: item for item in transfer_legs(store) + loan_items(store)}
+        by_id = {item.id: item for item in transfer_legs(store) + loan_items(store) + origination_items(store)}
         outgoing, incoming = (by_id[identity] for identity in ids)
         created = now(store)
         link_id = "resolution:" + digest([*ids, outgoing.version, incoming.version, expected_basis_sha256, reason])
