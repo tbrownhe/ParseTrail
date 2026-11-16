@@ -169,6 +169,39 @@ def test_repeated_unclassified_amounts_keep_codes_counts_and_bounded_source_loca
     assert len(changed.payload.dispositions) == 24
 
 
+@pytest.mark.parametrize(
+    "code",
+    [
+        "citi_account_summary",
+        "citi_payment_information",
+        "citi_credit_terms",
+        "citi_repayment_example",
+        "citi_apr_information",
+        "citi_interest_charge_detail",
+    ],
+)
+def test_recognized_citi_detail_is_informational_without_removing_capture_limit(decoded, code):
+    evidence = decoded["recent-citi-pilot-definition.json"]
+    location = PdfLine(kind="pdf_line", page=2, line=4)
+    changed = evidence.model_copy(
+        update={
+            "payload": evidence.payload.model_copy(
+                update={
+                    "dispositions": (SourceDisposition(code=code, location=location, raw_values=("Synthetic $3.00",)),),
+                    "capture_verified": False,
+                }
+            )
+        }
+    )
+    before = changed.model_dump_json()
+    warnings = evidence_import_warnings(changed)
+    warning = next(w for w in warnings if w.code == code)
+    assert warning.classification == "informational" and warning.locations == (location,)
+    assert any(w.code == "source_capture_unverified" for w in warnings)
+    assert not requires(changed)
+    assert changed.model_dump_json() == before
+
+
 def test_csv_export_does_not_invent_a_statement_balance_or_capture_check():
     evidence = build_source_evidence(SOURCE, DEFINITION.read_bytes(), suffix=".csv")
     assert not isinstance(evidence.payload, StatementPayload)

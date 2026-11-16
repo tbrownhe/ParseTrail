@@ -62,6 +62,16 @@ def _balance_warning(account: StatementAccount) -> tuple[str, str]:
 
 
 def _disposition_warning(code: str, raw_values: tuple[str, ...]) -> tuple[WarningClassification, str] | None:
+    citi_roles = {
+        "citi_account_summary": "Printed account summary amounts are retained separately from activity",
+        "citi_payment_information": "Printed payment information is retained separately from activity",
+        "citi_credit_terms": "Printed credit terms are retained separately from activity",
+        "citi_repayment_example": "Printed repayment examples are retained separately from activity",
+        "citi_apr_information": "Printed interest calculation details are retained separately from activity",
+        "citi_interest_charge_detail": "Printed interest charge detail is retained separately from activity",
+    }
+    if code in citi_roles:
+        return "informational", citi_roles[code]
     # Citi's unclassified page text has already refused financial/date-shaped
     # lines. Keep that benign text distinct from an unresolved monetary line.
     if code == "unclassified_page_text" and not any(_MONEY.search(raw) for raw in raw_values):

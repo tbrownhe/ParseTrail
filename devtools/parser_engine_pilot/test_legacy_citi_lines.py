@@ -7,12 +7,14 @@ from pathlib import Path
 
 import pytest
 from parsetrail.core.source_evidence import SourceEvidence
+from parsetrail.core.v2_import_warnings import evidence_import_warnings
 from parsetrail.core.v2_legacy_citi_lines import (
     LegacyCitiDefinition,
     LegacyCitiError,
     parse_legacy_citi,
 )
 from parsetrail.core.v2_pdf_lines import page_lines
+from parsetrail.core.v2_source_pipeline import SourcePipelineError, build_source_evidence
 
 from devtools.parser_engine_pilot.audit_legacy_citi_money import audit as audit_monetary_archive
 
@@ -141,3 +143,227 @@ def test_definition_schema_and_unknown_field() -> None:
 
 def test_monetary_audit_refuses_an_empty_archive(tmp_path: Path) -> None:
     assert audit_monetary_archive(tmp_path)["failure_reasons"] == {"no_matching_sources": 1}
+
+
+def test_finite_summary_and_interest_detail_roles_preserve_source() -> None:
+    first = lines(
+        extra=(
+            "Payments -$20.00",
+            "Purchases +$10.00",
+            "Minimum payment due $5.00",
+            "New balance as of 01/31/26: $90.00",
+            "Credit limit $500.00",
+        )
+    )
+    second = "\n".join(
+        (
+            "Interest charged",
+            "Interest: $0.00",
+            "Explanation",
+            "Total interest charged in this billing period $0.00",
+            "Standard Purch 12.34% $90.00 (D) $0.00",
+            "Standard Adv 24.99% (V) $0.00 (D) $0.00",
+        )
+    )
+    source = page_lines(
+        b"synthetic", ["\n".join(line.raw for line in first.lines), second], extraction_library=first.extraction_library
+    )
+    before = source.lines
+    output = parse_legacy_citi(DEFINITION, source)
+    assert [d.code for d in output.payload.dispositions] == [
+        "citi_account_summary",
+        "citi_account_summary",
+        "citi_payment_information",
+        "citi_payment_information",
+        "citi_credit_terms",
+        "citi_interest_charge_detail",
+        "interest_period_total",
+        "citi_apr_information",
+        "citi_apr_information",
+    ]
+    assert source.lines == before
+    for disposition in output.payload.dispositions:
+        line = next(
+            line
+            for line in source.lines
+            if (line.page, line.line) == (disposition.location.page, disposition.location.line)
+        )
+        assert disposition.raw_values == (line.raw,)
+    assert len(output.payload.accounts[0].rows) == 2
+    assert output.payload.capture_verified is False
+    assert output.engine_version == "legacy-citi-lines-pilot-2"
+    assert not [w for w in evidence_import_warnings(output) if w.classification == "requires_review"]
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "Purchases +$10.00 Unknown $9.00",
+        "Unknown $9.00",
+        "Credit limit $500.00 Unknown $1.00",
+        "New balance $90.00 Unknown $1.00",
+        "New balance $90.00 Unknown $1",
+        "Please pay New balance $90.00 Unknown $1.00",
+        "Standard Purch 12.34% $90.00 (D) $0.00 Unknown $1.00",
+        "Total interest charged in this billing period $0.00 Unknown $1.00",
+        "Total fees charged in 2026 $0.00 Unknown $1.00",
+        "Total fees charged in 2026 $0.00 Unknown $1",
+        "$0.00",
+    ],
+)
+def test_unknown_or_parallel_money_keeps_review_gate(raw: str) -> None:
+    output = parse(extra=(raw,))
+    warnings = [w for w in evidence_import_warnings(output) if w.classification == "requires_review"]
+    assert [w.code for w in warnings] == ["unclassified_monetary_line"]
+    assert output.payload.dispositions[-1].raw_values == (raw,)
+    assert len(output.payload.accounts[0].rows) == 2
+    assert output.payload.independent_balance_verified and not output.payload.capture_verified
+
+
+def test_summary_label_does_not_rescue_unresolved_dated_input() -> None:
+    with pytest.raises(LegacyCitiError, match="unresolved_dated_start"):
+        parse(extra=("01/20 Interest charged",))
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "Mystery $3",
+        "Purchases +$10",
+        "Total interest charged in this billing period $0",
+        "Total fees charged in 2026 $0.001",
+    ],
+)
+def test_standalone_incomplete_money_remains_reviewable(raw) -> None:
+    output = parse(extra=(raw,))
+    warning = next(w for w in evidence_import_warnings(output) if w.code == "unclassified_monetary_line")
+    assert warning.classification == "requires_review" and warning.occurrence_count == 1
+    assert output.payload.dispositions[-1].raw_values == (raw,)
+    assert len(output.payload.accounts[0].rows) == 2
+
+
+def test_truncated_parallel_dollar_amount_refuses() -> None:
+    with pytest.raises(LegacyCitiError, match="ambiguous_parallel_money"):
+        parse({6: "01/05 AUTOPAY AUTO-PMT -$20.00 Mystery $3"})
+
+
+def test_whole_dollar_disclosures_preserve_all_lines_without_becoming_activity() -> None:
+    raw = (
+        "your balance. For example: Credit Limit $5,000",
+        "Includes $1,000 cash advance limit",
+        "Available credit $4,000",
+        "charges using this card balance shown on the paying an estimated Available credit $4,000",
+        "and each month you pay... statement in about... total of... Includes $1,000 available for cash advances",
+        "Only the minimum payment 12 year(s) $800",
+        "$400",
+        "$30 3 year(s)",
+        "(Savings=$100)",
+    )
+    output = parse(extra=raw)
+    assert [d.code for d in output.payload.dispositions] == [
+        "citi_credit_terms",
+        "citi_credit_terms",
+        "citi_credit_terms",
+        "citi_credit_terms",
+        "citi_credit_terms",
+        "citi_repayment_example",
+        "unclassified_monetary_line",
+        "citi_repayment_example",
+        "citi_repayment_example",
+    ]
+    assert tuple(d.raw_values[0] for d in output.payload.dispositions) == raw
+    assert len(output.payload.accounts[0].rows) == 2
+    assert not output.payload.capture_verified
+    assert (
+        next(w for w in evidence_import_warnings(output) if w.code == "unclassified_monetary_line").occurrence_count
+        == 1
+    )
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "Credit limit $500 Unknown $3",
+        "Credit limit $500.0",
+        "Includes $500 cash advance limit unknown",
+        "Only the minimum payment 0 year(s) $800",
+        "Only the minimum payment 100 year(s) $800",
+        "Only the minimum payment 12 year(s) $800 Unknown $3",
+        "$30 3 year(s)",
+        "(Savings=$100)",
+        "your balance. For example: Credit Limit $5,000",
+        "charges using this card balance shown on the paying an estimated Available credit $4,000",
+        "and each month you pay... statement in about... total of... Includes $1,000 available for cash advances",
+        "Total interest charged in this billing period $0",
+    ],
+)
+def test_disclosure_whole_dollars_do_not_weaken_unknown_or_context_refusal(raw: str) -> None:
+    output = parse(extra=(raw,))
+    assert output.payload.dispositions[-1].code == "unclassified_monetary_line"
+    assert output.payload.dispositions[-1].raw_values == (raw,)
+
+
+def test_dated_whole_dollar_disclosure_is_not_rescued_by_disclosure_rules() -> None:
+    with pytest.raises(LegacyCitiError, match="unresolved_dated_start"):
+        parse(extra=("01/20 Credit limit $500",))
+
+
+def test_interest_detail_requires_its_section_and_total() -> None:
+    first = lines()
+    source = page_lines(
+        b"synthetic",
+        ["\n".join(line.raw for line in first.lines), "Interest: $0.00"],
+        extraction_library=first.extraction_library,
+    )
+    output = parse_legacy_citi(DEFINITION, source)
+    assert output.payload.dispositions[-1].code == "unclassified_monetary_line"
+
+
+def test_interest_detail_before_heading_and_offer_apr_need_exact_context() -> None:
+    first = lines()
+    detail = ("Interest: $0.00", "Interest charged", "Total interest charged in this billing period $0.00")
+    apr = (
+        "Standard Purch 12.34% $90.00 (D) $0.00",
+        "Example Offer 0.00% $10.00 (D) $0.00",
+        "Standard Adv 24.99% (V) $0.00 (D) $0.00",
+    )
+    for second, expected in ((detail, "citi_interest_charge_detail"), (apr, "citi_apr_information")):
+        source = page_lines(
+            b"synthetic",
+            ["\n".join(line.raw for line in first.lines), "\n".join(second)],
+            extraction_library=first.extraction_library,
+        )
+        output = parse_legacy_citi(DEFINITION, source)
+        assert all(d.code == expected or d.code == "interest_period_total" for d in output.payload.dispositions)
+    for second in ((detail[0], detail[2]), (apr[1],), (apr[0], apr[1]), (apr[1], apr[2])):
+        source = page_lines(
+            b"synthetic",
+            ["\n".join(line.raw for line in first.lines), "\n".join(second)],
+            extraction_library=first.extraction_library,
+        )
+        output = parse_legacy_citi(DEFINITION, source)
+        assert any(d.code == "unclassified_monetary_line" for d in output.payload.dispositions)
+
+
+def test_real_bounded_legacy_decoder_keeps_roles_unknown_money_and_cancellation() -> None:
+    from devtools.parser_engine_pilot.synthetic_family_sources import pdf_document, text_page
+
+    raw = [line.raw for line in lines({5: "Date Description Amount"}).lines]
+    raw.extend(("Payments -$20.00", "Mystery $3.00", "Mystery $3.00"))
+    source = pdf_document((text_page(*raw),))
+    before = source
+    output = build_source_evidence(source, DEFINITION, suffix=".pdf")
+    assert source == before
+    assert output.payload.dispositions[-3].code == "citi_account_summary"
+    unknown = [d for d in output.payload.dispositions if d.code == "unclassified_monetary_line"]
+    assert len(unknown) == 2 and unknown[0].location != unknown[1].location
+    assert all(d.raw_values[0].strip() == "Mystery $3.00" for d in unknown)
+    assert (
+        next(w for w in evidence_import_warnings(output) if w.code == "unclassified_monetary_line").occurrence_count
+        == 2
+    )
+    assert not output.payload.capture_verified
+    with pytest.raises(SourcePipelineError, match="cancelled"):
+        build_source_evidence(source, DEFINITION, suffix=".pdf", cancelled=lambda: True)
+    with pytest.raises(SourcePipelineError):
+        build_source_evidence(source[:90], DEFINITION, suffix=".pdf")

@@ -22,13 +22,14 @@ from parsetrail.core.source_evidence import (
     StatementPayload,
     TextValue,
 )
+from parsetrail.core.v2_legacy_citi_dispositions import classify_legacy_citi_money
 from parsetrail.core.v2_monetary_line_inventory import MonetaryLineRule, inventory_monetary_lines
 from parsetrail.core.v2_money_operations import usd_symbol_minor_v1
 from parsetrail.core.v2_partial_dates import PartialDateError, resolve_month_day
 from parsetrail.core.v2_pdf_lines import ADAPTER_VERSION, PageLine, PDFLineEvidence
 from parsetrail.core.v2_pdf_routing import PDFRouting
 
-ENGINE_VERSION = "legacy-citi-lines-pilot-1"
+ENGINE_VERSION = "legacy-citi-lines-pilot-2"
 MAX_DEFINITION_BYTES = 64 * 1024
 MONEY = r"-?\$(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)\.[0-9]{2}"
 MONEY_TOKEN = re.compile(MONEY)
@@ -220,7 +221,7 @@ def parse_legacy_citi(definition_bytes: bytes, lines: PDFLineEvidence) -> Source
         span = _location(fragments[0], fragments[-1]) if len(fragments) > 1 else _location(fragments[0])
         if match["trailing"]:
             trailing = match["trailing"]
-            if MONEY_TOKEN.search(trailing):
+            if "$" in trailing:
                 if re.fullmatch(rf"No Late Fee:\s+{MONEY}", trailing) is None:
                     raise LegacyCitiError("ambiguous_parallel_money")
                 tail_code = "parallel_no_late_fee"
@@ -271,15 +272,22 @@ def parse_legacy_citi(definition_bytes: bytes, lines: PDFLineEvidence) -> Source
     classified_dispositions = tuple(table_dispositions) + tuple(tail_dispositions) + repeated_closing_dispositions
     covered_locations = (
         (_location(opening_line),)
-        + tuple(_location(line) for line, _ in closings)
+        + tuple(_location(line) for line, _ in closings if line.raw.count("$") == 1)
         + tuple(fragment.location for row in rows for fragment in row.fragments)
-        + tuple(disposition.location for disposition in classified_dispositions)
+        + tuple(
+            disposition.location
+            for disposition in classified_dispositions
+            if disposition.code != "repeated_closing_balance"
+        )
     )
-    monetary_dispositions = inventory_monetary_lines(
+    monetary_dispositions = classify_legacy_citi_money(
+        inventory_monetary_lines(
+            lines,
+            money_token=re.compile(r"\$\s*[-+]?\d"),
+            covered_locations=covered_locations,
+            rules=definition.monetary_line_rules,
+        ),
         lines,
-        money_token=MONEY_TOKEN,
-        covered_locations=covered_locations,
-        rules=definition.monetary_line_rules,
     )
     return SourceEvidence(
         schema_version=2,
