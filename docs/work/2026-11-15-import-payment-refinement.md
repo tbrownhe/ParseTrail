@@ -193,3 +193,32 @@ manual keyboard behavior remain unverified. Screenshot inspection is evidence of
 layout/wording, not human comprehension. The original viewer's 700-high layout,
 long-list behavior and independent loan loading/error/missing-evidence discovery
 were not assessed; focused service/GUI missing-bank behavior passed.
+
+## Fresh owner workspace prepared
+
+At the owner's request after implementation, prepared
+`scratch/v2-owner-fresh-20261115-a34ed800/` with `Open-workflow-test.cmd` and
+`START-HERE.txt`. It contains a fresh schema-25 profile with zero Sources,
+SourceObservations, Accounts, CategoryBudgetRates, JournalEntries and
+PendingTransferReviews. No owner statements or old profiles were read/imported;
+the earlier test remains unchanged.
+
+The launcher opens **ParseTrail - DISPOSABLE WORKFLOW TEST** at 1280×800 and
+reopens this same profile on later runs. Its 302-file public runtime snapshot and
+digest manifest pin application/worker code to implementation commit `51479bc`.
+The 23 public pilot declarations use a new ephemeral development key; only public
+trust/signature remain. Profile, catalog, preferences and app-home/null keyring are
+isolated in the new folder. Defaults retain Always previews and opt-in abbreviated
+matching. No production signing, installation or daily-profile activation.
+
+Verified the actual pinned helper with the native Windows Qt plugin and display
+suppressed: ready, empty Documents, Import enabled, all five navigation tasks,
+unchanged profile digest, raw Qt/process exit 0. SQLite integrity and all six empty
+counts passed; inspected the empty-window screenshot. This is startup/preparation
+verification, not owner acceptance. The app was closed after verification for the
+owner to launch. Closing later retains their test work; no automatic reset/deletion.
+
+After handoff, this folder may contain private financial data. Do not enumerate or
+read its profile, logs, originals or captures without new task-specific permission.
+The source/launcher preparation helpers contain no private input and do not authorize
+inspection of subsequent owner imports.
