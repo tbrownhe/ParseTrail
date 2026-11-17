@@ -21,6 +21,7 @@ from parsetrail.core.v2_import_accounts import (
     commit_import_accounts,
 )
 from parsetrail.core.v2_institutions import Institution, catalog_institutions, merge_institutions
+from parsetrail.core.v2_loan_automation import LoanAutomationResult, post_imported_loan_payment
 from parsetrail.core.v2_preferences import V2Preferences, default_preferences_path, load_preferences, save_preferences
 from parsetrail.core.v2_prepared_import import PreparedImportSession
 from parsetrail.core.v2_profile_store import (
@@ -69,6 +70,7 @@ class BatchFileResult:
     status: Literal["imported", "already_imported", "failed", "skipped", "cancelled", "not_attempted"]
     source_sha256: str | None = None
     error_code: str | None = None
+    loan_automation: LoanAutomationResult | None = None
 
 
 @dataclass(frozen=True)
@@ -212,6 +214,11 @@ class V2Workspace:
             raise ValueError("invalid_import_preview_preference")
         save_preferences(self.preferences_path, replace(self.preferences(), import_preview_mode=mode))
 
+    def set_auto_post_loan_payments(self, enabled: bool) -> None:
+        if type(enabled) is not bool:
+            raise ValueError("invalid_loan_automation_preference")
+        save_preferences(self.preferences_path, replace(self.preferences(), auto_post_loan_payments=enabled))
+
     def account_bindings(self, source_sha256: str) -> tuple[AccountBinding, ...]:
         """Resolve automatic suggestions at read time; explicit decisions win."""
         catalog = self.catalog_cache.load_current()
@@ -292,6 +299,62 @@ class V2Workspace:
             return store.register_catalog_institutions(selected)
 
     def import_file(
+        self,
+        source_path: Path,
+        *,
+        cancelled: Callable[[], bool] | None = None,
+        review_format: FormatReview | None = None,
+        review_import: ImportReview | None = None,
+    ) -> SourceImportResult:
+        from parsetrail.core.v2_import_accounts import _profile_identity
+
+        preferences = self.preferences()
+        profile_path = self.profile_path
+        profile_identity = None
+        established_accounts = frozenset()
+        if preferences.auto_post_loan_payments:
+            with V2ProfileStore.open(profile_path, read_only=True) as store:
+                profile_identity = _profile_identity(store)
+                established_accounts = frozenset(account.id for account in store.financial_accounts())
+        result = self._import_file_evidence(
+            source_path, cancelled=cancelled, review_format=review_format, review_import=review_import
+        )
+        if result.status != "imported" or not preferences.auto_post_loan_payments:
+            return result
+        from parsetrail.core.v2_loan_payments import LOAN_PARSERS
+
+        if result.evidence.parser_id not in LOAN_PARSERS:
+            return result
+
+        def authorize():
+            if cancelled is not None and cancelled():
+                raise ProfileFormatError("loan_auto_cancelled")
+            current = self.preferences()
+            if (
+                self.profile_path != profile_path
+                or not current.auto_post_loan_payments
+                or current.allow_assumed_posting_dates != preferences.allow_assumed_posting_dates
+            ):
+                raise ProfileFormatError("loan_auto_changed")
+
+        try:
+            with V2ProfileStore.open(profile_path) as store:
+                automation = post_imported_loan_payment(
+                    store,
+                    result.source_sha256,
+                    preferences=preferences,
+                    established_accounts=established_accounts,
+                    expected_profile=profile_identity,
+                    authorize=authorize,
+                )
+        except Exception as exc:
+            code = str(exc) if isinstance(exc, ProfileFormatError) else "loan_auto_failed"
+            automation = LoanAutomationResult(
+                "cancelled" if code == "loan_auto_cancelled" else "needs_review", reason_code=code
+            )
+        return replace(result, loan_automation=automation)
+
+    def _import_file_evidence(
         self,
         source_path: Path,
         *,
@@ -459,7 +522,11 @@ class V2Workspace:
                 imported = self.import_file(
                     path, cancelled=cancelled, review_format=review_format, review_import=review_import
                 )
-                result = BatchFileResult(path, imported.status, imported.source_sha256)
+                result = BatchFileResult(
+                    path, imported.status, imported.source_sha256, loan_automation=imported.loan_automation
+                )
+                if imported.loan_automation is not None and imported.loan_automation.status == "cancelled":
+                    was_cancelled = True
             except ImportSkipped:
                 result = BatchFileResult(path, "skipped")
             except ImportCancelled:

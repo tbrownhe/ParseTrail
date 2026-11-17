@@ -19,6 +19,7 @@ from parsetrail.core.v2_format_recognition import (
     selected_definition,
     validate_catalog_evidence,
 )
+from parsetrail.core.v2_loan_automation import LoanAutomationResult
 from parsetrail.core.v2_pdf_routing import PDFRoutingError, select_pdf_definition
 from parsetrail.core.v2_profile_store import V2ProfileStore
 from parsetrail.core.v2_source_pipeline import SourcePipelineError, build_source_evidence
@@ -30,6 +31,7 @@ class SourceImportResult:
     status: Literal["imported", "already_imported"]
     source_sha256: str
     evidence: SourceEvidence
+    loan_automation: LoanAutomationResult | None = None
 
 
 @dataclass(frozen=True, slots=True)
