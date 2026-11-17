@@ -117,10 +117,21 @@ class _AmountItem(QTableWidgetItem):
 class V2AccountAnchors(QDialog):
     """Prompts own review; the profile service owns eligibility and transactions."""
 
-    def __init__(self, profile: Path, account_id: str | None = None, parent=None, *, initial_tab: str | None = None):
+    def __init__(
+        self,
+        profile: Path,
+        account_id: str | None = None,
+        parent=None,
+        *,
+        initial_tab: str | None = None,
+        as_of: date | None = None,
+        focus_value_id: int | None = None,
+    ):
         super().__init__(parent)
         install_initial_focus(self)
         self.profile = profile
+        self._as_of = as_of
+        self._focus_value_id = focus_value_id
         self.snapshot = None
         self.setWindowTitle("2.0 account openings, dated values and tracking")
         self.resize(1080, 790)
@@ -142,7 +153,7 @@ class V2AccountAnchors(QDialog):
         self.scope = self._label()
         form.addRow("Reviewed scope / direction", self.scope)
         self.books = self._label()
-        form.addRow("Books through today", self.books)
+        form.addRow("Books through selected date" if as_of is not None else "Books through today", self.books)
         layout.addLayout(form)
         self.tabs = QTabWidget()
         layout.addWidget(self.tabs, 1)
@@ -466,7 +477,7 @@ class V2AccountAnchors(QDialog):
         try:
             if account_id is not None:
                 with V2ProfileStore.open(self.profile, read_only=True) as store:
-                    self.snapshot = store.account_anchor_snapshot(account_id, as_of=date.today())
+                    self.snapshot = store.account_anchor_snapshot(account_id, as_of=self._as_of or date.today())
         except (ProfileFormatError, sqlite3.Error, OSError):
             pass
         if self.snapshot is None:
@@ -490,7 +501,7 @@ class V2AccountAnchors(QDialog):
                 + ("positive amount means asset value." if natural == 1 else "positive amount means liability owed.")
             )
             self.books.setText(
-                f"Through {date.today().isoformat()} inclusive: recorded journal movement {_money(natural * snapshot.recorded_debit_minor)}; "
+                f"Through {(self._as_of or date.today()).isoformat()} inclusive: recorded journal movement {_money(natural * snapshot.recorded_debit_minor)}; "
                 f"opening-based journal position {_money(natural * snapshot.position_debit_minor) if snapshot.position_debit_minor is not None else 'unknown'}. "
                 "Dated observations and closure do not replace these books."
             )
@@ -585,12 +596,14 @@ class V2AccountAnchors(QDialog):
         elif current is not None and snapshot.value_status == "known":
             origins = ", ".join(sorted({row.origin for row in snapshot.current_dated_values}))
             self.value_state.setText(
-                f"Known reviewed nonposting value through {date.today().isoformat()}: {_money(current.amount_minor * self._natural())} "
+                f"Known reviewed nonposting value through {(self._as_of or date.today()).isoformat()}: {_money(current.amount_minor * self._natural())} "
                 f"at {current.value_date.isoformat()} ({origins or current.origin}; {current.tracking_scope.replace('_', ' ')}). "
                 "This does not replace the opening or journal position."
             )
         else:
-            self.value_state.setText(f"No current dated value through {date.today().isoformat()}; unknown is not zero.")
+            self.value_state.setText(
+                f"No current dated value through {(self._as_of or date.today()).isoformat()}; unknown is not zero."
+            )
         self._put(
             self.value_history,
             [
@@ -615,6 +628,13 @@ class V2AccountAnchors(QDialog):
         self.value_history.setSortingEnabled(True)
         if self.value_history.rowCount():
             self.value_history.selectRow(0)
+            if self._focus_value_id is not None:
+                for index in range(self.value_history.rowCount()):
+                    item = self.value_history.item(index, 0)
+                    if item.text() == str(self._focus_value_id):
+                        self.value_history.selectRow(index)
+                        self.value_history.scrollToItem(item)
+                        break
         for row in self.snapshot.dated_values:
             if row.state == "active":
                 self.value_target.addItem(

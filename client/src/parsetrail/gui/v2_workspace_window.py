@@ -40,6 +40,7 @@ from parsetrail.core.v2_profile_store import (
     V2ProfileStore,
 )
 from parsetrail.core.v2_source_import import ImportCancelled, SourceImportResult
+from parsetrail.core.v2_statement_summary_review import SUMMARY_VALUE_PARSERS
 from parsetrail.core.v2_workspace import ImportSkipped, V2Workspace, folder_source_files
 from parsetrail.gui.v2_account_binding_review import V2AccountBindingReview
 from parsetrail.gui.v2_batch_account_assignment import V2BatchAccountAssignment
@@ -704,6 +705,12 @@ class V2WorkspaceWindow(QMainWindow):
     def _update_report_context(self, *_args):
         budget = self._reports_view is not None and self._reports_view.tabs.currentIndex() == 2
         self.reports_heading.setText("Monthly budget" if budget else "Reports")
+        if self._reports_view is not None and self._reports_view.tabs.currentIndex() == 4:
+            self.report_context.setText(
+                "Account values and journal positions · through "
+                + self._reports_view.as_of.date().toString("yyyy-MM-dd")
+            )
+            return
         context = "All profile accounts · Reviewed entries only"
         if self._document_report_context is not None:
             title, start, end = self._document_report_context
@@ -726,7 +733,10 @@ class V2WorkspaceWindow(QMainWindow):
     @staticmethod
     def _needs_attention(summary):
         return bool(
-            summary.unassigned_source_accounts or summary.unassigned_activity_rows or summary.pending_activity_rows
+            summary.unassigned_source_accounts
+            or summary.unassigned_activity_rows
+            or summary.pending_activity_rows
+            or summary.pending_summary_values
         )
 
     def _sync_review_selector(self):
@@ -791,6 +801,9 @@ class V2WorkspaceWindow(QMainWindow):
                 return
 
     def _initial_review_posted(self, source_id):
+        self._initial_review_completed(source_id)
+
+    def _initial_review_completed(self, source_id):
         # This signal is delivered after a successful initial write, separately
         # from ordinary refresh/correction notifications and disposable modals.
         if (
@@ -830,7 +843,11 @@ class V2WorkspaceWindow(QMainWindow):
         self.previous_document_button.hide()
         self.review_completion.setText(
             f"Initial review complete: {document_title(summary)} · {document_period(summary)}. "
-            "Resolve any unmatched counterparts in Transfers."
+            + (
+                "Statement value recorded for Accounts and Reports."
+                if summary.parser_id in SUMMARY_VALUE_PARSERS
+                else "Resolve any unmatched counterparts in Transfers."
+            )
         )
         summaries = list(self._document_summaries.values())
         current = next(i for i, item in enumerate(summaries) if item.source_sha256 == source_id)
@@ -856,6 +873,15 @@ class V2WorkspaceWindow(QMainWindow):
             self.review_completion.hide()
 
     def _show_document_spending(self):
+        summary = self._document_summaries.get(self._selected_source())
+        if summary is not None and summary.parser_id in SUMMARY_VALUE_PARSERS:
+            if summary.end is None or len(summary.associated_account_ids) != 1:
+                return
+            reports = self._ensure_report_view(self.REPORTS)
+            reports.show_account_value(summary.associated_account_ids[0], summary.end)
+            self.navigation.setCurrentRow(self.REPORTS)
+            self._update_report_context()
+            return
         reports = self._ensure_report_view(self.REPORTS)
         if not self._seed_document_results(reports):
             return
@@ -952,6 +978,7 @@ class V2WorkspaceWindow(QMainWindow):
                     summary
                     for summary in related
                     if summary.pending_activity_rows
+                    or summary.pending_summary_values
                     or summary.unassigned_activity_rows
                     or summary.unassigned_source_accounts
                 ),
@@ -965,7 +992,7 @@ class V2WorkspaceWindow(QMainWindow):
             )
             if selected is None:
                 self.status.setText(
-                    "No unallocated activity or account assignments remain. Source coverage and checks are separate."
+                    "No activity, statement values or account assignments remain to review. Source coverage and checks are separate."
                 )
                 self.navigation.setCurrentRow(self.DOCUMENTS)
                 return
@@ -1038,6 +1065,11 @@ class V2WorkspaceWindow(QMainWindow):
             from parsetrail.gui.v2_loan_document_review import V2LoanDocumentReview
 
             view = V2LoanDocumentReview(self.workspace, source_id, self)
+        elif summary.parser_id in SUMMARY_VALUE_PARSERS:
+            from parsetrail.gui.v2_statement_summary_review import V2StatementSummaryReview
+
+            view = V2StatementSummaryReview(self.workspace, source_id, self)
+            view.account_assignment_requested.connect(self._review_source_account)
         elif summary.parser_id in CARD_STATEMENT_PARSERS:
             view = V2CardPurchaseReview(self.workspace, source_id, self, embedded=True)
         else:
@@ -1057,6 +1089,9 @@ class V2WorkspaceWindow(QMainWindow):
         initial_posted = getattr(view, "initial_posted", None)
         if initial_posted is not None:
             initial_posted.connect(self._initial_review_posted, Qt.QueuedConnection)
+        initial_completed = getattr(view, "initial_review_completed", None)
+        if initial_completed is not None:
+            initial_completed.connect(self._initial_review_completed, Qt.QueuedConnection)
         transfers_requested = getattr(view, "transfers_requested", None)
         if transfers_requested is not None:
             transfers_requested.connect(self._open_transfers, Qt.QueuedConnection)
@@ -1428,8 +1463,19 @@ class V2WorkspaceWindow(QMainWindow):
         )
         is_card = summary is not None and summary.parser_id in CARD_STATEMENT_PARSERS
         is_register = summary is not None and summary.parser_id == REGISTER_PARSER
-        self.cash_review_button.setEnabled(available and not is_card and not is_register)
-        self.cash_review_button.setVisible(not is_card and not is_register)
+        is_summary = summary is not None and summary.parser_id in SUMMARY_VALUE_PARSERS
+        self.document_spending_button.setText("View account value" if is_summary else "View spending")
+        self.document_spending_button.setToolTip(
+            "View this account's recorded value at the statement end date."
+            if is_summary
+            else "View reviewed spending for this document's dates."
+        )
+        if is_summary:
+            self.document_spending_button.setEnabled(
+                available and summary.end is not None and len(summary.associated_account_ids) == 1
+            )
+        self.cash_review_button.setEnabled(available and not is_card and not is_register and not is_summary)
+        self.cash_review_button.setVisible(not is_card and not is_register and not is_summary)
         self.card_review_button.setEnabled(available and is_card)
         self.card_review_button.setVisible(is_card)
         self.register_review_action.setEnabled(available and is_register)
@@ -1476,7 +1522,16 @@ class V2WorkspaceWindow(QMainWindow):
                 summary.assigned_row_count and (summary.unassigned_source_accounts or summary.unassigned_activity_rows)
             )
             self.review_context.setText(
-                f"{summary.pending_activity_rows} imported rows not posted · may include repeats or pending transfers"
+                (
+                    "Statement value needs review"
+                    if summary.pending_summary_values == 1
+                    else f"{summary.pending_summary_values} statement values need review"
+                )
+                + " · summary totals are not transactions"
+                if summary.pending_summary_values
+                else "Statement value recorded · summary review complete"
+                if is_summary and summary.reviewed_summary_values
+                else f"{summary.pending_activity_rows} imported rows not posted · may include repeats or pending transfers"
                 if summary.pending_activity_rows
                 else "No pending imported rows · source coverage still needs checking"
             )
@@ -1485,6 +1540,10 @@ class V2WorkspaceWindow(QMainWindow):
                 if not summary.row_count
                 else "Confirm the account before reviewing activity. Account assignment adds no spending."
                 if summary.unassigned_source_accounts or summary.unassigned_activity_rows
+                else "Review the statement's values below, then record its closing value."
+                if summary.pending_summary_values
+                else "Value recorded. Inspect its source or saved value history below."
+                if is_summary and summary.reviewed_summary_values
                 else "Choose rows below, then add your review choices."
                 if summary.pending_activity_rows
                 else "Review saved choices or open Budget for the monthly result."
@@ -1507,6 +1566,10 @@ class V2WorkspaceWindow(QMainWindow):
             self.review_document_button.setText(
                 "Confirm account"
                 if summary.unassigned_activity_rows or summary.unassigned_source_accounts
+                else "Review statement value"
+                if summary.pending_summary_values
+                else "View statement value"
+                if is_summary
                 else "Review activity"
                 if summary.pending_activity_rows
                 else "Review document"
@@ -1516,6 +1579,10 @@ class V2WorkspaceWindow(QMainWindow):
                 if partial_assignment
                 else "Confirm the document account first. Suggestions need your confirmation."
                 if summary.unassigned_activity_rows or summary.unassigned_source_accounts
+                else "Record the printed closing value. Contributions and market changes remain summary evidence."
+                if summary.pending_summary_values
+                else "The statement value is recorded. Summary totals do not create individual transactions or budget effects."
+                if is_summary and summary.reviewed_summary_values
                 else "Review supported activity or check repeated evidence. Unallocated counts can include supporting copies; "
                 "do not post them twice. Transfers, repayments and loan splits have separate review."
                 if summary.pending_activity_rows
@@ -1584,6 +1651,9 @@ class V2WorkspaceWindow(QMainWindow):
             self._review_source_account()
         elif summary.unassigned_activity_rows:
             self._review_account()
+        elif summary.parser_id in SUMMARY_VALUE_PARSERS:
+            self._ensure_review_view()
+            self._review_widget.action_button.setFocus()
         elif summary.pending_activity_rows:
             if summary.parser_id == REGISTER_PARSER:
                 self._review_register_activity()

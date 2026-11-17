@@ -449,6 +449,7 @@ class V2ReviewedReportsDialog(QDialog):
         self._loaded: dict[int, tuple] = {}
         self._errors: dict[int, str] = {}
         self._selected_account_id: str | None = None
+        self._value_focus = False
         self._selected_budget_category_id: str | None = None
         self._read_timer = QTimer(self)
         self._read_timer.setSingleShot(True)
@@ -605,6 +606,22 @@ class V2ReviewedReportsDialog(QDialog):
     def set_budget_month(self, month: date) -> None:
         """Seed a month only for an explicit document/result handoff."""
         self.budget_month.setDate(QDate(month.year, month.month, 1))
+
+    def show_account_value(self, account_id: str, as_of: date) -> None:
+        """Open the selected account at an explicit statement date, preserving budget dates."""
+        self.as_of.blockSignals(True)
+        try:
+            self.as_of.setDate(QDate(as_of.year, as_of.month, as_of.day))
+        finally:
+            self.as_of.blockSignals(False)
+        self._invalidate((4,))
+        self._selected_account_id = account_id
+        self._value_focus = True
+        header = self.positions_table.horizontalHeader()
+        header.moveSection(header.visualIndex(12), 1)
+        self._toggle_details(self.show_details.isChecked())
+        self.tabs.setCurrentIndex(4)
+        self._queue_selected_read(0)
 
     def _update_report_menu(self):
         self.export_action.setEnabled(self.export_button.isEnabled())
@@ -780,8 +797,9 @@ class V2ReviewedReportsDialog(QDialog):
     def _toggle_details(self, checked: bool) -> None:
         self.scope.setVisible(checked)
         self.position_details.setVisible(checked)
+        visible_columns = (0, 3, 4, 12) if self._value_focus else (0, 1, 3, 4, 5, 10)
         for column in range(self.positions_model.columnCount()):
-            self.positions_table.setColumnHidden(column, not checked and column not in (0, 1, 3, 4, 5, 10))
+            self.positions_table.setColumnHidden(column, not checked and column not in visible_columns)
         self.positions_table.horizontalHeader().setSectionResizeMode(
             0, QHeaderView.Interactive if checked else QHeaderView.Stretch
         )
@@ -1066,7 +1084,10 @@ class V2ReviewedReportsDialog(QDialog):
         from parsetrail.gui.v2_account_anchors import V2AccountAnchors
 
         options = {"initial_tab": initial_tab} if initial_tab is not None else {}
-        V2AccountAnchors(self.profile, self.positions_model.rows[index.row()].account_id, self, **options).exec()
+        options["as_of"] = self.as_of.date().toPython()
+        exec_disposable(
+            V2AccountAnchors(self.profile, self.positions_model.rows[index.row()].account_id, self, **options)
+        )
         self._refresh_all_reports()
 
     def _clear_unavailable_reports(self, exc: Exception) -> None:

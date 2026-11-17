@@ -144,6 +144,14 @@ def document_status(summary: DocumentSummary) -> str:
         return f"{summary.unassigned_source_accounts} document account(s) need confirmation"
     if summary.unassigned_activity_rows:
         return f"{summary.unassigned_activity_rows} activity row(s) need an account"
+    if summary.pending_summary_values:
+        return (
+            "Statement value needs review"
+            if summary.pending_summary_values == 1
+            else f"{summary.pending_summary_values} statement values need review"
+        )
+    if summary.reviewed_summary_values:
+        return "Statement value recorded · summary review complete"
     if summary.pending_activity_rows:
         return f"{summary.pending_activity_rows} unallocated source row(s) · may include repeats"
     return "No activity pending · source checks are separate"
