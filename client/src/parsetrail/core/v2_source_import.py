@@ -23,6 +23,7 @@ from parsetrail.core.v2_loan_automation import LoanAutomationResult
 from parsetrail.core.v2_pdf_routing import PDFRoutingError, select_pdf_definition
 from parsetrail.core.v2_profile_store import V2ProfileStore
 from parsetrail.core.v2_source_pipeline import SourcePipelineError, build_source_evidence
+from parsetrail.core.v2_statement_value_automation import StatementValueAutomationResult
 from parsetrail.core.v2_worker_limits import WorkerError
 
 
@@ -32,6 +33,7 @@ class SourceImportResult:
     source_sha256: str
     evidence: SourceEvidence
     loan_automation: LoanAutomationResult | None = None
+    statement_value_automation: StatementValueAutomationResult | None = None
 
 
 @dataclass(frozen=True, slots=True)

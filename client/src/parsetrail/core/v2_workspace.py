@@ -39,6 +39,11 @@ from parsetrail.core.v2_source_import import (
     import_prepared_catalog_source,
 )
 from parsetrail.core.v2_source_pipeline import SourcePipelineError
+from parsetrail.core.v2_statement_summary_review import SUMMARY_VALUE_PARSERS
+from parsetrail.core.v2_statement_value_automation import (
+    StatementValueAutomationResult,
+    record_imported_statement_value,
+)
 
 
 class WorkspaceError(ValueError):
@@ -71,6 +76,7 @@ class BatchFileResult:
     source_sha256: str | None = None
     error_code: str | None = None
     loan_automation: LoanAutomationResult | None = None
+    statement_value_automation: StatementValueAutomationResult | None = None
 
 
 @dataclass(frozen=True)
@@ -219,6 +225,11 @@ class V2Workspace:
             raise ValueError("invalid_loan_automation_preference")
         save_preferences(self.preferences_path, replace(self.preferences(), auto_post_loan_payments=enabled))
 
+    def set_auto_record_statement_values(self, enabled: bool) -> None:
+        if type(enabled) is not bool:
+            raise ValueError("invalid_statement_value_automation_preference")
+        save_preferences(self.preferences_path, replace(self.preferences(), auto_record_statement_values=enabled))
+
     def account_bindings(self, source_sha256: str) -> tuple[AccountBinding, ...]:
         """Resolve automatic suggestions at read time; explicit decisions win."""
         catalog = self.catalog_cache.load_current()
@@ -312,47 +323,72 @@ class V2Workspace:
         profile_path = self.profile_path
         profile_identity = None
         established_accounts = frozenset()
-        if preferences.auto_post_loan_payments:
+        if preferences.auto_post_loan_payments or preferences.auto_record_statement_values:
             with V2ProfileStore.open(profile_path, read_only=True) as store:
                 profile_identity = _profile_identity(store)
-                established_accounts = frozenset(account.id for account in store.financial_accounts())
+                if preferences.auto_post_loan_payments:
+                    established_accounts = frozenset(account.id for account in store.financial_accounts())
         result = self._import_file_evidence(
             source_path, cancelled=cancelled, review_format=review_format, review_import=review_import
         )
-        if result.status != "imported" or not preferences.auto_post_loan_payments:
+        if result.status != "imported":
             return result
         from parsetrail.core.v2_loan_payments import LOAN_PARSERS
 
-        if result.evidence.parser_id not in LOAN_PARSERS:
-            return result
+        if preferences.auto_post_loan_payments and result.evidence.parser_id in LOAN_PARSERS:
 
-        def authorize():
-            if cancelled is not None and cancelled():
-                raise ProfileFormatError("loan_auto_cancelled")
-            current = self.preferences()
-            if (
-                self.profile_path != profile_path
-                or not current.auto_post_loan_payments
-                or current.allow_assumed_posting_dates != preferences.allow_assumed_posting_dates
-            ):
-                raise ProfileFormatError("loan_auto_changed")
+            def authorize_loan():
+                if cancelled is not None and cancelled():
+                    raise ProfileFormatError("loan_auto_cancelled")
+                current = self.preferences()
+                if (
+                    self.profile_path != profile_path
+                    or not current.auto_post_loan_payments
+                    or current.allow_assumed_posting_dates != preferences.allow_assumed_posting_dates
+                ):
+                    raise ProfileFormatError("loan_auto_changed")
 
-        try:
-            with V2ProfileStore.open(profile_path) as store:
-                automation = post_imported_loan_payment(
-                    store,
-                    result.source_sha256,
-                    preferences=preferences,
-                    established_accounts=established_accounts,
-                    expected_profile=profile_identity,
-                    authorize=authorize,
+            try:
+                with V2ProfileStore.open(profile_path) as store:
+                    automation = post_imported_loan_payment(
+                        store,
+                        result.source_sha256,
+                        preferences=preferences,
+                        established_accounts=established_accounts,
+                        expected_profile=profile_identity,
+                        authorize=authorize_loan,
+                    )
+            except Exception as exc:
+                code = str(exc) if isinstance(exc, ProfileFormatError) else "loan_auto_failed"
+                automation = LoanAutomationResult(
+                    "cancelled" if code == "loan_auto_cancelled" else "needs_review", reason_code=code
                 )
-        except Exception as exc:
-            code = str(exc) if isinstance(exc, ProfileFormatError) else "loan_auto_failed"
-            automation = LoanAutomationResult(
-                "cancelled" if code == "loan_auto_cancelled" else "needs_review", reason_code=code
-            )
-        return replace(result, loan_automation=automation)
+            result = replace(result, loan_automation=automation)
+
+        if preferences.auto_record_statement_values and result.evidence.parser_id in SUMMARY_VALUE_PARSERS:
+
+            def authorize_statement_value():
+                if cancelled is not None and cancelled():
+                    raise ProfileFormatError("statement_value_auto_cancelled")
+                if self.profile_path != profile_path or not self.preferences().auto_record_statement_values:
+                    raise ProfileFormatError("statement_value_auto_changed")
+
+            try:
+                with V2ProfileStore.open(profile_path) as store:
+                    value_automation = record_imported_statement_value(
+                        store,
+                        result.source_sha256,
+                        preferences=preferences,
+                        expected_profile=profile_identity,
+                        authorize=authorize_statement_value,
+                    )
+            except Exception as exc:
+                code = str(exc) if isinstance(exc, ProfileFormatError) else "statement_value_auto_failed"
+                value_automation = StatementValueAutomationResult(
+                    "cancelled" if code == "statement_value_auto_cancelled" else "needs_review", reason_code=code
+                )
+            result = replace(result, statement_value_automation=value_automation)
+        return result
 
     def _import_file_evidence(
         self,
@@ -523,9 +559,16 @@ class V2Workspace:
                     path, cancelled=cancelled, review_format=review_format, review_import=review_import
                 )
                 result = BatchFileResult(
-                    path, imported.status, imported.source_sha256, loan_automation=imported.loan_automation
+                    path,
+                    imported.status,
+                    imported.source_sha256,
+                    loan_automation=imported.loan_automation,
+                    statement_value_automation=imported.statement_value_automation,
                 )
-                if imported.loan_automation is not None and imported.loan_automation.status == "cancelled":
+                if any(
+                    outcome is not None and outcome.status == "cancelled"
+                    for outcome in (imported.loan_automation, imported.statement_value_automation)
+                ):
                     was_cancelled = True
             except ImportSkipped:
                 result = BatchFileResult(path, "skipped")

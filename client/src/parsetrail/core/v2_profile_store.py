@@ -12,6 +12,7 @@ import os
 import re
 import sqlite3
 import tempfile
+from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import asdict, dataclass, replace
 from datetime import date
@@ -11696,6 +11697,8 @@ class V2ProfileStore:
         corrects_value_id: int | None = None,
         allow_conflict: bool = False,
         expected_profile_identity: str | None = None,
+        before_write: Callable[[], None] | None = None,
+        before_commit: Callable[[], None] | None = None,
     ) -> ReviewedDatedValue:
         self._anchor_write_start(reason)
         try:
@@ -11710,6 +11713,8 @@ class V2ProfileStore:
                         raise ProfileFormatError("statement_summary_profile_changed")
 
             check_profile()
+            if before_write is not None:
+                before_write()
             if (
                 type(candidate_id) is not str
                 or type(expected_candidate_sha256) is not str
@@ -11758,6 +11763,8 @@ class V2ProfileStore:
                     and old_version == expected_candidate_sha256
                     and prior_basis == expected_basis_sha256
                 ):
+                    if before_commit is not None:
+                        before_commit()
                     check_profile()
                     self.connection.execute("COMMIT")
                     return value
@@ -11780,6 +11787,8 @@ class V2ProfileStore:
                 allow_conflict=allow_conflict,
                 source_proof=candidate.proof,
             )
+            if before_commit is not None:
+                before_commit()
             check_profile()
             self.connection.execute("COMMIT")
             return result
