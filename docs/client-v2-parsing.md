@@ -197,12 +197,28 @@ blanket balance-reconciliation blocker.
 The import convenience decision uses two warning classes. Estimated dates and
 generic unverified capture are Informational; unverified monetary statement balances,
 actual mismatch, unknown monetary fields and unexplained amount-bearing content
-Require review. Check equations use the declared account/component scope, including
+normally Require review. The audited Capital loan-history engine v2 has one narrow
+exception: an absent opening principal is Informational when a single supported
+payment has observed complete principal/interest/gross arithmetic and a printed
+closing principal. The opening remains unknown and both complete-capture and
+independent-balance verification remain false. Unexplained exterior monetary/date
+content still Requires review; recognized labeled summary, due-date and coupon
+fields are retained separately from activity. Older unaudited evidence does not
+qualify for the exception. Check equations use the declared account/component scope, including
 principal separately from gross loan payments. Unavailable endpoints are described
 as unverified rather than failed arithmetic, and activity exports do not invent
 statement balance checks. Warnings consider all rows, preserve bounded locations
 and occurrence counts, and leave original complete dispositions unchanged. Requiring
 preview does not create a source-repair override or modify posting-date permission.
+
+After explicit import confirmation, identical bounded PDF decoding may be reused
+inside that synchronous operation. Exact source bytes, worker mode and resource
+limits identify validated immutable pages/metadata. The operation clears retained
+references on success, failure, retry and cancellation; there is no reuse across
+imports or from the earlier preview. Routing/candidate uniqueness, source/catalog
+rereads, account assignments, profile identity and transactional checks still run.
+Cancellation is checked before lookup and before returning either a reused or
+newly decoded result. Worker limits and source evidence validation are unchanged.
 
 Account for candidate rows in declared activity sections as parsed, explicitly
 ignored with a reason, or unresolved. Preserve unexpected dated/amount rows,

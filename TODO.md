@@ -6,7 +6,13 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None. [Flexible financing destinations and tangible assets](docs/work/2026-11-16-flexible-origination-assets.md)
+None. [Loan review cues and import confirmation timing](docs/work/2026-11-16-loan-review-cues-import-timing.md)
+is implemented and agent-verified: blue/conditional form cues, destination-menu
+creation, audited Capital missing-opening qualification and measured import
+decoding reuse. Fresh schema-27 test prepared; populated candidates stay pinned.
+Owner timing/control verification and platform/release gates remain separate.
+
+[Flexible financing destinations and tangible assets](docs/work/2026-11-16-flexible-origination-assets.md)
 is implemented and agent-verified: independent financing/valuation, general asset
 destinations, signed liability transfers, precise Citi warnings, seeded Loan
 interest and faster review flow. Schema 27 fresh candidate prepared; existing
@@ -17,7 +23,7 @@ is implemented and agent-verified: separate Transfers workspace, posted unresolv
 payments, finite vehicle acquisition/valuation, warning severity, zero reviews,
 metadata locking and staging readiness. Independent integrity, design and fresh
 synthetic task checks passed. Human/platform/release gates remain separate.
-Current schema 26 needs a fresh profile; earlier private candidates stay pinned.
+That schema-26 packet uses its own fresh profile; earlier private candidates stay pinned.
 
 [Import convenience and pending payment review](docs/work/2026-11-15-import-payment-refinement.md)
 is implemented and agent-verified in Windows development: original access, guarded

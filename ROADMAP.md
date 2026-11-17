@@ -61,6 +61,12 @@ liability transfer, precise legacy Citi source roles, seeded Loan interest and
 completion-driven next-statement review. Existing private pilots stay pinned;
 schema 27 requires a fresh profile. Human/platform/release gates remain separate.
 
+[Loan review cues and import confirmation timing](docs/work/2026-11-16-loan-review-cues-import-timing.md)
+adds consistent conditional form cues, destination-selector creation, a narrowly
+qualified Capital import-warning policy with exterior source auditing, and measured
+operation-scoped PDF decoding reuse. Financial verification/unknowns and owner
+statement performance remain separate from synthetic timing and native UI checks.
+
 V2-5 distinguishes newly computed live reconciliation checks from explicitly
 saved decisions and their current/stale input versions. The
 [durable-history packet](docs/work/2026-10-25-v2-reconciliation-history.md) completed
