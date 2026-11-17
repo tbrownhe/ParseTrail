@@ -61,6 +61,7 @@ def import_failure_guidance(code: str) -> str:
     explanations = {
         "catalog_no_match": "This document does not match an installed statement format. Check that you selected a supported original CSV or PDF, or install an updated signed statement-format package and try again.",
         "catalog_ambiguous_match": "More than one installed format matches this document. ParseTrail cannot safely choose one. Install an updated signed statement-format package before retrying.",
+        "import_preparation_size_limit": "The document produced too much evidence to prepare safely. Nothing new was imported. Use a smaller supported export or an updated signed format package that narrows the match.",
         "import_account_routing_conflict": "This file matches conflicting supported formats. No new source, account or assignment was saved. Use a supported original export or install an updated signed statement-format package before retrying.",
         "verified_catalog_missing": "Install a signed statement-format package from Documents before importing, then try again.",
         "source_unavailable": "The selected file could not be read. Check that it still exists and is accessible, then select it again.",

@@ -63,7 +63,7 @@ def workspace_with_choices(tmp_path, *, account_routing=False):
     return workspace, path, activate
 
 
-def test_explicit_validated_choice_reparses_without_preview_writes_and_retry_needs_no_choice(tmp_path):
+def test_explicit_validated_choice_saves_prepared_evidence_and_retry_needs_no_choice(tmp_path):
     workspace, path, _ = workspace_with_choices(tmp_path)
     before = workspace.profile_path.read_bytes()
     seen = []

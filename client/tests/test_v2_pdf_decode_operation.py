@@ -93,7 +93,7 @@ def test_nested_operations_and_threads_are_isolated(worker):
     assert len(worker) == 3
 
 
-def test_confirmed_capital_auto_import_rechecks_share_one_bounded_child(tmp_path, monkeypatch):
+def test_capital_import_prepares_once_then_commits_and_reads_without_decoding(tmp_path, monkeypatch):
     import json
 
     # Build an isolated catalog from the public Capital Auto declaration.
@@ -101,6 +101,7 @@ def test_confirmed_capital_auto_import_rechecks_share_one_bounded_child(tmp_path
 
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from parsetrail.core import v2_source_pipeline as pipeline
     from parsetrail.core.v2_data_catalog import key_id_for_public_key
     from parsetrail.core.v2_import_accounts import ImportAccountChoice, prepare_import_accounts
     from parsetrail.core.v2_profile_store import FinancialAccount, V2ProfileStore
@@ -138,10 +139,24 @@ def test_confirmed_capital_auto_import_rechecks_share_one_bounded_child(tmp_path
 
     monkeypatch.setattr(module, "run_worker", run)
     seen = []
+    parsed = []
+    parse = pipeline.parse_loan_history
+
+    def parse_once(*args, **kwargs):
+        parsed.append(True)
+        return parse(*args, **kwargs)
+
+    monkeypatch.setattr(pipeline, "parse_loan_history", parse_once)
+
+    def no_more_parsing(*_args, **_kwargs):
+        pytest.fail("Source parsing or PDF decoding after review")
 
     def review(_path, proposed):
         seen.append(proposed)
+        assert calls == ["pdf_text_simple"] and len(parsed) == 1
         calls.clear()  # Start at the confirmed review boundary.
+        monkeypatch.setattr(pipeline, "parse_loan_history", no_more_parsing)
+        monkeypatch.setattr(module, "run_worker", no_more_parsing)
         account = FinancialAccount(
             "loan",
             "Synthetic Auto Loan",
@@ -158,9 +173,12 @@ def test_confirmed_capital_auto_import_rechecks_share_one_bounded_child(tmp_path
         )
 
     result = workspace.import_file(source, review_import=review)
-    assert len(seen) == 1 and calls == ["pdf_text_simple"]
+    assert len(seen) == 1 and calls == [] and len(parsed) == 1
     assert module._operation_decodes.get() is None
     with V2ProfileStore.open(workspace.profile_path, read_only=True) as store:
         assert store.load_import(result.source_sha256).source == case.source
         assert store.source_account_bindings(result.source_sha256)[0].ledger_account_id == "loan"
         assert store.connection.execute("SELECT count(*) FROM JournalEntries").fetchone() == (0,)
+        assert store.loan_review_snapshot(preferences=workspace.preferences()).components
+        assert store.document_summaries()
+    assert workspace.import_file(source, review_import=no_more_parsing).status == "already_imported"
