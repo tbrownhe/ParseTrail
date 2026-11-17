@@ -462,7 +462,12 @@ Unknown source descriptions remain unknown; a separate code-owned accounting lab
 can identify a reviewed entry without claiming printed merchant/interest text.
 Printed openings and reconciliation admit that same exact component rule. Other
 HSA/retirement summary rows remain nonposting; existing account-total opening rules
-remain available. Scope metadata survives correction, withdrawal and history.
+remain available. The finite Fidelity 401(k) summary family has a dedicated statement
+value Review rather than cash categorization. Its printed beginning value, component
+totals and ending value remain statement-period facts. Explicit confirmation records
+the exact source closing through the existing dated-value service, without creating
+journals, contribution counterparts, categories, transfers or budget effects.
+Scope metadata survives correction, withdrawal and history.
 
 The finite `pdf_yamahafin_202306` register has its own explicit review API and
 `review:register` namespace, restricted to component-free account-total liability
@@ -716,6 +721,22 @@ separate; later review changes are flagged without rewriting captured facts.
 Capture, arithmetic and complete activity are independent qualifications for a
 nonposting point. Values, proofs, exact locations and withdrawals export as metadata
 separate from active journal money. See the [source-value packet](work/2026-10-25-v2-source-values.md).
+
+Fidelity statement-value completion is distinct from activity allocation. Documents
+track pending and reviewed statement-value sections separately; zero pending activity
+does not mean a summary value has been reviewed. Completion requires an active exact
+source-backed closing under the current account/section binding. Equal manual or
+other-source values do not complete that source; withdrawal, relevant correction or
+conflict reopens/qualifies its review. The embedded Review shows the recorded value
+and neutral history access. Unknown openings, absent individual transaction dates,
+unverified capture and source-check qualifications remain explicit. The separate
+Accounts value-management workflow retains correction, conflict and withdrawal
+history; a generic refresh never silently records or restores a value. Summary
+history/conflict handoffs retain the statement-end as-of date and focused existing
+value, even when later points exist. View account value opens Reports at that
+account/date and shows the latest reviewed dated value beside the separate journal
+position; spending dates and budget month are preserved. Required reference/reason
+fields are initially populated, with explicit missing-field cues if edited blank.
 
 Every journal payload must contain exact integer, nonzero, balanced posting
 lines within supported integer bounds. Common reads additionally validate

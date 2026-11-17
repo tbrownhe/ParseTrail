@@ -6,7 +6,14 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None. [Opt-in loan payment posting and completion cues](docs/work/2026-11-17-loan-payment-automation.md)
+None. [Fidelity retirement statement value review](docs/work/2026-11-17-retirement-summary-review.md)
+is implemented and agent-verified: dedicated summary Review, exact source closing
+value, distinct pending/completion, dated account-value reports and no invented
+transaction, transfer or budget effect. Native/design, core and independent integrity
+checks pass; three unrelated baseline report assertions are recorded separately.
+Fresh schema-27 test prepared; owner/platform/release acceptance remains separate.
+
+[Opt-in loan payment posting and completion cues](docs/work/2026-11-17-loan-payment-automation.md)
 is implemented and agent-verified: default-off future-import authorization for
 complete audited Capital payments, separate unresolved Transfers, sole-row manual
 selection and neutral completed-action cues. Financial integrity, native UI/design

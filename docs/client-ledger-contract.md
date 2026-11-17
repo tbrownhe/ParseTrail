@@ -20,7 +20,10 @@ settlements with explicit sending/receiving fees, printed
 and reviewed manual openings, separate manual/source closing values and closure metadata.
 The finite HealthEquity cash family also supports explicitly reviewed cash purposes,
 owned movements, printed openings and reconciliation for asset cash-component
-tracking. Summary-only HSA/retirement rows remain nonposting. Blank descriptions
+tracking. Summary-only HSA/retirement rows remain nonposting. Fidelity 401(k)
+statement Review records the observed closing as a separate dated value; contribution
+and market-change totals remain explanatory evidence, with no invented cash movement,
+journal income or budget effect. Blank descriptions
 stay unknown in evidence; a generic reviewed-entry label does not assert interest
 or merchant text. Component reconciliation never claims the whole portfolio.
 Cash-category, card-category/date and source/manual opening corrections

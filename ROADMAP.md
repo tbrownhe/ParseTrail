@@ -80,6 +80,13 @@ convenience and neutral completed-action cues. Existing profiles and evidence re
 unchanged until an authorized new import; financial/native verification and owner
 acceptance are recorded separately in the work record.
 
+[Fidelity retirement statement value review](docs/work/2026-11-17-retirement-summary-review.md)
+connects the admitted source closing-value service to a dedicated summary Review
+under V2-3/4/5/UX. Contributions and market changes remain period-summary evidence;
+recording the source value creates no journal, transfer or budget effect. Separate
+summary pending/completion status and source-value recovery close the cash-review
+dead end without extending securities, payroll or per-contribution accounting.
+
 V2-5 distinguishes newly computed live reconciliation checks from explicitly
 saved decisions and their current/stale input versions. The
 [durable-history packet](docs/work/2026-10-25-v2-reconciliation-history.md) completed
