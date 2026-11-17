@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 
 from parsetrail.core.v2_pdf_text_worker import (
@@ -27,6 +29,26 @@ class DecodedPDFText:
     metadata: tuple[tuple[str, str], ...]
 
 
+_operation_decodes: ContextVar[dict | None] = ContextVar("pdf_operation_decodes", default=None)
+
+
+@contextmanager
+def pdf_decode_operation():
+    """Reuse immutable bounded results only within one synchronous operation.
+
+    Each operation has its own context, including nested operations. Exact
+    source bytes, worker mode and resource limits identify a result. Clearing
+    on exit releases source/text references even if a context is retained.
+    """
+    decodes = {}
+    token = _operation_decodes.set(decodes)
+    try:
+        yield
+    finally:
+        decodes.clear()
+        _operation_decodes.reset(token)
+
+
 def _decode_pdf(
     source: bytes,
     module: WorkerModule,
@@ -35,6 +57,15 @@ def _decode_pdf(
 ) -> DecodedPDFText:
     if not isinstance(source, bytes) or not source or len(source) > MAX_SOURCE_BYTES:
         raise WorkerError("source_size")
+    if cancelled is not None and cancelled():
+        raise WorkerError("cancelled")
+    decodes = _operation_decodes.get()
+    key = (source, module, limits)
+    if decodes is not None and key in decodes:
+        result = decodes[key]
+        if cancelled is not None and cancelled():
+            raise WorkerError("cancelled")
+        return result
     output = run_worker(module, source, output_limit=MAX_OUTPUT_BYTES, limits=limits, cancelled=cancelled)
     try:
         decoded = json.loads(output)
@@ -69,7 +100,12 @@ def _decode_pdf(
         for key, value in metadata.items()
     ):
         raise WorkerError("invalid_output")
-    return DecodedPDFText(tuple(pages), tuple(sorted(metadata.items())))
+    result = DecodedPDFText(tuple(pages), tuple(sorted(metadata.items())))
+    if cancelled is not None and cancelled():
+        raise WorkerError("cancelled")
+    if decodes is not None:
+        decodes[key] = result
+    return result
 
 
 def decode_pdf(

@@ -11,6 +11,7 @@ from typing import Literal
 
 from parsetrail.core.source_evidence import StatementPayload
 from parsetrail.core.v2_account_matching import LedgerAccountCandidate, match_verified_source_account
+from parsetrail.core.v2_bounded_pdf_text import pdf_decode_operation
 from parsetrail.core.v2_catalog_admission import admit_pilot_definition
 from parsetrail.core.v2_data_catalog import CatalogCache, VerifiedCatalog, load_trusted_catalog_keys
 from parsetrail.core.v2_format_recognition import FormatRecognition, FormatSelection, recognize_catalog_source
@@ -381,59 +382,61 @@ class V2Workspace:
             if current_catalog.snapshot != catalog.snapshot:
                 notice = "Statement formats changed after the preview. Check the refreshed choices before importing. Nothing from the earlier preview was saved."
                 continue
-            prepared = prepare_catalog_source(
-                current_source,
-                catalog=current_catalog,
-                suffix=suffix,
-                selection=decision.selection,
-                cancelled=cancelled,
-            )
-            latest_source, latest_suffix = _read_source(source_path)
-            if latest_suffix != suffix or hashlib.sha256(latest_source).hexdigest() != recognition.source_sha256:
-                notice = "The file changed while its import was being checked. Review the refreshed document before confirming again. Nothing from the earlier preview was saved."
-                continue
-            latest_catalog = self.catalog_cache.load_current()
-            if latest_catalog is None:
-                raise WorkspaceError("verified_catalog_missing")
-            if latest_catalog.snapshot != current_catalog.snapshot:
-                notice = "Statement formats changed while the import was being checked. Review the refreshed interpretation before confirming again. Nothing from the earlier preview was saved."
-                continue
-            try:
+            # Rechecks remain independent; identical bounded decodes need no new child.
+            with pdf_decode_operation():
+                prepared = prepare_catalog_source(
+                    current_source,
+                    catalog=current_catalog,
+                    suffix=suffix,
+                    selection=decision.selection,
+                    cancelled=cancelled,
+                )
+                latest_source, latest_suffix = _read_source(source_path)
+                if latest_suffix != suffix or hashlib.sha256(latest_source).hexdigest() != recognition.source_sha256:
+                    notice = "The file changed while its import was being checked. Review the refreshed document before confirming again. Nothing from the earlier preview was saved."
+                    continue
+                latest_catalog = self.catalog_cache.load_current()
+                if latest_catalog is None:
+                    raise WorkspaceError("verified_catalog_missing")
+                if latest_catalog.snapshot != current_catalog.snapshot:
+                    notice = "Statement formats changed while the import was being checked. Review the refreshed interpretation before confirming again. Nothing from the earlier preview was saved."
+                    continue
+                try:
 
-                def check_current_inputs(
-                    expected_suffix=suffix,
-                    expected_hash=recognition.source_sha256,
-                    expected_catalog=current_catalog.snapshot,
-                ):
-                    final_source, final_suffix = _read_source(source_path)
-                    if final_suffix != expected_suffix or hashlib.sha256(final_source).hexdigest() != expected_hash:
-                        raise WorkspaceError("import_source_changed_during_validation")
-                    final_catalog = self.catalog_cache.load_current()
-                    if final_catalog is None:
-                        raise WorkspaceError("verified_catalog_missing")
-                    if final_catalog.snapshot != expected_catalog:
-                        raise WorkspaceError("import_catalog_changed_during_validation")
+                    def check_current_inputs(
+                        expected_suffix=suffix,
+                        expected_hash=recognition.source_sha256,
+                        expected_catalog=current_catalog.snapshot,
+                    ):
+                        final_source, final_suffix = _read_source(source_path)
+                        if final_suffix != expected_suffix or hashlib.sha256(final_source).hexdigest() != expected_hash:
+                            raise WorkspaceError("import_source_changed_during_validation")
+                        final_catalog = self.catalog_cache.load_current()
+                        if final_catalog is None:
+                            raise WorkspaceError("verified_catalog_missing")
+                        if final_catalog.snapshot != expected_catalog:
+                            raise WorkspaceError("import_catalog_changed_during_validation")
 
-                with V2ProfileStore.open(self.profile_path) as store:
-                    return commit_import_accounts(
-                        store,
-                        prepared,
-                        current_catalog,
-                        decision,
-                        cancelled=cancelled,
-                        before_write=check_current_inputs,
-                        automatic_preferences=self.preferences if automatic else None,
-                    )
-            except (ProfileFormatError, WorkspaceError) as exc:
-                notices = {
-                    "import_automatic_review_required": "Automatic import needs attention. Review the current accounts, format and warnings before importing. Nothing was saved.",
-                    "import_account_review_stale": "Accounts or saved document assignments changed after the preview. Check the refreshed choices and confirm again. Nothing from the earlier preview was saved.",
-                    "import_source_changed_during_validation": "The file changed while its supported formats were being checked. Review the refreshed document before confirming again. Nothing from the earlier preview was saved.",
-                    "import_catalog_changed_during_validation": "Statement formats changed while the import was being checked. Review the refreshed document before confirming again. Nothing from the earlier preview was saved.",
-                }
-                if str(exc) not in notices:
-                    raise
-                notice = notices[str(exc)]
+                    with V2ProfileStore.open(self.profile_path) as store:
+                        return commit_import_accounts(
+                            store,
+                            prepared,
+                            current_catalog,
+                            decision,
+                            cancelled=cancelled,
+                            before_write=check_current_inputs,
+                            automatic_preferences=self.preferences if automatic else None,
+                        )
+                except (ProfileFormatError, WorkspaceError) as exc:
+                    notices = {
+                        "import_automatic_review_required": "Automatic import needs attention. Review the current accounts, format and warnings before importing. Nothing was saved.",
+                        "import_account_review_stale": "Accounts or saved document assignments changed after the preview. Check the refreshed choices and confirm again. Nothing from the earlier preview was saved.",
+                        "import_source_changed_during_validation": "The file changed while its supported formats were being checked. Review the refreshed document before confirming again. Nothing from the earlier preview was saved.",
+                        "import_catalog_changed_during_validation": "Statement formats changed while the import was being checked. Review the refreshed document before confirming again. Nothing from the earlier preview was saved.",
+                    }
+                    if str(exc) not in notices:
+                        raise
+                    notice = notices[str(exc)]
 
     def import_files(
         self,
