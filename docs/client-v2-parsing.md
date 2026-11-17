@@ -183,7 +183,10 @@ balances never overwrite printed endpoints; unknown is not zero. Multi-account
 and multi-loan identity survives without counting both summaries and components
 as separate activity. Source rows with equal values remain separate occurrences
 unless a reviewed interpretation establishes a supporting relationship; parsing
-or account matching never authorizes postings.
+or account matching alone never authorizes postings. A separate default-off standing
+loan-payment authorization can post its narrowly supported future-import case under
+the [single-store contract](client-v2-unified-store.md), retaining the exact saved
+evidence and distinguishing automatic authorization from manual review.
 
 For dates, `derived` means deterministic resolution from printed source facts,
 such as a Post month/day within the statement period. `assumed` identifies a

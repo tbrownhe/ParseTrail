@@ -73,6 +73,13 @@ zero source parsing after either interactive confirmation. Complete candidate,
 source/catalog/profile, cancellation and account-intent validation remain active;
 profile schema 27 and persisted reparse behavior remain unchanged.
 
+[Opt-in loan payment posting and completion cues](docs/work/2026-11-17-loan-payment-automation.md)
+extends V2-3/4/UX with explicit default-off authorization for future complete audited
+Capital payments, lender-only posting with separate Transfers, automatic-selection
+convenience and neutral completed-action cues. Existing profiles and evidence remain
+unchanged until an authorized new import; financial/native verification and owner
+acceptance are recorded separately in the work record.
+
 V2-5 distinguishes newly computed live reconciliation checks from explicitly
 saved decisions and their current/stale input versions. The
 [durable-history packet](docs/work/2026-10-25-v2-reconciliation-history.md) completed

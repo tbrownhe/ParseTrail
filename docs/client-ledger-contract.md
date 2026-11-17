@@ -38,9 +38,15 @@ account-total liabilities use neutral liability-payment terminology, covering
 cards and loan registers. Their full liability effect is not principal, and no
 unprinted principal/interest breakdown or interest category is automatically
 created. An explicit category choice remains an authored interpretation.
-Bounded evidenced loan payments pair an observed owned asset outflow with printed
-Capital/MOHELA principal/interest or explicitly selected Wells components, retaining
-their separate dates and whole-event correction history. General category splits,
+Bounded evidenced loan payments use printed Capital/MOHELA principal/interest or
+explicitly selected Wells components, with an optional observed owned asset outflow,
+retaining their separate dates and whole-event correction history. A default-off
+standing authorization may post one complete audited Capital payment after a future
+eligible import; automatic authorization is recorded truthfully and never inferred
+from parsing or account matching. The lender-only gross remains in transfer clearing
+until separately resolved in Transfers. The precise eligibility, consent and retry
+rules are in the [single-store contract](client-v2-unified-store.md).
+General category splits,
 other loan transactions, suspense and securities accounting require their own
 admitted workflows; examples below specify financial meaning rather than
 availability. Arbitrary manual journals remain outside DEC-1 scope.

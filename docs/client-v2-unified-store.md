@@ -22,7 +22,9 @@ evidence belong in [packet records](work/README.md).
 - Immutable source rows remain separate from authored interpretations. A review
   supplies the financial account and any permitted accounting-date decision.
   Journal allocations point to admitted source rows and preserve their signed
-  amounts. Parser output and account binding do not authorize postings.
+  amounts. Parser output and account binding alone do not authorize postings.
+  The separately enabled standing loan-payment policy below is an explicit
+  authorization for its bounded future-import case.
 - The 1.x application, database and archive remain independent and untouched.
   The [cutover contract](client-v2-cutover.md) defines the fresh-profile boundary;
   the [ledger contract](client-ledger-contract.md) defines financial meaning.
@@ -514,9 +516,33 @@ See the [loan-payment packet](work/2026-10-26-v2-loan-payments.md).
 Supported loan documents open a source-focused component view rather than ordinary
 cash categorization. It displays source total, principal and interest, component
 proof and prerequisites, and hands the selected source/row to whole-payment review
-without selecting a counterpart or checking a component automatically. Saved events
-remain whole-event history/correction actions. Observed activity dates, separately
+without selecting a counterpart. A fresh focused review selects the sole eligible
+payment; ambiguous/multiple components retain manual selection. Saved events
+remain whole-event history/correction actions with neutral inspection buttons;
+blue actions indicate pending review. Completed document review says Review complete.
+Observed activity dates, separately
 assumed accounting dates, principal-only scope and unknown openings stay explicit.
+
+The global **Automatically post supported loan payments** preference defaults off.
+Enabling it explicitly authorizes lender-only posting for eligible future imports;
+it never sweeps existing evidence, changes an existing posting or revives a withdrawn
+event. The initial admitted shape is one audited Capital loan-history engine v2
+payment bound to a compatible loan-principal account that existed before import.
+Complete printed principal/interest/gross arithmetic, no material import warning,
+permitted accounting date and no overlap, prior use or payment history are required.
+The existing narrow missing-opening informational exception remains applicable;
+unknown opening and unverified reconciliation remain unchanged. Origination,
+unsupported/multiple/incomplete rows and defects remain in manual Review.
+
+Standing authorization and assumed-date permission are separate choices. Import
+start captures consent/profile context, and posting revalidates current consent,
+profile identity, cancellation and source/account/history state transactionally.
+Automatic outcomes identify posted principal and interest, the unresolved paying
+account and retained automatic authorization reason/reference. A subsequent posting
+failure leaves the successfully imported evidence saved and reports manual review.
+Exact source retries never post again. Automatic posting uses the same lender
+entries, raw/derived evidence and whole-event correction/history as manual posting;
+it never selects a paying-account transaction or claims a human inspected the source.
 
 ## Separate transfer resolution and loan funding
 

@@ -6,7 +6,14 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None. [Prepared evidence through import confirmation](docs/work/2026-11-16-prepared-import-session.md)
+None. [Opt-in loan payment posting and completion cues](docs/work/2026-11-17-loan-payment-automation.md)
+is implemented and agent-verified: default-off future-import authorization for
+complete audited Capital payments, separate unresolved Transfers, sole-row manual
+selection and neutral completed-action cues. Financial integrity, native UI/design
+and focused regression checks pass; fresh schema-27 test prepared. Owner/platform/
+release acceptance remains separate.
+
+[Prepared evidence through import confirmation](docs/work/2026-11-16-prepared-import-session.md)
 is implemented and agent-verified: exact prepared evidence saved without source
 parsing after either interactive confirmation, bounded memory, full candidate
 authority and stale/cancel/tamper safeguards. Native/import integrity checks pass;
