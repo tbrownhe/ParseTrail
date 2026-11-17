@@ -226,9 +226,7 @@ def test_empty_origination_and_named_asset_states(qtbot, qapp, tmp_path, journey
     view.show()
     wait_for_jobs(view)
     assert not view.confirm.isEnabled() and "No supported origination" in view.status.text()
-    assert all(
-        not widget.isEnabled() for widget in (view.destination, view.create_asset, view.reason, view.assumed_dates)
-    )
+    assert all(not widget.isEnabled() for widget in (view.destination, view.reason, view.assumed_dates))
     JourneyArtifacts(journey_artifacts, qapp, (760, 560)).capture("05-empty-origination", view)
     view.close()
     assets = V2TangibleAssets(workspace)
@@ -296,7 +294,8 @@ def test_refinancing_destination_label_and_asset_create_date_default(qtbot, tmp_
         return 0
 
     monkeypatch.setattr(V2TangibleAssets, "exec", inspect)
-    view.create_asset.click()
+    view.destination.setCurrentIndex(view.destination.count() - 1)
+    qtbot.waitUntil(lambda: bool(defaults) and not view.jobs.pending, timeout=15000)
     wait_for_jobs(view)
     assert defaults == [date(2026, 1, 15)]
     view.close()

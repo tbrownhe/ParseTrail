@@ -19,7 +19,7 @@ from PySide6.QtWidgets import (
 from parsetrail.core.source_evidence import ObservationEvidence
 from parsetrail.core.v2_profile_store import ProfileFormatError
 from parsetrail.gui.v2_evidence_preview import _money, preview_saved_source
-from parsetrail.gui.v2_form_state import install_form_styles
+from parsetrail.gui.v2_form_state import install_form_styles, set_field_state
 from parsetrail.gui.v2_gui_lifetime import exec_disposable
 from parsetrail.gui.v2_loan_payment_review import REASONS, V2LoanPaymentReview
 from parsetrail.gui.v2_profile_jobs import ProfileJobs
@@ -223,6 +223,7 @@ class V2LoanDocumentReview(QWidget):
     def _selected(self):
         row = self._current()
         self.action_button.setEnabled(row is not None and row.account_id is not None and not self.jobs.pending)
+        set_field_state(self.action_button, "ready" if self.action_button.isEnabled() else "neutral")
         if row is None:
             self.components.clear()
             self.status.setText(

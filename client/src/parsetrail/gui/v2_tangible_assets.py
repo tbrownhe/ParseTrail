@@ -25,7 +25,7 @@ from PySide6.QtWidgets import (
 from parsetrail.core.v2_profile_store import FinancialAccount
 from parsetrail.gui.v2_account_anchors import _typed_minor
 from parsetrail.gui.v2_evidence_preview import _money
-from parsetrail.gui.v2_form_state import install_form_styles
+from parsetrail.gui.v2_form_state import install_form_styles, set_field_state, set_status
 from parsetrail.gui.v2_profile_jobs import ProfileJobs
 
 
@@ -96,6 +96,7 @@ class V2TangibleAssets(QDialog):
         self.value_date = QDateEdit(QDate(initial_date.year, initial_date.month, initial_date.day))
         self.value_date.setDisplayFormat("yyyy-MM-dd")
         self.value_date.setCalendarPopup(True)
+        self.value_date.dateChanged.connect(self._input_changed)
         valuation_form.addRow("Value as of", self.value_date)
         self.amount = QLineEdit()
         self.amount.setPlaceholderText("Enter an independent value, zero or more")
@@ -219,6 +220,12 @@ class V2TangibleAssets(QDialog):
         amount = _typed_minor(self.amount.text())
         if amount < 0:
             raise ValueError("Enter an asset value of zero or more.")
+        rate = self._annual_rate()
+        if not self.reason.text().strip():
+            raise ValueError("Enter a valuation note.")
+        return amount, rate
+
+    def _annual_rate(self):
         rate = None
         if self.rate.text().strip():
             try:
@@ -232,9 +239,7 @@ class V2TangibleAssets(QDialog):
                 rate = int(percentage * 100)
             except (InvalidOperation, ValueError):
                 raise ValueError("Enter an annual change from -100 to +1000 with at most two decimal places.") from None
-        if not self.reason.text().strip():
-            raise ValueError("Enter a valuation note.")
-        return amount, rate
+        return rate
 
     def _input_changed(self, *_args):
         self._failure_notice = None
@@ -269,6 +274,54 @@ class V2TangibleAssets(QDialog):
         elif self._success_notice is not None:
             self.status.setText(self._success_notice)
         self.save.setEnabled(ready)
+        self._update_cues()
+
+    def _update_cues(self):
+        creating = self.account.currentData() is None
+        estimate = self.valuation.isChecked()
+        set_field_state(self.account, "optional" if creating else "saved")
+        set_field_state(self.name, "readonly" if not creating else "ready" if self.name.text().strip() else "required")
+        if not estimate:
+            amount_state = rate_state = note_state = date_state = "readonly"
+        else:
+            amount_state = "required" if not self.amount.text().strip() else "invalid"
+            try:
+                if _typed_minor(self.amount.text()) >= 0:
+                    amount_state = "ready"
+            except ValueError:
+                pass
+            try:
+                self._annual_rate()
+                rate_state = "ready" if self.rate.text().strip() else "optional"
+            except ValueError:
+                rate_state = "invalid"
+            note_state = "ready" if self.reason.text().strip() else "required"
+            date_state = "ready" if self.value_date.date().isValid() else "invalid"
+        for field, state in (
+            (self.amount, amount_state),
+            (self.rate, rate_state),
+            (self.reason, note_state),
+            (self.value_date, date_state),
+        ):
+            set_field_state(field, state)
+        set_field_state(self.save, "ready" if self.save.isEnabled() else "neutral")
+        states = (self.name.property("formState"), amount_state, rate_state, note_state, date_state)
+        state = (
+            "blocked"
+            if self._failure_notice
+            else "saved"
+            if self._success_notice
+            else "loading"
+            if self.jobs.pending
+            else "required"
+            if "required" in states
+            else "invalid"
+            if "invalid" in states
+            else "ready"
+            if self.save.isEnabled()
+            else "neutral"
+        )
+        set_status(self.status, state, self.status.text())
 
     def _save(self):
         try:

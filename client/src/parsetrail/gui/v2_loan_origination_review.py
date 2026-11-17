@@ -1,6 +1,6 @@
 """Source-backed principal financing with optional destination and asset allocation."""
 
-from PySide6.QtCore import QDate, Qt
+from PySide6.QtCore import QDate, Qt, QTimer
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -20,13 +20,15 @@ from PySide6.QtWidgets import (
 from parsetrail.core.v2_account_products import account_product
 from parsetrail.gui.v2_details_disclosure import DetailsDisclosure
 from parsetrail.gui.v2_evidence_preview import _money, preview_saved_source
-from parsetrail.gui.v2_form_state import install_form_styles
+from parsetrail.gui.v2_form_state import install_form_styles, set_field_state, set_status
 from parsetrail.gui.v2_gui_lifetime import exec_disposable
 from parsetrail.gui.v2_profile_jobs import ProfileJobs
 from parsetrail.gui.v2_tangible_assets import V2TangibleAssets
 
 
 class V2LoanOriginationReview(QDialog):
+    CREATE_ASSET = object()
+
     def __init__(self, workspace, parent=None, *, source_sha256=None, focus_row_id=None):
         super().__init__(parent)
         install_form_styles(self)
@@ -36,6 +38,8 @@ class V2LoanOriginationReview(QDialog):
         self.rows, self._accounts, self._resolution_states = {}, {}, {}
         self._rendering = False
         self._preferred_destination = None
+        self._destination_choice = None
+        self._create_pending = False
         self._initial_pending_rows = None
         self.initial_posting_succeeded = False
         self.jobs = ProfileJobs(self, workspace.profile_path)
@@ -69,17 +73,12 @@ class V2LoanOriginationReview(QDialog):
         self.assumed_dates.toggled.connect(self._toggle_dates)
         layout.addWidget(self.assumed_dates)
         form = self.form = QFormLayout()
-        destination_row = QHBoxLayout()
         self.destination = QComboBox()
         self.destination.setAccessibleName("Financing destination, optional")
         self.destination.setMinimumContentsLength(25)
         self.destination.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.destination.currentIndexChanged.connect(self._destination_changed)
-        destination_row.addWidget(self.destination, 1)
-        self.create_asset = QPushButton("Create tangible asset…")
-        self.create_asset.clicked.connect(self._create_asset)
-        destination_row.addWidget(self.create_asset)
-        form.addRow("Destination (optional)", destination_row)
+        form.addRow("Destination (optional)", self.destination)
         self.asset_link = QCheckBox("This financing funded this asset")
         self.asset_link.toggled.connect(self._draft_changed)
         form.addRow(self.asset_link)
@@ -91,7 +90,7 @@ class V2LoanOriginationReview(QDialog):
         self.reason = QLineEdit("Initial Review")
         self.reason.setMaxLength(500)
         self.reason.textChanged.connect(self._draft_changed)
-        form.addRow("Review note", self.reason)
+        form.addRow("Review note *", self.reason)
         layout.addLayout(form)
         self.limits = QLabel(
             "Full acquisition cost remains unknown. Asset estimates are independent of financing and do not establish a downpayment or spending."
@@ -190,6 +189,8 @@ class V2LoanOriginationReview(QDialog):
                     self.destination.setItemData(
                         self.destination.count() - 1, f"{account.name} · {product}{scope}", Qt.ToolTipRole
                     )
+            self.destination.insertSeparator(self.destination.count())
+            self.destination.addItem("Create tangible asset…", self.CREATE_ASSET)
             self.destination.setCurrentIndex(max(0, self.destination.findData(destination)))
             self._rendering = False
             self._source_selected()
@@ -268,9 +269,25 @@ class V2LoanOriginationReview(QDialog):
     def _destination_changed(self, *_args):
         if self._rendering:
             return
-        account = self._accounts.get(self.destination.currentData())
+        selected = self.destination.currentData()
+        if selected is self.CREATE_ASSET:
+            # Finish the combo's native selection before opening a disposable
+            # modal. Restore even the valid None choice, never persisting this
+            # command or submitting it as a financial destination.
+            self.destination.blockSignals(True)
+            self.destination.setCurrentIndex(max(0, self.destination.findData(self._destination_choice)))
+            self.destination.blockSignals(False)
+            self.preview = None
+            self.confirm.setEnabled(False)
+            self.jobs.cancel_reads()
+            if not self._create_pending:
+                self._create_pending = True
+                QTimer.singleShot(0, self, self._create_asset)
+            return
+        previous, self._destination_choice = self._destination_choice, selected
+        account = self._accounts.get(selected)
         tangible = account is not None and account.product_type == "tangible_asset"
-        if not tangible:
+        if not tangible or (previous != selected and self._event() is None):
             self.asset_link.setChecked(False)
         self.form.setRowVisible(self.asset_link, tangible)
         self.form.setRowVisible(self.allocation_date, tangible and self.asset_link.isChecked())
@@ -287,6 +304,7 @@ class V2LoanOriginationReview(QDialog):
         self.jobs.cancel_reads()
         self.preview = None
         self.confirm.setEnabled(False)
+        self._update_cues()
         row = self.rows.get(self.source_row.currentData())
         if row is None or self.snapshot is None:
             self.status.setText("No supported origination evidence is available.")
@@ -343,11 +361,71 @@ class V2LoanOriginationReview(QDialog):
         self.withdraw.setEnabled(bool(active and self.correction_reason.text().strip() and not self.jobs.pending))
         self.correction_reason.setEnabled(active and not self.jobs.writing)
         self.confirm.setVisible(not active)
-        for widget in (self.destination, self.asset_link, self.allocation_date, self.reason, self.create_asset):
+        for widget in (self.destination, self.asset_link, self.allocation_date, self.reason):
             widget.setEnabled(has_source and not self.jobs.writing and not active)
+        self._update_cues()
+
+    def _update_cues(self):
+        has_source = self.source_row.currentData() in self.rows
+        saved = self._event() is not None
+        destination = self._accounts.get(self.destination.currentData())
+        tangible = destination is not None and destination.product_type == "tangible_asset"
+        readonly = saved or not has_source
+        set_field_state(self.source_row, "readonly" if has_source else "loading")
+        set_field_state(
+            self.destination,
+            "saved" if saved else "optional" if self.destination.currentData() is None else "ready",
+        )
+        set_field_state(self.reason, "saved" if readonly else "ready" if self.reason.text().strip() else "required")
+        set_field_state(
+            self.assumed_dates, "readonly" if readonly else "ready" if self.assumed_dates.isChecked() else "required"
+        )
+        set_field_state(
+            self.asset_link,
+            "readonly"
+            if readonly
+            else "ready"
+            if tangible and self.asset_link.isChecked()
+            else "required"
+            if tangible
+            else "neutral",
+        )
+        set_field_state(
+            self.allocation_date,
+            "readonly" if readonly else "ready" if self.allocation_date.date().isValid() else "invalid",
+        )
+        correcting = saved and self.correction.button.isChecked()
+        set_field_state(
+            self.correction_reason,
+            "ready"
+            if correcting and self.correction_reason.text().strip()
+            else "required"
+            if correcting
+            else "optional",
+        )
+        set_field_state(self.confirm, "ready" if self.confirm.isEnabled() else "neutral")
+        set_field_state(self.withdraw, "ready" if self.withdraw.isEnabled() else "neutral")
+        state = (
+            "loading"
+            if self.jobs.pending
+            else "saved"
+            if saved
+            else "neutral"
+            if not has_source
+            else "required"
+            if not self.reason.text().strip()
+            or (tangible and not self.asset_link.isChecked())
+            or not self.assumed_dates.isChecked()
+            else "ready"
+            if self.confirm.isEnabled()
+            else "blocked"
+        )
+        set_status(self.status, state, self.status.text())
 
     def _correction_expanded(self, expanded):
         self.correction.button.setText("Hide correction" if expanded else "Correct saved origination…")
+        if hasattr(self, "confirm"):
+            self._update_cues()
 
     def _withdraw(self):
         event = self._event()
@@ -374,7 +452,8 @@ class V2LoanOriginationReview(QDialog):
         )
 
     def _create_asset(self):
-        if self.jobs.writing:
+        self._create_pending = False
+        if self.jobs.writing or self._event() is not None or self.source_row.currentData() not in self.rows:
             return
         dialog = V2TangibleAssets(self.workspace, self, value_date=self.allocation_date.date().toPython())
         try:
@@ -383,6 +462,7 @@ class V2LoanOriginationReview(QDialog):
         finally:
             dialog.deleteLater()
         self.refresh()
+        self.destination.setFocus(Qt.OtherFocusReason)
 
     def _confirm(self):
         if self.preview is None or not self.confirm.isEnabled():
