@@ -6,6 +6,7 @@ from weakref import ref
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QFormLayout,
     QHBoxLayout,
@@ -20,6 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from parsetrail.core.v2_statement_value_automation import AUTOMATIC_REASON
 from parsetrail.gui.v2_account_anchors import V2AccountAnchors
 from parsetrail.gui.v2_details_disclosure import DetailsDisclosure
 from parsetrail.gui.v2_evidence_preview import _money, preview_saved_source
@@ -69,6 +71,7 @@ class V2StatementSummaryReview(QWidget):
     changed = Signal()
     initial_review_completed = Signal(str)
     account_assignment_requested = Signal()
+    preferences_changed = Signal()
 
     def __init__(self, workspace, source_sha256, parent=None):
         super().__init__(parent)
@@ -122,6 +125,15 @@ class V2StatementSummaryReview(QWidget):
         details_content = QWidget()
         details_layout = QVBoxLayout(details_content)
         details_layout.setContentsMargins(0, 0, 0, 0)
+        self.auto_record = QCheckBox("Automatically record supported statement values")
+        self.auto_record.setChecked(workspace.preferences().auto_record_statement_values)
+        self.auto_record.toggled.connect(self._toggle_auto_record)
+        details_layout.addWidget(self.auto_record)
+        self.auto_record_help = _label(
+            "Future imports only. Records supported Fidelity 401(k) closing values at statement end. "
+            "Summary totals remain evidence; no transactions or budget changes."
+        )
+        details_layout.addWidget(self.auto_record_help)
         form = QFormLayout()
         self.reference = QLineEdit()
         self.reference.setMaxLength(500)
@@ -132,7 +144,12 @@ class V2StatementSummaryReview(QWidget):
         details_layout.addLayout(form)
         self.details_text = _label()
         details_layout.addWidget(self.details_text)
-        self.details = DetailsDisclosure(details_content, self, subject="statement qualifications and review reference")
+        self.details = DetailsDisclosure(
+            details_content, self, subject="statement qualifications, future-import preferences and review reference"
+        )
+        self.details.button.setToolTip(
+            "Statement qualifications, automatic recording for future imports and review reference"
+        )
         self.details.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         layout.addWidget(self.details)
         self.reference.textChanged.connect(self._update_actions)
@@ -182,7 +199,39 @@ class V2StatementSummaryReview(QWidget):
 
     def _reload(self):
         self._notice = ""
+        try:
+            self.sync_preferences(self.workspace.preferences())
+        except (OSError, ValueError):
+            self._notice = "Automatic recording preferences are unavailable. Check settings before importing."
         self.refresh()
+
+    def sync_preferences(self, preferences):
+        """Synchronize the standing choice without resetting this manual review."""
+        self.auto_record.blockSignals(True)
+        self.auto_record.setChecked(preferences.auto_record_statement_values)
+        self.auto_record.blockSignals(False)
+
+    def _toggle_auto_record(self, enabled):
+        try:
+            self.workspace.set_auto_record_statement_values(enabled)
+            self.sync_preferences(self.workspace.preferences())
+        except (OSError, ValueError):
+            self.auto_record.blockSignals(True)
+            self.auto_record.setChecked(not enabled)
+            self.auto_record.blockSignals(False)
+            self._notice = "Automatic recording preference was not saved. Try again before importing."
+            self._update_actions()
+            return
+        section = self._current_section()
+        self._notice = (
+            "Enabled for future imports. This statement still needs its Record action."
+            if enabled and section is not None and section.status == "pending"
+            else "Enabled for future imports. This statement is unchanged."
+            if enabled
+            else "Automatic recording disabled. Future statement values will need review."
+        )
+        self._update_actions()
+        self.preferences_changed.emit()
 
     def _current_section(self):
         index = self.section.currentIndex()
@@ -315,17 +364,32 @@ class V2StatementSummaryReview(QWidget):
         set_field_state(self.action_button, "ready" if enabled and not completed else "neutral")
         self.source_button.setEnabled(not self.jobs.writing)
         self.reload_button.setEnabled(not self.jobs.writing)
+        self.auto_record.setEnabled(not self.jobs.writing)
         editable = ready and section.status == "pending"
         for field in (self.reference, self.reason):
             field.setEnabled(bool(editable))
             set_field_state(
                 field, "ready" if editable and field.text().strip() else "required" if editable else "neutral"
             )
-        if self._notice:
+        if (
+            section is not None
+            and section.status == "pending"
+            and not (self.reference.text().strip() and self.reason.text().strip())
+        ):
+            self.status.setText(
+                (self._notice + " " if self._notice else "")
+                + "Enter a review reference and reason in Show details before recording the value."
+            )
+        elif self._notice:
             self.status.setText(self._notice)
         elif completed:
             self.status.setText(
-                "Value recorded · Review complete. The summary changes remain statement evidence."
+                (
+                    "Value recorded automatically · Review complete. "
+                    if section.active_value is not None and section.active_value.reason == AUTOMATIC_REASON
+                    else "Value recorded · Review complete. "
+                )
+                + "The summary changes remain statement evidence."
                 if snapshot.complete
                 else "This plan's value is recorded. Review the remaining plan values."
             )
@@ -342,8 +406,6 @@ class V2StatementSummaryReview(QWidget):
                     for code in (*snapshot.blockers, *section.blockers)
                 )
             )
-        elif section is not None and not (self.reference.text().strip() and self.reason.text().strip()):
-            self.status.setText("Enter a review reference and reason in Show details before recording the value.")
         elif section is not None:
             self.status.setText(
                 "Ready to record the printed closing value. Contributions and market changes stay as summary evidence."

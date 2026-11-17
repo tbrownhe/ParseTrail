@@ -44,6 +44,49 @@ def loan_automation_summary(outcome) -> str:
     return "Imported · loan review needed. " + reason
 
 
+def statement_value_automation_summary(outcome) -> str:
+    """Describe a nonposting value result separately from its successful import."""
+    if outcome is None:
+        return ""
+    if outcome.status == "recorded":
+        return (
+            f"Statement value recorded automatically · {_money(outcome.amount_minor)} · "
+            f"{outcome.value_date.isoformat()}. Summary totals remain evidence; no transactions or budget changes."
+        )
+    reason = {
+        "statement_value_auto_conflict": "Different values are recorded for the statement date.",
+        "statement_value_auto_source_warning": "Source evidence needs attention.",
+        "statement_value_auto_prior_review": "This statement already has value review history.",
+        "statement_value_auto_multiple_sections": "Review each statement plan separately.",
+        "statement_value_auto_account_required": "Confirm a compatible account for this statement.",
+        "statement_value_auto_unsupported": "This statement format needs manual value review.",
+        "statement_value_auto_unavailable": "Check the confirmed account and the statement's closing value and date.",
+        "statement_value_auto_consent_required": "Enable automatic recording for future imports or review this value manually.",
+        "statement_value_auto_changed": "The profile or preferences changed before recording.",
+        "statement_value_auto_cancelled": "Automatic value recording was cancelled.",
+        "statement_value_auto_failed": "Automatic value recording could not complete. Inspect the saved evidence.",
+        "statement_summary_value_conflict": "Different values are recorded for the statement date.",
+        "account_dated_value_conflict_requires_review": "Different values are recorded for the statement date.",
+        "statement_summary_account_required": "Confirm a compatible account for this statement.",
+        "statement_summary_binding_mixed": "Confirm one account for this statement plan.",
+        "source_value_closing_unavailable": "The statement's closing value is not established.",
+        "source_value_date_unavailable": "The statement's closing date is not established.",
+        "source_value_scope_or_kind_mismatch": "The account does not match the statement's value scope.",
+    }.get(outcome.reason_code, "Inspect the saved statement value and its evidence.")
+    return "Imported · statement value needs review. " + reason
+
+
+def import_automation_summary(result) -> str:
+    return "\n".join(
+        text
+        for text in (
+            loan_automation_summary(result.loan_automation),
+            statement_value_automation_summary(result.statement_value_automation),
+        )
+        if text
+    )
+
+
 @dataclass
 class ImportAccountReviewRequest:
     path: Path
@@ -163,19 +206,25 @@ class V2BatchImportReport(QDialog):
             f"{counts['imported']} imported · {counts['already_imported']} already saved · "
             f"{counts['skipped']} skipped · {counts['failed']} failed · {counts['cancelled']} cancelled · "
             f"{counts['not_attempted']} not attempted. "
-            "Completed imports remain saved; payment posting results are shown per file."
+            "Completed imports remain saved; automatic review results are shown per file."
         )
         summary.setWordWrap(True)
         layout.addWidget(summary)
         self.files = QListWidget()
         for item in result.files:
             label = f"{item.path.name} — {item.status.replace('_', ' ')}"
-            automation = loan_automation_summary(item.loan_automation)
+            automation = import_automation_summary(item)
             if item.loan_automation is not None:
                 label += (
                     " — payment posted automatically"
                     if item.loan_automation.status == "posted"
                     else " — loan review needed"
+                )
+            if item.statement_value_automation is not None:
+                label += (
+                    " — statement value recorded automatically"
+                    if item.statement_value_automation.status == "recorded"
+                    else " — statement value needs review"
                 )
             if item.error_code:
                 label += " — select for recovery details"
