@@ -87,6 +87,12 @@ recording the source value creates no journal, transfer or budget effect. Separa
 summary pending/completion status and source-value recovery close the cash-review
 dead end without extending securities, payroll or per-contribution accounting.
 
+[Opt-in statement value recording](docs/work/2026-11-17-statement-value-automation.md)
+extends that journey with explicit default-off future-import authorization for
+eligible nonposting Fidelity closing values. Exact source proof, current consent,
+physical profile, conflict/history, cancellation and retry guards remain mandatory;
+ordinary transaction/budget accounting and separate loan automation are unchanged.
+
 V2-5 distinguishes newly computed live reconciliation checks from explicitly
 saved decisions and their current/stale input versions. The
 [durable-history packet](docs/work/2026-10-25-v2-reconciliation-history.md) completed

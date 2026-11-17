@@ -738,6 +738,26 @@ account/date and shows the latest reviewed dated value beside the separate journ
 position; spending dates and budget month are preserved. Required reference/reason
 fields are initially populated, with explicit missing-field cues if edited blank.
 
+The separate **Automatically record supported statement values** global preference
+defaults off. It explicitly authorizes nonposting closing-value recording after
+eligible future imports, initially the finite Fidelity 401(k) summary family. One
+bound compatible section, exact supported closing/date, no material import warning,
+conflict or prior value history for that source are required. Account creation may
+qualify after its import assignment is explicitly confirmed. Agreeing manual or
+other-source points do not replace the new source proof and are never summed.
+
+Import start captures consent and physical profile context. The existing source-value
+transaction rechecks current consent, cancellation, current source/section/history
+and exact candidate/basis/profile before recording and commit, including before any
+historical retry branch. Automatic history states automatic authorization. Saved
+source retries, withdrawn/corrected history and ordinary refreshes never trigger
+recording or revival. Enabling the setting leaves the current Review draft unchanged.
+Import and subsequent automation have distinct outcomes: a refusal or rolled-back
+recording retains the imported evidence and explains its manual-review requirement;
+cancelled batches keep completed imports and stop remaining files. This creates no
+journal, transfer, opening, income, spending or budget effect and does not use the
+assumed-posting-date opt-in. Loan automation remains a separate choice.
+
 Every journal payload must contain exact integer, nonzero, balanced posting
 lines within supported integer bounds. Common reads additionally validate
 ordinary initial/historical source and SQL allocation shapes, active bindings,

@@ -6,7 +6,13 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None. [Fidelity retirement statement value review](docs/work/2026-11-17-retirement-summary-review.md)
+None. [Opt-in statement value recording](docs/work/2026-11-17-statement-value-automation.md)
+is implemented and agent-verified: separate future-import consent, exact nonposting
+Fidelity closing values, truthful automatic completion and guarded history/conflict
+fallback. Core/integration, native/design and independent integrity checks pass.
+Fresh schema-27 test prepared; owner/platform/release acceptance remains separate.
+
+[Fidelity retirement statement value review](docs/work/2026-11-17-retirement-summary-review.md)
 is implemented and agent-verified: dedicated summary Review, exact source closing
 value, distinct pending/completion, dated account-value reports and no invented
 transaction, transfer or budget effect. Native/design, core and independent integrity
