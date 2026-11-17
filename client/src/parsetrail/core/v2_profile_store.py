@@ -119,6 +119,13 @@ from parsetrail.core.v2_source_values import (
     proof_payload,
     source_value_candidate_id,
 )
+from parsetrail.core.v2_statement_summary_review import (
+    SUMMARY_VALUE_PARSERS,
+    StatementSummarySection,
+    StatementSummarySnapshot,
+    summary_shape_blockers,
+    summary_value_state,
+)
 
 APPLICATION_ID = 0x50543230  # PT20
 SCHEMA_VERSION = 27
@@ -662,6 +669,8 @@ class DocumentSummary:
     association_kind: Literal["unassigned", "source", "file", "rows", "mixed"] = "unassigned"
     association_complete: bool = False
     assigned_row_count: int = 0
+    pending_summary_values: int = 0
+    reviewed_summary_values: int = 0
 
 
 @dataclass(frozen=True)
@@ -1768,6 +1777,8 @@ class V2ProfileStore:
         self._source_read_periods = None
         self._source_read_epoch = None
         self._source_read_cancelled = None
+        self._source_read_retained_sources = None
+        self._deferred_dated_proofs = None
 
     @contextmanager
     def _atomic_write(self, savepoint: str):
@@ -1787,7 +1798,7 @@ class V2ProfileStore:
             raise
 
     @contextmanager
-    def _verified_source_operation(self, cancelled=None):
+    def _verified_source_operation(self, cancelled=None, *, retained_sources=None):
         """Reuse requested imports and history only in an unwritten snapshot.
 
         The archive-wide overlap scan still streams every other import. Retaining
@@ -1803,6 +1814,7 @@ class V2ProfileStore:
         self._source_read_periods = {}
         self._source_read_epoch = self.connection.total_changes
         self._source_read_cancelled = cancelled
+        self._source_read_retained_sources = retained_sources
         try:
             yield
         finally:
@@ -1810,7 +1822,48 @@ class V2ProfileStore:
             self._source_read_periods = None
             self._source_read_epoch = None
             self._source_read_cancelled = None
+            self._source_read_retained_sources = None
             self._transfer_history_cache = None
+
+    @contextmanager
+    def _deferred_dated_proof_validation(self):
+        """Validate value history against streamed sources without retaining PDFs.
+
+        Only the new summary reads use this protocol. Metadata and bindings are
+        validated immediately; every registered source proof must be validated
+        within this unchanged read transaction before any result can escape.
+        """
+        if self._deferred_dated_proofs is not None or not self.connection.in_transaction:
+            raise ProfileFormatError("statement_summary_read_context_invalid")
+        state = (self.connection.total_changes, {}, set())
+        self._deferred_dated_proofs = state
+        try:
+            yield
+            if self.connection.total_changes != state[0] or state[1]:
+                raise ProfileFormatError("account_dated_value_history_integrity")
+        finally:
+            self._deferred_dated_proofs = None
+
+    def _validate_deferred_dated_source(self, source_id, evidence, digest):
+        state = self._deferred_dated_proofs
+        if state is None or self.connection.total_changes != state[0]:
+            raise ProfileFormatError("statement_summary_read_context_invalid")
+        for key, (account, proof) in state[1].pop(source_id, {}).items():
+            try:
+                self._validate_dated_source_proof_evidence(account, proof, evidence, digest)
+            except (ProfileFormatError, TypeError, ValueError, RecursionError):
+                raise ProfileFormatError("account_dated_value_history_integrity") from None
+            state[2].add(key)
+
+    def _finish_deferred_dated_proofs(self):
+        state = self._deferred_dated_proofs
+        while state[1]:
+            source_id = next(iter(state[1]))
+            saved = self.load_import(source_id, _retain_in_operation=False)
+            digest = self.connection.execute(
+                "SELECT sha256 FROM EvidenceSnapshots WHERE source_sha256=?", (source_id,)
+            ).fetchone()[0]
+            self._validate_deferred_dated_source(source_id, saved.evidence, digest)
 
     @contextmanager
     def _verified_transfer_operation(self, cancelled=None):
@@ -9412,6 +9465,150 @@ class V2ProfileStore:
         """List saved imports in their original insertion order, newest first."""
         return tuple(row[0] for row in self.connection.execute("SELECT sha256 FROM Sources ORDER BY rowid DESC"))
 
+    def _summary_value_indexes(self):
+        histories, current = {}, {}
+        for value in self._read_dated_values():
+            if value.source_proof is not None:
+                proof = value.source_proof
+                histories.setdefault(
+                    (proof.source_sha256, proof.source_identity, proof.source_identity_form), []
+                ).append(value)
+            if value.state == "active":
+                current.setdefault((value.account_id, value.value_date), []).append(value)
+        return (
+            {key: tuple(values) for key, values in histories.items()},
+            {key: tuple(values) for key, values in current.items()},
+        )
+
+    def _statement_summary_proof(self, evidence, section, account_id, accounts, assigned, digest):
+        blockers = list(summary_shape_blockers(evidence))
+        account = accounts.get(account_id)
+        if account is None:
+            blockers.append("statement_summary_account_required")
+        elif any(assigned.get(row.row_id) != account_id for row in section.rows):
+            blockers.append("statement_summary_binding_mixed")
+        proof = None
+        if not blockers:
+            try:
+                proof = make_source_value_proof(
+                    evidence,
+                    section,
+                    financial_kind=account.kind,
+                    tracking_scope=account.tracking_scope,
+                    evidence_sha256=digest,
+                    review_annotation=self._source_value_annotation(
+                        account_id,
+                        evidence.source_sha256,
+                        source_identity=section.source_identity,
+                        source_identity_form=section.source_identity_form,
+                    ),
+                )
+            except ValueError as exc:
+                blockers.append(str(exc))
+        return proof, tuple(blockers)
+
+    @staticmethod
+    def _statement_summary_value_state(evidence, section, account_id, proof, blockers, indexes):
+        histories, current = indexes
+        history = histories.get((evidence.source_sha256, section.source_identity, section.source_identity_form), ())
+        points = current.get((account_id, date.fromisoformat(proof.value_date.iso)), ()) if proof is not None else ()
+        return (
+            *summary_value_state(
+                proof, account_id=account_id, history=history, current_values=points, blockers=blockers
+            ),
+            history,
+        )
+
+    def statement_summary_snapshot(self, source_sha256: str) -> StatementSummarySnapshot:
+        """Review one finite statement summary without inventing financial activity."""
+        from parsetrail.core.v2_import_accounts import _profile_identity
+
+        if self.connection.in_transaction:
+            raise ProfileFormatError("statement_summary_requires_committed_snapshot")
+        self.connection.execute("BEGIN")
+        try:
+            with (
+                self._verified_source_operation(retained_sources=frozenset({source_sha256})),
+                self._deferred_dated_proof_validation(),
+            ):
+                profile_identity = _profile_identity(self)
+                evidence = self.load_import(source_sha256).evidence
+                if evidence.parser_id not in SUMMARY_VALUE_PARSERS:
+                    raise ProfileFormatError("statement_summary_family_unsupported")
+                payload = evidence.payload
+                if not isinstance(payload, StatementPayload):
+                    raise ProfileFormatError("statement_summary_shape_unsupported")
+                accounts = {account.id: account for account in self.financial_accounts()}
+                assignments = {
+                    (identity, form): account_id
+                    for identity, form, account_id in self.connection.execute(
+                        "SELECT source_identity,source_identity_form,ledger_account_id FROM SourceAccountBindings WHERE source_sha256=?",
+                        (source_sha256,),
+                    )
+                }
+                assigned = {
+                    binding.row_id: binding.ledger_account_id for binding in self.account_bindings(source_sha256)
+                }
+                digest = self.connection.execute(
+                    "SELECT sha256 FROM EvidenceSnapshots WHERE source_sha256=?", (source_sha256,)
+                ).fetchone()[0]
+                indexes = self._summary_value_indexes()
+                basis = self._account_anchor_basis()
+                reviews, sections = {}, []
+                for section in payload.accounts:
+                    account_id = assignments.get((section.source_identity, section.source_identity_form))
+                    account = accounts.get(account_id)
+                    proof, blockers = self._statement_summary_proof(
+                        evidence, section, account_id, accounts, assigned, digest
+                    )
+                    status, active, conflicts, blockers, history = self._statement_summary_value_state(
+                        evidence, section, account_id, proof, blockers, indexes
+                    )
+                    candidate = None
+                    if account is not None and not blockers:
+                        if account_id not in reviews:
+                            reviews[account_id] = {
+                                review.revision_id: review
+                                for review in self.statement_source_review_history(account_id)
+                            }
+                        candidate = self._source_value_candidate(
+                            account, source_sha256, section, evidence, digest, reviews[account_id]
+                        )
+                    sections.append(
+                        StatementSummarySection(
+                            section.source_identity,
+                            section.source_identity_form,
+                            account_id,
+                            account.name if account is not None else None,
+                            section.opening,
+                            section.closing,
+                            section.rows,
+                            candidate,
+                            basis if candidate is not None else None,
+                            active,
+                            history,
+                            conflicts,
+                            blockers,
+                            status,
+                        )
+                    )
+                self._finish_deferred_dated_proofs()
+                if _profile_identity(self) != profile_identity:
+                    raise ProfileFormatError("statement_summary_profile_changed")
+                return StatementSummarySnapshot(
+                    source_sha256,
+                    evidence.parser_id,
+                    payload.start,
+                    payload.end,
+                    payload.capture_verified,
+                    payload.independent_balance_verified,
+                    tuple(sections),
+                    summary_shape_blockers(evidence),
+                    profile_identity,
+                )
+        finally:
+            self.connection.execute("ROLLBACK")
+
     def document_summaries(self) -> tuple[DocumentSummary, ...]:
         """Read document labels and conservative review counts in one snapshot.
 
@@ -9423,120 +9620,146 @@ class V2ProfileStore:
             raise ProfileFormatError("document_summaries_requires_committed_snapshot")
         self.connection.execute("BEGIN")
         try:
-            accounts = {account.id: account for account in self.financial_accounts()}
-            consumed = self._active_consumed()
-            from parsetrail.core.v2_review_decisions import zero_history
-
-            reviewed_zeros = {
-                r.row_id for r in {r.row_id: r for r in zero_history(self)}.values() if r.action == "reviewed"
-            }
-            source_accounts = {}
-            for source_id, identity, form, account_id in self.connection.execute(
-                "SELECT source_sha256,source_identity,source_identity_form,ledger_account_id FROM SourceAccountBindings"
-            ):
-                source_accounts.setdefault(source_id, {})[identity, form] = account_id
-            summaries = {}
-            periods = {}
-            for source_id, saved, bindings in self._iter_verified_bound_imports():
-                evidence = saved.evidence
-                payload = evidence.payload
-                rows = _rows(evidence)
-                assigned = {binding.row_id: binding.ledger_account_id for binding in bindings}
-                identities = (
-                    tuple((section.source_identity, section.source_identity_form) for section in payload.accounts)
-                    if isinstance(payload, StatementPayload)
-                    else tuple(dict.fromkeys((row.source_account, row.source_account_form) for row in rows))
-                )
-                source_account_ids = tuple(
-                    source_accounts[source_id][identity]
-                    for identity in identities
-                    if identity in source_accounts.get(source_id, {})
-                )
-                bound_accounts = tuple(
-                    accounts[account_id]
-                    for account_id in dict.fromkeys(
-                        [binding.ledger_account_id for binding in bindings] + list(source_account_ids)
-                    )
-                    if account_id in accounts
-                )
-                identity_labels = tuple(
-                    f"Ending {identity[-4:]}" if form in {"full", "last_four"} else identity
-                    for identity, form in identities
-                    if identity is not None
-                )
-                start = payload.start if isinstance(payload, StatementPayload) else payload.activity_start
-                end = payload.end if isinstance(payload, StatementPayload) else payload.activity_end
-                if isinstance(payload, StatementPayload) and start.iso is not None:
-                    for account_id in set(source_account_ids):
-                        periods.setdefault(account_id, []).append((start.iso, end.iso, source_id))
-                activity = tuple(row for row in rows if row.row_role == "activity")
-                identity_rows = {}
-                for row in rows:
-                    if row.source_account is not None:
-                        identity_rows.setdefault((row.source_account, row.source_account_form), []).append(row)
-                unassigned_identities = sum(
-                    source_accounts.get(source_id, {}).get(identity) is None
-                    and (
-                        not identity_rows.get(identity)
-                        or any(assigned.get(row.row_id) is None for row in identity_rows[identity])
-                    )
-                    for identity in identities
-                    if identity[0] is not None
-                )
-                institutions = {account.institution_key for account in bound_accounts}
-                association_bases = {binding.basis for binding in bindings if binding.ledger_account_id is not None}
-                if source_account_ids:
-                    association_bases.add("source")
-                association_kind = (
-                    "unassigned"
-                    if not association_bases
-                    else "mixed"
-                    if len(association_bases) > 1
-                    else {"source": "source", "file": "file", "row": "rows"}[next(iter(association_bases))]
-                )
-                summaries[source_id] = DocumentSummary(
-                    source_id,
-                    evidence.parser_id,
-                    payload.kind,
-                    next(iter(institutions)) if len(institutions) == 1 else None,
-                    identity_labels,
-                    tuple(account.name for account in bound_accounts),
-                    date.fromisoformat(start.iso) if start.iso else None,
-                    date.fromisoformat(end.iso) if end.iso else None,
-                    start.provenance,
-                    end.provenance,
-                    len(rows),
-                    sum(
-                        (row.row_id not in consumed or consumed[row.row_id] != row.amount.minor)
-                        and row.row_id not in reviewed_zeros
-                        for row in activity
-                    ),
-                    sum(assigned.get(row.row_id) is None for row in activity),
-                    any(row.source_account is None for row in activity),
-                    isinstance(payload, StatementPayload) or any(row.source_account is not None for row in rows),
-                    unassigned_source_accounts=unassigned_identities,
-                    associated_account_ids=tuple(account.id for account in bound_accounts),
-                    association_kind=association_kind,
-                    association_complete=bool(bound_accounts)
-                    and not unassigned_identities
-                    and all(binding.ledger_account_id in accounts for binding in bindings),
-                    assigned_row_count=sum(binding.ledger_account_id in accounts for binding in bindings),
-                )
-            overlaps = {}
-            for account_periods in periods.values():
-                active = []
-                for start, end, source_id in sorted(account_periods):
-                    active = [(other_end, other_id) for other_end, other_id in active if other_end >= start]
-                    for _other_end, other_id in active:
-                        if other_id != source_id:
-                            overlaps.setdefault(source_id, set()).add(other_id)
-                            overlaps.setdefault(other_id, set()).add(source_id)
-                    active.append((end, source_id))
-            for source_id, others in overlaps.items():
-                summaries[source_id] = replace(summaries[source_id], overlapping_source_ids=tuple(sorted(others)))
-            return tuple(summaries[source_id] for source_id in self.source_ids())
+            with self._deferred_dated_proof_validation():
+                return self._document_summaries()
         finally:
             self.connection.execute("ROLLBACK")
+
+    def _document_summaries(self) -> tuple[DocumentSummary, ...]:
+        accounts = {account.id: account for account in self.financial_accounts()}
+        consumed = self._active_consumed()
+        from parsetrail.core.v2_review_decisions import zero_history
+
+        reviewed_zeros = {
+            r.row_id for r in {r.row_id: r for r in zero_history(self)}.values() if r.action == "reviewed"
+        }
+        source_accounts = {}
+        for source_id, identity, form, account_id in self.connection.execute(
+            "SELECT source_sha256,source_identity,source_identity_form,ledger_account_id FROM SourceAccountBindings"
+        ):
+            source_accounts.setdefault(source_id, {})[identity, form] = account_id
+        summaries = {}
+        periods = {}
+        summary_indexes = None
+        summary_digests = dict(self.connection.execute("SELECT source_sha256,sha256 FROM EvidenceSnapshots"))
+        for source_id, saved, bindings in self._iter_verified_bound_imports():
+            evidence = saved.evidence
+            payload = evidence.payload
+            rows = _rows(evidence)
+            assigned = {binding.row_id: binding.ledger_account_id for binding in bindings}
+            identities = (
+                tuple((section.source_identity, section.source_identity_form) for section in payload.accounts)
+                if isinstance(payload, StatementPayload)
+                else tuple(dict.fromkeys((row.source_account, row.source_account_form) for row in rows))
+            )
+            source_account_ids = tuple(
+                source_accounts[source_id][identity]
+                for identity in identities
+                if identity in source_accounts.get(source_id, {})
+            )
+            bound_accounts = tuple(
+                accounts[account_id]
+                for account_id in dict.fromkeys(
+                    [binding.ledger_account_id for binding in bindings] + list(source_account_ids)
+                )
+                if account_id in accounts
+            )
+            identity_labels = tuple(
+                f"Ending {identity[-4:]}" if form in {"full", "last_four"} else identity
+                for identity, form in identities
+                if identity is not None
+            )
+            start = payload.start if isinstance(payload, StatementPayload) else payload.activity_start
+            end = payload.end if isinstance(payload, StatementPayload) else payload.activity_end
+            if isinstance(payload, StatementPayload) and start.iso is not None:
+                for account_id in set(source_account_ids):
+                    periods.setdefault(account_id, []).append((start.iso, end.iso, source_id))
+            activity = tuple(row for row in rows if row.row_role == "activity")
+            identity_rows = {}
+            for row in rows:
+                if row.source_account is not None:
+                    identity_rows.setdefault((row.source_account, row.source_account_form), []).append(row)
+            unassigned_identities = sum(
+                source_accounts.get(source_id, {}).get(identity) is None
+                and (
+                    not identity_rows.get(identity)
+                    or any(assigned.get(row.row_id) is None for row in identity_rows[identity])
+                )
+                for identity in identities
+                if identity[0] is not None
+            )
+            institutions = {account.institution_key for account in bound_accounts}
+            association_bases = {binding.basis for binding in bindings if binding.ledger_account_id is not None}
+            if source_account_ids:
+                association_bases.add("source")
+            association_kind = (
+                "unassigned"
+                if not association_bases
+                else "mixed"
+                if len(association_bases) > 1
+                else {"source": "source", "file": "file", "row": "rows"}[next(iter(association_bases))]
+            )
+            pending_summary_values = reviewed_summary_values = 0
+            if evidence.parser_id in SUMMARY_VALUE_PARSERS:
+                if summary_indexes is None:
+                    summary_indexes = self._summary_value_indexes()
+                summary_sections = payload.accounts if isinstance(payload, StatementPayload) else ()
+                for section in summary_sections:
+                    account_id = source_accounts.get(source_id, {}).get(
+                        (section.source_identity, section.source_identity_form)
+                    )
+                    proof, blockers = self._statement_summary_proof(
+                        evidence, section, account_id, accounts, assigned, summary_digests[source_id]
+                    )
+                    status, *_rest = self._statement_summary_value_state(
+                        evidence, section, account_id, proof, blockers, summary_indexes
+                    )
+                    reviewed_summary_values += status == "reviewed"
+                pending_summary_values = max(1, len(summary_sections)) - reviewed_summary_values
+            self._validate_deferred_dated_source(source_id, evidence, summary_digests[source_id])
+            summaries[source_id] = DocumentSummary(
+                source_id,
+                evidence.parser_id,
+                payload.kind,
+                next(iter(institutions)) if len(institutions) == 1 else None,
+                identity_labels,
+                tuple(account.name for account in bound_accounts),
+                date.fromisoformat(start.iso) if start.iso else None,
+                date.fromisoformat(end.iso) if end.iso else None,
+                start.provenance,
+                end.provenance,
+                len(rows),
+                sum(
+                    (row.row_id not in consumed or consumed[row.row_id] != row.amount.minor)
+                    and row.row_id not in reviewed_zeros
+                    for row in activity
+                ),
+                sum(assigned.get(row.row_id) is None for row in activity),
+                any(row.source_account is None for row in activity),
+                isinstance(payload, StatementPayload) or any(row.source_account is not None for row in rows),
+                unassigned_source_accounts=unassigned_identities,
+                associated_account_ids=tuple(account.id for account in bound_accounts),
+                association_kind=association_kind,
+                association_complete=bool(bound_accounts)
+                and not unassigned_identities
+                and all(binding.ledger_account_id in accounts for binding in bindings),
+                assigned_row_count=sum(binding.ledger_account_id in accounts for binding in bindings),
+                pending_summary_values=pending_summary_values,
+                reviewed_summary_values=reviewed_summary_values,
+            )
+        overlaps = {}
+        for account_periods in periods.values():
+            active = []
+            for start, end, source_id in sorted(account_periods):
+                active = [(other_end, other_id) for other_end, other_id in active if other_end >= start]
+                for _other_end, other_id in active:
+                    if other_id != source_id:
+                        overlaps.setdefault(source_id, set()).add(other_id)
+                        overlaps.setdefault(other_id, set()).add(source_id)
+                active.append((end, source_id))
+        for source_id, others in overlaps.items():
+            summaries[source_id] = replace(summaries[source_id], overlapping_source_ids=tuple(sorted(others)))
+        return tuple(summaries[source_id] for source_id in self.source_ids())
 
     def statement_coverage(self) -> tuple[StatementCoverageRow, ...]:
         """Compare printed periods on explicitly bound statements, without certifying coverage."""
@@ -10945,7 +11168,15 @@ class V2ProfileStore:
 
     def _validate_dated_source_proof(self, account: FinancialAccount, proof: SourceValueProof) -> None:
         saved = self.load_import(proof.source_sha256)
-        payload = saved.evidence.payload
+        digest = self.connection.execute(
+            "SELECT sha256 FROM EvidenceSnapshots WHERE source_sha256=?", (proof.source_sha256,)
+        ).fetchone()[0]
+        self._validate_dated_source_proof_evidence(account, proof, saved.evidence, digest)
+
+    def _validate_dated_source_proof_evidence(self, account, proof, evidence, digest):
+        if evidence.source_sha256 != proof.source_sha256:
+            raise ProfileFormatError("account_dated_value_source_proof_invalid")
+        payload = evidence.payload
         if not isinstance(payload, StatementPayload):
             raise ProfileFormatError("account_dated_value_source_proof_invalid")
         sections = [
@@ -10960,11 +11191,8 @@ class V2ProfileStore:
             annotation = self._source_value_annotation(
                 account.id, proof.source_sha256, proof.review_annotation.revision_id
             )
-        digest = self.connection.execute(
-            "SELECT sha256 FROM EvidenceSnapshots WHERE source_sha256=?", (proof.source_sha256,)
-        ).fetchone()[0]
         expected = make_source_value_proof(
-            saved.evidence,
+            evidence,
             sections[0],
             financial_kind=account.kind,
             tracking_scope=account.tracking_scope,
@@ -11038,7 +11266,15 @@ class V2ProfileStore:
                     raise ValueError
                 proof = decode_source_value_proof(raw_proof) if origin == "source" else None
                 if proof is not None:
-                    self._validate_dated_source_proof(financial, proof)
+                    if self._deferred_dated_proofs is None:
+                        self._validate_dated_source_proof(financial, proof)
+                    else:
+                        epoch, pending, validated = self._deferred_dated_proofs
+                        if self.connection.total_changes != epoch:
+                            raise ProfileFormatError("statement_summary_read_context_invalid")
+                        key = _transfer_record_digest(financial.id, proof_payload(proof))
+                        if key not in validated:
+                            pending.setdefault(proof.source_sha256, {})[key] = (financial, proof)
                     if (
                         amount != proof.amount_minor
                         or value_date.isoformat() != proof.value_date.iso
@@ -11212,61 +11448,66 @@ class V2ProfileStore:
             if len(sections) != 1:
                 raise ProfileFormatError("source_value_bound_section_unavailable")
             section = sections[0]
-            annotation = self._source_value_annotation(
-                account_id, source_id, source_identity=identity, source_identity_form=form
-            )
-            review = review_history.get(annotation.revision_id) if annotation is not None else None
             digest = self.connection.execute(
                 "SELECT sha256 FROM EvidenceSnapshots WHERE source_sha256=?", (source_id,)
             ).fetchone()[0]
-            proof, blockers = None, ()
-            try:
-                proof = make_source_value_proof(
-                    evidence,
-                    section,
-                    financial_kind=account.kind,
-                    tracking_scope=account.tracking_scope,
-                    evidence_sha256=digest,
-                    review_annotation=annotation,
-                )
-            except ValueError as exc:
-                blockers = (str(exc),)
-            candidate_id = source_value_candidate_id(source_id, section)
-            version = _transfer_record_digest(
-                candidate_id,
-                account_id,
-                account.kind,
-                account.tracking_scope,
-                digest,
-                proof_payload(proof) if proof else None,
-                blockers,
-                annotation.model_dump(mode="json") if annotation else None,
-            )
-            rule = SOURCE_VALUE_RULES.get(evidence.parser_id)
             candidates.append(
-                SourceClosingCandidate(
-                    candidate_id,
-                    version,
-                    account_id,
-                    source_id,
-                    identity,
-                    form,
-                    date.fromisoformat(proof.value_date.iso) if proof else None,
-                    proof.amount_minor if proof else None,
-                    section.balance_scope,
-                    proof,
-                    blockers,
-                    review,
-                    evidence.payload.capture_verified,
-                    section.closing,
-                    evidence.payload.end,
-                    evidence.parser_id,
-                    evidence.definition_revision,
-                    rule.sign_rule if rule else None,
-                    False,
-                )
+                self._source_value_candidate(account, source_id, section, evidence, digest, review_history)
             )
         return tuple(candidates)
+
+    def _source_value_candidate(self, account, source_id, section, evidence, digest, review_history):
+        account_id = account.id
+        identity, form = section.source_identity, section.source_identity_form
+        annotation = self._source_value_annotation(
+            account_id, source_id, source_identity=identity, source_identity_form=form
+        )
+        review = review_history.get(annotation.revision_id) if annotation is not None else None
+        proof, blockers = None, ()
+        try:
+            proof = make_source_value_proof(
+                evidence,
+                section,
+                financial_kind=account.kind,
+                tracking_scope=account.tracking_scope,
+                evidence_sha256=digest,
+                review_annotation=annotation,
+            )
+        except ValueError as exc:
+            blockers = (str(exc),)
+        candidate_id = source_value_candidate_id(source_id, section)
+        version = _transfer_record_digest(
+            candidate_id,
+            account_id,
+            account.kind,
+            account.tracking_scope,
+            digest,
+            proof_payload(proof) if proof else None,
+            blockers,
+            annotation.model_dump(mode="json") if annotation else None,
+        )
+        rule = SOURCE_VALUE_RULES.get(evidence.parser_id)
+        return SourceClosingCandidate(
+            candidate_id,
+            version,
+            account_id,
+            source_id,
+            identity,
+            form,
+            date.fromisoformat(proof.value_date.iso) if proof else None,
+            proof.amount_minor if proof else None,
+            section.balance_scope,
+            proof,
+            blockers,
+            review,
+            evidence.payload.capture_verified,
+            section.closing,
+            evidence.payload.end,
+            evidence.parser_id,
+            evidence.definition_revision,
+            rule.sign_rule if rule else None,
+            False,
+        )
 
     def source_dated_value_snapshot(self, account_id: str, *, as_of: date | None = None) -> AccountAnchorSnapshot:
         return self.account_anchor_snapshot(account_id, as_of=as_of)
@@ -11454,9 +11695,21 @@ class V2ProfileStore:
         reason: str,
         corrects_value_id: int | None = None,
         allow_conflict: bool = False,
+        expected_profile_identity: str | None = None,
     ) -> ReviewedDatedValue:
         self._anchor_write_start(reason)
         try:
+
+            def check_profile():
+                if expected_profile_identity is not None:
+                    from parsetrail.core.v2_import_accounts import _profile_identity
+
+                    if type(expected_profile_identity) is not str or expected_profile_identity != _profile_identity(
+                        self
+                    ):
+                        raise ProfileFormatError("statement_summary_profile_changed")
+
+            check_profile()
             if (
                 type(candidate_id) is not str
                 or type(expected_candidate_sha256) is not str
@@ -11505,6 +11758,7 @@ class V2ProfileStore:
                     and old_version == expected_candidate_sha256
                     and prior_basis == expected_basis_sha256
                 ):
+                    check_profile()
                     self.connection.execute("COMMIT")
                     return value
             candidate = next(
@@ -11526,6 +11780,7 @@ class V2ProfileStore:
                 allow_conflict=allow_conflict,
                 source_proof=candidate.proof,
             )
+            check_profile()
             self.connection.execute("COMMIT")
             return result
         except BaseException:
@@ -12398,7 +12653,7 @@ class V2ProfileStore:
             )
             return True
 
-    def load_import(self, source_sha256: str) -> SavedImport:
+    def load_import(self, source_sha256: str, *, _retain_in_operation: bool = True) -> SavedImport:
         if self._transfer_verified_sources is not None:
             verified = self._transfer_verified_sources.get(source_sha256)
             if verified is None:
@@ -12432,7 +12687,11 @@ class V2ProfileStore:
             )
         )
         saved = self._verified_saved_import(source_sha256, row, actual)
-        if scoped:
+        if (
+            scoped
+            and _retain_in_operation
+            and (self._source_read_retained_sources is None or source_sha256 in self._source_read_retained_sources)
+        ):
             self._source_read_evidence[source_sha256] = saved
         return saved
 
