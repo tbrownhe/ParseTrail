@@ -54,10 +54,16 @@ valid CSV match unless an explicit validated selection is supplied.
 
 Recognition opens no profile connection and writes no evidence. A selection binds
 source SHA-256, catalog snapshot SHA-256, parser ID, revision and definition digest.
-After the GUI decision, the workspace rereads source/catalog, reparses the selected
-signed definition and independently rebuilds the complete valid candidate set to
-enforce unique account-compatible routing. It then rereads source/catalog again
-before atomic persistence; a trimmed preview cannot bypass routing checks.
+Both interactive workspace paths prepare the complete valid candidate set before
+the GUI decision. A private operation owns canonical evidence bytes and authentic
+recognition/catalog/review snapshots. The GUI receives detached bounded summaries
+and an opaque operation ID; choices cannot replace evidence or prune routing proof.
+The selected full evidence is reconstructed from those canonical bytes without
+another source parse. Source/catalog are reread after review and immediately
+before writing; physical profile, account basis, automatic preferences and all
+candidate/assignment constraints are rechecked before atomic persistence.
+Submitted choices/catalog are compared again after freshness callbacks. Writes
+use private authorized snapshots; public-object mutations cannot redirect them.
 Detected drift rebuilds the preview and requires another explicit confirmation.
 Preview summaries are never treated as authoritative stored evidence. Exact
 source retries reuse already verified saved evidence without another choice.
@@ -211,14 +217,20 @@ statement balance checks. Warnings consider all rows, preserve bounded locations
 and occurrence counts, and leave original complete dispositions unchanged. Requiring
 preview does not create a source-repair override or modify posting-date permission.
 
-After explicit import confirmation, identical bounded PDF decoding may be reused
-inside that synchronous operation. Exact source bytes, worker mode and resource
-limits identify validated immutable pages/metadata. The operation clears retained
-references on success, failure, retry and cancellation; there is no reuse across
-imports or from the earlier preview. Routing/candidate uniqueness, source/catalog
-rereads, account assignments, profile identity and transactional checks still run.
-Cancellation is checked before lookup and before returning either a reused or
-newly decoded result. Worker limits and source evidence validation are unchanged.
+Interactive preparation scopes bounded PDF decode reuse to recognition, ending
+before user review. Exact source bytes, worker mode and resource limits identify
+validated immutable pages/metadata. Each valid source interpretation is parsed
+once during preparation; confirmation performs no source parsing or decoding.
+Candidate canonical JSON shares a 32 MiB aggregate evidence budget, and only the
+selected full model is reconstructed. Exceeding the budget refuses the entire
+operation before review; candidates are never silently dropped. No private
+temporary files, compression or persistent decoded-text cache is introduced.
+Preparation resources are cleared on success, skip, failure, retry and cancellation;
+public DTOs never own the session or full evidence. Cancellation is checked around
+decoding, selection, freshness callbacks and atomic application. Guarded developer
+APIs without an authentic session still rebuild recognition and require complete
+selected-payload equality, including rows beyond the preview. Worker limits and
+persisted source evidence validation are unchanged.
 
 Account for candidate rows in declared activity sections as parsed, explicitly
 ignored with a reason, or unresolved. Preserve unexpected dated/amount rows,

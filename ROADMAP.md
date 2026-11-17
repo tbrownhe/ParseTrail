@@ -67,6 +67,12 @@ qualified Capital import-warning policy with exterior source auditing, and measu
 operation-scoped PDF decoding reuse. Financial verification/unknowns and owner
 statement performance remain separate from synthetic timing and native UI checks.
 
+[Prepared evidence through import confirmation](docs/work/2026-11-16-prepared-import-session.md)
+extends V2-3/UX with bounded core-owned preparation, exact evidence retention and
+zero source parsing after either interactive confirmation. Complete candidate,
+source/catalog/profile, cancellation and account-intent validation remain active;
+profile schema 27 and persisted reparse behavior remain unchanged.
+
 V2-5 distinguishes newly computed live reconciliation checks from explicitly
 saved decisions and their current/stale input versions. The
 [durable-history packet](docs/work/2026-10-25-v2-reconciliation-history.md) completed

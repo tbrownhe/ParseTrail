@@ -85,11 +85,30 @@ mappings, new-account drafts and the current account/profile basis. One atomic
 write creates referenced drafts, retains original/evidence and applies source,
 whole-file or mixed-row assignments according to their actual group scope. It
 creates no journals or openings. Cancel/failure rolls back all new state; exact
-retry retains saved evidence and assignments. Source/catalog are reread before
-and after final parsing; detected drift or changed account state rebuilds the
-review and requires another explicit confirmation. PDF signed routing is rechecked.
+retry retains saved evidence and assignments. Interactive imports retain the
+complete signed recognition result and canonical candidate evidence in a private
+short-lived preparation session. Source/catalog are reread after review and just
+before writing; detected drift or changed account state rebuilds account-first
+review and requires another explicit confirmation. Explicit-format selection
+refuses stale inputs. No source parsing/decoding follows either confirmation.
+PDF signed routing and complete candidate proof are established during preparation
+and bound to the exact source/catalog; a public summary cannot replace that proof.
 Manual/headless source-only import and later guarded assignment remain separate
 supported boundaries; the combined UI does not change immutable evidence policy.
+
+Prepared sessions bind an opaque operation identifier, exact source/suffix,
+catalog/declaration/engine/extractor context, physical profile and account basis.
+Detached public review/selection/plan objects are compared with private authorized
+snapshots, including after freshness callbacks; writes use the private choices.
+Only canonical evidence reconstructed and checked against its complete retained
+payload is saved. A session is consumed by one apply attempt and clears its
+source/catalog/review/plan/evidence resources on every exit. Unselected Python
+evidence graphs are discarded during recognition; retained JSON across candidates
+has a 32 MiB aggregate bound. Overflow refuses the whole operation before preview.
+No partial candidate set, new temporary evidence file or persistent cache is used.
+Developer commit DTOs lacking session authority require independent recognition
+and complete payload equality. Schema and ordinary saved-evidence reads remain
+unchanged; this does not implement multiple extraction revisions per source.
 
 Import previews default to Always. The global Only when attention is needed mode
 skips display only for one recognized interpretation whose complete account groups

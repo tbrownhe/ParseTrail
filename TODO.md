@@ -6,7 +6,13 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None. [Loan review cues and import confirmation timing](docs/work/2026-11-16-loan-review-cues-import-timing.md)
+None. [Prepared evidence through import confirmation](docs/work/2026-11-16-prepared-import-session.md)
+is implemented and agent-verified: exact prepared evidence saved without source
+parsing after either interactive confirmation, bounded memory, full candidate
+authority and stale/cancel/tamper safeguards. Native/import integrity checks pass;
+fresh schema-27 candidate prepared. Owner/platform/release acceptance remains separate.
+
+[Loan review cues and import confirmation timing](docs/work/2026-11-16-loan-review-cues-import-timing.md)
 is implemented and agent-verified: blue/conditional form cues, destination-menu
 creation, audited Capital missing-opening qualification and measured import
 decoding reuse. Fresh schema-27 test prepared; populated candidates stay pinned.
