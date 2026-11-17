@@ -27,10 +27,14 @@ from parsetrail.core.v2_money_operations import usd_symbol_minor_v1
 from parsetrail.core.v2_pdf_lines import PageLine, PDFLineEvidence
 from parsetrail.core.v2_pdf_routing import PDFRouting
 
-ENGINE_VERSION = "loan-history-lines-pilot-1"
+ENGINE_VERSION = "loan-history-lines-pilot-2"
 MAX_DEFINITION_BYTES = 64 * 1024
 MONEY = r"-?\$(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)\.[0-9]{2}"
 DATE = r"\d{2}/\d{2}/\d{4}"
+MONEY_SHAPED = re.compile(r"[$\u00a3\u20ac\u00a5]|(?<!\d)\d[\d,]*\.\d{2}(?!\d)")
+DATE_SHAPED = re.compile(
+    r"\b(?:\d{1,2}/\d{1,2}/\d{2,4}|\d{4}-\d{2}-\d{2}|(?:0?[1-9]|1[0-2])/(?:0?[1-9]|[12]\d|3[01]))\b"
+)
 
 
 class LoanHistoryError(ValueError):
@@ -107,18 +111,80 @@ def _date(raw: str):
     return parsed
 
 
+def _exterior_dispositions(
+    lines: PDFLineEvidence,
+    history_index: int,
+    history_end_index: int,
+    account_pattern: re.Pattern[str],
+    balance_pattern: re.Pattern[str],
+) -> list[SourceDisposition]:
+    """Inventory exterior text; consuming one known field never exempts its line."""
+    date_labels = r"(?:Statement Date|Payment Due Date|Due Date|Payoff Good Through)"
+    payment_labels = r"(?:Current Payment Due|Past Due|Late Fees|Total Due)"
+    known_fields = (
+        (
+            "loan_payment_information",
+            re.compile(rf"\b{payment_labels}:\s*{MONEY}(?![\w.,])", re.I),
+            False,
+        ),
+        (
+            "loan_account_summary",
+            re.compile(rf"\bPayoff Amount:\s*{MONEY}(?![\w.,])", re.I),
+            False,
+        ),
+        (
+            "loan_statement_dates",
+            re.compile(rf"\b{date_labels}:\s*(?P<value>{DATE})(?![\w/.,])", re.I),
+            True,
+        ),
+        ("loan_coupon_information", re.compile(r"\bAmount Enclosed:\s*\$\s*$", re.I), False),
+    )
+    unresolved_date_field = re.compile(rf"\b{date_labels}:", re.I)
+    unresolved_money_field = re.compile(rf"\b(?:{payment_labels}|Payoff Amount|Amount Enclosed):\s*(?:[-+]?\d|$)", re.I)
+    dispositions = []
+    for index, line in enumerate(lines.lines):
+        if history_index <= index <= history_end_index:
+            continue
+        residual = line.normalized
+        has_source_fields = account_pattern.search(residual) is not None or balance_pattern.search(residual) is not None
+        for pattern in (account_pattern, balance_pattern):
+            residual = pattern.sub(" ", residual)
+        roles = []
+        for role, pattern, is_date in known_fields:
+            for match in reversed(tuple(pattern.finditer(residual))):
+                if is_date:
+                    try:
+                        _date(match["value"])
+                    except LoanHistoryError:
+                        continue
+                roles.append(role)
+                residual = residual[: match.start()] + " " + residual[match.end() :]
+        if MONEY_SHAPED.search(residual) or unresolved_money_field.search(residual):
+            code = "unclassified_monetary_line"
+        elif DATE_SHAPED.search(residual) or unresolved_date_field.search(residual):
+            code = "dated_unresolved"
+        elif roles:
+            code = roles[0]
+        elif has_source_fields:
+            code = "loan_source_fields"
+        else:
+            code = "loan_page_text"
+        dispositions.append(SourceDisposition(code=code, location=_location(line), raw_values=(line.raw,)))
+    return dispositions
+
+
 def parse_loan_history(definition_bytes: bytes, lines: PDFLineEvidence) -> SourceEvidence:
     """Keep principal and interest source components without inventing an opening."""
     definition, definition_hash = load_definition(definition_bytes)
     account_pattern = re.compile(rf"\b{re.escape(definition.account_label)}\s*(?P<account>\d{{8,20}})\b")
-    balance_pattern = re.compile(rf"\b{re.escape(definition.closing_label)}\s*(?P<amount>{MONEY})\b")
+    balance_pattern = re.compile(rf"\b{re.escape(definition.closing_label)}\s*(?P<amount>{MONEY})(?![\w.,])")
     history_pattern = re.compile(rf"^{re.escape(definition.history_label)}\s+(?P<start>{DATE})\s+-\s+(?P<end>{DATE})$")
-    accounts = [(line, match) for line in lines.lines if (match := account_pattern.search(line.normalized))]
+    accounts = [(line, match) for line in lines.lines for match in account_pattern.finditer(line.normalized)]
     identities = {match["account"] for _, match in accounts}
     if not accounts or len(identities) != 1:
         raise LoanHistoryError("missing_or_ambiguous_account")
     account = next(iter(identities))
-    balances = [(line, match) for line in lines.lines if (match := balance_pattern.search(line.normalized))]
+    balances = [(line, match) for line in lines.lines for match in balance_pattern.finditer(line.normalized)]
     histories = [
         (index, line, match)
         for index, line in enumerate(lines.lines)
@@ -154,6 +220,7 @@ def parse_loan_history(definition_bytes: bytes, lines: PDFLineEvidence) -> Sourc
     )
     rows = []
     dispositions = [
+        SourceDisposition(code="history_period", location=_location(history_line), raw_values=(history_line.raw,)),
         SourceDisposition(code="history_header", location=_location(header), raw_values=(header.raw,)),
         SourceDisposition(
             code="history_end_marker",
@@ -223,6 +290,9 @@ def parse_loan_history(definition_bytes: bytes, lines: PDFLineEvidence) -> Sourc
         )
     if not rows:
         raise LoanHistoryError("empty_history")
+    dispositions.extend(
+        _exterior_dispositions(lines, history_index, history_end_index, account_pattern, balance_pattern)
+    )
     closing_raw = balance_match["amount"]
     return SourceEvidence(
         schema_version=2,

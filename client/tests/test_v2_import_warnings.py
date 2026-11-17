@@ -8,11 +8,14 @@ import pytest
 from parsetrail.core.source_evidence import MoneyValue, PdfLine, SourceDisposition, StatementPayload
 from parsetrail.core.v2_format_recognition import recognize_catalog_source
 from parsetrail.core.v2_import_warnings import MAX_WARNING_LOCATIONS, evidence_import_warnings
+from parsetrail.core.v2_loan_history_lines import LoanHistoryError, parse_loan_history
 from parsetrail.core.v2_source_pipeline import build_source_evidence
 from parsetrail.gui.v2_batch_import import ImportAccountReviewRequest
 from parsetrail.gui.v2_csv_import_preview import V2CsvImportPreview
 
-from devtools.parser_engine_pilot.synthetic_family_sources import family_sources
+from devtools.parser_engine_pilot.synthetic_family_sources import family_sources, pdf_document, text_page
+from devtools.parser_engine_pilot.test_loan_history_lines import DEFINITION as LOAN_DEFINITION
+from devtools.parser_engine_pilot.test_loan_history_lines import lines as loan_lines
 
 from .test_v2_catalog_import import DEFINITION, SOURCE, _verified_catalog
 
@@ -64,13 +67,249 @@ def test_real_decoder_date_omissions_and_capture_limitations_are_informational(d
     assert evidence.payload.accounts[0].rows[0].date.provenance == "assumed"
 
 
-def test_missing_opening_is_an_unavailable_balance_check_never_a_failed_equation(decoded):
+def test_capital_single_printed_payment_keeps_unknown_opening_and_informational_balance_limit(decoded):
     evidence = decoded["capital-one-loan-pilot-definition.json"]
+    before = evidence.model_dump_json()
+    account = evidence.payload.accounts[0]
+    row = account.rows[0]
+    assert account.opening is None and account.closing.minor == 950000
+    assert account.closing.raw == "$9,500.00" and account.closing.provenance == "observed"
+    assert row.amount.minor == -22000 and row.amount.raw == "-$220.00"
+    assert [(part.role, part.amount.minor, part.amount.raw) for part in row.components] == [
+        ("principal", -20000, "-$200.00"),
+        ("interest", -2000, "-$20.00"),
+    ]
+    assert not requires(evidence)
+    warnings = evidence_import_warnings(evidence)
+    balance = next(warning for warning in warnings if warning.code == "source_balance_check_unavailable")
+    assert balance.classification == "informational"
+    assert "Opening principal is not printed" in balance.message and "balance remains unverified" in balance.message
+    assert balance.locations == account.closing.locations
+    assert any(warning.code == "source_capture_unverified" for warning in warnings)
+    assert evidence.payload.independent_balance_verified is False
+    assert evidence.payload.capture_verified is False
+    assert evidence.model_dump_json() == before
+
+
+@pytest.mark.parametrize("closing", [None, "unknown", "derived"])
+def test_capital_missing_or_unprinted_closing_still_requires_review(decoded, closing):
+    evidence = decoded["capital-one-loan-pilot-definition.json"]
+    account = evidence.payload.accounts[0]
+    if closing == "unknown":
+        closing = MoneyValue(raw=None, minor=None, provenance="unknown", locations=account.closing.locations)
+    elif closing == "derived":
+        closing = MoneyValue(raw=None, minor=950000, provenance="derived", locations=account.closing.locations)
+    changed = with_account(evidence, account.model_copy(update={"closing": closing}))
+    warning = requires(changed)[0]
+    assert warning.code == "source_balance_check_unavailable"
+    assert "printed opening or closing" in warning.message
+    assert changed.payload.accounts[0].opening is None
+
+
+@pytest.mark.parametrize(
+    "defect",
+    [
+        "unknown_component",
+        "derived_component",
+        "derived_gross",
+        "component_equation",
+        "missing_component",
+        "positive_components",
+        "unsupported_description",
+        "unobserved_description",
+        "unobserved_date",
+        "summary_row",
+        "component_location",
+        "missing_fragment",
+        "repeated_occurrence",
+    ],
+)
+def test_capital_incomplete_or_unsupported_payment_shape_still_requires_review(decoded, defect):
+    evidence = decoded["capital-one-loan-pilot-definition.json"]
+    account = evidence.payload.accounts[0]
+    row = account.rows[0]
+    principal, interest = row.components
+    updates = {}
+    if defect in {"unknown_component", "derived_component", "component_equation", "component_location"}:
+        amount_updates = {
+            "unknown_component": {"minor": None, "raw": None, "provenance": "unknown"},
+            "derived_component": {"raw": None, "provenance": "derived"},
+            "component_equation": {"minor": principal.amount.minor - 1},
+            "component_location": {"locations": account.closing.locations},
+        }[defect]
+        updates["components"] = (
+            principal.model_copy(update={"amount": principal.amount.model_copy(update=amount_updates)}),
+            interest,
+        )
+    elif defect == "missing_component":
+        updates["components"] = (principal,)
+    elif defect == "derived_gross":
+        updates["amount"] = row.amount.model_copy(update={"raw": None, "provenance": "derived"})
+    elif defect == "positive_components":
+        updates = {
+            "amount": row.amount.model_copy(update={"minor": 22000}),
+            "components": tuple(
+                part.model_copy(update={"amount": part.amount.model_copy(update={"minor": -part.amount.minor})})
+                for part in row.components
+            ),
+        }
+    elif defect == "unsupported_description":
+        updates["description"] = row.description.model_copy(update={"text": "Other activity"})
+    elif defect == "unobserved_description":
+        updates["description"] = row.description.model_copy(update={"raw": None, "provenance": "derived"})
+    elif defect == "unobserved_date":
+        updates["date"] = row.date.model_copy(update={"raw": None, "provenance": "assumed"})
+    elif defect == "summary_row":
+        updates = {"row_role": "period_summary", "date_role": "statement_period_end"}
+    elif defect == "missing_fragment":
+        updates["fragments"] = ()
+    elif defect == "repeated_occurrence":
+        updates["occurrence"] = 1
+    changed = with_account(evidence, account.model_copy(update={"rows": (row.model_copy(update=updates),)}))
+    assert any(warning.code == "source_balance_check_unavailable" for warning in requires(changed))
+    assert changed.payload.independent_balance_verified is False
+
+
+@pytest.mark.parametrize(
+    "field,value",
+    [
+        ("parser_id", "other_loan"),
+        ("engine_version", "loan-history-lines-pilot-1"),
+        ("engine_version", "future-engine"),
+    ],
+)
+def test_capital_exception_is_limited_to_the_current_finite_parser(decoded, field, value):
+    evidence = decoded["capital-one-loan-pilot-definition.json"].model_copy(update={field: value})
+    assert [warning.code for warning in requires(evidence)] == ["source_balance_check_unavailable"]
+
+
+@pytest.mark.parametrize("repeated_payment", [True, False])
+def test_decoded_capital_multiple_payments_and_amount_financed_still_require_review(repeated_payment):
+    source = loan_lines(changes={5: loan_lines().lines[4].raw}) if repeated_payment else loan_lines(interest=False)
+    evidence = parse_loan_history(LOAN_DEFINITION, source)
+    assert [warning.code for warning in requires(evidence)] == ["source_balance_check_unavailable"]
+    rows = evidence.payload.accounts[0].rows
+    if repeated_payment:
+        assert [row.occurrence for row in rows] == [0, 1]
+        assert len({row.row_id for row in rows}) == 2
+        assert sum(row.amount.minor for row in rows) == -44000
+    else:
+        assert rows[0].description.text == "Amount Financed" and rows[0].amount.minor == 1000000
+
+
+@pytest.mark.parametrize(
+    "changes,error",
+    [
+        ({1: "Current Payment Due: $300.00"}, "missing_or_ambiguous_history_fields"),
+        ({4: "01/15/2026 Payment Received -$200.00 -$20.00 = -$221.00"}, "printed_component_equation"),
+        ({4: "01/15/2026 Payment Received -$200.00 -$20.00 ="}, "unresolved_history_row"),
+        ({6: "Unclassified $2.00"}, "missing_history_end"),
+    ],
+)
+def test_capital_warning_exception_does_not_admit_refused_source(changes, error):
+    with pytest.raises(LoanHistoryError, match=f"^{error}$"):
+        parse_loan_history(LOAN_DEFINITION, loan_lines(changes=changes))
+
+
+@pytest.mark.parametrize(
+    "changes,code",
+    [
+        ({7: "01/16/2026 Payment Received -$100.00 -$10.00 = -$110.00"}, "unclassified_monetary_line"),
+        ({7: "Unclassified $2.00"}, "unclassified_monetary_line"),
+        ({0: "Account Number: 1234567890123 Unclassified $2.00"}, "unclassified_monetary_line"),
+        (
+            {1: "Current Payment Due: $300.00 Principal Balance: $9,500.00 Unclassified $2.00"},
+            "unclassified_monetary_line",
+        ),
+        ({7: "Other activity 01/16/2026"}, "dated_unresolved"),
+    ],
+)
+def test_audited_capital_exterior_source_defects_still_require_review(changes, code):
+    source = pdf_document(
+        (text_page("Capital One Auto Finance", *(line.raw for line in loan_lines(changes=changes).lines)),)
+    )
+    evidence = build_source_evidence(source, LOAN_DEFINITION, suffix=".pdf")
+    assert evidence.engine_version == "loan-history-lines-pilot-2"
+    assert len(evidence.payload.accounts[0].rows) == 1
+    assert [warning.code for warning in requires(evidence)] == [code]
+    assert any(
+        warning.code == "source_balance_check_unavailable" and warning.classification == "informational"
+        for warning in evidence_import_warnings(evidence)
+    )
+    assert evidence.payload.capture_verified is False and evidence.payload.independent_balance_verified is False
+
+
+@pytest.mark.parametrize(
+    "source_field,code",
+    [
+        ("Past Due: $0.00", "loan_payment_information"),
+        ("Late Fees: $5.00", "loan_payment_information"),
+        ("Total Due: $305.00", "loan_payment_information"),
+        ("Payoff Amount: $9,600.00", "loan_account_summary"),
+        ("Statement Date: 01/31/2026", "loan_statement_dates"),
+        ("Payoff Good Through: 02/15/2026", "loan_statement_dates"),
+        ("Amount Enclosed: $", "loan_coupon_information"),
+    ],
+)
+def test_capital_known_exterior_nonactivity_roles_are_informational(source_field, code):
+    evidence = parse_loan_history(LOAN_DEFINITION, loan_lines(changes={7: source_field}))
+    before = evidence.model_dump_json()
+    warnings = evidence_import_warnings(evidence)
+    assert not requires(evidence)
+    assert any(warning.code == code and warning.classification == "informational" for warning in warnings)
     assert evidence.payload.accounts[0].opening is None
-    warnings = requires(evidence)
-    assert [warning.code for warning in warnings] == ["source_balance_check_unavailable"]
-    assert "printed opening or closing" in warnings[0].message
-    assert warnings[0].locations
+    assert evidence.payload.independent_balance_verified is False
+    assert evidence.model_dump_json() == before
+
+
+def test_capital_ambiguous_accounts_and_nonabsent_opening_still_require_review(decoded):
+    evidence = decoded["capital-one-loan-pilot-definition.json"]
+    account = evidence.payload.accounts[0]
+    other = account.model_copy(update={"source_identity": "9876543210987", "rows": ()})
+    multiple = evidence.model_copy(
+        update={"payload": evidence.payload.model_copy(update={"accounts": (account, other)})}
+    )
+    assert [warning.code for warning in requires(multiple)] == ["source_balance_check_unavailable"]
+    unknown = MoneyValue(raw=None, minor=None, provenance="unknown", locations=())
+    assert [
+        warning.code for warning in requires(with_account(evidence, account.model_copy(update={"opening": unknown})))
+    ] == ["source_balance_check_unavailable"]
+
+
+def test_capital_exception_preserves_unknown_money_and_source_defects(decoded):
+    evidence = decoded["capital-one-loan-pilot-definition.json"]
+    account = evidence.payload.accounts[0]
+    row = account.rows[0]
+    unknown = MoneyValue(raw=None, minor=None, provenance="unknown", locations=())
+    dispositions = tuple(
+        SourceDisposition(code=code, location=row.fragments[0].location, raw_values=("Unknown $1.00",))
+        for code in ("unclassified_monetary_line", "source_total_mismatch")
+    )
+    with_defects = evidence.model_copy(
+        update={"payload": evidence.payload.model_copy(update={"dispositions": dispositions})}
+    )
+    assert {warning.code for warning in requires(with_defects)} == {
+        "unclassified_monetary_line",
+        "source_total_mismatch",
+    }
+    with_unknown = with_account(
+        evidence, account.model_copy(update={"rows": (row.model_copy(update={"running_balance": unknown}),)})
+    )
+    assert {warning.code for warning in requires(with_unknown)} == {
+        "source_amount_unknown",
+        "source_balance_check_unavailable",
+    }
+
+
+def test_capital_printed_opening_never_uses_the_missing_opening_exception(decoded):
+    evidence = decoded["capital-one-loan-pilot-definition.json"]
+    account = evidence.payload.accounts[0]
+    opening = account.closing.model_copy(update={"minor": 970001, "raw": "$9,700.01"})
+    changed = with_account(evidence, account.model_copy(update={"opening": opening}))
+    assert [warning.code for warning in requires(changed)] == ["source_balance_mismatch"]
+    opening = opening.model_copy(update={"minor": 970000, "raw": "$9,700.00"})
+    changed = with_account(evidence, account.model_copy(update={"opening": opening}))
+    assert [warning.code for warning in requires(changed)] == ["source_balance_check_unverified"]
 
 
 def test_principal_check_uses_components_without_adding_interest_to_principal(decoded):

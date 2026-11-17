@@ -27,6 +27,52 @@ class ImportWarning:
     occurrence_count: int = 1
 
 
+def _capital_auto_payment_without_opening(evidence: SourceEvidence, account: StatementAccount) -> bool:
+    """Qualify one finite printed payment, without asserting a balance equation."""
+    if (
+        evidence.parser_id != "pdf_capitaloneauto_202402"
+        or evidence.engine_version != "loan-history-lines-pilot-2"
+        or not isinstance(evidence.payload, StatementPayload)
+        or len(evidence.payload.accounts) != 1
+        or account.balance_scope != "principal_component"
+        or account.opening is not None
+        or account.closing is None
+        or len(account.rows) != 1
+    ):
+        return False
+    row = account.rows[0]
+    if (
+        row.row_role != "activity"
+        or row.date_role != "activity_date"
+        or row.date.provenance != "observed"
+        or row.description.provenance != "observed"
+        or (row.description.text or "").casefold() != "payment received"
+        or row.occurrence != 0
+        or row.source_account != account.source_identity
+        or row.source_account_form != account.source_identity_form
+        or row.running_balance is not None
+        or len(row.components) != 2
+        or {part.role for part in row.components} != {"principal", "interest"}
+    ):
+        return False
+    values = (account.closing, row.amount, *(part.amount for part in row.components))
+    if any(
+        value.provenance != "observed" or value.minor is None or value.raw is None or not value.locations
+        for value in values
+    ):
+        return False
+    return (
+        row.amount.minor < 0
+        and all(part.amount.minor <= 0 for part in row.components)
+        and sum(part.amount.minor for part in row.components) == row.amount.minor
+        and row.date.locations == row.description.locations == row.amount.locations
+        and all(part.amount.locations == row.amount.locations for part in row.components)
+        and len(row.fragments) == 1
+        and row.fragments[0].channel == "loan_history_line"
+        and row.amount.locations == (row.fragments[0].location,)
+    )
+
+
 def _balance_warning(account: StatementAccount) -> tuple[str, str]:
     scope = {
         "account_total": "account total",
@@ -62,6 +108,14 @@ def _balance_warning(account: StatementAccount) -> tuple[str, str]:
 
 
 def _disposition_warning(code: str, raw_values: tuple[str, ...]) -> tuple[WarningClassification, str] | None:
+    loan_roles = {
+        "loan_payment_information": "Printed payment information and fee summaries are retained separately from activity",
+        "loan_account_summary": "Printed payoff quotes are retained separately from principal balances and activity",
+        "loan_statement_dates": "Printed statement, due and payoff dates are retained separately from the activity period",
+        "loan_coupon_information": "The blank payment coupon is retained separately from activity",
+    }
+    if code in loan_roles:
+        return "informational", loan_roles[code]
     citi_roles = {
         "citi_account_summary": "Printed account summary amounts are retained separately from activity",
         "citi_payment_information": "Printed payment information is retained separately from activity",
@@ -167,9 +221,18 @@ def evidence_import_warnings(evidence: SourceEvidence) -> tuple[ImportWarning, .
         if not payload.independent_balance_verified:
             for account in payload.accounts:
                 code, message = _balance_warning(account)
+                classification: WarningClassification = "requires_review"
+                if code == "source_balance_check_unavailable" and _capital_auto_payment_without_opening(
+                    evidence, account
+                ):
+                    classification = "informational"
+                    message = (
+                        "Opening principal is not printed; the closing principal and payment components are printed, "
+                        "but the principal balance remains unverified"
+                    )
                 add(
                     code,
-                    "requires_review",
+                    classification,
                     message,
                     tuple(
                         location
