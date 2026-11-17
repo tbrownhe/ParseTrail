@@ -15,8 +15,8 @@ from parsetrail.core.v2_format_recognition import (
     FormatCandidate,
     FormatRecognition,
     FormatSelection,
+    _recognize_catalog_source,
     candidate_from_evidence,
-    recognize_catalog_source,
     selected_definition,
     validate_catalog_evidence,
 )
@@ -53,6 +53,7 @@ class ImportAccountReview:
     recovery_notice: str = ""
     allow_abbreviated_account_matching: bool = False
     import_preview_mode: str = "always"
+    operation_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -69,6 +70,7 @@ class ImportAccountPlan:
     basis_sha256: str
     profile_sha256: str
     candidate: FormatCandidate
+    operation_id: str | None = None
 
 
 def _digest(value):
@@ -405,6 +407,7 @@ def prepare_import_accounts(review, choices, parser_id, new_accounts=()):
         review.basis_sha256,
         review.profile_sha256,
         candidate,
+        review.operation_id,
     )
 
 
@@ -420,12 +423,50 @@ def commit_import_accounts(
     automatic_preferences=None,
 ):
     """Create accounts, retain source and assign all groups together; post nothing."""
+    from parsetrail.core.v2_prepared_import import PreparedImportSession
+
+    try:
+        return _commit_import_accounts(
+            store,
+            prepared,
+            catalog,
+            plan,
+            cancelled,
+            parse=parse,
+            before_write=before_write,
+            automatic_preferences=automatic_preferences,
+        )
+    finally:
+        if type(prepared) is PreparedImportSession:
+            prepared.close()
+
+
+def _commit_import_accounts(
+    store,
+    prepared,
+    catalog,
+    plan,
+    cancelled,
+    *,
+    parse,
+    before_write,
+    automatic_preferences,
+):
+    from parsetrail.core.v2_prepared_import import PreparedImportSession
 
     def check_cancelled():
         if cancelled is not None and cancelled():
             raise ImportCancelled("cancelled")
 
     check_cancelled()
+    session = type(prepared) is PreparedImportSession
+    submitted_plan = plan
+    submitted_catalog = catalog
+    recognition = None
+    if session:
+        recognition, plan, catalog = prepared.claim(catalog, plan)
+    if not session and plan.operation_id is not None:
+        raise ProfileFormatError("import_preparation_operation_mismatch")
     if _profile_identity(store) != plan.profile_sha256:
         raise ProfileFormatError("import_account_profile_changed")
     entry = selected_definition(prepared.source, catalog=catalog, suffix=prepared.suffix, selection=plan.selection)
@@ -435,21 +476,33 @@ def commit_import_accounts(
     candidate = candidate_from_evidence(entry, prepared.evidence, catalog)
     if candidate != plan.candidate:
         raise ProfileFormatError("import_account_format_changed")
-    # Rebuild the complete valid candidate set, rather than trusting a caller
-    # that trimmed a review to its preferred parser. Parsing holds no write lock.
-    recognition = recognize_catalog_source(
-        prepared.source, catalog=catalog, suffix=prepared.suffix, cancelled=cancelled, parse=parse
-    )
+    # Legacy caller-built DTOs require complete recognition and full selected
+    # output equality. A live operation already owns that authenticated proof.
+    if not session:
+
+        def check_selected_output(definition, evidence):
+            if definition.identity.parser_id == plan.selection.parser_id and evidence != prepared.evidence:
+                raise ProfileFormatError("import_account_format_changed")
+
+        recognition = _recognize_catalog_source(
+            prepared.source,
+            catalog=catalog,
+            suffix=prepared.suffix,
+            cancelled=cancelled,
+            parse=parse,
+            collect=check_selected_output,
+        )
     if candidate not in recognition.candidates:
         raise ProfileFormatError("import_account_format_changed")
-    # Workspace rereads file/catalog after this last potentially long parse.
-    # A failure/cancellation here leaves every account and source untouched.
+    # Workspace rereads file/catalog immediately before the atomic write.
     if before_write is not None:
         before_write()
     if _profile_identity(store) != plan.profile_sha256:
         raise ProfileFormatError("import_account_profile_changed")
     with store._atomic_write("import_accounts"):
         check_cancelled()
+        if session:
+            prepared.validate_apply(catalog=submitted_catalog, plan=submitted_plan)
         if _profile_identity(store) != plan.profile_sha256:
             raise ProfileFormatError("import_account_profile_changed")
         if store.source_imported(prepared.source):

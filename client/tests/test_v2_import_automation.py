@@ -198,20 +198,20 @@ def test_preview_policy_requires_attention_for_new_unknown_ambiguous_and_warning
         assert automatic_import_plan(changed) is None
 
 
-def test_live_preference_change_during_parse_forces_preview_without_partial_import(known_pdf, monkeypatch):
-    from parsetrail.core import v2_workspace as module
+def test_live_preference_change_during_preparation_forces_preview_without_partial_import(known_pdf, monkeypatch):
+    from parsetrail.core.v2_prepared_import import PreparedImportSession
 
     workspace, source = known_pdf
     workspace.set_allow_abbreviated_account_matching(True)
     workspace.set_import_preview_mode("when_needed")
-    original = module.prepare_catalog_source
+    original = PreparedImportSession.select
 
     def preference_changed(*args, **kwargs):
         result = original(*args, **kwargs)
         workspace.set_import_preview_mode("always")
         return result
 
-    monkeypatch.setattr(module, "prepare_catalog_source", preference_changed)
+    monkeypatch.setattr(PreparedImportSession, "select", preference_changed)
     asked = []
 
     def cancel(_path, review):

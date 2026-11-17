@@ -11,19 +11,18 @@ from typing import Literal
 
 from parsetrail.core.source_evidence import StatementPayload
 from parsetrail.core.v2_account_matching import LedgerAccountCandidate, match_verified_source_account
-from parsetrail.core.v2_bounded_pdf_text import pdf_decode_operation
 from parsetrail.core.v2_catalog_admission import admit_pilot_definition
 from parsetrail.core.v2_data_catalog import CatalogCache, VerifiedCatalog, load_trusted_catalog_keys
-from parsetrail.core.v2_format_recognition import FormatRecognition, FormatSelection, recognize_catalog_source
+from parsetrail.core.v2_format_recognition import FormatRecognition, FormatSelection
 from parsetrail.core.v2_import_accounts import (
     ImportAccountPlan,
     ImportAccountReview,
     automatic_import_plan,
-    build_import_account_review,
     commit_import_accounts,
 )
 from parsetrail.core.v2_institutions import Institution, catalog_institutions, merge_institutions
 from parsetrail.core.v2_preferences import V2Preferences, default_preferences_path, load_preferences, save_preferences
+from parsetrail.core.v2_prepared_import import PreparedImportSession
 from parsetrail.core.v2_profile_store import (
     MAX_SOURCE_BYTES,
     AccountBinding,
@@ -36,7 +35,7 @@ from parsetrail.core.v2_source_import import (
     ImportCancelled,
     SourceImportResult,
     import_catalog_source,
-    prepare_catalog_source,
+    import_prepared_catalog_source,
 )
 from parsetrail.core.v2_source_pipeline import SourcePipelineError
 
@@ -304,13 +303,12 @@ class V2Workspace:
             raise WorkspaceError("import_review_conflict")
         if cancelled is not None and cancelled():
             raise ImportCancelled("cancelled")
+        if review_import is not None:
+            return self._import_with_accounts(source_path, review_import, cancelled=cancelled)
         catalog = self.catalog_cache.load_current()
         if catalog is None:
             raise WorkspaceError("verified_catalog_missing")
         source, suffix = _read_source(source_path)
-        if review_import is not None:
-            return self._import_with_accounts(source_path, review_import, cancelled=cancelled)
-        selection = None
         if review_format is not None and suffix == ".csv":
             # An exact retry needs no new interpretation or preview. This read
             # also verifies the existing profile before any review is requested.
@@ -319,29 +317,46 @@ class V2Workspace:
                     source_hash = hashlib.sha256(source).hexdigest()
                     saved = store.load_import(source_hash)
                     return SourceImportResult("already_imported", source_hash, saved.evidence)
-            recognition = recognize_catalog_source(source, catalog=catalog, suffix=suffix, cancelled=cancelled)
-            if not recognition.candidates:
-                raise CatalogImportError("catalog_no_match")
-            selection = review_format(source_path, recognition)
-            if cancelled is not None and cancelled():
-                raise ImportCancelled("cancelled")
-            if selection is None:
-                raise ImportSkipped("import_skipped")
-            # No connection or write lock was held while the user reviewed.
-            # Re-read both mutable inputs: confirmation cannot authorize bytes
-            # or a signed declaration release different from the preview.
-            source, current_suffix = _read_source(source_path)
-            if current_suffix != suffix or hashlib.sha256(source).hexdigest() != recognition.source_sha256:
-                raise WorkspaceError("source_changed_since_preview")
-            catalog = self.catalog_cache.load_current()
-            if catalog is None:
-                raise WorkspaceError("verified_catalog_missing")
+            with PreparedImportSession(source, catalog=catalog, suffix=suffix, cancelled=cancelled) as prepared:
+                with V2ProfileStore.open(self.profile_path, read_only=True) as store:
+                    recognition = prepared.format_review(store)
+                selection = review_format(source_path, recognition)
+                if cancelled is not None and cancelled():
+                    raise ImportCancelled("cancelled")
+                if selection is None:
+                    raise ImportSkipped("import_skipped")
+                prepared.select_format(selection, cancelled=cancelled)
+                # User review and JSON reconstruction hold no profile connection.
+                source, current_suffix = _read_source(source_path)
+                if current_suffix != suffix or hashlib.sha256(source).hexdigest() != recognition.source_sha256:
+                    raise WorkspaceError("source_changed_since_preview")
+                catalog = self.catalog_cache.load_current()
+                if catalog is None:
+                    raise WorkspaceError("verified_catalog_missing")
+
+                def check_format_inputs():
+                    final_source, final_suffix = _read_source(source_path)
+                    if final_suffix != suffix or hashlib.sha256(final_source).hexdigest() != recognition.source_sha256:
+                        raise WorkspaceError("source_changed_since_preview")
+                    final_catalog = self.catalog_cache.load_current()
+                    if final_catalog is None:
+                        raise WorkspaceError("verified_catalog_missing")
+                    if final_catalog.snapshot != catalog.snapshot:
+                        raise CatalogImportError("catalog_selection_catalog_changed")
+
+                with V2ProfileStore.open(self.profile_path) as store:
+                    return import_prepared_catalog_source(
+                        store,
+                        prepared,
+                        catalog=catalog,
+                        selection=selection,
+                        cancelled=cancelled,
+                        before_write=check_format_inputs,
+                    )
         if cancelled is not None and cancelled():
             raise ImportCancelled("cancelled")
         with V2ProfileStore.open(self.profile_path) as store:
-            return import_catalog_source(
-                store, source, catalog=catalog, suffix=suffix, cancelled=cancelled, selection=selection
-            )
+            return import_catalog_source(store, source, catalog=catalog, suffix=suffix, cancelled=cancelled)
 
     def _import_with_accounts(self, source_path, review_import, *, cancelled=None):
         notice = ""
@@ -357,55 +372,36 @@ class V2Workspace:
                     source_hash = hashlib.sha256(source).hexdigest()
                     saved = store.load_import(source_hash)
                     return SourceImportResult("already_imported", source_hash, saved.evidence)
-            recognition = recognize_catalog_source(source, catalog=catalog, suffix=suffix, cancelled=cancelled)
-            if not recognition.candidates:
-                raise CatalogImportError("catalog_no_match")
-            with V2ProfileStore.open(self.profile_path, read_only=True) as store:
-                review = build_import_account_review(store, recognition, catalog, preferences=self.preferences())
-            if notice:
-                review = replace(review, recovery_notice=notice)
-            decision = automatic_import_plan(review)
-            automatic = decision is not None
-            if not automatic:
-                decision = review_import(source_path, review)
-            if cancelled is not None and cancelled():
-                raise ImportCancelled("cancelled")
-            if decision is None:
-                raise ImportSkipped("import_skipped")
-            current_source, current_suffix = _read_source(source_path)
-            if current_suffix != suffix or hashlib.sha256(current_source).hexdigest() != recognition.source_sha256:
-                notice = "The file changed after the preview. Check the refreshed account choices and interpretation before importing. Nothing from the earlier preview was saved."
-                continue
-            current_catalog = self.catalog_cache.load_current()
-            if current_catalog is None:
-                raise WorkspaceError("verified_catalog_missing")
-            if current_catalog.snapshot != catalog.snapshot:
-                notice = "Statement formats changed after the preview. Check the refreshed choices before importing. Nothing from the earlier preview was saved."
-                continue
-            # Rechecks remain independent; identical bounded decodes need no new child.
-            with pdf_decode_operation():
-                prepared = prepare_catalog_source(
-                    current_source,
-                    catalog=current_catalog,
-                    suffix=suffix,
-                    selection=decision.selection,
-                    cancelled=cancelled,
-                )
-                latest_source, latest_suffix = _read_source(source_path)
-                if latest_suffix != suffix or hashlib.sha256(latest_source).hexdigest() != recognition.source_sha256:
-                    notice = "The file changed while its import was being checked. Review the refreshed document before confirming again. Nothing from the earlier preview was saved."
+            with PreparedImportSession(source, catalog=catalog, suffix=suffix, cancelled=cancelled) as prepared:
+                with V2ProfileStore.open(self.profile_path, read_only=True) as store:
+                    review = prepared.review(store, preferences=self.preferences(), recovery_notice=notice)
+                decision = automatic_import_plan(review)
+                automatic = decision is not None
+                if not automatic:
+                    decision = review_import(source_path, review)
+                if cancelled is not None and cancelled():
+                    raise ImportCancelled("cancelled")
+                if decision is None:
+                    raise ImportSkipped("import_skipped")
+                current_source, current_suffix = _read_source(source_path)
+                if (
+                    current_suffix != suffix
+                    or hashlib.sha256(current_source).hexdigest() != review.recognition.source_sha256
+                ):
+                    notice = "The file changed after the preview. Check the refreshed account choices and interpretation before importing. Nothing from the earlier preview was saved."
                     continue
-                latest_catalog = self.catalog_cache.load_current()
-                if latest_catalog is None:
+                current_catalog = self.catalog_cache.load_current()
+                if current_catalog is None:
                     raise WorkspaceError("verified_catalog_missing")
-                if latest_catalog.snapshot != current_catalog.snapshot:
-                    notice = "Statement formats changed while the import was being checked. Review the refreshed interpretation before confirming again. Nothing from the earlier preview was saved."
+                if current_catalog.snapshot != catalog.snapshot:
+                    notice = "Statement formats changed after the preview. Check the refreshed choices before importing. Nothing from the earlier preview was saved."
                     continue
+                prepared.select(decision, cancelled=cancelled)
                 try:
 
                     def check_current_inputs(
                         expected_suffix=suffix,
-                        expected_hash=recognition.source_sha256,
+                        expected_hash=review.recognition.source_sha256,
                         expected_catalog=current_catalog.snapshot,
                     ):
                         final_source, final_suffix = _read_source(source_path)

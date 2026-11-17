@@ -101,6 +101,44 @@ def _saved_retry(store: V2ProfileStore, source: bytes) -> SourceImportResult | N
     return None
 
 
+def import_prepared_catalog_source(store, prepared, *, catalog, selection, cancelled=None, before_write=None):
+    """Save an explicit-format session's exact validated output without parsing."""
+    from parsetrail.core.v2_prepared_import import PreparedImportSession
+
+    if type(prepared) is not PreparedImportSession:
+        raise CatalogImportError("catalog_preparation_required")
+    try:
+        if cancelled is not None and cancelled():
+            raise ImportCancelled("cancelled")
+        submitted_selection = selection
+        selection = prepared.claim_format(store, catalog, selection)
+        if cancelled is not None and cancelled():
+            raise ImportCancelled("cancelled")
+        if before_write is not None:
+            before_write()
+        if cancelled is not None and cancelled():
+            raise ImportCancelled("cancelled")
+        with store._atomic_write("prepared_catalog_source"):
+            if cancelled is not None and cancelled():
+                raise ImportCancelled("cancelled")
+            prepared.validate_apply(catalog=catalog, selection=submitted_selection)
+            prepared.validate_format_profile(store)
+            existing = _saved_retry(store, prepared.source)
+            if existing is not None:
+                return existing
+            if cancelled is not None and cancelled():
+                raise ImportCancelled("cancelled")
+            inserted = store.import_source(
+                prepared.source, prepared.definition, prepared.evidence, suffix=prepared.suffix
+            )
+            saved = store.load_import(selection.source_sha256)
+            return SourceImportResult(
+                "imported" if inserted else "already_imported", selection.source_sha256, saved.evidence
+            )
+    finally:
+        prepared.close()
+
+
 def import_source(
     store: V2ProfileStore,
     source: bytes,

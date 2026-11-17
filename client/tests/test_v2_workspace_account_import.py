@@ -130,26 +130,25 @@ def test_cancellation_after_draft_confirmation_leaves_no_new_state(tmp_path):
 
 
 @pytest.mark.parametrize("drift", ["source", "catalog"])
-def test_changes_during_final_reparse_require_fresh_confirmation(tmp_path, monkeypatch, drift):
-    from parsetrail.core import v2_workspace as module
+def test_changes_during_selected_evidence_validation_require_fresh_confirmation(tmp_path, monkeypatch, drift):
+    from parsetrail.core.v2_prepared_import import PreparedImportSession
 
     workspace, path, activate = workspace_with_choices(tmp_path)
-    original = module.prepare_catalog_source
+    original = PreparedImportSession.select
     changed = False
     reviews = []
 
-    def parse(*args, **kwargs):
+    def select(*args, **kwargs):
         nonlocal changed
-        prepared = original(*args, **kwargs)
+        original(*args, **kwargs)
         if not changed:
             changed = True
             if drift == "source":
-                path.write_bytes(path.read_bytes().replace(b"Coffee", b"Changed during reparse"))
+                path.write_bytes(path.read_bytes().replace(b"Coffee", b"Changed during validation"))
             else:
                 activate(2)
-        return prepared
 
-    monkeypatch.setattr(module, "prepare_catalog_source", parse)
+    monkeypatch.setattr(PreparedImportSession, "select", select)
 
     def choose(_path, review):
         reviews.append(review)
@@ -166,26 +165,25 @@ def test_changes_during_final_reparse_require_fresh_confirmation(tmp_path, monke
 
 
 @pytest.mark.parametrize("drift", ["source", "catalog"])
-def test_changes_during_route_uniqueness_recheck_require_fresh_confirmation(tmp_path, monkeypatch, drift):
-    from parsetrail.core import v2_import_accounts as module
+def test_changes_before_atomic_apply_require_fresh_confirmation(tmp_path, monkeypatch, drift):
+    from parsetrail.core import v2_workspace as module
 
     workspace, path, activate = workspace_with_choices(tmp_path)
-    original = module.recognize_catalog_source
+    original = module.commit_import_accounts
     reviews = []
     changed = False
 
-    def recognize(*args, **kwargs):
+    def commit(*args, **kwargs):
         nonlocal changed
-        result = original(*args, **kwargs)
         if not changed:
             changed = True
             if drift == "source":
                 path.write_bytes(path.read_bytes().replace(b"Coffee", b"Changed during route validation"))
             else:
                 activate(2)
-        return result
+        return original(*args, **kwargs)
 
-    monkeypatch.setattr(module, "recognize_catalog_source", recognize)
+    monkeypatch.setattr(module, "commit_import_accounts", commit)
 
     def choose(_path, review):
         reviews.append(review)

@@ -1,8 +1,7 @@
 """Read-only recognition of complete files against installed signed definitions.
 
-Candidates are bounded previews, never cached evidence or permission to post.
-Selection binds the exact source, catalog snapshot and declaration; import parses
-the selected declaration again before retaining authoritative evidence.
+Candidates are bounded previews and never permission to post. A core-owned
+preparation operation may collect complete validated outputs independently.
 """
 
 from __future__ import annotations
@@ -306,6 +305,19 @@ def recognize_catalog_source(
     metadata may narrow overlapping declarations; users do not map columns.
     A PDF has only its one unique signed route; selection cannot override it.
     """
+    return _recognize_catalog_source(source, catalog=catalog, suffix=suffix, parse=parse, cancelled=cancelled)
+
+
+def _recognize_catalog_source(
+    source: bytes,
+    *,
+    catalog: VerifiedCatalog,
+    suffix: Literal[".csv", ".pdf"],
+    parse: CatalogParser = build_source_evidence,
+    cancelled: Callable[[], bool] | None = None,
+    collect: Callable[[VerifiedDefinition, SourceEvidence], None] | None = None,
+) -> FormatRecognition:
+    """Deliver each validated output to its synchronous core operation owner."""
     _check_cancelled(cancelled)
     if type(source) is not bytes or not 0 < len(source) <= MAX_SOURCE_BYTES:
         raise SourcePipelineError("source_size")
@@ -333,6 +345,8 @@ def recognize_catalog_source(
         _check_cancelled(cancelled)
         validate_catalog_evidence(evidence, source_hash, item)
         candidates.append(candidate_from_evidence(item, evidence, catalog))
+        if collect is not None:
+            collect(item, evidence)
         # The next candidate must not keep this candidate's complete evidence.
         del evidence
     _check_cancelled(cancelled)
