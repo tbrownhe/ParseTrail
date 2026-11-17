@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
+    QSizePolicy,
     QSplitter,
     QTableWidget,
     QTableWidgetItem,
@@ -29,12 +30,13 @@ from PySide6.QtWidgets import (
 
 from parsetrail.core.source_evidence import ObservationEvidence
 from parsetrail.core.v2_cash_movement import cash_account_labels
+from parsetrail.core.v2_loan_automation import AUTOMATIC_REASON
 from parsetrail.core.v2_loan_payments import CLEARING, INTEREST
 from parsetrail.core.v2_profile_store import ProfileFormatError
 from parsetrail.gui.v2_cash_activity_review import _money
 from parsetrail.gui.v2_details_disclosure import DetailsDisclosure
 from parsetrail.gui.v2_evidence_preview import _location, preview_saved_source
-from parsetrail.gui.v2_form_state import install_initial_focus
+from parsetrail.gui.v2_form_state import install_form_styles, set_field_state
 from parsetrail.gui.v2_gui_lifetime import exec_disposable
 from parsetrail.gui.v2_profile_jobs import ProfileJobs
 
@@ -171,7 +173,7 @@ class V2LoanPaymentReview(QDialog):
 
     def __init__(self, workspace, parent=None, *, event_id=None, source_sha256=None, focus_row_id=None):
         super().__init__(parent)
-        install_initial_focus(self)
+        install_form_styles(self)
         self.workspace = workspace
         self.jobs = ProfileJobs(self, workspace.profile_path)
         self.jobs.completed.connect(self._job_completed)
@@ -180,6 +182,7 @@ class V2LoanPaymentReview(QDialog):
         self.snapshot = self.preview = self.selected_event = None
         self.initial_posting_succeeded = False
         self._initially_pending = event_id is None
+        self._select_only_payment = event_id is None
         self._requested_event_id = event_id
         self._source_sha256 = source_sha256
         self._focus_row_id = focus_row_id
@@ -212,6 +215,14 @@ class V2LoanPaymentReview(QDialog):
         self.assumed_dates.setChecked(self.review_preferences.allow_assumed_posting_dates)
         self.assumed_dates.toggled.connect(self._toggle_dates)
         layout.addWidget(self.assumed_dates)
+        self.auto_post = QCheckBox("Automatically post supported loan payments")
+        self.auto_post.setChecked(self.review_preferences.auto_post_loan_payments)
+        self.auto_post.toggled.connect(self._toggle_auto_post)
+        self.auto_post_help = _label(
+            "Future imports only. Currently supports single Capital One Auto payments. "
+            "Complete supported payments reduce principal and record interest; "
+            "the paying account stays unresolved in Transfers. Other payments need review."
+        )
         rules_text = _label(
             "Review complete printed loan components. The paying account can be resolved later in Transfers. "
             "Loan dates are observed activity dates; accounting dates require the explicit assumed-date choice. "
@@ -220,10 +231,16 @@ class V2LoanPaymentReview(QDialog):
         rules_content = QWidget()
         rules_layout = QVBoxLayout(rules_content)
         rules_layout.setContentsMargins(0, 0, 0, 0)
+        rules_layout.addWidget(self.auto_post)
+        rules_layout.addWidget(self.auto_post_help)
         rules_layout.addWidget(rules_text)
         rules_layout.addWidget(_label("Profile path"))
         rules_layout.addWidget(self.profile_path)
-        self.rules = DetailsDisclosure(rules_content, self, subject="review rules and date qualifications")
+        self.rules = DetailsDisclosure(
+            rules_content, self, subject="review rules, future-import preferences and date qualifications"
+        )
+        self.rules.button.setToolTip("Review rules, automatic posting for future imports, and profile details")
+        self.rules.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Maximum)
         layout.addWidget(self.rules)
         self.tabs = QTabWidget()
         layout.addWidget(self.tabs, 1)
@@ -336,12 +353,13 @@ class V2LoanPaymentReview(QDialog):
             self.components.horizontalHeader().setSectionResizeMode(column, QHeaderView.ResizeToContents)
         for column in (3, 7):
             self.components.horizontalHeader().setSectionResizeMode(column, QHeaderView.Stretch)
-        self.components.setMinimumHeight(0)
+        self.components.setMinimumHeight(70)
         self.components.setColumnHidden(8, True)
         self.components.itemChanged.connect(self._draft_changed)
         self.components.itemSelectionChanged.connect(self._component_selected)
         self.source_splitter = QSplitter(Qt.Vertical)
         self.source_splitter.addWidget(self.components)
+        self.source_splitter.setCollapsible(0, False)
         self.source_details = QPlainTextEdit()
         self.source_details.setReadOnly(True)
         self.source_details.setMinimumHeight(0)
@@ -438,6 +456,9 @@ class V2LoanPaymentReview(QDialog):
         self.assumed_dates.blockSignals(True)
         self.assumed_dates.setChecked(self.review_preferences.allow_assumed_posting_dates)
         self.assumed_dates.blockSignals(False)
+        self.auto_post.blockSignals(True)
+        self.auto_post.setChecked(self.review_preferences.auto_post_loan_payments)
+        self.auto_post.blockSignals(False)
         self._clear_draft()
         if event is None:
             self.reason.setText("Initial Review")
@@ -454,6 +475,9 @@ class V2LoanPaymentReview(QDialog):
             self.bank.setCurrentIndex(self.bank.findData(event.manifest.bank.row_id))
         self.bank.blockSignals(False)
         selected_rows = {proof.row_id for proof in event.manifest.components} if event else set()
+        if event is None and self._select_only_payment and len(self.rows) == 1 and self.rows[0].eligible:
+            selected_rows = {self.rows[0].row_id}
+            self._select_only_payment = False
         account_kinds = {account.id: account.kind for account in snapshot.accounts}
         self.components.blockSignals(True)
         self.components.setRowCount(len(self.rows))
@@ -544,7 +568,8 @@ class V2LoanPaymentReview(QDialog):
             self._open_saved_history = False
             self.tabs.setCurrentIndex(self.tabs.count() - 1)
             self.summary.setText(
-                "Saved reviewed payment. Current date preferences do not invalidate it. "
+                ("Automatically posted payment. " if event.reason == AUTOMATIC_REASON else "Saved reviewed payment. ")
+                + "Current date preferences do not invalidate it. "
                 "Inspect its source evidence here; use Bank and printed components to propose a replacement."
             )
             self._update_actions()
@@ -759,6 +784,7 @@ class V2LoanPaymentReview(QDialog):
                 and self.reason.text().strip()
             )
         )
+        set_field_state(self.confirm, "ready" if self.confirm.isEnabled() else "neutral")
         self.withdraw.setEnabled(
             bool(self.snapshot and active and not linked and self.reason.text().strip() and not self.jobs.writing)
         )
@@ -774,11 +800,13 @@ class V2LoanPaymentReview(QDialog):
             )
         elif linked:
             self.status.setText(
-                "Posted · transfer matched. Unlink it in Transfers before changing or withdrawing the lender posting."
+                ("Automatically posted · " if event.reason == AUTOMATIC_REASON else "Posted · ")
+                + "transfer matched. Unlink it in Transfers before changing or withdrawing the lender posting."
             )
         elif active and not changed:
             self.status.setText(
-                "Posted · paying-account counterpart unresolved. Resolve it in Transfers when more evidence is available."
+                ("Automatically posted · " if event.reason == AUTOMATIC_REASON else "Posted · ")
+                + "paying-account counterpart unresolved. Resolve it in Transfers when more evidence is available."
                 if unresolved
                 else "Posted payment · inspect its retained source evidence and history."
             )
@@ -802,6 +830,26 @@ class V2LoanPaymentReview(QDialog):
             self.assumed_dates.blockSignals(False)
             return
         self.refresh()
+
+    def _toggle_auto_post(self, enabled):
+        try:
+            self.workspace.set_auto_post_loan_payments(enabled)
+            preferences = self.workspace.preferences()
+        except (OSError, ValueError):
+            self.auto_post.blockSignals(True)
+            self.auto_post.setChecked(not enabled)
+            self.auto_post.blockSignals(False)
+            self.status.setText("Automatic posting preference was not saved. Try again before importing.")
+            return
+        if preferences.allow_assumed_posting_dates != self.review_preferences.allow_assumed_posting_dates:
+            self.refresh()
+        else:
+            self.review_preferences = preferences
+            self.status.setText(
+                "Automatic posting enabled for future supported imports. This payment is unchanged."
+                if enabled
+                else "Automatic posting disabled. Future payments will need review."
+            )
 
     def _open_source(self, source_sha256):
         try:
@@ -981,7 +1029,15 @@ class V2LoanPaymentReview(QDialog):
 
     def _busy_changed(self, _busy):
         writing = self.jobs.writing
-        for widget in (self.tabs, self.mode, self.reload, self.assumed_dates, self.reference, self.reason):
+        for widget in (
+            self.tabs,
+            self.mode,
+            self.reload,
+            self.assumed_dates,
+            self.auto_post,
+            self.reference,
+            self.reason,
+        ):
             widget.setEnabled(not writing)
         if writing:
             self.confirm.setEnabled(False)

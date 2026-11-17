@@ -17,6 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from parsetrail.core.source_evidence import ObservationEvidence
+from parsetrail.core.v2_loan_automation import AUTOMATIC_REASON
 from parsetrail.core.v2_profile_store import ProfileFormatError
 from parsetrail.gui.v2_evidence_preview import _money, preview_saved_source
 from parsetrail.gui.v2_form_state import install_form_styles, set_field_state
@@ -175,8 +176,14 @@ class V2LoanDocumentReview(QWidget):
                 if self._is_origination(row) and row.row_id in self.origination_events
                 else "Origination · ready to review"
                 if self._is_origination(row)
+                else "Automatically posted · counterpart unresolved"
+                if self._event(row) is not None
+                and self._event(row).reason == AUTOMATIC_REASON
+                and self._event_unresolved(self._event(row))
                 else "Posted · counterpart unresolved"
                 if self._event(row) is not None and self._event_unresolved(self._event(row))
+                else "Automatically posted · matched"
+                if self._event(row) is not None and self._event(row).reason == AUTOMATIC_REASON
                 else "Posted · matched"
                 if self._event(row) is not None
                 else "Ready for payment review"
@@ -223,7 +230,20 @@ class V2LoanDocumentReview(QWidget):
     def _selected(self):
         row = self._current()
         self.action_button.setEnabled(row is not None and row.account_id is not None and not self.jobs.pending)
-        set_field_state(self.action_button, "ready" if self.action_button.isEnabled() else "neutral")
+        saved = row is not None and (
+            row.row_id in self.origination_events if self._is_origination(row) else self._event(row) is not None
+        )
+        set_field_state(self.action_button, "ready" if self.action_button.isEnabled() and not saved else "neutral")
+        complete = bool(self.rows) and all(
+            item.row_id in self.origination_events if self._is_origination(item) else self._event(item) is not None
+            for item in self.rows
+        )
+        self.explanation.setText(
+            "Review complete. You can inspect the saved evidence or resolve unmatched counterparts in Transfers."
+            if complete
+            else "Review origination or payment evidence. Payments can post now and be matched to the paying account later in Transfers."
+        )
+        self.transfers_button.setVisible(False)
         if row is None:
             self.components.clear()
             self.status.setText(
@@ -233,7 +253,6 @@ class V2LoanDocumentReview(QWidget):
             )
             return
         proof = row.proof
-        self.transfers_button.setVisible(False)
         if self._is_origination(row):
             self.components.setText(
                 f"Loan origination · amount financed {_money(row.amount_minor)}. This is not a repayment."
@@ -281,16 +300,18 @@ class V2LoanDocumentReview(QWidget):
                 "Printed component facts are retained; resolve the account or component prerequisites below."
             )
         event = self._event(row)
-        self.action_button.setText("View reviewed loan payment" if event else "Review loan payment…")
+        self.action_button.setText("View payment" if event else "Review loan payment…")
         if event:
             unresolved = self._event_unresolved(event)
             self.transfers_button.setVisible(event.manifest.bank is None)
             self.transfers_button.setText("Resolve in Transfers…" if unresolved else "View in Transfers…")
             self.transfers_button.setEnabled(not self.jobs.pending)
             self.status.setText(
-                "Posted · paying-account counterpart unresolved. Resolve it later in Transfers."
+                ("Automatically posted · " if event.reason == AUTOMATIC_REASON else "Posted · ")
+                + "paying-account counterpart unresolved. Resolve it later in Transfers."
                 if unresolved
-                else "Posted · matched payment. Inspect its retained evidence or history."
+                else ("Automatically posted · " if event.reason == AUTOMATIC_REASON else "Posted · ")
+                + "matched payment. Inspect its retained evidence or history."
             )
         else:
             messages = [
@@ -362,4 +383,5 @@ class V2LoanDocumentReview(QWidget):
         self.table.setRowCount(0)
         self.components.clear()
         self.action_button.setEnabled(False)
+        set_field_state(self.action_button, "neutral")
         self.status.setText("Loan evidence is unavailable. Reload to retry; saved work is unchanged.")

@@ -381,12 +381,18 @@ def test_whole_replacement_retains_dates_proofs_inverses_and_fresh_derived_ids(t
 
 
 def test_context_change_before_preview_resets_cached_selection_and_reference(tmp_path):
+    from PySide6.QtCore import Qt
+
     path = tmp_path / "preview-race.db"
     bank, rows = _profile(path)
     view = dialog(path)
     view.assumed_dates.click()
     wait_for_jobs(view)
     view.bank.setCurrentIndex(view.bank.findData(bank))
+    wait_for_jobs(view)
+    # The only complete payment is selected on entry; create the unchecked
+    # selection that this stale-selection scenario changes after the mutation.
+    view.components.item(0, 0).setCheckState(Qt.Unchecked)
     wait_for_jobs(view)
     view.reference.setText("Loaded old account context")
     view.reason.setText("Loaded old review context")

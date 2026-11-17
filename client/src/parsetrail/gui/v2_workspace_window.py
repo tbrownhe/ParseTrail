@@ -47,6 +47,7 @@ from parsetrail.gui.v2_batch_import import (
     V2BatchImportReport,
     V2BatchImportWorker,
     import_failure_guidance,
+    loan_automation_summary,
     review_import_accounts,
 )
 from parsetrail.gui.v2_card_purchase_review import V2CardPurchaseReview
@@ -183,6 +184,17 @@ class V2WorkspaceWindow(QMainWindow):
         self.abbreviated_matching_action.setChecked(workspace.preferences().allow_abbreviated_account_matching)
         self.abbreviated_matching_action.toggled.connect(self._set_abbreviated_matching)
         settings_menu.addAction(self.abbreviated_matching_action)
+        self.auto_post_loan_action = QAction("Automatically post supported loan payments", self)
+        self.auto_post_loan_action.setCheckable(True)
+        self.auto_post_loan_action.setChecked(workspace.preferences().auto_post_loan_payments)
+        self.auto_post_loan_action.setToolTip(
+            "Future imports only: complete supported payments reduce principal and record interest. "
+            "The paying account stays unresolved in Transfers; other payments need review. "
+            "Currently supports single Capital One Auto payments."
+        )
+        self.auto_post_loan_action.setStatusTip(self.auto_post_loan_action.toolTip())
+        self.auto_post_loan_action.toggled.connect(self._set_auto_post_loan_payments)
+        settings_menu.addAction(self.auto_post_loan_action)
         self.assumed_posting_action = QAction(
             "Allow best guess posting dates when a statement does not print one", self
         )
@@ -1966,14 +1978,16 @@ class V2WorkspaceWindow(QMainWindow):
             self.refresh(select_source=imported[-1].source_sha256 if imported else None)
             failures = sum(item.status == "failed" for item in result.files)
             self.status.setText(
-                f"Batch finished: {len(imported)} imported, {failures} failed; saved evidence is pending review."
+                f"Batch finished: {len(imported)} imported, {failures} failed; "
+                f"{sum(item.loan_automation is not None and item.loan_automation.status == 'posted' for item in imported)} "
+                "loan payments posted automatically. Other activity may need review."
             )
             V2BatchImportReport(result, self).exec()
             return
         if result is not None:
             self.refresh(select_source=result.source_sha256)
             self.status.setText(
-                "Source imported; evidence is pending review."
+                loan_automation_summary(result.loan_automation) or "Source imported; evidence is pending review."
                 if result.status == "imported"
                 else "This exact source was already imported."
             )
@@ -2118,6 +2132,9 @@ class V2WorkspaceWindow(QMainWindow):
         self.abbreviated_matching_action.blockSignals(True)
         self.abbreviated_matching_action.setChecked(preferences.allow_abbreviated_account_matching)
         self.abbreviated_matching_action.blockSignals(False)
+        self.auto_post_loan_action.blockSignals(True)
+        self.auto_post_loan_action.setChecked(preferences.auto_post_loan_payments)
+        self.auto_post_loan_action.blockSignals(False)
         self.assumed_posting_action.blockSignals(True)
         self.assumed_posting_action.setChecked(preferences.allow_assumed_posting_dates)
         self.assumed_posting_action.blockSignals(False)
@@ -2136,6 +2153,21 @@ class V2WorkspaceWindow(QMainWindow):
             self.assumed_posting_action.setChecked(not enabled)
             self.assumed_posting_action.blockSignals(False)
             QMessageBox.warning(self, "Preference was not saved", str(exc))
+
+    def _set_auto_post_loan_payments(self, enabled: bool) -> None:
+        error = ""
+        try:
+            self.workspace.set_auto_post_loan_payments(enabled)
+            self.status.setText(
+                "Automatic loan posting enabled for future supported imports. Principal reduces debt; interest is expense; "
+                "paying-account counterparts stay in Transfers."
+                if enabled
+                else "Automatic loan posting disabled. Future payments will need review."
+            )
+        except (OSError, ValueError) as exc:
+            error = str(exc)
+            QMessageBox.warning(self, "Preference was not saved", str(exc))
+        self._sync_preference_controls(error)
 
     def _add_account(self) -> None:
         try:

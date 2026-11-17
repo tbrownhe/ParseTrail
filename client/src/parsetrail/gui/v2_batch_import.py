@@ -12,6 +12,36 @@ from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QLineEdit, QLis
 from parsetrail.core.v2_format_recognition import ImportCancelled
 from parsetrail.core.v2_import_accounts import ImportAccountPlan, ImportAccountReview
 from parsetrail.core.v2_workspace import BatchImportResult, V2Workspace, WorkspaceError
+from parsetrail.gui.v2_evidence_preview import _money
+
+
+def loan_automation_summary(outcome) -> str:
+    """Explain the separate posting result without turning a saved import into a failure."""
+    if outcome is None:
+        return ""
+    if outcome.status == "posted":
+        return (
+            f"Automatically posted payment · {_money(outcome.principal_minor)} principal · "
+            f"{_money(outcome.interest_minor)} interest. Paying account unresolved in Transfers."
+        )
+    reason = {
+        "loan_auto_account_new": "Check the payment for this newly created account.",
+        "loan_auto_account_required": "Choose a compatible loan account.",
+        "loan_auto_source_warning": "Source evidence needs attention.",
+        "loan_auto_unsupported": "This statement format requires manual loan review.",
+        "loan_auto_multiple_payments": "Choose the complete payment components.",
+        "loan_auto_prior_review": "Existing payment review history needs inspection.",
+        "loan_auto_date_permission_required": "Allow an assumed accounting date or review the date setting.",
+        "loan_auto_changed": "The profile or preferences changed before posting.",
+        "loan_auto_cancelled": "Automatic posting was cancelled.",
+        "loan_auto_failed": "Automatic posting could not complete. Inspect the saved evidence.",
+        "loan_auto_origination": "Review the loan origination and its destination.",
+        "source_overlap_review_required": "Repeated source evidence needs occurrence review.",
+        "loan_source_already_used": "This activity already has a posting or interpretation.",
+        "loan_principal_scope_required": "Choose a loan account that tracks principal.",
+        "loan_component_unsupported": "Printed payment components need inspection.",
+    }.get(outcome.reason_code, "Inspect the saved loan evidence.")
+    return "Imported · loan review needed. " + reason
 
 
 @dataclass
@@ -133,18 +163,26 @@ class V2BatchImportReport(QDialog):
             f"{counts['imported']} imported · {counts['already_imported']} already saved · "
             f"{counts['skipped']} skipped · {counts['failed']} failed · {counts['cancelled']} cancelled · "
             f"{counts['not_attempted']} not attempted. "
-            "Completed files remain pending review; cancellation keeps those imports."
+            "Completed imports remain saved; payment posting results are shown per file."
         )
         summary.setWordWrap(True)
         layout.addWidget(summary)
         self.files = QListWidget()
         for item in result.files:
             label = f"{item.path.name} — {item.status.replace('_', ' ')}"
+            automation = loan_automation_summary(item.loan_automation)
+            if item.loan_automation is not None:
+                label += (
+                    " — payment posted automatically"
+                    if item.loan_automation.status == "posted"
+                    else " — loan review needed"
+                )
             if item.error_code:
                 label += " — select for recovery details"
             row = QListWidgetItem(label)
             row.setData(Qt.UserRole, str(item.path))
             row.setData(Qt.UserRole + 1, item.error_code)
+            row.setData(Qt.UserRole + 2, automation)
             row.setToolTip(str(item.path))
             self.files.addItem(row)
         layout.addWidget(self.files)
@@ -168,4 +206,6 @@ class V2BatchImportReport(QDialog):
         self.selected_path.setText(current.data(Qt.UserRole) if current is not None else "")
         self.selected_path.setCursorPosition(0)
         code = current.data(Qt.UserRole + 1) if current is not None else None
-        self.recovery_guidance.setText(import_failure_guidance(code) if code else "")
+        self.recovery_guidance.setText(
+            import_failure_guidance(code) if code else current.data(Qt.UserRole + 2) if current is not None else ""
+        )

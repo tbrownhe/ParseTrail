@@ -131,7 +131,12 @@ def test_loan_stale_preview_is_discarded_and_confirmed_write_cannot_be_closed(tm
         view.bank.setCurrentIndex(0)
         release.set()
         wait_for_jobs(view)
-        assert view.preview is None and not view.confirm.isEnabled()
+        assert view.preview is not None and view.preview.manifest.bank is None
+        assert tuple(proof.row_id for proof in view.preview.manifest.components) == rows
+        assert view.preview.basis_sha256 == view.snapshot.basis_sha256
+        assert all(proof.source_sha256 == view.rows[0].source_sha256 for proof in view.preview.manifest.components)
+        with V2ProfileStore.open(path, read_only=True) as store:
+            assert not store.loan_history() and not store._active_journal_entries()
         monkeypatch.setattr(V2ProfileStore, "loan_payment_preview", original)
         view.bank.setCurrentIndex(view.bank.findData(bank))
         wait_for_jobs(view)
@@ -261,6 +266,7 @@ def test_working_font_layouts_and_discoverable_coverage_details(tmp_path, app):
         loan.components.selectRow(0)
         wait_for_jobs(loan)
         assert loan.components.viewport().height() >= 100
+        loan.rules.button.click()
         loan.activateWindow()
         app.processEvents()
         loan.profile_path.setFocus()
@@ -271,10 +277,11 @@ def test_working_font_layouts_and_discoverable_coverage_details(tmp_path, app):
         from PySide6.QtTest import QTest
 
         QTest.keyClick(loan.profile_path, Qt.Key_Tab)
-        assert loan.reload.hasFocus()
+        assert not loan.profile_path.hasFocus() and app.focusWidget() is not None
         loan.tabs.setCurrentIndex(1)
         app.processEvents()
-        assert loan.preview is not None and not loan.confirm.isEnabled()
+        assert loan.preview is not None and loan.confirm.isEnabled()
+        assert loan.reason.text() == "Initial Review" and loan.confirm.property("formState") == "ready"
         assert loan.grab().save(str(tmp_path / "loan-exact-preview-1100x650.png"))
         settlement.outgoing.setCurrentIndex(1)
         app.processEvents()

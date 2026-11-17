@@ -214,7 +214,8 @@ def test_report_lender_route_opens_the_exact_owning_loan_event(tmp_path, monkeyp
         review = window._review_widget
         wait_for_jobs(review)
         assert review._current().row_id == rows[0]
-        assert "View" in review.action_button.text() and "loan" in review.action_button.text()
+        assert review.action_button.text() == "View payment"
+        assert review.action_button.property("formState") == "neutral"
         assert review.action_button.isEnabled()
         review.action_button.click()
         wait_for_jobs(review)
