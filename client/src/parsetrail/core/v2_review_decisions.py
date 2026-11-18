@@ -76,7 +76,13 @@ def lock_pdf_account(store, account_id, source_sha256):
     if (
         imported.suffix != ".pdf"
         or values is None
-        or not any(binding.ledger_account_id == account_id for binding in store.account_bindings(source_sha256))
+        or not (
+            # A statement section remains valid evidence when it has balances
+            # but no activity rows. Resolve only identities in the saved PDF,
+            # rather than requiring that section to supply a row binding.
+            any(binding.ledger_account_id == account_id for binding in store.source_account_bindings(source_sha256))
+            or any(binding.ledger_account_id == account_id for binding in store.account_bindings(source_sha256))
+        )
     ):
         raise error("account_identity_origin_requires_bound_pdf")
     record = (account_id, source_sha256, *values)
