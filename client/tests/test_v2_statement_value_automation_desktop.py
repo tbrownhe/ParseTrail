@@ -91,7 +91,8 @@ def test_future_import_details_are_readable_and_leave_current_manual_action(
     assert not view.has_unsaved_draft and not view.snapshot.complete
     assert view.action_button.isEnabled() and view.action_button.property("formState") == "ready"
     assert "Future imports only" in view.auto_record_help.text()
-    assert "Fidelity" in view.auto_record_help.text() and "no transactions or budget" in view.auto_record_help.text()
+    assert "retirement and HSA" in view.auto_record_help.text()
+    assert "no transactions or budget" in view.auto_record_help.text()
     assert view.table.viewport().height() >= sum(view.table.rowHeight(i) for i in range(view.table.rowCount()))
     artifacts = JourneyArtifacts(journey_artifacts, qapp, size)
     artifacts.capture("02-expanded-future-import-setting", view)

@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from parsetrail.core.v2_source_values import SourceValueProof
 
 
-SUMMARY_VALUE_PARSERS = frozenset({"pdf_fidelity401k_201810"})
+SUMMARY_VALUE_PARSERS = frozenset({"pdf_fidelity401k_201810", "pdf_vanguard_202210", "pdf_fidelityhsa_202001"})
 SummaryReviewStatus = Literal["pending", "reviewed", "conflict", "blocked"]
 
 

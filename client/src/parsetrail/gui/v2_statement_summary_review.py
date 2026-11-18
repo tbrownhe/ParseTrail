@@ -1,4 +1,4 @@
-"""Review a retirement statement's value without inventing cash transactions."""
+"""Review a supported statement's value without inventing cash transactions."""
 
 from datetime import date
 from weakref import ref
@@ -39,8 +39,8 @@ def _label(text=""):
 
 
 REASONS = {
-    "statement_summary_account_required": "Choose the retirement account for this statement.",
-    "statement_summary_binding_mixed": "The summary needs one confirmed account for this plan.",
+    "statement_summary_account_required": "Choose the account for this statement.",
+    "statement_summary_binding_mixed": "The summary needs one confirmed account for this section.",
     "statement_summary_shape_unsupported": "This statement's summary needs further inspection.",
     "statement_summary_family_unsupported": "This document needs a different review workflow.",
     "source_value_closing_unavailable": "The statement's closing value is not established.",
@@ -91,13 +91,13 @@ class V2StatementSummaryReview(QWidget):
         self.jobs.busy_changed.connect(self._busy)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        title = _label("Retirement statement review")
+        title = _label("Statement value review")
         title.setStyleSheet("font-weight: 600; font-size: 16px")
         layout.addWidget(title)
         self.context = _label()
         layout.addWidget(self.context)
         self.section = QComboBox()
-        self.section.setAccessibleName("Statement plan")
+        self.section.setAccessibleName("Statement account")
         self.section.currentIndexChanged.connect(self._render)
         layout.addWidget(self.section)
         self.value = _label()
@@ -130,7 +130,7 @@ class V2StatementSummaryReview(QWidget):
         self.auto_record.toggled.connect(self._toggle_auto_record)
         details_layout.addWidget(self.auto_record)
         self.auto_record_help = _label(
-            "Future imports only. Records supported Fidelity 401(k) closing values at statement end. "
+            "Future imports only. Records supported retirement and HSA closing values at statement end. "
             "Summary totals remain evidence; no transactions or budget changes."
         )
         details_layout.addWidget(self.auto_record_help)
@@ -278,8 +278,13 @@ class V2StatementSummaryReview(QWidget):
             self._update_actions()
             return
         period = f"{snapshot.start.iso or 'Unknown start'} to {snapshot.end.iso or 'unknown end'}"
+        identity = (
+            f"Ending {section.source_identity[-4:]}"
+            if section.source_identity_form in {"full", "last_four"}
+            else section.source_identity
+        )
         self.context.setText(
-            f"{section.account_name or 'Account not confirmed'} · {section.source_identity}\nStatement period: {period}"
+            f"{section.account_name or 'Account not confirmed'} · {identity}\nStatement period: {period}"
         )
         self.value.setText(
             f"Ending value {_money(section.closing.minor if section.closing else None)} · {snapshot.end.iso or 'date unknown'}"
@@ -391,10 +396,10 @@ class V2StatementSummaryReview(QWidget):
                 )
                 + "The summary changes remain statement evidence."
                 if snapshot.complete
-                else "This plan's value is recorded. Review the remaining plan values."
+                else "This account's value is recorded. Review the remaining account values."
             )
         elif missing_account:
-            self.status.setText("Choose the retirement account before recording this statement's value.")
+            self.status.setText("Choose the account before recording this statement's value.")
         elif conflict:
             self.status.setText(
                 "Different values are recorded for this date. Review the conflict before completing this statement."
@@ -407,9 +412,7 @@ class V2StatementSummaryReview(QWidget):
                 )
             )
         elif section is not None:
-            self.status.setText(
-                "Ready to record the printed closing value. Contributions and market changes stay as summary evidence."
-            )
+            self.status.setText("Ready to record the closing value. Summary changes stay as evidence.")
 
     def _act(self):
         section, snapshot = self._current_section(), self.snapshot
