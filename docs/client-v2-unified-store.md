@@ -134,7 +134,9 @@ requires the transaction preview. No source-defect repair override is introduced
 New PDF-import accounts retain an immutable source-linked institution/product lock,
 created after account binding inside the atomic import. Values chosen during import
 remain distinct from parser-established facts. Names remain editable. Read validation,
-updates and backup enforce the same lock. Vehicle assets cannot bind statement cash
+updates and backup enforce the same lock. An authenticated PDF section binding can
+establish this origin even when the section has balances but no activity rows;
+unrelated accounts and nonexistent sections cannot. Tangible assets cannot bind statement cash
 activity or enter cash transfer candidates merely because their ledger class is asset.
 
 `Institutions(id,name)` is a managed identity registry independent of installed
@@ -462,7 +464,8 @@ Unknown source descriptions remain unknown; a separate code-owned accounting lab
 can identify a reviewed entry without claiming printed merchant/interest text.
 Printed openings and reconciliation admit that same exact component rule. Other
 HSA/retirement summary rows remain nonposting; existing account-total opening rules
-remain available. The finite Fidelity 401(k) summary family has a dedicated statement
+remain available. The finite Fidelity 401(k), Vanguard and Fidelity HSA summary
+families have a dedicated statement
 value Review rather than cash categorization. Its printed beginning value, component
 totals and ending value remain statement-period facts. Explicit confirmation records
 the exact source closing through the existing dated-value service, without creating
@@ -722,7 +725,7 @@ Capture, arithmetic and complete activity are independent qualifications for a
 nonposting point. Values, proofs, exact locations and withdrawals export as metadata
 separate from active journal money. See the [source-value packet](work/2026-10-25-v2-source-values.md).
 
-Fidelity statement-value completion is distinct from activity allocation. Documents
+Supported statement-value completion is distinct from activity allocation. Documents
 track pending and reviewed statement-value sections separately; zero pending activity
 does not mean a summary value has been reviewed. Completion requires an active exact
 source-backed closing under the current account/section binding. Equal manual or
@@ -740,7 +743,8 @@ fields are initially populated, with explicit missing-field cues if edited blank
 
 The separate **Automatically record supported statement values** global preference
 defaults off. It explicitly authorizes nonposting closing-value recording after
-eligible future imports, initially the finite Fidelity 401(k) summary family. One
+eligible future imports from the finite Fidelity 401(k), Vanguard and Fidelity HSA
+account-total summary families. The HSA cash-activity family remains separate. One
 bound compatible section, exact supported closing/date, no material import warning,
 conflict or prior value history for that source are required. Account creation may
 qualify after its import assignment is explicitly confirmed. Agreeing manual or

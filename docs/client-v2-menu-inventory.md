@@ -78,6 +78,14 @@ unchanged. Background reads, backup/restore/export and source recovery retain
 their scoped progress/outcome ownership. These presentation changes do not
 reactivate any deferred capabilities listed below.
 
+Documents uses a sortable table with Account(s), Institution, Period, Type and
+Review columns, plus Find and compact account/institution/type/review/date filters.
+Typed dates and pending counts sort without comparing formatted text; unknown periods
+remain last. Source identity preserves selection across sorting and reload. Filtering
+cannot silently discard a staged Review, and report/next-review handoffs explicitly
+reveal their target if filters hide it. Pending actions use the next-action cue;
+completed value/history actions remain neutral.
+
 Import uses Choose accounts → Review import for PDF/CSV. Compatible
 existing accounts and Create a new account are offered together; all source
 groups are represented. Managed products supply class/scope defaults, while

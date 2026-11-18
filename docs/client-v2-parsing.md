@@ -254,6 +254,18 @@ the policy revision; declarations and retained snapshots remain unchanged. Exact
 source retry still reuses its original evidence. No complete-capture or missing
 transfer claim follows from reclassifying known non-activity text.
 
+Vanguard summaries distinguish a complete, adjacent chart-axis frame from summary
+amounts: the exact paired chart header and five decreasing, equally spaced
+whole-dollar ticks are required. A standalone dollar line without that frame, an
+incomplete frame or unexplained money/date text still requires review. Fidelity HSA
+summary tails retain a finite accrued-interest/inclusive-value pair separately from
+the statement closing value; their exact equation must agree. Recognized footnotes
+and contact headings do not become activity. Unknown monetary/date tails remain
+unresolved. Recent Citi percentage-only page text is informational only within its
+existing bounded non-activity role; currency and unexplained monetary content still
+require review. These source roles never certify complete capture or invent a
+transaction, counterpart, date or balancing amount.
+
 The evidence envelope excludes categories, verification flags, journals and
 postings. Endpoint scopes are explicit: `account_total`, `cash_component` or
 `principal_component`. Row roles are `activity`, `period_summary` or

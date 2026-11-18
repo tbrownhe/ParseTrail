@@ -93,6 +93,14 @@ eligible nonposting Fidelity closing values. Exact source proof, current consent
 physical profile, conflict/history, cancellation and retry guards remain mandatory;
 ordinary transaction/budget accounting and separate loan automation are unchanged.
 
+[Statement-family imports and Documents table](docs/work/2026-11-18-import-families-documents.md)
+extends V2-3/4/5/UX with finite Vanguard/HSA/Citi source-role refinements,
+Vanguard and Fidelity HSA nonposting statement-value review and opt-in recording,
+sortable/filterable document discovery, and PDF account provenance for sections
+with balances but no activity. Unexplained money/date content and independent
+capture qualifications remain visible; schema and immutable saved evidence stay
+unchanged. Agent verification and owner/platform/release gates remain separate.
+
 V2-5 distinguishes newly computed live reconciliation checks from explicitly
 saved decisions and their current/stale input versions. The
 [durable-history packet](docs/work/2026-10-25-v2-reconciliation-history.md) completed

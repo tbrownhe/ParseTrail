@@ -6,7 +6,14 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
-None. [Opt-in statement value recording](docs/work/2026-11-17-statement-value-automation.md)
+[Statement-family imports and Documents table](docs/work/2026-11-18-import-families-documents.md)
+is implemented and agent-verified: finite named-family warning refinements,
+Vanguard/HSA statement values, sortable/filterable Documents and first-use OCCU
+balance-only section recovery. Native journeys and independent integrity/design
+checks pass. Ambiguous older Citi amounts still require review. A fresh pinned
+schema-27 test is prepared; owner/platform/release acceptance remains separate.
+
+[Opt-in statement value recording](docs/work/2026-11-17-statement-value-automation.md)
 is implemented and agent-verified: separate future-import consent, exact nonposting
 Fidelity closing values, truthful automatic completion and guarded history/conflict
 fallback. Core/integration, native/design and independent integrity checks pass.

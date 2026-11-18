@@ -29,7 +29,7 @@ evidence distinctions and observed limits without duplicating validation logs.
 | `pdf_citicc_202506` | 0.3.1 | Citi table credit-card PDF | Anchored-table evidence retains wrapped/foreign-transaction detail and monetary-tail dispositions separately from activity. |
 | `pdf_citicc_202511` | 0.4.0 | Citi table plus text/fee recovery PDF | Table/text/fee copies use finite occurrence reconciliation with exact locations; unclassified page text remains visible and capture unverified. |
 | `pdf_fidelity401k_201810` | 0.2.1 | Retirement PDF, wrapped account labels | Printed value components are period_summary rows with derived statement-period-end dates; investment posting remains unresolved. |
-| `pdf_fidelityhsa_202001` | 0.2.0 | HSA line PDF | Account-value summaries are non-activity components; source facts do not decide HSA accounting or investment values. |
+| `pdf_fidelityhsa_202001` | 0.2.0 | HSA line PDF | Account-value summaries remain non-activity components; finite closing-value Review/opt-in recording creates only a source-backed dated value. Accrued-interest/inclusive-value tails stay separate from that closing. |
 | `pdf_happenbank_202606` | 0.1.0 | Savings line PDF | Located savings activity and independently printed balances remain distinct from capture/coverage claims. |
 | `pdf_hehsa_201810` | 0.2.1 | HealthEquity cash and continuation PDF | Cash-component scope excludes investment sections; blank printed descriptions stay unknown rather than being relabeled Interest. |
 | `pdf_lendingclublus_202506` | 0.2.0 | Older savings table PDF | Anchored bank rows, printed running balances and located monetary tails remain separate evidence. |
@@ -39,7 +39,7 @@ evidence distinctions and observed limits without duplicating validation logs.
 | `pdf_synchrony-amzncc_202501` | 0.3.0 | Store-card table PDF | Anchored card rows retain shared continuations; pre-period activity dates and separate assumed posting candidates require the ordinary date gate. |
 | `pdf_transamerica_202104` | 0.2.0 | Retirement line PDF | Opaque plan identity and period-summary value changes remain evidence; they do not establish cash movements or accounting interpretation. |
 | `pdf_usbankreicc_201405` | 0.2.0 | Credit-card line PDF | Bounded extraction retains printed posting dates and unknown transaction dates where absent; capture remains unverified. |
-| `pdf_vanguard_202210` | 0.2.0 | Retirement line PDF | Period-summary value changes keep derived period-end dates; they do not become cash activity or approved valuation postings. |
+| `pdf_vanguard_202210` | 0.2.0 | Retirement line PDF | Period-summary changes keep derived period-end dates; finite closing-value Review/opt-in recording creates only a source-backed dated value. An authenticated chart-axis frame is distinct from unexplained monetary lines. |
 | `pdf_wfbankbus_202110` | 0.2.0 | Business bank dynamic table PDF | Located table activity, optional printed row balances and after-stop dispositions remain separate; missing balances are not filled as source facts. |
 | `pdf_wfbankper_202105` | 0.2.0 | Personal bank table PDF | Anchored table rows retain printed debit/credit and running-balance provenance; retained activity is not a claim of complete page capture. |
 | `pdf_wfloanper_202306` | 0.2.1 | Personal-loan line PDF | Printed principal/interest allocations and closing principal are retained; period start stays unknown and legacy synthetic origination is omitted. |

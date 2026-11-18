@@ -4,6 +4,12 @@ Start in **Documents**, import a supported statement or activity export, then
 check the document, account and dates shown. Statement periods and the span of an
 activity export can differ. Keep the original available when checking evidence.
 
+The Documents table shows accounts, institution, period, document type and review
+status. Click a column heading to sort; use Find or **Filters** to narrow the table
+by account, institution, type, review status or overlapping dates. **Clear filters**
+restores the full inventory. A document containing multiple accounts matches either
+account's filter. Select a document and use its review action, or press Enter.
+
 Import asks **which account the document came from**. Choose a compatible existing
 account, or **Create a new account…**, even if another account uses the same export
 format. For a new account, enter a nickname and only the institution/product details
@@ -29,6 +35,13 @@ saved interpretation; you can cancel before importing if the preview is wrong.
 Open **Review** for the selected document to decide what its transactions mean.
 Accounts created separately on the Accounts page still need explicit document/row
 assignment. Creating or assigning an account adds no spending.
+
+Supported Fidelity 401(k), Vanguard and Fidelity HSA period summaries use **Review
+statement value**. Their component totals remain evidence; recording the printed
+closing value adds no transactions, transfers or budget spending. The separate
+**Automatically record supported statement values** setting can record qualifying
+future imports. Missing or conflicting values and material source warnings still
+require review. This does not apply to HSA statements containing dated cash activity.
 
 Choose an institution by its name when creating an account, or deliberately choose
 **Institution not identified**. Selecting an existing account uses its saved
