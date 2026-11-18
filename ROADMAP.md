@@ -101,6 +101,14 @@ with balances but no activity. Unexplained money/date content and independent
 capture qualifications remain visible; schema and immutable saved evidence stay
 unchanged. Agent verification and owner/platform/release gates remain separate.
 
+[Import review follow-up and batch safety](docs/work/2026-11-18-import-review-followup.md)
+refines remaining named source layouts, audited empty HSA tables and printed Wells
+product defaults under V2-3/4/UX. Stable batch actions, safe Alt shortcuts and neutral
+current-file pending states prevent accidental Skip/stale evidence. Source repair
+and a unified compact progress handoff remain design discussion; replacement card
+identities retain explicit many-to-one associations. Human/platform/release gates
+remain separate from agent verification.
+
 V2-5 distinguishes newly computed live reconciliation checks from explicitly
 saved decisions and their current/stale input versions. The
 [durable-history packet](docs/work/2026-10-25-v2-reconciliation-history.md) completed

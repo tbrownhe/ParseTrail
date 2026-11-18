@@ -139,6 +139,21 @@ establish this origin even when the section has balances but no activity rows;
 unrelated accounts and nonexistent sections cannot. Tangible assets cannot bind statement cash
 activity or enter cash transfer candidates merely because their ledger class is asset.
 
+The finite Wells business format supports both checking and business savings. Its
+audited located printed product heading can establish the product default under the
+exact verified declaration; the parser ID or filename alone cannot. Missing,
+duplicate or conflicting context stays a required choice. Nickname remains authored;
+the usual institution/visible-suffix suggestion accompanies an identified product.
+
+A financial account can have multiple explicitly associated printed source identities,
+including replacement card numbers. Each document retains its exact identity/form;
+binding neither rewrites those facts nor creates another financial account or journal.
+A newly encountered number requires its own assignment decision; later exact-context
+statements can reuse the retained association. This does not establish continuity
+between independent obligations or institutions, and does not invent a full number
+from an abbreviated one. Possible repeated transactions and source overlaps retain
+their separate review guards.
+
 `Institutions(id,name)` is a managed identity registry independent of installed
 document formats. Fresh profiles seed canonical institution names/IDs; explicit
 registration can retain additional managed identities from verified catalog

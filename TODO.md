@@ -6,6 +6,13 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
+[Import review follow-up and batch safety](docs/work/2026-11-18-import-review-followup.md)
+is implemented and agent-verified: remaining named statement variants, stable batch
+controls/Alt shortcuts/current previews, audited empty-HSA handling and printed Wells
+defaults. Native journeys and independent integrity/UI review pass. One unlabelled
+Citi amount still needs review; recovery/progress/account-identity options are
+recorded for discussion. Owner/platform/release acceptance remains separate.
+
 [Statement-family imports and Documents table](docs/work/2026-11-18-import-families-documents.md)
 is implemented and agent-verified: finite named-family warning refinements,
 Vanguard/HSA statement values, sortable/filterable Documents and first-use OCCU

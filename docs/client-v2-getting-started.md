@@ -32,6 +32,20 @@ Check the interpretation before saving: changing the format of an already
 imported document is not supported yet. Selecting the exact file again reuses its
 saved interpretation; you can cancel before importing if the preview is wrong.
 
+During batches, account setup and recognized review keep stable primary-action
+positions; **Skip this file** stays separate beside Cancel. Alt+N continues to
+review, Alt+I imports, Alt+B returns to accounts, Alt+S skips, and Alt+O opens the
+original. Ordinary letters stay in text editors. While the next file is read, the
+pending screen shows its filename and queue status without the previous document's
+rows or warnings. Repeated Enter on pending does nothing; Tab reaches Cancel.
+
+If a warning appears, compare the original with the displayed dates and amounts.
+Import retains the evidence and warnings; it does not approve complete capture or
+post transactions. Back can repair account choices. If the extraction is wrong,
+skip that file and retry a supported original export or an updated statement format.
+Extracted cells are read-only; editing a number would not repair missing source
+content. Replacing the interpretation of a saved source is still a separate gap.
+
 Open **Review** for the selected document to decide what its transactions mean.
 Accounts created separately on the Accounts page still need explicit document/row
 assignment. Creating or assigning an account adds no spending.

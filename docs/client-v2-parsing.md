@@ -266,6 +266,24 @@ existing bounded non-activity role; currency and unexplained monetary content st
 require review. These source roles never certify complete capture or invent a
 transaction, counterpart, date or balancing amount.
 
+Additional audited variants retain explicitly labelled Vanguard current-period/YTD
+columns separately, the finite merged Fidelity HSA contact/footnote line, Citi
+benefit-savings sidebars with matching components/total and exact legal clauses,
+and Wells business footer summaries. Wells closing/totals must match admitted
+activity; fee tables need their complete labelled frame. Unlabelled Citi amounts
+remain unresolved. A malformed optional sidebar amount remains source evidence
+requiring review rather than preventing otherwise valid activity import.
+
+The HealthEquity cash engine has a finite empty-table convenience rule: an exact
+printed table header, adjacent beginning/ending balances with no intervening rows,
+equal observed cash endpoints, and an observed ordered period. The empty source's
+exterior monetary/date content is audited separately; rate/fee totals need their
+complete finite frame and unexplained money/dates still require review. Prefixed
+header whitespace is normalized for recognition while exact raw text is retained.
+The empty-table warning is informational only for the audited engine and complete
+proof; it never certifies page capture, calendar coverage or an arbitrary empty
+statement. Other families retain their existing no-activity review policy.
+
 The evidence envelope excludes categories, verification flags, journals and
 postings. Endpoint scopes are explicit: `account_total`, `cash_component` or
 `principal_component`. Row roles are `activity`, `period_summary` or
