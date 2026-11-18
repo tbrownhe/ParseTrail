@@ -254,7 +254,7 @@ def test_ordinary_main_chooser_new_open_restore_preserves_sources_and_separate_p
     if selection != "create":
         assert original.read_bytes() == old_bytes and backup.read_bytes() == backup_bytes
         with V2ProfileStore.open(expected, read_only=True) as store:
-            assert store.category_accounts()[0].name == "Retained"
+            assert next(item for item in store.category_accounts() if item.id == "expense:retained").name == "Retained"
     app.processEvents()
 
 
@@ -337,7 +337,7 @@ def test_new_profile_menu_preserves_old_profile_and_is_disabled_during_import(tm
         assert window.workspace.profile_path == new.resolve()
         assert str(new.resolve()) == window.profile_label.text()
         with V2ProfileStore.open(new, read_only=True) as store:
-            assert store.category_accounts() == ()
+            assert tuple(item.id for item in store.category_accounts()) == ("builtin:loan-interest",)
         assert current.read_bytes() == before
     finally:
         window.import_worker = None
@@ -424,7 +424,7 @@ def test_failed_refresh_after_staging_selection_rolls_back_workspace_and_visible
         assert window.workspace is workspace
         assert window.profile_label.text() == str(workspace.profile_path)
         assert window._selected_source() == source_id
-        assert window.sources.count() == 1
+        assert window.sources.model().rowCount() == 1
         assert workspace.profile_path.read_bytes() == before
         assert "Synthetic concurrent refresh failure" in warnings[-1]
     finally:

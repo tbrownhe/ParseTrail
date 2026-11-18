@@ -11,6 +11,8 @@ from time import sleep
 
 import pytest
 
+from .v2_documents_helpers import document_details, document_text
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QElapsedTimer, QTimer  # noqa: E402
@@ -52,18 +54,19 @@ def test_documents_are_recognizable_searchable_and_preserve_context(tmp_path: Pa
     window = V2WorkspaceWindow(_populated_workspace(tmp_path))
     try:
         wait_for_inventory(window)
-        assert window.sources.count() == 1
-        label = window.sources.item(0).text()
+        assert window.sources.model().rowCount() == 1
+        label = document_text(window)
         assert "Everyday checking" in label and "2026-10-01" in label
-        assert "Activity dates" in label and "unallocated" in label and "may include repeats" in label
+        assert "Activity dates" in document_details(window)
+        assert "unallocated" in document_details(window) and "may include repeats" in document_details(window)
         selected = window._selected_source()
         window.document_search.setText("no such account")
-        assert window.sources.item(0).isHidden()
+        assert window.sources.model().rowCount() == 0
         assert not window.review_document_button.isEnabled()
         window.document_search.clear()
         assert window._selected_source() == selected
         window.document_search.setText("Everyday 2026-10")
-        assert not window.sources.item(0).isHidden()
+        assert window.sources.model().rowCount() == 1
         window.review_document_button.click()
         wait_for_inventory(window)
         assert window.navigation.currentRow() == window.REVIEW
@@ -138,13 +141,13 @@ def test_failed_inventory_clears_actions_and_can_retry(tmp_path: Path, monkeypat
         monkeypatch.setattr(V2ProfileStore, "document_summaries", refuse)
         window.refresh()
         wait_for_inventory(window)
-        assert window.sources.count() == 0
+        assert window.sources.model().rowCount() == 0
         assert not window.review_document_button.isEnabled()
         assert "unavailable" in window.inventory_status.text()
         monkeypatch.setattr(V2ProfileStore, "document_summaries", original)
         window.retry_inventory.click()
         wait_for_inventory(window)
-        assert window.sources.count() == 1
+        assert window.sources.model().rowCount() == 1
         assert window.review_document_button.isEnabled()
     finally:
         window.close()
@@ -186,8 +189,8 @@ def test_late_inventory_from_previous_profile_cannot_replace_current_accounts(tm
         assert window.accounts_list.count() == 0
         release.set()
         wait_for_inventory(window)
-        assert "New profile checking" in window.sources.item(0).text()
-        assert "Everyday checking" not in window.sources.item(0).text()
+        assert "New profile checking" in document_text(window)
+        assert "Everyday checking" not in document_text(window)
         assert "New profile checking" in window.accounts_list.item(0).text()
     finally:
         release.set()

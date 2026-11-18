@@ -46,6 +46,7 @@ from .qt_journey_helpers import (
     enter_text,
     select_file,
 )
+from .v2_documents_helpers import document_text
 
 SOURCE = (
     b"Date,Account,Description,Amount,ReportedBalance\n"
@@ -135,7 +136,7 @@ def test_empty_profile_to_reviewed_spending_correction_and_recovery(
     assert window.inventory_pending and "Loading" in window.inventory_status.text()
     artifacts.capture("00-loading-document-inventory", window, settle=False)
     ready(qtbot, window)
-    assert window.sources.count() == 0
+    assert window.sources.model().rowCount() == 0
     assert "Import" in window.inventory_status.text()
     assert not window.review_document_button.isEnabled()
     artifacts.capture("01-empty-profile", window)
@@ -143,7 +144,7 @@ def test_empty_profile_to_reviewed_spending_correction_and_recovery(
     modals.arm((QFileDialog, lambda dialog: qtbot.keyClick(dialog, Qt.Key_Escape)))
     qtbot.mouseClick(window.import_button, Qt.LeftButton)
     modals.finish()
-    assert window.sources.count() == 0
+    assert window.sources.model().rowCount() == 0
     modals.arm(
         (QFileDialog, lambda dialog: select_file(qtbot, dialog, source)),
         (V2ImportAccountReview, lambda dialog: confirm_new_import(qtbot, dialog)),
@@ -152,9 +153,9 @@ def test_empty_profile_to_reviewed_spending_correction_and_recovery(
     modals.finish()
     qtbot.waitUntil(lambda: window.import_worker is None, timeout=20000)
     ready(qtbot, window)
-    assert window.sources.count() == 1
-    assert "2026-10-01" in window.sources.item(0).text()
-    assert "2026-10-03" in window.sources.item(0).text()
+    assert window.sources.model().rowCount() == 1
+    assert "2026-10-01" in document_text(window)
+    assert "2026-10-03" in document_text(window)
     assert "review" in window.review_document_button.text().lower()
     assert_books(workspace.profile_path, entries=0)
     with V2ProfileStore.open(workspace.profile_path, read_only=True) as store:
@@ -184,7 +185,11 @@ def test_empty_profile_to_reviewed_spending_correction_and_recovery(
             enter_text(qtbot, dialog.add_name, name)
             choose_combo(qtbot, dialog.add_kind, kind)
             qtbot.mouseClick(dialog.add_button, Qt.LeftButton)
-        assert dialog.categories.count() == 3
+        assert dialog.categories.count() == 4
+        assert any(
+            dialog.categories.item(index).data(Qt.UserRole) == "builtin:loan-interest"
+            for index in range(dialog.categories.count())
+        )
         close_dialog(qtbot, dialog)
 
     modals.arm((V2CategoryDialog, author_categories))
@@ -405,7 +410,7 @@ def test_empty_profile_to_reviewed_spending_correction_and_recovery(
     reopened.resize(*size)
     reopened.show()
     ready(qtbot, reopened)
-    assert reopened.sources.count() == 1 and "1 unallocated" in reopened.sources.item(0).text()
+    assert reopened.sources.model().rowCount() == 1 and "Review 1 row" in document_text(reopened)
     assert_books(restored, entries=4, corrections=1, pending=1)
     artifacts.capture("15-reopened-restored-profile", reopened)
 
@@ -439,7 +444,7 @@ def test_refused_import_can_retry_without_losing_source_or_creating_entries(
     qtbot.mouseClick(window.import_button, Qt.LeftButton)
     modals.finish()
     ready(qtbot, window)
-    assert window.sources.count() == 0 and window.import_button.isEnabled()
+    assert window.sources.model().rowCount() == 0 and window.import_button.isEnabled()
     assert window.install_catalog_button.isEnabled()
     assert window.account_button.isEnabled()
     assert "no new source saved" in window.status.text()
@@ -461,7 +466,7 @@ def test_refused_import_can_retry_without_losing_source_or_creating_entries(
             artifacts.capture("03-importing-source-with-cancel-action", window.import_preview, settle=False)
         qtbot.waitUntil(lambda: window.import_worker is None, timeout=20000)
         ready(qtbot, window)
-        assert window.sources.count() == 1
+        assert window.sources.model().rowCount() == 1
         assert_books(workspace.profile_path, entries=0)
     assert "already imported" in window.status.text()
     assert valid_source.read_bytes() == SOURCE

@@ -60,11 +60,11 @@ def test_changing_document_preserves_draft_until_explicit_discard(tmp_path, monk
         view = window._review_widget
         view.batch.reason.setText("Unapplied explicit review note")
         monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.No)
-        window.sources.setCurrentRow(1)
+        window.sources.select_source(next(item for item in window.sources.visible_sources() if item != source))
         assert window._selected_source() == source
         assert window._review_widget is view and view.has_unsaved_draft
         monkeypatch.setattr(QMessageBox, "question", lambda *_args: QMessageBox.Yes)
-        window.sources.setCurrentRow(1)
+        window.sources.select_source(next(item for item in window.sources.visible_sources() if item != source))
         wait_for_jobs(window._review_widget)
         assert window._selected_source() != source
         assert window._review_widget is not view

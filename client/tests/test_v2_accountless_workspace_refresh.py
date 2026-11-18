@@ -17,6 +17,7 @@ from PySide6.QtWidgets import QApplication, QDialog
 from .test_v2_account_binding_review import DEFINITION, SOURCE
 from .test_v2_document_browser import wait_for_inventory
 from .test_v2_inline_account_creation import _workspace
+from .v2_documents_helpers import document_details, document_text
 from .v2_institution_helpers import add_test_financial_account
 
 
@@ -69,9 +70,9 @@ def test_return_from_actual_row_assignment_refreshes_documents_and_new_batch(app
         assert summary.association_kind == "rows" and summary.association_complete
         assert summary.bound_account_names == ("Alpha loan",)
         assert "All 3 rows assigned individually to Alpha loan" in window.account_assignment_status.text()
-        assert "All rows have accounts" in window.sources.item(0).text()
+        assert "All 3 rows assigned individually to Alpha loan" in document_details(window)
         assert window.review_button.text() == "Review row account assignments"
-        assert window.sources.count() == 1
+        assert window.sources.model().rowCount() == 1
         batch = V2BatchAccountAssignment(workspace)
         _ready(app, batch)
         assert batch.plan.groups == ()
@@ -137,9 +138,9 @@ def test_partial_and_multiaccount_rows_remain_qualified_and_search_every_account
         summary = window._document_summaries[evidence.source_sha256]
         assert "All 3 rows assigned across 3 accounts" in window.selected_details.text()
         assert summary.association_complete
-        assert "Zebra third account" not in window.sources.item(0).text()
+        assert "Zebra third account" in document_text(window)
         window.document_search.setText("Zebra third account")
-        assert not window.sources.item(0).isHidden()
+        assert window.sources.model().rowCount() == 1
         assert window._selected_source() == evidence.source_sha256
     finally:
         window.close()

@@ -125,7 +125,7 @@ def test_unique_csv_shows_full_file_validated_preview_then_explicit_local_import
         assert len(store.source_ids()) == 1
         assert store.load_import(store.source_ids()[0]).source == SOURCE
         assert store.connection.execute("SELECT COUNT(*) FROM JournalEntries").fetchone() == (0,)
-    assert window.sources.count() == 1 and window.install_catalog_button.isEnabled()
+    assert window.sources.model().rowCount() == 1 and window.install_catalog_button.isEnabled()
     artifacts.capture("03-imported-and-assigned-evidence-pending-review", window)
 
 

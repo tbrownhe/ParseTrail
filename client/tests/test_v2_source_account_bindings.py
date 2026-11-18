@@ -200,7 +200,6 @@ def test_statement_overlap_uses_explicit_account_and_printed_period(tmp_path: Pa
     from parsetrail.gui.v2_evidence_preview import _money
     from parsetrail.gui.v2_statement_coverage import V2StatementCoverageDialog
     from parsetrail.gui.v2_workspace_window import V2WorkspaceWindow
-    from PySide6.QtCore import Qt
     from PySide6.QtWidgets import QApplication, QLabel, QTabWidget
 
     app = QApplication.instance() or QApplication([])
@@ -233,10 +232,7 @@ def test_statement_overlap_uses_explicit_account_and_printed_period(tmp_path: Pa
         assert "Source timing unreviewed" in dialog.opening_model.data(dialog.opening_model.index(card_opening, 5))
         assert any("do not establish" in label.text() for label in dialog.findChildren(QLabel))
         dialog.close()
-        for index in range(window.sources.count()):
-            if window.sources.item(index).data(Qt.UserRole) == first_evidence.source_sha256:
-                window.sources.setCurrentRow(index)
-                break
+        assert window.sources.select_source(first_evidence.source_sha256)
         assert "Possible period overlap" in window.selected_details.text()
         assert overlapping_evidence.source_sha256 in window.document_technical_details.toPlainText()
         assert disjoint_evidence.source_sha256[:16] not in window.selected_details.text()

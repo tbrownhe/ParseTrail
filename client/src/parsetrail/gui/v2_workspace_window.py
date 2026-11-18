@@ -59,13 +59,13 @@ from parsetrail.gui.v2_document_browser import (
     DocumentInventoryWorker,
     document_account_association,
     document_period,
-    document_status,
     document_title,
     profile_revision,
 )
+from parsetrail.gui.v2_documents_table import DocumentFilters, DocumentsFilterBar, DocumentsTable
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
 from parsetrail.gui.v2_financial_account import V2FinancialAccountDialog
-from parsetrail.gui.v2_form_state import install_initial_focus
+from parsetrail.gui.v2_form_state import install_form_styles, install_initial_focus, set_field_state
 from parsetrail.gui.v2_gui_lifetime import exec_disposable
 from parsetrail.gui.v2_import_account_review import V2ImportAccountReview
 from parsetrail.gui.v2_opening_review import V2OpeningReview
@@ -200,7 +200,7 @@ class V2WorkspaceWindow(QMainWindow):
         self.auto_record_statement_values_action.setCheckable(True)
         self.auto_record_statement_values_action.setChecked(workspace.preferences().auto_record_statement_values)
         self.auto_record_statement_values_action.setToolTip(
-            "Future imports only. Records supported Fidelity 401(k) closing values at statement end. "
+            "Future imports only. Records supported retirement and HSA statement closing values at statement end. "
             "Summary totals remain evidence; no transactions or budget changes."
         )
         self.auto_record_statement_values_action.setStatusTip(self.auto_record_statement_values_action.toolTip())
@@ -325,13 +325,11 @@ class V2WorkspaceWindow(QMainWindow):
             "Assign document accounts…", self.batch_accounts_button.click
         )
         document_layout.addLayout(imports)
-        self.document_search = QLineEdit()
-        self.document_search.setObjectName("documentSearch")
-        self.document_search.setPlaceholderText("Find an account, statement period or document type")
-        self.document_search.setAccessibleName("Find documents")
-        self.document_search.setClearButtonEnabled(True)
-        self.document_search.textChanged.connect(self._filter_documents)
-        document_layout.addWidget(self.document_search)
+        self.document_filters = DocumentsFilterBar(self)
+        self.document_search = self.document_filters.search
+        self._document_filter_state = DocumentFilters()
+        self.document_filters.changed.connect(self._filter_documents)
+        document_layout.addWidget(self.document_filters)
         inventory_row = QHBoxLayout()
         self.inventory_status = QLabel("Loading saved documents…")
         self.inventory_status.setWordWrap(True)
@@ -342,11 +340,9 @@ class V2WorkspaceWindow(QMainWindow):
         self.retry_inventory.hide()
         document_menu.addAction("Reload statements", self.retry_inventory.click)
         document_layout.addLayout(inventory_row)
-        self.sources = QListWidget()
-        self.sources.setAccessibleName("Saved documents")
-        self.sources.setWordWrap(True)
-        self.sources.currentItemChanged.connect(self._update_controls)
-        self.sources.itemDoubleClicked.connect(self._review_document)
+        self.sources = DocumentsTable(self)
+        self.sources.source_changed.connect(self._update_controls)
+        self.sources.review_requested.connect(self._review_document)
         document_layout.addWidget(self.sources, 1)
         self.selected_details = QLabel()
         self.selected_details.setWordWrap(True)
@@ -355,6 +351,7 @@ class V2WorkspaceWindow(QMainWindow):
         document_layout.addWidget(self.selected_details)
         document_actions = QHBoxLayout()
         self.review_document_button = QPushButton("Review document")
+        install_form_styles(self.review_document_button)
         self.review_document_button.clicked.connect(self._review_document)
         document_actions.addWidget(self.review_document_button)
         self.preview_button = QPushButton("Preview evidence")
@@ -395,6 +392,13 @@ class V2WorkspaceWindow(QMainWindow):
         self.next_document_button.clicked.connect(self._next_document)
         document_switch.addWidget(self.next_document_button)
         review_layout.addLayout(document_switch)
+        self.review_period = QLabel()
+        self.review_period.setWordWrap(True)
+        self.review_period.setTextFormat(Qt.PlainText)
+        self.review_period.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.review_period.setAccessibleName("Selected document period")
+        self.review_period.hide()
+        review_layout.addWidget(self.review_period)
         self.review_context = QLabel("Choose a document to review.")
         self.review_context.setWordWrap(True)
         self.review_context.setTextFormat(Qt.PlainText)
@@ -757,6 +761,10 @@ class V2WorkspaceWindow(QMainWindow):
             self.review_document_selector.addItem(
                 f"{document_title(summary)} · {document_period(summary)}", summary.source_sha256
             )
+            index = self.review_document_selector.count() - 1
+            self.review_document_selector.setItemData(
+                index, f"{document_title(summary)}\n{document_period(summary)}", Qt.ToolTipRole
+            )
         self.review_document_selector.setCurrentIndex(self.review_document_selector.findData(selected))
         self.review_document_selector.blockSignals(False)
 
@@ -771,19 +779,27 @@ class V2WorkspaceWindow(QMainWindow):
             self._previous_completed_source = None
             self.previous_document_button.hide()
             self.review_completion.hide()
-        # A document search must not hide a route from a report or the review selector.
+        # An explicit handoff reveals its source without keeping it hidden by filters.
+        revealed = source_id not in self.sources.visible_sources()
         self._search_prior_source = None
-        self.document_search.blockSignals(True)
-        self.document_search.clear()
-        self.document_search.blockSignals(False)
-        for position in range(self.sources.count()):
-            item = self.sources.item(position)
-            item.setHidden(False)
-            if item.data(Qt.UserRole) == source_id:
-                self.sources.setCurrentItem(item)
+        if revealed:
+            self._document_filter_state = DocumentFilters()
+            self.document_filters.set_state(self._document_filter_state)
+            self.sources.documents_proxy.set_filters(self._document_filter_state)
+        self.sources.select_source(source_id)
         self._sync_review_selector()
+        self._update_document_count()
         self._update_controls()
+        if revealed:
+            self._pending_filter_reveal_source = source_id
+            QTimer.singleShot(0, self, self._announce_filter_reveal)
         return self._selected_source() == source_id
+
+    def _announce_filter_reveal(self):
+        source = getattr(self, "_pending_filter_reveal_source", None)
+        self._pending_filter_reveal_source = None
+        if source is not None and self._selected_source() == source:
+            self.status.setText("Filters cleared to show the selected statement. " + self.status.text())
 
     def _switch_review_document(self, *_args):
         source_id = self.review_document_selector.currentData()
@@ -1244,7 +1260,11 @@ class V2WorkspaceWindow(QMainWindow):
         self.accounts_list.clear()
         self.accounts_status.setText("Loading accounts…")
         if self._inventory_profile != self.workspace.profile_path:
-            self.sources.clear()
+            self.sources.replace(())
+            self._document_filter_state = DocumentFilters()
+            self.document_filters.set_state(self._document_filter_state)
+            self.sources.documents_proxy.set_filters(self._document_filter_state)
+            self._search_prior_source = None
             self._inventory_profile = self.workspace.profile_path
         self._inventory_generation += 1
         self._inventory_requested = True
@@ -1278,7 +1298,7 @@ class V2WorkspaceWindow(QMainWindow):
         if worker.generation == self._inventory_generation:
             if worker.error is not None:
                 self._initial_post_pending = None
-                self.sources.clear()
+                self.sources.replace(())
                 self._document_summaries = {}
                 self.inventory_status.setText("Documents are unavailable. Reload to retry; saved data has not changed.")
                 self.inventory_status.setToolTip(str(worker.error))
@@ -1319,81 +1339,60 @@ class V2WorkspaceWindow(QMainWindow):
             "initialFocusObject",
             "documentSearch" if summaries else "firstImport" if self._catalog_available else "installFormats",
         )
-        self.document_search.setVisible(bool(summaries))
+        self.document_filters.setVisible(bool(summaries) or bool(self._document_filter_state.active_count))
         prior = self._inventory_selection
         scroll = self.sources.verticalScrollBar().value()
-        self.sources.blockSignals(True)
-        existing = {self.sources.item(i).data(Qt.UserRole): self.sources.item(i) for i in range(self.sources.count())}
-        for source_id, item in existing.items():
-            if source_id not in self._document_summaries:
-                self.sources.takeItem(self.sources.row(item))
-        for position, summary in enumerate(summaries):
-            item = existing.get(summary.source_sha256)
-            if item is None:
-                item = QListWidgetItem()
-                item.setData(Qt.UserRole, summary.source_sha256)
-                self.sources.insertItem(position, item)
-            elif self.sources.row(item) != position:
-                self.sources.takeItem(self.sources.row(item))
-                self.sources.insertItem(position, item)
-            account_note = (
-                (
-                    " · All rows have accounts"
-                    if summary.association_complete
-                    else f" · {summary.assigned_row_count}/{summary.row_count} rows have accounts"
-                )
-                if summary.has_unidentified_rows and summary.assigned_row_count
-                else ""
-            )
-            item.setText(
-                f"{document_title(summary)}\n{document_period(summary)}{account_note} · {document_status(summary)}"
-            )
-            item.setToolTip(f"{item.text()}\nParser: {summary.parser_id}\nSource: {summary.source_sha256}")
-            if summary.source_sha256 == prior:
-                self.sources.setCurrentItem(item)
-        self.sources.blockSignals(False)
-        if self.sources.currentItem() is None and self.sources.count():
-            self.sources.setCurrentRow(0)
+        self.document_filters.set_options(summaries)
+        self._document_filter_state = self.document_filters.state()
+        selection = self.sources.selectionModel()
+        was_blocked = selection.blockSignals(True)
+        try:
+            self.sources.documents_proxy.set_filters(self._document_filter_state)
+            self.sources.replace(summaries, prior, select_first=prior is None)
+        finally:
+            selection.blockSignals(was_blocked)
         self.sources.verticalScrollBar().setValue(scroll)
-        self._filter_documents(self.document_search.text())
+        self._update_document_count()
         self._sync_review_selector()
 
-    def _filter_documents(self, query: str) -> None:
-        words = query.casefold().split()
-        if words and self._search_prior_source is None:
-            self._search_prior_source = self._selected_source()
-        visible = []
-        for i in range(self.sources.count()):
-            item = self.sources.item(i)
-            summary = self._document_summaries.get(item.data(Qt.UserRole))
-            searchable = item.text() + (
-                f" {summary.parser_id} {' '.join(summary.bound_account_names)} {' '.join(summary.source_accounts)}"
-                if summary
-                else ""
-            )
-            item.setHidden(not all(word in searchable.casefold() for word in words))
-            if not item.isHidden():
-                visible.append(item)
-        if not words and self._search_prior_source:
-            for item in visible:
-                if item.data(Qt.UserRole) == self._search_prior_source:
-                    self.sources.setCurrentItem(item)
-                    break
+    def _filter_documents(self, state) -> None:
+        from parsetrail.gui.v2_documents_table import matches
+
+        current = self._selected_source()
+        summary = self._document_summaries.get(current)
+        if summary is not None and not matches(summary, state) and not self._discard_review():
+            self.document_filters.set_state(self._document_filter_state)
+            return
+        if state.active_count and self._search_prior_source is None:
+            self._search_prior_source = current
+        selected = self._search_prior_source if not state.active_count else current
+        self._document_filter_state = state
+        selection = self.sources.selectionModel()
+        selection.blockSignals(True)
+        try:
+            self.sources.documents_proxy.set_filters(state)
+            if not self.sources.select_source(selected) and self.sources.model().rowCount():
+                self.sources.select_source(self.sources.visible_sources()[0])
+        finally:
+            selection.blockSignals(False)
+        if not state.active_count:
             self._search_prior_source = None
-        current = self.sources.currentItem()
-        if current is None or current.isHidden():
-            self.sources.setCurrentItem(visible[0] if visible else None)
+        self._update_document_count()
+        self._update_controls()
+
+    def _update_document_count(self):
         if not self.inventory_pending:
+            count = self.sources.model().rowCount()
+            total = self.sources.documents_model.rowCount()
             self.inventory_status.setText(
-                f"{len(visible)} of {self.sources.count()} documents"
-                if words
-                else f"{self.sources.count()} saved documents · select one to continue"
-                if self.sources.count()
+                f"{count} of {total} documents"
+                if self._document_filter_state.active_count
+                else f"{total} saved documents · select one to continue"
+                if total
                 else "No documents yet. Import a bank statement PDF or a supported CSV export to begin."
                 if self._catalog_available
                 else "First install a signed statement-format package using Install statement formats above."
             )
-        self._update_controls()
 
     def changeEvent(self, event):
         super().changeEvent(event)
@@ -1407,8 +1406,7 @@ class V2WorkspaceWindow(QMainWindow):
             self.refresh(select_source=self._selected_source())
 
     def _selected_source(self) -> str | None:
-        item = self.sources.currentItem()
-        return item.data(Qt.UserRole) if item is not None else None
+        return self.sources.selected_source()
 
     def _update_controls(self, *_args) -> None:
         source_id = self._selected_source()
@@ -1416,15 +1414,19 @@ class V2WorkspaceWindow(QMainWindow):
         if summary is not None and self._review_widget is not None and self._review_source_id != source_id:
             previous_source = self._review_source_id
             if not self._discard_review():
-                self.sources.blockSignals(True)
-                for index in range(self.sources.count()):
-                    item = self.sources.item(index)
-                    if item.data(Qt.UserRole) == previous_source:
-                        self.sources.setCurrentItem(item)
-                        break
-                self.sources.blockSignals(False)
+                self.sources.selectionModel().blockSignals(True)
+                self.sources.select_source(previous_source)
+                self.sources.selectionModel().blockSignals(False)
                 return
-        available = summary is not None and not self._write_in_progress() and not self._closing
+        available = (
+            summary is not None and not self.inventory_pending and not self._write_in_progress() and not self._closing
+        )
+        self.review_period.setVisible(summary is not None)
+        self.review_period.setText(document_period(summary) if summary is not None else "")
+        self.sources.setEnabled(not self.inventory_pending and not self._write_in_progress() and not self._closing)
+        self.document_filters.setEnabled(
+            not self.inventory_pending and not self._write_in_progress() and not self._closing
+        )
         if self._review_widget is not None:
             self._review_widget.setEnabled(summary is not None and not self._closing)
         self.recover_source_action.setEnabled(available)
@@ -1459,12 +1461,16 @@ class V2WorkspaceWindow(QMainWindow):
         self.batch_accounts_action.setEnabled(batch_available)
         self.review_document_button.setEnabled(available)
         self.document_details_button.setEnabled(available)
-        self.review_document_selector.setEnabled(batch_available and bool(self._document_summaries))
+        self.review_document_selector.setEnabled(
+            batch_available and not self.inventory_pending and bool(self._document_summaries)
+        )
         self.review_document_selector.blockSignals(True)
         self.review_document_selector.setCurrentIndex(self.review_document_selector.findData(source_id))
         self.review_document_selector.blockSignals(False)
         self.next_document_button.setEnabled(
-            batch_available and any(self._needs_attention(item) for item in self._document_summaries.values())
+            batch_available
+            and not self.inventory_pending
+            and any(self._needs_attention(item) for item in self._document_summaries.values())
         )
         self.document_spending_button.setEnabled(
             available
@@ -1583,7 +1589,16 @@ class V2WorkspaceWindow(QMainWindow):
                 if is_summary
                 else "Review activity"
                 if summary.pending_activity_rows
-                else "Review document"
+                else "View document"
+            )
+            set_field_state(
+                self.review_document_button,
+                "ready"
+                if summary.unassigned_activity_rows
+                or summary.unassigned_source_accounts
+                or summary.pending_summary_values
+                or summary.pending_activity_rows
+                else "neutral",
             )
             self.review_guidance.setText(
                 "Review confirmed rows below. Assign the remaining accounts before reviewing their activity."
@@ -1631,7 +1646,7 @@ class V2WorkspaceWindow(QMainWindow):
             )
             self.review_empty.setText(
                 "Import documents from Documents to begin. Account assignment and reviewed activity are separate steps."
-                if not self.inventory_pending and not self.sources.count()
+                if not self.inventory_pending and not self.sources.documents_model.rowCount()
                 else "Choose a document to see its supported activity and remaining decisions."
             )
             self.review_empty.setVisible(self._review_widget is None)
@@ -1780,7 +1795,7 @@ class V2WorkspaceWindow(QMainWindow):
             try:
                 self.refresh(select_source=previous_source)
             except (ProfileFormatError, sqlite3.Error, OSError, ValueError):
-                self.sources.clear()
+                self.sources.replace(())
                 self.import_button.setEnabled(False)
                 self.import_folder_button.setEnabled(False)
                 self._update_controls()

@@ -124,18 +124,18 @@ def test_window_imports_pending_evidence_and_reuses_exact_source(tmp_path: Path,
     window = V2WorkspaceWindow(workspace)
     wait_for_inventory(window)
     try:
-        assert window.sources.count() == 0
+        assert window.sources.model().rowCount() == 0
         category_opens = []
         monkeypatch.setattr(V2CategoryDialog, "exec", lambda dialog: category_opens.append(dialog.categories.count()))
         window.categories_button.click()
-        assert category_opens == [0]
+        assert category_opens == [1]  # Fresh profiles already include Loan interest.
         window._open_reviewed_reports()
         assert window.navigation.currentRow() == window.REPORTS and window._reports_view.embedded
         assert window.import_button.isEnabled()
         window.start_import(source)
         _wait_finished(window.import_worker, app)
         wait_for_inventory(window)
-        assert window.sources.count() == 1
+        assert window.sources.model().rowCount() == 1
         assert window.preview_button.isEnabled()
         assert window.cash_review_button.isEnabled()
         assert not window.review_button.isEnabled()
@@ -155,7 +155,7 @@ def test_window_imports_pending_evidence_and_reuses_exact_source(tmp_path: Path,
         window.start_import(source)
         _wait_finished(window.import_worker, app)
         wait_for_inventory(window)
-        assert window.sources.count() == 1
+        assert window.sources.model().rowCount() == 1
         assert "already imported" in window.status.text()
     finally:
         window.close()
@@ -193,7 +193,7 @@ def test_window_batch_import_shows_per_file_report_and_retains_successes(tmp_pat
         assert worker is not None
         _wait_finished(worker, app)
         wait_for_inventory(window)
-        assert window.sources.count() == 1
+        assert window.sources.model().rowCount() == 1
         assert window.import_button.isEnabled()
         assert window.import_folder_button.isEnabled()
         assert len(reports) == 1
