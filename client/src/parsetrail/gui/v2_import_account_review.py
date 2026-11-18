@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QPlainTextEdit,
+    QProgressBar,
     QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
@@ -140,6 +141,7 @@ class V2ImportAccountReview(QDialog):
         self._editing_draft_id = None
         self._active_group = None
         self._rendering = False
+        self._pending = False
         self._original_open = None
         self.setWindowTitle("Import document and choose accounts")
         self.setWindowModality(Qt.WindowModal)
@@ -241,7 +243,20 @@ class V2ImportAccountReview(QDialog):
             widget.hide()
         self.preview.format_selector.currentIndexChanged.connect(self._preview_changed)
         self.pages.addWidget(self.preview)
-        preference_row = QHBoxLayout()
+        self.pending_page = QWidget()
+        self.pending_page.setFocusPolicy(Qt.StrongFocus)
+        self.pending_page.setAccessibleName("Import in progress; Tab reaches Cancel remaining imports")
+        pending_layout = QVBoxLayout(self.pending_page)
+        pending_layout.addStretch()
+        self.busy = QProgressBar()
+        self.busy.setRange(0, 0)
+        self.busy.setAccessibleName("Import queue is working")
+        pending_layout.addWidget(self.busy)
+        pending_layout.addStretch()
+        self.pages.addWidget(self.pending_page)
+        self.preferences = QWidget()
+        preference_row = QHBoxLayout(self.preferences)
+        preference_row.setContentsMargins(0, 0, 0, 0)
         self.abbreviated_matching = QCheckBox("Automatically match abbreviated account numbers")
         self.abbreviated_matching.setToolTip("Saved for future imports. Your current account choices will not change.")
         self.abbreviated_matching.toggled.connect(self._matching_preference_changed)
@@ -257,7 +272,7 @@ class V2ImportAccountReview(QDialog):
         )
         self.preview_mode.currentIndexChanged.connect(self._preview_preference_changed)
         preference_row.addWidget(self.preview_mode)
-        layout.addLayout(preference_row)
+        layout.addWidget(self.preferences)
         self.preference_notice = QLabel(
             "Import preferences are saved for future files. Current choices stay unchanged."
         )
@@ -272,23 +287,36 @@ class V2ImportAccountReview(QDialog):
         self.status = QLabel()
         layout.addWidget(self.status)
         actions = QHBoxLayout()
-        self.back_button = _ExplicitDecisionButton("Back to accounts")
+        self.back_button = _ExplicitDecisionButton("&Back to accounts")
         self.back_button.clicked.connect(self._back)
-        self.next_button = _ExplicitDecisionButton("Next: review import")
+        self.next_button = _ExplicitDecisionButton("&Next: review import")
         self.next_button.clicked.connect(self._next)
-        self.import_button = _ExplicitDecisionButton("Import and assign")
+        self.import_button = _ExplicitDecisionButton("&Import and assign")
         self.import_button.clicked.connect(self._import)
-        self.skip_button = _ExplicitDecisionButton("Skip this file")
+        self.skip_button = _ExplicitDecisionButton("&Skip this file")
         self.skip_button.clicked.connect(self._skip)
         self.cancel_button = _ExplicitDecisionButton("Cancel remaining imports")
         self.cancel_button.clicked.connect(self.reject)
-        self.original_button = _ExplicitDecisionButton("View original…")
+        self.original_button = _ExplicitDecisionButton("View &original…")
         self.original_button.clicked.connect(self._view_original)
         actions.addWidget(self.original_button)
-        for button in (self.back_button, self.next_button, self.import_button, self.skip_button):
-            actions.addWidget(button)
+        actions.addWidget(self.back_button)
+        # The two steps share one primary slot. Hidden secondary actions retain
+        # their space so another decision never inherits the Import coordinates.
+        self.primary_actions = QStackedWidget(self)
+        self.primary_actions.addWidget(self.next_button)
+        self.primary_actions.addWidget(self.import_button)
+        self.primary_actions.setFixedWidth(
+            max(self.next_button.sizeHint().width(), self.import_button.sizeHint().width())
+        )
+        actions.addWidget(self.primary_actions)
         actions.addStretch()
+        actions.addWidget(self.skip_button)
         actions.addWidget(self.cancel_button)
+        for widget in (self.original_button, self.back_button, self.primary_actions, self.skip_button):
+            policy = widget.sizePolicy()
+            policy.setRetainSizeWhenHidden(True)
+            widget.setSizePolicy(policy)
         layout.addLayout(actions)
 
     def present(self, request):
@@ -308,6 +336,18 @@ class V2ImportAccountReview(QDialog):
         )
         self._drafts = self._drafts if same_bytes else {}
         self.request, self._finished = request, False
+        self._pending = False
+        for widget in (
+            self.step_label,
+            self.scope,
+            self.preferences,
+            self.preference_notice,
+            self.original_button,
+            self.primary_actions,
+            self.skip_button,
+        ):
+            widget.show()
+        self.status.setToolTip("")
         self.review = request.review
         self.institutions = request.review.institutions
         self._rendering = True
@@ -636,7 +676,7 @@ class V2ImportAccountReview(QDialog):
         return tuple(choices), tuple(account for account in drafts.values() if account.id in used)
 
     def _changed(self, *_args):
-        if self._rendering or self.request is None:
+        if self._rendering or self._pending or self.request is None:
             return
         self._save_active()
         choices, accounts = self._choices()
@@ -719,6 +759,7 @@ class V2ImportAccountReview(QDialog):
             else "Check the dates, amounts and accounts. Import saves the original and assignments; it adds no spending."
         )
         self.back_button.setVisible(index == 1)
+        self.primary_actions.setCurrentIndex(index)
         self.next_button.setVisible(index == 0)
         self.import_button.setVisible(index == 1)
         self.assignment_summary.setVisible(index == 1)
@@ -791,7 +832,7 @@ class V2ImportAccountReview(QDialog):
         self.account_choice.setFocus()
 
     def _preview_changed(self, *_args):
-        if self.request is None:
+        if self._pending or self.request is None:
             return
         valid = self.preview.format_selector.currentData() is not None and not self.request.decided.is_set()
         if self.pages.currentIndex() == 1:
@@ -812,12 +853,26 @@ class V2ImportAccountReview(QDialog):
                     preview_reason = "Preview required: source interpretation warnings need checking. "
                 else:
                     preview_reason = "Preview required: account choices need confirmation. "
+            candidate = next(
+                (
+                    item
+                    for item in self.preview.request.recognition.candidates
+                    if item.parser_id == self.preview.format_selector.currentData()
+                ),
+                None,
+            )
+            warning_guidance = (
+                " Compare the warnings, dates and amounts with View original. "
+                "Import retains these warnings and assignments; no transactions are posted."
+                if candidate is not None and (candidate.attention_codes or getattr(candidate, "warnings", ()))
+                else ""
+            )
             set_status(
                 self.status,
                 "ready" if valid else "blocked",
-                preview_reason + "Ready to import · Not saved. No spending is posted."
+                preview_reason + "Ready to import · Not saved. No spending is posted." + warning_guidance
                 if valid
-                else "This file matches more than one supported format for these accounts. Nothing has been imported. Back keeps your drafts; check the institution and product, or skip this file and use another supported export.",
+                else "This file matches more than one supported format for these accounts. Nothing has been imported. Back keeps your drafts; check the institution and product, or Skip this file. You can update supported formats from the workspace before trying again.",
             )
 
     def _import(self):
@@ -848,6 +903,22 @@ class V2ImportAccountReview(QDialog):
 
     def _waiting(self, text):
         self._cancel_original()
+        self._draft_focus_timer.stop()
+        self._pending = True
+        self.pages.setCurrentWidget(self.pending_page)
+        for widget in (
+            self.step_label,
+            self.scope,
+            self.recovery_notice,
+            self.assignment_summary,
+            self.preferences,
+            self.preference_notice,
+            self.original_button,
+            self.back_button,
+            self.primary_actions,
+            self.skip_button,
+        ):
+            widget.hide()
         self.accounts_page.setEnabled(False)
         self.preview.setEnabled(False)
         self.original_button.setEnabled(False)
@@ -857,9 +928,12 @@ class V2ImportAccountReview(QDialog):
             button.setEnabled(False)
             set_field_state(button, "neutral")
         set_status(self.status, "loading", text)
+        self.status.setToolTip("")
+        self.pending_page.setFocus()
 
     def wait_for_next(self, index, total, path):
         self.file_context.setText(f"File {index} of {total}: {path.name} · Reading document…")
+        self.file_context.setToolTip(str(path))
         self._waiting("Checking the next document. Completed imports stay saved if you cancel.")
 
     def update_queue(self, completed):
