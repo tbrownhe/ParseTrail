@@ -26,7 +26,7 @@ from parsetrail.core.v2_money_operations import usd_or_decimal_2dp_minor_v1
 from parsetrail.core.v2_pdf_lines import PageLine, PDFLineEvidence
 from parsetrail.core.v2_pdf_routing import PDFRouting
 
-ENGINE_VERSION = "investment-summary-lines-pilot-2"
+ENGINE_VERSION = "investment-summary-lines-pilot-3"
 MAX_DEFINITION_BYTES = 64 * 1024
 PERIOD = re.compile(r"(?P<start>[A-Z][a-z]+ \d{1,2}, \d{4}) - (?P<end>[A-Z][a-z]+ \d{1,2}, \d{4})\Z")
 
@@ -134,7 +134,12 @@ def _summary_tail(lines: tuple[PageLine, ...], closing_minor: int) -> list[Sourc
     for line in lines:
         raw = line.normalized
         code = labelled.get(line.line)
-        if raw == "Contact Information":
+        if raw == (
+            "Contact Information * Reflects appreciation or depreciation of your holdings due to price changes, transactions"
+        ):
+            code = "summary_explanatory_note"
+            note = True
+        elif raw == "Contact Information":
             code = "summary_contact_heading"
             note = False
         elif not re.search(r"\$|[0-9]", raw):

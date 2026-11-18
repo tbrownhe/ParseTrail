@@ -27,7 +27,7 @@ from parsetrail.core.v2_money_operations import usd_symbol_minor_v1
 from parsetrail.core.v2_pdf_lines import PageLine, PDFLineEvidence
 from parsetrail.core.v2_pdf_routing import PDFRouting
 
-ENGINE_VERSION = "single-column-summary-pilot-2"
+ENGINE_VERSION = "single-column-summary-pilot-3"
 PLAN_ROW_VERSION = "single-column-summary-pilot-1"
 PLAN_ENGINE_VERSION = PLAN_ROW_VERSION + "+plan-label"
 MAX_DEFINITION_BYTES = 64 * 1024
@@ -180,6 +180,72 @@ def parse_single_column_summary(definition_bytes: bytes, lines: PDFLineEvidence)
     dispositions = []
     occurrences: Counter[tuple[str, int]] = Counter()
     chart_lines = _chart_axis_lines(first_page, opening_line, closing_line)
+    # The paired header must be unique, adjacent to the chart header and before
+    # this summary. Every printed summary row must then have exactly one second
+    # two-decimal amount (plus an independently established chart tick).
+    paired_headers = [
+        index for index, line in enumerate(first_page) if line.normalized == "Current Period Year to Date"
+    ]
+    labelled_ytd = False
+    if len(paired_headers) == 1:
+        index = paired_headers[0]
+        labelled_ytd = (
+            index > 0
+            and first_page[index - 1].normalized.casefold() == "account balance your account progress"
+            and 0 < opening_line.line - first_page[index].line <= 3
+        )
+    summary_tails = [(opening_line, opening_tail), (closing_line, closing_tail)]
+    summary_tails.extend(
+        (line, _first_money(line, label)[2])
+        for line in first_page[opening_line.line : closing_line.line - 1]
+        if (label := next((label for label in definition.row_labels if line.normalized.startswith(label + " ")), None))
+    )
+    ytd_values = {}
+    if labelled_ytd:
+        for line, tail in summary_tails:
+            parts = tail.split()
+            if (
+                not parts
+                or MONEY.fullmatch(parts[0]) is None
+                or len(parts) > 2
+                or (len(parts) == 2 and not (line.line in chart_lines and _CHART_TICK.fullmatch(parts[1])))
+            ):
+                ytd_values.clear()
+                break
+            try:
+                usd_symbol_minor_v1(parts[0])
+            except ValueError:
+                ytd_values.clear()
+                break
+            ytd_values[line.line] = parts[0]
+    if ytd_values:
+        dispositions.append(
+            SourceDisposition(
+                code="summary_year_to_date_context",
+                location=_location(first_page[paired_headers[0]]),
+                raw_values=(first_page[paired_headers[0]].raw,),
+            )
+        )
+
+    def tail_dispositions(line: PageLine, tail: str) -> list[SourceDisposition]:
+        if not tail:
+            return []
+        result = []
+        if line.line in ytd_values:
+            ytd = ytd_values[line.line]
+            result.append(SourceDisposition(code="year_to_date_column", location=_location(line), raw_values=(ytd,)))
+            tail = tail[len(ytd) :].strip()
+        if tail:
+            chart_tail = line.line in chart_lines and _CHART_TICK.fullmatch(tail)
+            result.append(
+                SourceDisposition(
+                    code="summary_chart_axis" if chart_tail else "summary_extra_column",
+                    location=_location(line),
+                    raw_values=(line.raw if chart_tail else tail,),
+                )
+            )
+        return result
+
     if chart_lines:
         dispositions.extend(
             SourceDisposition(code="summary_chart_axis", location=_location(line), raw_values=(line.raw,))
@@ -229,25 +295,9 @@ def parse_single_column_summary(definition_bytes: bytes, lines: PDFLineEvidence)
                 fragments=(SourceFragment(channel="account_value_summary", location=location, raw_values=(line.raw,)),),
             )
         )
-        if tail:
-            chart_tail = line.line in chart_lines and _CHART_TICK.fullmatch(tail)
-            dispositions.append(
-                SourceDisposition(
-                    code="summary_chart_axis" if chart_tail else "summary_extra_column",
-                    location=location,
-                    raw_values=(line.raw if chart_tail else tail,),
-                )
-            )
+        dispositions.extend(tail_dispositions(line, tail))
     for line, tail in ((opening_line, opening_tail), (closing_line, closing_tail)):
-        if tail:
-            chart_tail = line.line in chart_lines and _CHART_TICK.fullmatch(tail)
-            dispositions.append(
-                SourceDisposition(
-                    code="summary_chart_axis" if chart_tail else "summary_extra_column",
-                    location=_location(line),
-                    raw_values=(line.raw if chart_tail else tail,),
-                )
-            )
+        dispositions.extend(tail_dispositions(line, tail))
     if not rows or opening + sum(row.amount.minor for row in rows) != closing:
         raise SingleColumnSummaryError("printed_summary_equation")
     return SourceEvidence(

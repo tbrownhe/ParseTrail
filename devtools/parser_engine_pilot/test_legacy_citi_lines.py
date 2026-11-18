@@ -209,7 +209,7 @@ def test_finite_summary_and_interest_detail_roles_preserve_source() -> None:
         assert disposition.raw_values == (line.raw,)
     assert len(output.payload.accounts[0].rows) == 2
     assert output.payload.capture_verified is False
-    assert output.engine_version == "legacy-citi-lines-pilot-3"
+    assert output.engine_version == "legacy-citi-lines-pilot-4"
     assert not [w for w in evidence_import_warnings(output) if w.classification == "requires_review"]
 
 
@@ -465,3 +465,111 @@ def test_real_bounded_legacy_decoder_keeps_roles_unknown_money_and_cancellation(
         build_source_evidence(source, DEFINITION, suffix=".pdf", cancelled=lambda: True)
     with pytest.raises(SourcePipelineError):
         build_source_evidence(source[:90], DEFINITION, suffix=".pdf")
+
+
+def test_parallel_summary_terms_and_inline_repayment_total_have_finite_roles():
+    raw = (
+        "includes an overlimit amount of $7.00 and a",
+        "past due amount of $8.00.",
+        "Late Payment Warning: If we do not receive your minimum payment by the date Purchases +$10.00",
+        "listed above, you may have to pay a late fee of up to $25 and your APRs may be Cash advances +$0.00",
+        "increased up to the Penalty APR of 28.99%. Fees +$0.00",
+        "charges using this card balance shown on the paying an estimated Revolving Credit limit $900",
+        "If you make no additional charges using this card",
+        "and each month you pay... statement in about... total of...",
+        "Only the minimum payment 12 year(s) $900 Available Revolving credit $800",
+        "$42 3 year(s) $700 Credit limit $900",
+        "(Savings = $200)",
+        "For information about credit counseling services, call 800-555-0100. Available credit $800",
+    )
+    output = parse(extra=raw)
+    assert not [d for d in output.payload.dispositions if d.code == "unclassified_monetary_line"]
+    assert len(output.payload.accounts[0].rows) == 2
+    assert output.payload.capture_verified is False
+    for index in (8, 9):
+        changed = list(raw)
+        changed[index] += " Unknown $9.00"
+        assert any(d.code == "unclassified_monetary_line" for d in parse(extra=tuple(changed)).payload.dispositions)
+    changed = list(raw)
+    changed[9] = changed[9].replace("$700", "$701")
+    assert any(d.code == "unclassified_monetary_line" for d in parse(extra=tuple(changed)).payload.dispositions)
+
+
+def test_savings_sidebar_needs_complete_labels_column_and_arithmetic():
+    base = "\n".join(line.raw for line in lines().lines)
+    sidebar = (
+        " " * 55 + "Citi Simplicity Lifetime Savings",
+        " " * 60 + "Interest: $12.00",
+        "Fees charged" + " " * 48 + "No Late Fee: $25.00",
+        "Your Annual Percentage Rate (APR) is the annual interest rate on your account. CITI SIMPLICITY LIFETIME SAVINGS:",
+        " " * 67 + "$37.00",
+    )
+
+    def output(second):
+        return parse_legacy_citi(
+            DEFINITION,
+            page_lines(b"synthetic", [base, "\n".join(second)], extraction_library=lines().extraction_library),
+        )
+
+    evidence = output(sidebar)
+    assert [d.code for d in evidence.payload.dispositions] == ["citi_savings_information"] * 3
+    assert evidence.payload.dispositions[-1].location.line == 5
+    assert evidence.payload.dispositions[-1].raw_values == (sidebar[-1],)
+    for altered in (
+        sidebar[:-1] + (" " * 67 + "$38.00",),
+        sidebar[:-1] + ("$37.00",),
+        sidebar[:-1] + (" " * 67 + "$37.00 Unknown $9",),
+        sidebar[1:],
+        sidebar + (" " * 67 + "$37.00",),
+    ):
+        assert any(d.code == "unclassified_monetary_line" for d in output(altered).payload.dispositions)
+
+
+@pytest.mark.parametrize(
+    "interest,fee,total",
+    [
+        ("$1000.00", "$25.00", "$1,025.00"),
+        ("$25.00", "$1000.00", "$1,025.00"),
+        ("$1,000.00", "$25.00", "$1025.00"),
+        ("$90,000,000,000,000.00", "$25.00", "$90,000,000,000,025.00"),
+    ],
+)
+def test_savings_sidebar_converter_refusal_preserves_unknown_source_lines(interest, fee, total):
+    base = "\n".join(line.raw for line in lines().lines)
+    sidebar = (
+        " " * 55 + "Citi Simplicity Lifetime Savings",
+        " " * 60 + f"Interest: {interest}",
+        "Fees charged" + " " * 48 + f"No Late Fee: {fee}",
+        "Your Annual Percentage Rate (APR) is the annual interest rate on your account. CITI SIMPLICITY LIFETIME SAVINGS:",
+        " " * 67 + total,
+    )
+    output = parse_legacy_citi(
+        DEFINITION, page_lines(b"synthetic", [base, "\n".join(sidebar)], extraction_library=lines().extraction_library)
+    )
+    assert [d.code for d in output.payload.dispositions] == ["unclassified_monetary_line"] * 3
+    assert [d.raw_values for d in output.payload.dispositions] == [(sidebar[i],) for i in (1, 2, 4)]
+    assert [d.location.line for d in output.payload.dispositions] == [2, 3, 5]
+    assert len(output.payload.accounts[0].rows) == 2
+    assert any(w.classification == "requires_review" for w in evidence_import_warnings(output))
+
+
+def test_statutory_purchase_threshold_requires_exact_complete_parallel_prose():
+    base = "\n".join(line.raw for line in lines().lines)
+    prose = (
+        "take the balance at the end of the previous day, add the interest on the previous "
+        "your current mailing address, and the purchase price must have been more",
+        "day’s balance and new charges, subtract new credits or payments, and make "
+        "than $50. (Note: Neither of these is necessary if your purchase was based on",
+        "adjustments. The Balance Subject to Interest Rate is the average of the daily "
+        "an advertisement we mailed to you, or if we own the company that sold you",
+    )
+    for second, expected in (
+        (prose, "citi_credit_terms"),
+        (prose[1:], "unclassified_monetary_line"),
+        ((prose[0], prose[1] + " Unknown $9.00", prose[2]), "unclassified_monetary_line"),
+    ):
+        output = parse_legacy_citi(
+            DEFINITION,
+            page_lines(b"synthetic", [base, "\n".join(second)], extraction_library=lines().extraction_library),
+        )
+        assert output.payload.dispositions[-1].code == expected

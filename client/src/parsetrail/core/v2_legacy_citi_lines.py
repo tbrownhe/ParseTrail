@@ -29,7 +29,7 @@ from parsetrail.core.v2_partial_dates import PartialDateError, resolve_month_day
 from parsetrail.core.v2_pdf_lines import ADAPTER_VERSION, PageLine, PDFLineEvidence
 from parsetrail.core.v2_pdf_routing import PDFRouting
 
-ENGINE_VERSION = "legacy-citi-lines-pilot-3"
+ENGINE_VERSION = "legacy-citi-lines-pilot-4"
 MAX_DEFINITION_BYTES = 64 * 1024
 MONEY = r"-?\$(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)\.[0-9]{2}"
 MONEY_TOKEN = re.compile(MONEY)

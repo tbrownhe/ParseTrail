@@ -67,3 +67,47 @@ def test_worker_refuses_invalid_source_without_echoing_it() -> None:
     with pytest.raises(WorkerError, match="worker_failed") as error:
         extract_bounded_wells(DEFINITION.read_bytes(), b"private statement text")
     assert "private" not in str(error.value)
+
+
+def test_actual_bounded_footer_preserves_unknowns_product_and_cancelled_input():
+    from parsetrail.core.v2_source_pipeline import SourcePipelineError, build_source_evidence
+
+    from devtools.parser_engine_pilot.synthetic_family_sources import pdf_document, table_page, text_page
+
+    source = pdf_document(
+        (
+            text_page(
+                "Initiate Business Checking SM",
+                "Wells Fargo",
+                "October 31, 2026 Page 1 of 1",
+                "Statement period activity summary Account number: 1234567890",
+                "Beginning balance on 10/1 $100.00",
+                "Ending balance on 10/31 $101.00",
+                *("Printed service information" for _ in range(10)),
+            ),
+            table_page(
+                ("Date", "Description", "Credits", "Debits", "balance"),
+                (("10/1", "Printed", "$1.00", "", "$101.00"),),
+                (20, 100, 400, 600, 800),
+            )
+            + (
+                (20, 640, "Ending balance on 10/31"),
+                (800, 640, "$101.00"),
+                (20, 620, "Totals"),
+                (400, 620, "$1.00"),
+                (600, 620, "$0.00"),
+                (100, 600, "Unknown adjustment $7.00"),
+            ),
+        )
+    )
+    output = build_source_evidence(source, DEFINITION.read_bytes(), suffix=".pdf")
+    assert len(output.payload.accounts[0].rows) == 1
+    assert len([d for d in output.payload.dispositions if d.code == "wells_statement_summary"]) == 2
+    assert len([d for d in output.payload.dispositions if d.code == "wells_account_product"]) == 1
+    unknown = [d for d in output.payload.dispositions if d.code == "unresolved_after_stop"]
+    assert len(unknown) == 1 and "$7.00" in "".join(unknown[0].raw_values)
+    assert not output.payload.capture_verified
+    with pytest.raises(SourcePipelineError, match="cancelled"):
+        build_source_evidence(source, DEFINITION.read_bytes(), suffix=".pdf", cancelled=lambda: True)
+    with pytest.raises(SourcePipelineError):
+        build_source_evidence(source[:90], DEFINITION.read_bytes(), suffix=".pdf")

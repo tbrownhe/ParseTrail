@@ -17,7 +17,7 @@ from parsetrail.core.v2_pdf_lines import MAX_PAGES, MAX_PDF_BYTES
 from parsetrail.core.v2_pdf_routing import PDFRouting
 from parsetrail.core.v2_table_continuations import ContinuationRule
 
-ENGINE_VERSION = "wells-table-pilot-1"
+ENGINE_VERSION = "wells-table-pilot-2"
 MAX_DEFINITION_BYTES = 64 * 1024
 MAX_WORDS_PER_PAGE = 20_000
 MAX_TABLE_ROWS = 20_000

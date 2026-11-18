@@ -24,6 +24,7 @@ from parsetrail.core.v2_money_operations import usd_or_decimal_2dp_minor_v1
 from parsetrail.core.v2_partial_dates import PartialDateError, resolve_slash_month_day
 from parsetrail.core.v2_pdf_lines import PageLine, PDFLineEvidence
 from parsetrail.core.v2_table_continuations import RawTableRow, assemble
+from parsetrail.core.v2_wells_dispositions import classify_wells_tail
 from parsetrail.core.v2_wells_table import TableRow, WellsTableEvidence, load_definition
 
 END_DATE = re.compile(r"(?P<date>[A-Z][a-z]+\s+\d{1,2},\s+\d{4})")
@@ -183,15 +184,33 @@ def from_wells_business(
         )
     if running != closing:
         raise WellsStatementError("printed_closing_mismatch")
-    dispositions = tuple(
-        SourceDisposition(
-            code=row.disposition,
-            location=_table_location(row),
-            raw_values=row.raw_cells,
-        )
-        for row in table.rows
-        if row.disposition in {"terminator", "unresolved_after_stop"}
+    dispositions = classify_wells_tail(
+        table.rows,
+        lines,
+        closing=closing,
+        end=end,
+        credits=sum(row.amount.minor for row in rows if row.amount.minor > 0),
+        debits=-sum(row.amount.minor for row in rows if row.amount.minor < 0),
     )
+    products = [
+        line
+        for line in first_page
+        if line.normalized.casefold()
+        in {
+            "initiate business checking",
+            "initiate business checking sm",
+            "business market rate savings",
+            "business market rate savings sm",
+        }
+    ]
+    if len(products) == 1:
+        dispositions += (
+            SourceDisposition(
+                code="wells_account_product",
+                location=_location(products[0]),
+                raw_values=(products[0].raw,),
+            ),
+        )
     payload = StatementPayload(
         kind="statement",
         start=DateValue(
@@ -234,7 +253,7 @@ def from_wells_business(
         definition_sha256=definition_hash,
         parser_id=definition.parser_id,
         definition_revision=definition.revision,
-        engine_version=table.engine_version + "+statement-v1",
+        engine_version=table.engine_version + "+statement-v2",
         extractor_version=table.extraction_library + "+" + lines.adapter_version,
         payload=payload,
     )

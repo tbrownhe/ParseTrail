@@ -28,6 +28,53 @@ class ImportWarning:
     occurrence_count: int = 1
 
 
+def _printed_empty_hsa_cash_table(evidence: SourceEvidence) -> bool:
+    """Recognize one audited empty cash table, without certifying page capture."""
+    payload = evidence.payload
+    if (
+        evidence.parser_id != "hsa_cash_line_pilot"
+        or evidence.engine_version != "hsa-cash-lines-pilot-2"
+        or not isinstance(payload, StatementPayload)
+        or len(payload.accounts) != 1
+        or any(
+            value.provenance != "observed" or value.iso is None or not value.locations
+            for value in (payload.start, payload.end)
+        )
+        or payload.start.iso > payload.end.iso
+    ):
+        return False
+    account = payload.accounts[0]
+    if account.balance_scope != "cash_component" or account.rows:
+        return False
+    endpoints = (account.opening, account.closing)
+    if any(
+        value is None
+        or value.provenance != "observed"
+        or value.minor is None
+        or value.raw is None
+        or len(value.locations) != 1
+        for value in endpoints
+    ):
+        return False
+    opening, closing = endpoints
+    if opening.minor != closing.minor:
+        return False
+    proof = [item for item in payload.dispositions if item.code == "hsa_empty_cash_table"]
+    if (
+        len(proof) != 1
+        or len(proof[0].raw_values) != 1
+        or " ".join(proof[0].raw_values[0].split()).lstrip("_ ") != "Date DescriptionofTransaction (Withdrawal) Balance"
+    ):
+        return False
+    header, first, last = proof[0].location, opening.locations[0], closing.locations[0]
+    return (
+        header.kind == first.kind == last.kind == "pdf_line"
+        and header.page == first.page == last.page
+        and first.line == header.line + 1
+        and last.line == first.line + 1
+    )
+
+
 def _capital_auto_payment_without_opening(evidence: SourceEvidence, account: StatementAccount) -> bool:
     """Qualify one finite printed payment, without asserting a balance equation."""
     if (
@@ -124,9 +171,20 @@ def _disposition_warning(code: str, raw_values: tuple[str, ...]) -> tuple[Warnin
         "citi_repayment_example": "Printed repayment examples are retained separately from activity",
         "citi_apr_information": "Printed interest calculation details are retained separately from activity",
         "citi_interest_charge_detail": "Printed interest charge detail is retained separately from activity",
+        "citi_savings_information": "Printed card benefit savings are retained separately from account activity",
     }
     if code in citi_roles:
         return "informational", citi_roles[code]
+    wells_roles = {
+        "wells_non_activity_blank": "Blank cells after the activity table are retained separately",
+        "wells_statement_summary": "Printed table totals and ending balance are retained separately from activity",
+        "wells_balance_disclosure": "Printed balance explanations are retained separately from activity",
+        "wells_service_fee_information": "Printed service fee information is retained separately from activity",
+        "wells_transaction_fee_information": "Printed transaction fee calculations are retained separately from activity",
+        "wells_account_product": "The printed business account product is retained as source context",
+    }
+    if code in wells_roles:
+        return "informational", wells_roles[code]
     if code in {
         "summary_chart_axis",
         "summary_chart_context",
@@ -134,8 +192,13 @@ def _disposition_warning(code: str, raw_values: tuple[str, ...]) -> tuple[Warnin
         "summary_contact_heading",
         "summary_accrued_interest",
         "summary_inclusive_value",
+        "summary_year_to_date_context",
     }:
         return "informational", "Printed summary context is retained separately from period changes and closing value"
+    if code in {"hsa_empty_cash_table", "hsa_cash_rate_fee_information", "hsa_cash_statement_dates"}:
+        return "informational", "Printed HSA cash-table context is retained separately from activity"
+    if code == "hsa_exterior_unclassified":
+        return "requires_review", "Content outside the empty HSA cash table needs review"
     # Citi's unclassified page text has already refused financial/date-shaped
     # lines. Keep that benign text distinct from an unresolved monetary line.
     if code == "unclassified_page_text" and not any(_MONEY.search(_PERCENTAGE.sub("", raw)) for raw in raw_values):
@@ -186,7 +249,14 @@ def evidence_import_warnings(evidence: SourceEvidence) -> tuple[ImportWarning, .
     rows = tuple(row for account in payload.accounts for row in account.rows) if statement else payload.rows
     start, end = (payload.start, payload.end) if statement else (payload.activity_start, payload.activity_end)
     if not rows:
-        add("no_activity_captured", "requires_review", "No activity rows were captured")
+        if _printed_empty_hsa_cash_table(evidence):
+            add(
+                "no_activity_captured",
+                "informational",
+                "The printed cash table has no transactions and its balances agree",
+            )
+        else:
+            add("no_activity_captured", "requires_review", "No activity rows were captured")
     if start.iso is None or end.iso is None:
         add(
             "source_period_unknown",

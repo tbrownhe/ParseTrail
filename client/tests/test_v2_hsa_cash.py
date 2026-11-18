@@ -340,6 +340,7 @@ def test_missing_receipt_stale_and_atomic_failure_leave_original_money_and_histo
             post_missing(store, outgoing, basis="0" * 64)
         original = post_missing(store, outgoing) if stage == "replacement" else None
         history, consumed = store.transfer_history(), store._active_consumed()
+        accounts = store.connection.execute("SELECT * FROM Accounts ORDER BY id").fetchall()
         table = "TransferEventActions" if original else "TransferEvents"
         store.connection.execute(
             f"CREATE TEMP TRIGGER fail_hsa BEFORE INSERT ON {table} BEGIN SELECT RAISE(ABORT,'injected failure'); END"
@@ -362,9 +363,7 @@ def test_missing_receipt_stale_and_atomic_failure_leave_original_money_and_histo
                 )
         assert store.transfer_history() == history and store._active_consumed() == consumed
         assert store.connection.execute("SELECT count(*) FROM JournalRetirements").fetchone() == (0,)
-        assert store.connection.execute(
-            "SELECT count(*) FROM Accounts WHERE id='builtin:loan-interest'"
-        ).fetchone() == (0,)
+        assert store.connection.execute("SELECT * FROM Accounts ORDER BY id").fetchall() == accounts
         assert not store.connection.in_transaction
 
 

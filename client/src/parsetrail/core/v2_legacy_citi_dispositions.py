@@ -75,8 +75,20 @@ _CONDITIONAL_LATE_FEE = re.compile(
     re.I,
 )
 _REPAYMENT_COMBINED = re.compile(
-    rf"{_DISCLOSURE_MONEY} {_YEARS}(?: \(Savings\s*=\s*{_DISCLOSURE_MONEY}\))?"
+    rf"{_DISCLOSURE_MONEY} {_YEARS}(?: (?P<total>{_DISCLOSURE_MONEY}))?"
+    rf"(?: \(Savings\s*=\s*{_DISCLOSURE_MONEY}\))?"
     rf"(?: (?:(?:Revolving )?Credit limit {_DISCLOSURE_MONEY}|Includes {_DISCLOSURE_MONEY} cash advance limit))?",
+    re.I,
+)
+_MINIMUM_WITH_CREDIT = re.compile(
+    rf"(?P<minimum>Only the minimum payment {_YEARS} {_DISCLOSURE_MONEY})"
+    rf"(?: Available (?:Revolving )?credit {_DISCLOSURE_MONEY})?",
+    re.I,
+)
+_OVERLIMIT = re.compile(rf"(?:includes an overlimit amount of {_MONEY} and a|past due amount of {_MONEY}\.?)", re.I)
+_LEGAL_PURCHASE = re.compile(
+    rf"day['’\ufffd]s balance and new charges, subtract new credits or payments, and make "
+    rf"than {_DISCLOSURE_MONEY}\. \(Note: Neither of these is necessary if your purchase was based on",
     re.I,
 )
 
@@ -90,7 +102,8 @@ def _repayment_positions(page: list[PageLine]) -> set[int]:
     """
     result = set()
     for index, line in enumerate(page):
-        if not _REPAYMENT_MINIMUM.fullmatch(line.normalized):
+        minimum = _MINIMUM_WITH_CREDIT.fullmatch(line.normalized)
+        if minimum is None:
             continue
         headers = [item.normalized.casefold() for item in page[max(0, index - 8) : index]]
         if not (
@@ -108,7 +121,7 @@ def _repayment_positions(page: list[PageLine]) -> set[int]:
         ]
         if len(monthly) != 1 or len(savings) != 1 or abs(monthly[0] - savings[0][0]) > 1:
             continue
-        minimum_raw = re.search(_DISCLOSURE_MONEY + r"(?![\d,.])", line.normalized).group()
+        minimum_raw = re.search(_DISCLOSURE_MONEY + r"(?![\d,.])", minimum["minimum"]).group()
 
         # Complete grammars above have already bounded every monetary token.
         def minor(raw):
@@ -116,6 +129,11 @@ def _repayment_positions(page: list[PageLine]) -> set[int]:
             return usd_symbol_minor_v1(raw if "." in raw else raw + ".00")
 
         total = minor(minimum_raw) - minor(savings[0][1]["amount"])
+        monthly_match = _REPAYMENT_COMBINED.fullmatch(page[monthly[0]].normalized)
+        if monthly_match["total"] is not None:
+            if minor(monthly_match["total"]) == total:
+                result.update((index, monthly[0], savings[0][0]))
+            continue
         detached = [
             i
             for i in nearby
@@ -128,7 +146,15 @@ def _repayment_positions(page: list[PageLine]) -> set[int]:
 
 def _parallel_summary(raw: str) -> bool:
     for match in re.finditer(r"(?:Payments|Credits|Purchases|Cash advances|Fees|Interest)\b", raw, re.I):
-        if _SUMMARY_PREFIX.fullmatch(raw[: match.start()].strip()) and _SUMMARY.fullmatch(raw[match.start() :]):
+        prefix = raw[: match.start()].strip()
+        if (
+            _SUMMARY_PREFIX.fullmatch(prefix)
+            or re.fullmatch(
+                r"Late Payment Warning: If we do not receive your minimum payment by the date", prefix, re.I
+            )
+            or _LATE_WARNING.fullmatch(prefix)
+            or re.fullmatch(r"increased up to the Penalty APR of \d{1,2}\.\d{2}%\.?", prefix, re.I)
+        ) and _SUMMARY.fullmatch(raw[match.start() :]):
             return True
     return False
 
@@ -141,6 +167,64 @@ def _apr_with_known_parallel_text(raw: str) -> bool:
     return bool(_ANNUAL_PURCHASES.fullmatch(tail) or tail.casefold() in {"interest charged", "interest rate"})
 
 
+def _savings_positions(page: list[PageLine]) -> set[int]:
+    """Bind the labeled sidebar components and its explicitly labeled total.
+
+    The final bare amount needs both the printed total heading's column and the
+    exact component equation. An equal amount elsewhere does not acquire a role.
+    """
+    result = set()
+    for start, line in enumerate(page):
+        if line.normalized != "Citi Simplicity Lifetime Savings":
+            continue
+        window = range(start + 1, min(start + 22, len(page)))
+        interest = [(i, re.fullmatch(rf"Interest: (?P<amount>{_MONEY})", page[i].normalized)) for i in window]
+        fee = [
+            (i, re.fullmatch(rf"Fees charged No Late Fee: (?P<amount>{_MONEY})", page[i].normalized)) for i in window
+        ]
+        interest = [(i, m) for i, m in interest if m is not None]
+        fee = [(i, m) for i, m in fee if m is not None]
+        total_header = [
+            i
+            for i in window
+            if page[i].normalized
+            == (
+                "Your Annual Percentage Rate (APR) is the annual interest rate on your account. "
+                "CITI SIMPLICITY LIFETIME SAVINGS:"
+            )
+        ]
+        if len(interest) != 1 or len(fee) != 1 or len(total_header) != 1:
+            continue
+        total_index = total_header[0] + 1
+        if total_index >= len(page) or re.fullmatch(_MONEY, page[total_index].normalized) is None:
+            continue
+        header_column = line.raw.find("Citi Simplicity Lifetime Savings")
+        total_column = page[total_index].raw.find("$")
+        if header_column < 0 or not header_column <= total_column < header_column + len(
+            "CITI SIMPLICITY LIFETIME SAVINGS:"
+        ):
+            continue
+        if not start < interest[0][0] < fee[0][0] < total_header[0]:
+            continue
+        if any(
+            page[i].raw.find(label) < header_column
+            for i, label in ((interest[0][0], "Interest:"), (fee[0][0], "No Late Fee:"))
+        ):
+            continue
+        try:
+            interest_minor, fee_minor, total_minor = (
+                usd_symbol_minor_v1(raw.replace(" ", ""))
+                for raw in (interest[0][1]["amount"], fee[0][1]["amount"], page[total_index].normalized)
+            )
+        except ValueError:
+            # Shape recognition does not authorize conversion outside the money
+            # operation's admitted syntax/range. Retain the unresolved lines.
+            continue
+        if interest_minor + fee_minor == total_minor:
+            result.update((interest[0][0], fee[0][0], total_index))
+    return result
+
+
 def classify_legacy_citi_money(
     dispositions: tuple[SourceDisposition, ...], lines: PDFLineEvidence
 ) -> tuple[SourceDisposition, ...]:
@@ -151,6 +235,7 @@ def classify_legacy_citi_money(
             pages.setdefault(line.page, []).append(line)
     positions = {(line.page, line.line): (page, index) for page in pages.values() for index, line in enumerate(page)}
     repayment = _repayment_positions(pages.get(1, []))
+    savings = {number: _savings_positions(page) for number, page in pages.items() if number > 1}
     result = []
     for item in dispositions:
         if item.code in {"fee_period_total", "interest_period_total", "annual_fee_total", "annual_interest_total"}:
@@ -170,7 +255,12 @@ def classify_legacy_citi_money(
                 code = "citi_repayment_example"
             elif _SUMMARY.fullmatch(raw) or _parallel_summary(raw):
                 code = "citi_account_summary"
-            elif _PAYMENT.fullmatch(raw) or _AUTOPAY.fullmatch(raw) or _COUPON.fullmatch(raw):
+            elif (
+                _PAYMENT.fullmatch(raw)
+                or _AUTOPAY.fullmatch(raw)
+                or _COUPON.fullmatch(raw)
+                or _OVERLIMIT.fullmatch(raw)
+            ):
                 code = "citi_payment_information"
             elif _LATE_WARNING.fullmatch(raw):
                 code = "citi_credit_terms"
@@ -178,6 +268,18 @@ def classify_legacy_citi_money(
                 _CREDIT.fullmatch(raw)
                 or _CASH_LIMIT.fullmatch(raw)
                 or _COUNSELING_CREDIT.fullmatch(raw)
+                or re.fullmatch(
+                    rf"For information about credit counseling services, call [0-9-]+\. "
+                    rf"Available (?:Revolving )?credit {_DISCLOSURE_MONEY}",
+                    raw,
+                    re.I,
+                )
+                or re.fullmatch(
+                    rf"charges using this card balance shown on the paying an estimated "
+                    rf"(?:Revolving )?Credit limit {_DISCLOSURE_MONEY}",
+                    raw,
+                    re.I,
+                )
                 or (
                     _CREDIT_EXAMPLE.fullmatch(raw)
                     and index + 1 < len(page)
@@ -209,12 +311,39 @@ def classify_legacy_citi_money(
                 and any(_REPAYMENT_MINIMUM.fullmatch(line.normalized) for line in page[max(0, index - 3) : index - 1])
             ):
                 code = "citi_repayment_example"
-        elif _MINIMUM_INTEREST.fullmatch(raw) or _CONDITIONAL_LATE_FEE.fullmatch(raw):
+        elif index in savings.get(item.location.page, set()):
+            code = "citi_savings_information"
+        elif (
+            _MINIMUM_INTEREST.fullmatch(raw)
+            or _CONDITIONAL_LATE_FEE.fullmatch(raw)
+            or re.fullmatch(_CONDITIONAL_LATE_FEE.pattern + r" Plus Tier", raw, re.I)
+            or (
+                _LEGAL_PURCHASE.fullmatch(raw)
+                and index > 0
+                and page[index - 1].normalized
+                == (
+                    "take the balance at the end of the previous day, add the interest on the previous "
+                    "your current mailing address, and the purchase price must have been more"
+                )
+                and index + 1 < len(page)
+                and page[index + 1].normalized
+                == (
+                    "adjustments. The Balance Subject to Interest Rate is the average of the daily "
+                    "an advertisement we mailed to you, or if we own the company that sold you"
+                )
+            )
+        ):
             code = "citi_credit_terms"
         elif (
             _APR.fullmatch(raw)
             or _apr_with_known_parallel_text(raw)
             or _ANNUAL_PURCHASES.fullmatch(raw)
+            or re.fullmatch(
+                rf"and the estimated interest that would have been assessed against these same "
+                rf"Minimum Annual Purchases: {_DISCLOSURE_MONEY}",
+                raw,
+                re.I,
+            )
             or (
                 _APR_TABLE_ROW.fullmatch(raw)
                 and any(

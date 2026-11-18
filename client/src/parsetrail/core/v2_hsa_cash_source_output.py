@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from collections import Counter
+from datetime import datetime
 
 from parsetrail.core.source_evidence import (
     DateValue,
@@ -18,6 +20,132 @@ from parsetrail.core.source_evidence import (
 )
 from parsetrail.core.v2_hsa_cash_lines import CashField, HsaCashEvidence
 from parsetrail.core.v2_pdf_lines import PDFLineEvidence
+
+_MONTH = (
+    r"(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?"
+    r"|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?"
+)
+_FINANCIAL_OR_DATE = re.compile(
+    r"\$|(?<!\d)\d[\d,]*\.\d{2}(?!\d)|(?<!\d)\d{1,4}[-/]\d{1,2}(?:[-/]\d{1,4})?(?!\d)"
+    rf"|\b{_MONTH}[ .-]*\d{{1,2}}(?:st|nd|rd|th)?(?:[, .-]*\d{{4}})?\b"
+    rf"|\b\d{{1,2}}(?:st|nd|rd|th)?[ .-]*{_MONTH}(?:[, .-]*\d{{4}})?\b"
+    rf"|\b\d{{4}}[ .-]*{_MONTH}[ .-]*\d{{1,2}}\b",
+    re.IGNORECASE,
+)
+_USD = r"\$(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)\.[0-9]{2}"
+_RATE = r"[0-9]{1,2}\.[0-9]{1,4}%"
+# An empty cash table cannot explain a nonzero current-period fee. The second
+# printed fee column is year to date and can legitimately remain nonzero.
+_FEES = rf"(?:TotalOverdraftFees|TotalNon-SufficientFundsFees|TotalReturnDepositItemFees) \$0\.00 {_USD}"
+_RATE_TIER = rf"(?:{_USD}-{_USD}|Over\$[0-9][0-9,]*) {_RATE}"
+_RATE_ROW = re.compile(rf"(?:{_RATE_TIER}(?: {_USD} Total| {_FEES})?|{_FEES})\Z")
+
+
+def _valid_printed_date(raw: str) -> bool:
+    try:
+        return datetime.strptime(raw, "%m/%d/%y").strftime("%m/%d/%y") == raw
+    except ValueError:
+        return False
+
+
+def _framed_rate_totals(lines: PDFLineEvidence, closing_index: int) -> set[str]:
+    """Require the complete located interleaved rate/fee frame for bare totals."""
+    headers = [index for index, line in enumerate(lines.lines) if line.normalized == "Interest AverageDaily Interest"]
+    if len(headers) != 1 or headers[0] != closing_index + 2:
+        return set()
+    block = lines.lines[headers[0] - 1 : headers[0] + 12]
+    if len(block) != 13 or any(line.page != lines.lines[closing_index].page for line in block):
+        return set()
+    raw = [line.normalized for line in block]
+    if (
+        re.fullmatch(r"InterestRateScheduleEffective:\d{2}/\d{2}/\d{2}", raw[0]) is None
+        or not _valid_printed_date(raw[0][-8:])
+        or raw[1:5] != ["Interest AverageDaily Interest", "BalanceTier", "Rate Balance Earned YeartoDate", "Period"]
+    ):
+        return set()
+    patterns = (
+        rf"{_USD}-{_USD} {_RATE} {_USD} Total",
+        rf"{_USD}-{_USD} {_RATE} TotalOverdraftFees \$0\.00 {_USD}",
+        rf"{_USD}-{_USD} {_RATE}",
+        rf"TotalNon-SufficientFundsFees \$0\.00 {_USD}",
+        rf"Over\$[0-9][0-9,]* {_RATE}",
+        rf"TotalReturnDepositItemFees \$0\.00 {_USD}",
+        rf"Total {_USD}",
+        rf"Fundsarecurrentlyheldat[A-Za-z]+ Total {_USD} {_USD}",
+    )
+    if any(re.fullmatch(pattern, value) is None for pattern, value in zip(patterns, raw[5:], strict=True)):
+        return set()
+    return {block[11].line_id, block[12].line_id}
+
+
+def _empty_cash_dispositions(evidence: HsaCashEvidence, lines: PDFLineEvidence) -> list[SourceDisposition]:
+    """Locate an actually empty table; equal balances alone do not establish it.
+
+    Only the four adjacent, same-page printed table lines establish the empty
+    cash-table role. Other money/date-shaped source text is retained separately;
+    this finite source-shape check does not establish complete source capture.
+    """
+    if evidence.rows:
+        return []
+    result = []
+    positions = {line.line_id: index for index, line in enumerate(lines.lines)}
+    first = positions[evidence.printed_opening_minor.source_line_id]
+    last = positions[evidence.printed_closing_minor.source_line_id]
+    closing = lines.lines[last]
+    framed_totals = _framed_rate_totals(lines, last)
+    proof_lines = set()
+    if (
+        first >= 2
+        and last == first + 1
+        and lines.lines[first - 2].page == closing.page
+        and lines.lines[first - 2].normalized.lstrip("_ ") == "Depositor Account"
+        and lines.lines[first - 1].normalized.lstrip("_ ") == "Date DescriptionofTransaction (Withdrawal) Balance"
+        and evidence.printed_opening_minor.normalized == evidence.printed_closing_minor.normalized
+    ):
+        heading = lines.lines[first - 1]
+        result.append(
+            SourceDisposition(
+                code="hsa_empty_cash_table",
+                location=PdfLine(kind="pdf_line", page=heading.page, line=heading.line),
+                raw_values=(heading.raw,),
+            )
+        )
+        proof_lines = {line.line_id for line in lines.lines[first - 2 : last + 1]}
+    # Fields already retained by the envelope are removed exactly, so an extra
+    # monetary/date tail on their lines cannot inherit the field's known role.
+    fields = (
+        evidence.account_identity,
+        evidence.period_start,
+        evidence.period_end,
+        evidence.printed_opening_minor,
+        evidence.printed_closing_minor,
+    )
+    for line in lines.lines:
+        if first < positions[line.line_id] < last or line.line_id in proof_lines:
+            continue
+        raw = line.normalized.lstrip("_ ")
+        for field in fields:
+            if field.source_line_id == line.line_id:
+                raw = raw.replace(field.raw, "", 1)
+        if not _FINANCIAL_OR_DATE.search(raw):
+            continue
+        code = "hsa_exterior_unclassified"
+        if _RATE_ROW.fullmatch(raw) or line.line_id in framed_totals:
+            code = "hsa_cash_rate_fee_information"
+        elif re.fullmatch(r"InterestRateScheduleEffective:\d{2}/\d{2}/\d{2}", raw) and _valid_printed_date(raw[-8:]):
+            code = "hsa_cash_statement_dates"
+        elif re.fullmatch(r"[^$]*StatementPrintDate:\d{2}/\d{2}/\d{2}", raw):
+            prefix = raw.rsplit("StatementPrintDate:", 1)[0]
+            if not _FINANCIAL_OR_DATE.search(prefix) and _valid_printed_date(raw[-8:]):
+                code = "hsa_cash_statement_dates"
+        result.append(
+            SourceDisposition(
+                code=code,
+                location=PdfLine(kind="pdf_line", page=line.page, line=line.line),
+                raw_values=(line.raw,),
+            )
+        )
+    return result
 
 
 def _location(field: CashField) -> PdfLine:
@@ -119,6 +247,7 @@ def from_hsa_cash(evidence: HsaCashEvidence, lines: PDFLineEvidence) -> SourceEv
                 raw_values=(raw,),
             )
         )
+    dispositions.extend(_empty_cash_dispositions(evidence, lines))
     payload = StatementPayload(
         kind="statement",
         start=DateValue(

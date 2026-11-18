@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from parsetrail.core.v2_pdf_lines import PageLine, PDFLineEvidence
 from parsetrail.core.v2_pdf_routing import PDFRouting
 
-ENGINE_VERSION = "hsa-cash-lines-pilot-1"
+ENGINE_VERSION = "hsa-cash-lines-pilot-2"
 MAX_DEFINITION_BYTES = 64 * 1024
 MAX_DATED_LINE_CHARS = 512
 MAX_MONEY_MINOR = 9_000_000_000_000_000
