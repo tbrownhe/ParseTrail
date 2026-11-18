@@ -29,11 +29,12 @@ from parsetrail.core.v2_partial_dates import PartialDateError, resolve_month_day
 from parsetrail.core.v2_pdf_lines import ADAPTER_VERSION, PageLine, PDFLineEvidence
 from parsetrail.core.v2_pdf_routing import PDFRouting
 
-ENGINE_VERSION = "legacy-citi-lines-pilot-2"
+ENGINE_VERSION = "legacy-citi-lines-pilot-3"
 MAX_DEFINITION_BYTES = 64 * 1024
 MONEY = r"-?\$(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)\.[0-9]{2}"
 MONEY_TOKEN = re.compile(MONEY)
 DATE_START = re.compile(r"^\d{2}/\d{2}\s")
+_UNRESOLVED_DATE_START = re.compile(r"^\d{2}/\d{2}(?:/\d{2,4})?(?:\s|$)")
 ROW = re.compile(
     rf"^(?P<transaction>\d{{2}}/\d{{2}})\s+(?:(?P<posting>\d{{2}}/\d{{2}})\s+)?"
     rf"(?P<description>.+?)\s+(?P<amount>{MONEY})(?:\s+(?P<trailing>.+))?$"
@@ -122,6 +123,10 @@ def _truncate_words(raw: str, max_index: int) -> str:
 def _rows(
     definition: LegacyCitiDefinition, lines: PDFLineEvidence
 ) -> tuple[list[tuple[str, tuple[PageLine, ...]]], list[SourceDisposition]]:
+    if any(
+        _UNRESOLVED_DATE_START.match(line.normalized) and not DATE_START.match(line.normalized) for line in lines.lines
+    ):
+        raise LegacyCitiError("unresolved_dated_start")
     pages: dict[int, list[PageLine]] = {}
     for line in lines.lines:
         if line.normalized:

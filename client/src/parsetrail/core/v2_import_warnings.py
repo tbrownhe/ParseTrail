@@ -16,6 +16,7 @@ from parsetrail.core.source_evidence import SourceEvidence, SourceLocation, Stat
 MAX_WARNING_LOCATIONS = 16
 WarningClassification = Literal["informational", "requires_review"]
 _MONEY = re.compile(r"\$|(?<!\d)\d[\d,]*\.\d{2}(?!\d)")
+_PERCENTAGE = re.compile(r"(?<![\d.,$])\d{1,3}\.\d{2}%(?!\d)")
 
 
 @dataclass(frozen=True, slots=True)
@@ -126,9 +127,18 @@ def _disposition_warning(code: str, raw_values: tuple[str, ...]) -> tuple[Warnin
     }
     if code in citi_roles:
         return "informational", citi_roles[code]
+    if code in {
+        "summary_chart_axis",
+        "summary_chart_context",
+        "summary_explanatory_note",
+        "summary_contact_heading",
+        "summary_accrued_interest",
+        "summary_inclusive_value",
+    }:
+        return "informational", "Printed summary context is retained separately from period changes and closing value"
     # Citi's unclassified page text has already refused financial/date-shaped
     # lines. Keep that benign text distinct from an unresolved monetary line.
-    if code == "unclassified_page_text" and not any(_MONEY.search(raw) for raw in raw_values):
+    if code == "unclassified_page_text" and not any(_MONEY.search(_PERCENTAGE.sub("", raw)) for raw in raw_values):
         return "informational", "Additional page text is retained outside the extracted financial rows"
     if code == "unclassified_monetary_line" or code == "money_unresolved":
         return "requires_review", "A source line containing money has not been classified"
@@ -136,6 +146,8 @@ def _disposition_warning(code: str, raw_values: tuple[str, ...]) -> tuple[Warnin
         return "requires_review", "A line within the account summary has not been classified"
     if code == "summary_window_tail_unclassified":
         return "requires_review", "Content after the account summary has not been classified"
+    if code == "summary_extra_column":
+        return "requires_review", "An additional account summary column has not been classified"
     if code == "dated_unresolved":
         return "requires_review", "A dated source line has not been resolved"
     if code == "unresolved_after_stop":

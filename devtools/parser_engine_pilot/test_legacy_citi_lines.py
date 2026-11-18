@@ -121,10 +121,28 @@ def test_overlapping_literal_labels_stay_unclassified() -> None:
 def test_zero_activity_requires_printed_equal_balances_and_table_header() -> None:
     output = parse({4: "New balance $100.00", 6: "", 7: "", 8: ""})
     assert output.payload.accounts[0].rows == ()
+    assert any(
+        w.code == "no_activity_captured" and w.classification == "requires_review"
+        for w in evidence_import_warnings(output)
+    )
     with pytest.raises(LegacyCitiError, match="printed_card_balance_equation"):
         parse({6: "", 7: "", 8: ""})
     with pytest.raises(LegacyCitiError, match="missing_activity_rows"):
         parse({4: "New balance $100.00", 5: "", 6: "", 7: "", 8: ""})
+
+
+@pytest.mark.parametrize("raw", ["01/20", "01/20/2026", "01/20/2026 Unresolved activity"])
+def test_unmatched_date_start_never_proves_an_empty_table(raw):
+    with pytest.raises(LegacyCitiError, match="unresolved_dated_start"):
+        parse({4: "New balance $100.00", 6: raw, 7: "", 8: ""})
+
+
+def test_empty_table_with_unexplained_bare_amount_still_needs_review():
+    output = parse({4: "New balance $100.00", 6: "Unknown amount 9.00", 7: "", 8: ""})
+    assert any(
+        w.code == "no_activity_captured" and w.classification == "requires_review"
+        for w in evidence_import_warnings(output)
+    )
 
 
 def test_definition_schema_and_unknown_field() -> None:
@@ -191,7 +209,7 @@ def test_finite_summary_and_interest_detail_roles_preserve_source() -> None:
         assert disposition.raw_values == (line.raw,)
     assert len(output.payload.accounts[0].rows) == 2
     assert output.payload.capture_verified is False
-    assert output.engine_version == "legacy-citi-lines-pilot-2"
+    assert output.engine_version == "legacy-citi-lines-pilot-3"
     assert not [w for w in evidence_import_warnings(output) if w.classification == "requires_review"]
 
 
@@ -257,7 +275,7 @@ def test_whole_dollar_disclosures_preserve_all_lines_without_becoming_activity()
         "Only the minimum payment 12 year(s) $800",
         "$400",
         "$30 3 year(s)",
-        "(Savings=$100)",
+        "(Savings= $100)",
     )
     output = parse(extra=raw)
     assert [d.code for d in output.payload.dispositions] == [
@@ -306,6 +324,86 @@ def test_disclosure_whole_dollars_do_not_weaken_unknown_or_context_refusal(raw: 
 def test_dated_whole_dollar_disclosure_is_not_rescued_by_disclosure_rules() -> None:
     with pytest.raises(LegacyCitiError, match="unresolved_dated_start"):
         parse(extra=("01/20 Credit limit $500",))
+
+
+def test_kerning_spaces_and_finite_parallel_summary_context_preserve_amounts():
+    raw = (
+        "Payments - $ 20.00",
+        "Credits - $0.00",
+        "Available revolving credit $ 400",
+        "Includes $100 available for cash advances",
+        "Minimum Payment Warning: I f you make only the minimum payment each Purchases +$ 10.00",
+        "period, you will pay more in interest and it will take you longer to pay off Cash advances $0.00",
+        "your balance. For example: Fees $0.00",
+        "For information about credit counseling services, call 800-555-0100. Revolving Credit limit $500",
+        "Enrolled in AutoPay. Minimum payment due $5.00",
+    )
+    output = parse(extra=raw)
+    assert not [w for w in evidence_import_warnings(output) if w.classification == "requires_review"]
+    assert tuple(d.raw_values[0] for d in output.payload.dispositions) == raw
+    assert [row.amount.minor for row in output.payload.accounts[0].rows] == [2000, -1000]
+
+
+def test_detached_repayment_total_requires_complete_headings_and_savings_equation():
+    raw = (
+        "If you make no additional charges using this card",
+        "and each month you pay... statement in about... total of...",
+        "Only the minimum payment 12 year(s) $1,800",
+        "Credit limit $500",
+        "$1,700",
+        "$30 3 year(s) Includes $100 cash advance limit",
+        "(Savings = $100)",
+    )
+    output = parse(extra=raw)
+    assert not [w for w in evidence_import_warnings(output) if w.classification == "requires_review"]
+    assert [d.code for d in output.payload.dispositions].count("citi_repayment_example") == 4
+    for replacement in ("$1,701", "$1,700 unknown", "$1,700 $9.00"):
+        changed = list(raw)
+        changed[4] = replacement
+        assert any(
+            w.code == "unclassified_monetary_line" for w in evidence_import_warnings(parse(extra=tuple(changed)))
+        )
+
+
+def test_exact_conditional_late_fee_and_minimum_interest_prose_is_not_activity():
+    first = lines()
+    clause = "using a $35 late fee (if your minimum payment due was less than $35, we used"
+    for raw, expected in (
+        (clause, "citi_credit_terms"),
+        ("Minimum interest charge. If we charge interest, it will be at least $0.50.", "citi_credit_terms"),
+        (clause + " Unknown $9.00", "unclassified_monetary_line"),
+        (clause.replace("$35 late fee", "$35.0 late fee"), "unclassified_monetary_line"),
+    ):
+        source = page_lines(
+            b"synthetic",
+            ["\n".join(line.raw for line in first.lines), raw],
+            extraction_library=first.extraction_library,
+        )
+        output = parse_legacy_citi(DEFINITION, source)
+        assert output.payload.dispositions[-1].code == expected
+        assert len(output.payload.accounts[0].rows) == 2
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "Unknown adjustment 9.00 is greater than $25. (Note: None of these is final if your purchase rate is based on",
+        "01/20/2026 your balance is greater than $25. (Note: None of these is final if your purchase rate is based on",
+    ],
+)
+def test_unknown_decimal_or_date_near_minimum_payment_is_not_legal_prose(raw):
+    first = lines()
+    source = page_lines(
+        b"synthetic",
+        ["\n".join(line.raw for line in first.lines), "minimum payment\n" + raw],
+        extraction_library=first.extraction_library,
+    )
+    if raw.startswith("01/20/2026"):
+        with pytest.raises(LegacyCitiError, match="unresolved_dated_start"):
+            parse_legacy_citi(DEFINITION, source)
+    else:
+        output = parse_legacy_citi(DEFINITION, source)
+        assert output.payload.dispositions[-1].code == "unclassified_monetary_line"
 
 
 def test_interest_detail_requires_its_section_and_total() -> None:

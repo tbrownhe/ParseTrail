@@ -53,7 +53,11 @@ def test_summary_rows_have_honest_role_date_and_printed_equation() -> None:
     assert all(row.date_role == "statement_period_end" and row.date.provenance == "derived" for row in account.rows)
     assert all(row.running_balance is None for row in account.rows)
     assert len([item for item in output.payload.dispositions if item.code == "year_to_date_column"]) == 5
-    assert len([item for item in output.payload.dispositions if item.code == "summary_window_tail_unclassified"]) == 3
+    assert {item.code for item in output.payload.dispositions} >= {
+        "summary_accrued_interest",
+        "summary_inclusive_value",
+        "summary_contact_heading",
+    }
 
 
 def test_unknown_component_or_wrong_equation_refuses_entire_statement() -> None:

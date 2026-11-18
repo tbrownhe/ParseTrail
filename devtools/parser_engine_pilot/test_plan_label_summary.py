@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -52,6 +53,20 @@ def test_plan_label_variants_and_first_summary(variant: str) -> None:
     assert [row.amount.minor for row in account.rows] == [5000, -1000]
     assert all(row.row_role == "period_summary" and row.date_role == "statement_period_end" for row in account.rows)
     assert len(output.payload.dispositions) == 1
+
+
+def test_fidelity_plan_envelope_and_row_identity_keep_the_original_versions():
+    source = lines()
+    output = parse_plan_label_summary(DEFINITION, source)
+    assert output.engine_version == "single-column-summary-pilot-1+plan-label"
+    definition_hash = hashlib.sha256(DEFINITION).hexdigest()
+    for row in output.payload.accounts[0].rows:
+        location = row.amount.locations[0]
+        line = next(item for item in source.lines if (item.page, item.line) == (location.page, location.line))
+        assert (
+            row.row_id
+            == hashlib.sha256(f"{definition_hash}:single-column-summary-pilot-1:{line.line_id}".encode()).hexdigest()
+        )
 
 
 def test_conflicting_repeated_period_or_unknown_summary_line_refuses_source() -> None:

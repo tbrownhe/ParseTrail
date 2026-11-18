@@ -27,9 +27,15 @@ from parsetrail.core.v2_money_operations import usd_symbol_minor_v1
 from parsetrail.core.v2_pdf_lines import PageLine, PDFLineEvidence
 from parsetrail.core.v2_pdf_routing import PDFRouting
 
-ENGINE_VERSION = "single-column-summary-pilot-1"
+ENGINE_VERSION = "single-column-summary-pilot-2"
+PLAN_ROW_VERSION = "single-column-summary-pilot-1"
+PLAN_ENGINE_VERSION = PLAN_ROW_VERSION + "+plan-label"
 MAX_DEFINITION_BYTES = 64 * 1024
 MONEY = re.compile(r"-?\$(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)\.[0-9]{2}")
+_CHART_TICK = re.compile(r"\$(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)\Z")
+_CHART_FOOTNOTE = re.compile(
+    r"\*May include recordkeeping, administrative, or purchase/redemption fees\. " + _CHART_TICK.pattern
+)
 
 
 class SingleColumnSummaryError(ValueError):
@@ -105,6 +111,40 @@ def _first_money(line: PageLine, label: str) -> tuple[str, int, str]:
     return raw, amount, rest[match.end() :].strip()
 
 
+def _chart_axis_lines(first_page: tuple[PageLine, ...], opening: PageLine, closing: PageLine) -> set[int]:
+    """Recognize only the complete five-tick chart beside this summary format.
+
+    The simple text channel interleaves this neighbouring chart with table
+    rows. Its whole-dollar axis is distinct from two-decimal summary amounts.
+    Missing, repeated or nonuniform ticks do not establish this source role.
+    """
+    headers = [
+        index
+        for index, line in enumerate(first_page)
+        if line.normalized.casefold() == "account balance your account progress" and 0 < opening.line - line.line <= 5
+    ]
+    if len(headers) != 1:
+        return set()
+    region = first_page[headers[0] + 1 : closing.line + 2]
+    ticks = []
+    for line in region:
+        tokens = line.normalized.split()
+        if tokens and _CHART_TICK.fullmatch(tokens[-1]):
+            ticks.append((line, int(tokens[-1][1:].replace(",", ""))))
+    if len(ticks) != 5 or not ticks[0][0].line < opening.line:
+        return set()
+    if any(
+        not opening.line <= line.line <= closing.line
+        and not (_CHART_TICK.fullmatch(line.normalized) or _CHART_FOOTNOTE.fullmatch(line.normalized))
+        for line, _ in ticks
+    ):
+        return set()
+    steps = [left[1] - right[1] for left, right in zip(ticks, ticks[1:], strict=False)]
+    if len(set(steps)) != 1 or steps[0] <= 0 or ticks[-1][0].line < closing.line:
+        return set()
+    return {line.line for line, _ in ticks}
+
+
 def parse_single_column_summary(definition_bytes: bytes, lines: PDFLineEvidence) -> SourceEvidence:
     """Retain printed period components with explicit unknown nonprimary columns."""
     definition, definition_hash = load_definition(definition_bytes)
@@ -139,11 +179,30 @@ def parse_single_column_summary(definition_bytes: bytes, lines: PDFLineEvidence)
     rows = []
     dispositions = []
     occurrences: Counter[tuple[str, int]] = Counter()
+    chart_lines = _chart_axis_lines(first_page, opening_line, closing_line)
+    if chart_lines:
+        dispositions.extend(
+            SourceDisposition(code="summary_chart_axis", location=_location(line), raw_values=(line.raw,))
+            for line in first_page
+            if line.line in chart_lines and not opening_line.line <= line.line <= closing_line.line
+        )
+        dispositions.extend(
+            SourceDisposition(code="summary_chart_context", location=_location(line), raw_values=(line.raw,))
+            for line in first_page
+            if line.normalized.casefold() == "account balance your account progress"
+            and 0 < opening_line.line - line.line <= 5
+        )
     for line in first_page[opening_line.line : closing_line.line - 1]:
         label = next((label for label in definition.row_labels if line.normalized.startswith(label + " ")), None)
         if label is None:
             dispositions.append(
-                SourceDisposition(code="summary_window_unclassified", location=_location(line), raw_values=(line.raw,))
+                SourceDisposition(
+                    code="summary_chart_axis"
+                    if line.line in chart_lines and _CHART_TICK.fullmatch(line.normalized)
+                    else "summary_window_unclassified",
+                    location=_location(line),
+                    raw_values=(line.raw,),
+                )
             )
             continue
         raw_amount, amount, tail = _first_money(line, label)
@@ -171,11 +230,23 @@ def parse_single_column_summary(definition_bytes: bytes, lines: PDFLineEvidence)
             )
         )
         if tail:
-            dispositions.append(SourceDisposition(code="summary_extra_column", location=location, raw_values=(tail,)))
+            chart_tail = line.line in chart_lines and _CHART_TICK.fullmatch(tail)
+            dispositions.append(
+                SourceDisposition(
+                    code="summary_chart_axis" if chart_tail else "summary_extra_column",
+                    location=location,
+                    raw_values=(line.raw if chart_tail else tail,),
+                )
+            )
     for line, tail in ((opening_line, opening_tail), (closing_line, closing_tail)):
         if tail:
+            chart_tail = line.line in chart_lines and _CHART_TICK.fullmatch(tail)
             dispositions.append(
-                SourceDisposition(code="summary_extra_column", location=_location(line), raw_values=(tail,))
+                SourceDisposition(
+                    code="summary_chart_axis" if chart_tail else "summary_extra_column",
+                    location=_location(line),
+                    raw_values=(line.raw if chart_tail else tail,),
+                )
             )
     if not rows or opening + sum(row.amount.minor for row in rows) != closing:
         raise SingleColumnSummaryError("printed_summary_equation")
@@ -365,7 +436,7 @@ def parse_plan_label_summary(definition_bytes: bytes, lines: PDFLineEvidence) ->
         occurrences[key] += 1
         rows.append(
             ObservationEvidence(
-                row_id=hashlib.sha256(f"{definition_hash}:{ENGINE_VERSION}:{line.line_id}".encode()).hexdigest(),
+                row_id=hashlib.sha256(f"{definition_hash}:{PLAN_ROW_VERSION}:{line.line_id}".encode()).hexdigest(),
                 occurrence=occurrence,
                 row_role="period_summary",
                 source_account=account,
@@ -397,7 +468,7 @@ def parse_plan_label_summary(definition_bytes: bytes, lines: PDFLineEvidence) ->
         definition_sha256=definition_hash,
         parser_id=definition.parser_id,
         definition_revision=definition.revision,
-        engine_version=ENGINE_VERSION + "+plan-label",
+        engine_version=PLAN_ENGINE_VERSION,
         extractor_version=lines.extraction_library + "+" + lines.adapter_version,
         payload=StatementPayload(
             kind="statement",

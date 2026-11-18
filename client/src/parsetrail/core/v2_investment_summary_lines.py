@@ -26,7 +26,7 @@ from parsetrail.core.v2_money_operations import usd_or_decimal_2dp_minor_v1
 from parsetrail.core.v2_pdf_lines import PageLine, PDFLineEvidence
 from parsetrail.core.v2_pdf_routing import PDFRouting
 
-ENGINE_VERSION = "investment-summary-lines-pilot-1"
+ENGINE_VERSION = "investment-summary-lines-pilot-2"
 MAX_DEFINITION_BYTES = 64 * 1024
 PERIOD = re.compile(r"(?P<start>[A-Z][a-z]+ \d{1,2}, \d{4}) - (?P<end>[A-Z][a-z]+ \d{1,2}, \d{4})\Z")
 
@@ -101,6 +101,55 @@ def _two_columns(line: PageLine, label: str, *, footnote: str = "") -> tuple[str
     _money(values[0])
     _money(values[1])
     return values[0], values[1]
+
+
+def _summary_tail(lines: tuple[PageLine, ...], closing_minor: int) -> list[SourceDisposition]:
+    """Keep notes and the separately labelled accrued-interest valuation located.
+
+    The inclusive valuation is never substituted for the printed closing
+    value. Both alternative-value labels must occur exactly once and agree
+    arithmetically before either receives its informational source role.
+    """
+    pair = {}
+    for code, label in (
+        ("summary_accrued_interest", "Accrued Interest (AI)"),
+        ("summary_inclusive_value", "Ending Account Value Incl. AI"),
+    ):
+        matches = [line for line in lines if line.normalized.startswith(label + " ")]
+        if len(matches) != 1:
+            continue
+        line = matches[0]
+        raw = line.normalized[len(label) + 1 :]
+        try:
+            value = _money(raw)
+        except InvestmentSummaryError:
+            continue
+        pair[code] = (line.line, value)
+    pair_valid = len(pair) == 2 and (
+        closing_minor + pair["summary_accrued_interest"][1] == pair["summary_inclusive_value"][1]
+    )
+    labelled = {number: code for code, (number, _) in pair.items()} if pair_valid else {}
+    note = False
+    result = []
+    for line in lines:
+        raw = line.normalized
+        code = labelled.get(line.line)
+        if raw == "Contact Information":
+            code = "summary_contact_heading"
+            note = False
+        elif not re.search(r"\$|[0-9]", raw):
+            if raw.startswith(("* ", "** ")):
+                note = True
+            if note and raw:
+                code = "summary_explanatory_note"
+        else:
+            note = False
+        result.append(
+            SourceDisposition(
+                code=code or "summary_window_tail_unclassified", location=_location(line), raw_values=(line.raw,)
+            )
+        )
+    return result
 
 
 def parse_investment_summary(definition_bytes: bytes, lines: PDFLineEvidence) -> SourceEvidence:
@@ -185,10 +234,7 @@ def parse_investment_summary(definition_bytes: bytes, lines: PDFLineEvidence) ->
             )
         )
         dispositions.append(SourceDisposition(code="year_to_date_column", location=location, raw_values=(ytd,)))
-    dispositions.extend(
-        SourceDisposition(code="summary_window_tail_unclassified", location=_location(line), raw_values=(line.raw,))
-        for line in window[closing[0] + 1 :]
-    )
+    dispositions.extend(_summary_tail(window[closing[0] + 1 :], closing_minor))
     if not rows or opening + sum(row.amount.minor for row in rows) != closing_minor:
         raise InvestmentSummaryError("printed_summary_equation")
     return SourceEvidence(

@@ -389,6 +389,39 @@ def test_benign_citi_page_text_does_not_imply_unclassified_amounts(decoded):
     assert not requires(evidence)
 
 
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("The APR may increase to 29.99%. Your payment is due.", "informational"),
+        ("The APR is 29.99% and an unknown amount is 9.00", "requires_review"),
+        ("Unknown $29.99%", "requires_review"),
+        ("Unknown amount 29.99", "requires_review"),
+        ("Malformed rate 1299.99%", "requires_review"),
+    ],
+)
+def test_citi_percent_only_page_text_is_not_money(decoded, raw, expected):
+    evidence = decoded["recent-citi-pilot-definition.json"]
+    changed = evidence.model_copy(
+        update={
+            "payload": evidence.payload.model_copy(
+                update={
+                    "dispositions": (
+                        SourceDisposition(
+                            code="unclassified_page_text",
+                            location=PdfLine(kind="pdf_line", page=1, line=1),
+                            raw_values=(raw,),
+                        ),
+                    )
+                }
+            )
+        }
+    )
+    assert (
+        next(w for w in evidence_import_warnings(changed) if w.code == "unclassified_page_text").classification
+        == expected
+    )
+
+
 def test_repeated_unclassified_amounts_keep_codes_counts_and_bounded_source_locations(decoded):
     evidence = decoded["happen-savings-pilot-definition.json"]
     dispositions = tuple(
