@@ -11,7 +11,7 @@ import hashlib
 import json
 import re
 
-from parsetrail.core.source_evidence import ActivityExportPayload, SourceEvidence
+from parsetrail.core.source_evidence import ActivityExportPayload, SourceEvidence, StatementPayload
 from parsetrail.core.v2_account_products import AccountProductProfile, account_product
 from parsetrail.core.v2_data_catalog import CatalogAccountContext, VerifiedCatalog
 from parsetrail.core.v2_parser_engine import ENGINE_VERSION, Definition, load_definition
@@ -60,7 +60,42 @@ _FAMILY_PRODUCTS = {
 }
 
 
-def _identified_product(context, parser_id):
+def _wells_printed_product(evidence: SourceEvidence) -> str | None:
+    """Use an audited printed business product, never its filename or route alone."""
+    payload = evidence.payload
+    if (
+        evidence.parser_id != "wells_business_table_pilot"
+        or evidence.engine_version != "wells-table-pilot-2+statement-v2"
+        or not isinstance(payload, StatementPayload)
+        or len(payload.accounts) != 1
+        or payload.accounts[0].balance_scope != "account_total"
+    ):
+        return None
+    labels = [item for item in payload.dispositions if item.code == "wells_account_product"]
+    if len(labels) != 1 or len(labels[0].raw_values) != 1:
+        return None
+    label = labels[0]
+    if label.location.kind != "pdf_line" or label.location.page != 1:
+        return None
+    text = " ".join(label.raw_values[0].split()).casefold()
+    return {
+        "initiate business checking": "checking",
+        "initiate business checking sm": "checking",
+        "business market rate savings": "savings",
+        "business market rate savings sm": "savings",
+    }.get(text)
+
+
+def _identified_product(context, evidence):
+    parser_id = evidence.parser_id
+    if parser_id == "wells_business_table_pilot" and (context.institution_key, context.kind) == ("wellsfargo", "asset"):
+        printed = _wells_printed_product(evidence)
+        if printed is not None:
+            # A conflicting catalog hint must not silently relabel the printed
+            # account. Its institution/class remain context; product stays open.
+            return context.model_copy(
+                update={"product_type": printed if context.product_type in {None, printed} else None}
+            )
     if context.product_type is not None:
         return context
     products = {product for product, _scope in _FAMILY_PRODUCTS.get(parser_id, ())}
@@ -187,7 +222,7 @@ def verified_source_account_context(
     ):
         return None
     if entry.identity.suffix == ".pdf":
-        return _identified_product(entry.account_context, evidence.parser_id)
+        return _identified_product(entry.account_context, evidence)
     if entry.identity.suffix != ".csv" or (entry.account_context.institution_key, entry.account_context.kind) != (
         "mohela",
         "liability",
@@ -199,7 +234,7 @@ def verified_source_account_context(
         return None
     if not _reviewed_mohela_declaration(definition) or not _reviewed_mohela_evidence(evidence, definition):
         return None
-    return _identified_product(entry.account_context, evidence.parser_id)
+    return _identified_product(entry.account_context, evidence)
 
 
 def source_account_profiles(evidence: SourceEvidence, catalog: VerifiedCatalog) -> tuple[AccountProductProfile, ...]:
