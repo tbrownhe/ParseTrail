@@ -6,6 +6,14 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
+[Remaining Citi warnings and V2 directory audit](docs/work/2026-11-18-citi-warning-audit.md)
+is implemented and agent-verified: finite repayment/disclosure roles clear the two
+named CITIAA examples; two unproven lines in the named CITISIMP remain reviewable.
+Read-only directory recognition/import-warning diagnostics, bounded/private reporting
+and selection safeguards pass integrated checks and independent integrity review.
+No account, journal, saved-evidence or profile-format changes; owner/platform/release
+acceptance remains separate.
+
 [Account consolidation and unified import progress](docs/work/2026-11-18-account-consolidation-progress.md)
 is implemented and agent-verified: audited same-obligation consolidation with conflict
 preflight, immutable original history, retained numbers and continuing matching/report

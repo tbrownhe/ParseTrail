@@ -120,6 +120,13 @@ guarded cancellation and final per-file outcomes. Fresh pre-release schema 28 re
 financial checks, native Windows journeys and independent design/integrity/acceptance
 checks pass; owner, other-platform and release acceptance remain separate.
 
+[Remaining Citi warnings and V2 directory audit](docs/work/2026-11-18-citi-warning-audit.md)
+refines V2-3/P2-4 with finite repayment/disclosure source roles and a read-only
+directory diagnostic using actual V2 recognition/import warnings. Unproven monetary
+lines remain reviewable, financial row identities and saved evidence are preserved,
+and reports exclude raw activity/account data. No schema change; agent verification
+does not establish complete capture, owner acceptance or release authorization.
+
 V2-5 distinguishes newly computed live reconciliation checks from explicitly
 saved decisions and their current/stale input versions. The
 [durable-history packet](docs/work/2026-10-25-v2-reconciliation-history.md) completed

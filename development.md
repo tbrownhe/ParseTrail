@@ -106,7 +106,14 @@ The independently retained published 1.x app has its own database, configuration
 and OS-backed credentials. See the [cutover contract](docs/client-v2-cutover.md)
 for the runtime boundary and [roadmap](ROADMAP.md) for release gates.
 
-To test local parsers against a private fixture directory without importing:
+To audit V2 recognition and import-review warnings without opening a profile, use
+the [read-only V2 directory audit](devtools/local_statements/README.md). It uses
+the current recognition and warning policies with an explicitly supplied catalog
+or clearly labelled development definitions. Reports are local diagnostics, not
+account assignment, capture certification or journal posting. Select only authorized
+inputs; filenames and detailed reports are explicit options.
+
+To test retained 1.x plugins against a private fixture directory without importing:
 
 ```bash
 cd ..

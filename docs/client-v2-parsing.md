@@ -283,6 +283,15 @@ activity; fee tables need their complete labelled frame. Unlabelled Citi amounts
 remain unresolved. A malformed optional sidebar amount remains source evidence
 requiring review rather than preventing otherwise valid activity import.
 
+Older Citi source-role engine revision 5 also handles complete repayment examples
+with known parallel revolving-credit limits/availability, labelled month-duration
+illustrations and finite parallel late-fee/purchase-threshold prose. Detached totals
+require their complete printed context and exact illustration arithmetic; an unknown
+amount or extra monetary/date suffix stays unresolved. This changes dispositions,
+not activity extraction. The financial observation identity namespace remains at
+revision 4 so unchanged rows retain their IDs; a later financial extraction change
+must reconsider that namespace independently of the source-role output version.
+
 The HealthEquity cash engine has a finite empty-table convenience rule: an exact
 printed table header, adjacent beginning/ending balances with no intervening rows,
 equal observed cash endpoints, and an observed ordered period. The empty source's
@@ -329,6 +338,16 @@ retry reuses its saved snapshot without parsing; reparse produces a comparison.
 Changed output needs explicit review before replacing affected interpretations.
 Hashes alone do not guarantee replay parity across engine/library versions;
 restoring retained evidence remains distinct from reproducing the original parse.
+
+The [read-only directory audit](../devtools/local_statements/README.md) runs current
+V2 recognition and import-warning policy against explicitly selected local files.
+It opens no financial profile and makes no account assignment or journal entries.
+An explicitly supplied signed release follows catalog verification; development
+definitions are labelled as development inputs, not an installed release. Default
+console output is aggregate; optional local reports contain bounded format/engine,
+period/count and warning-location metadata without raw source text or activity rows.
+Account choices, saved evidence, complete capture, reconciliation and posting
+eligibility remain separate from this source-level diagnostic result.
 
 ## Small implementation chunks
 
