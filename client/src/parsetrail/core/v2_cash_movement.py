@@ -120,8 +120,13 @@ def read_cash_movement(
             store.connection.set_progress_handler(lambda: int(bool(cancelled())), 1000)
         store.connection.execute("BEGIN")
         try:
-            financial = store.financial_accounts()
-            labels = cash_account_labels(financial)
+            selected = frozenset(store.canonical_account_id(identity) for identity in selected)
+            financial = store.active_financial_accounts()
+            canonical_labels = cash_account_labels(financial)
+            labels = {
+                account.id: canonical_labels[store.canonical_account_id(account.id)]
+                for account in store.financial_accounts()
+            }
             allowed = {account.id for account in financial if account.kind == "asset"}
             if not selected <= allowed:
                 raise ProfileFormatError("cash_movement_scope_invalid")
@@ -136,7 +141,11 @@ def read_cash_movement(
             rows = []
             for entry in journal.entries:
                 checkpoint()
-                effects = tuple((p.account_id, p.amount_minor) for p in entry.postings if p.account_id in selected)
+                effects = tuple(
+                    (store.canonical_account_id(p.account_id), p.amount_minor)
+                    for p in entry.postings
+                    if store.canonical_account_id(p.account_id) in selected
+                )
                 if not effects:
                     continue
                 amount = sum(value for _account, value in effects)
@@ -186,14 +195,16 @@ def read_cash_movement(
                             purpose = "unsettled_transfer"
                         elif all(movement.account_kind == "liability" for movement in settlement.incoming):
                             purpose = "liability_payment"
-                        elif {movement.account_id for movement in settlement.movements} <= selected:
+                        elif {
+                            store.canonical_account_id(movement.account_id) for movement in settlement.movements
+                        } <= selected:
                             purpose = "within_scope_transfer"
                         else:
                             purpose = "owned_transfer"
                         selected_rows = {
                             allocation.observation_id
                             for posting in entry.postings
-                            if posting.account_id in selected
+                            if store.canonical_account_id(posting.account_id) in selected
                             for allocation in posting.allocations
                         }
                         fee_effect = -sum(
@@ -240,7 +251,11 @@ def read_cash_movement(
                     else:
                         classification = (
                             "within_scope_transfer"
-                            if {pair.outgoing.account_id, pair.incoming.account_id} <= selected
+                            if {
+                                store.canonical_account_id(pair.outgoing.account_id),
+                                store.canonical_account_id(pair.incoming.account_id),
+                            }
+                            <= selected
                             else "owned_transfer"
                         )
                     if pair is not None:
@@ -287,8 +302,8 @@ def read_cash_movement(
                 sum(
                     event.settlement.expected_destination is not None
                     and (
-                        event.settlement.outgoing.account_id in selected
-                        or event.settlement.expected_destination.account_id in selected
+                        store.canonical_account_id(event.settlement.outgoing.account_id) in selected
+                        or store.canonical_account_id(event.settlement.expected_destination.account_id) in selected
                     )
                     for event in events.values()
                 ),

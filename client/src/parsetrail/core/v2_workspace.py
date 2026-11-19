@@ -237,11 +237,12 @@ class V2Workspace:
         with V2ProfileStore.open(self.profile_path, read_only=True) as store:
             saved = store.load_import(source_sha256)
             bindings = store.account_bindings(source_sha256)
-            accounts = store.financial_accounts()
-        candidates = tuple(
-            LedgerAccountCandidate(account.id, account.institution_key, account.kind, account.full_account_number)
-            for account in accounts
-        )
+            accounts = store.active_financial_accounts()
+            candidates = tuple(
+                LedgerAccountCandidate(account.id, account.institution_key, account.kind, number)
+                for account in accounts
+                for number in store.account_numbers(account.id) or (None,)
+            )
         payload = saved.evidence.payload
         rows = (
             tuple(row for account in payload.accounts for row in account.rows)

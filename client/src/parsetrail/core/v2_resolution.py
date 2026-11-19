@@ -272,7 +272,8 @@ def links(store, items):
             or outgoing.gross_minor != incoming.gross_minor
             or (
                 outgoing.expected_destination_account_id is not None
-                and outgoing.expected_destination_account_id != incoming.account_id
+                and store.canonical_account_id(outgoing.expected_destination_account_id)
+                != store.canonical_account_id(incoming.account_id)
             )
             or (
                 active
@@ -411,11 +412,12 @@ def snapshot(store, *, preferences, max_day_gap=7):
             )
             if (
                 outgoing.kind == incoming.kind == "source"
-                or outgoing.account_id == incoming.account_id
+                or store.canonical_account_id(outgoing.account_id) == store.canonical_account_id(incoming.account_id)
                 or outgoing.gross_minor != incoming.gross_minor
                 or (
                     outgoing.expected_destination_account_id is not None
-                    and outgoing.expected_destination_account_id != incoming.account_id
+                    and store.canonical_account_id(outgoing.expected_destination_account_id)
+                    != store.canonical_account_id(incoming.account_id)
                 )
                 or gap > max_day_gap
             ):

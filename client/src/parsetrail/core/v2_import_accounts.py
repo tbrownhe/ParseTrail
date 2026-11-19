@@ -98,6 +98,7 @@ def _basis(store):
     for table, columns in (
         ("Institutions", "*"),
         ("Accounts", "*"),
+        ("AccountConsolidations", "*"),
         ("Sources", "sha256,size,suffix"),
         ("SourceAccountBindings", "*"),
         ("FileAccountAssertions", "*"),
@@ -123,6 +124,7 @@ def _remembered_accounts(store, catalog, identity, form, eligible, candidate, se
         "SELECT source_sha256,ledger_account_id FROM SourceAccountBindings WHERE source_identity=? AND source_identity_form=?",
         (identity, form),
     ):
+        account_id = store.canonical_account_id(account_id)
         if account_id not in account_ids or account_id in found:
             continue
         saved = store.load_import(source)
@@ -153,7 +155,7 @@ def build_import_account_review(store, recognition, catalog, preferences=None):
     if owns:
         store.connection.execute("BEGIN")
     try:
-        accounts = store.financial_accounts()
+        accounts = store.active_financial_accounts()
         institutions = merge_institutions(store.institutions(), catalog_institutions(catalog))
         grouped = {}
         for candidate in recognition.candidates:
@@ -175,8 +177,9 @@ def build_import_account_review(store, recognition, catalog, preferences=None):
                         institution_key=candidate.institution_key,
                         kind=candidate.account_kind,
                         candidates=tuple(
-                            LedgerAccountCandidate(a.id, a.institution_key, a.kind, a.full_account_number)
+                            LedgerAccountCandidate(a.id, a.institution_key, a.kind, number)
                             for a in eligible
+                            for number in (store.account_numbers(a.id) or (None,))
                         ),
                         preferences=preferences,
                     )

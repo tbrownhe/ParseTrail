@@ -22,6 +22,7 @@ from typing import Literal
 
 from pydantic import ValidationError
 
+from parsetrail.core import v2_account_consolidation as consolidation
 from parsetrail.core.ledger import (
     AccountKind,
     Allocation,
@@ -129,7 +130,7 @@ from parsetrail.core.v2_statement_summary_review import (
 )
 
 APPLICATION_ID = 0x50543230  # PT20
-SCHEMA_VERSION = 27
+SCHEMA_VERSION = 28
 TRACKING_SCOPES = {"account_total", "principal_component", "cash_component"}
 CategoryPurpose = Literal["expense", "expense_refund", "income", "income_adjustment"]
 CATEGORY_PURPOSE_KINDS = {
@@ -598,8 +599,11 @@ IMMUTABLE_TABLES = (
 )
 
 TABLE_COLUMNS.update(RESOLUTION_TABLES)
+TABLE_COLUMNS[consolidation.TABLE] = consolidation.COLUMNS
 FOREIGN_KEYS.update(RESOLUTION_FOREIGN_KEYS)
+FOREIGN_KEYS[consolidation.TABLE] = consolidation.FOREIGN_KEYS
 IMMUTABLE_TABLES += tuple(RESOLUTION_TABLES)
+IMMUTABLE_TABLES += (consolidation.TABLE,)
 
 _INACTIVE_JOURNAL_SQL = (
     "SELECT original_key FROM JournalCorrections UNION SELECT reversal_key FROM JournalCorrections "
@@ -1418,6 +1422,7 @@ class ReviewedJournalExport:
     origination_events: tuple = ()
     zero_reviews: tuple = ()
     tangible_asset_value_history: tuple = ()
+    account_consolidations: tuple = ()
 
 
 BANK_CASH_STATEMENT_PARSERS = frozenset(
@@ -1745,6 +1750,7 @@ def _check_format(connection: sqlite3.Connection) -> None:
         if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
             raise ProfileFormatError("profile_integrity")
         _validate_institution_records(connection)
+        consolidation.history(V2ProfileStore(connection, read_only=True))
         for kind, role, scope, product_type, institution, number in connection.execute(
             "SELECT kind,role,tracking_scope,product_type,institution_key,full_account_number FROM Accounts"
         ):
@@ -2172,7 +2178,7 @@ class V2ProfileStore:
                 );
                 COMMIT;
             """)
-            connection.executescript(RESOLUTION_SQL)
+            connection.executescript("BEGIN IMMEDIATE;" + RESOLUTION_SQL + consolidation.SQL)
             connection.executemany(
                 "INSERT INTO Institutions VALUES (?,?)", ((item.id, item.name) for item in BUILTIN_INSTITUTIONS)
             )
@@ -2187,6 +2193,7 @@ class V2ProfileStore:
                         f"BEFORE {action} ON {table} BEGIN SELECT RAISE(ABORT,'immutable evidence'); END"
                     )
             _check_format(connection)
+            connection.execute("COMMIT")
             return cls(connection, read_only=False)
         except BaseException:
             connection.close()
@@ -2441,6 +2448,23 @@ class V2ProfileStore:
             raise ProfileFormatError("account_anchor_requires_committed_snapshot")
         self.connection.execute("BEGIN IMMEDIATE")
         try:
+            self._require_active_account_identity(account.id)
+            if len(self.account_members(account.id)) > 1:
+                current = next(item for item in self.financial_accounts() if item.id == account.id)
+                if (
+                    account.kind,
+                    account.institution_key,
+                    account.tracking_scope,
+                    account.product_type,
+                    account.full_account_number,
+                ) != (
+                    current.kind,
+                    current.institution_key,
+                    current.tracking_scope,
+                    current.product_type,
+                    current.full_account_number,
+                ):
+                    raise ProfileFormatError("consolidated_account_identity_locked")
             lock = self.account_identity_lock(account.id)
             if lock is not None and (account.institution_key, account.product_type) != (
                 lock.institution_key,
@@ -2491,6 +2515,69 @@ class V2ProfileStore:
                 "WHERE role='financial' ORDER BY name,id"
             )
         )
+
+    def account_consolidation_history(self):
+        return consolidation.history(self)
+
+    def canonical_account_id(self, account_id):
+        return consolidation.identity_map(self).get(account_id, account_id)
+
+    def account_members(self, account_id):
+        mapping = consolidation.identity_map(self)
+        canonical = mapping.get(account_id, account_id)
+        return tuple(sorted(identity for identity, target in mapping.items() if target == canonical))
+
+    def active_financial_accounts(self):
+        mapping = consolidation.identity_map(self)
+        return tuple(account for account in self.financial_accounts() if mapping[account.id] == account.id)
+
+    def effective_account_name(self, account_id):
+        canonical = self.canonical_account_id(account_id)
+        row = self.connection.execute("SELECT name FROM Accounts WHERE id=?", (canonical,)).fetchone()
+        return row[0] if row else account_id
+
+    def account_numbers(self, account_id):
+        return consolidation.numbers(self, account_id)
+
+    def account_source_identities(self, account_id):
+        members = self.account_members(account_id)
+        return tuple(
+            sorted(
+                {
+                    (identity, form)
+                    for identity, form, bound in self.connection.execute(
+                        "SELECT source_identity,source_identity_form,ledger_account_id FROM SourceAccountBindings"
+                    )
+                    if bound in members
+                }
+            )
+        )
+
+    def effective_opening_account_id(self, account_id):
+        return next(
+            (
+                identity
+                for identity in self.account_members(account_id)
+                if (decision := self.opening_decision(identity)) is not None and decision.state == "active"
+            ),
+            self.canonical_account_id(account_id),
+        )
+
+    def account_consolidation_snapshot(self, kept_account_id, absorbed_account_id):
+        if self.connection.in_transaction:
+            raise ProfileFormatError("account_consolidation_requires_committed_snapshot")
+        self.connection.execute("BEGIN")
+        try:
+            return consolidation.snapshot(self, kept_account_id, absorbed_account_id)
+        finally:
+            self.connection.execute("ROLLBACK")
+
+    def consolidate_accounts(self, kept_account_id, absorbed_account_id, **kwargs):
+        return consolidation.consolidate(self, kept_account_id, absorbed_account_id, **kwargs)
+
+    def _require_active_account_identity(self, account_id):
+        if self.canonical_account_id(account_id) != account_id:
+            raise ProfileFormatError("account_consolidated_choose_continuing_account")
 
     def account_identity_lock(self, account_id):
         from parsetrail.core.v2_review_decisions import identity_locks
@@ -3200,8 +3287,8 @@ class V2ProfileStore:
                 item = SourceOverlapRow(
                     row.row_id,
                     source_id,
-                    account.id,
-                    account.name,
+                    self.canonical_account_id(account.id),
+                    self.effective_account_name(account.id),
                     row.date.iso,
                     row.date_role,
                     row.date.provenance,
@@ -3344,6 +3431,7 @@ class V2ProfileStore:
             "SourceOverlapReviews",
             "BindingCorrections",
             "PendingTransferReviews",
+            "AccountConsolidations",
             *RESOLUTION_TABLES,
         ):
             digest.update(table.encode())
@@ -4892,7 +4980,7 @@ class V2ProfileStore:
             if outgoing.account_kind != "asset" or outgoing.amount_minor >= 0:
                 continue
             for incoming in receiving.get(-outgoing.amount_minor, ()):
-                if outgoing.account_id == incoming.account_id:
+                if self.canonical_account_id(outgoing.account_id) == self.canonical_account_id(incoming.account_id):
                     continue
                 gap = abs((date.fromisoformat(outgoing.posting_date) - date.fromisoformat(incoming.posting_date)).days)
                 if gap <= max_day_gap:
@@ -5565,7 +5653,7 @@ class V2ProfileStore:
                     events,
                     tuple(c for c in self.category_accounts() if c.kind == "expense"),
                     self._transfer_review_basis(),
-                    self.financial_accounts(),
+                    self.active_financial_accounts(),
                 )
         finally:
             self.connection.execute("ROLLBACK")
@@ -5636,11 +5724,14 @@ class V2ProfileStore:
     ) -> ExpectedOwnedDestination | None:
         if destination is None:
             return None
+        self._require_active_account_identity(destination.account_id)
         saved = self.connection.execute(
             "SELECT name,kind,tracking_scope FROM Accounts WHERE id=? AND role='financial' AND currency='USD'",
             (destination.account_id,),
         ).fetchone()
-        if saved is None or destination.account_id == outgoing_account_id:
+        if saved is None or self.canonical_account_id(destination.account_id) == self.canonical_account_id(
+            outgoing_account_id
+        ):
             raise ProfileFormatError("settlement_expected_destination_invalid")
         name, kind, scope = saved
         if (
@@ -5684,6 +5775,9 @@ class V2ProfileStore:
                 movements[out_id], tuple(movements[row_id] for row_id in in_ids), fees, destination
             )
             validate_settlement(settlement)
+            source_identity = self.canonical_account_id(settlement.outgoing.account_id)
+            if any(self.canonical_account_id(item.account_id) == source_identity for item in settlement.incoming):
+                raise ProfileFormatError("transfer_same_continuing_account")
         except KeyError:
             raise ProfileFormatError("settlement_movement_unavailable_or_already_posted") from None
         except (TypeError, ValueError) as exc:
@@ -7171,22 +7265,24 @@ class V2ProfileStore:
 
     def financial_journal_summary(self, *, start: date, end: date) -> FinancialJournalSummary:
         """Show reviewed account postings, keeping openings apart from period activity."""
-        accounts = {account.id: account for account in self.financial_accounts()}
+        accounts = {account.id: account for account in self.active_financial_accounts()}
         nonopening = dict.fromkeys(accounts, 0)
         opening = dict.fromkeys(accounts, 0)
         opening_seen: set[str] = set()
         excluded_unreviewed = 0
         opening_keys = self._opening_journal_keys()
         for entry in self._journal_entries_in_period(start, end):
-            financial_postings = tuple(posting for posting in entry.postings if posting.account_id in accounts)
+            financial_postings = tuple(
+                posting for posting in entry.postings if self.canonical_account_id(posting.account_id) in accounts
+            )
             if not entry.reviewed:
                 excluded_unreviewed += bool(financial_postings)
                 continue
             target = opening if entry.key in opening_keys else nonopening
             for posting in financial_postings:
-                target[posting.account_id] += posting.amount_minor
+                target[self.canonical_account_id(posting.account_id)] += posting.amount_minor
                 if entry.key in opening_keys:
-                    opening_seen.add(posting.account_id)
+                    opening_seen.add(self.canonical_account_id(posting.account_id))
         unresolved_rows, unresolved_sources = self._unallocated_activity_counts()
         from parsetrail.core.v2_resolution import unmatched_items
 
@@ -7232,7 +7328,7 @@ class V2ProfileStore:
         self._validate_journal_retirements()
         self._validate_opening_decision_histories()
         self._validate_common_journal_read()
-        accounts = self.financial_accounts()
+        accounts = self.active_financial_accounts()
         entries = tuple(
             sorted(
                 (
@@ -7265,7 +7361,7 @@ class V2ProfileStore:
             for row in _rows(evidence):
                 if row.row_role != "activity":
                     continue
-                account_id = bindings.get(row.row_id)
+                account_id = self.canonical_account_id(bindings.get(row.row_id))
                 if account_id not in pending:
                     unbound += 1
                     continue
@@ -7286,7 +7382,7 @@ class V2ProfileStore:
         saved_checks = self._reconciliation_history(checks)
         result = []
         for account in accounts:
-            decision = self.opening_decision(account.id)
+            decision = self.opening_decision(self.effective_opening_account_id(account.id))
             if decision is None:
                 status = "missing"
             elif decision.state == "withdrawn":
@@ -7299,8 +7395,14 @@ class V2ProfileStore:
                 entry.key != decision.entry_key
                 and entry.key not in inactive
                 and entry.posting_date <= decision.cutoff_date
-                and any(posting.account_id == account.id for posting in entry.postings)
+                and any(self.canonical_account_id(posting.account_id) == account.id for posting in entry.postings)
                 for entry in entries
+            ):
+                status = "conflict"
+            elif any(
+                self._manual_opening_history_conflict(member, decision.cutoff_date)
+                for member in self.account_members(account.id)
+                if member != decision.account_id
             ):
                 status = "conflict"
             else:
@@ -7311,7 +7413,9 @@ class V2ProfileStore:
             for entry in entries:
                 if entry.posting_date > as_of:
                     continue
-                postings = tuple(posting for posting in entry.postings if posting.account_id == account.id)
+                postings = tuple(
+                    posting for posting in entry.postings if self.canonical_account_id(posting.account_id) == account.id
+                )
                 if not postings:
                     continue
                 if not entry.reviewed:
@@ -7343,7 +7447,9 @@ class V2ProfileStore:
                         role,
                     )
                 )
-            sections = tuple(section for section in coverage if section.account_id == account.id)
+            sections = tuple(
+                section for section in coverage if self.canonical_account_id(section.account_id) == account.id
+            )
             source_cutoff = max((section.period_end for section in sections), default=None)
             warnings = []
             if reconciliation_unavailable is not None:
@@ -7375,7 +7481,7 @@ class V2ProfileStore:
                     check.period_end
                     for check in checks
                     if status == "valid"
-                    and check.account_id == account.id
+                    and self.canonical_account_id(check.account_id) == account.id
                     and check.reconciled
                     and check.posted_interpretations_reviewed
                     and check.period_end <= as_of
@@ -7407,7 +7513,7 @@ class V2ProfileStore:
                         (
                             saved.cutoff_date
                             for saved in saved_checks
-                            if saved.account_id == account.id and saved.cutoff_date <= as_of
+                            if self.canonical_account_id(saved.account_id) == account.id and saved.cutoff_date <= as_of
                         ),
                         default=None,
                     ),
@@ -7415,7 +7521,9 @@ class V2ProfileStore:
                         (
                             saved.cutoff_date
                             for saved in saved_checks
-                            if saved.account_id == account.id and saved.cutoff_date <= as_of and not saved.stale
+                            if self.canonical_account_id(saved.account_id) == account.id
+                            and saved.cutoff_date <= as_of
+                            and not saved.stale
                         ),
                         default=None,
                     ),
@@ -7569,6 +7677,7 @@ class V2ProfileStore:
             origination_history(self),
             zero_history(self),
             value_history(self),
+            tuple(self.account_consolidation_history()),
         )
 
     def _insert_reviewed_category(
@@ -8805,6 +8914,11 @@ class V2ProfileStore:
         bindings = tuple(b for b in self.account_bindings(target.source_sha256) if b.row_id in set(rows))
         bindings = tuple(sorted(bindings, key=lambda b: b.row_id))
         blockers = []
+        if (
+            destination_account_id is not None
+            and self.canonical_account_id(destination_account_id) != destination_account_id
+        ):
+            blockers.append("account_consolidated_choose_continuing_account")
         if all(account == destination_account_id for account in accounts):
             blockers.append("binding_unchanged")
         if (
@@ -8896,7 +9010,7 @@ class V2ProfileStore:
             target,
             destination_account_id,
             evidence,
-            self.financial_accounts(),
+            self.active_financial_accounts(),
             accounts,
             bindings,
             rows,
@@ -9112,7 +9226,9 @@ class V2ProfileStore:
         }:
             raise ProfileFormatError("source_account_missing")
         self._require_statement_account(account_id)
+        self._require_active_account_identity(account_id)
         with self._atomic_write("bind_source_account"):
+            self._require_active_account_identity(account_id)
             prior = self.connection.execute(
                 "SELECT ledger_account_id FROM SourceAccountBindings "
                 "WHERE source_sha256=? AND source_identity=? AND source_identity_form=?",
@@ -9157,6 +9273,7 @@ class V2ProfileStore:
     def assert_file_account(self, source_sha256: str, account_id: str) -> None:
         """Assert that every accountless row belongs to one financial account."""
         self._require_writable()
+        self._require_active_account_identity(account_id)
         self._require_statement_account(account_id)
         evidence = self.load_import(source_sha256).evidence
         payload = evidence.payload
@@ -9167,6 +9284,7 @@ class V2ProfileStore:
         ):
             raise ProfileFormatError("file_account_assertion_requires_accountless_export")
         with self._atomic_write("assert_file_account"):
+            self._require_active_account_identity(account_id)
             if self.connection.execute(
                 "SELECT 1 FROM RowAccountAssignments a JOIN SourceObservations o ON o.row_id=a.row_id "
                 "WHERE o.source_sha256=? LIMIT 1",
@@ -9201,6 +9319,7 @@ class V2ProfileStore:
     def assign_row_account(self, row_id: str, account_id: str) -> None:
         """Assign one accountless row in an export reviewed row by row."""
         self._require_writable()
+        self._require_active_account_identity(account_id)
         row = self.connection.execute(
             "SELECT source_sha256 FROM SourceObservations WHERE row_id=?", (row_id,)
         ).fetchone()
@@ -9211,6 +9330,7 @@ class V2ProfileStore:
     def assign_rows_account(self, source_sha256: str, row_ids: tuple[str, ...], account_id: str) -> None:
         """Atomically assign selected rows in a mixed, accountless export."""
         self._require_writable()
+        self._require_active_account_identity(account_id)
         self._require_statement_account(account_id)
         evidence = self.load_import(source_sha256).evidence
         payload = evidence.payload
@@ -9222,6 +9342,7 @@ class V2ProfileStore:
         ):
             raise ProfileFormatError("row_account_assignment_requires_accountless_export")
         with self._atomic_write("assign_rows_account"):
+            self._require_active_account_identity(account_id)
             if self.connection.execute(
                 "SELECT 1 FROM FileAccountAssertions WHERE source_sha256=?", (source_sha256,)
             ).fetchone():
@@ -9293,7 +9414,7 @@ class V2ProfileStore:
             self._active_consumed()
             self._validate_loan_history()
             corrections = self._read_binding_corrections()
-            accounts = self.financial_accounts()
+            accounts = self.active_financial_accounts()
             rows = tuple(row for row in payload.rows if row.source_account is None)
             bindings = tuple(
                 binding
@@ -9674,7 +9795,9 @@ class V2ProfileStore:
             end = payload.end if isinstance(payload, StatementPayload) else payload.activity_end
             if isinstance(payload, StatementPayload) and start.iso is not None:
                 for account_id in set(source_account_ids):
-                    periods.setdefault(account_id, []).append((start.iso, end.iso, source_id))
+                    periods.setdefault(self.canonical_account_id(account_id), []).append(
+                        (start.iso, end.iso, source_id)
+                    )
             activity = tuple(row for row in rows if row.row_role == "activity")
             identity_rows = {}
             for row in rows:
@@ -9724,7 +9847,7 @@ class V2ProfileStore:
                 payload.kind,
                 next(iter(institutions)) if len(institutions) == 1 else None,
                 identity_labels,
-                tuple(account.name for account in bound_accounts),
+                tuple(dict.fromkeys(self.effective_account_name(account.id) for account in bound_accounts)),
                 date.fromisoformat(start.iso) if start.iso else None,
                 date.fromisoformat(end.iso) if end.iso else None,
                 start.provenance,
@@ -9739,7 +9862,9 @@ class V2ProfileStore:
                 any(row.source_account is None for row in activity),
                 isinstance(payload, StatementPayload) or any(row.source_account is not None for row in rows),
                 unassigned_source_accounts=unassigned_identities,
-                associated_account_ids=tuple(account.id for account in bound_accounts),
+                associated_account_ids=tuple(
+                    dict.fromkeys(self.canonical_account_id(account.id) for account in bound_accounts)
+                ),
                 association_kind=association_kind,
                 association_complete=bool(bound_accounts)
                 and not unassigned_identities
@@ -9968,7 +10093,9 @@ class V2ProfileStore:
                 for entry in journal:
                     if section.period_start <= entry.posting_date <= section.period_end:
                         for posting in entry.postings:
-                            if posting.account_id != section.account_id:
+                            if self.canonical_account_id(posting.account_id) != self.canonical_account_id(
+                                section.account_id
+                            ):
                                 continue
                             journal_change += posting.amount_minor
                             if entry.key not in inactive_keys and (
@@ -10060,6 +10187,7 @@ class V2ProfileStore:
             ("EvidenceSnapshots", "source_sha256,definition_sha256,sha256"),
             ("SourceObservations", "*"),
             ("Accounts", "*"),
+            ("AccountConsolidations", "*"),
             ("SourceAccountBindings", "*"),
             ("FileAccountAssertions", "*"),
             ("RowAccountAssignments", "*"),
@@ -10104,7 +10232,17 @@ class V2ProfileStore:
             account.id: {review.source_sha256: review for review in self.statement_source_reviews(account.id)}
             for account in self.financial_accounts()
         }
-        decisions = {account_id: self.opening_decision(account_id) for account_id in reviews}
+        raw_decisions = {account.id: self.opening_decision(account.id) for account in self.financial_accounts()}
+        decisions = {}
+        for account in self.active_financial_accounts():
+            decisions[account.id] = next(
+                (
+                    raw_decisions[member]
+                    for member in self.account_members(account.id)
+                    if raw_decisions[member] is not None and raw_decisions[member].state == "active"
+                ),
+                raw_decisions[account.id],
+            )
         kinds = {account.id: account.kind for account in self.financial_accounts()}
         derived_parents = dict(
             self.connection.execute("SELECT observation_id,row_id FROM DerivedFinancialObservations")
@@ -10120,7 +10258,7 @@ class V2ProfileStore:
             _payload, source_section = self._bound_statement_section(section.account_id, section.source_sha256)
             source_row_ids = {row.row_id for row in source_section.rows if row.row_role == "activity"}
             review = reviews[section.account_id].get(section.source_sha256)
-            opening_decision = decisions[section.account_id]
+            opening_decision = decisions[self.canonical_account_id(section.account_id)]
             printed_opening = (
                 section.opening.minor
                 if self._admitted_statement_scope(section.account_id, section.source_sha256, source_section)
@@ -10142,14 +10280,14 @@ class V2ProfileStore:
                     for entry in entries
                     if entry.posting_date < section.period_start
                     for posting in entry.postings
-                    if posting.account_id == section.account_id
+                    if self.canonical_account_id(posting.account_id) == self.canonical_account_id(section.account_id)
                 )
             journal_closing = sum(
                 posting.amount_minor
                 for entry in entries
                 if entry.posting_date <= section.period_end
                 for posting in entry.postings
-                if posting.account_id == section.account_id
+                if self.canonical_account_id(posting.account_id) == self.canonical_account_id(section.account_id)
             )
             opening_difference = (
                 journal_opening - printed_opening
@@ -10188,7 +10326,7 @@ class V2ProfileStore:
                 )
                 for entry in entries
                 for posting in entry.postings
-                if posting.account_id == section.account_id
+                if self.canonical_account_id(posting.account_id) == self.canonical_account_id(section.account_id)
             )
             if unsupported_postings:
                 exceptions.append("postings_outside_statement_evidence")
@@ -10205,7 +10343,7 @@ class V2ProfileStore:
             if opening_decision is None or opening_decision.state != "active" or opening_decision.stale:
                 exceptions.append("opening_position_unverified_or_stale")
             overlapping = any(
-                other.account_id == section.account_id
+                self.canonical_account_id(other.account_id) == self.canonical_account_id(section.account_id)
                 and other.source_sha256 != section.source_sha256
                 and section.period_start is not None
                 and other.period_start is not None
@@ -10230,13 +10368,16 @@ class V2ProfileStore:
                 entry.key not in inactive
                 and entry.posting_date <= section.period_end
                 and not entry.reviewed
-                and any(posting.account_id == section.account_id for posting in entry.postings)
+                and any(
+                    self.canonical_account_id(posting.account_id) == self.canonical_account_id(section.account_id)
+                    for posting in entry.postings
+                )
                 for entry in entries
             )
             result.append(
                 StatementReconciliationCheck(
-                    section.account_id,
-                    section.account_name,
+                    self.canonical_account_id(section.account_id),
+                    self.effective_account_name(section.account_id),
                     kinds[section.account_id],
                     section.source_sha256,
                     section.period_start,
@@ -10270,6 +10411,8 @@ class V2ProfileStore:
     ) -> ReconciliationDecision:
         """Explicitly retain a successful current check, without posting any money."""
         self._require_writable()
+        if len(self.account_members(account_id)) > 1:
+            raise ProfileFormatError("consolidated_account_saved_reconciliation_not_supported")
         if type(reason) is not str or not 0 < len(reason.strip()) <= 500:
             raise ProfileFormatError("reconciliation_reason_required")
         if type(expected_input_version) is not str or re.fullmatch(r"[0-9a-f]{64}", expected_input_version) is None:
@@ -11391,7 +11534,11 @@ class V2ProfileStore:
 
     def _dated_value_point(self, account_id: str, as_of: date):
         values = tuple(
-            item for item in self._read_dated_values(account_id) if item.state == "active" and item.value_date <= as_of
+            item
+            for item in self._read_dated_values()
+            if item.account_id in self.account_members(account_id)
+            and item.state == "active"
+            and item.value_date <= as_of
         )
         if not values:
             return "missing", None, ()
@@ -11402,6 +11549,7 @@ class V2ProfileStore:
         return "known", max(current, key=lambda item: item.value_id), current
 
     def _validate_account_metadata(self) -> None:
+        consolidation.history(self)
         self._validate_builtin_categories()
         self._validate_transfer_clearing()
         from parsetrail.core.v2_review_decisions import identity_locks
@@ -11526,10 +11674,13 @@ class V2ProfileStore:
             raise ProfileFormatError("account_anchor_date_invalid")
         self.connection.execute("BEGIN")
         try:
+            account_id = self.canonical_account_id(account_id)
             self._require_financial_account(account_id)
+            members = self.account_members(account_id)
             account = next(a for a in self.financial_accounts() if a.id == account_id)
-            history = self.opening_decision_history(account_id)
-            opening = self.opening_decision(account_id)
+            opening_owner = self.effective_opening_account_id(account_id)
+            history = self.opening_decision_history(opening_owner)
+            opening = self.opening_decision(opening_owner)
             lifecycle = self._read_account_lifecycle(account_id)
             recorded = sum(
                 p.amount_minor
@@ -11537,15 +11688,24 @@ class V2ProfileStore:
                 for entry in (_decode_journal(payload),)
                 if entry.reviewed and entry.posting_date <= as_of
                 for p in entry.postings
-                if p.account_id == account_id
+                if p.account_id in members
             )
-            earliest = self._earliest_known_account_activity(account_id)
-            boundaries = self._account_opening_boundaries(account_id)
+            earliest = min(
+                (item for member in members if (item := self._earliest_known_account_activity(member)) is not None),
+                default=None,
+            )
+            boundaries = tuple(item for member in members for item in self._account_opening_boundaries(member))
             value_status, latest_value, current_values = self._dated_value_point(account_id, as_of)
-            value_history = self._read_dated_values(account_id)
+            value_history = tuple(value for value in self._read_dated_values() if value.account_id in members)
             valid = (
                 opening is not None and opening.state == "active" and not opening.stale and opening.cutoff_date <= as_of
             )
+            if valid and any(
+                self._manual_opening_history_conflict(member, opening.cutoff_date)
+                for member in members
+                if member != opening.account_id
+            ):
+                valid = False
             if valid and any(
                 entry.key != opening.entry_key
                 and entry.posting_date <= opening.cutoff_date
@@ -11567,7 +11727,7 @@ class V2ProfileStore:
                 recorded if valid else None,
                 min((item.boundary_date for item in boundaries), default=None),
                 boundaries,
-                self._source_value_candidates(account_id),
+                tuple(value for member in members for value in self._source_value_candidates(member)),
                 tuple(v.withdrawal for v in value_history if v.withdrawal is not None),
                 value_status,
                 current_values if value_status == "conflict" else (),
@@ -11629,6 +11789,8 @@ class V2ProfileStore:
             or type(allow_conflict) is not bool
         ):
             raise ProfileFormatError("account_anchor_version_required")
+        if corrects_value_id is None and source_proof is None:
+            self._require_active_account_identity(account_id)
         self._anchor_account(account_id, tracking_scope)
         self._validate_anchor_value(amount_minor, value_date, reference)
         origin = "source" if source_proof is not None else "manual"
@@ -11660,7 +11822,12 @@ class V2ProfileStore:
             raise ProfileFormatError("account_dated_value_correction_unavailable")
         if (
             dated_value_conflicts(
-                history, value_date=value_date, amount_minor=amount_minor, corrects_value_id=corrects_value_id
+                tuple(
+                    value for value in self._read_dated_values() if value.account_id in self.account_members(account_id)
+                ),
+                value_date=value_date,
+                amount_minor=amount_minor,
+                corrects_value_id=corrects_value_id,
             )
             and not allow_conflict
         ):
@@ -11857,6 +12024,7 @@ class V2ProfileStore:
     ) -> AccountLifecycleDecision:
         self._anchor_write_start(reason)
         try:
+            self._require_active_account_identity(account_id)
             if (
                 type(expected_basis_sha256) is not str
                 or re.fullmatch(r"[0-9a-f]{64}", expected_basis_sha256) is None
@@ -11923,8 +12091,25 @@ class V2ProfileStore:
             raise ProfileFormatError("opening_requires_committed_snapshot")
         self.connection.execute("BEGIN")
         try:
+            account_id = self.effective_opening_account_id(account_id)
             self._require_financial_account(account_id)
             candidate = next(item for item in self.earliest_source_openings() if item.account_id == account_id)
+            if self.opening_decision(account_id) is None and len(self.account_members(account_id)) > 1:
+                member_sources = tuple(
+                    item
+                    for item in self.earliest_source_openings()
+                    if item.account_id in self.account_members(account_id)
+                    and item.account_id != account_id
+                    and item.bound_statement_sections
+                )
+                if member_sources:
+                    candidate = replace(
+                        candidate,
+                        blockers=candidate.blockers
+                        + (
+                            "Use a reviewed manual opening for consolidated history; a source-backed opening from an absorbed member is unavailable",
+                        ),
+                    )
             reviews = self.statement_source_reviews(account_id)
             return OpeningReviewSnapshot(
                 candidate,
@@ -12149,16 +12334,25 @@ class V2ProfileStore:
     def _append_opening_decision(
         self, account_id, *, current, origin, state, amount, cutoff, basis, reference, reason, request_basis
     ):
+        if current is None:
+            self._require_active_account_identity(account_id)
+        if state == "active":
+            for member in self.account_members(account_id):
+                other = self.opening_decision(member)
+                if member != account_id and other is not None and other.state == "active":
+                    raise ProfileFormatError("continuing_account_already_has_opening")
         account = next(a for a in self.financial_accounts() if a.id == account_id)
         if state == "active":
-            if origin == "manual":
-                if self._manual_opening_history_conflict(account_id, cutoff):
+            if origin == "manual" or len(self.account_members(account_id)) > 1:
+                if any(
+                    self._manual_opening_history_conflict(member, cutoff) for member in self.account_members(account_id)
+                ):
                     raise ProfileFormatError("opening_earlier_activity_conflict")
             for entry in self._active_journal_entries():
                 if (
                     entry.key != (current.entry_key if current else None)
                     and entry.posting_date <= cutoff
-                    and any(p.account_id == account_id for p in entry.postings)
+                    and any(p.account_id in self.account_members(account_id) for p in entry.postings)
                 ):
                     raise ProfileFormatError("opening_earlier_posting_conflict")
         self._account_anchors_mutating = True
@@ -12277,10 +12471,12 @@ class V2ProfileStore:
 
     def post_reviewed_opening(self, account_id: str, *, expected_basis_sha256: str | None = None) -> OpeningDecision:
         self._require_writable()
+        self._require_active_account_identity(account_id)
         if self.connection.in_transaction:
             raise ProfileFormatError("opening_requires_committed_snapshot")
         self.connection.execute("BEGIN IMMEDIATE")
         try:
+            self._require_active_account_identity(account_id)
             candidate = next((c for c in self.earliest_source_openings() if c.account_id == account_id), None)
             if (
                 candidate is None
@@ -12499,6 +12695,10 @@ class V2ProfileStore:
         expected_decision_version: str | None,
         expected_basis_sha256: str,
     ) -> OpeningDecision:
+        if self.canonical_account_id(account_id) == account_id:
+            owner = self.effective_opening_account_id(account_id)
+            if owner != account_id and expected_decision_version is not None:
+                account_id = owner
         self._anchor_write_start(reason)
         try:
             if (

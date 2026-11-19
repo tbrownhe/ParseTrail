@@ -436,7 +436,9 @@ def test_malformed_journal_clears_parent_reports_and_can_refresh_after_valid_res
     wait_for_reports(dialog)
     dialog.end.setDate(QDate(2026, 11, 1))
     wait_for_reports(dialog)
-    assert dialog.model.rowCount() == 2 and dialog.export_button.isEnabled()
+    expected_categories = {"expense:food", "expense:travel", "builtin:loan-interest"}
+    assert {row.category_id for row in dialog.model.rows} == expected_categories
+    assert dialog.export_button.isEnabled()
     invalid = json.loads(original)
     invalid["postings"][1]["amount_minor"] += 1
     replace_payload(json.dumps(invalid))
@@ -465,7 +467,8 @@ def test_malformed_journal_clears_parent_reports_and_can_refresh_after_valid_res
             dialog.tabs.setCurrentIndex(tab)
             wait_for_reports(dialog)
         assert dialog.export_button.isEnabled()
-        assert dialog.model.rowCount() == dialog.budget_model.rowCount() == 2
+        assert {row.category_id for row in dialog.model.rows} == expected_categories
+        assert {row.category_id for row in dialog.budget_model.rows} == expected_categories
         assert dialog.positions_model.rowCount() == 1
         assert "$7.00" in dialog.total.text()
     finally:

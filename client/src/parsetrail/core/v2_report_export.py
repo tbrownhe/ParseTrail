@@ -39,6 +39,49 @@ def _sheet(workbook: Workbook, name: str, headers: tuple[str, ...], rows: list[t
         sheet.column_dimensions[letter].width = min(max(width + 2, 12), 64)
 
 
+def _consolidation_metadata(workbook: Workbook, report: ReviewedJournalExport) -> list[str]:
+    if not report.account_consolidations:
+        return []
+    workbook["Scope"].append(
+        (
+            "Account consolidations",
+            "Profile-wide same-obligation history, not additional money. Original account IDs in postings and proofs "
+            "remain unchanged. Resolve absorbed records to their continuing account when grouping; do not add "
+            "duplicate carried-forward balances. Consolidation does not certify complete history.",
+        )
+    )
+    _sheet(
+        workbook,
+        "Account Consolidations",
+        (
+            "Consolidation ID",
+            "Kept account ID",
+            "Absorbed account ID",
+            "Original member account IDs",
+            "Review reference",
+            "Reason",
+            "Created at",
+            "Preflight basis",
+            "History SHA-256",
+        ),
+        [
+            (
+                item.consolidation_id,
+                item.kept_account_id,
+                item.absorbed_account_id,
+                ", ".join(item.member_account_ids),
+                item.reference,
+                item.reason,
+                item.created_at,
+                item.basis_sha256,
+                item.record_sha256,
+            )
+            for item in report.account_consolidations
+        ],
+    )
+    return ["Account Consolidations"]
+
+
 def _loan_metadata(workbook: Workbook, report: ReviewedJournalExport, derived_allocations: list[tuple]) -> list[str]:
     """Full raw-row use and derived principal support are distinct audit dimensions."""
     if not report.loan_events:
@@ -931,6 +974,7 @@ def write_reviewed_journal_workbook(report: ReviewedJournalExport, destination_p
     expected_sheets.extend(_loan_metadata(workbook, report, derived_allocations))
     expected_sheets.extend(_value_metadata(workbook, report, accounts))
     expected_sheets.extend(_resolution_metadata(workbook, report))
+    expected_sheets.extend(_consolidation_metadata(workbook, report))
     descriptor, partial_name = tempfile.mkstemp(
         prefix=f".{destination.name}.partial.", suffix=".xlsx", dir=destination.parent
     )

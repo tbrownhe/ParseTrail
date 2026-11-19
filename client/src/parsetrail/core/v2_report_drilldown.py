@@ -28,10 +28,13 @@ class ReviewedEntryDrilldown:
     retirements: tuple[JournalExportRetirement, ...]
     related_keys: tuple[tuple[str, frozenset[str]], ...]
     audit_entries: tuple[JournalEntry, ...]
+    member_account_ids: tuple[str, ...] = ()
 
     def effect_minor(self, entry: JournalEntry) -> int:
         natural = -1 if self.account.kind in {"income", "liability"} else 1
-        return natural * sum(p.amount_minor for p in entry.postings if p.account_id == self.account.id)
+        return natural * sum(
+            p.amount_minor for p in entry.postings if p.account_id in (self.member_account_ids or (self.account.id,))
+        )
 
     def entry_history(self, entry: JournalEntry):
         related = dict(self.related_keys).get(entry.key, frozenset())
@@ -55,11 +58,11 @@ def read_reviewed_entry_drilldown(profile: Path, account_id: str, *, start: date
             }
             if account_id not in allowed:
                 raise ProfileFormatError("drilldown_account_missing")
+            account_id = store.canonical_account_id(account_id)
+            members = store.account_members(account_id) or (account_id,)
             report = store.reviewed_journal_export(start=start, end=end)
             account = next(item for item in report.accounts if item.id == account_id)
-            entries = tuple(
-                entry for entry in report.entries if any(p.account_id == account_id for p in entry.postings)
-            )
+            entries = tuple(entry for entry in report.entries if any(p.account_id in members for p in entry.postings))
             # Related history can predate the selected report range. It provides
             # provenance only; the money above still comes from the common query.
             by_source_row: dict[str, set[str]] = {}
@@ -142,10 +145,10 @@ def read_reviewed_entry_drilldown(profile: Path, account_id: str, *, start: date
             )
             natural = -1 if account.kind in {"income", "liability"} else 1
             total = natural * sum(
-                p.amount_minor for entry in entries for p in entry.postings if p.account_id == account_id
+                p.amount_minor for entry in entries for p in entry.postings if p.account_id in members
             )
             return ReviewedEntryDrilldown(
-                report, account, entries, total, corrections, retirements, tuple(related_keys), audit_entries
+                report, account, entries, total, corrections, retirements, tuple(related_keys), audit_entries, members
             )
         finally:
             store.connection.execute("ROLLBACK")

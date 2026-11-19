@@ -127,6 +127,7 @@ def _state_basis(store, authority):
         ("EvidenceSnapshots", "source_sha256,definition_sha256,sha256,size"),
         ("Institutions", "*"),
         ("Accounts", "*"),
+        ("AccountConsolidations", "*"),
         ("SourceAccountBindings", "*"),
         ("FileAccountAssertions", "*"),
         ("RowAccountAssignments", "*"),
@@ -220,9 +221,11 @@ def account_compatible(group: AccountAssignmentGroup, account: FinancialAccount)
 
 def _build_plan(store, catalog, preferences, cancelled=None):
     authority = _authority(catalog, preferences)
-    accounts = store.financial_accounts()
+    accounts = store.active_financial_accounts()
     account_by_id = {account.id: account for account in accounts}
-    corrections, blocked_rows, review_accounts, source_openings, values = _binding_guards(store, accounts)
+    corrections, blocked_rows, review_accounts, source_openings, values = _binding_guards(
+        store, store.financial_accounts()
+    )
     assignments = {}
     for source, identity, form, account in store.connection.execute("SELECT * FROM SourceAccountBindings"):
         assignments[source, identity, form] = account
@@ -332,7 +335,7 @@ def _build_plan(store, catalog, preferences, cancelled=None):
     for grouping, value in pending.items():
         key, draft = value["key"], value["draft"]
         eligible = tuple(account.id for account in accounts if _compatible(account, key))
-        prior = seeds.get(key, set())
+        prior = {store.canonical_account_id(identity) for identity in seeds.get(key, set())}
         suggested = None
         reason = next(iter(sorted(value["reasons"])), "")
         status = "manual" if reason else "choose_account"
@@ -351,11 +354,10 @@ def _build_plan(store, catalog, preferences, cancelled=None):
                 institution_key=key[0],
                 kind=key[1],
                 candidates=tuple(
-                    LedgerAccountCandidate(
-                        account.id, account.institution_key, account.kind, account.full_account_number
-                    )
+                    LedgerAccountCandidate(account.id, account.institution_key, account.kind, number)
                     for account in accounts
                     if account.id in eligible
+                    for number in (store.account_numbers(account.id) or (None,))
                 ),
                 preferences=preferences,
             )
