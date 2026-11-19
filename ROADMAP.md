@@ -127,6 +127,14 @@ lines remain reviewable, financial row identities and saved evidence are preserv
 and reports exclude raw activity/account data. No schema change; agent verification
 does not establish complete capture, owner acceptance or release authorization.
 
+[Bounded parallel import preparation](docs/work/2026-11-18-parallel-import-preparation.md)
+extends V2-3/UX/P2-4 with up to four concurrent source preparations and a worker-sized
+lookahead including the current statement. Reviews, current account decisions,
+automatic policies and writes remain ordered; cancellation joins decoder work and
+keeps confirmed imports. Read-only auditing shares the queue. Synthetic benchmarks
+show preparation gains with exact evidence parity; archive-wide throughput and
+other-platform/owner/release gates remain separate. No profile schema change.
+
 V2-5 distinguishes newly computed live reconciliation checks from explicitly
 saved decisions and their current/stale input versions. The
 [durable-history packet](docs/work/2026-10-25-v2-reconciliation-history.md) completed

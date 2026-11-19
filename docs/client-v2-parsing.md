@@ -81,6 +81,17 @@ worker is released. Completion waits for the worker's actual outcome, preserves
 confirmed writes and disposes resources on the GUI thread. A final report gives
 per-file outcomes; cancellation never reports an already committed file as cancelled.
 
+Batch preparation uses up to four coordinator threads for independent sources and
+their existing isolated decoder processes. The ordered queue includes the current
+consumer in its worker-sized slot bound; it does not enqueue or retain the full
+archive. Raw decode caches are operation-local and released before handoff. Account
+review, preferences, physical-profile validation, automatic policies and persistence
+remain on the ordered consumer, so earlier account creation is visible to later
+prepared files. Source/catalog freshness is checked before using speculative
+successes or failures and again at the existing confirmation/commit boundaries.
+Cancellation joins all producers and decoder children and disposes unused proof;
+confirmed writes remain saved. One-worker mode retains the same admission rules.
+
 Institution identity comes only from reliable signed parser context or separately
 authored account metadata. Generic column compatibility does not identify a bank.
 Institution names/IDs are managed separately from the set of supported formats;
@@ -348,6 +359,11 @@ console output is aggregate; optional local reports contain bounded format/engin
 period/count and warning-location metadata without raw source text or activity rows.
 Account choices, saved evidence, complete capture, reconciliation and posting
 eligibility remain separate from this source-level diagnostic result.
+
+The audit shares the bounded queue and supports `--workers 1..4`; metadata is
+consumed in selection order regardless of preparation completion order. Each
+preparation has its own decode-operation cache. Concurrency does not broaden
+catalog trust, warning policy, report fields or account/posting claims.
 
 ## Small implementation chunks
 

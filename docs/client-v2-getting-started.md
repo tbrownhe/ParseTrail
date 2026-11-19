@@ -38,6 +38,11 @@ return to compact progress. The previous file's rows are never shown while the n
 file is read. Cancel preserves completed imports and waits for the actual outcome;
 the final report lists each file's result.
 
+Large batches prepare up to four statements in the background. Account questions
+and saved imports still follow your file order; a newly created account is available
+to later statements. The progress count shows completed imports, not background
+preparation. Cancel waits for background work to stop and keeps completed files.
+
 Account setup and recognized review keep stable primary-action positions;
 **Skip this file** stays separate beside Cancel. Alt+N continues to
 review, Alt+I imports, Alt+B returns to accounts, Alt+S skips, and Alt+O opens the

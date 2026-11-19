@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import hashlib
 import json
+from contextlib import contextmanager
 from pathlib import Path
+from threading import Event, Lock, Thread
 
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -223,26 +225,134 @@ def test_cancellation_keeps_only_completed_metadata_and_report_budget_is_bounded
     sources, definitions = setup
     for name in ("one.csv", "two.csv"):
         (sources / name).write_bytes(SOURCE)
-    calls = 0
-    original = audit.recognize_catalog_source
-    stop = False
+    stop = Event()
+    original_queue = audit.OrderedPreparation
 
-    def complete_one(*args, **kwargs):
-        nonlocal calls, stop
-        result = original(*args, **kwargs)
-        calls += 1
-        stop = True
-        return result
+    class StopAfterCompletedFile(original_queue):
+        @contextmanager
+        def take_next(self):
+            with super().take_next() as record:
+                yield record
+            stop.set()
 
-    monkeypatch.setattr(audit, "recognize_catalog_source", complete_one)
-    report = run(sources, definitions, cancelled=lambda: stop)
-    assert calls == 1 and report["summary"]["files_completed"] == 1
+    monkeypatch.setattr(audit, "OrderedPreparation", StopAfterCompletedFile)
+    report = run(sources, definitions, cancelled=stop.is_set)
+    assert report["summary"]["files_completed"] == 1
     assert report["summary"]["files_remaining"] == 1 and audit.exit_code(report) == 130
-    monkeypatch.setattr(audit, "recognize_catalog_source", original)
+    monkeypatch.setattr(audit, "OrderedPreparation", original_queue)
     monkeypatch.setattr(audit, "MAX_REPORT_BYTES", 1)
     report = run(sources, definitions)
     assert report["summary"]["files_completed"] == 0 and report["summary"]["metadata_limit_reached"]
     assert audit.exit_code(report) == 1
+
+
+def test_parallel_preparations_overlap_but_metadata_matches_serial_order(setup, monkeypatch):
+    sources, definitions = setup
+    source_indices = {}
+    for index in range(6):
+        data = SOURCE.replace(b"PRIVATE MERCHANT", f"PRIVATE MERCHANT {index}".encode())
+        (sources / f"{index:02d}.csv").write_bytes(data)
+        source_indices[data] = index
+    verified, mode = catalog(definitions)
+    original = audit.recognize_catalog_source
+    lock = Lock()
+    releases = [Event() for _ in range(4)]
+    done = [Event() for _ in range(4)]
+    started = Event()
+    active = peak = 0
+
+    def recognize(source, **kwargs):
+        nonlocal active, peak
+        index = source_indices[source]
+        with lock:
+            active += 1
+            peak = max(peak, active)
+            if active == 4:
+                started.set()
+        try:
+            if index < 4:
+                assert releases[index].wait(10), "test gate did not release"
+            return original(source, **kwargs)
+        finally:
+            with lock:
+                active -= 1
+            if index < 4:
+                done[index].set()
+
+    monkeypatch.setattr(audit, "recognize_catalog_source", recognize)
+    results, failures = [], []
+
+    def run_parallel():
+        try:
+            results.append(audit.audit_directory(sources, catalog=verified, mode=mode, workers=4))
+        except BaseException as error:
+            failures.append(error)
+
+    runner = Thread(target=run_parallel)
+    runner.start()
+    try:
+        assert started.wait(10), "four independent preparations did not overlap"
+        for index in (3, 2, 1):
+            releases[index].set()
+            assert done[index].wait(10)
+        assert not results
+    finally:
+        for release in releases:
+            release.set()
+        runner.join(20)
+    assert not runner.is_alive() and not failures and peak == 4
+    assert results[0]["summary"]["recognized"] == 6
+    serial = audit.audit_directory(sources, catalog=verified, mode=mode, workers=1)
+    assert results[0] == serial
+
+
+def test_cancelling_four_active_audit_preparations_joins_them(setup, monkeypatch):
+    sources, definitions = setup
+    for index in range(8):
+        (sources / f"{index:02d}.csv").write_bytes(SOURCE)
+    entered, release, stop = Event(), Event(), Event()
+    lock = Lock()
+    started = finished = 0
+    original = audit.recognize_catalog_source
+
+    def recognize(source, **kwargs):
+        nonlocal started, finished
+        with lock:
+            started += 1
+            if started == 4:
+                entered.set()
+        try:
+            assert release.wait(10), "test cancellation gate did not release"
+            return original(source, **kwargs)
+        finally:
+            with lock:
+                finished += 1
+
+    monkeypatch.setattr(audit, "recognize_catalog_source", recognize)
+    results = []
+    runner = Thread(target=lambda: results.append(run(sources, definitions, workers=4, cancelled=stop.is_set)))
+    runner.start()
+    try:
+        assert entered.wait(10)
+        stop.set()
+    finally:
+        release.set()
+        runner.join(20)
+    assert not runner.is_alive() and started == finished == 4
+    assert len(results) == 1 and audit.exit_code(results[0]) == 130
+    assert results[0]["files"] == [] and results[0]["summary"]["files_remaining"] == 8
+
+
+@pytest.mark.parametrize("workers", [0, 5, True, 1.5])
+def test_invalid_workers_refuse_before_selecting_sources(setup, monkeypatch, workers):
+    sources, definitions = setup
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("invalid concurrency must not select source paths")
+
+    monkeypatch.setattr(audit, "selected_paths", forbidden)
+    with pytest.raises(ValueError, match="import_preparation_workers_invalid"):
+        run(sources, definitions, workers=workers)
 
 
 def test_cli_verified_catalog_aggregate_stdout_report_creation_and_no_overwrite(setup, tmp_path, capsys):

@@ -6,6 +6,13 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
+[Bounded parallel import preparation](docs/work/2026-11-18-parallel-import-preparation.md)
+is implemented and agent-verified: up to four concurrent source preparations,
+ordered account review/writes and automation, bounded lookahead/cancellation and
+shared audit concurrency. Headless/native/independent checks pass; public synthetic
+benchmark shows faster preparation with exact evidence parity. No schema change;
+owner/platform/release acceptance remains separate.
+
 [Remaining Citi warnings and V2 directory audit](docs/work/2026-11-18-citi-warning-audit.md)
 is implemented and agent-verified: finite repayment/disclosure roles clear the two
 named CITIAA examples; two unproven lines in the named CITISIMP remain reviewable.

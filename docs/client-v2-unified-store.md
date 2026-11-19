@@ -141,6 +141,20 @@ and bound to the exact source/catalog; a public summary cannot replace that proo
 Manual/headless source-only import and later guarded assignment remain separate
 supported boundaries; the combined UI does not change immutable evidence policy.
 
+Batch imports prepare independent sources concurrently, on available CPUs capped
+at four. A worker-sized ordered queue includes the current consumer in its slot
+limit; no archive-sized preparation backlog or decoded-text cache is retained.
+Producers use source bytes and verified catalog data; account/profile/preferences
+and automatic decisions are bound only by the ordered consumer. One source may
+be prepared while an earlier source waits for account review. Earlier committed
+account creation is therefore visible to subsequent reviews. Saved-source and
+duplicate-path checks still occur at consumption. Speculative successes/failures
+are used only for unchanged source/catalog inputs; existing pre-confirmation and
+commit freshness checks remain. Cancellation joins all producers/decoder children,
+disposes unused authorities and preserves completed writes. Source-only and
+explicit-format batch paths use the same queue/admission boundary; single-file
+import remains available without speculation. No schema or accounting change.
+
 Prepared sessions bind an opaque operation identifier, exact source/suffix,
 catalog/declaration/engine/extractor context, physical profile and account basis.
 Detached public review/selection/plan objects are compared with private authorized

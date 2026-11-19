@@ -17,6 +17,7 @@ from threading import Event
 REPOSITORY = Path(__file__).resolve().parents[2]
 sys.path[:0] = [str(REPOSITORY / "client/src"), str(REPOSITORY / "client"), str(REPOSITORY)]
 
+from parsetrail.core.v2_bounded_pdf_text import pdf_decode_operation  # noqa: E402
 from parsetrail.core.v2_catalog_admission import admit_pilot_definition  # noqa: E402
 from parsetrail.core.v2_data_catalog import (  # noqa: E402
     MAX_CATALOG_BYTES,
@@ -29,6 +30,13 @@ from parsetrail.core.v2_format_recognition import (  # noqa: E402
     ImportCancelled,
     catalog_digest,
     recognize_catalog_source,
+)
+from parsetrail.core.v2_parallel_preparation import (  # noqa: E402
+    DEFAULT_PREPARATION_WORKERS,
+    MAX_PREPARATION_WORKERS,
+    OrderedPreparation,
+    PreparationCancelled,
+    preparation_workers,
 )
 from parsetrail.core.v2_source_pipeline import MAX_SOURCE_BYTES  # noqa: E402
 
@@ -48,6 +56,7 @@ _SAFE_ERRORS = {
     "catalog_size",
     "cancelled",
     "invalid_signature",
+    "import_preparation_workers_invalid",
     "no_matching_format",
     "source_changed",
     "source_file_unavailable",
@@ -216,6 +225,47 @@ def _error(error: Exception) -> str:
     return str(error) if str(error) in _SAFE_ERRORS else "audit_file_failed"
 
 
+def _audit_source(item, *, directory, catalog, show_filenames, cancelled):
+    """Prepare one metadata result without retaining source bytes or GUI state."""
+    index, path = item
+    record = {"file": f"fixture-{index + 1:05d}{path.suffix.lower()}"}
+    if show_filenames:
+        record["file"] = path.relative_to(directory).as_posix()
+    source = recognition = None
+    try:
+        if cancelled():
+            raise ImportCancelled("cancelled")
+        source = read_limited(path, MAX_SOURCE_BYTES)
+        digest = hashlib.sha256(source).hexdigest()
+        record["source_sha256"] = digest
+        if not show_filenames:
+            record["file"] = f"fixture-{index + 1:05d}-{digest[:12]}{path.suffix.lower()}"
+        with pdf_decode_operation():
+            recognition = recognize_catalog_source(
+                source, catalog=catalog, suffix=path.suffix.lower(), cancelled=cancelled
+            )
+        source = None
+        if hashlib.sha256(read_limited(path, MAX_SOURCE_BYTES)).hexdigest() != digest:
+            raise ValueError("source_changed")
+        candidates = [_candidate(candidate) for candidate in recognition.candidates]
+        if not candidates:
+            raise ValueError("no_matching_format")
+        record.update(
+            status="recognized" if len(candidates) == 1 else "ambiguous",
+            requires_review=len(candidates) != 1 or any(candidate["requires_review"] for candidate in candidates),
+            candidates=candidates,
+        )
+    except ImportCancelled:
+        raise
+    except Exception as error:
+        if cancelled():
+            raise ImportCancelled("cancelled") from None
+        record.update(status="failed", error=_error(error))
+    finally:
+        source = recognition = None
+    return record
+
+
 def audit_directory(
     directory: Path,
     *,
@@ -226,56 +276,38 @@ def audit_directory(
     max_files: int = MAX_FILES,
     show_filenames: bool = False,
     cancelled: Callable[[], bool] | None = None,
+    workers: int = DEFAULT_PREPARATION_WORKERS,
 ) -> dict:
-    """Recognize each source once, retain only bounded diagnostic metadata."""
+    """Prepare bounded metadata concurrently and retain it in selection order."""
+    workers = preparation_workers(workers)
     paths = selected_paths(directory, patterns=patterns, recursive=recursive, max_files=max_files)
     stop = cancelled or (lambda: False)
     records, warnings, counts = [], Counter(), Counter()
     metadata_bytes = 0
-    for index, path in enumerate(paths):
-        if stop():
-            counts["cancelled"] = 1
-            break
-        record = {"file": f"fixture-{index + 1:05d}{path.suffix.lower()}"}
-        if show_filenames:
-            record["file"] = path.relative_to(directory).as_posix()
-        try:
-            source = read_limited(path, MAX_SOURCE_BYTES)
-            digest = hashlib.sha256(source).hexdigest()
-            record["source_sha256"] = digest
-            if not show_filenames:
-                record["file"] = f"fixture-{index + 1:05d}-{digest[:12]}{path.suffix.lower()}"
-            recognition = recognize_catalog_source(source, catalog=catalog, suffix=path.suffix.lower(), cancelled=stop)
-            del source
-            if hashlib.sha256(read_limited(path, MAX_SOURCE_BYTES)).hexdigest() != digest:
-                raise ValueError("source_changed")
-            candidates = [_candidate(candidate) for candidate in recognition.candidates]
-            if not candidates:
-                raise ValueError("no_matching_format")
-            record.update(
-                status="recognized" if len(candidates) == 1 else "ambiguous",
-                requires_review=len(candidates) != 1 or any(candidate["requires_review"] for candidate in candidates),
-                candidates=candidates,
-            )
-        except ImportCancelled:
-            counts["cancelled"] = 1
-            break
-        except Exception as error:
-            if stop():
+
+    def prepare(item, *, cancelled):
+        return _audit_source(
+            item, directory=directory, catalog=catalog, show_filenames=show_filenames, cancelled=cancelled
+        )
+
+    with OrderedPreparation(enumerate(paths), prepare, workers=workers, cancelled=stop) as queue:
+        for _path in paths:
+            try:
+                with queue.take_next() as record:
+                    size = len(json.dumps(record, separators=(",", ":")).encode("utf-8"))
+                    if metadata_bytes + size > MAX_REPORT_BYTES:
+                        counts["metadata_limit_reached"] = 1
+                        break
+                    metadata_bytes += size
+                    records.append(record)
+                    counts[record["status"]] += 1
+                    counts["requires_review"] += record.get("requires_review", False)
+                    for candidate in record.get("candidates", ()):
+                        for warning in candidate["warnings"]:
+                            warnings[warning["classification"], warning["code"]] += warning["occurrence_count"]
+            except (ImportCancelled, PreparationCancelled):
                 counts["cancelled"] = 1
                 break
-            record.update(status="failed", error=_error(error))
-        size = len(json.dumps(record, separators=(",", ":")).encode("utf-8"))
-        if metadata_bytes + size > MAX_REPORT_BYTES:
-            counts["metadata_limit_reached"] = 1
-            break
-        metadata_bytes += size
-        records.append(record)
-        counts[record["status"]] += 1
-        counts["requires_review"] += record.get("requires_review", False)
-        for candidate in record.get("candidates", ()):
-            for warning in candidate["warnings"]:
-                warnings[warning["classification"], warning["code"]] += warning["occurrence_count"]
     summary = {
         "files_selected": len(paths),
         "files_completed": len(records),
@@ -322,6 +354,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--pattern", action="append", help="Repeatable basename glob; default *.pdf and *.csv")
     parser.add_argument("--recursive", action="store_true")
     parser.add_argument("--max-files", type=int, default=MAX_FILES)
+    parser.add_argument(
+        "--workers",
+        type=int,
+        choices=range(1, MAX_PREPARATION_WORKERS + 1),
+        default=DEFAULT_PREPARATION_WORKERS,
+        help="Concurrent preparations, 1..4; default available CPUs capped at 4",
+    )
     parser.add_argument("--report", type=Path, help="Create a NEW local JSON report; never overwrite")
     parser.add_argument(
         "--show-filenames", action="store_true", help="Include relative filenames in the private JSON report"
@@ -349,6 +388,7 @@ def main(argv: list[str] | None = None) -> int:
             max_files=args.max_files,
             show_filenames=args.show_filenames,
             cancelled=stop.is_set,
+            workers=args.workers,
         )
         if args.report is not None:
             with args.report.open("x", encoding="utf-8", newline="") as stream:

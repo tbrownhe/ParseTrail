@@ -40,6 +40,30 @@ Git and routine logs. The default per-file labels are ordinal/digest labels; add
 `--show-filenames` only when relative filenames may be stored in that report.
 This option never adds filenames to console output.
 
+Source preparation runs concurrently on the available CPUs, capped at four.
+Use `--workers 1`, `--workers 2` or `--workers 4` to compare performance or lower
+concurrency. The shared bounded queue includes the current result in its slot
+count, retains only a small lookahead and returns metadata in selection order.
+Each source keeps its own decoder-operation cache and existing process/time/memory
+limits; no source text is shared between operations. Cancellation joins active
+preparations and their decoder children before returning completed metadata.
+An unfinished prepared result is not included in the completed report prefix.
+
+For a reproducible comparison using generated public PDFs and isolated fresh
+profiles, run:
+
+```powershell
+uv run --project client --frozen --python 3.13.15 python `
+  devtools/local_statements/benchmark_v2_imports.py `
+  --output scratch/parallel-import-benchmark --files 8 --rows 100
+```
+
+The output directory must be new and beneath repository `scratch`. The benchmark
+compares preparation and full import with one/two/four workers, checks exact saved
+evidence/binding parity, and measures active decoder calls and retained canonical
+source/evidence bytes. It does not measure total process RSS or the owner's archive;
+serial account checks and writes may limit total speedup.
+
 Selection is shallow by default; use `--recursive` deliberately. Repeat `--pattern`
 for basename globs, or omit it for `*.pdf` and `*.csv`. Glob matching ignores case.
 Nonrecursive literal filenames are addressed directly without listing siblings,
