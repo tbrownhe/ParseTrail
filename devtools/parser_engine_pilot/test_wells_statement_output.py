@@ -95,7 +95,7 @@ def footer_text():
 def test_finite_footer_cells_retain_locations_values_and_activity_count():
     values = footer_cells()
     output = build(values, text=footer_text())
-    assert output.engine_version == "wells-table-pilot-2+statement-v2"
+    assert output.engine_version == "wells-table-pilot-2+statement-v3"
     assert len(output.payload.accounts[0].rows) == 1
     assert output.payload.capture_verified is False
     assert output.payload.independent_balance_verified is True

@@ -9,9 +9,12 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Literal
 
 from parsetrail.core.source_evidence import SourceEvidence, SourceLocation, StatementAccount, StatementPayload
+from parsetrail.core.v2_money_operations import usd_symbol_minor_v1
+from parsetrail.core.v2_wells_loan_lines import _FINANCIAL_OR_DATE as _WELLS_REGISTER_FINANCIAL_OR_DATE
 
 MAX_WARNING_LOCATIONS = 16
 WarningClassification = Literal["informational", "requires_review"]
@@ -33,7 +36,7 @@ def _printed_empty_hsa_cash_table(evidence: SourceEvidence) -> bool:
     payload = evidence.payload
     if (
         evidence.parser_id != "hsa_cash_line_pilot"
-        or evidence.engine_version != "hsa-cash-lines-pilot-2"
+        or evidence.engine_version not in {"hsa-cash-lines-pilot-2", "hsa-cash-lines-pilot-3"}
         or not isinstance(payload, StatementPayload)
         or len(payload.accounts) != 1
         or any(
@@ -72,6 +75,142 @@ def _printed_empty_hsa_cash_table(evidence: SourceEvidence) -> bool:
         and header.page == first.page == last.page
         and first.line == header.line + 1
         and last.line == first.line + 1
+    )
+
+
+def _printed_empty_wells_loan_register(evidence: SourceEvidence) -> bool:
+    """A located explicit empty register, not an inference from equal balances."""
+    payload = evidence.payload
+    if (
+        evidence.parser_id != "pdf_wfloanper_202306"
+        or evidence.engine_version != "wells-loan-lines-pilot-2"
+        or not isinstance(payload, StatementPayload)
+        or not payload.independent_balance_verified
+        or len(payload.accounts) != 1
+        or payload.start.iso is not None
+        or payload.start.provenance != "unknown"
+        or payload.end.iso is None
+        or payload.end.provenance != "observed"
+    ):
+        return False
+    account = payload.accounts[0]
+    endpoints = (account.opening, account.closing)
+    if (
+        account.balance_scope != "principal_component"
+        or account.rows
+        or any(
+            value is None
+            or value.provenance != "observed"
+            or value.raw is None
+            or value.minor is None
+            or len(value.locations) != 1
+            for value in endpoints
+        )
+    ):
+        return False
+    opening, closing = endpoints
+    if opening.minor != closing.minor or opening.minor > 0:
+        return False
+    proofs = [item for item in payload.dispositions if item.code == "wells_loan_empty_register"]
+    if len(proofs) != 1:
+        return False
+    proof = proofs[0]
+    location, first, last = proof.location, opening.locations[0], closing.locations[0]
+    if (
+        location.kind != "pdf_line"
+        or first.kind != "pdf_line"
+        or last.kind != "pdf_line"
+        or location.page != first.page
+        or first.page != last.page
+        or location.end_line != last.line
+        or location.line >= first.line
+        or not 1 <= last.line - first.line <= 3
+        or len(proof.raw_values) != last.line - location.line + 1
+        or not 4 <= len(proof.raw_values) <= 11
+        or last not in payload.end.locations
+    ):
+        return False
+    raw = [" ".join(value.split()) for value in proof.raw_values]
+    opening_index = first.line - location.line
+    if (
+        raw[0] != "Effective Transaction Principal"
+        or raw.count("Date Description Amount Balance") != 1
+        or raw.index("Date Description Amount Balance") >= opening_index
+        or raw[opening_index] != f"Prior Principal Balance {opening.raw}"
+        or raw[-2] != "No transactions within this billing cycle."
+    ):
+        return False
+    match = re.fullmatch(r"(?P<date>\d{2}/\d{2}/\d{2}) Ending Principal Balance (?P<amount>\$[\d,.]+)\*", raw[-1])
+    if match is None or match["amount"] != closing.raw:
+        return False
+    try:
+        if (
+            datetime.strptime(match["date"], "%m/%d/%y").date().isoformat() != payload.end.iso
+            or usd_symbol_minor_v1(opening.raw) != -opening.minor
+            or usd_symbol_minor_v1(closing.raw) != -closing.minor
+        ):
+            return False
+    except ValueError:
+        return False
+    return all(
+        not _WELLS_REGISTER_FINANCIAL_OR_DATE.search(value)
+        for index, value in enumerate(raw)
+        if index not in {opening_index, len(raw) - 1}
+    )
+
+
+def _capital_auto_origination_without_opening(evidence: SourceEvidence, account: StatementAccount) -> bool:
+    """Qualify an evidenced financed amount without inventing an opening."""
+    payload = evidence.payload
+    if (
+        evidence.parser_id != "pdf_capitaloneauto_202402"
+        or evidence.engine_version != "loan-history-lines-pilot-2"
+        or not isinstance(payload, StatementPayload)
+        or len(payload.accounts) != 1
+        or account.balance_scope != "principal_component"
+        or account.opening is not None
+        or account.closing is None
+        or len(account.rows) != 1
+        or any(
+            value.provenance != "observed" or value.iso is None or not value.locations
+            for value in (payload.start, payload.end)
+        )
+        or payload.start.iso > payload.end.iso
+    ):
+        return False
+    row = account.rows[0]
+    if (
+        row.row_role != "activity"
+        or row.date_role != "activity_date"
+        or row.date.provenance != "observed"
+        or row.date.raw is None
+        or row.date.iso is None
+        or not payload.start.iso <= row.date.iso <= payload.end.iso
+        or row.description.provenance != "observed"
+        or row.description.raw is None
+        or (row.description.text or "").casefold() != "amount financed"
+        or row.occurrence != 0
+        or row.running_balance is not None
+        or row.source_account != account.source_identity
+        or row.source_account_form != account.source_identity_form
+        or len(row.components) != 1
+        or row.components[0].role != "principal"
+    ):
+        return False
+    values = (account.closing, row.amount, row.components[0].amount)
+    return (
+        all(
+            value.provenance == "observed" and value.raw is not None and value.minor is not None and value.locations
+            for value in values
+        )
+        and 0 < account.closing.minor == row.amount.minor == row.components[0].amount.minor
+        and row.date.locations
+        == row.description.locations
+        == row.amount.locations
+        == row.components[0].amount.locations
+        and len(row.fragments) == 1
+        and row.fragments[0].channel == "loan_history_line"
+        and row.amount.locations == (row.fragments[0].location,)
     )
 
 
@@ -182,9 +321,12 @@ def _disposition_warning(code: str, raw_values: tuple[str, ...]) -> tuple[Warnin
         "wells_service_fee_information": "Printed service fee information is retained separately from activity",
         "wells_transaction_fee_information": "Printed transaction fee calculations are retained separately from activity",
         "wells_account_product": "The printed business account product is retained as source context",
+        "wells_statement_context": "Printed statement context is retained separately from activity",
     }
     if code in wells_roles:
         return "informational", wells_roles[code]
+    if code == "wells_loan_empty_register":
+        return "informational", "The printed principal register explicitly reports no transactions"
     if code in {
         "summary_chart_axis",
         "summary_chart_context",
@@ -255,6 +397,12 @@ def evidence_import_warnings(evidence: SourceEvidence) -> tuple[ImportWarning, .
                 "informational",
                 "The printed cash table has no transactions and its balances agree",
             )
+        elif _printed_empty_wells_loan_register(evidence):
+            add(
+                "no_activity_captured",
+                "informational",
+                "The printed principal register reports no transactions and its balances agree",
+            )
         else:
             add("no_activity_captured", "requires_review", "No activity rows were captured")
     if start.iso is None or end.iso is None:
@@ -311,6 +459,14 @@ def evidence_import_warnings(evidence: SourceEvidence) -> tuple[ImportWarning, .
                     message = (
                         "Opening principal is not printed; the closing principal and payment components are printed, "
                         "but the principal balance remains unverified"
+                    )
+                elif code == "source_balance_check_unavailable" and _capital_auto_origination_without_opening(
+                    evidence, account
+                ):
+                    classification = "informational"
+                    message = (
+                        "Opening principal is not printed for this origination; the financed amount and closing principal agree, "
+                        "but opening arithmetic remains unverified. Origination posting still requires separate review"
                     )
                 add(
                     code,

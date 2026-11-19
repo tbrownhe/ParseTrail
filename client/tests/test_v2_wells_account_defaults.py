@@ -53,8 +53,10 @@ def catalog_for(evidence):
         ("Business Market Rate Savings", "savings"),
     ],
 )
-def test_printed_product_defaults_without_changing_the_evidence(label, product):
+@pytest.mark.parametrize("engine", ["wells-table-pilot-2+statement-v2", "wells-table-pilot-2+statement-v3"])
+def test_printed_product_defaults_without_changing_the_evidence(label, product, engine):
     evidence = printed_business(label)
+    evidence = evidence.model_copy(update={"engine_version": engine})
     catalog = catalog_for(evidence)
     before = evidence.model_dump_json()
     context = verified_source_account_context(evidence, catalog)
@@ -69,12 +71,16 @@ def test_printed_product_defaults_without_changing_the_evidence(label, product):
     assert evidence.model_dump_json() == before
 
 
-@pytest.mark.parametrize("change", ["missing", "old_engine", "unknown", "duplicate", "wrong_page", "stale_catalog"])
+@pytest.mark.parametrize(
+    "change", ["missing", "old_engine", "unreviewed_engine", "unknown", "duplicate", "wrong_page", "stale_catalog"]
+)
 def test_route_or_filename_alone_cannot_identify_the_business_product(change):
     evidence = printed_business(None if change == "missing" else "Initiate Business Checking SM")
     catalog = catalog_for(evidence)
     if change == "old_engine":
         evidence = evidence.model_copy(update={"engine_version": "wells-table-pilot-1+statement-v1"})
+    if change == "unreviewed_engine":
+        evidence = evidence.model_copy(update={"engine_version": "wells-table-pilot-2+statement-v99"})
     if change in {"unknown", "duplicate", "wrong_page"}:
         roles = list(evidence.payload.dispositions)
         index = next(index for index, item in enumerate(roles) if item.code == "wells_account_product")

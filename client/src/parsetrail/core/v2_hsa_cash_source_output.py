@@ -26,7 +26,7 @@ _MONTH = (
     r"|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\.?"
 )
 _FINANCIAL_OR_DATE = re.compile(
-    r"\$|(?<!\d)\d[\d,]*\.\d{2}(?!\d)|(?<!\d)\d{1,4}[-/]\d{1,2}(?:[-/]\d{1,4})?(?!\d)"
+    r"[$€£¥]|(?<!\d)\d[\d,]*\.\d{2}(?!\d)|(?<!\d)\d{1,4}[-/]\d{1,2}(?:[-/]\d{1,4})?(?!\d)"
     rf"|\b{_MONTH}[ .-]*\d{{1,2}}(?:st|nd|rd|th)?(?:[, .-]*\d{{4}})?\b"
     rf"|\b\d{{1,2}}(?:st|nd|rd|th)?[ .-]*{_MONTH}(?:[, .-]*\d{{4}})?\b"
     rf"|\b\d{{4}}[ .-]*{_MONTH}[ .-]*\d{{1,2}}\b",
@@ -53,19 +53,23 @@ def _framed_rate_totals(lines: PDFLineEvidence, closing_index: int) -> set[str]:
     headers = [index for index, line in enumerate(lines.lines) if line.normalized == "Interest AverageDaily Interest"]
     if len(headers) != 1 or headers[0] != closing_index + 2:
         return set()
-    block = lines.lines[headers[0] - 1 : headers[0] + 12]
-    if len(block) != 13 or any(line.page != lines.lines[closing_index].page for line in block):
-        return set()
-    raw = [line.normalized for line in block]
-    if (
-        re.fullmatch(r"InterestRateScheduleEffective:\d{2}/\d{2}/\d{2}", raw[0]) is None
-        or not _valid_printed_date(raw[0][-8:])
-        or raw[1:5] != ["Interest AverageDaily Interest", "BalanceTier", "Rate Balance Earned YeartoDate", "Period"]
-    ):
-        return set()
-    patterns = (
-        rf"{_USD}-{_USD} {_RATE} {_USD} Total",
-        rf"{_USD}-{_USD} {_RATE} TotalOverdraftFees \$0\.00 {_USD}",
+    variants = (
+        (
+            ("Rate Balance Earned YeartoDate", "Period"),
+            (
+                rf"{_USD}-{_USD} {_RATE} {_USD} Total",
+                rf"{_USD}-{_USD} {_RATE} TotalOverdraftFees \$0\.00 {_USD}",
+            ),
+        ),
+        (
+            ("Rate Balance Earned",),
+            (
+                rf"{_USD}-{_USD} {_RATE} {_USD} YeartoDate",
+                rf"{_USD}-{_USD} {_RATE} Period Total",
+            ),
+        ),
+    )
+    suffix = (
         rf"{_USD}-{_USD} {_RATE}",
         rf"TotalNon-SufficientFundsFees \$0\.00 {_USD}",
         rf"Over\$[0-9][0-9,]* {_RATE}",
@@ -73,9 +77,28 @@ def _framed_rate_totals(lines: PDFLineEvidence, closing_index: int) -> set[str]:
         rf"Total {_USD}",
         rf"Fundsarecurrentlyheldat[A-Za-z]+ Total {_USD} {_USD}",
     )
-    if any(re.fullmatch(pattern, value) is None for pattern, value in zip(patterns, raw[5:], strict=True)):
-        return set()
-    return {block[11].line_id, block[12].line_id}
+    for labels, first_rows in variants:
+        block_size = 3 + len(labels) + len(first_rows) + len(suffix)
+        block = lines.lines[headers[0] - 1 : headers[0] - 1 + block_size]
+        if len(block) != block_size or any(line.page != lines.lines[closing_index].page for line in block):
+            continue
+        raw = [line.normalized for line in block]
+        if (
+            re.fullmatch(r"InterestRateScheduleEffective:\d{2}/\d{2}/\d{2}", raw[0]) is None
+            or not _valid_printed_date(raw[0][-8:])
+            or raw[1:3] != ["Interest AverageDaily Interest", "BalanceTier"]
+            or raw[3 : 3 + len(labels)] != list(labels)
+        ):
+            continue
+        start = 3 + len(labels)
+        if all(
+            re.fullmatch(pattern, value) is not None
+            for pattern, value in zip((*first_rows, *suffix), raw[start:], strict=True)
+        ):
+            # The alternate layout moves header labels into the first rate
+            # rows. Classify those only with the entire same-page frame.
+            return {line.line_id for line in block[start:]}
+    return set()
 
 
 def _empty_cash_dispositions(evidence: HsaCashEvidence, lines: PDFLineEvidence) -> list[SourceDisposition]:
@@ -94,6 +117,28 @@ def _empty_cash_dispositions(evidence: HsaCashEvidence, lines: PDFLineEvidence) 
     closing = lines.lines[last]
     framed_totals = _framed_rate_totals(lines, last)
     proof_lines = set()
+    closure_lines = set()
+    closure_headers = [
+        index for index, line in enumerate(lines.lines[:-1]) if line.normalized == "HealthSavingsAccount(Closed"
+    ]
+    for index in closure_headers if len(closure_headers) == 1 else ():
+        line = lines.lines[index]
+        following = lines.lines[index + 1]
+        if (
+            line.normalized == "HealthSavingsAccount(Closed"
+            and following.page == line.page
+            and following.line == line.line + 1
+            and re.fullmatch(r"\d{2}/\d{2}/\d{2}\)", following.normalized)
+            and _valid_printed_date(following.normalized[:-1])
+        ):
+            result.append(
+                SourceDisposition(
+                    code="hsa_cash_statement_dates",
+                    location=PdfLine(kind="pdf_line", page=line.page, line=line.line, end_line=following.line),
+                    raw_values=(line.raw, following.raw),
+                )
+            )
+            closure_lines.update((line.line_id, following.line_id))
     if (
         first >= 2
         and last == first + 1
@@ -121,7 +166,7 @@ def _empty_cash_dispositions(evidence: HsaCashEvidence, lines: PDFLineEvidence) 
         evidence.printed_closing_minor,
     )
     for line in lines.lines:
-        if first < positions[line.line_id] < last or line.line_id in proof_lines:
+        if first < positions[line.line_id] < last or line.line_id in proof_lines | closure_lines:
             continue
         raw = line.normalized.lstrip("_ ")
         for field in fields:

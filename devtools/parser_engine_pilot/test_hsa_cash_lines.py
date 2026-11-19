@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -58,6 +59,27 @@ def test_cross_page_cash_chain_retains_unknown_description_and_unresolved_lines(
     assert evidence.rows[-1].description.normalized is None
     assert evidence.rows[-1].description.provenance == "unknown_description"
     assert evidence.cash_chain_verified is True
+
+
+def test_source_role_version_preserves_existing_financial_occurrence_namespace():
+    evidence = parse()
+    assert evidence.engine_version == "hsa-cash-lines-pilot-3"
+    for row in evidence.rows:
+        expected = hashlib.sha256(
+            json.dumps(
+                [
+                    evidence.source_sha256,
+                    evidence.definition_sha256,
+                    "hsa-cash-lines-pilot-2",
+                    evidence.line_adapter_version,
+                    evidence.extraction_library,
+                    row.date.page,
+                    row.date.line,
+                ],
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+        assert row.row_id == expected
     assert evidence.coverage_verified is False and evidence.account_balance_reconciled is False
     assert len(evidence.unresolved_section_lines) == 3
     assert parse(library="synthetic-pdf-2").rows[0].row_id != evidence.rows[0].row_id

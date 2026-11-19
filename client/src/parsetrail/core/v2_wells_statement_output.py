@@ -189,6 +189,7 @@ def from_wells_business(
         lines,
         closing=closing,
         end=end,
+        statement_start=start,
         credits=sum(row.amount.minor for row in rows if row.amount.minor > 0),
         debits=-sum(row.amount.minor for row in rows if row.amount.minor < 0),
     )
@@ -253,7 +254,7 @@ def from_wells_business(
         definition_sha256=definition_hash,
         parser_id=definition.parser_id,
         definition_revision=definition.revision,
-        engine_version=table.engine_version + "+statement-v2",
+        engine_version=table.engine_version + "+statement-v3",
         extractor_version=table.extraction_library + "+" + lines.adapter_version,
         payload=payload,
     )

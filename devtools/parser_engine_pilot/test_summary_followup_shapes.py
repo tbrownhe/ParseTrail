@@ -135,7 +135,7 @@ def cash_output(source):
 def test_empty_cash_table_proof_is_located_and_never_certifies_full_capture():
     output = cash_output(empty_cash_lines())
     assert SourceEvidence.model_validate_json(output.model_dump_json()) == output
-    assert output.engine_version == "hsa-cash-lines-pilot-2"
+    assert output.engine_version == "hsa-cash-lines-pilot-3"
     proof = [item for item in output.payload.dispositions if item.code == "hsa_empty_cash_table"]
     assert len(proof) == 1 and (proof[0].location.page, proof[0].location.line) == (1, 5)
     assert proof[0].raw_values == ("Date DescriptionofTransaction (Withdrawal) Balance",)

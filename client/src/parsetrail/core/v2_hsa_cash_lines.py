@@ -15,7 +15,10 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_valida
 from parsetrail.core.v2_pdf_lines import PageLine, PDFLineEvidence
 from parsetrail.core.v2_pdf_routing import PDFRouting
 
-ENGINE_VERSION = "hsa-cash-lines-pilot-2"
+ENGINE_VERSION = "hsa-cash-lines-pilot-3"
+# Source-role refinements do not create new financial occurrences. Reconsider
+# this namespace only when the admitted financial extraction itself changes.
+OBSERVATION_ID_VERSION = "hsa-cash-lines-pilot-2"
 MAX_DEFINITION_BYTES = 64 * 1024
 MAX_DATED_LINE_CHARS = 512
 MAX_MONEY_MINOR = 9_000_000_000_000_000
@@ -283,7 +286,7 @@ def parse_cash_section(
                 [
                     lines.source_sha256,
                     definition_hash,
-                    ENGINE_VERSION,
+                    OBSERVATION_ID_VERSION,
                     lines.adapter_version,
                     lines.extraction_library,
                     line.page,

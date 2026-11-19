@@ -30,8 +30,12 @@ from parsetrail.core.v2_money_operations import usd_or_decimal_2dp_minor_v1
 from parsetrail.core.v2_partial_dates import PartialDateError, resolve_slash_month_day
 from parsetrail.core.v2_pdf_lines import ADAPTER_VERSION, PageLine, PDFLineEvidence
 from parsetrail.core.v2_table_continuations import ContinuationError, RawTableRow, assemble
+from parsetrail.core.v2_wells_dispositions import classify_wells_dispositions
 
-ENGINE_VERSION = "wells-personal-source-pilot-1"
+ENGINE_VERSION = "wells-personal-source-pilot-2"
+# Source-role refinement does not create another financial occurrence. Reconsider
+# this namespace only when the financial extraction semantics themselves change.
+OBSERVATION_ID_VERSION = "wells-personal-source-pilot-1"
 END_DATE = re.compile(r"(?P<date>[A-Z][a-z]+\s+\d{1,2},\s+\d{4})")
 PARTIAL = r"\d{1,2}/\d{1,2}"
 MONEY = r"-?\$?(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)\.\d{2}"
@@ -229,7 +233,7 @@ def from_wells_personal(
         rows.append(
             ObservationEvidence(
                 row_id=hashlib.sha256(
-                    f"{table.source_sha256}:{definition_hash}:{ENGINE_VERSION}:".encode()
+                    f"{table.source_sha256}:{definition_hash}:{OBSERVATION_ID_VERSION}:".encode()
                     + ":".join(f"{item.page}:{item.ordinal}" for item in sources).encode()
                 ).hexdigest(),
                 occurrence=occurrence,
@@ -264,6 +268,15 @@ def from_wells_personal(
         )
     if running != closing:
         raise WellsPersonalError("printed_closing_mismatch")
+    dispositions = classify_wells_dispositions(
+        dispositions,
+        lines,
+        closing=closing,
+        end=end,
+        statement_start=start,
+        credits=sum(row.amount.minor for row in rows if row.amount.minor > 0),
+        debits=-sum(row.amount.minor for row in rows if row.amount.minor < 0),
+    )
     return SourceEvidence(
         schema_version=2,
         source_sha256=table.source_sha256,

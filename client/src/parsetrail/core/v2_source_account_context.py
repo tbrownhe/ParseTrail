@@ -65,7 +65,7 @@ def _wells_printed_product(evidence: SourceEvidence) -> str | None:
     payload = evidence.payload
     if (
         evidence.parser_id != "wells_business_table_pilot"
-        or evidence.engine_version != "wells-table-pilot-2+statement-v2"
+        or evidence.engine_version not in {"wells-table-pilot-2+statement-v2", "wells-table-pilot-2+statement-v3"}
         or not isinstance(payload, StatementPayload)
         or len(payload.accounts) != 1
         or payload.accounts[0].balance_scope != "account_total"

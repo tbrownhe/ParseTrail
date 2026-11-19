@@ -65,7 +65,7 @@ def test_wells_personal_continuation_and_printed_chain() -> None:
     assert len(account.rows[0].fragments) == 2
     assert account.rows[0].description.provenance == "derived"
     assert account.rows[1].description.provenance == "observed"
-    assert [item.code for item in output.payload.dispositions] == ["table_terminator", "unresolved_after_stop"]
+    assert [item.code for item in output.payload.dispositions] == ["wells_non_activity_blank", "unresolved_after_stop"]
     assert output.payload.capture_verified is False
     assert output.payload.independent_balance_verified is True
 
@@ -75,3 +75,22 @@ def test_unresolved_prefix_or_wrong_printed_balance_refuses() -> None:
         from_wells_personal(DEFINITION, *evidence({0: ("1/5", "", "Deposit", "$20.00", "", "$121.00")}))
     with pytest.raises(WellsPersonalError, match="unresolved_before_stop"):
         from_wells_personal(DEFINITION, *evidence({0: ("date?", "", "Deposit", "$20.00", "", "$120.00")}))
+
+
+def test_disposition_output_version_preserves_original_financial_occurrence_namespace():
+    table, text = evidence()
+    output = from_wells_personal(DEFINITION, table, text)
+    assert output.engine_version == "wells-personal-source-pilot-2"
+    expected = hashlib.sha256(
+        f"{table.source_sha256}:{table.definition_sha256}:wells-personal-source-pilot-1:1:1:1:2".encode()
+    ).hexdigest()
+    assert output.payload.accounts[0].rows[0].row_id == expected
+
+
+def test_optional_huge_footer_money_does_not_refuse_or_modify_financial_account():
+    table, text = evidence()
+    baseline = from_wells_personal(DEFINITION, table, text)
+    changed, _ = evidence({4: ("Unknown amount", "", "", "$900,000,000,000,000,000.00", "", "")})
+    output = from_wells_personal(DEFINITION, changed, text)
+    assert output.payload.accounts == baseline.payload.accounts
+    assert output.payload.dispositions[-1].code == "unresolved_after_stop"

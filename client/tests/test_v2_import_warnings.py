@@ -197,6 +197,126 @@ def test_decoded_capital_multiple_payments_and_amount_financed_still_require_rev
         assert rows[0].description.text == "Amount Financed" and rows[0].amount.minor == 1000000
 
 
+def evidenced_origination():
+    return parse_loan_history(
+        LOAN_DEFINITION,
+        loan_lines(
+            interest=False,
+            changes={1: "Current Payment Due: $300.00 Principal Balance: $10,000.00"},
+        ),
+    )
+
+
+def test_capital_evidenced_origination_keeps_missing_opening_unverified_but_informational():
+    evidence = evidenced_origination()
+    before = evidence.model_dump_json()
+    warnings = evidence_import_warnings(evidence)
+    assert not requires(evidence)
+    balance = next(w for w in warnings if w.code == "source_balance_check_unavailable")
+    assert (
+        balance.classification == "informational"
+        and "Origination posting still requires separate review" in balance.message
+    )
+    assert "opening arithmetic remains unverified" in balance.message
+    assert evidence.payload.accounts[0].opening is None
+    assert not evidence.payload.independent_balance_verified and not evidence.payload.capture_verified
+    assert evidence.model_dump_json() == before
+
+
+@pytest.mark.parametrize(
+    "defect",
+    [
+        "closing_mismatch",
+        "zero_amount",
+        "component_mismatch",
+        "missing_component",
+        "interest_component",
+        "date_outside_period",
+        "unobserved_date",
+        "unobserved_closing",
+        "missing_fragment",
+        "repeated_occurrence",
+        "different_identity",
+        "component_location",
+        "unknown_period",
+        "future_engine",
+    ],
+)
+def test_origination_qualification_requires_exact_admitted_financing_shape(defect):
+    evidence = evidenced_origination()
+    account = evidence.payload.accounts[0]
+    row = account.rows[0]
+    component = row.components[0]
+    if defect == "closing_mismatch":
+        account = account.model_copy(
+            update={"closing": account.closing.model_copy(update={"minor": account.closing.minor + 1})}
+        )
+    elif defect == "zero_amount":
+        account = account.model_copy(update={"closing": account.closing.model_copy(update={"minor": 0})})
+        row = row.model_copy(
+            update={
+                "amount": row.amount.model_copy(update={"minor": 0}),
+                "components": (
+                    component.model_copy(update={"amount": component.amount.model_copy(update={"minor": 0})}),
+                ),
+            }
+        )
+    elif defect in {"component_mismatch", "component_location"}:
+        changed = (
+            {"minor": component.amount.minor + 1}
+            if defect == "component_mismatch"
+            else {"locations": account.closing.locations}
+        )
+        row = row.model_copy(
+            update={
+                "components": (component.model_copy(update={"amount": component.amount.model_copy(update=changed)}),)
+            }
+        )
+    elif defect == "missing_component":
+        row = row.model_copy(update={"components": ()})
+    elif defect == "interest_component":
+        row = row.model_copy(update={"components": (component.model_copy(update={"role": "interest"}),)})
+    elif defect == "date_outside_period":
+        row = row.model_copy(update={"date": row.date.model_copy(update={"iso": "2026-02-01"})})
+    elif defect == "unobserved_date":
+        row = row.model_copy(update={"date": row.date.model_copy(update={"provenance": "assumed"})})
+    elif defect == "unobserved_closing":
+        account = account.model_copy(update={"closing": account.closing.model_copy(update={"provenance": "derived"})})
+    elif defect == "missing_fragment":
+        row = row.model_copy(update={"fragments": ()})
+    elif defect == "repeated_occurrence":
+        row = row.model_copy(update={"occurrence": 1})
+    elif defect == "different_identity":
+        row = row.model_copy(update={"source_account": "other"})
+    elif defect == "unknown_period":
+        evidence = evidence.model_copy(
+            update={
+                "payload": evidence.payload.model_copy(
+                    update={"start": evidence.payload.start.model_copy(update={"iso": None, "provenance": "unknown"})}
+                )
+            }
+        )
+    else:
+        evidence = evidence.model_copy(update={"engine_version": "future-engine"})
+    changed = with_account(evidence, account.model_copy(update={"rows": (row,)}))
+    assert any(w.code == "source_balance_check_unavailable" for w in requires(changed))
+
+
+def test_valid_origination_does_not_suppress_other_unknown_source_money():
+    evidence = evidenced_origination()
+    unknown = SourceDisposition(
+        code="unclassified_monetary_line",
+        location=PdfLine(kind="pdf_line", page=1, line=99),
+        raw_values=("Unknown $3.00",),
+    )
+    changed = evidence.model_copy(
+        update={
+            "payload": evidence.payload.model_copy(update={"dispositions": (*evidence.payload.dispositions, unknown)})
+        }
+    )
+    assert [w.code for w in requires(changed)] == ["unclassified_monetary_line"]
+
+
 @pytest.mark.parametrize(
     "changes,error",
     [
