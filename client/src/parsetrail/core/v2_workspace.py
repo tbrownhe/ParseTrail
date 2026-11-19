@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import sqlite3
 from collections.abc import Callable, Mapping
+from contextvars import ContextVar
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
@@ -22,6 +23,15 @@ from parsetrail.core.v2_import_accounts import (
 )
 from parsetrail.core.v2_institutions import Institution, catalog_institutions, merge_institutions
 from parsetrail.core.v2_loan_automation import LoanAutomationResult, post_imported_loan_payment
+from parsetrail.core.v2_parallel_preparation import (
+    DEFAULT_PREPARATION_WORKERS,
+    OrderedPreparation,
+    PreparationCancelled,
+    detached_error,
+)
+from parsetrail.core.v2_parallel_preparation import (
+    preparation_workers as validate_preparation_workers,
+)
 from parsetrail.core.v2_preferences import V2Preferences, default_preferences_path, load_preferences, save_preferences
 from parsetrail.core.v2_prepared_import import PreparedImportSession
 from parsetrail.core.v2_profile_store import (
@@ -56,6 +66,27 @@ class ImportSkipped(WorkspaceError):
 
 FormatReview = Callable[[Path, FormatRecognition], FormatSelection | None]
 ImportReview = Callable[[Path, ImportAccountReview], ImportAccountPlan | None]
+
+# An ordered consumer hands prepared authority through the ordinary import_file
+# wrapper, preserving its post-import automation and public callback interface.
+# This context is consumed once; no producer thread or GUI owns its authority.
+_batch_preparation: ContextVar[tuple | None] = ContextVar("v2_batch_preparation", default=None)
+
+
+@dataclass(slots=True)
+class _BatchPreparation:
+    source_sha256: str | None = None
+    suffix: str | None = None
+    catalog: VerifiedCatalog | None = None
+    prepared: PreparedImportSession | None = None
+    error: Exception | None = None
+
+    def close(self):
+        if self.prepared is not None:
+            self.prepared.close()
+        if self.error is not None:
+            detached_error(self.error)
+        self.prepared = self.catalog = self.error = self.source_sha256 = self.suffix = None
 
 
 @dataclass(frozen=True)
@@ -403,6 +434,16 @@ class V2Workspace:
             raise WorkspaceError("import_review_conflict")
         if cancelled is not None and cancelled():
             raise ImportCancelled("cancelled")
+        pending = _batch_preparation.get()
+        if pending is not None and pending[0] is self and pending[1] == source_path:
+            _batch_preparation.set(None)
+            if review_import is not None:
+                return self._import_with_accounts(
+                    source_path, review_import, cancelled=cancelled, preparation=pending[2]
+                )
+            return self._import_prepared_format(
+                source_path, pending[2], review_format=review_format, cancelled=cancelled
+            )
         if review_import is not None:
             return self._import_with_accounts(source_path, review_import, cancelled=cancelled)
         catalog = self.catalog_cache.load_current()
@@ -458,7 +499,100 @@ class V2Workspace:
         with V2ProfileStore.open(self.profile_path) as store:
             return import_catalog_source(store, source, catalog=catalog, suffix=suffix, cancelled=cancelled)
 
-    def _import_with_accounts(self, source_path, review_import, *, cancelled=None):
+    def _prepare_batch_source(self, source_path, known_sources, *, cancelled):
+        """Recognize privately; no profile, preferences or account plans in producers."""
+        result = _BatchPreparation()
+        try:
+            if cancelled():
+                raise ImportCancelled("cancelled")
+            source, result.suffix = _read_source(source_path)
+            result.source_sha256 = hashlib.sha256(source).hexdigest()
+            result.catalog = self.catalog_cache.load_current()
+            if result.catalog is None:
+                raise WorkspaceError("verified_catalog_missing")
+            if result.source_sha256 not in known_sources:
+                result.prepared = PreparedImportSession(
+                    source, catalog=result.catalog, suffix=result.suffix, cancelled=cancelled
+                )
+            return result
+        except ImportCancelled:
+            result.close()
+            raise
+        except Exception as error:
+            # A speculative failure is authoritative only if those exact source
+            # bytes and catalog are still current when its ordered turn arrives.
+            result.error = detached_error(error)
+            return result
+        except BaseException:
+            result.close()
+            raise
+
+    @staticmethod
+    def _session_from_preparation(source, suffix, catalog, preparation, *, cancelled):
+        if preparation is not None:
+            same_inputs = (
+                preparation.source_sha256 == hashlib.sha256(source).hexdigest()
+                and preparation.suffix == suffix
+                and preparation.catalog is not None
+                and preparation.catalog.snapshot == catalog.snapshot
+            )
+            if same_inputs:
+                if preparation.error is not None:
+                    raise preparation.error
+                if preparation.prepared is not None:
+                    return preparation.prepared
+            preparation.close()
+        return PreparedImportSession(source, catalog=catalog, suffix=suffix, cancelled=cancelled)
+
+    def _import_prepared_format(self, source_path, preparation, *, review_format=None, cancelled=None):
+        """Ordered source-only/explicit-format apply without repeating preparation."""
+        source, suffix = _read_source(source_path)
+        catalog = self.catalog_cache.load_current()
+        if catalog is None:
+            raise WorkspaceError("verified_catalog_missing")
+        with V2ProfileStore.open(self.profile_path, read_only=True) as store:
+            if store.source_imported(source):
+                digest = hashlib.sha256(source).hexdigest()
+                return SourceImportResult("already_imported", digest, store.load_import(digest).evidence)
+        with self._session_from_preparation(source, suffix, catalog, preparation, cancelled=cancelled) as prepared:
+            with V2ProfileStore.open(self.profile_path, read_only=True) as store:
+                recognition = prepared.format_review(store)
+            if review_format is not None and suffix == ".csv":
+                selection = review_format(source_path, recognition)
+                if cancelled is not None and cancelled():
+                    raise ImportCancelled("cancelled")
+                if selection is None:
+                    raise ImportSkipped("import_skipped")
+            else:
+                if len(recognition.candidates) != 1:
+                    raise CatalogImportError("catalog_ambiguous_match")
+                selection = recognition.selection(recognition.candidates[0].parser_id)
+            if cancelled is not None and cancelled():
+                raise ImportCancelled("cancelled")
+            prepared.select_format(selection, cancelled=cancelled)
+
+            def check_current_inputs():
+                current, current_suffix = _read_source(source_path)
+                if current_suffix != suffix or hashlib.sha256(current).hexdigest() != recognition.source_sha256:
+                    raise WorkspaceError("source_changed_since_preview")
+                current_catalog = self.catalog_cache.load_current()
+                if current_catalog is None:
+                    raise WorkspaceError("verified_catalog_missing")
+                if current_catalog.snapshot != catalog.snapshot:
+                    raise CatalogImportError("catalog_selection_catalog_changed")
+
+            check_current_inputs()
+            with V2ProfileStore.open(self.profile_path) as store:
+                return import_prepared_catalog_source(
+                    store,
+                    prepared,
+                    catalog=catalog,
+                    selection=selection,
+                    cancelled=cancelled,
+                    before_write=check_current_inputs,
+                )
+
+    def _import_with_accounts(self, source_path, review_import, *, cancelled=None, preparation=None):
         notice = ""
         while True:
             if cancelled is not None and cancelled():
@@ -472,7 +606,8 @@ class V2Workspace:
                     source_hash = hashlib.sha256(source).hexdigest()
                     saved = store.load_import(source_hash)
                     return SourceImportResult("already_imported", source_hash, saved.evidence)
-            with PreparedImportSession(source, catalog=catalog, suffix=suffix, cancelled=cancelled) as prepared:
+            with self._session_from_preparation(source, suffix, catalog, preparation, cancelled=cancelled) as prepared:
+                preparation = None
                 with V2ProfileStore.open(self.profile_path, read_only=True) as store:
                     review = prepared.review(store, preferences=self.preferences(), recovery_notice=notice)
                 decision = automatic_import_plan(review)
@@ -542,51 +677,72 @@ class V2Workspace:
         progress: Callable[[int, BatchFileResult], None] | None = None,
         review_format: FormatReview | None = None,
         review_import: ImportReview | None = None,
+        preparation_workers: int = DEFAULT_PREPARATION_WORKERS,
     ) -> BatchImportResult:
-        """Continue after per-file failures; cancellation keeps completed imports."""
+        """Prepare bounded lookahead; review and commit in original selection order."""
+        validate_preparation_workers(preparation_workers)
         if not paths or len(paths) > MAX_BATCH_FILES or any(not isinstance(path, Path) for path in paths):
             raise WorkspaceError("source_batch_selection_invalid")
         if self.catalog_cache.load_current() is None:
             raise WorkspaceError("verified_catalog_missing")
+        with V2ProfileStore.open(self.profile_path, read_only=True) as store:
+            known_sources = frozenset(store.source_ids())
+
+        def prepare(path, *, cancelled):
+            return self._prepare_batch_source(path, known_sources, cancelled=cancelled)
+
         files = []
         was_cancelled = False
-        for index, path in enumerate(paths):
-            if cancelled is not None and cancelled():
-                was_cancelled = True
-                files.extend(BatchFileResult(remaining, "not_attempted") for remaining in paths[index:])
-                break
-            try:
-                imported = self.import_file(
-                    path, cancelled=cancelled, review_format=review_format, review_import=review_import
-                )
-                result = BatchFileResult(
-                    path,
-                    imported.status,
-                    imported.source_sha256,
-                    loan_automation=imported.loan_automation,
-                    statement_value_automation=imported.statement_value_automation,
-                )
-                if any(
-                    outcome is not None and outcome.status == "cancelled"
-                    for outcome in (imported.loan_automation, imported.statement_value_automation)
-                ):
+        with OrderedPreparation(
+            paths, prepare, dispose=lambda item: item.close(), workers=preparation_workers, cancelled=cancelled
+        ) as queue:
+            for index, path in enumerate(paths):
+                if cancelled is not None and cancelled():
                     was_cancelled = True
-            except ImportSkipped:
-                result = BatchFileResult(path, "skipped")
-            except ImportCancelled:
-                result = BatchFileResult(path, "cancelled")
-                was_cancelled = True
-            except Exception as exc:
-                code = (
-                    str(exc)
-                    if isinstance(exc, (WorkspaceError, CatalogImportError, ProfileFormatError, SourcePipelineError))
-                    else type(exc).__name__
-                )
-                result = BatchFileResult(path, "failed", error_code=code)
-            files.append(result)
-            if progress is not None:
-                progress(index + 1, result)
-            if was_cancelled:
-                files.extend(BatchFileResult(remaining, "not_attempted") for remaining in paths[index + 1 :])
-                break
+                    files.extend(BatchFileResult(remaining, "not_attempted") for remaining in paths[index:])
+                    break
+                try:
+                    with queue.take_next() as preparation:
+                        token = _batch_preparation.set((self, path, preparation))
+                        try:
+                            imported = self.import_file(
+                                path, cancelled=cancelled, review_format=review_format, review_import=review_import
+                            )
+                        finally:
+                            _batch_preparation.reset(token)
+                        result = BatchFileResult(
+                            path,
+                            imported.status,
+                            imported.source_sha256,
+                            loan_automation=imported.loan_automation,
+                            statement_value_automation=imported.statement_value_automation,
+                        )
+                        if any(
+                            outcome is not None and outcome.status == "cancelled"
+                            for outcome in (imported.loan_automation, imported.statement_value_automation)
+                        ):
+                            was_cancelled = True
+                        # Release the full returned evidence model before the
+                        # current slot is disposed and a replacement is submitted.
+                        del imported
+                except ImportSkipped:
+                    result = BatchFileResult(path, "skipped")
+                except (ImportCancelled, PreparationCancelled):
+                    result = BatchFileResult(path, "cancelled")
+                    was_cancelled = True
+                except Exception as exc:
+                    code = (
+                        str(exc)
+                        if isinstance(
+                            exc, (WorkspaceError, CatalogImportError, ProfileFormatError, SourcePipelineError)
+                        )
+                        else type(exc).__name__
+                    )
+                    result = BatchFileResult(path, "failed", error_code=code)
+                files.append(result)
+                if progress is not None:
+                    progress(index + 1, result)
+                if was_cancelled:
+                    files.extend(BatchFileResult(remaining, "not_attempted") for remaining in paths[index + 1 :])
+                    break
         return BatchImportResult(tuple(files), was_cancelled)
