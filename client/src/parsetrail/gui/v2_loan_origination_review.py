@@ -142,7 +142,7 @@ class V2LoanOriginationReview(QDialog):
         def read(store, _cancelled):
             accounts = tuple(
                 a
-                for a in store.financial_accounts()
+                for a in store.active_financial_accounts()
                 if a.kind in {"asset", "liability"}
                 and (
                     a.tracking_scope in {"account_total", "cash_component"}

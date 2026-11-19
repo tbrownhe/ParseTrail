@@ -7,12 +7,149 @@ from pathlib import Path
 from threading import Event, Lock
 
 from PySide6.QtCore import Qt, QThread, Signal
-from PySide6.QtWidgets import QDialog, QDialogButtonBox, QLabel, QLineEdit, QListWidget, QListWidgetItem, QVBoxLayout
+from PySide6.QtWidgets import (
+    QDialog,
+    QDialogButtonBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QListWidget,
+    QListWidgetItem,
+    QProgressBar,
+    QVBoxLayout,
+    QWidget,
+)
 
 from parsetrail.core.v2_format_recognition import ImportCancelled
 from parsetrail.core.v2_import_accounts import ImportAccountPlan, ImportAccountReview
 from parsetrail.core.v2_workspace import BatchImportResult, V2Workspace, WorkspaceError
+from parsetrail.gui.v2_csv_import_preview import _ExplicitDecisionButton
 from parsetrail.gui.v2_evidence_preview import _money
+
+
+class V2ImportProgress(QDialog):
+    """Reusable GUI-owned progress; updates never process nested native events.
+
+    Closing requests cancellation once and keeps the surface until the worker
+    has actually stopped. Hiding it for account review has no cancellation side
+    effect (unlike QProgressDialog reset/auto-close behavior).
+    """
+
+    cancel_remaining = Signal()
+
+    def __init__(self, paths, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Importing statements")
+        self.setWindowModality(Qt.WindowModal)
+        self.paths = paths
+        self._cancelling = False
+        self._finished = False
+        self.setFixedWidth(600)
+        layout = QVBoxLayout(self)
+        self.body = QWidget(self)
+        self.body.setFocusPolicy(Qt.StrongFocus)
+        self.body.setAccessibleName("Import in progress; Tab reaches Cancel remaining imports")
+        body = QVBoxLayout(self.body)
+        body.setContentsMargins(0, 0, 0, 0)
+        self.file_context = QLabel()
+        self.file_context.setWordWrap(True)
+        self.file_context.setTextFormat(Qt.PlainText)
+        self.file_context.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        body.addWidget(self.file_context)
+        self.selected_path = QLineEdit()
+        self.selected_path.setReadOnly(True)
+        self.selected_path.setFocusPolicy(Qt.ClickFocus)
+        self.selected_path.setAccessibleName("Current statement file path; select to copy")
+        body.addWidget(self.selected_path)
+        self.phase = QLabel()
+        self.phase.setWordWrap(True)
+        self.phase.setTextFormat(Qt.PlainText)
+        body.addWidget(self.phase)
+        self.completed = QProgressBar()
+        self.completed.setRange(0, len(paths))
+        self.completed.setValue(0)
+        self.completed.setFormat("%v of %m files completed")
+        self.completed.setAccessibleName("Completed files, not current file percentage")
+        body.addWidget(self.completed)
+        self.outcomes = QLabel("No files completed yet.")
+        self.outcomes.setWordWrap(True)
+        self.outcomes.setTextFormat(Qt.PlainText)
+        body.addWidget(self.outcomes)
+        consequence = QLabel("Completed imports remain saved if you cancel.")
+        consequence.setWordWrap(True)
+        body.addWidget(consequence)
+        layout.addWidget(self.body)
+        actions = QHBoxLayout()
+        actions.addStretch()
+        self.cancel_button = _ExplicitDecisionButton("Cancel remaining imports")
+        self.cancel_button.clicked.connect(self.reject)
+        actions.addWidget(self.cancel_button)
+        layout.addLayout(actions)
+        self.set_current(1, paths[0], "Reading and checking the document…")
+
+    def set_current(self, index, path, phase):
+        self.file_context.setText(f"File {index} of {len(self.paths)}: {path.name}")
+        self.file_context.setToolTip(str(path))
+        self.selected_path.setText(str(path))
+        self.selected_path.setCursorPosition(0)
+        if not self._cancelling:
+            self.phase.setText(phase)
+
+    def update_outcomes(self, outcomes):
+        self.completed.setValue(len(outcomes))
+        counts = {
+            status: sum(item.status == status for item in outcomes)
+            for status in ("imported", "already_imported", "skipped", "failed")
+        }
+        text = (
+            f"{counts['imported']} imported · {counts['already_imported']} already saved · "
+            f"{counts['skipped']} skipped · {counts['failed']} failed."
+        )
+        if outcomes:
+            text += f" Last: {outcomes[-1].path.name} — {outcomes[-1].status.replace('_', ' ')}."
+        self.outcomes.setText(text)
+
+    def present(self, avoid=()):
+        """Keep Cancel away from the preceding review's decision coordinates."""
+        self.adjustSize()
+        parent = self.parentWidget()
+        if parent is not None:
+            self.move(parent.frameGeometry().center() - self.rect().center())
+        self.layout().activate()
+        # The compact surface normally sits above the large review's footer.
+        # Check actual screen coordinates as fonts, DPI and window sizes vary.
+        for _ in range(8):
+            cancel_rect = self.cancel_button.rect().translated(
+                self.cancel_button.mapToGlobal(self.cancel_button.rect().topLeft())
+            )
+            if not any(cancel_rect.intersects(rect) for rect in avoid):
+                break
+            self.move(self.x(), self.y() - self.cancel_button.height() - 12)
+        self.show()
+        self.body.setFocus(Qt.OtherFocusReason)
+
+    def cancelling(self):
+        self._cancelling = True
+        self.cancel_button.setEnabled(False)
+        self.cancel_button.setText("Cancelling…")
+        self.phase.setText("Cancelling remaining imports… Waiting for the current operation to stop safely.")
+        self.body.setFocus(Qt.OtherFocusReason)
+
+    def finish(self):
+        self._finished = True
+        self.hide()
+
+    def reject(self):
+        if not self._finished and not self._cancelling:
+            self.cancelling()
+            self.cancel_remaining.emit()
+
+    def closeEvent(self, event):
+        if self._finished:
+            event.accept()
+        else:
+            self.reject()
+            event.ignore()
 
 
 def loan_automation_summary(outcome) -> str:

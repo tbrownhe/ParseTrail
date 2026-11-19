@@ -264,7 +264,7 @@ class V2OpeningReview(QDialog):
         layout.addWidget(buttons)
         self.account.blockSignals(True)
         with V2ProfileStore.open(workspace.profile_path, read_only=True) as store:
-            accounts = store.financial_accounts()
+            accounts = store.active_financial_accounts()
         labels = cash_account_labels(accounts)
         for account in accounts:
             self.account.addItem(labels[account.id], account.id)

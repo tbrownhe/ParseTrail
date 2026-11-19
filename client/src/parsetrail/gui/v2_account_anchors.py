@@ -161,6 +161,11 @@ class V2AccountAnchors(QDialog):
         self._values_tab()
         self._lifecycle_tab()
         self._source_values_tab()
+        self.consolidation_history = QPlainTextEdit()
+        self.consolidation_history.setReadOnly(True)
+        self.consolidation_history.setTabChangesFocus(True)
+        self.consolidation_history.setAccessibleName("Combined account records and known statement numbers")
+        self.tabs.addTab(self.consolidation_history, "Combined account records")
         self.status = self._label()
         layout.addWidget(self.status)
         close = QDialogButtonBox(QDialogButtonBox.Close)
@@ -169,7 +174,9 @@ class V2AccountAnchors(QDialog):
         self.account.blockSignals(True)
         try:
             with V2ProfileStore.open(profile, read_only=True) as store:
-                accounts = store.financial_accounts()
+                accounts = store.active_financial_accounts()
+                if account_id is not None:
+                    account_id = store.canonical_account_id(account_id)
             labels = cash_account_labels(accounts)
             for account in accounts:
                 self.account.addItem(labels[account.id], account.id)
@@ -437,6 +444,7 @@ class V2AccountAnchors(QDialog):
 
     def refresh(self, *_args):
         self.snapshot = None
+        self.consolidation_history.clear()
         self.history_boundary_note.setToolTip("")
         for field in (
             self.opening_amount,
@@ -478,6 +486,31 @@ class V2AccountAnchors(QDialog):
             if account_id is not None:
                 with V2ProfileStore.open(self.profile, read_only=True) as store:
                     self.snapshot = store.account_anchor_snapshot(account_id, as_of=self._as_of or date.today())
+                    members = set(store.account_members(account_id))
+                    names = {account.id: account.name for account in store.financial_accounts()}
+                    numbers = (
+                        ", ".join(
+                            dict.fromkeys(
+                                f"ending {identity[-4:]}" if form in {"full", "last_four"} else identity
+                                for identity, form in store.account_source_identities(account_id)
+                            )
+                        )
+                        or "None established"
+                    )
+                    records = [
+                        f"{item.created_at}\nCombined {names[item.absorbed_account_id]} into {names[item.kept_account_id]}.\n"
+                        f"Reference: {item.reference}\nReason: {item.reason}"
+                        for item in store.account_consolidation_history()
+                        if item.absorbed_account_id in members
+                    ]
+                    self.consolidation_history.setPlainText(
+                        "Known statement identifiers: "
+                        + numbers
+                        + "\n\n"
+                        + ("\n\n".join(records) if records else "No account records have been consolidated here.")
+                        + "\n\nOriginal statement identities and financial entries remain in their saved history. "
+                        "Number changes do not establish complete history or create a transfer."
+                    )
         except (ProfileFormatError, sqlite3.Error, OSError):
             pass
         if self.snapshot is None:
@@ -678,6 +711,17 @@ class V2AccountAnchors(QDialog):
 
     def _source_selected(self):
         candidate = self._source_candidate()
+        self.source_target.blockSignals(True)
+        self.source_target.clear()
+        self.source_target.addItem("Record a new source closing value", None)
+        if candidate is not None and self.snapshot is not None:
+            for row in self.snapshot.dated_values:
+                if row.state == "active" and row.account_id == candidate.account_id:
+                    self.source_target.addItem(
+                        f"Source correction of {row.origin} value {row.value_id}: {row.value_date.isoformat()}, {_money(row.amount_minor * self._natural())}",
+                        row.value_id,
+                    )
+        self.source_target.blockSignals(False)
         self.source_reference.clear()
         self.source_reason.clear()
         self.source_ack.setChecked(False)
@@ -1034,6 +1078,7 @@ class V2AccountAnchors(QDialog):
         amount, value_date = _typed_minor(self.value_amount.text()), _typed_date(self.value_date.text())
         reference, reason = self.value_reference.text().strip(), self.value_reason.text().strip()
         corrects = self.value_target.currentData()
+        owner = next((row.account_id for row in snapshot.dated_values if row.value_id == corrects), snapshot.account.id)
         conflicts = self._manual_conflicts()
         allow_conflict = self.value_allow_conflict.isChecked()
         account = snapshot.account
@@ -1054,7 +1099,7 @@ class V2AccountAnchors(QDialog):
             "Confirm manual dated value",
             message,
             lambda store: store.record_reviewed_dated_value(
-                account.id,
+                owner,
                 amount_minor=amount * (1 if account.kind == "asset" else -1),
                 value_date=value_date,
                 tracking_scope=account.tracking_scope,
@@ -1110,7 +1155,7 @@ class V2AccountAnchors(QDialog):
             "Confirm nonposting source closing value",
             message,
             lambda store: store.record_reviewed_source_value(
-                snapshot.account.id,
+                candidate.account_id,
                 candidate.candidate_id,
                 expected_candidate_sha256=candidate.version,
                 expected_basis_sha256=snapshot.basis_sha256,
@@ -1139,7 +1184,7 @@ class V2AccountAnchors(QDialog):
             "Confirm dated-value withdrawal",
             message,
             lambda store: store.withdraw_reviewed_dated_value(
-                snapshot.account.id,
+                row.account_id,
                 row.value_id,
                 expected_value_version=row.version,
                 expected_basis_sha256=snapshot.basis_sha256,

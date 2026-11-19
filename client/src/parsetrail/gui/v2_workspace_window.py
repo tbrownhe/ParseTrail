@@ -24,7 +24,6 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPlainTextEdit,
-    QProgressDialog,
     QPushButton,
     QStackedWidget,
     QVBoxLayout,
@@ -43,10 +42,12 @@ from parsetrail.core.v2_source_import import ImportCancelled, SourceImportResult
 from parsetrail.core.v2_statement_summary_review import SUMMARY_VALUE_PARSERS
 from parsetrail.core.v2_workspace import ImportSkipped, V2Workspace, folder_source_files
 from parsetrail.gui.v2_account_binding_review import V2AccountBindingReview
+from parsetrail.gui.v2_account_consolidation import V2AccountConsolidation
 from parsetrail.gui.v2_batch_account_assignment import V2BatchAccountAssignment
 from parsetrail.gui.v2_batch_import import (
     V2BatchImportReport,
     V2BatchImportWorker,
+    V2ImportProgress,
     import_automation_summary,
     import_failure_guidance,
     review_import_accounts,
@@ -66,7 +67,7 @@ from parsetrail.gui.v2_documents_table import DocumentFilters, DocumentsFilterBa
 from parsetrail.gui.v2_evidence_preview import V2EvidencePreview
 from parsetrail.gui.v2_financial_account import V2FinancialAccountDialog
 from parsetrail.gui.v2_form_state import install_form_styles, install_initial_focus, set_field_state
-from parsetrail.gui.v2_gui_lifetime import exec_disposable
+from parsetrail.gui.v2_gui_lifetime import clear_exception_tracebacks, exec_disposable
 from parsetrail.gui.v2_import_account_review import V2ImportAccountReview
 from parsetrail.gui.v2_opening_review import V2OpeningReview
 from parsetrail.gui.v2_original_document import open_original_document
@@ -118,9 +119,17 @@ class V2WorkspaceWindow(QMainWindow):
         install_initial_focus(self)
         self.workspace = workspace
         self.import_worker: V2ImportWorker | V2BatchImportWorker | None = None
-        self.progress: QProgressDialog | None = None
+        self.progress: V2ImportProgress | None = None
         self.import_preview = None
+        self._import_generation = 0
+        self._import_review_request = None
+        self._import_presentation = None
+        self._import_avoid = ()
+        self._import_presentation_timer = QTimer(self)
+        self._import_presentation_timer.setSingleShot(True)
+        self._import_presentation_timer.timeout.connect(self._show_import_surface)
         self._close_after_import = False
+        self._consolidation_dialog = None
         self._inventory_worker = None
         self._inventory_generation = 0
         self._inventory_requested = False
@@ -221,6 +230,8 @@ class V2WorkspaceWindow(QMainWindow):
         self.add_financial_account_action.triggered.connect(self._add_account)
         self.edit_financial_account_action = accounts_menu.addAction("Edit financial account…")
         self.edit_financial_account_action.triggered.connect(self._edit_account)
+        self.consolidate_accounts_action = accounts_menu.addAction("Consolidate accounts…")
+        self.consolidate_accounts_action.triggered.connect(self._consolidate_accounts)
         self.account_anchors_action = accounts_menu.addAction("Reviewed openings, dated values and closure…")
         self.account_anchors_action.triggered.connect(self._review_account_anchors)
         self.source_values_action = accounts_menu.addAction("Review statement closing values…")
@@ -548,6 +559,10 @@ class V2WorkspaceWindow(QMainWindow):
         self.edit_account_button = QPushButton("Edit account…")
         self.edit_account_button.clicked.connect(self._edit_account)
         account_actions.addWidget(self.edit_account_button)
+        self.consolidate_accounts_button = QPushButton("Consolidate accounts…")
+        self.consolidate_accounts_button.setObjectName("consolidateAccounts")
+        self.consolidate_accounts_button.clicked.connect(self._consolidate_accounts)
+        account_actions.addWidget(self.consolidate_accounts_button)
         self.openings_button = QPushButton("Review source-backed openings…")
         self.openings_button.clicked.connect(self._review_openings)
         account_actions.addWidget(self.openings_button)
@@ -1138,6 +1153,7 @@ class V2WorkspaceWindow(QMainWindow):
             or self._reports_writing()
             or getattr(getattr(self._review_widget, "jobs", None), "writing", False)
             or getattr(getattr(self._transfers_view, "jobs", None), "writing", False)
+            or getattr(getattr(self._consolidation_dialog, "jobs", None), "writing", False)
         )
 
     def _reports_writing(self):
@@ -1457,6 +1473,14 @@ class V2WorkspaceWindow(QMainWindow):
         self.document_details_action.setEnabled(available)
         for button in (self.account_button, self.edit_account_button, self.categories_button, self.openings_button):
             button.setEnabled(batch_available)
+        consolidation_available = (
+            batch_available
+            and not self.profile_jobs.pending
+            and not self.inventory_pending
+            and self.accounts_list.count() >= 2
+        )
+        self.consolidate_accounts_action.setEnabled(consolidation_available)
+        self.consolidate_accounts_button.setEnabled(consolidation_available)
         self.batch_accounts_button.setEnabled(batch_available)
         self.batch_accounts_action.setEnabled(batch_available)
         self.review_document_button.setEnabled(available)
@@ -1951,13 +1975,9 @@ class V2WorkspaceWindow(QMainWindow):
         if self.import_worker is not None:
             return
         self.import_worker = V2ImportWorker(self.workspace, source_path, self)
-        self.import_worker.finished.connect(self._import_finished)
+        self.import_worker.finished.connect(self._import_finished, Qt.QueuedConnection)
         self.import_worker.import_review_requested.connect(self._review_import_accounts)
-        self.progress = QProgressDialog("Importing source evidence…", "Cancel import", 0, 0, self)
-        self.progress.setWindowTitle("ParseTrail 2.0 import")
-        self.progress.setWindowModality(Qt.WindowModal)
-        self.progress.setMinimumDuration(0)
-        self.progress.canceled.connect(self.import_worker.cancel)
+        self._begin_import_progress((source_path,))
         self.import_button.setEnabled(False)
         self.import_folder_button.setEnabled(False)
         self.recover_source_action.setEnabled(False)
@@ -1968,7 +1988,6 @@ class V2WorkspaceWindow(QMainWindow):
             self.restore_profile_action,
         ):
             action.setEnabled(False)
-        self.progress.show()
         self._update_controls()
         self.import_worker.start()
 
@@ -1978,13 +1997,9 @@ class V2WorkspaceWindow(QMainWindow):
         self.import_worker = V2BatchImportWorker(self.workspace, paths, self)
         self.import_worker.progressed.connect(self._batch_progress)
         self.import_worker.outcomes_changed.connect(self._batch_outcomes)
-        self.import_worker.finished.connect(self._import_finished)
+        self.import_worker.finished.connect(self._import_finished, Qt.QueuedConnection)
         self.import_worker.import_review_requested.connect(self._review_import_accounts)
-        self.progress = QProgressDialog("Importing source evidence…", "Cancel remaining imports", 0, len(paths), self)
-        self.progress.setWindowTitle("ParseTrail 2.0 batch import")
-        self.progress.setWindowModality(Qt.WindowModal)
-        self.progress.setMinimumDuration(0)
-        self.progress.canceled.connect(self.import_worker.cancel)
+        self._begin_import_progress(paths)
         self.import_button.setEnabled(False)
         self.import_folder_button.setEnabled(False)
         self.recover_source_action.setEnabled(False)
@@ -1995,57 +2010,163 @@ class V2WorkspaceWindow(QMainWindow):
             self.restore_profile_action,
         ):
             action.setEnabled(False)
-        self.progress.show()
         self._update_controls()
         self.import_worker.start()
 
+    def _begin_import_progress(self, paths):
+        self._import_generation += 1
+        self._import_review_request = None
+        self._import_avoid = ()
+        self.progress = V2ImportProgress(paths, self)
+        self.progress.cancel_remaining.connect(self._cancel_import)
+        self._queue_import_surface("progress")
+
+    def _queue_import_surface(self, kind, request=None):
+        # A parent-owned timer crosses the native button/close callback boundary.
+        # Replacing this tuple invalidates any earlier decision's pending handoff.
+        self._import_presentation = (self._import_generation, self.import_worker, kind, request)
+        self._import_presentation_timer.start(0)
+
+    def _show_import_surface(self):
+        pending, self._import_presentation = self._import_presentation, None
+        if pending is None:
+            return
+        generation, worker, kind, request = pending
+        if generation != self._import_generation or worker is not self.import_worker or self.progress is None:
+            return
+        if worker.isFinished():
+            # Its queued finished delivery owns the outcome and cleanup. Do not
+            # flash an obsolete surface ahead of that delivery.
+            return
+        if kind == "review":
+            if request is not self._import_review_request or request.decided.is_set():
+                return
+            if worker.cancel_event.is_set() or self._close_after_import:
+                request.finish(None)
+                self._cancel_import()
+                return
+            try:
+                if self.import_preview is None:
+                    self.import_preview = V2ImportAccountReview(self.workspace.institutions(), self)
+                    self.import_preview.abbreviated_matching_changed.connect(self._set_abbreviated_matching)
+                    self.import_preview.import_preview_mode_changed.connect(self._set_import_preview_mode)
+                    self.import_preview.cancel_remaining.connect(self._cancel_import)
+                    self.import_preview.decision_submitted.connect(self._import_decision_submitted)
+                self.progress.hide()
+                self.import_preview.present(request)
+            except Exception:
+                request.fail()
+                self._import_review_request = None
+                self._queue_import_surface("progress")
+            return
+        # A new input request always outranks a queued automatic-work handoff.
+        active = self._import_review_request
+        if active is not None and not active.decided.is_set():
+            return
+        if request is not None and request is not active:
+            return
+        if self.import_preview is not None:
+            self.import_preview._cancel_original()
+            if self.import_preview.isVisible():
+                self._import_avoid = (
+                    tuple(
+                        button.rect().translated(button.mapToGlobal(button.rect().topLeft()))
+                        for button in (
+                            self.import_preview.next_button,
+                            self.import_preview.import_button,
+                            self.import_preview.skip_button,
+                        )
+                        if button.isVisible()
+                    )
+                    or self._import_avoid
+                )
+            self.import_preview.hide()
+        self.progress.present(self._import_avoid)
+
+    def _import_decision_submitted(self, request, decision):
+        if request is not self._import_review_request or self.import_worker is None or self.progress is None:
+            return
+        # Retained primary/secondary slots preserve the preceding decision
+        # coordinates while the neutral page is already showing.
+        self._import_avoid = tuple(
+            button.rect().translated(button.mapToGlobal(button.rect().topLeft()))
+            for button in (
+                self.import_preview.next_button,
+                self.import_preview.import_button,
+                self.import_preview.skip_button,
+            )
+        )
+        self.progress.set_current(
+            request.index,
+            request.path,
+            "Saving the confirmed original, accounts and assignments…"
+            if decision == "import"
+            else "Skipping this file… Provisional accounts are not saved.",
+        )
+        self._queue_import_surface("progress", request)
+
+    def _cancel_import(self):
+        worker = self.import_worker
+        if worker is None:
+            return
+        worker.cancel()
+        request, self._import_review_request = self._import_review_request, None
+        if request is not None:
+            request.finish(None)
+        if self.progress is not None:
+            self.progress.cancelling()
+            self._queue_import_surface("progress")
+
     def _review_import_accounts(self, request):
         worker = self.import_worker
-        if worker is None or worker.cancel_event.is_set() or self._closing:
+        if (
+            worker is None
+            or self.sender() is not worker
+            or worker.cancel_event.is_set()
+            or self._closing
+            or self._close_after_import
+        ):
             request.finish(None)
             return
-        if self.progress is not None:
-            self.progress.hide()
-        try:
-            if self.import_preview is None:
-                self.import_preview = V2ImportAccountReview(self.workspace.institutions(), self)
-                self.import_preview.abbreviated_matching_changed.connect(self._set_abbreviated_matching)
-                self.import_preview.import_preview_mode_changed.connect(self._set_import_preview_mode)
-                self.import_preview.cancel_remaining.connect(
-                    lambda: self.import_worker.cancel() if self.import_worker else None
-                )
-            self.import_preview.present(request)
-        except Exception:
-            # A queued GUI failure must always release the waiting worker. It
-            # reports a preview failure, rather than claiming the user cancelled.
-            request.fail()
+        self._import_review_request = request
+        self._queue_import_surface("review", request)
 
     def _batch_progress(self, count: int, filename: str) -> None:
-        if self.progress is not None:
-            self.progress.setLabelText(f"Processed {count} source(s); last: {filename}")
-            self.progress.setValue(count)
-        if self.import_preview is not None:
-            paths = getattr(self.import_worker, "paths", ())
-            if count < len(paths):
-                self.import_preview.wait_for_next(count + 1, len(paths), paths[count])
-            else:
-                self.import_preview._waiting(f"Processed {count} file(s); last: {filename}. Finishing the queue…")
+        if self.import_worker is None or self.sender() is not self.import_worker or self.progress is None:
+            return
+        self._import_review_request = None
+        paths = self.import_worker.paths
+        self.progress.set_current(
+            count + 1 if count < len(paths) else count,
+            paths[count] if count < len(paths) else paths[-1],
+            "Reading and checking the document…" if count < len(paths) else "Finishing the batch report…",
+        )
+        self._queue_import_surface("progress")
 
     def _batch_outcomes(self, outcomes):
-        if self.import_preview is not None:
-            self.import_preview.update_queue(outcomes)
+        if self.import_worker is not None and self.sender() is self.import_worker and self.progress is not None:
+            self.progress.update_outcomes(outcomes)
 
     def _import_finished(self) -> None:
         worker = self.import_worker
         if worker is None:
             return
+        if not worker.wait(1000):
+            QTimer.singleShot(10, self, self._import_finished)
+            return
         result, error = worker.result, worker.error
+        clear_exception_tracebacks(error)
+        self._import_generation += 1
+        self._import_presentation_timer.stop()
+        self._import_presentation = None
+        self._import_review_request = None
+        self._import_avoid = ()
         if self.import_preview is not None:
             self.import_preview.finish_queue()
             self.import_preview.deleteLater()
             self.import_preview = None
         if self.progress is not None:
-            self.progress.close()
+            self.progress.finish()
             self.progress.deleteLater()
             self.progress = None
         self.import_worker = None
@@ -2090,7 +2211,7 @@ class V2WorkspaceWindow(QMainWindow):
                 + ("; ".join(automatic) + ". " if automatic else "")
                 + "Other activity or statement values may need review."
             )
-            V2BatchImportReport(result, self).exec()
+            exec_disposable(V2BatchImportReport(result, self))
             return
         if result is not None:
             self.refresh(select_source=result.source_sha256)
@@ -2321,10 +2442,42 @@ class V2WorkspaceWindow(QMainWindow):
             self.refresh()
             break
 
+    def _consolidate_accounts(self) -> None:
+        if (
+            self._closing
+            or self._consolidation_dialog is not None
+            or self._write_in_progress()
+            or self.profile_jobs.pending
+            or self.inventory_pending
+            or self.accounts_list.count() < 2
+        ):
+            return
+        if not self._discard_review():
+            return
+        current = self.accounts_list.currentItem()
+        selected_id = current.data(Qt.UserRole) if current is not None else None
+        dialog = V2AccountConsolidation(self.workspace.profile_path, selected_id, parent=self)
+        dialog.consolidated.connect(self._accounts_consolidated)
+        dialog.jobs.busy_changed.connect(self._embedded_busy)
+        self._consolidation_dialog = dialog
+        try:
+            exec_disposable(dialog)
+        finally:
+            self._consolidation_dialog = None
+            self._update_controls()
+
+    def _accounts_consolidated(self, kept_id: str) -> None:
+        # refresh owns revision invalidation for documents, reports and positions.
+        # Set the account selection after it captures the previous selection.
+        self.refresh(select_source=self._selected_source())
+        self._inventory_account_selection = kept_id
+        self.navigation.setCurrentRow(self.ACCOUNTS)
+        self.status.setText("Account records consolidated. The kept account contains their saved history.")
+
     def _edit_account(self, *_args) -> None:
         try:
             with V2ProfileStore.open(self.workspace.profile_path, read_only=True) as store:
-                accounts = store.financial_accounts()
+                accounts = store.active_financial_accounts()
             identities = cash_account_labels(accounts)
         except (ProfileFormatError, sqlite3.Error, OSError) as exc:
             QMessageBox.warning(self, "Account details are unavailable", str(exc))
@@ -2397,9 +2550,11 @@ class V2WorkspaceWindow(QMainWindow):
             self._close_after_job = True
             if self.import_worker is not None:
                 self._close_after_import = True
-                self.import_worker.cancel()
+                self._cancel_import()
             self.status.setText("Finishing the current operation before closing…")
             return False
+        if self._consolidation_dialog is not None:
+            self._consolidation_dialog.reject()
         if not self._discard_review() or not self._reset_embedded_views():
             return False
         self.profile_jobs.close()
@@ -2416,7 +2571,7 @@ class V2WorkspaceWindow(QMainWindow):
     def closeEvent(self, event) -> None:
         if self.import_worker is not None:
             self._close_after_import = True
-            self.import_worker.cancel()
+            self._cancel_import()
             self.status.setText("Cancelling import before closing…")
             event.ignore()
             return
@@ -2425,6 +2580,8 @@ class V2WorkspaceWindow(QMainWindow):
             self.status.setText("Finishing the confirmed operation before closing…")
             event.ignore()
             return
+        if self._consolidation_dialog is not None:
+            self._consolidation_dialog.reject()
         if not self._discard_review() or not self._reset_embedded_views():
             event.ignore()
             return

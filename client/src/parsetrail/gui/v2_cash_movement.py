@@ -193,7 +193,7 @@ class V2CashMovementDialog(QDialog):
         def read(store, _cancelled):
             store.connection.execute("BEGIN")
             try:
-                financial = store.financial_accounts()
+                financial = store.active_financial_accounts()
                 accounts = tuple(account for account in financial if account.kind == "asset")
                 return accounts, cash_account_labels(financial)
             finally:

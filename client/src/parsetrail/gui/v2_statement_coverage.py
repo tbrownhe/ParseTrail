@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections import Counter
 from pathlib import Path
 
 from PySide6.QtCore import QAbstractTableModel, QModelIndex, Qt
@@ -739,16 +738,15 @@ class V2StatementCoverageDialog(QDialog):
                 openings = store.earliest_source_openings()
                 comparisons = store.statement_journal_comparisons()
                 accounts = store.financial_accounts()
+                active = store.active_financial_accounts()
                 reviewed = frozenset(
                     (account.id, review.source_sha256)
                     for account in accounts
                     for review in store.statement_source_reviews(account.id)
                 )
-                labels = cash_account_labels(accounts)
-                counts = Counter(account.name for account in accounts)
-                duplicates = {name for name, count in counts.items() if count > 1}
-                labels = {account.id: labels[account.id] for account in accounts if account.name in duplicates}
-                result = rows, openings, comparisons, reconciliation, reviewed, len(accounts), labels
+                active_labels = cash_account_labels(active)
+                labels = {account.id: active_labels[store.canonical_account_id(account.id)] for account in accounts}
+                result = rows, openings, comparisons, reconciliation, reviewed, len(active), labels
             finally:
                 store.connection.execute("ROLLBACK")
             return result

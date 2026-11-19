@@ -128,6 +128,7 @@ class V2ImportAccountReview(QDialog):
     """One reusable two-step surface for every PDF/CSV and queue request."""
 
     cancel_remaining = Signal()
+    decision_submitted = Signal(object, str)
     abbreviated_matching_changed = Signal(bool)
     import_preview_mode_changed = Signal(str)
 
@@ -893,13 +894,17 @@ class V2ImportAccountReview(QDialog):
             )
             self.status.setToolTip(str(error))
             return
-        self.request.finish(plan)
+        request = self.request
         self._waiting("Importing original, accounts and assignments together… No transactions are posted.")
+        self.decision_submitted.emit(request, "import")
+        request.finish(plan)
 
     def _skip(self):
         if self.request is not None and not self.request.decided.is_set():
-            self.request.finish(None)
+            request = self.request
             self._waiting("File skipped. Provisional accounts were not saved. Waiting for the next file…")
+            self.decision_submitted.emit(request, "skip")
+            request.finish(None)
 
     def _waiting(self, text):
         self._cancel_original()

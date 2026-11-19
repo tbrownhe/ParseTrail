@@ -132,7 +132,7 @@ class V2TangibleAssets(QDialog):
         today = date.today()
 
         def read(store, _cancelled):
-            accounts = tuple(a for a in store.financial_accounts() if a.product_type == "tangible_asset")
+            accounts = tuple(a for a in store.active_financial_accounts() if a.product_type == "tangible_asset")
             return accounts, store.tangible_asset_values(as_of=today)
 
         self.jobs.submit("snapshot", read)

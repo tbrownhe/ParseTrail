@@ -152,7 +152,7 @@ class V2TransferWorkspace(QWidget):
 
         def read(store, _cancelled):
             return store.resolution_snapshot(preferences=preferences), {
-                account.id: account.name for account in store.financial_accounts()
+                account.id: store.effective_account_name(account.id) for account in store.financial_accounts()
             }
 
         self.jobs.submit("snapshot", read)

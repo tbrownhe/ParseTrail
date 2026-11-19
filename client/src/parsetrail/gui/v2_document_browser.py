@@ -85,7 +85,7 @@ class DocumentInventoryWorker(QThread):
             with V2ProfileStore.open(self.profile, read_only=True) as store:
                 store.connection.set_progress_handler(lambda: int(self.isInterruptionRequested()), 1000)
                 self.result = store.document_summaries()
-                self.accounts = store.financial_accounts()
+                self.accounts = store.active_financial_accounts()
         except Exception as exc:
             self.error = exc
 

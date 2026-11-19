@@ -127,7 +127,11 @@ class V2SourceAccountReview(QDialog):
         with V2ProfileStore.open(self.profile, read_only=True) as store:
             evidence = store.load_import(self.source_sha256).evidence
             self.bindings = store.source_account_bindings(self.source_sha256)
-            accounts = store.financial_accounts()
+            accounts = store.active_financial_accounts()
+            self._canonical_accounts = {
+                account.id: store.canonical_account_id(account.id) for account in store.financial_accounts()
+            }
+            aliases = {account.id: store.account_numbers(account.id) for account in accounts}
             posted_rows = store.journal_history_row_ids(self.source_sha256)
             overlap_rows = store.source_overlap_history_row_ids(self.source_sha256)
             self.ordinary_blockers = {
@@ -150,8 +154,9 @@ class V2SourceAccountReview(QDialog):
             else "Allow abbreviated account numbers to automatically match to ledger"
         )
         candidates = tuple(
-            LedgerAccountCandidate(account.id, account.institution_key, account.kind, account.full_account_number)
+            LedgerAccountCandidate(account.id, account.institution_key, account.kind, number)
             for account in accounts
+            for number in aliases[account.id] or (None,)
         )
         self.matches = tuple(
             match_verified_source_account(
@@ -188,7 +193,7 @@ class V2SourceAccountReview(QDialog):
         for binding, match in zip(self.bindings, self.matches, strict=True):
             count = counts[(binding.source_identity, binding.source_identity_form)]
             if binding.ledger_account_id is not None:
-                assigned = f"Assigned: {names.get(binding.ledger_account_id, 'Unknown account')}"
+                assigned = f"Assigned: {names.get(self._canonical_accounts.get(binding.ledger_account_id, binding.ledger_account_id), 'Unknown account')}"
             elif match.status == "automatic":
                 assigned = (
                     f"Suggested account: {names.get(match.ledger_account_id, 'Unknown account')} · confirm to assign"
@@ -233,6 +238,7 @@ class V2SourceAccountReview(QDialog):
                 account_id = match.ledger_account_id
             elif account_id is None and match.offer_enable_abbreviated_matching and len(match.suggestions) == 1:
                 account_id = match.suggestions[0]
+        account_id = self._canonical_accounts.get(account_id, account_id)
         self.account_combo.setCurrentIndex(max(0, self.account_combo.findData(account_id)))
         self._update_controls()
 
