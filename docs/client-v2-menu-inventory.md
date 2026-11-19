@@ -86,6 +86,19 @@ cannot silently discard a staged Review, and report/next-review handoffs explici
 reveal their target if filters hide it. Pending actions use the next-action cue;
 completed value/history actions remain neutral.
 
+Accounts offers **Consolidate accounts** beside Edit and in its menu. It combines
+compatible bookkeeping records of the same actual account/obligation after an
+explicit conflict preview and irreversible confirmation. Original numbers, evidence
+and journal history remain retained; ordinary lists and reports show the continuing
+account. **Combined account records** in account history exposes the decision.
+This creates no payment or financial entry. Unsupported histories stay blocked;
+see the [single-store contract](client-v2-unified-store.md#consolidating-records-of-one-actual-account).
+
+Import reading/saving/advancing uses one compact progress window with current file,
+phase, completed counts and Cancel. Account/review panels appear only when input
+is needed, then return to compact progress. The final report preserves each file's
+actual outcome and completed writes through cancellation.
+
 Import uses Choose accounts → Review import for PDF/CSV. Compatible
 existing accounts and Create a new account are offered together; all source
 groups are represented. Managed products supply class/scope defaults, while

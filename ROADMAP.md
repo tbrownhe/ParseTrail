@@ -109,6 +109,17 @@ and a unified compact progress handoff remain design discussion; replacement car
 identities retain explicit many-to-one associations. Human/platform/release gates
 remain separate from agent verification.
 
+[Account consolidation and unified import progress](docs/work/2026-11-18-account-consolidation-progress.md)
+implements the subsequent V2-3/4/5/6/UX refinement: audited irreversible consolidation
+of compatible records of one actual account, original-owner evidence/journal history,
+conflict preflight, continuing identity in matching/reports and retained-number history.
+The first version excludes named loan, lifecycle and saved-reconciliation histories.
+One compact import progress surface now surrounds account/review decisions, with
+guarded cancellation and final per-file outcomes. Fresh pre-release schema 28 replaces
+27 for new development profiles; existing owner trials remain pinned. Synthetic
+financial checks, native Windows journeys and independent design/integrity/acceptance
+checks pass; owner, other-platform and release acceptance remain separate.
+
 V2-5 distinguishes newly computed live reconciliation checks from explicitly
 saved decisions and their current/stale input versions. The
 [durable-history packet](docs/work/2026-10-25-v2-reconciliation-history.md) completed

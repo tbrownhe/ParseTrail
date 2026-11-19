@@ -32,12 +32,17 @@ Check the interpretation before saving: changing the format of an already
 imported document is not supported yet. Selecting the exact file again reuses its
 saved interpretation; you can cancel before importing if the preview is wrong.
 
-During batches, account setup and recognized review keep stable primary-action
-positions; **Skip this file** stays separate beside Cancel. Alt+N continues to
+During imports, a compact progress window shows the current file, phase, completed
+count and outcomes. Account setup and review open only when input is needed, then
+return to compact progress. The previous file's rows are never shown while the next
+file is read. Cancel preserves completed imports and waits for the actual outcome;
+the final report lists each file's result.
+
+Account setup and recognized review keep stable primary-action positions;
+**Skip this file** stays separate beside Cancel. Alt+N continues to
 review, Alt+I imports, Alt+B returns to accounts, Alt+S skips, and Alt+O opens the
-original. Ordinary letters stay in text editors. While the next file is read, the
-pending screen shows its filename and queue status without the previous document's
-rows or warnings. Repeated Enter on pending does nothing; Tab reaches Cancel.
+original. Ordinary letters stay in text editors. Repeated Enter while waiting does
+nothing; Tab reaches Cancel.
 
 If a warning appears, compare the original with the displayed dates and amounts.
 Import retains the evidence and warnings; it does not approve complete capture or
@@ -49,6 +54,16 @@ content. Replacing the interpretation of a saved source is still a separate gap.
 Open **Review** for the selected document to decide what its transactions mean.
 Accounts created separately on the Accounts page still need explicit document/row
 assignment. Creating or assigning an account adds no spending.
+
+If you created separate records for replacement card numbers of the **same actual
+account or obligation**, use **Accounts → Consolidate accounts**. Choose the record
+to keep and the duplicate to combine, check the affected documents and identifiers,
+then confirm they represent the same account. The original evidence and posted
+history remain intact; future matching can use the retained numbers. The combined
+account's review contains **Combined account records** with the decision history.
+This adds no financial transaction and cannot be undone in the application; keep a
+backup first. The preview explains conflicts, such as duplicate openings, to correct
+before trying again. Use Transfers for payments or transfers between separate accounts.
 
 Supported Fidelity 401(k), Vanguard and Fidelity HSA period summaries use **Review
 statement value**. Their component totals remain evidence; recording the printed

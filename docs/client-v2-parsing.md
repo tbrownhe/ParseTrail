@@ -72,6 +72,15 @@ original files. The interactive plan atomically retains evidence, creates only
 referenced account drafts and assigns complete source groups; ledger posting
 remains a separate explicit review. Headless source-only import remains available.
 
+The workspace presents one compact progress window while preparing, saving or
+advancing an import. The reusable account/review surface is visible only for a
+current undecided request; both surfaces share workspace ownership and guarded
+queued handoffs. Filename, phase, completed counts and cancellation consequence
+stay current. Neutral waiting state clears prior evidence synchronously before the
+worker is released. Completion waits for the worker's actual outcome, preserves
+confirmed writes and disposes resources on the GUI thread. A final report gives
+per-file outcomes; cancellation never reports an already committed file as cancelled.
+
 Institution identity comes only from reliable signed parser context or separately
 authored account metadata. Generic column compatibility does not identify a bank.
 Institution names/IDs are managed separately from the set of supported formats;

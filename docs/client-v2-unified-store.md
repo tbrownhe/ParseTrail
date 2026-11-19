@@ -31,7 +31,7 @@ evidence belong in [packet records](work/README.md).
 
 ## Profile format and lifecycle
 
-The current pre-release profile schema is revision 27; check `SCHEMA_VERSION`
+The current pre-release profile schema is revision 28; check `SCHEMA_VERSION`
 in `v2_profile_store.py` when opening a packet. Format markers, exact table and
 foreign-key shapes, append-only triggers and SQLite integrity are checked before
 writable use. Older disposable pilots, 1.x, unknown, damaged and newer shapes
@@ -62,6 +62,49 @@ read reuses the reconciliation inventory for pending counts within its transacti
 unavailable reconciliation must not omit pending sources.
 
 ## Authored accounts and decisions
+
+### Consolidating records of one actual account
+
+**Accounts → Consolidate accounts** combines two bookkeeping records of the same
+actual account or continuing obligation, commonly following a replacement card.
+It is irreversible in the application; recovery uses a prior verified backup.
+It is not a payment, balance transfer or method of combining separate debts.
+Compatible institution, product, class, currency and tracking scope are required.
+The preview identifies the retained record, affected documents/rows/entries,
+retained identifiers and specific conflicts before explicit same-account confirmation.
+
+Append-only `AccountConsolidations` stores the decision, original member IDs,
+reference/reason, timestamp and checked account/profile basis. Original accounts,
+source bytes, evidence, bindings, journal entries, allocations and proofs are not
+rewritten. Raw financial-account reads preserve those owners; active choices omit
+absorbed records. Reports, positions, document associations, drill-down and future
+matching resolve the continuing identity. Full authored/source numbers and reliable
+abbreviated source identities remain eligible under existing matching preferences.
+The account history exposes both records and masked retained identifiers. Workbook
+export includes profile-wide consolidation metadata separately from period postings.
+This decision adds no income, expense, transfer or opening and does not establish
+coverage or reconcile the combined history.
+
+At most one active opening may survive; duplicate openings require correction or
+withdrawal before consolidation. No opening stays unknown. Conflicting same-date
+values, active within-account transfers/settlements/resolution links and already
+consumed repeated occurrences block confirmation. Pending possible repeats require
+the ordinary occurrence review before posting. Original-owner corrections and
+withdrawals remain available. Old bound pending activity may still be reviewed;
+new bindings and ordinary metadata changes cannot target absorbed records. A future
+receipt may satisfy a previously authored expected destination through its retained
+account identity without changing that historical instruction.
+
+The first version refuses lifecycle/closure, saved reconciliation, loan component
+and loan origination histories. New saved reconciliations of consolidated accounts
+are also refused. When the earliest opening source belongs to an absorbed member,
+a new source-backed opening under the retained ID is unavailable; a reviewed manual
+opening remains available. Consolidation does not broaden those accounting shapes.
+Stale previews, changed physical profiles, cancellation and failures leave no partial
+membership. Exact retries return the saved decision. Profile initialization performs
+extension creation and validation within one transaction.
+
+### Account metadata and import
 
 Financial accounts retain nullable managed `product_type` metadata independently
 of asset/liability kind, institution and tracking scope. Products constrain class
@@ -618,7 +661,7 @@ no journals or budget expense. A missing rate leaves a later estimate unknown;
 explicit zero permits a flat estimate. Entered values remain available on their own
 dates. Origination-created estimates default to the source activity date, separately
 editable; standalone estimates default to today. Values do not establish acquisition
-cost or previously unknown book openings. Fresh schema27 profiles include the protected
+cost or previously unknown book openings. Fresh profiles include the protected
 Loan interest category through explicit initialization, without writes on read.
 
 The sidebar order is Documents, Accounts, Review, Transfers, Budget, Reports. Loan

@@ -6,6 +6,14 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
+[Account consolidation and unified import progress](docs/work/2026-11-18-account-consolidation-progress.md)
+is implemented and agent-verified: audited same-obligation consolidation with conflict
+preflight, immutable original history, retained numbers and continuing matching/report
+identity, plus compact import progress between decisions. Native Windows journeys and
+independent integrity/design/acceptance checks pass. Named unsupported histories remain
+blocked; fresh schema 28 requires a new development profile. Owner/platform/release
+acceptance remains separate.
+
 [Import review follow-up and batch safety](docs/work/2026-11-18-import-review-followup.md)
 is implemented and agent-verified: remaining named statement variants, stable batch
 controls/Alt shortcuts/current previews, audited empty-HSA handling and printed Wells
