@@ -135,6 +135,13 @@ keeps confirmed imports. Read-only auditing shares the queue. Synthetic benchmar
 show preparation gains with exact evidence parity; archive-wide throughput and
 other-platform/owner/release gates remain separate. No profile schema change.
 
+[Family-level import-warning review](docs/work/2026-11-18-import-warning-family-review.md)
+identifies pending V2-3/P2-4 refinements from the owner-selected audit: 17 strong
+text/proof candidates, a shared Wells fee-section auditor and Citi benefit-caption
+provenance/date-context extraction work. These are bounded family capabilities,
+not per-document exemptions. Cohort counts are not clearance promises; parser
+implementation and replay/negative-case acceptance remain pending.
+
 V2-5 distinguishes newly computed live reconciliation checks from explicitly
 saved decisions and their current/stale input versions. The
 [durable-history packet](docs/work/2026-10-25-v2-reconciliation-history.md) completed

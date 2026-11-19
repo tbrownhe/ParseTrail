@@ -6,6 +6,12 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
+[Family-level import-warning review](docs/work/2026-11-18-import-warning-family-review.md)
+is complete: 17 strong first-pass candidates, shared Wells fee-section work and
+Citi graphic-caption/provenance/extraction improvements identified without per-file
+exceptions. Independent review and baseline boundary checks pass. Parser changes
+are proposed, not implemented; see the record for proof requirements and priorities.
+
 [Bounded parallel import preparation](docs/work/2026-11-18-parallel-import-preparation.md)
 is implemented and agent-verified: up to four concurrent source preparations,
 ordered account review/writes and automation, bounded lookahead/cancellation and
