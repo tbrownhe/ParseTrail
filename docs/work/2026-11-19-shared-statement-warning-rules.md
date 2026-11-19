@@ -191,5 +191,23 @@ and its remaining source variants stay deferred as agreed. No per-document
 exception was used. Warnings are reduced without declaring complete capture.
 
 All19 changed/new Python files pass Ruff check/format and whitespace checks. Hooks
-and fresh pinned test closeout follow below. No schema or saved-evidence mutation
+and fresh pinned test closeout are recorded below. No schema or saved-evidence mutation
 is selected; owner, other supported platforms and release gates remain separate.
+
+## Commits and fresh test
+
+- `21cb0f9`: isolated baseline-confirmed register-test seeded-category correction.
+- `aa7ad87`: shared Wells roles, HSA/loan warning proofs, stable financial namespaces,
+  preserved product defaults and parser/integration regressions.
+- `4376ea4`: current contracts and measured945-source results/remaining limits.
+  Normal pre-commit hooks passed for all three commits.
+- Fresh empty candidate:
+  `scratch/v2-owner-fresh-20261119-shared-rules-8203bc68/Open-workflow-test.cmd`,
+  pinned to `4376ea4`, unchanged schema28, 322 public runtime files and23 development
+  definitions. Zero sources/journals/consolidations and only protected Loan interest;
+  ephemeral catalog key discarded. Native Windows hidden startup smoke passed:
+  ready, empty Documents, Import enabled, expected sidebar, unchanged profile bytes,
+  raw Qt exit0. START-HERE explains the measured21-file improvement, remaining254,
+  retained origination/closure boundaries, preferences and immutable saved evidence.
+  Existing trials stay untouched; owner-added content/logs/screenshots in the new
+  candidate become private after handoff. No owner acceptance is claimed.
