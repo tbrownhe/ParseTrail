@@ -105,6 +105,9 @@ def test_actual_yamaha_category_repayment_opening_closing_and_no_principal_inven
     evidence, bank = _profile(path, yamaha_source)
     charge, payment = evidence.payload.accounts[0].rows
     with V2ProfileStore.open(path) as store:
+        initial_loan_interest = store.connection.execute(
+            "SELECT * FROM Accounts WHERE id='builtin:loan-interest'"
+        ).fetchall()
         frame = store.source_interpretation_snapshot(evidence.source_sha256, kind="register")
         assert frame.kind == "register"
         row = next(r for r in frame.rows if r.row_id == charge.row_id)
@@ -153,9 +156,10 @@ def test_actual_yamaha_category_repayment_opening_closing_and_no_principal_inven
         check = next(c for c in store.statement_reconciliation_checks() if c.account_id == "register")
         assert check.reconciled and check.rule == "v2-statement-reconciliation-6"
         assert store.loan_history() == ()
-        assert store.connection.execute(
-            "SELECT count(*) FROM Accounts WHERE id='builtin:loan-interest'"
-        ).fetchone() == (0,)
+        assert (
+            store.connection.execute("SELECT * FROM Accounts WHERE id='builtin:loan-interest'").fetchall()
+            == initial_loan_interest
+        )
         assert store._active_consumed() == {bank: -2000, charge.row_id: -1000, payment.row_id: 2000}
         assert store.load_import(evidence.source_sha256).evidence == evidence
     restored = tmp_path / "restored.db"
