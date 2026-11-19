@@ -167,6 +167,24 @@ Report: `scratch/parallel-import-native-20261118/benchmark-eight-100/benchmark.j
 Independent final review reports no actionable findings; its focused suite passed
 33 tests with the same one Windows symlink skip. All seven changed/new Python files
 pass Ruff check/format and git diff whitespace checks pass. No owner data was used.
-Fresh pinned test preparation and commit closeout follow below. Owner acceptance,
+Fresh pinned test preparation and commit closeout are recorded below. Owner acceptance,
 other supported platforms, signing/publication and daily-profile activation remain
 separate.
+
+## Commits and fresh test
+
+- `79535ae`: shared bounded ordered preparation queue, all batch import paths and
+  headless concurrency/freshness/parity tests.
+- `e46b997`: shared audit preparation, public benchmark, native lifetime/progress
+  tests and affected contracts/status. Normal pre-commit hooks passed for both.
+- Fresh empty candidate:
+  `scratch/v2-owner-fresh-20261118-parallel-53b02ca7/Open-workflow-test.cmd`.
+  Pinned to `e46b997`, unchanged schema 28, 322 public runtime files and 23
+  development definitions; no sources, journals or account-consolidation records.
+  Only protected Loan interest exists. Ephemeral catalog signing key discarded.
+  Native Windows hidden startup smoke passed: ready, empty Documents, Import
+  enabled, expected sidebar, unchanged profile bytes and raw Qt exit0. START-HERE
+  explains automatic worker selection, ordered questions/progress/cancellation,
+  default-off existing preferences, audit controls and measured benchmark limits.
+  Existing trials are untouched; all owner-added sources/profile/logs/screenshots
+  in this new candidate remain private after handoff. No owner acceptance claimed.
