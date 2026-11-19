@@ -32,7 +32,12 @@ _CASH_AVAILABLE_HEADER = re.compile(
     re.I,
 )
 _YEARS = r"[1-9][0-9]? year\(s\)"
+_REPAYMENT_TERM = r"[1-9][0-9]? (?:year|month)\(s\)"
+_REPAYMENT_CREDIT = rf"(?:(?:Revolving )?Credit limit|Available (?:Revolving )?credit) {_DISCLOSURE_MONEY}"
 _REPAYMENT_MINIMUM = re.compile(rf"Only the minimum payment {_YEARS} {_DISCLOSURE_MONEY}", re.I)
+_REPAYMENT_MINIMUM_WITH_HEADER = re.compile(
+    rf"Only the minimum payment {_REPAYMENT_TERM} {_DISCLOSURE_MONEY} Credit Limit", re.I
+)
 _REPAYMENT_MONTHLY = re.compile(rf"{_DISCLOSURE_MONEY} {_YEARS}", re.I)
 _REPAYMENT_SAVINGS = re.compile(rf"\(Savings\s*=\s*{_DISCLOSURE_MONEY}\)", re.I)
 _APR = re.compile(
@@ -75,14 +80,14 @@ _CONDITIONAL_LATE_FEE = re.compile(
     re.I,
 )
 _REPAYMENT_COMBINED = re.compile(
-    rf"{_DISCLOSURE_MONEY} {_YEARS}(?: (?P<total>{_DISCLOSURE_MONEY}))?"
+    rf"{_DISCLOSURE_MONEY} {_REPAYMENT_TERM}(?: (?P<total>{_DISCLOSURE_MONEY}))?"
     rf"(?: \(Savings\s*=\s*{_DISCLOSURE_MONEY}\))?"
-    rf"(?: (?:(?:Revolving )?Credit limit {_DISCLOSURE_MONEY}|Includes {_DISCLOSURE_MONEY} cash advance limit))?",
+    rf"(?: (?:{_REPAYMENT_CREDIT}|Includes {_DISCLOSURE_MONEY} cash advance limit))?",
     re.I,
 )
 _MINIMUM_WITH_CREDIT = re.compile(
-    rf"(?P<minimum>Only the minimum payment {_YEARS} {_DISCLOSURE_MONEY})"
-    rf"(?: Available (?:Revolving )?credit {_DISCLOSURE_MONEY})?",
+    rf"(?P<minimum>Only the minimum payment {_REPAYMENT_TERM} {_DISCLOSURE_MONEY})"
+    rf"(?: {_REPAYMENT_CREDIT})?",
     re.I,
 )
 _OVERLIMIT = re.compile(rf"(?:includes an overlimit amount of {_MONEY} and a|past due amount of {_MONEY}\.?)", re.I)
@@ -91,6 +96,13 @@ _LEGAL_PURCHASE = re.compile(
     rf"than {_DISCLOSURE_MONEY}\. \(Note: Neither of these is necessary if your purchase was based on",
     re.I,
 )
+
+
+def _repayment_headings(page: list[PageLine], index: int) -> bool:
+    headers = [item.normalized.casefold() for item in page[max(0, index - 8) : index]]
+    return any(item.startswith("if you make no additional") for item in headers) and any(
+        item.startswith("and each month you pay") for item in headers
+    )
 
 
 def _repayment_positions(page: list[PageLine]) -> set[int]:
@@ -105,11 +117,7 @@ def _repayment_positions(page: list[PageLine]) -> set[int]:
         minimum = _MINIMUM_WITH_CREDIT.fullmatch(line.normalized)
         if minimum is None:
             continue
-        headers = [item.normalized.casefold() for item in page[max(0, index - 8) : index]]
-        if not (
-            any(item.startswith("if you make no additional") for item in headers)
-            and any(item.startswith("and each month you pay") for item in headers)
-        ):
+        if not _repayment_headings(page, index):
             continue
         nearby = range(index + 1, min(index + 9, len(page)))
         monthly = [i for i in nearby if _REPAYMENT_COMBINED.fullmatch(page[i].normalized)]
@@ -128,17 +136,22 @@ def _repayment_positions(page: list[PageLine]) -> set[int]:
             raw = raw.replace(" ", "")
             return usd_symbol_minor_v1(raw if "." in raw else raw + ".00")
 
-        total = minor(minimum_raw) - minor(savings[0][1]["amount"])
-        monthly_match = _REPAYMENT_COMBINED.fullmatch(page[monthly[0]].normalized)
-        if monthly_match["total"] is not None:
-            if minor(monthly_match["total"]) == total:
-                result.update((index, monthly[0], savings[0][0]))
+        try:
+            total = minor(minimum_raw) - minor(savings[0][1]["amount"])
+            monthly_match = _REPAYMENT_COMBINED.fullmatch(page[monthly[0]].normalized)
+            if monthly_match["total"] is not None:
+                if minor(monthly_match["total"]) == total:
+                    result.update((index, monthly[0], savings[0][0]))
+                continue
+            detached = [
+                i
+                for i in nearby
+                if re.fullmatch(_DISCLOSURE_MONEY, page[i].normalized) and minor(page[i].normalized) == total
+            ]
+        except ValueError:
+            # Disclosure recognition never bypasses the exact money operation's
+            # syntax/range. Keep incomplete proof as unresolved source content.
             continue
-        detached = [
-            i
-            for i in nearby
-            if re.fullmatch(_DISCLOSURE_MONEY, page[i].normalized) and minor(page[i].normalized) == total
-        ]
         if len(detached) == 1:
             result.update((index, monthly[0], savings[0][0], detached[0]))
     return result
@@ -253,6 +266,8 @@ def classify_legacy_citi_money(
         if item.location.page == 1:
             if index in repayment:
                 code = "citi_repayment_example"
+            elif _REPAYMENT_MINIMUM_WITH_HEADER.fullmatch(raw) and _repayment_headings(page, index):
+                code = "citi_repayment_example"
             elif _SUMMARY.fullmatch(raw) or _parallel_summary(raw):
                 code = "citi_account_summary"
             elif (
@@ -317,6 +332,7 @@ def classify_legacy_citi_money(
             _MINIMUM_INTEREST.fullmatch(raw)
             or _CONDITIONAL_LATE_FEE.fullmatch(raw)
             or re.fullmatch(_CONDITIONAL_LATE_FEE.pattern + r" Plus Tier", raw, re.I)
+            or re.fullmatch(_CONDITIONAL_LATE_FEE.pattern + r" " + _ANNUAL_PURCHASES.pattern, raw, re.I)
             or (
                 _LEGAL_PURCHASE.fullmatch(raw)
                 and index > 0

@@ -29,7 +29,11 @@ from parsetrail.core.v2_partial_dates import PartialDateError, resolve_month_day
 from parsetrail.core.v2_pdf_lines import ADAPTER_VERSION, PageLine, PDFLineEvidence
 from parsetrail.core.v2_pdf_routing import PDFRouting
 
-ENGINE_VERSION = "legacy-citi-lines-pilot-4"
+ENGINE_VERSION = "legacy-citi-lines-pilot-5"
+# Non-activity source-role refinements do not create new financial occurrences.
+# Keep the existing observation namespace while identifying the newer engine.
+# Financial extraction changes must explicitly reconsider this namespace.
+OBSERVATION_ID_VERSION = "legacy-citi-lines-pilot-4"
 MAX_DEFINITION_BYTES = 64 * 1024
 MONEY = r"-?\$(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:,[0-9]{3})+)\.[0-9]{2}"
 MONEY_TOKEN = re.compile(MONEY)
@@ -239,7 +243,7 @@ def parse_legacy_citi(definition_bytes: bytes, lines: PDFLineEvidence) -> Source
         rows.append(
             ObservationEvidence(
                 row_id=hashlib.sha256(
-                    f"{definition_hash}:{ENGINE_VERSION}:{fragments[0].line_id}".encode()
+                    f"{definition_hash}:{OBSERVATION_ID_VERSION}:{fragments[0].line_id}".encode()
                 ).hexdigest(),
                 occurrence=occurrence,
                 row_role="activity",

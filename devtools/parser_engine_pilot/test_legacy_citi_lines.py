@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -209,7 +210,7 @@ def test_finite_summary_and_interest_detail_roles_preserve_source() -> None:
         assert disposition.raw_values == (line.raw,)
     assert len(output.payload.accounts[0].rows) == 2
     assert output.payload.capture_verified is False
-    assert output.engine_version == "legacy-citi-lines-pilot-4"
+    assert output.engine_version == "legacy-citi-lines-pilot-5"
     assert not [w for w in evidence_import_warnings(output) if w.classification == "requires_review"]
 
 
@@ -573,3 +574,105 @@ def test_statutory_purchase_threshold_requires_exact_complete_parallel_prose():
             page_lines(b"synthetic", [base, "\n".join(second)], extraction_library=lines().extraction_library),
         )
         assert output.payload.dispositions[-1].code == expected
+
+
+def test_repayment_credit_columns_and_inline_savings_require_complete_total_proof():
+    raw = (
+        "If you make no additional You will pay off the And you will end up",
+        "charges using this card balance shown on the paying an estimated",
+        "and each month you pay... statement in about... total of...",
+        "Credit Limit",
+        "Only the minimum payment 8 year(s) $1,900 Revolving Credit limit $5,000",
+        "Includes $500 cash advance limit",
+        "$1,600",
+        "$45 3 year(s) (Savings = $300) Available Revolving credit $4,900",
+        "Includes $500 available for cash advances",
+    )
+    output = parse(extra=raw)
+    assert not [w for w in evidence_import_warnings(output) if w.classification == "requires_review"]
+    assert [d.code for d in output.payload.dispositions].count("citi_repayment_example") == 3
+    assert [row.amount.minor for row in output.payload.accounts[0].rows] == [2000, -1000]
+    assert output.payload.capture_verified is False
+    source_lines = {(line.page, line.line): line for line in lines(extra=raw).lines}
+    for row in output.payload.accounts[0].rows:
+        location = row.fragments[0].location
+        first_line = source_lines[(location.page, location.line)]
+        assert (
+            row.row_id
+            == hashlib.sha256(
+                f"{output.definition_sha256}:legacy-citi-lines-pilot-4:{first_line.line_id}".encode()
+            ).hexdigest()
+        )
+    assert tuple(d.raw_values[0] for d in output.payload.dispositions) == raw[4:]
+    for altered in (
+        raw[1:],
+        raw[:2] + raw[3:],
+        raw[:6] + ("$1,601",) + raw[7:],
+        raw[:6] + ("$1,600", "$1,600") + raw[7:],
+        raw[:7] + (raw[7] + " Unknown $9.00",) + raw[8:],
+        raw[:4] + (raw[4] + " Unknown $9.00",) + raw[5:],
+        raw[:4] + (raw[4].replace("$1,900", "$1,900.0"),) + raw[5:],
+    ):
+        evidence = parse(extra=altered)
+        assert any(w.classification == "requires_review" for w in evidence_import_warnings(evidence))
+        assert any(d.code == "unclassified_monetary_line" for d in evidence.payload.dispositions)
+
+
+def test_single_minimum_month_illustration_needs_both_repayment_headings():
+    headings = (
+        "If you make no additional You will pay off the And you will end up",
+        "charges using this card balance shown on the paying an estimated",
+        "and each month you pay... statement in about... total of...",
+    )
+    detail = "Only the minimum payment 3 month(s) $45 Credit Limit"
+    output = parse(extra=headings + (detail,))
+    assert output.payload.dispositions[-1].code == "citi_repayment_example"
+    assert output.payload.dispositions[-1].raw_values == (detail,)
+    assert len(output.payload.accounts[0].rows) == 2
+    for altered in (
+        (detail,),
+        headings[1:] + (detail,),
+        headings[:2] + (detail,),
+        headings + (detail.replace("3 month", "0 month"),),
+        headings + (detail.replace("3 month", "100 month"),),
+        headings + (detail.replace("$45", "$45.0"),),
+        headings + (detail + " Unknown $9.00",),
+    ):
+        assert parse(extra=altered).payload.dispositions[-1].code == "unclassified_monetary_line"
+    with pytest.raises(LegacyCitiError, match="unresolved_dated_start"):
+        parse(extra=headings + ("01/20 " + detail,))
+
+
+@pytest.mark.parametrize("amount", ["$1900", "$90,000,000,000,000.00"])
+def test_new_repayment_proof_conversion_refusal_stays_unresolved(amount):
+    raw = (
+        "If you make no additional You will pay off the And you will end up",
+        "and each month you pay... statement in about... total of...",
+        f"Only the minimum payment 8 year(s) {amount} Revolving Credit limit $5,000",
+        "$1,600",
+        "$45 3 year(s) (Savings = $300) Available Revolving credit $4,900",
+    )
+    output = parse(extra=raw)
+    assert any(d.code == "unclassified_monetary_line" for d in output.payload.dispositions)
+    assert len(output.payload.accounts[0].rows) == 2
+    assert any(w.classification == "requires_review" for w in evidence_import_warnings(output))
+
+
+def test_parallel_late_fee_explanation_and_annual_purchase_threshold_have_finite_role():
+    base = "\n".join(line.raw for line in lines().lines)
+    prose = (
+        "using a $35 late fee (if your minimum payment due was less than $35, we used Minimum Annual Purchases: $1,000"
+    )
+    for detail, code in (
+        (prose, "citi_credit_terms"),
+        (prose + " Unknown $9.00", "unclassified_monetary_line"),
+        (prose.replace("$1,000", "$1,000.0"), "unclassified_monetary_line"),
+        (prose.replace("$35 late", "$35.0 late"), "unclassified_monetary_line"),
+    ):
+        output = parse_legacy_citi(
+            DEFINITION,
+            page_lines(b"synthetic", [base, detail], extraction_library=lines().extraction_library),
+        )
+        assert output.payload.dispositions[-1].code == code
+        assert output.payload.dispositions[-1].raw_values == (detail,)
+        assert len(output.payload.accounts[0].rows) == 2
