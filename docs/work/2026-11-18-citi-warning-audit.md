@@ -118,3 +118,21 @@ Windows test limit; no other platforms, native UI or owner acceptance is claimed
 Saved source evidence is immutable. These source-role refinements affect current
 recognition/new imports; exact-source retries in a populated profile reuse its
 retained snapshot. Existing pinned owner trials remain unchanged and private.
+
+## Commits and fresh test
+
+- `3a32271`: finite Citi disposition fixes, explicit stable observation namespace
+  and synthetic regression boundaries.
+- `e47f14a`: read-only audit, tests, usage/privacy/limits and current contracts/status.
+  Normal pre-commit hooks passed for both commits.
+- Fresh empty candidate:
+  `scratch/v2-owner-fresh-20261118-citi-audit-ee439765/Open-workflow-test.cmd`,
+  pinned to `e47f14a`, schema 28, legacy Citi engine 5, 321 public runtime files,
+  23 development definitions and no source/journal/account-consolidation data.
+  Only seeded Loan interest exists. The ephemeral catalog key was discarded.
+  Native Windows hidden startup smoke passed: ready, empty Documents, Import
+  enabled, expected navigation, profile bytes unchanged and raw Qt exit0.
+  START-HERE explains the two clear Citi examples, two remaining 2017 source
+  lines, default-off preferences, audit usage and immutable saved-evidence boundary.
+  Existing owner trials remain untouched. All owner-added content/logs/screenshots
+  in this new candidate become private after handoff. No owner acceptance claimed.
