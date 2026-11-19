@@ -43,6 +43,11 @@ from parsetrail.core.v2_source_pipeline import MAX_SOURCE_BYTES  # noqa: E402
 MAX_FILES = 10_000
 MAX_SCANNED_ENTRIES = 100_000
 MAX_REPORT_BYTES = 64 * 1024 * 1024
+_REPORT_GUIDANCE = {
+    "report_exists": "The report already exists. Choose a new filename; reports are never overwritten.",
+    "report_parent_unavailable": "The report folder is missing or inaccessible. Choose an existing writable folder.",
+    "report_write_failed": "The report could not be written. Check the destination folder's permissions and free space.",
+}
 _SAFE_ERRORS = {
     "audit_cancelled",
     "audit_directory_unavailable",
@@ -63,7 +68,7 @@ _SAFE_ERRORS = {
     "source_size",
     "trust_keys_shape",
     "untrusted_key",
-}
+} | _REPORT_GUIDANCE.keys()
 
 
 def _linked(path: Path) -> bool:
@@ -340,6 +345,17 @@ def exit_code(report: dict) -> int:
     return int(bool(summary["requires_review"] or summary["failed"] or summary["files_remaining"]))
 
 
+def _validate_report_destination(path: Path) -> None:
+    """Reject invalid destinations before spending time reading statements."""
+    try:
+        if path.exists() or path.is_symlink():
+            raise ValueError("report_exists")
+        if not path.parent.is_dir():
+            raise ValueError("report_parent_unavailable")
+    except OSError:
+        raise ValueError("report_parent_unavailable") from None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("directory", type=Path)
@@ -361,7 +377,7 @@ def main(argv: list[str] | None = None) -> int:
         default=DEFAULT_PREPARATION_WORKERS,
         help="Concurrent preparations, 1..4; default available CPUs capped at 4",
     )
-    parser.add_argument("--report", type=Path, help="Create a NEW local JSON report; never overwrite")
+    parser.add_argument("--report", type=Path, help="Create a NEW JSON report in an existing folder; never overwrite")
     parser.add_argument(
         "--show-filenames", action="store_true", help="Include relative filenames in the private JSON report"
     )
@@ -373,8 +389,8 @@ def main(argv: list[str] | None = None) -> int:
     stop = Event()
     previous = None
     try:
-        if args.report is not None and (args.report.exists() or args.report.is_symlink()):
-            raise FileExistsError("report_exists")
+        if args.report is not None:
+            _validate_report_destination(args.report)
         catalog, mode = load_catalog(
             release=args.catalog_release, trust_keys=args.trust_keys, definitions=args.development_definitions
         )
@@ -391,9 +407,14 @@ def main(argv: list[str] | None = None) -> int:
             workers=args.workers,
         )
         if args.report is not None:
-            with args.report.open("x", encoding="utf-8", newline="") as stream:
-                json.dump(report, stream, indent=2, sort_keys=True)
-                stream.write("\n")
+            try:
+                with args.report.open("x", encoding="utf-8", newline="") as stream:
+                    json.dump(report, stream, indent=2, sort_keys=True)
+                    stream.write("\n")
+            except FileExistsError:
+                raise ValueError("report_exists") from None
+            except OSError:
+                raise ValueError("report_write_failed") from None
         # Console is deliberately aggregate-only, even with --show-filenames.
         print(json.dumps({key: report[key] for key in ("mode", "summary", "warning_occurrences")}, sort_keys=True))
         return exit_code(report)
@@ -401,7 +422,11 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"error": "audit_cancelled"}))
         return 130
     except Exception as error:
-        print(json.dumps({"error": "audit_setup_failed", "reason": _error(error)}))
+        reason = _error(error)
+        details = {"error": "audit_setup_failed", "reason": reason}
+        if reason in _REPORT_GUIDANCE:
+            details["message"] = _REPORT_GUIDANCE[reason]
+        print(json.dumps(details))
         return 2
     finally:
         if previous is not None:

@@ -188,3 +188,33 @@ separate.
   default-off existing preferences, audit controls and measured benchmark limits.
   Existing trials are untouched; all owner-added sources/profile/logs/screenshots
   in this new candidate remain private after handoff. No owner acceptance claimed.
+
+## Report destination follow-up
+
+The owner attempted the full shallow PDF audit with four workers and a literal
+example `C:\path\to\new-audit.json` output. Its parent does not exist; the previous
+tool deferred opening that destination until after scanning and redacted the error
+as generic audit_file_failed. Report destination existence/parent checks now occur
+before catalog or source reads, and report_exists/report_parent_unavailable/
+report_write_failed have static actionable guidance. Exclusive creation still
+prevents overwriting; operating-system path/exception text stays redacted.
+
+Public synthetic audit suite: 19 passed, one existing Windows symlink skip, 0.86s.
+Tests prove missing/non-directory destinations refuse before catalog/source access
+and a late permissions error reports safe guidance. Ruff check/format and whitespace
+checks pass. No parser, financial, schema or desktop behavior change.
+
+For this follow-up only, the owner-supplied SUCCESS directory/shallow *.pdf command
+is rerun read-only with four workers and development definitions, writing metadata
+to a new ignored scratch report. This is separate from the prior synthetic-only
+implementation/benchmark. No original/source copies or extracted-text dumps are
+saved, no financial profile is opened, and the private report is excluded from Git.
+The rerun completed and its JSON report was parsed/validated: 945 selected/completed,
+943 recognized, 275 require review, two failures, zero remaining/ambiguous/cancelled
+and no metadata truncation. This matches the owner's original aggregate summary;
+exit1 reflects remaining source review/failures, not setup failure. The two failed
+records retain redacted audit_file_failed rather than private exception text.
+Report: `scratch/import-audit-20261118-f1f03ecf.json`, confirmed Git-ignored, with
+945 per-file metadata records and explicit filenames. No report contents, original
+financial data or private exception paths are committed. Per-file interpretation
+and remaining parser refinements are separate from this destination fix.

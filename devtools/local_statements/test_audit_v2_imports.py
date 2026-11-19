@@ -389,3 +389,48 @@ def test_cli_verified_catalog_aggregate_stdout_report_creation_and_no_overwrite(
     (release / "catalog.sig").write_bytes(b"0" * 64)
     assert audit.main(args[:5]) == 2
     assert "invalid_signature" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("parent_kind", ["missing", "file"])
+def test_report_parent_refuses_before_catalog_or_source_reads(setup, tmp_path, monkeypatch, capsys, parent_kind):
+    sources, definitions = setup
+    parent = tmp_path / "PRIVATE-report-folder"
+    if parent_kind == "file":
+        parent.write_text("existing content", encoding="utf-8")
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("Invalid report destination must refuse before reading a catalog or statements")
+
+    monkeypatch.setattr(audit, "load_catalog", forbidden)
+    monkeypatch.setattr(audit, "audit_directory", forbidden)
+    assert (
+        audit.main(
+            [str(sources), "--development-definitions", str(definitions), "--report", str(parent / "report.json")]
+        )
+        == 2
+    )
+    result = json.loads(capsys.readouterr().out)
+    assert result["reason"] == "report_parent_unavailable" and "existing writable folder" in result["message"]
+    assert "PRIVATE" not in json.dumps(result)
+    if parent_kind == "file":
+        assert parent.read_text(encoding="utf-8") == "existing content"
+    else:
+        assert not parent.exists()
+
+
+def test_report_write_error_is_actionable_and_redacts_exception_text(setup, tmp_path, monkeypatch, capsys):
+    sources, definitions = setup
+    (sources / "private-name.csv").write_bytes(SOURCE)
+    report = tmp_path / "report.json"
+    original = Path.open
+
+    def denied(path, *args, **kwargs):
+        if path == report:
+            raise PermissionError("PRIVATE path and operating-system error")
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", denied)
+    assert audit.main([str(sources), "--development-definitions", str(definitions), "--report", str(report)]) == 2
+    result = json.loads(capsys.readouterr().out)
+    assert result["reason"] == "report_write_failed" and "permissions" in result["message"]
+    assert "PRIVATE" not in json.dumps(result) and not report.exists()

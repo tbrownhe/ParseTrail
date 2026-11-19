@@ -30,8 +30,13 @@ C:\path\to\public-keys.json`, a JSON mapping of `data-ed25519-...` key IDs to
 32-byte public keys in hexadecimal. No key, catalog or preference is installed.
 
 The default console output contains only aggregate counts and warning-code counts.
-Add `--report C:\private\v2-import-audit.json` to create a **new** local JSON report;
-existing files are never overwritten. This report retains per-file hashes,
+Add `--report .\scratch\v2-import-audit.json` to create a **new** local JSON report
+from the repository root. Its parent folder must already exist; create `scratch`
+first if needed. A missing/inaccessible parent is reported before scanning statements.
+Choose a new filename on subsequent runs; existing files are never overwritten.
+Replace example statement-directory placeholders such as `C:\path\to\statements`
+with your actual selected directory. Report-writing errors explain the destination problem
+without printing private filesystem exception text. The report retains per-file hashes,
 format/revision/definition hash, engine/extractor, typed period/provenance,
 row/group counts, warning severity, occurrence counts and bounded source locations.
 It excludes transaction values/descriptions, account identities and raw date text.
