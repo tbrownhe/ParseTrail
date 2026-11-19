@@ -6,11 +6,17 @@ queue position does not authorize a candidate. Keep it short and link details.
 
 ## Selected packet
 
+[Shared Wells sections and HSA/loan warning proofs](docs/work/2026-11-19-shared-statement-warning-rules.md)
+is implemented and agent-verified: shared typed Wells roles and ten HSA/loan cases
+preserve exact financial evidence. Same945-source audit reduces review275→254,
+Wells unknown lines5608→2097, with zero new review/failure cases. Independent and
+native checks pass. Remaining Wells context and Citi work stay explicit; no schema
+change or owner/release acceptance claimed.
+
 [Family-level import-warning review](docs/work/2026-11-18-import-warning-family-review.md)
-is complete: 17 strong first-pass candidates, shared Wells fee-section work and
-Citi graphic-caption/provenance/extraction improvements identified without per-file
-exceptions. Independent review and baseline boundary checks pass. Parser changes
-are proposed, not implemented; see the record for proof requirements and priorities.
+is complete: shared Wells and small-family candidates were selected for the
+implementation above; Citi graphic-caption/provenance/extraction work remains
+proposed. The review records proof requirements rather than per-file exceptions.
 
 [Bounded parallel import preparation](docs/work/2026-11-18-parallel-import-preparation.md)
 is implemented and agent-verified: up to four concurrent source preparations,

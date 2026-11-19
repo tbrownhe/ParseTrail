@@ -56,6 +56,12 @@ skip that file and retry a supported original export or an updated statement for
 Extracted cells are read-only; editing a number would not repair missing source
 content. Replacing the interpretation of a saved source is still a separate gap.
 
+Supported statements explicitly showing no transactions can skip import preview
+when their complete source checks qualify. Printed account-status dates remain
+statement evidence; they do not close your account or create financial entries.
+Loan origination still needs its separate posting review even when import preview
+can be skipped.
+
 Open **Review** for the selected document to decide what its transactions mean.
 Accounts created separately on the Accounts page still need explicit document/row
 assignment. Creating or assigning an account adds no spending.

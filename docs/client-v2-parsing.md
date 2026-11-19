@@ -226,11 +226,14 @@ blanket balance-reconciliation blocker.
 The import convenience decision uses two warning classes. Estimated dates and
 generic unverified capture are Informational; unverified monetary statement balances,
 actual mismatch, unknown monetary fields and unexplained amount-bearing content
-normally Require review. The audited Capital loan-history engine v2 has one narrow
-exception: an absent opening principal is Informational when a single supported
-payment has observed complete principal/interest/gross arithmetic and a printed
-closing principal. The opening remains unknown and both complete-capture and
-independent-balance verification remain false. Unexplained exterior monetary/date
+normally Require review. The audited Capital loan-history engine v2 qualifies an
+absent opening principal as Informational for a single supported payment with
+observed complete principal/interest/gross arithmetic and printed closing principal.
+It also qualifies a single observed Amount Financed origination whose positive
+principal equals gross and printed closing, with an observed activity date inside
+the printed period. Origination still needs separate financial posting review;
+opening stays unknown and both complete-capture and independent-balance verification
+remain false. Unexplained exterior monetary/date
 content still Requires review; recognized labeled summary, due-date and coupon
 fields are retained separately from activity. Older unaudited evidence does not
 qualify for the exception. Check equations use the declared account/component scope, including
@@ -312,6 +315,28 @@ header whitespace is normalized for recognition while exact raw text is retained
 The empty-table warning is informational only for the audited engine and complete
 proof; it never certifies page capture, calendar coverage or an arbitrary empty
 statement. Other families retain their existing no-activity review policy.
+
+Wells personal source-role engine v2 and the business statement-v3 wrapper share
+a bounded tail/section auditor. Exact ending/totals comparisons, complete public
+balance explanations and typed labelled fee/waiver/eligibility fields remain
+separate from activity. Auxiliary fee cycles retain their own validated dates;
+they need not end on the financial statement date. Full source-line correspondence
+must preserve numeric/currency/date/sign content and semantic labels; incomplete
+sections, unknown extra tokens and activity-like post-stop rows remain unresolved.
+Finite raw legacy annotations stay uninterpreted context, never observed eligibility
+or fee-correctness facts. Personal financial row IDs keep namespace v1; business
+rows retain their original table identities. Only explicitly reviewed business
+wrapper versions can supply printed-product defaults.
+
+The HSA cash source-role engine v3 retains financial-ID namespace v2 and extends
+the complete empty-cash rate/fee frame for its interleaved heading variant. A
+validated wrapped closure date is printed status metadata; it cannot close an
+authored account. Empty-table qualification remains available for admitted v2/v3
+proofs; missing frames, invalid dates and unexplained/nonzero current fees stay
+reviewable. Wells personal-loan source-role engine v2 retains financial namespace
+v1 and may record explicit no-transactions proof only with a complete bounded
+register and exterior audit. That proof can qualify the empty warning without
+inventing the unprinted period start. Equal endpoints alone are insufficient.
 
 The evidence envelope excludes categories, verification flags, journals and
 postings. Endpoint scopes are explicit: `account_total`, `cash_component` or

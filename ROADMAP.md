@@ -142,6 +142,14 @@ provenance/date-context extraction work. These are bounded family capabilities,
 not per-document exemptions. Cohort counts are not clearance promises; parser
 implementation and replay/negative-case acceptance remain pending.
 
+[Shared Wells sections and HSA/loan warning proofs](docs/work/2026-11-19-shared-statement-warning-rules.md)
+implements the first selected V2-3/P2-4 subset: shared bounded Wells tail/fee context,
+explicit empty-source and origination qualifications with exact financial identity
+preservation. The same945-source audit reduces review275→254 and introduces no
+new review/failure cases. Remaining Wells context and Citi extraction/graphic
+provenance remain unsupported work, not waived evidence. Schema unchanged; agent
+verification, source-capture limits and owner/platform/release gates stay separate.
+
 V2-5 distinguishes newly computed live reconciliation checks from explicitly
 saved decisions and their current/stale input versions. The
 [durable-history packet](docs/work/2026-10-25-v2-reconciliation-history.md) completed
